@@ -1,7 +1,7 @@
 # nameless Browsergame
 
 
-## Architekture
+## Architecture
 
 ### Backend
 Rest API written with ASP.Net core
