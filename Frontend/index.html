@@ -1,0 +1,36 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+
+    <style>
+        ul, ol {
+            margin: 0;
+            padding: 0 0 0 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <!--<h1>Test</h1>-->
+        <menu>
+            <!-- use router-link component for navigation. -->
+            <!-- specify the link by passing the `to` prop. -->
+            <!-- `<router-link>` will be rendered as an `<a>` tag by default -->
+            <router-link to="/map">Go to map</router-link>
+            <br />
+            <router-link to="/user">Go to user profile</router-link>
+        </menu>
+        
+        <article>
+
+            <router-view></router-view>
+        </article>
+    </div>
+    
+
+<script src="dist/build.js"></script>
+</body>
+</html>
