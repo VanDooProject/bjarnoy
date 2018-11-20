@@ -2,14 +2,43 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "build",
-                "${workspaceFolder}/Backend/ApiServer/ApiServer.csproj"
-            ],
-            "problemMatcher": "$msCompile"
+            "label": "watch",
+            "type": "npm",
+            "script": "dev",
+            "path": "Frontend/",
+            "group": "build",
+            "options": {
+                "showOutput": "always"
+            },
+            "isBackground": true,
+            // https://code.visualstudio.com/docs/editor/tasks#_background-watching-tasks
+            "problemMatcher": [
+                {
+					"owner": "npm",
+					"pattern": {
+                        "regexp": "^([^\\s].*)\\((\\d+|\\d+,\\d+|\\d+,\\d+,\\d+,\\d+)\\):\\s+(error|warning|info)\\s+(TS\\d+)\\s*:\\s*(.*)$",
+                        "file": 1,
+                        "location": 2,
+                        "severity": 3,
+                        "code": 4,
+                        "message": 5
+                    },
+					/*"background": {
+						"activeOnStart": true,
+					    "beginsPattern": "^(.*)Project is running at(.*)",
+						"endsPattern": "^(.*)404s will fallback to(.*)"
+                    }*/
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": {
+                            "regexp": "^(.*)Project is running at(.*)"
+                        },
+                        "endsPattern": {
+                            "regexp": "^(.*)404s will fallback to(.*)"
+                        }
+                    }
+				}
+            ]
         }
     ]
 }

@@ -34,3 +34,31 @@ job_build_dotnet_bin_linux:
     expire_in: 60 minutes
     paths:
       - Backend/ApiServer/bin/Release/*
+
+
+## scripts for type/javascript
+job_build_vue:
+  stage: build
+  image: node:7
+  # require runner with npm tag - nothing special only for caching
+  tags:
+    - npm
+
+  before_script:
+    - cd Frontend/
+    - npm install
+
+  script:
+    - npm run build
+
+  # cache node_modules for faster build times
+  cache:
+    paths:
+      - Frontend/node_modules/
+    key: "npm-vue"
+
+  artifacts:
+      expire_in: 15 minutes
+      paths:
+        - Frontend/*.html
+        - Frontend/dist/*
