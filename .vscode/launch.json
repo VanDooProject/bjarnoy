@@ -4,25 +4,25 @@
    // For further information visit https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md
    "version": "0.2.0",
    "configurations": [
-        {
-            "name": "Launch Frontend",
-            "type": "node",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/Frontend",
-            "runtimeExecutable": "npm",
-            "runtimeArgs": [
-                "run",
-                "dev"
-            ],
-            // "port": 9229,
-            "autoAttachChildProcesses": true,
-        },
+        //{
+        //    "name": "Launch Frontend",
+        //    "type": "node",
+        //    "request": "launch",
+        //    "cwd": "${workspaceFolder}/Frontend",
+        //    "runtimeExecutable": "npm",
+        //    "runtimeArgs": [
+        //        "run",
+        //        "dev"
+        //    ],
+        //    // "port": 9229,
+        //    "autoAttachChildProcesses": true,
+        //},
         // https://github.com/marckassay/VSCodeNewProject/blob/master/.vscode/launch.json
         // Docs: https://github.com/Microsoft/vscode-chrome-debug
         {
             "type": "chrome",
             "request": "launch",
-            "name": "Launch Chrome Debugger",
+            "name": "Launch Frontend in Chrome Debugger",
             "port": 9222,
             "url": "http://localhost:8080/",
             "cwd": "${workspaceFolder}/Frontend",
