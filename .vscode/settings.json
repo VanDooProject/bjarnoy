@@ -7,6 +7,13 @@
     // Insert spaces when pressing `Tab`. This setting is overridden based on the file contents when `editor.detectIndentation` is on.
     "editor.insertSpaces": true,
 
+    
+    // ***********************
+    // MD pasteImage settings
+    "pasteImage.path": "${currentFileDir}/img",
+    "pasteImage.forceUnixStyleSeparator": true,
+
+
     // ***********************
     // gitlab settings
     "gitlab.instanceUrl": "https://gitlab.mynode.space",
