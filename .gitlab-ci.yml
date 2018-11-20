@@ -21,8 +21,8 @@ job_build_dotnet_bin_linux:
   <<: *cache_nuget
 
   script: 
-    - dotnet restore
-    - dotnet publish --self-contained -c Release --framework netcoreapp2.0 -r ubuntu.16.10-x64
+    - dotnet restore Backend/
+    - dotnet publish --self-contained -c Release --framework netcoreapp2.0 -r ubuntu.16.10-x64 Backend/
 
   artifacts:
     expire_in: 60 minutes
