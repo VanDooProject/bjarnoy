@@ -1,0 +1,30 @@
+
+stages:
+  - build
+
+# cache nuget template
+.cache_nuget: &cache_nuget
+  # https://gitlab.com/gitlab-org/gitlab-ci-yml/issues/12
+  variables:
+    NUGET_PACKAGES: "${CI_PROJECT_DIR}/.nugetcache"
+
+  cache: # https://docs.gitlab.com/ce/ci/yaml/README.html#cache
+    paths:
+#      - .local/share/NuGet/Cache
+#      - .nuget/packages
+      - .nugetcache
+    key: "nuget"
+
+job_build_dotnet_bin_linux:
+  stage: build
+  image: microsoft/dotnet:latest
+  <<: *cache_nuget
+
+  script: 
+    - dotnet restore
+    - dotnet publish --self-contained -c Release --framework netcoreapp2.0 -r ubuntu.16.10-x64
+
+  artifacts:
+    expire_in: 60 minutes
+    paths:
+      - Backend/ApiServer/bin/Release/*
