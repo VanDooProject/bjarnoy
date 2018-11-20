@@ -1,5 +1,8 @@
 # nameless Browsergame
+simple MOBA RTS Browsergame about floating islands.
 
+
+[![pipeline status](https://gitlab.mynode.space/browsergame/browsergame/badges/master/pipeline.svg)](https://gitlab.mynode.space/browsergame/browsergame/commits/master)
 
 ## Architecture
 
