@@ -24,7 +24,7 @@ job_build_dotnet_bin_linux:
     - cd Backend/
     - dotnet restore
     - dotnet publish
-        /ApiServer/ApiServer.csproj
+        ApiServer/ApiServer.csproj
         --self-contained
         -c Release
         --framework netcoreapp2.0
