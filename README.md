@@ -21,6 +21,7 @@ written in JS using vue.js, jQuery and Bootstrap
 # How to Develop?
 Main IDEs are VisualStudio 2017 and VisualStudio Code
 
+additional info see: [How to Develop](./docs/DEVELOP.MD)
 
 # Challanges
 Since this is a project to learn new stuff here is a list of challanges includes:
