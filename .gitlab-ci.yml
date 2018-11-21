@@ -144,3 +144,41 @@ job_docker_create:
     # build container
     - docker build -t $CONTAINER_IMAGE ./Docker/
     - docker push $CONTAINER_IMAGE
+
+
+
+
+
+
+
+# DEPLOY  ############################################################################
+# idea: https://stackoverflow.com/questions/44545635/how-to-auto-deploy-docker-image-on-own-server-with-gitlab
+# image: https://hub.docker.com/r/kroniak/ssh-client/
+job_deploy_staging:
+  stage: deploy
+  image: kroniak/ssh-client
+  environment: Staging
+
+  dependencies:
+    - job_docker_create
+
+  variables:
+    DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
+    VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
+
+  script: 
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - echo "$SSH_PRIVATE_KEY_STAGING" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker login -u "$DOCKER_REG_USER" -p "$DOCKER_REG_PASSWORD" 10.0.0.130:1443'
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker pull $CONTAINER_IMAGE'
+
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker stop $DOCKER_CONTAINER_NAME || true'
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rm $DOCKER_CONTAINER_NAME || true'
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker run --detach -P -e VIRTUAL_HOST=$VHOST --name $DOCKER_CONTAINER_NAME $CONTAINER_IMAGE'
+
+    # cleanup old docker images - https://blog.cynexia.com/varlibdockeraufsdiff-is-consuming-entire-drive/
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true)'
