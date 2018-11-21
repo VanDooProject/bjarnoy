@@ -2,22 +2,27 @@
 simple MOBA RTS Browsergame about floating islands.
 
 
+# Demo
+visit live demo of current production state:
+
+http://master.gamez.mynode.space
 [![pipeline status](https://gitlab.mynode.space/browsergame/browsergame/badges/master/pipeline.svg)](https://gitlab.mynode.space/browsergame/browsergame/commits/master)
 
-## Architecture
 
-### Backend
+# Architecture
+
+## Backend
 Rest API written with ASP.Net core
 
-### Frontend
+## Frontend
 written in JS using vue.js, jQuery and Bootstrap
 
 
-## How to Develop?
+# How to Develop?
 Main IDEs are VisualStudio 2017 and VisualStudio Code
 
 
-## Challanges
+# Challanges
 Since this is a project to learn new stuff here is a list of challanges includes:
  * OOP - mainly in backend for stuff like buildings, troops, maptiles,...
  * Design Patterns - also mainly in backend: stragies, factories, dependency injection,...
