@@ -158,7 +158,8 @@ job_docker_create:
 job_deploy_staging:
   stage: deploy
   image: kroniak/ssh-client
-#  environment: Staging
+
+  allow_failure: true
 
   dependencies:
     - job_docker_create
@@ -197,7 +198,6 @@ job_deploy_staging:
 job_stop_deploy_staging:
   stage: stop_deploy
   image: kroniak/ssh-client
-#  environment: Staging
 
   dependencies:
     - job_deploy_staging
@@ -220,6 +220,6 @@ job_stop_deploy_staging:
     - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
     - echo "$SSH_PRIVATE_KEY_STAGING" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
-    
+
     - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
     - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
