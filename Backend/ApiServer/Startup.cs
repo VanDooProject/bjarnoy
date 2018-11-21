@@ -33,6 +33,10 @@ namespace ApiServer
             {
                 app.UseDeveloperExceptionPage();
             }
+            
+            // https://docs.microsoft.com/en-us/aspnet/core/fundamentals/static-files?view=aspnetcore-2.1&tabs=aspnetcore2x
+            app.UseDefaultFiles();
+            app.UseStaticFiles();
 
             app.UseMvc();
         }
