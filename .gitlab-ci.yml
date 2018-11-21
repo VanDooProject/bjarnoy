@@ -124,15 +124,15 @@ job_docker_create:
   
   before_script:
     # login to registy
-    - docker info
-    - docker login -u $DOCKER_REG_USER -p $DOCKER_REG_PASSWORD $CONTAINER_IMAGE
+    # - docker info
+    - docker login -u "$DOCKER_REG_USER" -p "$DOCKER_REG_PASSWORD" $CONTAINER_IMAGE
 
   script:
     - docker pull $CONTAINER_IMAGE || true
     
     #-------------------------------------------------------------------------------
     # copy artifact to docker build dir
-    - mkdir ./Docker
+    - mkdir -p ./Docker
     - mv -v Backend/ApiServer/bin/Release/netcoreapp2.0/ubuntu.16.10-x64/publish/* ./Docker/
 
     # vue stuff
