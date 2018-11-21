@@ -3,6 +3,7 @@ stages:
   - build
   - docker
   - deploy
+  - stop_deploy
 
 
 
@@ -174,7 +175,7 @@ job_deploy_staging:
     url: http://$CI_COMMIT_REF_SLUG.gamez.mynode.space
     on_stop: job_stop_deploy_staging
 
-  script: 
+  script:
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
@@ -194,9 +195,12 @@ job_deploy_staging:
 
 # https://blog.kontena.io/continuous-delivery-with-gitlabci/
 job_stop_deploy_staging:
-  stage: deploy
+  stage: stop_deploy
   image: kroniak/ssh-client
 #  environment: Staging
+
+  dependencies:
+    - job_deploy_staging
 
   variables:
     GIT_STRATEGY: none
@@ -211,5 +215,11 @@ job_stop_deploy_staging:
     action: stop
   
   script:
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - echo "$SSH_PRIVATE_KEY_STAGING" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    
     - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
     - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
