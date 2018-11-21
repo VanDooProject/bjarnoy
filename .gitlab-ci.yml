@@ -166,6 +166,10 @@ job_deploy_staging:
     DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
     VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
 
+  environment:
+    name: staging/$CI_COMMIT_REF_SLUG
+    url: http://$CI_COMMIT_REF_SLUG.gamez.mynode.space
+
   script: 
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
