@@ -163,6 +163,7 @@ job_deploy_staging:
     - job_docker_create
 
   variables:
+    CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
     DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
     VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
 
