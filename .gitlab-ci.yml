@@ -1,7 +1,16 @@
 
 stages:
   - build
+  - docker
+  - deploy
+  - stop_deploy
 
+
+
+
+
+
+# BUILD  ############################################################################
 # cache nuget template
 .cache_nuget: &cache_nuget
   # https://gitlab.com/gitlab-org/gitlab-ci-yml/issues/12
@@ -62,3 +71,155 @@ job_build_vue:
       paths:
         - Frontend/*.html
         - Frontend/dist/*
+
+
+
+
+
+
+
+# DOCKER  ############################################################################
+# https://docs.gitlab.com/ee/ci/docker/using_docker_build.html#using-the-gitlab-container-registry
+job_docker_create:
+  stage: docker
+  image: docker:stable
+  
+#  dependencies:
+#    - job_package_ubuntu
+  dependencies:
+    - job_build_dotnet_bin_linux
+    - job_build_vue
+
+  # require runner with dind tag
+  tags:
+    - dind
+  services:
+    # - docker:dind
+    # https://github.com/LordGaav/dind-options
+    - lordgaav/dind-options:latest
+
+
+  variables:
+    # gitlab.mynode.space:1443/browsergame/browsergame:tag
+    CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
+    
+    # When using dind service we need to instruct docker, to talk with the
+    # daemon started inside of the service. The daemon is available with
+    # a network connection instead of the default /var/run/docker.sock socket.
+    #
+    # The 'docker' hostname is the alias of the service container as described at
+    # https://docs.gitlab.com/ee/ci/docker/using_docker_images.html#accessing-the-services
+    #
+    # Note that if you're using Kubernetes executor, the variable should be set to
+    # tcp://localhost:2375 because of how Kubernetes executor connects services
+    # to the job container
+    #DOCKER_HOST: tcp://docker:2375/
+    DOCKER_HOST: "tcp://lordgaav__dind-options:2375"
+
+    # When using dind, it's wise to use the overlayfs driver for
+    # improved performance.
+    DOCKER_DRIVER: overlay2
+
+    # https://docs.docker.com/registry/insecure/#deploy-a-plain-http-registry
+    DOCKER_OPTS: "--insecure-registry=10.0.0.130:1443"
+  
+  before_script:
+    # login to registy
+    # - docker info
+    - docker login -u "$DOCKER_REG_USER" -p "$DOCKER_REG_PASSWORD" $CONTAINER_IMAGE
+
+  script:
+    - docker pull $CONTAINER_IMAGE || true
+    
+    #-------------------------------------------------------------------------------
+    # copy artifact to docker build dir
+    - mkdir -p ./Docker
+    - mv -v Backend/ApiServer/bin/Release/netcoreapp2.0/ubuntu.16.10-x64/publish/* ./Docker/
+
+    # vue stuff
+    - mkdir -p ./Docker/wwwroot/dist
+    - cp -Rv Frontend/*.html ./Docker/wwwroot
+    - cp -Rv Frontend/dist/*.js ./Docker/wwwroot/dist/
+    #-------------------------------------------------------------------------------
+    - ls -ahl && ls -ahl ./Docker/
+    # build container
+    - docker build -t $CONTAINER_IMAGE ./Docker/
+    - docker push $CONTAINER_IMAGE
+
+
+
+
+
+
+
+# DEPLOY  ############################################################################
+# idea: https://stackoverflow.com/questions/44545635/how-to-auto-deploy-docker-image-on-own-server-with-gitlab
+# image: https://hub.docker.com/r/kroniak/ssh-client/
+job_deploy_staging:
+  stage: deploy
+  image: kroniak/ssh-client
+
+  allow_failure: true
+
+  dependencies:
+    - job_docker_create
+
+  variables:
+    GIT_STRATEGY: none
+
+    CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
+    DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
+    VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
+
+  environment:
+    name: staging/$CI_COMMIT_REF_SLUG
+    url: http://$CI_COMMIT_REF_SLUG.gamez.mynode.space
+    on_stop: job_stop_deploy_staging
+
+  script:
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - echo "$SSH_PRIVATE_KEY_STAGING" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker login -u $DOCKER_REG_USER -p $DOCKER_REG_PASSWORD 10.0.0.130:1443"
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker pull $CONTAINER_IMAGE"
+
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME || true"
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker run --detach -P -e VIRTUAL_HOST=$VHOST --name $DOCKER_CONTAINER_NAME $CONTAINER_IMAGE"
+
+    # cleanup old docker images - https://blog.cynexia.com/varlibdockeraufsdiff-is-consuming-entire-drive/
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true) || true'
+
+
+# https://blog.kontena.io/continuous-delivery-with-gitlabci/
+job_stop_deploy_staging:
+  stage: stop_deploy
+  image: kroniak/ssh-client
+
+  dependencies:
+    - job_deploy_staging
+
+  variables:
+    GIT_STRATEGY: none
+
+    CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
+    DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
+    VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
+
+  when: manual
+  environment:
+    name: staging/$CI_COMMIT_REF_SLUG
+    action: stop
+  
+  script:
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - echo "$SSH_PRIVATE_KEY_STAGING" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
