@@ -157,12 +157,14 @@ job_docker_create:
 job_deploy_staging:
   stage: deploy
   image: kroniak/ssh-client
-  environment: Staging
+#  environment: Staging
 
   dependencies:
     - job_docker_create
 
   variables:
+    GIT_STRATEGY: none
+
     CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
     DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
     VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
@@ -170,6 +172,7 @@ job_deploy_staging:
   environment:
     name: staging/$CI_COMMIT_REF_SLUG
     url: http://$CI_COMMIT_REF_SLUG.gamez.mynode.space
+    on_stop: job_stop_deploy_staging
 
   script: 
     - mkdir -p ~/.ssh
@@ -186,4 +189,27 @@ job_deploy_staging:
     - ssh $DEPLOY_STAGING_SSH_HOST "docker run --detach -P -e VIRTUAL_HOST=$VHOST --name $DOCKER_CONTAINER_NAME $CONTAINER_IMAGE"
 
     # cleanup old docker images - https://blog.cynexia.com/varlibdockeraufsdiff-is-consuming-entire-drive/
-    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true)'
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true) || true'
+
+
+# https://blog.kontena.io/continuous-delivery-with-gitlabci/
+job_stop_deploy_staging:
+  stage: deploy
+  image: kroniak/ssh-client
+#  environment: Staging
+
+  variables:
+    GIT_STRATEGY: none
+
+    CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
+    DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
+    VHOST: $CI_COMMIT_REF_SLUG.gamez.mynode.space
+
+  when: manual
+  environment:
+    name: staging/$CI_COMMIT_REF_SLUG
+    action: stop
+  
+  script:
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
+    - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
