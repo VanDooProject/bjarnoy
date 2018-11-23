@@ -1,4 +1,3 @@
-
 // import MapLayer from './componments/map_layer.vue';
 
 
@@ -36,7 +35,7 @@
         mounted () {
             this.axios
                 // TODO: use global server config
-                .get('http://localhost:41527/api/v1/map/demo/10',
+                .get(this.$config.RequestUriPrefix + '/api/v1/map/demo/10',
                     {
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })

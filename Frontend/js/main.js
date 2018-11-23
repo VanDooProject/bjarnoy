@@ -1,4 +1,5 @@
 import Vue from 'vue';
+import config from './config.js';
 
 // Vue Router
 import VueRouter from 'vue-router';
@@ -49,6 +50,7 @@ const router = new VueRouter({
     routes // short for `routes: routes`
 });
 
+Vue.prototype.$config = config;
 // main app
 const vue = new Vue({
     router,
