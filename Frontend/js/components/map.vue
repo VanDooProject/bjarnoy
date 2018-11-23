@@ -6,12 +6,14 @@
     <div>
         <h1>Map</h1>
 
+        <!--
         <ul id="map-list-1">
             <li v-bind:key="tile.id" v-for="tile in tiles">
                 {{ tile.x }} | {{ tile.y }}
             </li>
         </ul>
----
+        -->
+
         <div id="map">
             <MapLayer layerZ="0" v-bind:tiles="tiles"></MapLayer>
         </div>
@@ -33,7 +35,7 @@
         mounted () {
             this.axios
                 // TODO: use global server config
-                .get('http://localhost:41527/api/v1/map/demo',
+                .get('http://localhost:41527/api/v1/map/demo/10',
                     {
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
@@ -50,12 +52,6 @@
 </script>
 
 <style>
-.tile {
-    display: block;
-    width: 50px;
-    height: 50px;
-    background-color: green;
-    margin: 2px;
-}
+
 
 </style>

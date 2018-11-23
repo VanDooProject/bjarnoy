@@ -1,5 +1,12 @@
 <template>
-    <div class="tile">
+    <div
+        class="tile"
+        v-bind:style="{
+                top: tile.y * -60 + 'px',
+                left: tile.x * 60 + 'px',
+                zIndex: tile.x + tile.y
+            }"
+    >
         ( {{ tile.x }} | {{ tile.y }} )
     </div>
 </template>
@@ -9,7 +16,7 @@
         props: ['tile'],
         data: function() {
             return {
-                tile: {}
+                //tile: {}
             }
         }
     }
@@ -21,8 +28,12 @@
 <style>
 .tile {
     display: block;
-    width: 60px;
-    height: 60px;
+
+    position: absolute;
+
+    width: 58px;
+    height: 58px;
+
     background-color: green;
     margin: 2px;
 }
