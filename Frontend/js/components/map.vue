@@ -15,7 +15,8 @@
         -->
 
         <div id="map">
-            <MapLayer layerZ="0" v-bind:tiles="tiles"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="tiles"></MapLayer>
+            <MapLayer layerZ="2" v-bind:tiles="tiles"></MapLayer>
         </div>
 
     </div>

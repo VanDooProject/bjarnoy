@@ -1,5 +1,8 @@
 <template>
     <div class="maplayer"
+            v-bind:style="{
+                transform: 'scale(' + 1 / this.layerZ + ')'
+            }"
         >
         <!--
         v-bind:style="{
