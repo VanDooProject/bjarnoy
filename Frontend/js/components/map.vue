@@ -1,3 +1,7 @@
+
+// import MapLayer from './componments/map_layer.vue';
+
+
 <template>
     <div>
         <h1>Map</h1>
@@ -8,34 +12,23 @@
             </li>
         </ul>
 ---
-        <div id="map-layer-1">
-            <div v-bind:key="tile.id" v-for="tile in layerZ" class="tile">
-                {{ tile.x }} | {{ tile.y }}
-            </div>
+        <div id="map">
+            <MapLayer layerZ="0" v-bind:tiles="tiles"></MapLayer>
         </div>
+
     </div>
 </template>
 
 <script>
-    module.exports = {
+    import MapLayer from './map_layer.vue';
+
+    export default {
         props: [],
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
                 tiles: [],
-                targetZ: 0
             }
-        },
-        computed: {
-            // https://stackoverflow.com/questions/41791482/filter-list-with-vue-js
-            layerZ() {
-                return this.tiles.filter(tile => {
-                    return tile.z == this.targetZ;
-                });
-            }
-        },
-        methods: {
-
         },
         mounted () {
             this.axios
@@ -46,6 +39,9 @@
                     })
                 .then(response => ( this.tiles = response.data))
                 .catch(error => console.log(error));
+        },
+        components: {
+            MapLayer
         }
     }
 
