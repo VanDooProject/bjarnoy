@@ -2,18 +2,29 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CoreClassLibrary.Models.Map;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiServer.Controllers
 {
-    [Route("api/[controller]")]
-    public class ValuesController : Controller
+    [Route("api/v1/[controller]")]
+    public class MapController : Controller
     {
         // GET api/values
-        [HttpGet]
-        public IEnumerable<string> Get()
+        [HttpGet("demo/")]
+        public IEnumerable<Tile> Get()
         {
-            return new string[] { "value1", "value2" };
+            return new Tile[] {
+                new Tile(0,0,0),
+                new Tile(1,0,0),
+                new Tile(0,1,0),
+                new Tile(1,1,0),
+
+                new Tile(0,0,1),
+                new Tile(1,0,1),
+                new Tile(0,1,1),
+                new Tile(1,1,1),
+            };
         }
 
         // GET api/values/5

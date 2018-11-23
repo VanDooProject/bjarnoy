@@ -19,14 +19,17 @@
         mounted () {
             this.axios
                 // TODO: use global server config
-                .get('http://localhost:15625/api/v1/map',
+                .get('http://localhost:41527/api/v1/map/demo',
                     {
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => (this.users = response.data))
+                .then(response => ( this.tiles = response.data))
                 .catch(error => console.log(error));
         }
     }
+
+    // https://forum.vuejs.org/t/debugging-vue-files-with-visual-studio-code/8022/5
+    //# sourceURL=map.vue
 </script>
 
 <style>
