@@ -38,4 +38,8 @@
     margin: 2px;
 }
 
+.tile:hover {
+    background-color: greenyellow;
+}
+
 </style>
