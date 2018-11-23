@@ -1,0 +1,115 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+
+    <style>
+        ul, ol {
+            margin: 0;
+            padding: 0 0 0 0;
+        }
+    </style>
+</head>
+<body>
+    
+    <h3>test map transperancy click handler</h3>
+    <article>
+        <h4>info for clicking on map</h4>
+        <p>
+            example code changed:<br>
+            https://stackoverflow.com/questions/11228987/image-map-by-alpha-channel
+        </p>
+
+        <p>
+            Alternative solution - image map(s):<br>
+            https://developer.mozilla.org/en-US/docs/Web/HTML/Element/map
+        </p>
+        
+        <p>
+            Alternative solution - css pointer-events:<br>
+            https://developer.mozilla.org/en-US/docs/Web/CSS/pointer-events<br>
+            from https://stackoverflow.com/questions/3680429/click-through-a-div-to-underlying-elements
+        </p>
+
+
+        <h4>info for z values</h4>
+        <p>
+            to get proper overly of map elements we have to calculate z-values:<br>
+            https://gamedev.stackexchange.com/questions/73464/how-would-i-apply-my-isometric-art-onto-isometric-css-with-correct-z-indexing
+
+        </p>
+
+        <h4>optic examples</h4>
+        <p>most of them are based on: https://www.w3schools.com/css/css3_3dtransforms.asp</p>
+        <ul>
+            <li>https://codepen.io/rdfriedl/pen/bdvrjM</li>
+            <li>https://codepen.io/Fahscinate/pen/IEhbu</li>
+        </ul>
+    </article>
+
+    <canvas id="canvas"></canvas>
+
+
+    <script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+    <script>
+        var circle = 'data:image/png;base64,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';
+
+        var ctx = document.getElementById('canvas').getContext('2d');
+        var img = new Image();
+        img.onload = function(){
+            ctx.drawImage(img,0,0);
+        };
+        //img.src = "https://upload.wikimedia.org/wikipedia/commons/c/ca/Triple-Spiral-4turns_green_transparent.png";
+        img.src = circle;
+        //alert(img.src);
+
+        $('#canvas').click(function (e) {
+            if (isTransparentUnderMouse(this, e))
+            {
+                alert('transparent!');
+            }
+            else
+            {
+                alert('color!');
+            }
+        });
+        
+        $('#canvas').mousemove( function (e) {
+            if (isTransparentUnderMouse(this, e))
+                $(this).css('cursor', 'default');
+            else
+                $(this).css('cursor', 'pointer');
+        });
+        
+
+        var isTransparentUnderMouse = function (target, evnt) {
+            var l = 0, t = 0;
+            if (target.offsetParent) {
+                var ele = target;
+                do {
+                    l += ele.offsetLeft;
+                    t += ele.offsetTop;
+                } while (ele = ele.offsetParent);
+            }
+            var x = evnt.pageX - l;
+            var y = evnt.pageY - t;
+            var imgdata = target.getContext('2d').getImageData(x, y, 1, 1).data;
+            if (
+                imgdata[0] == 0 && 
+                imgdata[1] == 0 && 
+                imgdata[2] == 0 && 
+                imgdata[3] == 0 
+            ){
+                return true;
+            }
+            return false;
+        };
+    </script>
+
+<script src="dist/build.js"></script>
+</body>
+</html>
