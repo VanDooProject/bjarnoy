@@ -33,7 +33,14 @@ namespace ApiServer
             {
                 app.UseDeveloperExceptionPage();
             }
-            
+
+            // https://stackoverflow.com/questions/44379560/how-to-enable-cors-in-asp-net-core-webapi
+            app.UseCors(builder => builder
+                .AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials());
+
             // https://docs.microsoft.com/en-us/aspnet/core/fundamentals/static-files?view=aspnetcore-2.1&tabs=aspnetcore2x
             app.UseDefaultFiles();
             app.UseStaticFiles();
