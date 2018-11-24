@@ -10,7 +10,7 @@
                 width: Math.round(Math.sqrt(this.tiles.length)) * 60 + 'px'
             }"
         -->
-        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in FilterLayerZ"></MapTile>
+        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in FilterLayerZ" @tile_clicked="gotEvent"></MapTile>
     </div>
 </template>
 
@@ -31,6 +31,11 @@
                 return this.tiles.filter(tile => {
                     return tile.z == this.layerZ;
                 });
+            }
+        },
+        methods: {
+            gotEvent: function(event) {
+                this.$emit('tile_clicked', event);
             }
         },
         components: {

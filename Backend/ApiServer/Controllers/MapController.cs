@@ -11,7 +11,7 @@ namespace ApiServer.Controllers
     public class MapController : Controller
     {
 
-        // GET api/v1/dem
+        // GET api/v1/demo
         [HttpGet("demo/")]
         public IEnumerable<Tile> Get()
         {
