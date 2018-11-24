@@ -47,14 +47,8 @@
         },
         methods: {
             gotEvent: function(event) {
-                console.log("got in map component");
                 this.menu.x = event.pageX;
                 this.menu.y = event.pageY;
-                console.log(this.menu);
-                //menu.x=event.pageX;
-                //menu.y=event.pageX;
-                //this.menu.x=x;
-                //this.menu.y=y;
             }
         },
         components: {

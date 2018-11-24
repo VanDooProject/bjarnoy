@@ -36,7 +36,6 @@
         methods: {
             gotEvent: function(event) {
                 this.$emit('tile_clicked', event);
-                console.log(event);
             }
         },
         components: {

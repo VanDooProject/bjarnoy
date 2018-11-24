@@ -17,7 +17,6 @@
         methods: {
             openMenu: function(event) {
                 this.$emit('tile_clicked', event);
-                console.log("called")
             }
         },
         data: function() {
