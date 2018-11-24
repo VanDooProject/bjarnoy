@@ -11,8 +11,6 @@
 </template>
 
 <script>
-    // Vue Router
-    //import VueRouter from 'vue-router';
     export default {
         name: "GameHeader",
         props:[],
@@ -38,7 +36,6 @@
     top: 0;
     right: 0;
     z-index: 100000;
-    /*height: 10%;*/
     background-color: darkgoldenrod;
 }
 #header > menu > a {

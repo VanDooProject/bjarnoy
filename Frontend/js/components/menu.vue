@@ -1,16 +1,16 @@
 <template>
     <div 
-            v-bind:style="{
-                top: pos.y - size.y/2 + 'px',
-                left: pos.x - size.x/2 + 'px',
-                width: size.x + 'px',
-                height: size.y + 'px',
-                display: display,
-                zIndex: 50000
-            }" 
-            class="mapmenu"
-        >
-            pos = ( {{pos.x}} | {{ pos.y }} )
+        v-bind:style="{
+            top: pos.y - size.y/2 + 'px',
+            left: pos.x - size.x/2 + 'px',
+            width: size.x + 'px',
+            height: size.y + 'px',
+            display: display,
+            zIndex: 50000
+        }" 
+        class="mapmenu"
+    >
+        pos = ( {{pos.x}} | {{ pos.y }} )
             
     </div>
 </template>
