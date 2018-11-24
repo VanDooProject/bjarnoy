@@ -4,7 +4,7 @@ import config from './config.js';
 // Vue Router
 import VueRouter from 'vue-router';
 
-Vue.use(VueRouter);
+Vue.use(VueRouter);//*/
 
 // Axios
 import axios from 'axios';
@@ -35,6 +35,9 @@ Vue.use(CxltToastr, toastrConfigs);
 
 // own components:
 import MapComponent from './components/map.vue';
+import GameHeader from './components/gameHeader.vue';
+//Vue.component("GameHeader", GameHeader);
+
 
 // 1. Define route components.
 const ComponentUserProfie = { template: '<div>User Profile</div>' };
@@ -50,13 +53,14 @@ const router = new VueRouter({
     routes // short for `routes: routes`
 });
 
+
 Vue.prototype.$config = config;
 // main app
 const vue = new Vue({
     router,
     el: '#app',
     components: {
-
+        'gameheader':GameHeader
     },
     data: {
 

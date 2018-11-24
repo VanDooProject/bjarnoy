@@ -8,8 +8,6 @@
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
     >
-        <h1>Map</h1>
-
         <MapMenu v-bind:pos="menu"></MapMenu>
 
         <!--
@@ -30,7 +28,7 @@
 <script>
     import MapLayer from './map_layer.vue';
     import MapMenu from './menu.vue';
-
+    
     export default {
         components: {
             MapLayer,
@@ -82,7 +80,7 @@
                 }
             },
             mouseLeave: function(event) {
-                console.log("Leave");
+                //console.log("Leave");
                 this.isMouseDown=false;
             }
         }
@@ -93,6 +91,32 @@
 </script>
 
 <style>
+html, body {
+    padding: 0px;
+    margin: 0px;
 
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+#map {
+    display: block;
+    padding: 0px;
+    margin: 0px;
+    /*width: 100%;*/
+    /*height: 100%;*/
+    min-width: 100%;
+    min-height: 100%;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 0;
+    /*background-color: aquamarine;*/
+}
 
 </style>
