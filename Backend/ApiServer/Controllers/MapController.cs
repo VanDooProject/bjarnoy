@@ -31,7 +31,10 @@ namespace ApiServer.Controllers
                 {
                     for (int y = 0; y < size; y++)
                     {
-                        TileList.Add(new Tile(x, y, z));
+                        TileList.Add(new Tile( x,  y, z));
+                        TileList.Add(new Tile( x, -y, z));
+                        TileList.Add(new Tile(-x, -y, z));
+                        TileList.Add(new Tile(-x,  y, z));
                     }
                 }
             }
