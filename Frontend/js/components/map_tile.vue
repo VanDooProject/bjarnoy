@@ -1,5 +1,5 @@
 <template>
-    <div
+    <div v-on:click="openMenu"
         class="tile"
         v-bind:style="{
                 top: tile.y * -60 + 'px',
@@ -14,6 +14,12 @@
 <script>
     export default {
         props: ['tile'],
+        methods: {
+            openMenu: function(event) {
+                this.$emit('tile_clicked', event);
+                console.log("called")
+            }
+        },
         data: function() {
             return {
                 //tile: {}
@@ -34,7 +40,7 @@
     width: 58px;
     height: 58px;
 
-    background-color: green;
+   background-color: green;
     margin: 2px;
 }
 
