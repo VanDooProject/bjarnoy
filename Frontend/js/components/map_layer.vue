@@ -1,8 +1,11 @@
 <template>
     <div class="maplayer"
             v-bind:style="{
-                transform: 'scale(' + 1 / this.layerZ + ')'
+                transform: 'scale(' + scalingFactor + ')',
+                left: globalMapOffset.x * scalingFactor + 'px',
+                top:  globalMapOffset.y * scalingFactor + 'px',
             }"
+             
         >
         <!--
         v-bind:style="{
@@ -10,7 +13,7 @@
                 width: Math.round(Math.sqrt(this.tiles.length)) * 60 + 'px'
             }"
         -->
-        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in FilterLayerZ" @tile_clicked="gotEvent"></MapTile>
+        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in FilterLayerZ" @tile_clicked="TileClicked"></MapTile>
     </div>
 </template>
 
@@ -18,7 +21,7 @@
     import MapTile from './map_tile.vue';
 
     export default {
-        props: ['tiles', 'layerZ'],
+        props: ['tiles', 'layerZ', 'globalMapOffset'],
         data: function() {
             return {
                 // tiles: [],
@@ -31,10 +34,13 @@
                 return this.tiles.filter(tile => {
                     return tile.z == this.layerZ;
                 });
+            },
+            scalingFactor() {
+                return 1.5 - (this.layerZ * 0.25);
             }
         },
         methods: {
-            gotEvent: function(event) {
+            TileClicked: function(event) {
                 this.$emit('tile_clicked', event);
             }
         },

@@ -2,7 +2,12 @@
 
 
 <template>
-    <div>
+    <div
+    v-on:mousedown='mouseDown'
+    v-on:mouseup='mouseUp'
+    v-on:mousemove='mouseMove'
+    v-on:mouseleave='mouseLeave'
+    >
         <h1>Map</h1>
 
         <MapMenu v-bind:pos="menu"></MapMenu>
@@ -16,8 +21,8 @@
         -->
 
         <div id="map">
-            <MapLayer layerZ="1" v-bind:tiles="tiles" @tile_clicked="gotEvent"></MapLayer>
-            <MapLayer layerZ="2" v-bind:tiles="tiles" @tile_clicked="gotEvent"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
     </div>
 </template>
@@ -27,12 +32,19 @@
     import MapMenu from './menu.vue';
 
     export default {
+        components: {
+            MapLayer,
+            MapMenu
+        },
         props: [],
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
                 tiles: [],
-                menu: {x:0, y:0}
+                menu: {x: 0, y: 0},
+                isMouseDown: false,
+                globalMapOffset: {x:0, y:0},
+                mouseMovement: {x:0, y:0}
             }
         },
         mounted () {
@@ -46,14 +58,33 @@
                 .catch(error => console.log(error));
         },
         methods: {
-            gotEvent: function(event) {
-                this.menu.x = event.pageX;
-                this.menu.y = event.pageY;
+            TileClicked: function(event) {
+                if((this.mouseMovement.x < 5) && (this.mouseMovement.y < 5))
+                {
+                    this.menu.x = event.pageX;
+                    this.menu.y = event.pageY;
+                }
+            },
+            mouseDown: function(event) {
+                this.isMouseDown=true;
+                this.mouseMovement={x:0, y:0};
+            },
+            mouseUp: function(event) {
+                this.isMouseDown=false;
+            },
+            mouseMove: function(event) {
+                if(this.isMouseDown)
+                {
+                    this.mouseMovement.x += Math.abs(event.movementX);
+                    this.mouseMovement.y += Math.abs(event.movementY);
+                    this.globalMapOffset.x += event.movementX;
+                    this.globalMapOffset.y += event.movementY;
+                }
+            },
+            mouseLeave: function(event) {
+                console.log("Leave");
+                this.isMouseDown=false;
             }
-        },
-        components: {
-            MapLayer,
-            MapMenu
         }
     }
 
