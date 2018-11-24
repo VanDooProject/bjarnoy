@@ -4,6 +4,8 @@
                 transform: 'scale(' + scalingFactor + ')',
                 left: globalMapOffset.x * scalingFactor + 'px',
                 top:  globalMapOffset.y * scalingFactor + 'px',
+                // currently maybe not effecting all browsers could be fixed with https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting
+                userSelect: 'none'
             }"
              
         >
@@ -34,9 +36,9 @@
                 return this.tiles.filter(tile => {
                     return tile.z == this.layerZ;
                 });
-            },
+            }, 
             scalingFactor() {
-                return 1.5 - (this.layerZ * 0.25);
+                return 1.25 - (this.layerZ * 0.25);
             }
         },
         methods: {
