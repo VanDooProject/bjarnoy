@@ -1,9 +1,9 @@
 <template>
     <div class="maplayer"
             v-bind:style="{
-                transform: 'scale(' + scalingFactor + ')',
-                left: globalMapOffset.x * scalingFactor + 'px',
-                top:  globalMapOffset.y * scalingFactor + 'px',
+                transform: 'translate(' + globalMapOffset.x * scalingFactor + 'px ,' 
+                    + globalMapOffset.y  * scalingFactor + 'px) ' +
+                    'scale(' + scalingFactor + ')',
                 // currently maybe not effecting all browsers could be fixed with https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting
                 userSelect: 'none'
             }"
