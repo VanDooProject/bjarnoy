@@ -97,12 +97,7 @@ job_build_postman_docs:
   script:
     - node /usr/bin/transform-collection.js --help
     - node /usr/bin/transform-collection.js convert --help
-    - node /usr/bin/transform-collection.js convert \
-          -i=./docs/RestAPI/BrowsergameAPI.postman_collection.json \
-          -j=2.0.0 \
-          -o=BrowsergameAPI.V1.postman_collection.json \
-          -p=1.0.0 \
-          -P -w
+    - node /usr/bin/transform-collection.js "convert -i=./docs/RestAPI/BrowsergameAPI.postman_collection.json -j=2.0.0 -o=BrowsergameAPI.V1.postman_collection.json -p=1.0.0 -P -w"
     - find . -name "*.json"
     - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
@@ -287,12 +282,7 @@ job_test_postman_api:
     - newman --help
     - newman run --help
     # https://github.com/postmanlabs/newman/issues/1590
-    - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
-                --environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json \
-                --reporter-junit-export=./newman-report.xml \
-                --r junit \
-                --r="junit,cli" \
-                --reporters="junit,cli" || true
+    - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --reporter-junit-export="./newman-report.xml" --r junit --r="junit,cli" --reporters="junit,cli" || true
     # --testReportFile="newman-report.xml"
     - ls -ahl
     - find . -name "*.xml"
