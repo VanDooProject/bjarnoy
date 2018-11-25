@@ -80,14 +80,15 @@ job_build_postman_docs:
   image: 
     name: hughmp/postmanerator:latest
     # ATTENTION: this container hash no shell as entrypoint -> set it ( https://docs.gitlab.com/ee/ci/docker/using_docker_images.html#overriding-the-entrypoint-of-an-image )
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [""]
 
   allow_failure: true
 
   # need to use correct container typ for: https://github.com/postmanlabs/postman-collection-transformer
-  #before_script:
-  #  - npm install -g postman-collection-transformer
-  #
+  before_script:
+    - apt install npm
+    - npm install -g postman-collection-transformer
+  
   script:
   #  - transform-collection convert \
   #        --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
@@ -265,7 +266,7 @@ job_test_postman_api:
   image: 
     name: postman/newman
     # ATTENTION: this container hash no shell as entrypoint -> set it
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [""]
 
   dependencies:
     - job_deploy_staging
@@ -274,6 +275,7 @@ job_test_postman_api:
 
   script:
     - ls -ahl
+    - newman --version
     - newman --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml" ./docs/RestAPI/BrowsergameAPI.postman_collection.json
     - ls -ahl
 
