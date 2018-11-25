@@ -11,7 +11,7 @@ namespace ApiServer.Controllers
     public class MapController : Controller
     {
 
-        // GET api/v1/demo
+        // GET api/v1/map/demo
         [HttpGet("demo/")]
         public IEnumerable<Tile> Get()
         {
@@ -19,7 +19,7 @@ namespace ApiServer.Controllers
             return this.Get(size);
         }
 
-        // GET api/v1/demo/{size}
+        // GET api/v1/map/demo/{size}
         [HttpGet("demo/{size}")]
         public IEnumerable<Tile> Get(int size)
         {
@@ -31,7 +31,10 @@ namespace ApiServer.Controllers
                 {
                     for (int y = 0; y < size; y++)
                     {
-                        TileList.Add(new Tile(x, y, z));
+                        TileList.Add(new Tile( x,  y, z));
+                        TileList.Add(new Tile( x, -y, z));
+                        TileList.Add(new Tile(-x, -y, z));
+                        TileList.Add(new Tile(-x,  y, z));
                     }
                 }
             }

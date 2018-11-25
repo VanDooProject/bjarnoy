@@ -2,10 +2,9 @@
     <div v-on:click="openMenu"
         class="tile"
         v-bind:style="{
-                top: tile.y * -60 + 'px',
-                left: tile.x * 60 + 'px',
-                zIndex: tile.x + tile.y
-            }"
+            transform: 'translate(' + tile.y * -100 + 'px, ' + tile.x * 100 + 'px)',
+            zIndex: tile.x + tile.y
+        }"
     >
         ( {{ tile.x }} | {{ tile.y }} )
     </div>
@@ -36,11 +35,11 @@
 
     position: absolute;
 
-    width: 58px;
-    height: 58px;
+    width: 95px;
+    height: 95px;
 
-   background-color: green;
-    margin: 2px;
+    background-color: green;
+    margin: 5px;
 }
 
 .tile:hover {

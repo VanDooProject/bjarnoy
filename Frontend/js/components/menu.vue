@@ -1,6 +1,6 @@
 <template>
-    <div
-    v-bind:style="{
+    <div 
+        v-bind:style="{
             top: pos.y - size.y/2 + 'px',
             left: pos.x - size.x/2 + 'px',
             width: size.x + 'px',

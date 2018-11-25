@@ -1,0 +1,264 @@
+{
+	"info": {
+		"_postman_id": "bde83344-a8be-4dea-8351-e7364d6a18cc",
+		"name": "BrowsergameAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "auth sign-in",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () { ",
+									"    pm.response.to.not.be.error; ",
+									"    pm.response.to.have.jsonBody(\"\"); ",
+									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"});",
+									"",
+									"var data = pm.response.json();",
+									"pm.environment.set(\"token\", data.token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-in",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-in"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (without token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"",
+									"pm.test(\"response is denied\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token) for admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "2098f59f-4015-418b-bcc7-804f1bd7974c",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest/admin",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest",
+								"admin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token) with session",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "1afa5b9f-952f-420f-a1b7-b0c798464f73",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest/session",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest",
+								"session"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "41b8360a-82b0-4a68-816f-6dc4f6d78538",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "4073e711-bb22-4a67-9632-d8afab2eef49",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}
