@@ -100,10 +100,11 @@ job_build_postman_docs:
     - node /usr/bin/transform-collection.js convert \
           --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
           --input-version 2.0.0 \
-          --output ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json \
+          --output BrowsergameAPI.V1.postman_collection.json \
           --output-version 1.0.0 \
           --pretty \
           --overwrite
+    - find . -name "*.json"
     - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
   artifacts:
@@ -288,12 +289,12 @@ job_test_postman_api:
     - newman run --help
     - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
                 -e ./docs/RestAPI/BrowsergameAPI.postman_environment.json \
-                --reporter-junit-export ./newman-report.xml \
+                --reporter-junit-export=./newman-report.xml \
                 --reporters cli,junit || true
     # --testReportFile="newman-report.xml"
     - ls -ahl
     - find . -name "*.xml"
-    - find / -name "newman-report.xml"
+    - find / -name "*.xml"
 
   artifacts:
       reports:
