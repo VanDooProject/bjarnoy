@@ -88,15 +88,16 @@ job_build_postman_docs:
   before_script:
     - apk add --update nodejs nodejs-npm
     - npm install -g postman-collection-transformer
+    - find / -name transform-collection
   
   script:
-    - transform-collection convert \
-          --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
-          --input-version 2.0.0 \
-          --output ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json \
-          --output-version 1.0.0 \
-          --pretty \
-          --overwrite
+    #- transform-collection convert \
+    #      --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
+    #      --input-version 2.0.0 \
+    #      --output ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json \
+    #      --output-version 1.0.0 \
+    #      --pretty \
+    #      --overwrite
     - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
   artifacts:
@@ -275,9 +276,10 @@ job_test_postman_api:
 
   # https://medium.com/@vdespa/how-to-run-postman-api-tests-with-newman-in-gitlab-ci-the-proper-way-b5a9f6076d79
   script:
-    - ls -ahl
+    - ls -ahl && ls -ahl ./docs && ls -ahl ./docs/RestAPI
     - newman --version
     - newman --help
+    - newman run --help
     - newman run \
                 --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" \
                 --reporters junit \
