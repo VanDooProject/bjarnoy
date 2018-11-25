@@ -81,12 +81,12 @@ job_build_postman_docs:
   allow_failure: true
 
   script:
-    - ls -ahl
-    - postmanerator ./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
-    - postmanerator -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
-    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json 
-     #-environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
-    - ls -ahl
+  # ATTENTION: this container hash no shell as entrypoint
+    #- ls -ahl
+    #- postmanerator ./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
+    #- postmanerator -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
+    - -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+    #- ls -ahl
 
   artifacts:
       expire_in: 45 minutes
