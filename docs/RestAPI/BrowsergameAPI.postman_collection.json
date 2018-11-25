@@ -6,230 +6,235 @@
 	},
 	"item": [
 		{
-			"name": "auth sign-in",
-			"event": [
+			"name": "Authentication",
+			"item": [
 				{
-					"listen": "test",
-					"script": {
-						"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
-						"type": "text/javascript",
-						"exec": [
-							"",
-							"",
-							"",
-							"",
-							"pm.test(\"response is ok\", function () {",
-							"    pm.response.to.have.status(200);",
-							"});",
-							"",
-							"",
-							"// example using response assertions",
-							"pm.test(\"response should be okay to process\", function () { ",
-							"    pm.response.to.not.be.error; ",
-							"    pm.response.to.have.jsonBody(\"\"); ",
-							"    pm.response.to.not.have.jsonBody(\"error\"); ",
-							"});",
-							"",
-							"var data = pm.response.json();",
-							"pm.environment.set(\"token\", data.token);"
-						]
-					}
-				}
-			],
-			"request": {
-				"auth": {
-					"type": "noauth"
-				},
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\"Username\": \"mario\", \"Password\": \"secret\"}"
-				},
-				"url": {
-					"raw": "{{url}}/api/v1/auth/sign-in",
-					"host": [
-						"{{url}}"
-					],
-					"path": [
-						"api",
-						"v1",
-						"auth",
-						"sign-in"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "test auth (without token)",
-			"event": [
-				{
-					"listen": "test",
-					"script": {
-						"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
-						"type": "text/javascript",
-						"exec": [
-							"",
-							"",
-							"pm.test(\"response is denied\", function () {",
-							"    pm.response.to.have.status(401);",
-							"});"
-						]
-					}
-				}
-			],
-			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
+					"name": "auth sign-in",
+					"event": [
 						{
-							"key": "token",
-							"value": "",
-							"type": "string"
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () { ",
+									"    pm.response.to.not.be.error; ",
+									"    pm.response.to.have.jsonBody(\"\"); ",
+									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"});",
+									"",
+									"var data = pm.response.json();",
+									"pm.environment.set(\"token\", data.token);"
+								]
+							}
 						}
-					]
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-in",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-in"
+							]
+						}
+					},
+					"response": []
 				},
-				"method": "GET",
-				"header": [],
-				"body": {},
-				"url": {
-					"raw": "http://localhost:41527/api/v1/auth/selftest",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "41527",
-					"path": [
-						"api",
-						"v1",
-						"auth",
-						"selftest"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "test auth (with token)",
-			"event": [
 				{
-					"listen": "test",
-					"script": {
-						"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
-						"type": "text/javascript",
-						"exec": [
-							"",
-							"pm.test(\"response is ok\", function () {",
-							"    pm.response.to.have.status(200);",
-							"});"
-						]
-					}
-				}
-			],
-			"request": {
-				"method": "GET",
-				"header": [],
-				"body": {},
-				"url": {
-					"raw": "http://localhost:41527/api/v1/auth/selftest",
-					"protocol": "http",
-					"host": [
-						"localhost"
+					"name": "test auth (without token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"",
+									"pm.test(\"response is denied\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								]
+							}
+						}
 					],
-					"port": "41527",
-					"path": [
-						"api",
-						"v1",
-						"auth",
-						"selftest"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "test auth (with token) for admin",
-			"event": [
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "http://localhost:41527/api/v1/auth/selftest",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "41527",
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest"
+							]
+						}
+					},
+					"response": []
+				},
 				{
-					"listen": "test",
-					"script": {
-						"id": "2098f59f-4015-418b-bcc7-804f1bd7974c",
-						"type": "text/javascript",
-						"exec": [
-							"",
-							"pm.test(\"response is ok\", function () {",
-							"    pm.response.to.have.status(200);",
-							"});"
-						]
-					}
-				}
-			],
-			"request": {
-				"method": "GET",
-				"header": [],
-				"body": {},
-				"url": {
-					"raw": "http://localhost:41527/api/v1/auth/selftest/admin",
-					"protocol": "http",
-					"host": [
-						"localhost"
+					"name": "test auth (with token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
 					],
-					"port": "41527",
-					"path": [
-						"api",
-						"v1",
-						"auth",
-						"selftest",
-						"admin"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "test auth (with token) with session",
-			"event": [
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "http://localhost:41527/api/v1/auth/selftest",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "41527",
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest"
+							]
+						}
+					},
+					"response": []
+				},
 				{
-					"listen": "test",
-					"script": {
-						"id": "1afa5b9f-952f-420f-a1b7-b0c798464f73",
-						"type": "text/javascript",
-						"exec": [
-							"",
-							"pm.test(\"response is ok\", function () {",
-							"    pm.response.to.have.status(200);",
-							"});"
-						]
-					}
-				}
-			],
-			"request": {
-				"method": "GET",
-				"header": [],
-				"body": {},
-				"url": {
-					"raw": "http://localhost:41527/api/v1/auth/selftest/session",
-					"protocol": "http",
-					"host": [
-						"localhost"
+					"name": "test auth (with token) for admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "2098f59f-4015-418b-bcc7-804f1bd7974c",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
 					],
-					"port": "41527",
-					"path": [
-						"api",
-						"v1",
-						"auth",
-						"selftest",
-						"session"
-					]
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "http://localhost:41527/api/v1/auth/selftest/admin",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "41527",
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest",
+								"admin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token) with session",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "1afa5b9f-952f-420f-a1b7-b0c798464f73",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {},
+						"url": {
+							"raw": "http://localhost:41527/api/v1/auth/selftest/session",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "41527",
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest",
+								"session"
+							]
+						}
+					},
+					"response": []
 				}
-			},
-			"response": []
+			]
 		}
 	],
 	"auth": {

@@ -78,16 +78,15 @@ job_build_postman_docs:
   stage: build
   image: 
     name: hughmp/postmanerator:latest
-    # ATTENTION: this container hash no shell as entrypoint -> set it
+    # ATTENTION: this container hash no shell as entrypoint -> set it ( https://docs.gitlab.com/ee/ci/docker/using_docker_images.html#overriding-the-entrypoint-of-an-image )
     entrypoint: ["/bin/sh", "-c"]
 
   allow_failure: true
 
   script:
-    - ls -ahl
-    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json
-    #- -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
-    - ls -ahl
+    - postmanerator -output=./doc.html \
+                    -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json \
+                    -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
   artifacts:
       expire_in: 45 minutes
@@ -265,7 +264,7 @@ job_test_postman_api:
 
   script:
     - ls -ahl
-    - newman --collection="./docs/RestAPI/BrowsergameAPI.postman_collection.json" --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml"
+    - newman "./docs/RestAPI/BrowsergameAPI.postman_collection.json" --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml"
     - ls -ahl
 
   artifacts:
