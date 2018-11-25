@@ -35,6 +35,7 @@ Vue.use(CxltToastr, toastrConfigs);
 
 // own components:
 import MapComponent from './components/map.vue';
+import GameHeader from './components/gameHeader.vue';
 
 // 1. Define route components.
 const ComponentUserProfie = { template: '<div>User Profile</div>' };
@@ -51,12 +52,13 @@ const router = new VueRouter({
 });
 
 Vue.prototype.$config = config;
+
 // main app
 const vue = new Vue({
     router,
     el: '#app',
     components: {
-
+        'gameheader':GameHeader
     },
     data: {
 

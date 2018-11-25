@@ -1,6 +1,3 @@
-// import MapLayer from './componments/map_layer.vue';
-
-
 <template>
     <div
     v-on:mousedown='mouseDown'
@@ -8,17 +5,7 @@
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
     >
-        <h1>Map</h1>
-
         <MapMenu v-bind:pos="menu"></MapMenu>
-
-        <!--
-        <ul id="map-list-1">
-            <li v-bind:key="tile.id" v-for="tile in tiles">
-                {{ tile.x }} | {{ tile.y }}
-            </li>
-        </ul>
-        -->
 
         <div id="map">
             <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
@@ -30,7 +17,7 @@
 <script>
     import MapLayer from './map_layer.vue';
     import MapMenu from './menu.vue';
-
+    
     export default {
         components: {
             MapLayer,
@@ -41,7 +28,9 @@
             return {
                 // will be a three-dimensional array with map coords
                 tiles: [],
+
                 menu: {x: 0, y: 0},
+
                 isMouseDown: false,
                 globalMapOffset: {x:0, y:0},
                 mouseMovement: {x:0, y:0}
@@ -49,7 +38,6 @@
         },
         mounted () {
             this.axios
-                // TODO: use global server config
                 .get(this.$config.RequestUriPrefix + '/api/v1/map/demo/10',
                     {
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
@@ -82,7 +70,6 @@
                 }
             },
             mouseLeave: function(event) {
-                console.log("Leave");
                 this.isMouseDown=false;
             }
         }
@@ -93,6 +80,29 @@
 </script>
 
 <style>
+html, body {
+    padding: 0px;
+    margin: 0px;
 
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+#map {
+    display: block;
+    padding: 0px;
+    margin: 0px;
+    min-width: 100%;
+    min-height: 100%;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 0;
+}
 
 </style>
