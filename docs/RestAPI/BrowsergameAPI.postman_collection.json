@@ -102,12 +102,10 @@
 						"header": [],
 						"body": {},
 						"url": {
-							"raw": "http://localhost:41527/api/v1/auth/selftest",
-							"protocol": "http",
+							"raw": "{{url}}/api/v1/auth/selftest",
 							"host": [
-								"localhost"
+								"{{url}}"
 							],
-							"port": "41527",
 							"path": [
 								"api",
 								"v1",
@@ -140,12 +138,10 @@
 						"header": [],
 						"body": {},
 						"url": {
-							"raw": "http://localhost:41527/api/v1/auth/selftest",
-							"protocol": "http",
+							"raw": "{{url}}/api/v1/auth/selftest",
 							"host": [
-								"localhost"
+								"{{url}}"
 							],
-							"port": "41527",
 							"path": [
 								"api",
 								"v1",
@@ -178,12 +174,10 @@
 						"header": [],
 						"body": {},
 						"url": {
-							"raw": "http://localhost:41527/api/v1/auth/selftest/admin",
-							"protocol": "http",
+							"raw": "{{url}}/api/v1/auth/selftest/admin",
 							"host": [
-								"localhost"
+								"{{url}}"
 							],
-							"port": "41527",
 							"path": [
 								"api",
 								"v1",
@@ -217,12 +211,10 @@
 						"header": [],
 						"body": {},
 						"url": {
-							"raw": "http://localhost:41527/api/v1/auth/selftest/session",
-							"protocol": "http",
+							"raw": "{{url}}/api/v1/auth/selftest/session",
 							"host": [
-								"localhost"
+								"{{url}}"
 							],
-							"port": "41527",
 							"path": [
 								"api",
 								"v1",
