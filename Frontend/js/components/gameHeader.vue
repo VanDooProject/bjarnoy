@@ -6,6 +6,8 @@
             <!-- `<router-link>` will be rendered as an `<a>` tag by default -->
             <router-link to="/map">Go to map</router-link>
             <router-link to="/user">Go to user profile</router-link>
+            <router-link to="/login">login</router-link>
+            <router-link to="/register">register</router-link>
         </menu>
     </div>
 </template>
