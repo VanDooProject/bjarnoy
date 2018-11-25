@@ -83,10 +83,18 @@ job_build_postman_docs:
 
   allow_failure: true
 
+  before_script:
+    - npm install -g postman-collection-transformer
+
   script:
-    - postmanerator -output=./doc.html \
-                    -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json \
-                    -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+    - transform-collection convert \
+          --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
+          --input-version 2.0.0 \
+          --output ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json \
+          --output-version 1.0.0 \
+          --pretty \
+          --overwrite
+    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
   artifacts:
       expire_in: 45 minutes
@@ -264,7 +272,7 @@ job_test_postman_api:
 
   script:
     - ls -ahl
-    - newman "./docs/RestAPI/BrowsergameAPI.postman_collection.json" --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml"
+    - newman --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml" ./docs/RestAPI/BrowsergameAPI.postman_collection.json
     - ls -ahl
 
   artifacts:
