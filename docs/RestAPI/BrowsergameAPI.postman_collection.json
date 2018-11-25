@@ -11,14 +11,13 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "333af06a-01d4-4610-8001-145598445c3a",
+						"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
 						"type": "text/javascript",
 						"exec": [
 							"",
 							"",
 							"",
 							"",
-							"// example using pm.response.to.have",
 							"pm.test(\"response is ok\", function () {",
 							"    pm.response.to.have.status(200);",
 							"});",
@@ -118,6 +117,21 @@
 		},
 		{
 			"name": "test auth (with token)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+						"type": "text/javascript",
+						"exec": [
+							"",
+							"pm.test(\"response is ok\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
+						]
+					}
+				}
+			],
 			"request": {
 				"method": "GET",
 				"header": [],
@@ -145,10 +159,13 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "3a75ae0c-c157-4fd9-9021-868063947d2c",
+						"id": "2098f59f-4015-418b-bcc7-804f1bd7974c",
 						"type": "text/javascript",
 						"exec": [
-							""
+							"",
+							"pm.test(\"response is ok\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
 						]
 					}
 				}
@@ -181,10 +198,13 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "3a75ae0c-c157-4fd9-9021-868063947d2c",
+						"id": "1afa5b9f-952f-420f-a1b7-b0c798464f73",
 						"type": "text/javascript",
 						"exec": [
-							""
+							"",
+							"pm.test(\"response is ok\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
 						]
 					}
 				}
