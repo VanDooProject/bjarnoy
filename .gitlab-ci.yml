@@ -86,7 +86,7 @@ job_build_postman_docs:
 
   # need to use correct container typ for: https://github.com/postmanlabs/postman-collection-transformer
   before_script:
-    - apt install npm
+    - apk add --update nodejs nodejs-npm
     - npm install -g postman-collection-transformer
   
   script:
@@ -273,10 +273,11 @@ job_test_postman_api:
 
   allow_failure: true
 
+  # https://medium.com/@vdespa/how-to-run-postman-api-tests-with-newman-in-gitlab-ci-the-proper-way-b5a9f6076d79
   script:
     - ls -ahl
     - newman --version
-    - newman --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml" ./docs/RestAPI/BrowsergameAPI.postman_collection.json
+    - newman run --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml" ./docs/RestAPI/BrowsergameAPI.postman_collection.json
     - ls -ahl
 
   artifacts:
