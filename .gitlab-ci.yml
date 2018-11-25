@@ -76,7 +76,8 @@ job_build_vue:
 ## create postman docs
 job_build_postman_docs:
   stage: build
-  image: hughmp/postmanerator:latest
+  image: 
+    name: hughmp/postmanerator:latest
     # ATTENTION: this container hash no shell as entrypoint -> set it
     entrypoint: ["/bin/sh", "-c"]
 
@@ -252,7 +253,8 @@ job_stop_deploy_staging:
 ## check API with postman docs
 job_test_postman_api:
   stage: stop_deploy
-  image: postman/newman_alpine33
+  image: 
+    name: postman/newman_alpine33
     # ATTENTION: this container hash no shell as entrypoint -> set it
     entrypoint: ["/bin/sh", "-c"]
 
