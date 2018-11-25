@@ -12,6 +12,9 @@
 
 <script>
     export default {
+        components:{
+            
+        },
         name: "GameHeader",
         props:[],
         computed: {
