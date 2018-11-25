@@ -3,10 +3,14 @@
         class="tile"
         v-bind:style="{
             transform: 'translate(' + tile.y * -100 + 'px, ' + tile.x * 100 + 'px)',
-            zIndex: tile.x + tile.y
+            zIndex: tile.x - tile.y
         }"
     >
-        ( {{ tile.x }} | {{ tile.y }} )
+        <!-- <img src="/images/tile.png"
+        width="150"
+        height="150"
+        draggable="false"
+        >-->
     </div>
 </template>
 
@@ -35,11 +39,15 @@
 
     position: absolute;
 
-    width: 95px;
-    height: 95px;
+    width: 100px;
+    height: 100px;
 
-    background-color: green;
-    margin: 5px;
+    background-color: green;    
+    border:1px solid black;
+    border-top-style: none;
+    border-right-style: solid;
+    border-bottom-style: solid;
+    border-left-style: none;
 }
 
 .tile:hover {

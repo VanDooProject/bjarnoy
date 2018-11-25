@@ -8,8 +8,8 @@
         <MapMenu v-bind:pos="menu"></MapMenu>
 
         <div id="map">
-            <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
             <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
     </div>
 </template>
@@ -65,8 +65,10 @@
                 {
                     this.mouseMovement.x += Math.abs(event.movementX);
                     this.mouseMovement.y += Math.abs(event.movementY);
-                    this.globalMapOffset.x += event.movementX;
-                    this.globalMapOffset.y += event.movementY;
+                    //var MapOffset = 
+                    var angle = -45 * Math.PI / 180
+                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
+                    this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
                 }
             },
             mouseLeave: function(event) {
@@ -103,6 +105,7 @@ html, body {
     bottom: 0;
     right: 0;
     z-index: 0;
+    transform: rotateX(45deg) rotateZ(45deg);
 }
 
 </style>
