@@ -2,10 +2,9 @@
     <div v-on:click="openMenu"
         class="tile"
         v-bind:style="{
-                top: tile.y * -100 + 'px',
-                left: tile.x * 100 + 'px',
-                zIndex: tile.x + tile.y
-            }"
+            transform: 'translate(' + tile.y * -100 + 'px, ' + tile.x * 100 + 'px)',
+            zIndex: tile.x + tile.y
+        }"
     >
         ( {{ tile.x }} | {{ tile.y }} )
     </div>
