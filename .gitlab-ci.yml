@@ -87,7 +87,7 @@ job_build_vue:
   artifacts:
       expire_in: 45 minutes
       paths:
-        - *.html
+        - ./*.html
 
 
 
