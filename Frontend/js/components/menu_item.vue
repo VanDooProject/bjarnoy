@@ -1,6 +1,6 @@
 <template>
     <img
-        src="./../../images/circle1.png" 
+        src="/images/circle1.png" 
         v-bind:style="{
             top: pos.y - size/2 + 'px',
             left: pos.x - size/2 + 'px',

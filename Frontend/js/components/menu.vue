@@ -10,7 +10,7 @@
         }" 
         class="mapmenu"
     >
-        <img src="./../../images/circle.png" 
+        <img src="/images/circle.png" 
             v-bind:height="size.x"
             v-bind:width="size.y"
         />
