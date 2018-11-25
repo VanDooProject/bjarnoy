@@ -88,7 +88,10 @@ job_build_postman_docs:
   before_script:
     - apk add --update nodejs nodejs-npm
     - npm install -g postman-collection-transformer
-    - find / -name "*collection*""
+    # /usr/bin/transform-collection.js -> /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
+    - find / -name "*collection*"
+    - ls -ahl /usr/bin/transform-collection.js
+    - ls -ahl /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
   
   script:
     #- transform-collection convert \
@@ -280,10 +283,9 @@ job_test_postman_api:
     - newman --version
     - newman --help
     - newman run --help
-    - newman run \
+    - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
                 -e ./docs/RestAPI/BrowsergameAPI.postman_environment.json \
                 --reporters junit \
-                ./docs/RestAPI/BrowsergameAPI.postman_collection.json
     # --testReportFile="newman-report.xml"
     - ls -ahl
 
