@@ -71,6 +71,7 @@ job_build_vue:
       paths:
         - Frontend/*.html
         - Frontend/dist/*
+        - Frontend/images/*
 
 
 
@@ -140,6 +141,7 @@ job_docker_create:
     - mkdir -p ./Docker/wwwroot/dist
     - cp -Rv Frontend/*.html ./Docker/wwwroot
     - cp -Rv Frontend/dist/*.js ./Docker/wwwroot/dist/
+    - cp -Rv Frontend/images/* ./Docker/wwwroot/images/
     #-------------------------------------------------------------------------------
     - ls -ahl && ls -ahl ./Docker/
     # build container
