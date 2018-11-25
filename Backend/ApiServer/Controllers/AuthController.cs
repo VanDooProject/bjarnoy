@@ -111,6 +111,7 @@ namespace ApiServer.Controllers
             {
                 user = new UserModel
                 {
+                    Id = "IdFromMongoDb",
                     Name = "Mario Rossi",
                     Email = "mario.rossi@domain.com",
                     Birthdate = DateTime.Now

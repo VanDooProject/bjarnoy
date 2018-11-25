@@ -88,16 +88,11 @@ job_build_postman_docs:
   before_script:
     - apk add --update nodejs nodejs-npm
     - npm install -g postman-collection-transformer
-    ## /usr/bin/transform-collection.js -> /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
-    #- find / -name "*collection*"
-    #- ls -ahl /usr/bin/transform-collection.js
-    #- ls -ahl /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
-    #- ls -ahl /usr/lib/node_modules/postman-collection-transformer
   
   script:
     - node /usr/bin/transform-collection.js --help
     - node /usr/bin/transform-collection.js convert --help
-    - node /usr/bin/transform-collection.js convert -i ./docs/RestAPI/BrowsergameAPI.postman_collection.json -j 2.1.0 -o ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json -p 1.0.0 -P -w
+    - node /usr/bin/transform-collection.js convert -i="./docs/RestAPI/BrowsergameAPI.postman_collection.json" -j="2.1.0" -o="./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json" -p="1.0.0" -P -w
     - find . -name "*.json"
     - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
@@ -283,7 +278,6 @@ job_test_postman_api:
     - newman run --help
     # https://github.com/postmanlabs/newman/issues/1590
     - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --reporter-junit-export="./newman-report.xml" -r junit --reporters="junit,cli" --global-var "url=http://$CI_COMMIT_REF_SLUG.gamez.mynode.space"
-    # --testReportFile="newman-report.xml"
     - ls -ahl
     - find . -name "*.xml"
     - find / -name "*.xml"
