@@ -36,7 +36,15 @@ namespace ApiServer.Controllers
 
             return String.Format("user({0}) is allowed to view page", currentUser);
         }
+        // GET api/v1/auth/selftest/session/
+        [HttpGet("selftest/session/")]
+        [Authorize(Policy = "ValidSession")]
+        public string GetTestSession()
+        {
+            ClaimsPrincipal currentUser = HttpContext.User;
 
+            return String.Format("user({0}) is allowed to view page - active session found", currentUser);
+        }
 
         // GET api/v1/auth/selftest/admin/
         [HttpGet("selftest/admin/")]
