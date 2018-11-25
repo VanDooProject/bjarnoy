@@ -139,6 +139,7 @@ job_docker_create:
 
     # vue stuff
     - mkdir -p ./Docker/wwwroot/dist
+    - mkdir -p ./Docker/wwwroot/images
     - cp -Rv Frontend/*.html ./Docker/wwwroot
     - cp -Rv Frontend/dist/*.js ./Docker/wwwroot/dist/
     - cp -Rv Frontend/images/* ./Docker/wwwroot/images/
