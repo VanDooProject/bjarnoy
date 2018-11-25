@@ -74,14 +74,15 @@ job_build_vue:
 
 
 ## create postman docs
-job_build_vue:
+job_build_postman_docs:
   stage: build
   image: hughmp/postmanerator:latest
 
   allow_failure: true
 
   script:
-    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json 
+     #-environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
     - ls -ahl
 
   artifacts:
