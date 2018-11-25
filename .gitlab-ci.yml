@@ -81,6 +81,9 @@ job_build_postman_docs:
   allow_failure: true
 
   script:
+    - ls -ahl
+    - postmanerator ./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
+    - postmanerator -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
     - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json 
      #-environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
     - ls -ahl
@@ -242,3 +245,25 @@ job_stop_deploy_staging:
 
     - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
     - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
+
+
+
+
+## check API with postman docs
+job_build_postman_docs:
+  stage: stop_deploy
+  image: postman/newman_alpine33
+
+  dependencies:
+    - job_deploy_staging
+
+  allow_failure: true
+
+  script:
+    - ls -ahl
+    - postmanerator --collection="./docs/RestAPI/BrowsergameAPI.postman_collection.json" --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml"
+    - ls -ahl
+
+  artifacts:
+      reports:
+        junit: ./newman-report.xml
