@@ -268,7 +268,7 @@ job_test_postman_api:
   dependencies:
     - job_deploy_staging
 
-  allow_failure: true
+#  allow_failure: true
 
   # https://medium.com/@vdespa/how-to-run-postman-api-tests-with-newman-in-gitlab-ci-the-proper-way-b5a9f6076d79
   script:
