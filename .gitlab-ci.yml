@@ -73,6 +73,24 @@ job_build_vue:
         - Frontend/dist/*
 
 
+## create postman docs
+job_build_vue:
+  stage: build
+  image: hughmp/postmanerator:latest
+
+  allow_failure: true
+
+  script:
+    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+    - ls -ahl
+
+  artifacts:
+      expire_in: 45 minutes
+      paths:
+        - *.html
+
+
+
 
 
 
