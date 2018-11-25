@@ -88,13 +88,15 @@ job_build_postman_docs:
   before_script:
     - apk add --update nodejs nodejs-npm
     - npm install -g postman-collection-transformer
-    # /usr/bin/transform-collection.js -> /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
-    - find / -name "*collection*"
-    - ls -ahl /usr/bin/transform-collection.js
-    - ls -ahl /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
-    - ls -ahl /usr/lib/node_modules/postman-collection-transformer
+    ## /usr/bin/transform-collection.js -> /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
+    #- find / -name "*collection*"
+    #- ls -ahl /usr/bin/transform-collection.js
+    #- ls -ahl /usr/lib/node_modules/postman-collection-transformer/bin/transform-collection.js
+    #- ls -ahl /usr/lib/node_modules/postman-collection-transformer
   
   script:
+    - node /usr/bin/transform-collection.js --help
+    - node /usr/bin/transform-collection.js convert --help
     - node /usr/bin/transform-collection.js convert \
           --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
           --input-version 2.0.0 \
@@ -286,10 +288,12 @@ job_test_postman_api:
     - newman run --help
     - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
                 -e ./docs/RestAPI/BrowsergameAPI.postman_environment.json \
-                --reporters junit \
-                --reporter-junit-export ./newman-report.xml || true
+                --reporter-junit-export ./newman-report.xml \
+                --reporters cli,junit || true
     # --testReportFile="newman-report.xml"
     - ls -ahl
+    - find . -name "*.xml"
+    - find / -name "newman-report.xml"
 
   artifacts:
       reports:
