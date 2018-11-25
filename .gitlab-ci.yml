@@ -71,6 +71,37 @@ job_build_vue:
       paths:
         - Frontend/*.html
         - Frontend/dist/*
+        - Frontend/images/*
+
+
+## create postman docs
+# https://stackoverflow.com/questions/29238120/creating-html-doc-from-postman-collection
+job_build_postman_docs:
+  stage: build
+  image: 
+    name: hughmp/postmanerator:latest
+    # ATTENTION: this container hash no shell as entrypoint -> set it ( https://docs.gitlab.com/ee/ci/docker/using_docker_images.html#overriding-the-entrypoint-of-an-image )
+    entrypoint: [""]
+
+  allow_failure: true
+
+  # need to use correct container typ for: https://github.com/postmanlabs/postman-collection-transformer
+  before_script:
+    - apk add --update nodejs nodejs-npm
+    - npm install -g postman-collection-transformer
+  
+  script:
+    - node /usr/bin/transform-collection.js --help
+    - node /usr/bin/transform-collection.js convert --help
+    - node /usr/bin/transform-collection.js convert -i="./docs/RestAPI/BrowsergameAPI.postman_collection.json" -j="2.1.0" -o="./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json" -p="1.0.0" -P -w
+    - find . -name "*.json"
+    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+
+  artifacts:
+      expire_in: 45 minutes
+      paths:
+        - ./*.html
+
 
 
 
@@ -138,8 +169,10 @@ job_docker_create:
 
     # vue stuff
     - mkdir -p ./Docker/wwwroot/dist
+    - mkdir -p ./Docker/wwwroot/images
     - cp -Rv Frontend/*.html ./Docker/wwwroot
     - cp -Rv Frontend/dist/*.js ./Docker/wwwroot/dist/
+    - cp -Rv Frontend/images/* ./Docker/wwwroot/images/
     #-------------------------------------------------------------------------------
     - ls -ahl && ls -ahl ./Docker/
     # build container
@@ -223,3 +256,38 @@ job_stop_deploy_staging:
 
     - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
     - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
+
+
+
+
+## check API with postman docs
+job_test_postman_api:
+  stage: stop_deploy
+  image: 
+    name: postman/newman
+    # ATTENTION: this container hash no shell as entrypoint -> set it
+    entrypoint: [""]
+
+  dependencies:
+    - job_deploy_staging
+
+#  allow_failure: true
+
+  # https://medium.com/@vdespa/how-to-run-postman-api-tests-with-newman-in-gitlab-ci-the-proper-way-b5a9f6076d79
+  script:
+    - ls -ahl && ls -ahl ./docs && ls -ahl ./docs/RestAPI
+    - newman --version
+    - newman --help
+    - newman run --help
+    # https://github.com/postmanlabs/newman/issues/1590
+    - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --reporter-junit-export="./newman-report.xml" -r junit --reporters="junit,cli" --global-var "url=http://$CI_COMMIT_REF_SLUG.gamez.mynode.space"
+    - ls -ahl
+    - find . -name "*.xml"
+    - find / -name "*.xml"
+
+  artifacts:
+      expire_in: 15 minutes
+      paths:
+        - ./*.xml
+      reports:
+        junit: ./*.xml

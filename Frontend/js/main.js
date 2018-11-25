@@ -36,6 +36,9 @@ Vue.use(CxltToastr, toastrConfigs);
 // own components:
 import MapComponent from './components/map.vue';
 import GameHeader from './components/gameHeader.vue';
+import LoginForm from './components/forms/login_form.vue';
+import RegisterForm from './components/forms/register_form.vue';
+
 
 // 1. Define route components.
 const ComponentUserProfie = { template: '<div>User Profile</div>' };
@@ -44,6 +47,8 @@ const ComponentUserProfie = { template: '<div>User Profile</div>' };
 const routes = [
     { path: '/map', component: MapComponent },
     { path: '/user', component: ComponentUserProfie },
+    { path: '/login', component: LoginForm },
+    { path: '/register', component: RegisterForm },
 ];
 
 // 3. Create the router instance and pass the `routes` option

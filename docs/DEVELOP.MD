@@ -64,6 +64,7 @@ To run the Backend or Frontend open Visual Studio Code, on the left menubar clic
 Then you will see a dropdown at the top like on the following screenshot.
 ![](img/2018-11-21-20-11-13.png)
 
+To prepare the the nodeJS runtime you have to run `npm install` in the Frontend directory.
 To Start the Frontend select "Launch Frontend in Chrome Debugger" and click 'play' or press 'F5'.
  NPM should build the frontend in the background an launch a webserver via webpack with hot-reload enabled. So when you change a file it immediately should change in the browser which should also have opened.
 

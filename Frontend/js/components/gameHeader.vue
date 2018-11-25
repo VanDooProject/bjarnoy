@@ -12,6 +12,9 @@
 
 <script>
     export default {
+        components:{
+            
+        },
         name: "GameHeader",
         props:[],
         computed: {
@@ -21,7 +24,21 @@
             
         },
         mounted () {
-            
+            if (localStorage.token == undefined)
+            {
+                this.$router.push('/register');
+            }
+            else
+            {
+                this.axios
+                .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                    {
+                        headers: {'Authorization': "bearer " + localStorage.token},
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                    })
+                .then(response => console.log(response))
+                .catch(error => this.$router.push('/login'));
+            }
         },
     }
 </script>
