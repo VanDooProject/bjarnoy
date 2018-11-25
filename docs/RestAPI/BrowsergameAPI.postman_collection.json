@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "bde83344-a8be-4dea-8351-e7364d6a18cc",
-		"name": "Browsergame",
+		"name": "BrowsergameAPI",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -11,9 +11,26 @@
 				{
 					"listen": "test",
 					"script": {
-						"id": "ce8ef842-78a0-4eb5-a9db-e3c53e38eda6",
+						"id": "333af06a-01d4-4610-8001-145598445c3a",
 						"type": "text/javascript",
 						"exec": [
+							"",
+							"",
+							"",
+							"",
+							"// example using pm.response.to.have",
+							"pm.test(\"response is ok\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"",
+							"// example using response assertions",
+							"pm.test(\"response should be okay to process\", function () { ",
+							"    pm.response.to.not.be.error; ",
+							"    pm.response.to.have.jsonBody(\"\"); ",
+							"    pm.response.to.not.have.jsonBody(\"error\"); ",
+							"});",
+							"",
 							"var data = pm.response.json();",
 							"pm.environment.set(\"token\", data.token);"
 						]
@@ -21,6 +38,9 @@
 				}
 			],
 			"request": {
+				"auth": {
+					"type": "noauth"
+				},
 				"method": "POST",
 				"header": [
 					{
@@ -49,7 +69,33 @@
 		},
 		{
 			"name": "test auth (without token)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+						"type": "text/javascript",
+						"exec": [
+							"",
+							"",
+							"pm.test(\"response is denied\", function () {",
+							"    pm.response.to.have.status(401);",
+							"});"
+						]
+					}
+				}
+			],
 			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "",
+							"type": "string"
+						}
+					]
+				},
 				"method": "GET",
 				"header": [],
 				"body": {},
@@ -73,16 +119,6 @@
 		{
 			"name": "test auth (with token)",
 			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{token}}",
-							"type": "string"
-						}
-					]
-				},
 				"method": "GET",
 				"header": [],
 				"body": {},
@@ -118,16 +154,6 @@
 				}
 			],
 			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{token}}",
-							"type": "string"
-						}
-					]
-				},
 				"method": "GET",
 				"header": [],
 				"body": {},
@@ -164,16 +190,6 @@
 				}
 			],
 			"request": {
-				"auth": {
-					"type": "bearer",
-					"bearer": [
-						{
-							"key": "token",
-							"value": "{{token}}",
-							"type": "string"
-						}
-					]
-				},
 				"method": "GET",
 				"header": [],
 				"body": {},
@@ -194,6 +210,38 @@
 				}
 			},
 			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "41b8360a-82b0-4a68-816f-6dc4f6d78538",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "4073e711-bb22-4a67-9632-d8afab2eef49",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
 		}
 	]
 }
