@@ -250,7 +250,7 @@ job_stop_deploy_staging:
 
 
 ## check API with postman docs
-job_build_postman_docs:
+job_test_postman_api:
   stage: stop_deploy
   image: postman/newman_alpine33
 
