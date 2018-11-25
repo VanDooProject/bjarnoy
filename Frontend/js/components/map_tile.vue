@@ -3,10 +3,14 @@
         class="tile"
         v-bind:style="{
             transform: 'translate(' + tile.y * -100 + 'px, ' + tile.x * 100 + 'px)',
-            zIndex: tile.x + tile.y
+            zIndex: tile.x - tile.y
         }"
     >
-        ( {{ tile.x }} | {{ tile.y }} )
+        <img src="/images/tile.jpg"
+        width="150"
+        height="150"
+        draggable="false"
+        >
     </div>
 </template>
 
