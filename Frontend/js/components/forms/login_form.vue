@@ -1,7 +1,7 @@
 <template>
     <div>
         <b-form @submit="onSubmit" @reset="onReset">
-            <b-form-group label="Username or email"
+            <b-form-group label="Email"
                     label-for="email" 
                     description="We'll never share your email with anyone else."
             >
@@ -23,6 +23,7 @@
                     v-model="form.password"
                     required
                     placeholder="Please enter your password"
+                    autocomplete="current-password"
                 >
                 </b-form-input>
             </b-form-group>

@@ -1,7 +1,7 @@
 <template>
     <div>
         <b-form @submit="onSubmit" @reset="onReset">
-            <b-form-group label="Username or email"
+            <b-form-group label="Email"
                     label-for="email" 
                     description="We'll never share your email with anyone else."
             >
@@ -10,13 +10,13 @@
                     type="email"
                     v-model="form.email"
                     required
-                    placeholder="Enter username or email"
+                    autocomplete="email"
+                    placeholder="Please enter your email"
                 >
                 </b-form-input>
             </b-form-group>
             <b-form-group label="Password"
-                    label-for="password" 
-                    requred
+                    label-for="password"
                     :state="passwordCorrectState&&passwordVerifiedState"
             >
                 <b-form-input
@@ -25,7 +25,8 @@
                     v-model="form.password"
                     required
                     :state="passwordCorrectState"
-                    placeholder="Please enter your password"
+                    autocomplete="new-password"
+                    placeholder="Please enter a password"
                 >
                 </b-form-input>
                 <b-form-input
@@ -33,7 +34,8 @@
                     v-model="form.passwordVerify"
                     required
                     :state="passwordVerifiedState"
-                    placeholder="Please verify your password"
+                    autocomplete="new-password"
+                    placeholder="Please verify the password"
                 >
                 </b-form-input>
             </b-form-group>
