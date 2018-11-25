@@ -74,6 +74,7 @@ job_build_vue:
 
 
 ## create postman docs
+# https://stackoverflow.com/questions/29238120/creating-html-doc-from-postman-collection
 job_build_postman_docs:
   stage: build
   image: 
@@ -83,18 +84,19 @@ job_build_postman_docs:
 
   allow_failure: true
 
-  before_script:
-    - npm install -g postman-collection-transformer
-
+  # need to use correct container typ for: https://github.com/postmanlabs/postman-collection-transformer
+  #before_script:
+  #  - npm install -g postman-collection-transformer
+  #
   script:
-    - transform-collection convert \
-          --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
-          --input-version 2.0.0 \
-          --output ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json \
-          --output-version 1.0.0 \
-          --pretty \
-          --overwrite
-    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+  #  - transform-collection convert \
+  #        --input ./docs/RestAPI/BrowsergameAPI.postman_collection.json \
+  #        --input-version 2.0.0 \
+  #        --output ./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json \
+  #        --output-version 1.0.0 \
+  #        --pretty \
+  #        --overwrite
+    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
 
   artifacts:
       expire_in: 45 minutes
@@ -261,7 +263,7 @@ job_stop_deploy_staging:
 job_test_postman_api:
   stage: stop_deploy
   image: 
-    name: postman/newman_alpine33
+    name: postman/newman
     # ATTENTION: this container hash no shell as entrypoint -> set it
     entrypoint: ["/bin/sh", "-c"]
 
