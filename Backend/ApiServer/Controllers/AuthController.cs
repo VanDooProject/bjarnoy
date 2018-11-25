@@ -84,8 +84,9 @@ namespace ApiServer.Controllers
 
             var token = new JwtSecurityToken(_config["Jwt:Issuer"],
                 _config["Jwt:Issuer"],
-                claims,
-                expires: DateTime.Now.AddMinutes(30),
+                claims: claims,
+                notBefore: DateTime.UtcNow,
+                expires: DateTime.Now.AddMinutes(30), // time how long cookie is valid
                 signingCredentials: creds);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
@@ -97,7 +98,12 @@ namespace ApiServer.Controllers
 
             if (login.Username == "mario" && login.Password == "secret")
             {
-                user = new UserModel { Name = "Mario Rossi", Email = "mario.rossi@domain.com" };
+                user = new UserModel
+                {
+                    Name = "Mario Rossi",
+                    Email = "mario.rossi@domain.com",
+                    Birthdate = DateTime.Now
+                };
             }
             return user;
         }
