@@ -49,6 +49,7 @@
                 <b-button type="reset"  variant="danger" >Reset</b-button>
             </b-form-group>
         </b-form>
+        Already have an account? Click <router-link to="/login">login</router-link> to login.   
     </div>
 </template>
 

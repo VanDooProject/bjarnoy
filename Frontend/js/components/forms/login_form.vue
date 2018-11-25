@@ -1,16 +1,16 @@
 <template>
     <div>
         <b-form @submit="onSubmit" @reset="onReset">
-            <b-form-group label="Email"
-                    label-for="email" 
-                    description="We'll never share your email with anyone else."
+            <b-form-group label="Username"
+                    label-for="username" 
             >
                 <b-form-input
-                    id="email"
-                    type="email"
-                    v-model="form.email"
+                    id="username"
+                    type="text"
+                    v-model="form.username"
                     required
-                    placeholder="Enter username or email"
+                    autocomplete="username"
+                    placeholder="Please enter your username"
                 >
                 </b-form-input>
             </b-form-group>
@@ -36,7 +36,8 @@
                 <b-button type="submit" variant="primary">Submit</b-button>
                 <b-button type="reset"  variant="danger" >Reset</b-button>
             </b-form-group>
-        </b-form>                
+        </b-form>
+        Don't have an account jet? Click <router-link to="/register">register</router-link> to register.     
     </div>
 </template>
 
@@ -47,12 +48,33 @@
             onSubmit (evt) {
                 evt.preventDefault();
                 //TODO: Send to Backend
-                alert(JSON.stringify(this.form));
+                this.axios
+                .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-in',
+                    {
+                        username: this.form.username,
+                        password: this.form.password,
+                    },
+                    {
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                    })
+                .then(response => {localStorage.token = response.data.token
+                    this.axios
+                        .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                            {
+                                headers: {'Authorization': "bearer " + localStorage.token},
+                                withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                            })
+                        .then(response => this.$router.push('/'))
+                        .catch(error => console.log(error));//alert('Got an invalid token from server'));
+                    }
+                )
+                .catch(error => console.log(error));
+                
             },
             onReset (evt) {
                 evt.preventDefault();
                 /* Reset our form values */
-                this.form.email = '';
+                this.form.username = '';
                 this.form.password = '';
                 /* Trick to reset/clear native browser form validation state */
                 this.show = false;
@@ -62,7 +84,7 @@
         data: function () {
             return {
                 form:{
-                    email: "",
+                    username: "",
                     password: "",
                     stayLogedIn: false
                 }

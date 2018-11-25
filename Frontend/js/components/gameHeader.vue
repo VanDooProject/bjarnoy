@@ -6,8 +6,6 @@
             <!-- `<router-link>` will be rendered as an `<a>` tag by default -->
             <router-link to="/map">Go to map</router-link>
             <router-link to="/user">Go to user profile</router-link>
-            <router-link to="/login">login</router-link>
-            <router-link to="/register">register</router-link>
         </menu>
     </div>
 </template>
@@ -26,7 +24,21 @@
             
         },
         mounted () {
-            
+            if (localStorage.token == undefined)
+            {
+                this.$router.push('/register');
+            }
+            else
+            {
+                this.axios
+                .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                    {
+                        headers: {'Authorization': "bearer " + localStorage.token},
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                    })
+                .then(response => console.log(response))
+                .catch(error => this.$router.push('/login'));
+            }
         },
     }
 </script>
