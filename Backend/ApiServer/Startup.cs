@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -62,12 +63,16 @@ namespace ApiServer
 
             services.AddMvc();
 
+
+            // https://docs.microsoft.com/en-us/aspnet/core/security/authorization/policies?view=aspnetcore-2.1
             services.AddAuthorization(options =>
             {
                 options.AddPolicy("ValidSession", policy =>
                     policy.Requirements.Add(new ValidSessionRequirement()
                     ));
             });
+
+            services.AddSingleton<IAuthorizationHandler, SessionAuthorizationHandler>();
         }
 
 

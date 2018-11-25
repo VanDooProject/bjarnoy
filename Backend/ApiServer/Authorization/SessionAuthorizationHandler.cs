@@ -24,8 +24,8 @@ namespace ApiServer.Authorization
             }
 
             
-            int UserId = int.TryParse(context.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value, out UserId) ? UserId : 0;
-            if (UserId == 0)
+            string UserId = context.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value;
+            if (UserId == "")
             {
                 context.Fail();
             }
