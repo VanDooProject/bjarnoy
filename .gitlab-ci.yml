@@ -78,15 +78,16 @@ job_build_postman_docs:
   stage: build
   image: hughmp/postmanerator:latest
 
+  # ATTENTION: this container hash no shell as entrypoint -> set it
+  entrypoint: ["/bin/sh", "-c"]
+
   allow_failure: true
 
   script:
-  # ATTENTION: this container hash no shell as entrypoint
-    #- ls -ahl
-    #- postmanerator ./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
-    #- postmanerator -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json || true
-    - -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
-    #- ls -ahl
+    - ls -ahl
+    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json
+    #- -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
+    - ls -ahl
 
   artifacts:
       expire_in: 45 minutes
@@ -254,6 +255,9 @@ job_test_postman_api:
   stage: stop_deploy
   image: postman/newman_alpine33
 
+  # ATTENTION: this container hash no shell as entrypoint -> set it
+  entrypoint: ["/bin/sh", "-c"]
+
   dependencies:
     - job_deploy_staging
 
@@ -261,7 +265,7 @@ job_test_postman_api:
 
   script:
     - ls -ahl
-    - postmanerator --collection="./docs/RestAPI/BrowsergameAPI.postman_collection.json" --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml"
+    - newman --collection="./docs/RestAPI/BrowsergameAPI.postman_collection.json" --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --testReportFile="newman-report.xml"
     - ls -ahl
 
   artifacts:
