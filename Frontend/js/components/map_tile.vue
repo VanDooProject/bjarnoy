@@ -38,6 +38,10 @@
     display: block;
 
     position: absolute;
+    
+    background-color: green;
+    width: 101px;
+    height: 101px;
 }
 
 </style>

@@ -21,7 +21,9 @@
             }"
             class="mapmenu"
         >
-        <MenuItem v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" ></MenuItem>
+       <!-- <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" > -->
+       <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" >
+           </menu-item>
         </div>
         {{tile.x}} | {{tile.y}} | {{tile.z}}
     </div>
@@ -72,10 +74,6 @@
 <style>
 .mapmenu {
     position: absolute;
-
-    /*background-color: oldlace;*/
-}
-.mapmenu:hover {
-    /*background-color: lightblue;*/
+   /*background-color: oldlace;*/
 }
 </style>
