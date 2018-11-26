@@ -55,8 +55,4 @@
     border-left-style: none;*/
 }
 
-.tile:hover {
-    background-color: greenyellow;
-}
-
 </style>
