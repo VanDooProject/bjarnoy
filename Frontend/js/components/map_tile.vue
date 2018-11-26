@@ -1,16 +1,21 @@
 <template>
-    <div v-on:click="openMenu"
+    <div
         class="tile"
+        v-on:click="openMenu"
         v-bind:style="{
+            position: 'absolute',
             transform: 'translate(' + tile.y * -100 + 'px, ' + tile.x * 100 + 'px)',
             zIndex: tile.x - tile.y
         }"
     >
-        <!-- <img src="/images/tile.png"
-        width="150"
-        height="150"
-        draggable="false"
-        >-->
+        <img src="/images/tile.png"
+            draggable="false"
+            style="
+                transform: translate(-50px,-50px);
+                opacity: 0.5;
+                pointer-events: none;
+            "
+        >
     </div>
 </template>
 
@@ -35,19 +40,20 @@
 
 <style>
 .tile {
-    display: block;
-
     position: absolute;
 
-    width: 100px;
-    height: 100px;
+    display: block;
+/*    width:"100";
+    height:"100";
+    min-width:"100";
+    min-height:"100";
 
     background-color: green;    
     border:1px solid black;
     border-top-style: none;
     border-right-style: solid;
     border-bottom-style: solid;
-    border-left-style: none;
+    border-left-style: none;*/
 }
 
 .tile:hover {
