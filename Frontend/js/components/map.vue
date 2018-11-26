@@ -5,7 +5,7 @@
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
     >
-        <MapMenu v-bind:pos="menu"></MapMenu>
+        <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
         <div id="map">
             <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
@@ -30,7 +30,7 @@
                 tiles: [],
 
                 menu: {x: 0, y: 0},
-
+                tile: {x: 0, y: 0},
                 isMouseDown: false,
                 globalMapOffset: {x:0, y:0},
                 mouseMovement: {x:0, y:0}
@@ -46,11 +46,12 @@
                 .catch(error => console.log(error));
         },
         methods: {
-            TileClicked: function(event) {
+            TileClicked: function(event, tile) {
                 if((this.mouseMovement.x < 5) && (this.mouseMovement.y < 5))
                 {
                     this.menu.x = event.pageX;
                     this.menu.y = event.pageY;
+                    this.tile=tile;
                 }
             },
             mouseDown: function(event) {

@@ -21,15 +21,16 @@
             }"
             class="mapmenu"
         >
-            <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" ></menu-item>
+        <MenuItem v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" ></MenuItem>
         </div>
+        {{tile.x}} | {{tile.y}} | {{tile.z}}
     </div>
 </template>
 
 <script>
     import MenuItem from './menu_item.vue';
     export default {
-        props:['pos'],
+        props:['pos', 'tile'],
         components: {
             MenuItem
         },
