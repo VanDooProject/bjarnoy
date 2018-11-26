@@ -12,7 +12,6 @@
             draggable="false"
             style="
                 transform: translate(-50px,-50px);
-                opacity: 0.5;
                 pointer-events: none;
             "
         >
