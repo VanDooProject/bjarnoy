@@ -10,8 +10,11 @@
     >
         <img src="/images/tile.png"
             draggable="false"
+            width="141px"
+            height="500px"
             style="
-                transform: translate(-50px,-50px);
+                position: absolute;
+                transform: translate(-70px,-250px) rotateZ(-45deg);
                 pointer-events: none;
             "
         >
@@ -42,11 +45,15 @@
     position: absolute;
 
     display: block;
-/*    width:"100";
-    height:"100";
-    min-width:"100";
-    min-height:"100";
-
+    width: 100px;
+    height: 100px;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    padding: 0px;
+    margin: 0px;
+/*
     background-color: green;    
     border:1px solid black;
     border-top-style: none;
