@@ -198,7 +198,7 @@ job_deploy_staging:
     - job_docker_create
 
   variables:
-    GIT_STRATEGY: none
+  #  GIT_STRATEGY: none # we need git for docker-compose
 
     CONTAINER_IMAGE: 10.0.0.130:1443/browsergame/browsergame:$CI_COMMIT_REF_SLUG
     DOCKER_CONTAINER_NAME: browsergame_$CI_COMMIT_REF_SLUG
