@@ -25,7 +25,10 @@
        <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" >
            </menu-item>
         </div>
-        {{tile.x}} | {{tile.y}} | {{tile.z}}
+
+        <span v-if="tile">
+            {{tile.x}} | {{tile.y}} | {{tile.z}}
+        </span>
     </div>
 </template>
 

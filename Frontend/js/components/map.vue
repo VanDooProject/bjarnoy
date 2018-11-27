@@ -30,7 +30,7 @@
                 tiles: [],
 
                 menu: {x: 0, y: 0},
-                tile: {x: 0, y: 0},
+                tile: undefined,
                 isMouseDown: false,
                 globalMapOffset: {x:0, y:0},
                 mouseMovement: {x:0, y:0}
@@ -70,11 +70,18 @@
                     var angle = -45 * Math.PI / 180
                     this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
                     this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
+
+                    this.closeMenu();
                 }
             },
             mouseLeave: function(event) {
                 this.isMouseDown=false;
+            },
+            closeMenu: function() {
+                this.menu = {x:0, y:0};
+                this.tile = undefined;
             }
+
         }
     }
 
