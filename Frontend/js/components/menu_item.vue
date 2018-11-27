@@ -24,7 +24,6 @@
         computed: {
             angle() {
                 return (this.submenu * 2 * Math.PI / this.submenutotal);
-                console.log(this.s);
             },
             pos() {
                 return {x: Math.sin(this.angle)*this.submenulayer*100, y: Math.cos(this.angle)*this.submenulayer*100};
