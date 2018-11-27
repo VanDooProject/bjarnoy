@@ -8,8 +8,10 @@
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
         <div id="map">
-            <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <div id="maptransform">
+                <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+                <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            </div>
         </div>
     </div>
 </template>
@@ -103,17 +105,20 @@ html, body {
     display: block;
     padding: 0px;
     margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
+    min-width: 300%;
+    min-height: 300%;
     position: fixed;
-    width: 100%;
-    height: 100%;
+    width: 300%;
+    height: 300%;
     left: 0;
     top: 0;
     bottom: 0;
     right: 0;
     z-index: 0;
     transform: rotateX(45deg) rotateZ(45deg);
+}
+#maptransform {
+    transform: translate(0%, 100%)
 }
 
 </style>
