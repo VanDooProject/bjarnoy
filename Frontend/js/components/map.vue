@@ -69,6 +69,8 @@
                     var angle = -45 * Math.PI / 180
                     this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
                     this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
+                    this.menu.x = 0;
+                    this.menu.y = 0;
                 }
             },
             mouseLeave: function(event) {
