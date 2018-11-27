@@ -1,7 +1,7 @@
 version: "3"
 
-#volumes:
-#  db: {}
+volumes:
+  db: {}
 #  config: {}
 
 #networks:
@@ -50,6 +50,8 @@ services:
     #networks:
     #  reverse-proxy-network: {}
 
+    volumes:
+      - "db:/data/db"
 
   # --------------------
   mongoWeb:
