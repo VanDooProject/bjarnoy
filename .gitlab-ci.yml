@@ -233,7 +233,7 @@ job_deploy_staging:
 
     # docker compose
     - ssh $DEPLOY_STAGING_SSH_HOST "mkdir -p ~/browsergame/$CI_COMMIT_REF_SLUG"
-    - scp -r ./Docker/docker-compose.yml $DEPLOY_STAGING_SSH_HOST:~/browsergame/docker-compose.yml
+    - scp -r ./Docker/docker-compose.yml $DEPLOY_STAGING_SSH_HOST:~/browsergame/$CI_COMMIT_REF_SLUG/docker-compose.yml
     - ssh $DEPLOY_STAGING_SSH_HOST "cd ~/browsergame/$CI_COMMIT_REF_SLUG && export CI_COMMIT_SHA=$CI_COMMIT_SHA && export BRANCH=$CI_COMMIT_REF_SLUG && export CONTAINER_IMAGE=$CONTAINER_IMAGE && docker-compose -p $CI_COMMIT_REF_SLUG up -d"
     
 
@@ -272,7 +272,7 @@ job_stop_deploy_staging:
     #- ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
 
     # docker compose
-    - scp -r ./Docker/docker-compose.yml $DEPLOY_STAGING_SSH_HOST:~/browsergame/docker-compose.yml
+    - scp -r ./Docker/docker-compose.yml $DEPLOY_STAGING_SSH_HOST:~/browsergame/$CI_COMMIT_REF_SLUG/docker-compose.yml
     - ssh $DEPLOY_STAGING_SSH_HOST "cd ~/browsergame/$CI_COMMIT_REF_SLUG && export BRANCH=$CI_COMMIT_REF_SLUG && export CONTAINER_IMAGE=$CONTAINER_IMAGE && docker-compose -p $CI_COMMIT_REF_SLUG down"
     - ssh $DEPLOY_STAGING_SSH_HOST "cd ~/browsergame && rm -f ./$CI_COMMIT_REF_SLUG"
 
