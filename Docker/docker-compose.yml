@@ -1,0 +1,83 @@
+version: "3"
+
+volumes:
+  db: {}
+#  config: {}
+
+#networks:
+#  reverse-proxy-network:
+#    external: true
+
+services:
+  
+  # --------------------
+  browsergame:
+    # no build ... this is done by CI
+    #build: .
+    image: "$CONTAINER_IMAGE"
+    container_name: "docker_browsergame_${BRANCH}"
+
+#    volumes:
+#      - config:/config
+
+    # Either specify both ports (HOST:CONTAINER), or just the container port (an ephemeral host port is chosen).
+    ports:
+      - "80"
+
+    environment:
+      - VIRTUAL_HOST=${BRANCH}.gamez.mynode.space
+      - BRANCH=${BRANCH}
+      - CI_COMMIT_SHA=${CI_COMMIT_SHA}
+
+    # to make it reachable for nginx-proxy
+    network_mode: "bridge"
+    #networks:
+    #  reverse-proxy-network: {}
+
+    links:
+      - mongodb
+    depends_on:
+      - mongodb
+
+  # --------------------
+  mongodb:
+    image: mongo:latest
+    container_name: "docker_browsergame_${BRANCH}_mongo"
+
+    # Expose ports without publishing them to the host machine - they’ll only be accessible to linked services. Only the internal port can be specified.
+    expose:
+      - "27017"
+
+    network_mode: "bridge"
+    #networks:
+    #  reverse-proxy-network: {}
+
+    volumes:
+      - "db:/data/db"
+
+  # --------------------
+  mongoWeb:
+    image: mongo-express:latest
+    container_name: "docker_browsergame_${BRANCH}_mongo_express"
+    environment:
+    - ME_CONFIG_MONGODB_SERVER=mongodb
+    - ME_CONFIG_MONGODB_PORT=27017
+    - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
+#    - ME_CONFIG_MONGODB_ENABLE_ADMIN=false # default is true
+#    - ME_CONFIG_MONGODB_AUTH_DATABASE=admin
+
+    ports:
+      - 8081
+
+    network_mode: "bridge"
+    #networks:
+    #  reverse-proxy-network: {}
+
+    environment:
+      - VIRTUAL_HOST=mongo.${BRANCH}.gamez.mynode.space
+
+    
+    links:
+      - mongodb
+    depends_on:
+      - mongodb
