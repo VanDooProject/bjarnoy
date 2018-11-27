@@ -26,6 +26,7 @@ services:
 
     environment:
       - VIRTUAL_HOST=${BRANCH}.gamez.mynode.space
+      - BRANCH=${BRANCH}
 
     # to make it reachable for nginx-proxy
     network_mode: "bridge"

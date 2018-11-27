@@ -18,10 +18,16 @@ namespace ApiServer.Controllers
 
             List<string> infoList = new List<string>
             {
-                Environment.GetEnvironmentVariable("BRANCH")
+                GetEnvironmentVariable("VIRTUAL_HOST"),
+                GetEnvironmentVariable("BRANCH")
             };
 
             return infoList;
+        }
+
+        private static string GetEnvironmentVariable(string name)
+        {
+            return String.Format("{0}={1}", name, Environment.GetEnvironmentVariable(name));
         }
     }
 }
