@@ -4,11 +4,9 @@ version: "3"
 #  db: {}
 #  config: {}
 
-networks:
-  reverse-proxy-network:
-    external: true
-#    external: false
-#    name: "docker_browsergame_${BRANCH}"
+#networks:
+#  reverse-proxy-network:
+#    external: true
 
 services:
   
@@ -31,8 +29,6 @@ services:
 
     # to make it reachable for nginx-proxy
     network_mode: "bridge"
-    #external_links:
-    # - optimistic_golick
     #networks:
     #  reverse-proxy-network: {}
 
@@ -53,12 +49,6 @@ services:
     network_mode: "bridge"
     #networks:
     #  reverse-proxy-network: {}
-
-#    ports:
-#      - "27017:27017"
-#    volumes:
-#      - db:/data/db
-#    restart: unless-stopped
 
 
   # --------------------
