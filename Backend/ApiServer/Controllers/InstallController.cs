@@ -19,6 +19,7 @@ namespace ApiServer.Controllers
             List<string> infoList = new List<string>
             {
                 GetEnvironmentVariable("VIRTUAL_HOST"),
+                GetEnvironmentVariable("CI_COMMIT_SHA"),
                 GetEnvironmentVariable("BRANCH")
             };
 

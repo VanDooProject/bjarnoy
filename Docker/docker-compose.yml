@@ -27,6 +27,7 @@ services:
     environment:
       - VIRTUAL_HOST=${BRANCH}.gamez.mynode.space
       - BRANCH=${BRANCH}
+      - CI_COMMIT_SHA=${CI_COMMIT_SHA}
 
     # to make it reachable for nginx-proxy
     network_mode: "bridge"
@@ -61,8 +62,8 @@ services:
     environment:
     - ME_CONFIG_MONGODB_SERVER=mongodb
     - ME_CONFIG_MONGODB_PORT=27017
-#    - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
-#    - ME_CONFIG_MONGODB_ENABLE_ADMIN=false
+    - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
+#    - ME_CONFIG_MONGODB_ENABLE_ADMIN=false # default is true
 #    - ME_CONFIG_MONGODB_AUTH_DATABASE=admin
 
     ports:
