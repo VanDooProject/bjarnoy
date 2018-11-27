@@ -42,8 +42,8 @@
             }
         },
         methods: {
-            TileClicked: function(event) {
-                this.$emit('tile_clicked', event);
+            TileClicked: function(event, tile) {
+                this.$emit('tile_clicked', event, tile);
             }
         },
         components: {

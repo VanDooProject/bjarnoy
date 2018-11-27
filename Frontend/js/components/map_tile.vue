@@ -23,7 +23,7 @@
         props: ['tile'],
         methods: {
             openMenu: function(event) {
-                this.$emit('tile_clicked', event);
+                this.$emit('tile_clicked', event, {x: this.tile.x, y: this.tile.y, z: this.tile.z});
             }
         },
         data: function() {
