@@ -219,12 +219,25 @@ job_deploy_staging:
     - ssh $DEPLOY_STAGING_SSH_HOST "docker login -u $DOCKER_REG_USER -p $DOCKER_REG_PASSWORD 10.0.0.130:1443"
     - ssh $DEPLOY_STAGING_SSH_HOST "docker pull $CONTAINER_IMAGE"
 
-    - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
-    - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME || true"
-    - ssh $DEPLOY_STAGING_SSH_HOST "docker run --detach -P -e VIRTUAL_HOST=$VHOST --name $DOCKER_CONTAINER_NAME $CONTAINER_IMAGE"
+
+
+    # docker standalone
+    #- ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
+    #- ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME || true"
+    #- ssh $DEPLOY_STAGING_SSH_HOST "docker run --detach -P -e VIRTUAL_HOST=$VHOST --name $DOCKER_CONTAINER_NAME $CONTAINER_IMAGE"
 
     # cleanup old docker images - https://blog.cynexia.com/varlibdockeraufsdiff-is-consuming-entire-drive/
-    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true) || true'
+    #- ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true) || true'
+
+
+
+    # docker compose
+    - ssh $DEPLOY_STAGING_SSH_HOST "mkdir -p ~/browsergame/"
+    - scp -r ./Docker/docker-compose.yml $DEPLOY_STAGING_SSH_HOST:~/browsergame/docker-compose.yml
+    - ssh $DEPLOY_STAGING_SSH_HOST "cd ~/browsergame && export BRANCH=$CI_COMMIT_REF_SLUG && export CONTAINER_IMAGE=$CONTAINER_IMAGE && docker-compose up -d"
+    
+
+    
 
 
 # https://blog.kontena.io/continuous-delivery-with-gitlabci/
@@ -254,9 +267,17 @@ job_stop_deploy_staging:
     - echo "$SSH_PRIVATE_KEY_STAGING" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
 
-    - ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
-    - ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
+    # docker standalone
+    #- ssh $DEPLOY_STAGING_SSH_HOST "docker stop $DOCKER_CONTAINER_NAME || true"
+    #- ssh $DEPLOY_STAGING_SSH_HOST "docker rm $DOCKER_CONTAINER_NAME"
 
+    # docker compose
+    - ssh $DEPLOY_STAGING_SSH_HOST "mkdir -p ~/browsergame/"
+    - scp -r ./Docker/docker-compose.yml $DEPLOY_STAGING_SSH_HOST:~/browsergame/docker-compose.yml
+    - ssh $DEPLOY_STAGING_SSH_HOST "cd ~/browsergame && export BRANCH=$CI_COMMIT_REF_SLUG && export CONTAINER_IMAGE=$CONTAINER_IMAGE && docker-compose down"
+
+    # cleanup old docker images - https://blog.cynexia.com/varlibdockeraufsdiff-is-consuming-entire-drive/
+    - ssh $DEPLOY_STAGING_SSH_HOST 'docker rmi $(docker images -aq --filter=dangling=true) || true'
 
 
 
