@@ -86,6 +86,12 @@ namespace ApiServer.Controllers
 
             UserRepository userRepository = new UserRepository();
 
+            UserModel IsUserInDb = userRepository.GetByUsername(login.Username);
+            if (IsUserInDb != null)
+            {
+                return base.BadRequest();
+            }
+
             // TODO: validate user input
             UserModel user = new UserModel();
             user.Username = login.Username;

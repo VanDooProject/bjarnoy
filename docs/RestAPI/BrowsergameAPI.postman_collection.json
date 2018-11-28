@@ -30,10 +30,10 @@
 									"    pm.response.to.not.be.error; ",
 									"    pm.response.to.have.jsonBody(\"\"); ",
 									"    pm.response.to.not.have.jsonBody(\"error\"); ",
-									"});",
 									"",
-									"var data = pm.response.json();",
-									"pm.environment.set(\"token\", data.token);"
+									"    var data = pm.response.json();",
+									"    pm.environment.set(\"token\", data.token);",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -76,7 +76,6 @@
 							"listen": "test",
 							"script": {
 								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
-								"type": "text/javascript",
 								"exec": [
 									"",
 									"",
@@ -92,11 +91,14 @@
 									"    pm.response.to.not.be.error; ",
 									"    pm.response.to.have.jsonBody(\"\"); ",
 									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"    ",
+									"    var data = pm.response.json();",
+									"    pm.environment.set(\"token\", data.token);",
 									"});",
 									"",
-									"var data = pm.response.json();",
-									"pm.environment.set(\"token\", data.token);"
-								]
+									""
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
