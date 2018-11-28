@@ -5,8 +5,10 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using CoreClassLibrary;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -78,16 +80,16 @@ namespace ApiServer.Controllers
         {
             // most claims are defined here: http://tools.ietf.org/html/rfc7519#section-4
             var claims = new[] {
-                //new Claim(JwtRegisteredClaimNames.Sub, user.Name), // Subject
+                //new Claim(JwtRegisteredClaimNames.Sub, user.Username), // Subject
                 //new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 //new Claim(JwtRegisteredClaimNames.Birthdate, user.Birthdate.ToString("yyyy-MM-dd")),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // JWT ID - security measure against replay attacks
 
                 // https://stackoverflow.com/a/38426677/2298744
-                new Claim(ClaimTypes.Role, "Admin"),
+                //new Claim(ClaimTypes.Role, "Admin"),
 
                 // set user ID
-                new Claim(ClaimTypes.NameIdentifier, user.Id)
+                new Claim(ClaimTypes.NameIdentifier, user._id)
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
@@ -105,19 +107,24 @@ namespace ApiServer.Controllers
 
         private UserModel Authenticate(LoginModel login)
         {
-            UserModel user = null;
+            UserRepository userRepository = new UserRepository();
 
-            if (login.Username == "mario" && login.Password == "secret")
+            UserModel user = userRepository.GetByUsername(login.Username);
+
+            // no access if user not found
+            if (user == null)
             {
-                user = new UserModel
-                {
-                    Id = "IdFromMongoDb",
-                    Name = "Mario Rossi",
-                    Email = "mario.rossi@domain.com",
-                    Birthdate = DateTime.Now
-                };
+                return null;
             }
-            return user;
+
+            // compare password
+            if (HashHelper.Instance.Hash(user.Password, user._id) == login.Password)
+            {
+                return user;
+            }
+
+            // user found -> password wrong
+            return null;
         }
     }
 }
