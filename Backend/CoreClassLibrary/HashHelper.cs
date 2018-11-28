@@ -23,7 +23,7 @@ namespace CoreClassLibrary
             //var pbkdf2 = new Rfc2898DeriveBytes(password, Encoding.ASCII.GetBytes(salt));
             using (SHA512 shaM = new SHA512Managed())
             {
-                return shaM.ComputeHash(Encoding.ASCII.GetBytes(password + salt)).ToString();
+                return Convert.ToBase64String(shaM.ComputeHash(Encoding.ASCII.GetBytes(password + salt)));
             }
         }
     }

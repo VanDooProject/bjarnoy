@@ -76,6 +76,33 @@ namespace ApiServer.Controllers
             return response;
         }
 
+
+        // POST api/v1/auth/sign-up
+        [AllowAnonymous]
+        [HttpPost("sign-up")]
+        public IActionResult SignUp([FromBody]LoginModel login)
+        {
+            IActionResult response = Unauthorized();
+
+            UserRepository userRepository = new UserRepository();
+
+            // TODO: validate user input
+            UserModel user = new UserModel();
+            user.Username = login.Username;
+
+            user.Password = HashHelper.Instance.Hash(login.Password, user._id);
+
+            userRepository.Add(user);
+
+            if (user != null)
+            {
+                var tokenString = BuildToken(user);
+                response = Ok(new { token = tokenString });
+            }
+
+            return response;
+        }
+
         private string BuildToken(UserModel user)
         {
             // most claims are defined here: http://tools.ietf.org/html/rfc7519#section-4
@@ -86,7 +113,7 @@ namespace ApiServer.Controllers
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // JWT ID - security measure against replay attacks
 
                 // https://stackoverflow.com/a/38426677/2298744
-                //new Claim(ClaimTypes.Role, "Admin"),
+                new Claim(ClaimTypes.Role, "Admin"),
 
                 // set user ID
                 new Claim(ClaimTypes.NameIdentifier, user._id)
@@ -118,7 +145,7 @@ namespace ApiServer.Controllers
             }
 
             // compare password
-            if (HashHelper.Instance.Hash(user.Password, user._id) == login.Password)
+            if (user.Password == HashHelper.Instance.Hash(login.Password, user._id))
             {
                 return user;
             }
