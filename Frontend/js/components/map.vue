@@ -4,14 +4,13 @@
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
+    id="mapbg"
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
         <div id="map">
-            <div id="maptransform">
-                <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-                <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-            </div>
+            <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
     </div>
 </template>
@@ -105,11 +104,11 @@ html, body {
     display: block;
     padding: 0px;
     margin: 0px;
-    min-width: 300%;
-    min-height: 300%;
+    min-width: 100%;
+    min-height: 100%;
     position: fixed;
-    width: 300%;
-    height: 300%;
+    width: 100%;
+    height: 100%;
     left: 0;
     top: 0;
     bottom: 0;
@@ -117,8 +116,19 @@ html, body {
     z-index: 0;
     transform: rotateX(45deg) rotateZ(45deg);
 }
-#maptransform {
-    transform: translate(0%, 100%)
+#mapbg{
+    display: block;
+    padding: 0px;
+    margin: 0px;
+    min-width: 100%;
+    min-height: 100%;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
 }
 
 </style>
