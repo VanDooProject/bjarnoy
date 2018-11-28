@@ -77,6 +77,35 @@ namespace ApiServer.Controllers
         }
 
 
+        // DELETE api/v1/auth/delete
+        [Authorize]
+        [HttpDelete("delete")]
+        public IActionResult DeleteAccount()
+        {
+            UserRepository userRepository = new UserRepository();
+
+            string UserId = HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value;
+            if (UserId == "")
+            {
+                // TODO: test (cause this is untested)
+                return base.Forbid();
+            }
+
+            UserModel IsUserInDb = userRepository.GetByUserId(UserId);
+
+            if (IsUserInDb == null)
+            {
+                // user not found
+                return base.BadRequest();
+            }
+
+            // remove user
+            userRepository.Delete(IsUserInDb);
+
+            return Ok();
+        }
+
+
         // POST api/v1/auth/sign-up
         [AllowAnonymous]
         [HttpPost("sign-up")]

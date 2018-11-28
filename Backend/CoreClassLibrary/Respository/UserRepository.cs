@@ -28,7 +28,12 @@ namespace CoreClassLibrary.Respository
 
         public UserModel Get(ObjectId Id)
         {
-            var filter = Builders<UserModel>.Filter.Where(x => x._id == Id.ToString());
+            return GetByUserId(Id.ToString());
+        }
+
+        public UserModel GetByUsername(string loginUsername)
+        {
+            var filter = Builders<UserModel>.Filter.Where(x => x.Username == loginUsername);
             var result = collection.Find(filter).ToList();
             if (result.Count == 1)
             {
@@ -41,9 +46,9 @@ namespace CoreClassLibrary.Respository
             }
         }
 
-        public UserModel GetByUsername(string loginUsername)
+        public UserModel GetByUserId(string userId)
         {
-            var filter = Builders<UserModel>.Filter.Where(x => x.Username == loginUsername);
+            var filter = Builders<UserModel>.Filter.Where(x => x._id == userId);
             var result = collection.Find(filter).ToList();
             if (result.Count == 1)
             {
