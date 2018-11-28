@@ -4,6 +4,7 @@
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
+    id="mapbg"
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
@@ -114,6 +115,20 @@ html, body {
     right: 0;
     z-index: 0;
     transform: rotateX(45deg) rotateZ(45deg);
+}
+#mapbg{
+    display: block;
+    padding: 0px;
+    margin: 0px;
+    min-width: 100%;
+    min-height: 100%;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
 }
 
 </style>
