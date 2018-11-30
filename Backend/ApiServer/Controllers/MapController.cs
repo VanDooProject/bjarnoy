@@ -56,13 +56,13 @@ namespace ApiServer.Controllers
         }
 
         [HttpGet("demo/biom/{size}")]
-        public IEnumerable<Biom> GetBiom(int size)
+        public IEnumerable<Biom> GetRndBiom(int size)
         {
             List<Biom> BiomList = new List<Biom>();
             BiomFactory factory = new BiomFactory();
             for (int loop_count = 0; loop_count < size; loop_count++)
             {
-                BiomList.Add(factory.GetBiom());
+                BiomList.Add(factory.GetRndBiom());
             }
 
             return BiomList;

@@ -8,7 +8,8 @@ namespace CoreClassLibrary.Models.Map
         public struct Attributes
         {
             public string type {get; set;}
-            public string size {get; set;}
+            public string size_description {get; set;}
+            public int size {get; set;}
         }
 
         public Attributes attributes;
