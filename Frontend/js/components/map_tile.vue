@@ -26,7 +26,7 @@
         props: ['tile'],
         methods: {
             openMenu: function(event) {
-                this.$emit('tile_clicked', event, {x: this.tile.x, y: this.tile.y, z: this.tile.z});
+                this.$emit('tile_clicked', event, this.tile);
             }
         },
         data: function() {
