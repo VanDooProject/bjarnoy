@@ -36,7 +36,7 @@
         },
         computed: {
             imgSrc() {
-                    return "images/tile_" + this.tile.type + ".png"
+                    return "/images/tile_" + this.tile.type + ".png"
             }
         }
     }
