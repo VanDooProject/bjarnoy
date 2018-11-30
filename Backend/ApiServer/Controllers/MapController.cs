@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using Microsoft.AspNetCore.Mvc;
 
@@ -52,6 +53,19 @@ namespace ApiServer.Controllers
             //     new Tile(0,1,1),
             //     new Tile(1,1,1),
             // };
+        }
+
+        [HttpGet("demo/biom/{size}")]
+        public IEnumerable<Biom> GetBiom(int size)
+        {
+            List<Biom> BiomList = new List<Biom>();
+            BiomFactory factory = new BiomFactory();
+            for (int loop_count = 0; loop_count < size; loop_count++)
+            {
+                BiomList.Add(factory.GetBiom());
+            }
+
+            return BiomList;
         }
 
         // POST api/values
