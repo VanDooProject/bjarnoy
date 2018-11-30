@@ -8,7 +8,7 @@
             zIndex: tile.x - tile.y
         }"
     >
-        <img src="/images/tile.png"
+        <img v-bind:src="imgSrc"
             draggable="false"
             width="141px"
             height="500px"
@@ -32,6 +32,11 @@
         data: function() {
             return {
                 //tile: {}
+            }
+        },
+        computed: {
+            imgSrc() {
+                    return "/images/tile_" + this.tile.type + ".png"
             }
         }
     }
