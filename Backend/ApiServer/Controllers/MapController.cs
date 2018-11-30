@@ -26,7 +26,7 @@ namespace ApiServer.Controllers
             List<Tile> TileList = new List<Tile>();
             int layers = 3;
             Random r = new Random();
-            String[] tileTypes = {"Grass", "Hill"};
+            String[] tileTypes = {"grass", "hill"};
             for (int z = 0; z < layers; z++)
             {
                 for (int x = -size; x < size; x++)
