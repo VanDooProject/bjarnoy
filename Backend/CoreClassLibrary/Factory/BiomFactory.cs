@@ -30,6 +30,8 @@ namespace CoreClassLibrary.Factory
             Large = 8,
             Huge = 10,
         }
+        
+        private TileFactory tile_factory = new TileFactory();
         public Biom GetRndBiom()
         {
             Biom biom = new Biom();
@@ -128,7 +130,7 @@ namespace CoreClassLibrary.Factory
             {
                 for(int horizontal_loop_count = 0; horizontal_loop_count < biom.attributes.size.value; horizontal_loop_count++)
                 {
-                    biom.tiles.Add(new Tile(horizontal_loop_count, vertical_loop_count, 1, TileTypeList[count]));
+                    biom.tiles.Add(tile_factory.GetNewSpecificTile(horizontal_loop_count, vertical_loop_count, 1, TileTypeList[count]));
                     count++;
                 }
             }

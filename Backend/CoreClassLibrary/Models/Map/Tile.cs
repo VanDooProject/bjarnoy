@@ -6,11 +6,16 @@ namespace CoreClassLibrary.Models.Map
         public int y;
         public int z;
 
-        public struct Attributes
+        public struct ResourceContainer
         {
             public string type {get; set;}
             public float resource_volume {get; set;}
             public float degradation_rate {get; set;}
+        }
+        public struct Attributes
+        {
+            public string type {get; set;}
+            public ResourceContainer resource;
         }
         public Attributes attributes;
 
