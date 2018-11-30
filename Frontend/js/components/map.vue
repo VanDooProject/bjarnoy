@@ -1,6 +1,5 @@
 <template>
     <div
-    v-on:mousedown='mouseDown'
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
@@ -8,7 +7,7 @@
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
-        <div id="map">
+        <div id="map" v-on:mousedown='mouseDown'>
             <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
             <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
@@ -58,6 +57,7 @@
             mouseDown: function(event) {
                 this.isMouseDown=true;
                 this.mouseMovement={x:0, y:0};
+                this.closeMenu();
             },
             mouseUp: function(event) {
                 this.isMouseDown=false;
@@ -71,8 +71,6 @@
                     var angle = -45 * Math.PI / 180
                     this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
                     this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
-
-                    this.closeMenu();
                 }
             },
             mouseLeave: function(event) {
