@@ -68,6 +68,16 @@ namespace ApiServer.Controllers
             return BiomList;
         }
 
+        [HttpGet("demo/island")]
+        public IEnumerable<Island> GetRndIsland()
+        {
+            List<Island> IslandList = new List<Island>();
+            IslandFactory factory = new IslandFactory();
+            IslandList.Add(factory.GetRndIsland());
+
+            return IslandList;
+        }
+
         // POST api/values
         [HttpPost]
         public void Post([FromBody]string value)

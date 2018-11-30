@@ -5,5 +5,6 @@ namespace CoreClassLibrary.Models.Map
     public class Island
     {
         public List<Biom> bioms = new List<Biom>();
+        public string name {get; set;}
     }
 }

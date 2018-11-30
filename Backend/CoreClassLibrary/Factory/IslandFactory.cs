@@ -4,29 +4,24 @@ namespace CoreClassLibrary.Factory
 {
     public class IslandFactory
     {
-        private string[] IslandAttributes = new string[]
-        {
-            "fanncy",
-            "huge"
-        };
-
-        public Island GetIsland()
+        private BiomFactory biom_factory = new BiomFactory();
+        public Island GetRndIsland()
         {
             Island island = new Island();
 
-            // TODO: dann genereieren wir mal random insel namen
-            // https://stackoverflow.com/questions/2019417/how-to-access-random-item-in-list
-
-
+            island.name = GenerateRandomName();
+            for(int loop_count = 0; loop_count < 4; loop_count++)
+            {
+                island.bioms.Add(biom_factory.GetRndBiom());
+            }
+            
             return island;
         }
 
         private string GenerateRandomName()
         {
-            string RandomName = "";
+            string RandomName = "Refugium";
 
-            // https://stackoverflow.com/questions/2019417/how-to-access-random-item-in-list
-            
             return RandomName;
         }
     }
