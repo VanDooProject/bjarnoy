@@ -13,13 +13,6 @@ namespace CoreClassLibrary.Factory
             "Resource"
         };
 
-        private string[] TileAttributesResourceTypeList = new string[]
-        {
-            "Gold",
-            "Stone",
-            "Pumpkin"
-        };
-
         public Tile GetNewSpecificTile(int x, int y, int z, string type)
         {
             switch (type)
@@ -38,7 +31,7 @@ namespace CoreClassLibrary.Factory
 
                 case "Resource":
                     ResourceTile resource_tile = new ResourceTile(x, y, z, type);
-                    GetRndRessource(resource_tile);
+                    resource_tile.GetRndRessource();
                     return resource_tile;
 
                 default:
@@ -46,29 +39,5 @@ namespace CoreClassLibrary.Factory
                     return gras_tile_def;
             }
         }
-
-        private void GetRndRessource(ResourceTile tile)
-        {
-            Random rnd = new Random();
-
-            tile.resource.type = TileAttributesResourceTypeList[rnd.Next(TileAttributesResourceTypeList.Length)];
-            tile.resource.resource_volume = 50000 * rnd.Next(1, 3);
-
-            switch (tile.resource.type)
-            {
-                case "Gold":
-                    tile.resource.degradation_rate = 0.2f;
-                    break;
-                case "Stone":
-                    tile.resource.degradation_rate = 0.4f;
-                    break;
-                case "Pumpkin":
-                    tile.resource.degradation_rate = 0.6f;
-                    break;      
-                default:
-                    break;
-            }
-        }
-
     }
 }

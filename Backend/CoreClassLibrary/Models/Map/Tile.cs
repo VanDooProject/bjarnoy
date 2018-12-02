@@ -29,6 +29,13 @@ namespace CoreClassLibrary.Models.Map
 
     public class ResourceTile : Tile
     {
+        private string[] TileAttributesResourceTypeList = new string[]
+        {
+            "Gold",
+            "Stone",
+            "Pumpkin"
+        };
+
         public struct ResourceContainer
         {
             public string type {get; set;}
@@ -41,6 +48,29 @@ namespace CoreClassLibrary.Models.Map
         {
 
         }   
+
+        public virtual void GetRndRessource()
+        {
+            Random rnd = new Random();
+
+            this.resource.type = TileAttributesResourceTypeList[rnd.Next(TileAttributesResourceTypeList.Length)];
+            this.resource.resource_volume = 50000 * rnd.Next(1, 3);
+
+            switch (this.resource.type)
+            {
+                case "Gold":
+                    this.resource.degradation_rate = 0.2f;
+                    break;
+                case "Stone":
+                    this.resource.degradation_rate = 0.4f;
+                    break;
+                case "Pumpkin":
+                    this.resource.degradation_rate = 0.6f;
+                    break;      
+                default:
+                    break;
+            }
+        }
     }
 
     public class ForestTile : ResourceTile
@@ -54,6 +84,11 @@ namespace CoreClassLibrary.Models.Map
             this.resource.resource_volume = 10000 * rnd.Next(1, 3);
 
             this.type = "Resource";
+        }
+
+        public override void GetRndRessource()
+        {
+
         }
     }
 
