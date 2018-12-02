@@ -71,7 +71,6 @@
                 {
                     this.mouseMovement.x += Math.abs(event.movementX);
                     this.mouseMovement.y += Math.abs(event.movementY);
-                    //var MapOffset = 
                     var angle = -45 * Math.PI / 180;
                     this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
                     this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));

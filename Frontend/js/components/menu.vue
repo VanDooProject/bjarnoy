@@ -21,7 +21,7 @@
             }"
             class="mapmenu"
         >
-       <!-- <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" > -->
+       
        <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" >
            </menu-item>
         </div>
@@ -43,7 +43,6 @@
         data: function() {
             return {
                 size: {x:150, y:150},
-                //submenus: [0,1,2,3,4,5]
             }
         },
         computed: {
@@ -59,7 +58,6 @@
                     return [0,1,2,3]
                 return [0,1,2]
             }
-            //submenusize: this.submenus.size()
         },
         methods: {
             close: function(event) {
@@ -86,6 +84,5 @@
 <style>
 .mapmenu {
     position: absolute;
-   /*background-color: oldlace;*/
 }
 </style>
