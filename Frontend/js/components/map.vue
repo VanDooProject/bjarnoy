@@ -3,6 +3,7 @@
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
+    v-on:mousedown='closeMenu'
     id="mapbg"
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
@@ -61,7 +62,6 @@
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.mouseMovement = {x:0, y:0};
-                this.closeMenu();
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;
