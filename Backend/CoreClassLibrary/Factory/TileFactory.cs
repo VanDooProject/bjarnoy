@@ -22,37 +22,48 @@ namespace CoreClassLibrary.Factory
 
         public Tile GetNewSpecificTile(int x, int y, int z, string type)
         {
-            Tile tile = new Tile(x, y, z, type);
-            if(tile.attributes.type == "Resource")
+            switch (type)
             {
-                GetRndRessource(tile);
+                case "Gras":
+                    GrasTile gras_tile = new GrasTile(x, y, z, type);
+                    return gras_tile;
+
+                case "Mountain":
+                    MountainTile mountain_tile = new MountainTile(x, y, z, type);
+                    return mountain_tile;
+
+                case "Forest":
+                    ForestTile forest_tile = new ForestTile(x, y, z, type);
+                    return forest_tile;
+
+                case "Resource":
+                    ResourceTile resource_tile = new ResourceTile(x, y, z, type);
+                    GetRndRessource(resource_tile);
+                    return resource_tile;
+
+                default:
+                    GrasTile gras_tile_def = new GrasTile(x, y, z, type);
+                    return gras_tile_def;
             }
-            else if(tile.attributes.type == "Forest")
-            {
-                Random rnd = new Random();
-                tile.attributes.resource.degradation_rate = 0.5f;
-                tile.attributes.resource.resource_volume = 10000 * rnd.Next(1, 3);
-            }
-            return tile;
         }
 
-        private void GetRndRessource(Tile tile)
+        private void GetRndRessource(ResourceTile tile)
         {
             Random rnd = new Random();
 
-            tile.attributes.resource.type = TileAttributesResourceTypeList[rnd.Next(TileAttributesResourceTypeList.Length)];
-            tile.attributes.resource.resource_volume = 50000 * rnd.Next(1, 3);
+            tile.resource.type = TileAttributesResourceTypeList[rnd.Next(TileAttributesResourceTypeList.Length)];
+            tile.resource.resource_volume = 50000 * rnd.Next(1, 3);
 
-            switch (tile.attributes.resource.type)
+            switch (tile.resource.type)
             {
                 case "Gold":
-                    tile.attributes.resource.degradation_rate = 0.2f;
+                    tile.resource.degradation_rate = 0.2f;
                     break;
                 case "Stone":
-                    tile.attributes.resource.degradation_rate = 0.4f;
+                    tile.resource.degradation_rate = 0.4f;
                     break;
                 case "Pumpkin":
-                    tile.attributes.resource.degradation_rate = 0.6f;
+                    tile.resource.degradation_rate = 0.6f;
                     break;      
                 default:
                     break;

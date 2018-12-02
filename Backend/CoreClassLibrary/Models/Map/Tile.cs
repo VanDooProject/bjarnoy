@@ -1,3 +1,5 @@
+using System;
+
 namespace CoreClassLibrary.Models.Map
 {
     public class Tile
@@ -6,18 +8,7 @@ namespace CoreClassLibrary.Models.Map
         public int y;
         public int z;
 
-        public struct ResourceContainer
-        {
-            public string type {get; set;}
-            public float resource_volume {get; set;}
-            public float degradation_rate {get; set;}
-        }
-        public struct Attributes
-        {
-            public string type {get; set;}
-            public ResourceContainer resource;
-        }
-        public Attributes attributes;
+        public string type {get; set;}
 
         public Tile(int x, int y, int z)
         {
@@ -32,7 +23,54 @@ namespace CoreClassLibrary.Models.Map
             this.y = y;
             this.z = z;
 
-            this.attributes.type = type;
+            this.type = type;
         }
     }
+
+    public class ResourceTile : Tile
+    {
+        public struct ResourceContainer
+        {
+            public string type {get; set;}
+            public float resource_volume {get; set;}
+            public float degradation_rate {get; set;}
+        }
+        public ResourceContainer resource;
+
+        public ResourceTile(int x, int y, int z, string type) : base(x, y, z, type)
+        {
+
+        }   
+    }
+
+    public class ForestTile : ResourceTile
+    {
+        public ForestTile(int x, int y, int z, string type) : base(x, y, z, type)
+        {
+            Random rnd = new Random();
+                    
+            this.resource.type = "Forest";
+            this.resource.degradation_rate = 0.5f;
+            this.resource.resource_volume = 10000 * rnd.Next(1, 3);
+
+            this.type = "Resource";
+        }
+    }
+
+    public class GrasTile : Tile
+    {
+        public GrasTile(int x, int y, int z, string type) : base(x, y, z, type)
+        {
+            
+        }
+    }
+
+    public class MountainTile : Tile
+    {
+        public MountainTile(int x, int y, int z, string type) : base(x, y, z, type)
+        {
+            
+        }
+    }
+    
 }

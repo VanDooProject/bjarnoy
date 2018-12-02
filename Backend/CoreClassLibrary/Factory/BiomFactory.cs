@@ -120,7 +120,7 @@ namespace CoreClassLibrary.Factory
                 }
                 else
                 {
-                     TileTypeList.Add("Gras");
+                    TileTypeList.Add("Gras");
                 }
             }
             Shuffle(TileTypeList);
@@ -135,6 +135,7 @@ namespace CoreClassLibrary.Factory
                 }
             }
         }
+        //https://stackoverflow.com/questions/273313/randomize-a-listt
         private void Shuffle<T>(IList<T> list)
         {
             RNGCryptoServiceProvider provider = new RNGCryptoServiceProvider();
