@@ -27,7 +27,8 @@
         </div>
 
         <span v-if="tile">
-            {{tile.x}} | {{tile.y}} | {{tile.z}}
+            {{tile.x}} | {{tile.y}} | {{tile.z}}<br/>
+            {{tile.type}}
         </span>
     </div>
 </template>
@@ -42,7 +43,7 @@
         data: function() {
             return {
                 size: {x:150, y:150},
-                submenus: [0,1,2,3,4,5]
+                //submenus: [0,1,2,3,4,5]
             }
         },
         computed: {
@@ -50,6 +51,14 @@
                 var bHide = (this.pos.x == 0) && (this.pos.y == 0);
                 return bHide ? 'none' : 'block';
             },
+            submenus()
+            {
+                if(this.tile == undefined)
+                    return []
+                if(this.tile.type == "grass")
+                    return [0,1,2,3]
+                return [0,1,2]
+            }
             //submenusize: this.submenus.size()
         },
         methods: {
