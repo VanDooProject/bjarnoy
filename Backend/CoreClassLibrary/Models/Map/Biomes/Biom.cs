@@ -1,12 +1,20 @@
 using System.Collections.Generic;
+using CoreClassLibrary.Models.Map.Tiles;
 
-namespace CoreClassLibrary.Models.Map
+namespace CoreClassLibrary.Models.Map.Biomes
 {
     public class Biom
     {
-        public struct ValueNameContainer
+        public enum BiomAttributesSizeDescriptionList
         {
-            public string description {get; set;}
+            Small = 4,
+            Medium = 6,
+            Large = 8,
+            Huge = 10,
+        };
+        public struct SizeContainer
+        {
+            public BiomAttributesSizeDescriptionList description {get; set;}
             public float value {get; set;}
         }
         public struct BiomTypeContainer
@@ -21,7 +29,7 @@ namespace CoreClassLibrary.Models.Map
         public struct Attributes
         {
             public BiomTypeContainer type;
-            public ValueNameContainer size;
+            public SizeContainer size;
         }
 
         public Attributes attributes;

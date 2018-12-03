@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CoreClassLibrary.Models.Map.Biomes;
 
 namespace CoreClassLibrary.Models.Map
 {

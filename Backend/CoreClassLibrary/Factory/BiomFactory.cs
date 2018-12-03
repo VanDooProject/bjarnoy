@@ -1,35 +1,30 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Biomes;
+using static CoreClassLibrary.Factory.TileFactory;
+using static CoreClassLibrary.Models.Map.Biomes.Biom;
 
 namespace CoreClassLibrary.Factory
 {
     public class BiomFactory
     {
-        private string[] BiomAttributesTypeList = new string[]
+        public enum BiomAttributesTypeList
         {
-            "Sparse",
-            "Mountain",
-            "Forest",
-            "Grassland"
-        };
-        private string[] BiomAttributesSizeDescriptionList = new string[]
-        {
-            "Small",
-            "Medium",
-            "Large",
-            "Huge"
+            Sparse = 1,
+            Mountain = 2,
+            Forest = 3,
+            Grassland = 4,
         };
 
-        private enum BiomSize
+       /* private enum BiomSize
         {
             Min = 2,
             Small = 4,
             Medium = 6,
             Large = 8,
             Huge = 10,
-        }
+        }*/
         
         private TileFactory tile_factory = new TileFactory();
         public Biom GetRndBiom()
@@ -44,25 +39,28 @@ namespace CoreClassLibrary.Factory
         private void GetRndAttributes(Biom biom)
         {
             Random rnd = new Random();
-            biom.attributes.type.description = BiomAttributesTypeList[rnd.Next(BiomAttributesTypeList.Length)];
-            biom.attributes.size.description = BiomAttributesSizeDescriptionList[rnd.Next(BiomAttributesSizeDescriptionList.Length)];
+            var temp_type_enum_list = Enum.GetValues(typeof(BiomAttributesTypeList));
+            var temp_size_enum_list = Enum.GetValues(typeof(BiomAttributesSizeDescriptionList));
+
+            biom.attributes.type.description = temp_type_enum_list.GetValue(rnd.Next(temp_type_enum_list.Length)).ToString();
+            biom.attributes.size.description = (BiomAttributesSizeDescriptionList)temp_size_enum_list.GetValue(rnd.Next(temp_size_enum_list.Length));
 
             switch (biom.attributes.size.description)
             {
-                case "Small":
-                    biom.attributes.size.value = rnd.Next((int)BiomSize.Min, (int)BiomSize.Small);
+                case BiomAttributesSizeDescriptionList.Small:
+                    biom.attributes.size.value = rnd.Next(((int)(BiomAttributesSizeDescriptionList.Small) - 2), (int)BiomAttributesSizeDescriptionList.Small);
                     break;
-                case "Medium":
-                    biom.attributes.size.value = rnd.Next(((int)BiomSize.Small + 1), (int)BiomSize.Medium);
+                case BiomAttributesSizeDescriptionList.Medium:
+                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
                     break;
-                case "Large":
-                    biom.attributes.size.value = rnd.Next(((int)BiomSize.Medium + 1), (int)BiomSize.Large);
+                case BiomAttributesSizeDescriptionList.Large:
+                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Medium + 1), (int)BiomAttributesSizeDescriptionList.Large);
                     break;
-                case "Huge":
-                    biom.attributes.size.value = rnd.Next(((int)BiomSize.Large + 1), (int)BiomSize.Huge);
+                case BiomAttributesSizeDescriptionList.Huge:
+                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Large + 1), (int)BiomAttributesSizeDescriptionList.Huge);
                     break;
                 default:
-                    biom.attributes.size.value = rnd.Next(((int)BiomSize.Small + 1), (int)BiomSize.Medium);
+                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
                     break;
             }
 
@@ -89,7 +87,7 @@ namespace CoreClassLibrary.Factory
                     biom.attributes.type.resource_probability = 0.1f;
                     break;
                 default:
-                    biom.attributes.size.value = rnd.Next(((int)BiomSize.Small + 1), (int)BiomSize.Medium);
+                    //biom.attributes.size.value = rnd.Next(((int)BiomSize.Small + 1), (int)BiomSize.Medium);
                     break;
             }
         }
@@ -100,27 +98,27 @@ namespace CoreClassLibrary.Factory
             int resource_count = (int)(nof_tiles * biom.attributes.type.resource_probability);
             int forest_count = (int)(nof_tiles * biom.attributes.type.forest_probability);
             int mountain_count = (int)(nof_tiles * biom.attributes.type.mountain_probability);
-            List<String> TileTypeList = new List<string>();
+            List<TileAttributesGeneralTypeList> TileTypeList = new List<TileAttributesGeneralTypeList>();
             for(int loop_count = 0; loop_count < nof_tiles; loop_count++)
             {
                 if(resource_count > 0)
                 {
-                    TileTypeList.Add("Resource");
+                    TileTypeList.Add(TileAttributesGeneralTypeList.Resource);
                     resource_count--;
                 }
                 else if(forest_count > 0)
                 {
-                    TileTypeList.Add("Forest");
+                    TileTypeList.Add(TileAttributesGeneralTypeList.Forest);
                     forest_count--; 
                 }
                 else if(mountain_count > 0)
                 {
-                    TileTypeList.Add("Mountain");
+                    TileTypeList.Add(TileAttributesGeneralTypeList.Mountain);
                     mountain_count--;
                 }
                 else
                 {
-                    TileTypeList.Add("Gras");
+                    TileTypeList.Add(TileAttributesGeneralTypeList.Gras);
                 }
             }
             Shuffle(TileTypeList);

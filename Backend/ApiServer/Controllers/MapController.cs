@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Tiles;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiServer.Controllers

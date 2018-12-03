@@ -1,42 +1,39 @@
 using System;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Tiles;
 
 namespace CoreClassLibrary.Factory
 {
     public class TileFactory
     {
-        private string[] TileAttributesGeneralTypeList = new string[]
+        public enum TileAttributesGeneralTypeList  
         {
-            "Gras",
-            "Mountain",
-            "Forest",
-            "Resource"
+            Gras = 1,
+            Mountain = 2,
+            Forest = 3,
+            Resource = 4,
         };
 
-        public Tile GetNewSpecificTile(int x, int y, int z, string type)
+        public Tile GetNewSpecificTile(int x, int y, int z, TileAttributesGeneralTypeList type)
         {
             switch (type)
             {
-                case "Gras":
-                    GrasTile gras_tile = new GrasTile(x, y, z, type);
-                    return gras_tile;
+                case TileAttributesGeneralTypeList.Gras:
+                    return new GrasTile(x, y, z, TileAttributesGeneralTypeList.Gras.ToString());
 
-                case "Mountain":
-                    MountainTile mountain_tile = new MountainTile(x, y, z, type);
-                    return mountain_tile;
+                case TileAttributesGeneralTypeList.Mountain:
+                    return new MountainTile(x, y, z, TileAttributesGeneralTypeList.Mountain.ToString());
 
-                case "Forest":
-                    ForestTile forest_tile = new ForestTile(x, y, z, type);
-                    return forest_tile;
+                case TileAttributesGeneralTypeList.Forest:
+                    return new ForestTile(x, y, z, TileAttributesGeneralTypeList.Forest.ToString());
 
-                case "Resource":
-                    ResourceTile resource_tile = new ResourceTile(x, y, z, type);
+                case TileAttributesGeneralTypeList.Resource:
+                    ResourceTile resource_tile = new ResourceTile(x, y, z, TileAttributesGeneralTypeList.Resource.ToString());
                     resource_tile.GetRndRessource();
                     return resource_tile;
 
                 default:
-                    GrasTile gras_tile_def = new GrasTile(x, y, z, type);
-                    return gras_tile_def;
+                    return new GrasTile(x, y, z, TileAttributesGeneralTypeList.Gras.ToString());
             }
         }
     }
