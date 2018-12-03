@@ -64,6 +64,13 @@ namespace ApiServer.Controllers
         [HttpPost("sign-in")]
         public IActionResult CreateToken([FromBody]SignInModel login)
         {
+            // User Data validation
+            if (!ModelState.IsValid)
+            {
+                return new BadRequestObjectResult(ModelState);
+            }
+
+
             IActionResult response = Unauthorized();
             var user = Authenticate(login);
 
@@ -111,27 +118,27 @@ namespace ApiServer.Controllers
         [HttpPost("sign-up")]
         public IActionResult SignUp([FromBody]SignUpModel signUp)
         {
-            IActionResult response = Unauthorized();
+            IActionResult response = StatusCode(500);
 
+            // User Data validation
             // https://docs.microsoft.com/en-us/aspnet/core/tutorials/first-mvc-app-xplat/validation?view=aspnetcore-2.1
             if (!ModelState.IsValid)
             {
-                //return new BadRequestObjectResult(BadRequest(ModelState));
                 return new BadRequestObjectResult(ModelState);
             }
 
             UserRepository userRepository = new UserRepository();
 
+            // check if user already exists
             UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
             if (IsUserInDb != null)
             {
                 return base.BadRequest();
             }
 
-            // TODO: validate user input
+            // use given data for new User(Model)
             UserModel user = new UserModel();
             user.Username = signUp.Username;
-
             user.Password = HashHelper.Instance.Hash(signUp.Password, user._id);
 
             userRepository.Add(user);
