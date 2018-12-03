@@ -20,7 +20,7 @@ namespace ApiServer.Controllers
     [ApiController] // <- for automatic data validation as of https://docs.microsoft.com/en-us/aspnet/core/mvc/models/validation?view=aspnetcore-2.1#handle-model-state-errors
     // mainly from https://auth0.com/blog/securing-asp-dot-net-core-2-applications-with-jwts/
     [Route("api/v1/[controller]")]
-    public class AuthController : Controller
+    public class AuthController : ControllerBase
     {
         private IConfiguration _config;
 
@@ -79,6 +79,10 @@ namespace ApiServer.Controllers
 
 
         // DELETE api/v1/auth/delete
+        /// <summary>
+        /// deletes current user / owner of token
+        /// </summary>
+        /// <returns></returns>
         [Authorize]
         [HttpDelete("delete")]
         public IActionResult DeleteAccount()
