@@ -16,79 +16,37 @@ namespace CoreClassLibrary.Factory
             Forest = 3,
             Grassland = 4,
         };
-
-       /* private enum BiomSize
-        {
-            Min = 2,
-            Small = 4,
-            Medium = 6,
-            Large = 8,
-            Huge = 10,
-        }*/
         
         private TileFactory tile_factory = new TileFactory();
         public Biom GetRndBiom()
         {
-            Biom biom = new Biom();
-
-            GetRndAttributes(biom);
+            Biom biom = GetRndBiomType();
             GetBiomTiles(biom);
             return biom;
         }
 
-        private void GetRndAttributes(Biom biom)
+        private Biom GetRndBiomType()
         {
             Random rnd = new Random();
             var temp_type_enum_list = Enum.GetValues(typeof(BiomAttributesTypeList));
-            var temp_size_enum_list = Enum.GetValues(typeof(BiomAttributesSizeDescriptionList));
 
-            biom.attributes.type.description = temp_type_enum_list.GetValue(rnd.Next(temp_type_enum_list.Length)).ToString();
-            biom.attributes.size.description = (BiomAttributesSizeDescriptionList)temp_size_enum_list.GetValue(rnd.Next(temp_size_enum_list.Length));
+            BiomAttributesTypeList temp_rnd_biom_type = (BiomAttributesTypeList)temp_type_enum_list.GetValue(rnd.Next(temp_type_enum_list.Length));
 
-            switch (biom.attributes.size.description)
+            switch (temp_rnd_biom_type)
             {
-                case BiomAttributesSizeDescriptionList.Small:
-                    biom.attributes.size.value = rnd.Next(((int)(BiomAttributesSizeDescriptionList.Small) - 2), (int)BiomAttributesSizeDescriptionList.Small);
-                    break;
-                case BiomAttributesSizeDescriptionList.Medium:
-                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
-                    break;
-                case BiomAttributesSizeDescriptionList.Large:
-                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Medium + 1), (int)BiomAttributesSizeDescriptionList.Large);
-                    break;
-                case BiomAttributesSizeDescriptionList.Huge:
-                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Large + 1), (int)BiomAttributesSizeDescriptionList.Huge);
-                    break;
-                default:
-                    biom.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
-                    break;
-            }
+                case BiomAttributesTypeList.Sparse:
+                    return new SparseBiom();
 
-            switch (biom.attributes.type.description)
-            {
-                case "Sparse":
-                    biom.attributes.type.forest_probability = 0.05f;
-                    biom.attributes.type.mountain_probability = 0.0f;
-                    biom.attributes.type.resource_probability = 0.05f;
-                    break;
-                case "Mountain":
-                    biom.attributes.type.forest_probability = 0.1f;
-                    biom.attributes.type.mountain_probability = 0.6f;
-                    biom.attributes.type.resource_probability = 0.1f;
-                    break;
-                case "Forest":
-                    biom.attributes.type.forest_probability = 0.6f;
-                    biom.attributes.type.mountain_probability = 0.1f;
-                    biom.attributes.type.resource_probability = 0.1f;
-                    break;
-                case "Grassland":
-                    biom.attributes.type.forest_probability = 0.1f;
-                    biom.attributes.type.mountain_probability = 0.1f;
-                    biom.attributes.type.resource_probability = 0.1f;
-                    break;
+                case BiomAttributesTypeList.Mountain:
+                    return new MountainBiom();
+
+                case BiomAttributesTypeList.Forest:
+                    return new ForestBiom();
+
+                case BiomAttributesTypeList.Grassland:
+                    return new GrasslandBiom();
                 default:
-                    //biom.attributes.size.value = rnd.Next(((int)BiomSize.Small + 1), (int)BiomSize.Medium);
-                    break;
+                    return new GrasslandBiom();
             }
         }
 

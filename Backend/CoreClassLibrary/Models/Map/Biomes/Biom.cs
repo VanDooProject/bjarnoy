@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CoreClassLibrary.Models.Map.Tiles;
 
@@ -33,5 +34,36 @@ namespace CoreClassLibrary.Models.Map.Biomes
         }
 
         public Attributes attributes;
+
+        public Biom()
+        {
+            this.GetRndBiomSize();
+        }
+
+        public void GetRndBiomSize()
+        {
+            Random rnd = new Random();
+            var temp_size_enum_list = Enum.GetValues(typeof(BiomAttributesSizeDescriptionList));
+            this.attributes.size.description = (BiomAttributesSizeDescriptionList)temp_size_enum_list.GetValue(rnd.Next(temp_size_enum_list.Length));
+
+            switch (this.attributes.size.description)
+            {
+                case BiomAttributesSizeDescriptionList.Small:
+                    this.attributes.size.value = rnd.Next(((int)(BiomAttributesSizeDescriptionList.Small) - 2), (int)BiomAttributesSizeDescriptionList.Small);
+                    break;
+                case BiomAttributesSizeDescriptionList.Medium:
+                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
+                    break;
+                case BiomAttributesSizeDescriptionList.Large:
+                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Medium + 1), (int)BiomAttributesSizeDescriptionList.Large);
+                    break;
+                case BiomAttributesSizeDescriptionList.Huge:
+                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Large + 1), (int)BiomAttributesSizeDescriptionList.Huge);
+                    break;
+                default:
+                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
+                    break;
+            }
+        }
     }
 }
