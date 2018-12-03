@@ -17,6 +17,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace ApiServer.Controllers
 {
+    [ApiController] // <- for automatic data validation as of https://docs.microsoft.com/en-us/aspnet/core/mvc/models/validation?view=aspnetcore-2.1#handle-model-state-errors
     // mainly from https://auth0.com/blog/securing-asp-dot-net-core-2-applications-with-jwts/
     [Route("api/v1/[controller]")]
     public class AuthController : Controller
@@ -64,13 +65,6 @@ namespace ApiServer.Controllers
         [HttpPost("sign-in")]
         public IActionResult CreateToken([FromBody]SignInModel login)
         {
-            // User Data validation
-            if (!ModelState.IsValid)
-            {
-                return new BadRequestObjectResult(ModelState);
-            }
-
-
             IActionResult response = Unauthorized();
             var user = Authenticate(login);
 
@@ -119,13 +113,6 @@ namespace ApiServer.Controllers
         public IActionResult SignUp([FromBody]SignUpModel signUp)
         {
             IActionResult response = StatusCode(500);
-
-            // User Data validation
-            // https://docs.microsoft.com/en-us/aspnet/core/tutorials/first-mvc-app-xplat/validation?view=aspnetcore-2.1
-            if (!ModelState.IsValid)
-            {
-                return new BadRequestObjectResult(ModelState);
-            }
 
             UserRepository userRepository = new UserRepository();
 
