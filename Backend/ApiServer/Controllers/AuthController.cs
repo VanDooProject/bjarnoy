@@ -62,7 +62,7 @@ namespace ApiServer.Controllers
         // POST api/v1/auth/sign-in
         [AllowAnonymous]
         [HttpPost("sign-in")]
-        public IActionResult CreateToken([FromBody]LoginModel login)
+        public IActionResult CreateToken([FromBody]SignInModel login)
         {
             IActionResult response = Unauthorized();
             var user = Authenticate(login);
@@ -109,13 +109,20 @@ namespace ApiServer.Controllers
         // POST api/v1/auth/sign-up
         [AllowAnonymous]
         [HttpPost("sign-up")]
-        public IActionResult SignUp([FromBody]LoginModel login)
+        public IActionResult SignUp([FromBody]SignUpModel signUp)
         {
             IActionResult response = Unauthorized();
 
+            // https://docs.microsoft.com/en-us/aspnet/core/tutorials/first-mvc-app-xplat/validation?view=aspnetcore-2.1
+            if (!ModelState.IsValid)
+            {
+                //return new BadRequestObjectResult(BadRequest(ModelState));
+                return new BadRequestObjectResult(ModelState);
+            }
+
             UserRepository userRepository = new UserRepository();
 
-            UserModel IsUserInDb = userRepository.GetByUsername(login.Username);
+            UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
             if (IsUserInDb != null)
             {
                 return base.BadRequest();
@@ -123,9 +130,9 @@ namespace ApiServer.Controllers
 
             // TODO: validate user input
             UserModel user = new UserModel();
-            user.Username = login.Username;
+            user.Username = signUp.Username;
 
-            user.Password = HashHelper.Instance.Hash(login.Password, user._id);
+            user.Password = HashHelper.Instance.Hash(signUp.Password, user._id);
 
             userRepository.Add(user);
 
@@ -167,7 +174,7 @@ namespace ApiServer.Controllers
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        private UserModel Authenticate(LoginModel login)
+        private UserModel Authenticate(SignInModel login)
         {
             UserRepository userRepository = new UserRepository();
 

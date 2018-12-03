@@ -9,6 +9,62 @@
 			"name": "Authentication",
 			"item": [
 				{
+					"name": "auth sign-up - No Mail",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"Mail\"); ",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "auth sign-up",
 					"event": [
 						{
@@ -163,7 +219,10 @@
 						},
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest",
 							"host": [
@@ -199,7 +258,10 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest",
 							"host": [
@@ -235,7 +297,10 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest/admin",
 							"host": [
@@ -272,7 +337,10 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest/session",
 							"host": [
