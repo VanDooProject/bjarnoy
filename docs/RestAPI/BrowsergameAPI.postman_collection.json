@@ -9,13 +9,124 @@
 			"name": "Authentication",
 			"item": [
 				{
-					"name": "auth sign-in",
+					"name": "auth sign-up - No Mail",
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
-								"type": "text/javascript",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"Mail\"); ",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-up - password not equal",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"PasswordConfirm\"); ",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret123\", \"Mail\": \"mario.browsergame@andesia.org\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-up",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
 								"exec": [
 									"",
 									"",
@@ -31,11 +142,133 @@
 									"    pm.response.to.not.be.error; ",
 									"    pm.response.to.have.jsonBody(\"\"); ",
 									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"",
+									"    var data = pm.response.json();",
+									"    pm.environment.set(\"token\", data.token);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"mario.browsergame@andesia.org\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-in - without password",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
 									"});",
 									"",
-									"var data = pm.response.json();",
-									"pm.environment.set(\"token\", data.token);"
-								]
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"Password\"); ",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"mario\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-in",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-in"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-in",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () { ",
+									"    pm.response.to.not.be.error; ",
+									"    pm.response.to.have.jsonBody(\"\"); ",
+									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"    ",
+									"    var data = pm.response.json();",
+									"    pm.environment.set(\"token\", data.token);",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -100,7 +333,10 @@
 						},
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest",
 							"host": [
@@ -136,7 +372,10 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest",
 							"host": [
@@ -172,7 +411,10 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest/admin",
 							"host": [
@@ -209,7 +451,10 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/selftest/session",
 							"host": [
@@ -221,6 +466,45 @@
 								"auth",
 								"selftest",
 								"session"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth remove self",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/delete",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"delete"
 							]
 						}
 					},

@@ -5,8 +5,10 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using CoreClassLibrary;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +17,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace ApiServer.Controllers
 {
+    [ApiController] // <- for automatic data validation as of https://docs.microsoft.com/en-us/aspnet/core/mvc/models/validation?view=aspnetcore-2.1#handle-model-state-errors
     // mainly from https://auth0.com/blog/securing-asp-dot-net-core-2-applications-with-jwts/
     [Route("api/v1/[controller]")]
     public class AuthController : Controller
@@ -60,10 +63,72 @@ namespace ApiServer.Controllers
         // POST api/v1/auth/sign-in
         [AllowAnonymous]
         [HttpPost("sign-in")]
-        public IActionResult CreateToken([FromBody]LoginModel login)
+        public IActionResult CreateToken([FromBody]SignInModel login)
         {
             IActionResult response = Unauthorized();
             var user = Authenticate(login);
+
+            if (user != null)
+            {
+                var tokenString = BuildToken(user);
+                response = Ok(new { token = tokenString });
+            }
+
+            return response;
+        }
+
+
+        // DELETE api/v1/auth/delete
+        [Authorize]
+        [HttpDelete("delete")]
+        public IActionResult DeleteAccount()
+        {
+            UserRepository userRepository = new UserRepository();
+
+            string UserId = HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value;
+            if (UserId == "")
+            {
+                // TODO: test (cause this is untested)
+                return base.Forbid();
+            }
+
+            UserModel IsUserInDb = userRepository.GetByUserId(UserId);
+
+            if (IsUserInDb == null)
+            {
+                // user not found
+                return base.BadRequest();
+            }
+
+            // remove user
+            userRepository.Delete(IsUserInDb);
+
+            return Ok();
+        }
+
+
+        // POST api/v1/auth/sign-up
+        [AllowAnonymous]
+        [HttpPost("sign-up")]
+        public IActionResult SignUp([FromBody]SignUpModel signUp)
+        {
+            IActionResult response = StatusCode(500);
+
+            UserRepository userRepository = new UserRepository();
+
+            // check if user already exists
+            UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
+            if (IsUserInDb != null)
+            {
+                return base.BadRequest();
+            }
+
+            // use given data for new User(Model)
+            UserModel user = new UserModel();
+            user.Username = signUp.Username;
+            user.Password = HashHelper.Instance.Hash(signUp.Password, user._id);
+
+            userRepository.Add(user);
 
             if (user != null)
             {
@@ -78,7 +143,7 @@ namespace ApiServer.Controllers
         {
             // most claims are defined here: http://tools.ietf.org/html/rfc7519#section-4
             var claims = new[] {
-                //new Claim(JwtRegisteredClaimNames.Sub, user.Name), // Subject
+                //new Claim(JwtRegisteredClaimNames.Sub, user.Username), // Subject
                 //new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 //new Claim(JwtRegisteredClaimNames.Birthdate, user.Birthdate.ToString("yyyy-MM-dd")),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // JWT ID - security measure against replay attacks
@@ -87,7 +152,7 @@ namespace ApiServer.Controllers
                 new Claim(ClaimTypes.Role, "Admin"),
 
                 // set user ID
-                new Claim(ClaimTypes.NameIdentifier, user.Id)
+                new Claim(ClaimTypes.NameIdentifier, user._id)
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
@@ -103,21 +168,26 @@ namespace ApiServer.Controllers
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        private UserModel Authenticate(LoginModel login)
+        private UserModel Authenticate(SignInModel login)
         {
-            UserModel user = null;
+            UserRepository userRepository = new UserRepository();
 
-            if (login.Username == "mario" && login.Password == "secret")
+            UserModel user = userRepository.GetByUsername(login.Username);
+
+            // no access if user not found
+            if (user == null)
             {
-                user = new UserModel
-                {
-                    Id = "IdFromMongoDb",
-                    Name = "Mario Rossi",
-                    Email = "mario.rossi@domain.com",
-                    Birthdate = DateTime.Now
-                };
+                return null;
             }
-            return user;
+
+            // compare password
+            if (user.Password == HashHelper.Instance.Hash(login.Password, user._id))
+            {
+                return user;
+            }
+
+            // user found -> password wrong
+            return null;
         }
     }
 }
