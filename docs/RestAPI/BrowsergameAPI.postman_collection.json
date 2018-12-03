@@ -108,7 +108,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\"}"
+							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"mario.browsergame@andesia.org\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-up",
