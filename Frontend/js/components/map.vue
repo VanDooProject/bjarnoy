@@ -8,8 +8,8 @@
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
         <div id="map" v-on:mousedown='mouseDown'>
-            <MapLayer layerZ="2" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="tiles" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>ü
         </div>
     </div>
 </template>
@@ -35,6 +35,15 @@
                 globalMapOffset: {x:0, y:0},
                 mouseMovement: {x:0, y:0},
                 menuClosed: false
+            }
+        },
+        computed: {
+            TilesArray () {
+                var ls = [[],[],[]]
+                this.tiles.forEach(tile => {
+                    ls[tile.z].push(tile);
+                });
+                return ls;
             }
         },
         mounted () {
