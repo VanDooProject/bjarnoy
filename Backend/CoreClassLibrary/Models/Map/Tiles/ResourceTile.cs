@@ -19,9 +19,14 @@ namespace CoreClassLibrary.Models.Map.Tiles
         }
         public ResourceContainer resource;
 
+
+        public bool isResourceTile
+        {
+            get { return (this as ResourceTile) != null; }
+        }
+
         public ResourceTile(int x, int y, int z) : base(x, y, z)
         {
-            this.type = "Resource";
         }   
 
         public virtual void GetRndRessource()
