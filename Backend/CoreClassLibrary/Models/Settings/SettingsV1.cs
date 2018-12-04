@@ -8,6 +8,7 @@ using CoreClassLibrary.Annotations;
 
 namespace CoreClassLibrary.Models.Settings
 {
+    [Serializable]
     public class SettingsV1 : ObservableData
     {
         //public String MongoDatabaseServerAddress
