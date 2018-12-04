@@ -8,7 +8,7 @@
             zIndex: tile.x - tile.y
         }"
     >
-        <img src="/images/tile.png"
+        <img v-bind:src="imgSrc"
             draggable="false"
             width="141px"
             height="500px"
@@ -26,12 +26,17 @@
         props: ['tile'],
         methods: {
             openMenu: function(event) {
-                this.$emit('tile_clicked', event, {x: this.tile.x, y: this.tile.y, z: this.tile.z});
+                this.$emit('tile_clicked', event, this.tile);
             }
         },
         data: function() {
             return {
                 //tile: {}
+            }
+        },
+        computed: {
+            imgSrc() {
+                    return "/images/tile_" + this.tile.type + ".png"
             }
         }
     }

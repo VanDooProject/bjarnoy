@@ -19,7 +19,7 @@
     "ApiServer": {
       "commandName": "Project",
       "launchBrowser": true,
-      "launchUrl": "api/v1/auth/selftest",
+      "launchUrl": "swagger/",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },

@@ -28,16 +28,15 @@ namespace ApiServer.Controllers
         {
             List<Tile> TileList = new List<Tile>();
             int layers = 3;
+            Random r = new Random();
+            String[] tileTypes = {"grass", "hill"};
             for (int z = 0; z < layers; z++)
             {
-                for (int x = 0; x < size; x++)
+                for (int x = -size; x < size; x++)
                 {
-                    for (int y = 0; y < size; y++)
+                    for (int y = -size; y < size; y++)
                     {
-                        TileList.Add(new Tile( x,  y, z));
-                        TileList.Add(new Tile( x, -y, z));
-                        TileList.Add(new Tile(-x, -y, z));
-                        TileList.Add(new Tile(-x,  y, z));
+                        TileList.Add(new Tile( x,  y, z, tileTypes[r.Next(tileTypes.Length)]));
                     }
                 }
             }
