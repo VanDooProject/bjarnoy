@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using CoreClassLibrary.Controller;
 using MongoDB.Driver;
 
 namespace CoreClassLibrary.Factory
@@ -10,11 +11,19 @@ namespace CoreClassLibrary.Factory
         private MongoClient client = null;
         private IMongoDatabase db = null;
 
-#if DEBUG
-        private string ServerUri = "mongodb://10.0.0.137:27017";
-#else
-        private string ServerUri = "mongodb://mongodb:27017";
-#endif
+        //#if DEBUG
+        //        private string ServerUri = "mongodb://10.0.0.137:27017";
+        //#else
+        //        private string ServerUri = "mongodb://mongodb:27017";
+        //#endif
+        private string ServerUri = String.Format(
+            "mongodb://{0}:{1}/?ServerSelectionTimeout={2}", // socketTimeoutMS={2}&amp;connectTimeoutMS={2}&amp;waitqueuetimeoutms={2}
+            SettingsController.Instance.GetSettings().V1.MongoDatabaseServerAddress,
+            SettingsController.Instance.GetSettings().V1.MongoDatabaseServerPort,
+            // https://stackoverflow.com/questions/24825107/c-sharp-mongodb-driver-ignores-timeout-options <- token should be set for all request -> undoable
+            SettingsController.Instance.GetSettings().V1.MongoDatabaseServerTimeoutSeconds
+            );
+        
 
         private string DatabaseName = "BrowsergameDatabase";
 

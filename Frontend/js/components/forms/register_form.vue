@@ -15,6 +15,20 @@
                 >
                 </b-form-input>
             </b-form-group>
+            <b-form-group label="Username"
+                label-for="username"
+            >
+                <b-form-input
+                    id="username"
+                    type="text"
+                    v-model="form.username"
+                    required
+                    autocomplete="username"
+                    placeholder="Please choose a username"
+                >
+
+                </b-form-input>
+            </b-form-group>
             <b-form-group label="Password"
                     label-for="password"
                     :state="passwordCorrectState&&passwordVerifiedState"
@@ -29,6 +43,10 @@
                     placeholder="Please enter a password"
                 >
                 </b-form-input>
+                <b-form-invalid-feedback>
+                    <!-- This will only be shown if the preceeding input has an invalid state -->
+                    Enter at least 3 letters<br/>
+                </b-form-invalid-feedback>
                 <b-form-input
                     type="password"
                     v-model="form.passwordVerify"
@@ -38,12 +56,17 @@
                     placeholder="Please verify the password"
                 >
                 </b-form-input>
+                <b-form-invalid-feedback id="inputLiveFeedback">
+                    <!-- This will only be shown if the preceeding input has an invalid state -->
+                    Passwords don't match
+                </b-form-invalid-feedback>
             </b-form-group>
             <b-form-group>
                 <b-form-checkbox id="staylogedin" v-model="form.stayLogedIn">
                     Stay logged in?
                 </b-form-checkbox>
             </b-form-group>
+            {{this.error}}
             <b-form-group>
                 <b-button type="submit" variant="primary">Submit</b-button>
                 <b-button type="reset"  variant="danger" >Reset</b-button>
@@ -62,15 +85,43 @@
         methods: {
             onSubmit (evt) {
                 evt.preventDefault();
-                //TODO: Send to Backend
-                alert(JSON.stringify(this.form));
+                //TODO: Verify inputs in frontend
+                this.axios
+                .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-up',
+                    {
+                        username: this.form.username,
+                        password: this.form.password,
+                        mail: this.form.email,
+                        passwordConfirm: this.form.passwordVerify
+                    },
+                    {
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                    })
+                .then(response => {localStorage.token = response.data.token
+                    this.axios
+                        .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                            {
+                                headers: {'Authorization': "bearer " + localStorage.token},
+                                withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                            })
+                        .then(response => this.$router.push('/map'))
+                        .catch(error => console.log(error.response));
+                    }
+                )
+                .catch(error => {
+                    this.error = error.response.data.Password[0] + ' <br/>' +
+                        error.response.data.Username[0] + ' <br/>' +
+                        error.response.data.PasswordConfirm[0] + ' <br/>';
+                });
             },
             onReset (evt) {
                 evt.preventDefault();
                 /* Reset our form values */
                 this.form.email = '';
+                this.form.username = '';
                 this.form.password = '';
                 this.form.passwordVerify = '';
+                this.error = ''
                 /* Trick to reset/clear native browser form validation state */
                 this.show = false;
                 this.$nextTick(() => { this.show = true });
@@ -89,10 +140,12 @@
         data: function () {
             return {
                 form: {
-                    email: "",
-                    password: "",
-                    passwordVerify: ""
-                }
+                    email: '',
+                    password: '',
+                    passwordVerify: '',
+                    username: ''
+                },
+                error: ''
             }
         }
     }

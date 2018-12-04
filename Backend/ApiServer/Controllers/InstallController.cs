@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Map;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,7 +21,11 @@ namespace ApiServer.Controllers
             {
                 GetEnvironmentVariable("VIRTUAL_HOST"),
                 GetEnvironmentVariable("CI_COMMIT_SHA"),
-                GetEnvironmentVariable("BRANCH")
+                GetEnvironmentVariable("BRANCH"),
+                String.Format("Database Server={0}:{1}",
+                    SettingsController.Instance.GetSettings().V1.MongoDatabaseServerAddress,
+                    SettingsController.Instance.GetSettings().V1.MongoDatabaseServerPort
+                    )
             };
 
             return infoList;
