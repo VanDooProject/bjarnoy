@@ -9,7 +9,7 @@
 
         <div id="map" v-on:mousedown='mouseDown'>
             <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>ü
+            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
     </div>
 </template>
