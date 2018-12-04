@@ -18,10 +18,10 @@ namespace CoreClassLibrary.Factory
         };
         
         private TileFactory tile_factory = new TileFactory();
-        public Biom GetRndBiom()
+        public Biom GetRndBiom(int start_size)
         {
             Biom biom = GetRndBiomType();
-            GetBiomTiles(biom);
+            GetBiomTiles(biom, start_size);
             return biom;
         }
 
@@ -50,7 +50,7 @@ namespace CoreClassLibrary.Factory
             }
         }
 
-        private void GetBiomTiles(Biom biom)
+        private void GetBiomTiles(Biom biom, int start_size)
         {
             int nof_tiles = (int)(biom.attributes.size.value * biom.attributes.size.value);
             int resource_count = (int)(nof_tiles * biom.attributes.type.resource_probability);
@@ -86,7 +86,7 @@ namespace CoreClassLibrary.Factory
             {
                 for(int horizontal_loop_count = 0; horizontal_loop_count < biom.attributes.size.value; horizontal_loop_count++)
                 {
-                    biom.tiles.Add(tile_factory.GetNewSpecificTile(horizontal_loop_count, vertical_loop_count, 1, TileTypeList[count]));
+                    biom.tiles.Add(tile_factory.GetNewSpecificTile((horizontal_loop_count + start_size), vertical_loop_count, 1, TileTypeList[count]));
                     count++;
                 }
             }

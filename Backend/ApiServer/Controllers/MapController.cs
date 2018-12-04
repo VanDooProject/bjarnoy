@@ -64,7 +64,7 @@ namespace ApiServer.Controllers
             BiomFactory factory = new BiomFactory();
             for (int loop_count = 0; loop_count < size; loop_count++)
             {
-                BiomList.Add(factory.GetRndBiom());
+                BiomList.Add(factory.GetRndBiom(loop_count));
             }
 
             return BiomList;

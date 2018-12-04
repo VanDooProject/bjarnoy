@@ -10,9 +10,13 @@ namespace CoreClassLibrary.Factory
             Island island = new Island();
 
             island.name = GenerateRandomName();
-            for(int loop_count = 0; loop_count < 4; loop_count++)
+
+            int start_value = 0;
+
+            for(int loop_count = 1; loop_count < 5; loop_count++)
             {
-                island.bioms.Add(biom_factory.GetRndBiom());
+                island.bioms.Add(biom_factory.GetRndBiom(start_value));
+                start_value = start_value + (int)island.bioms[loop_count - 1].attributes.size.value;
             }
             
             return island;
