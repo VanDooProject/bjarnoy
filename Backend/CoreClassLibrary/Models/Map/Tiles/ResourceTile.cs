@@ -19,10 +19,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
         }
         public ResourceContainer resource;
 
-        public ResourceTile(int x, int y, int z, string type) : base(x, y, z, type)
-        {
-        }
-
         public ResourceTile(int x, int y, int z) : base(x, y, z)
         {
             this.type = "Resource";

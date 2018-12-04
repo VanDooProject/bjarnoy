@@ -19,21 +19,21 @@ namespace CoreClassLibrary.Factory
             switch (type)
             {
                 case TileAttributesGeneralTypeList.Gras:
-                    return new GrasTile(x, y, z, TileAttributesGeneralTypeList.Gras.ToString());
+                    return new GrasTile(x, y, z);
 
                 case TileAttributesGeneralTypeList.Mountain:
-                    return new MountainTile(x, y, z, TileAttributesGeneralTypeList.Mountain.ToString());
+                    return new MountainTile(x, y, z);
 
                 case TileAttributesGeneralTypeList.Forest:
-                    return new ForestTile(x, y, z, TileAttributesGeneralTypeList.Forest.ToString());
+                    return new ForestTile(x, y, z);
 
                 case TileAttributesGeneralTypeList.Resource:
-                    ResourceTile resource_tile = new ResourceTile(x, y, z, TileAttributesGeneralTypeList.Resource.ToString());
+                    ResourceTile resource_tile = new ResourceTile(x, y, z);
                     resource_tile.GetRndRessource();
                     return resource_tile;
 
                 default:
-                    return new GrasTile(x, y, z, TileAttributesGeneralTypeList.Gras.ToString());
+                    return new GrasTile(x, y, z);
             }
         }
     }
