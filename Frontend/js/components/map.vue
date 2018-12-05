@@ -39,8 +39,12 @@
         },
         computed: {
             TilesArray () {
-                var ls = [[],[],[]]
+                var ls = [[]];
                 this.tiles.forEach(tile => {
+                    if(ls[tile.z] == undefined)
+                    {
+                        ls[tile.z]=[];
+                    }
                     ls[tile.z].push(tile);
                 });
                 return ls;
