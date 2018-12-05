@@ -130,6 +130,7 @@ namespace ApiServer.Controllers
             // use given data for new User(Model)
             UserModel user = new UserModel();
             user.Username = signUp.Username;
+            user.Email = signUp.Mail;
             user.Password = HashHelper.Instance.Hash(signUp.Password, user._id);
 
             userRepository.Add(user);
