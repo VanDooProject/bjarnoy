@@ -2,7 +2,7 @@ version: "3"
 
 volumes:
   db: {}
-#  config: {}
+  config: {}
 
 #networks:
 #  reverse-proxy-network:
@@ -17,8 +17,8 @@ services:
     image: "$CONTAINER_IMAGE"
     container_name: "docker_browsergame_${BRANCH}"
 
-#    volumes:
-#      - config:/config
+    volumes:
+      - config:/app/config
 
     # Either specify both ports (HOST:CONTAINER), or just the container port (an ephemeral host port is chosen).
     ports:

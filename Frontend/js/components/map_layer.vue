@@ -8,7 +8,7 @@
                 userSelect: 'none'
             }"    
         >
-        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in FilterLayerZ" @tile_clicked="TileClicked"></MapTile>
+        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in tiles" @tile_clicked="TileClicked"></MapTile>
     </div>
 </template>
 
@@ -22,12 +22,6 @@
             }
         },
         computed: {
-            // https://stackoverflow.com/questions/41791482/filter-list-with-vue-js
-            FilterLayerZ() {
-                return this.tiles.filter(tile => {
-                    return tile.z == this.layerZ;
-                });
-            }, 
             scalingFactor() {
                 return 1.25 - (this.layerZ * 0.25);
             }

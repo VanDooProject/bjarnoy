@@ -63,11 +63,11 @@
                                 headers: {'Authorization': "bearer " + localStorage.token},
                                 withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                             })
-                        .then(response => this.$router.push('/'))
-                        .catch(error => console.log(error));//alert('Got an invalid token from server'));
+                        .then(response => this.$router.push('/map'))
+                        .catch(error => console.log(error.response));
                     }
                 )
-                .catch(error => console.log(error));
+                .catch(error => console.log(error.response));
                 
             },
             onReset (evt) {
@@ -83,8 +83,8 @@
         data: function () {
             return {
                 form:{
-                    username: "",
-                    password: "",
+                    username: '',
+                    password: '',
                     stayLogedIn: false
                 }
             }

@@ -1,4 +1,4 @@
-namespace CoreClassLibrary.Models.Map
+namespace CoreClassLibrary.Models.Map.Tiles
 {
     public class Tile
     {
@@ -6,14 +6,22 @@ namespace CoreClassLibrary.Models.Map
         public int y;
         public int z;
 
-        public string type;
+        public string type {get; set;}
+
+        public Tile(int x, int y, int z)
+        {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
 
         public Tile(int x, int y, int z, string type)
         {
             this.x = x;
             this.y = y;
             this.z = z;
+
             this.type = type;
         }
-    }
+    }    
 }

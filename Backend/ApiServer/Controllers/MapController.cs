@@ -2,7 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Tiles;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiServer.Controllers
@@ -39,36 +42,29 @@ namespace ApiServer.Controllers
             }
 
             return TileList;
-
-            // return new Tile[] {
-            //     new Tile(0,0,0),
-            //     new Tile(1,0,0),
-            //     new Tile(0,1,0),
-            //     new Tile(1,1,0),
-            // 
-            //     new Tile(0,0,1),
-            //     new Tile(1,0,1),
-            //     new Tile(0,1,1),
-            //     new Tile(1,1,1),
-            // };
         }
 
-        // POST api/values
-        [HttpPost]
-        public void Post([FromBody]string value)
+        [HttpGet("demo/biom/{size}")]
+        public IEnumerable<Biom> GetRndBiom(int size)
         {
+            List<Biom> BiomList = new List<Biom>();
+            BiomFactory factory = new BiomFactory();
+            for (int loop_count = 0; loop_count < size; loop_count++)
+            {
+                BiomList.Add(factory.GetRndBiom(loop_count));
+            }
+
+            return BiomList;
         }
 
-        // PUT api/values/5
-        [HttpPut("{id}")]
-        public void Put(int id, [FromBody]string value)
+        [HttpGet("demo/island")]
+        public IEnumerable<Island> GetRndIsland()
         {
-        }
+            List<Island> IslandList = new List<Island>();
+            IslandFactory factory = new IslandFactory();
+            IslandList.Add(factory.GetRndIsland());
 
-        // DELETE api/values/5
-        [HttpDelete("{id}")]
-        public void Delete(int id)
-        {
+            return IslandList;
         }
     }
 }
