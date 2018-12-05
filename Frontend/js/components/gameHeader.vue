@@ -21,7 +21,17 @@
             
         },
         methods: {
-            
+            //https://stackoverflow.com/questions/38552003/how-to-decode-jwt-token-in-javascript
+            jwtDecode(token){
+                return JSON.parse(
+                    decodeURIComponent(
+                    Array.prototype.map.call(atob(
+                    token.split('.')[1].replace('-', '+').replace('_', '/')
+                    ), c =>
+                    '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+                    ).join(''))
+                )
+            }
         },
         mounted () {
             if (localStorage.token == undefined)
@@ -30,6 +40,7 @@
             }
             else
             {
+                console.log(this.jwtDecode(localStorage.token));
                 this.axios
                 .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
