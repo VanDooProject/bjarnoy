@@ -1,4 +1,6 @@
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Tiles;
 using System;
 
 namespace CoreClassLibrary.Factory
@@ -40,12 +42,27 @@ namespace CoreClassLibrary.Factory
             {
                 int x = rnd.Next(0, island.size);
                 int y = rnd.Next(0, island.size);
-                biom_factory.GetRndBiomAtStartCoords(0, 0, 1);
-                //foreach
-                //island.bioms.Add(biom_factory.GetRndBiomAtStartCoords(rnd.Next(0, island.size), rnd.Next(0, island.size), z));
+
+                var tile_already_exits = false;
+                //biom_factory.GetRndBiomAtStartCoords(x, y, 1);
+                foreach (Biom b in island.bioms)
+                {
+                    foreach(Tile t in b.tiles)
+                    {
+                        if(t.x == x && t.y == y && t.z == z)
+                        {
+                            tile_already_exits = true;
+                            break;
+                        }
+                    }
+                }
+                if(tile_already_exits == false)
+                {
+                    island.bioms.Add(biom_factory.GetRndBiomAtStartCoords(x, y, z));
+                    nof_bioms_in_island--;
+                }
             } while (nof_bioms_in_island > 0);
                 
-
             return island;
         }
 

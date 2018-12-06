@@ -69,22 +69,22 @@ namespace CoreClassLibrary.Factory
             {
                 if(resource_count > 0)
                 {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.Resource);
+                    TileTypeList.Add(TileAttributesGeneralTypeList.resource);
                     resource_count--;
                 }
                 else if(forest_count > 0)
                 {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.Forest);
+                    TileTypeList.Add(TileAttributesGeneralTypeList.forest);
                     forest_count--; 
                 }
                 else if(mountain_count > 0)
                 {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.Mountain);
+                    TileTypeList.Add(TileAttributesGeneralTypeList.mountain);
                     mountain_count--;
                 }
                 else
                 {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.Gras);
+                    TileTypeList.Add(TileAttributesGeneralTypeList.gras);
                 }
             }
             Shuffle(TileTypeList);

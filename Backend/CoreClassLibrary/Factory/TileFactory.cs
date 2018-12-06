@@ -8,26 +8,26 @@ namespace CoreClassLibrary.Factory
     {
         public enum TileAttributesGeneralTypeList  
         {
-            Gras = 1,
-            Mountain = 2,
-            Forest = 3,
-            Resource = 4,
+            gras = 1,
+            mountain = 2,
+            forest = 3,
+            resource = 4,
         };
 
         public Tile GetNewSpecificTile(int x, int y, int z, TileAttributesGeneralTypeList type)
         {
             switch (type)
             {
-                case TileAttributesGeneralTypeList.Gras:
+                case TileAttributesGeneralTypeList.gras:
                     return new GrasTile(x, y, z);
 
-                case TileAttributesGeneralTypeList.Mountain:
+                case TileAttributesGeneralTypeList.mountain:
                     return new MountainTile(x, y, z);
 
-                case TileAttributesGeneralTypeList.Forest:
+                case TileAttributesGeneralTypeList.forest:
                     return new ForestTile(x, y, z);
 
-                case TileAttributesGeneralTypeList.Resource:
+                case TileAttributesGeneralTypeList.resource:
                     ResourceTile resource_tile = new ResourceTile(x, y, z);
                     resource_tile.GetRndRessource();
                     return resource_tile;

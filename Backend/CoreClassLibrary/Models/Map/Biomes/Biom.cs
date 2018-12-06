@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Factory;
+using static CoreClassLibrary.Factory.TileFactory;
 
 namespace CoreClassLibrary.Models.Map.Biomes
 {
@@ -42,6 +44,8 @@ namespace CoreClassLibrary.Models.Map.Biomes
 
         public Attributes attributes;
 
+        private TileFactory tile_factory = new TileFactory();
+
         public Biom()
         {
             this.GetRndBiomSize();
@@ -75,11 +79,15 @@ namespace CoreClassLibrary.Models.Map.Biomes
 
         public void AddRndBiomTileAtPosition(int x, int y, int z)
         {
+            tiles.Add(GetRndBiomTileAtPosition(x, y, z));
+        }
+
+        private Tile GetRndBiomTileAtPosition(int x, int y, int z)
+        {
             Random rnd = new Random();
             double rnd_value = rnd.NextDouble();
 
             double cumulative_probability = 0.0;
-            //FieldInfo[] probabilities = this.attributes.type.probability.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             PropertyInfo[] probabilities = this.attributes.type.probability.GetType().GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             foreach (PropertyInfo pi in probabilities)
             {
@@ -87,10 +95,39 @@ namespace CoreClassLibrary.Models.Map.Biomes
                 if(rnd_value < cumulative_probability)
                 {
                     string name = pi.Name;
+                    TileAttributesGeneralTypeList tile_type;
+                    if(Enum.TryParse(pi.Name, out tile_type))
+                    {
+                        switch (tile_type)
+                        {
+                            case TileAttributesGeneralTypeList.gras:
+                                return new GrasTile(x, y, z);
 
-                    break;
+                            case TileAttributesGeneralTypeList.mountain:
+                                return new MountainTile(x, y, z);
+
+                            case TileAttributesGeneralTypeList.forest:
+                                return new ForestTile(x, y, z);
+
+                            case TileAttributesGeneralTypeList.resource:
+                                ResourceTile resource_tile = new ResourceTile(x, y, z);
+                                resource_tile.GetRndRessource();
+                                return resource_tile;
+
+                            default:
+                                return new GrasTile(x, y, z);
+                        }
+
+                    }
+                    else
+                    {
+                        while (true);
+                    }
                 }
             }
+
+            //If we reach this point, then the cumulative probability is less than 100%
+            return new GrasTile(x, y, z);
         }
     }
 }
