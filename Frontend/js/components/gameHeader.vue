@@ -34,7 +34,8 @@
                 .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        withCredentials: true
                     })
                 .then(response => console.log(response))
                 .catch(error => this.$router.push('/login'));

@@ -3,6 +3,7 @@
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
+    v-on:mousedown='closeMenu'
     id="mapbg"
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
@@ -74,7 +75,6 @@
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.mouseMovement = {x:0, y:0};
-                this.closeMenu();
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;
@@ -84,7 +84,6 @@
                 {
                     this.mouseMovement.x += Math.abs(event.movementX);
                     this.mouseMovement.y += Math.abs(event.movementY);
-                    //var MapOffset = 
                     var angle = -45 * Math.PI / 180;
                     this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
                     this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));

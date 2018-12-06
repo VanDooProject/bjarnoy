@@ -12,11 +12,7 @@
             draggable="false"
             width="141px"
             height="500px"
-            style="
-                position: absolute;
-                transform: translate(-70px,-250px) rotateZ(-45deg);
-                pointer-events: none;
-            "
+            class="tileimg"
         >
     </div>
 </template>
@@ -31,7 +27,7 @@
         },
         data: function() {
             return {
-                //tile: {}
+                
             }
         },
         computed: {
@@ -58,13 +54,10 @@
     right: 0;
     padding: 0px;
     margin: 0px;
-/*
-    background-color: green;    
-    border:1px solid black;
-    border-top-style: none;
-    border-right-style: solid;
-    border-bottom-style: solid;
-    border-left-style: none;*/
 }
-
+.tileimg {
+    position: absolute;
+    transform: translate(-70px,-250px) rotateZ(-45deg);
+    pointer-events: none;
+}
 </style>
