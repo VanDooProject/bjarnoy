@@ -18,10 +18,18 @@ namespace CoreClassLibrary.Factory
         };
         
         private TileFactory tile_factory = new TileFactory();
-        public Biom GetRndBiom(int start_size)
+        public Biom GetRndBiomAndTiles(int start_size)
         {
             Biom biom = GetRndBiomType();
-            GetBiomTiles(biom, start_size);
+            GetRndBiomTiles(biom, start_size);
+            return biom;
+        }
+
+        public Biom GetRndBiomAtStartCoords(int x, int y, int z)
+        {
+            Biom biom = GetRndBiomType();
+            biom.AddRndBiomTileAtPosition(x, y, z);
+
             return biom;
         }
 
@@ -50,12 +58,12 @@ namespace CoreClassLibrary.Factory
             }
         }
 
-        private void GetBiomTiles(Biom biom, int start_size)
+        private void GetRndBiomTiles(Biom biom, int start_size)
         {
             int nof_tiles = (int)(biom.attributes.size.value * biom.attributes.size.value);
-            int resource_count = (int)(nof_tiles * biom.attributes.type.resource_probability);
-            int forest_count = (int)(nof_tiles * biom.attributes.type.forest_probability);
-            int mountain_count = (int)(nof_tiles * biom.attributes.type.mountain_probability);
+            int resource_count = (int)(nof_tiles * biom.attributes.type.probability.resource);
+            int forest_count = (int)(nof_tiles * biom.attributes.type.probability.forest);
+            int mountain_count = (int)(nof_tiles * biom.attributes.type.probability.mountain);
             List<TileAttributesGeneralTypeList> TileTypeList = new List<TileAttributesGeneralTypeList>();
             for(int loop_count = 0; loop_count < nof_tiles; loop_count++)
             {

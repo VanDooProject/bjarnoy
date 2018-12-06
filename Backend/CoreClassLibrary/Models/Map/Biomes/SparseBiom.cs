@@ -5,9 +5,9 @@ namespace CoreClassLibrary.Models.Map.Biomes
         public SparseBiom() : base()
         {
             this.attributes.type.description = "Sparse";
-            this.attributes.type.forest_probability = 0.05f;
-            this.attributes.type.mountain_probability = 0.0f;
-            this.attributes.type.resource_probability = 0.05f;
+            this.attributes.type.probability.forest = 0.05f;
+            this.attributes.type.probability.mountain = 0.0f;
+            this.attributes.type.probability.resource = 0.05f;
         }
     }
 }

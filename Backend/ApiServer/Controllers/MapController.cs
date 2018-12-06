@@ -42,18 +42,6 @@ namespace ApiServer.Controllers
             }
 
             return TileList;
-
-            // return new Tile[] {
-            //     new Tile(0,0,0),
-            //     new Tile(1,0,0),
-            //     new Tile(0,1,0),
-            //     new Tile(1,1,0),
-            // 
-            //     new Tile(0,0,1),
-            //     new Tile(1,0,1),
-            //     new Tile(0,1,1),
-            //     new Tile(1,1,1),
-            // };
         }
 
         [HttpGet("demo/biom/{size}")]
@@ -63,7 +51,7 @@ namespace ApiServer.Controllers
             BiomFactory factory = new BiomFactory();
             for (int loop_count = 0; loop_count < size; loop_count++)
             {
-                BiomList.Add(factory.GetRndBiom(loop_count));
+                BiomList.Add(factory.GetRndBiomAndTiles(loop_count));
             }
 
             return BiomList;
@@ -78,6 +66,17 @@ namespace ApiServer.Controllers
 
             return IslandList;
         }
+
+        [HttpGet("demo/island/new")]
+        public IEnumerable<Island> GetRndIslandNew()
+        {
+            List<Island> IslandList = new List<Island>();
+            IslandFactory factory = new IslandFactory();
+            IslandList.Add(factory.GetRndIslandNew(10, 1));
+
+            return IslandList;
+        }
+        
 
         // POST api/values
         [HttpPost]

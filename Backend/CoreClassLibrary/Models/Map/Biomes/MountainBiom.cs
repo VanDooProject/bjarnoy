@@ -5,9 +5,9 @@ namespace CoreClassLibrary.Models.Map.Biomes
         public MountainBiom() : base()
         {
             this.attributes.type.description = "Mountain";
-            this.attributes.type.forest_probability = 0.1f;
-            this.attributes.type.mountain_probability = 0.6f;
-            this.attributes.type.resource_probability = 0.1f;
+            this.attributes.type.probability.forest= 0.1f;
+            this.attributes.type.probability.mountain = 0.6f;
+            this.attributes.type.probability.resource = 0.1f;
         }
     }
 }
