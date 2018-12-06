@@ -37,6 +37,15 @@ namespace CoreClassLibrary.Factory
             }
             island.size = rnd.Next(size - 5, size + 5);
 
+            CreateAndAddRndStartBioms(island, z);
+            ExpandBiomsAndCreateTiles(island);
+
+            return island;
+        }
+
+        private void CreateAndAddRndStartBioms(Island island, int z)
+        {
+            Random rnd = new Random();
             int nof_bioms_in_island = rnd.Next(1, (int)(island.size / 3));
             do
             {
@@ -44,26 +53,28 @@ namespace CoreClassLibrary.Factory
                 int y = rnd.Next(0, island.size);
 
                 var tile_already_exits = false;
-                //biom_factory.GetRndBiomAtStartCoords(x, y, 1);
                 foreach (Biom b in island.bioms)
                 {
-                    foreach(Tile t in b.tiles)
+                    foreach (Tile t in b.tiles)
                     {
-                        if(t.x == x && t.y == y && t.z == z)
+                        if (t.x == x && t.y == y && t.z == z)
                         {
                             tile_already_exits = true;
                             break;
                         }
                     }
                 }
-                if(tile_already_exits == false)
+                if (tile_already_exits == false)
                 {
                     island.bioms.Add(biom_factory.GetRndBiomAtStartCoords(x, y, z));
                     nof_bioms_in_island--;
                 }
             } while (nof_bioms_in_island > 0);
-                
-            return island;
+        }
+
+        private void ExpandBiomsAndCreateTiles(Island island)
+        {
+
         }
 
         private string GenerateRandomName()

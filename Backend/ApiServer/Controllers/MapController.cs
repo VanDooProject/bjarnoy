@@ -67,12 +67,12 @@ namespace ApiServer.Controllers
             return IslandList;
         }
 
-        [HttpGet("demo/island/new")]
-        public IEnumerable<Island> GetRndIslandNew()
+        [HttpGet("demo/island/new/{size}")]
+        public IEnumerable<Island> GetRndIslandNew(int size)
         {
             List<Island> IslandList = new List<Island>();
             IslandFactory factory = new IslandFactory();
-            IslandList.Add(factory.GetRndIslandNew(10, 1));
+            IslandList.Add(factory.GetRndIslandNew(size, 1));
 
             return IslandList;
         }
