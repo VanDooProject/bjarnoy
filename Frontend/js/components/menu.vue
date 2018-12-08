@@ -21,13 +21,14 @@
             }"
             class="mapmenu"
         >
-       <!-- <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" > -->
+       
        <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" >
            </menu-item>
         </div>
 
         <span v-if="tile">
-            {{tile.x}} | {{tile.y}} | {{tile.z}}
+            {{tile.x}} | {{tile.y}} | {{tile.z}}<br/>
+            {{tile.type}}
         </span>
     </div>
 </template>
@@ -42,7 +43,6 @@
         data: function() {
             return {
                 size: {x:150, y:150},
-                submenus: [0,1,2,3,4,5]
             }
         },
         computed: {
@@ -50,7 +50,14 @@
                 var bHide = (this.pos.x == 0) && (this.pos.y == 0);
                 return bHide ? 'none' : 'block';
             },
-            //submenusize: this.submenus.size()
+            submenus()
+            {
+                if(this.tile == undefined)
+                    return []
+                if(this.tile.type == "grass")
+                    return [0,1,2,3]
+                return [0,1,2]
+            }
         },
         methods: {
             close: function(event) {
@@ -77,6 +84,5 @@
 <style>
 .mapmenu {
     position: absolute;
-   /*background-color: oldlace;*/
 }
 </style>

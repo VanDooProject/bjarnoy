@@ -6,15 +6,8 @@
                     'scale(' + scalingFactor + ')',
                 // currently maybe not effecting all browsers could be fixed with https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting
                 userSelect: 'none'
-            }"
-             
+            }"    
         >
-        <!--
-        v-bind:style="{
-                height: Math.round(Math.sqrt(this.tiles.length)) * 60 + 'px',
-                width: Math.round(Math.sqrt(this.tiles.length)) * 60 + 'px'
-            }"
-        -->
         <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in tiles" @tile_clicked="TileClicked"></MapTile>
     </div>
 </template>
@@ -26,8 +19,6 @@
         props: ['tiles', 'layerZ', 'globalMapOffset'],
         data: function() {
             return {
-                // tiles: [],
-                // targetZ: 0
             }
         },
         computed: {
@@ -60,8 +51,8 @@
     -khtml-user-select: none;   /* Konqueror HTML */
     -moz-user-select: none;     /* Firefox */
     -ms-user-select: none;      /* Internet Explorer/Edge */
-    user-select: none;          /* Non-prefixed version, currently
-                                supported by Chrome and Opera */
+    user-select: none;          /* Non-prefixed version, currently */
+                                /* supported by Chrome and Opera */
 }
 
 </style>

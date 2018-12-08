@@ -7,6 +7,9 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public int y;
         public int z;
 
+        public Tile()
+        {
+        }
         public string type
         {
             get { return this.GetType().ToString().Split('.').Last(); }

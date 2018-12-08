@@ -19,6 +19,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
         }
         public ResourceContainer resource;
 
+        public ResourceTile() : base()
+        {
+        }
+
 
         public bool isResourceTile
         {

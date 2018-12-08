@@ -4,6 +4,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
 {
     public class ForestTile : ResourceTile
     {
+        public ForestTile() : base()
+        {
+        }
+
         public ForestTile(int x, int y, int z) : base(x, y, z)
         {
             Random rnd = new Random();
