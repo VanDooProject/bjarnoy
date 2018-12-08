@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.Map
 {
@@ -19,6 +20,7 @@ namespace CoreClassLibrary.Models.Map
         }
 
         private List<Tile> _tiles = new List<Tile>();
+        [JsonIgnore]
         public List<Tile> Tiles
         {
             get

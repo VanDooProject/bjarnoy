@@ -11,26 +11,8 @@ namespace CoreClassLibrary.Factory
     public class IslandFactory
     {
         private BiomFactory biom_factory = new BiomFactory();
-        public Island GetRndIsland()
-        {
-            Vector3 startPosition = new Vector3(0, 0, 1);
 
-            Island island = new Island(startPosition);
-
-            island.name = GenerateRandomName();
-
-            int start_value = 0;
-
-            for(int loop_count = 1; loop_count < 5; loop_count++)
-            {
-                island.bioms.Add(biom_factory.GetRndBiomAndTiles(start_value));
-                start_value = start_value + (int)island.bioms[loop_count - 1].attributes.size.value;
-            }
-            
-            return island;
-        }
-
-        public Island GetRndIslandNew(int size, int z)
+        public Island GetRndIsland(int size, int z)
         {
             Vector3 startPosition = new Vector3(0, 0, z);
             Island island = new Island(startPosition);

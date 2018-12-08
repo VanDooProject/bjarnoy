@@ -24,7 +24,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
         }
 
-
         public bool isResourceTile
         {
             get { return (this as ResourceTile) != null; }

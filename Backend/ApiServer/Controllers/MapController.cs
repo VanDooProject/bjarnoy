@@ -46,7 +46,7 @@ namespace ApiServer.Controllers
             return TileList;
         }
 
-        [HttpGet("demo/biom/{size}")]
+        /*[HttpGet("demo/biom/{size}")]
         public IEnumerable<Biom> GetRndBiom(int size)
         {
             List<Biom> BiomList = new List<Biom>();
@@ -57,24 +57,14 @@ namespace ApiServer.Controllers
             }
 
             return BiomList;
-        }
+        }*/
 
-        [HttpGet("demo/island")]
-        public IEnumerable<Island> GetRndIsland()
+        [HttpGet("demo/island/{size}")]
+        public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
             IslandFactory factory = new IslandFactory();
-            IslandList.Add(factory.GetRndIsland());
-
-            return IslandList;
-        }
-
-        [HttpGet("demo/island/new/{size}")]
-        public IEnumerable<Island> GetRndIslandNew(int size)
-        {
-            List<Island> IslandList = new List<Island>();
-            IslandFactory factory = new IslandFactory();
-            IslandList.Add(factory.GetRndIslandNew(size, 1));
+            IslandList.Add(factory.GetRndIsland(size, 1));
 
             return IslandList;
         }

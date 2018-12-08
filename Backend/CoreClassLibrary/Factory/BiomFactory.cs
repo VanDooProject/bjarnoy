@@ -19,12 +19,6 @@ namespace CoreClassLibrary.Factory
         };
         
         private TileFactory tile_factory = new TileFactory();
-        public Biom GetRndBiomAndTiles(int start_size)
-        {
-            Biom biom = GetRndBiomType();
-            GetRndBiomTiles(biom, start_size);
-            return biom;
-        }
 
         public Biom GetRndBiomAtStartPosition(Vector3 position)
         {
@@ -61,66 +55,6 @@ namespace CoreClassLibrary.Factory
                     return new GrasslandBiom();
                 default:
                     return new GrasslandBiom();
-            }
-        }
-
-        private void GetRndBiomTiles(Biom biom, int start_size)
-        {
-            int nof_tiles = (int)(biom.attributes.size.value * biom.attributes.size.value);
-            int resource_count = (int)(nof_tiles * biom.attributes.type.probability.resource);
-            int forest_count = (int)(nof_tiles * biom.attributes.type.probability.forest);
-            int mountain_count = (int)(nof_tiles * biom.attributes.type.probability.mountain);
-            List<TileAttributesGeneralTypeList> TileTypeList = new List<TileAttributesGeneralTypeList>();
-            for(int loop_count = 0; loop_count < nof_tiles; loop_count++)
-            {
-                if(resource_count > 0)
-                {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.resource);
-                    resource_count--;
-                }
-                else if(forest_count > 0)
-                {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.forest);
-                    forest_count--; 
-                }
-                else if(mountain_count > 0)
-                {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.mountain);
-                    mountain_count--;
-                }
-                else
-                {
-                    TileTypeList.Add(TileAttributesGeneralTypeList.gras);
-                }
-            }
-            Shuffle(TileTypeList);
-
-            var count = 0;
-            for(int vertical_loop_count = 0; vertical_loop_count < biom.attributes.size.value; vertical_loop_count++)
-            {
-                for(int horizontal_loop_count = 0; horizontal_loop_count < biom.attributes.size.value; horizontal_loop_count++)
-                {
-                    Vector3 position = new Vector3((horizontal_loop_count + start_size), vertical_loop_count, 1);
-                    biom.tiles.Add(tile_factory.GetNewSpecificTile(position, TileTypeList[count]));
-                    count++;
-                }
-            }
-        }
-        //https://stackoverflow.com/questions/273313/randomize-a-listt
-        private void Shuffle<T>(IList<T> list)
-        {
-            RNGCryptoServiceProvider provider = new RNGCryptoServiceProvider();
-            int n = list.Count;
-            while (n > 1)
-            {
-                byte[] box = new byte[1];
-                do provider.GetBytes(box);
-                while (!(box[0] < n * (Byte.MaxValue / n)));
-                int k = (box[0] % n);
-                n--;
-                T value = list[k];
-                list[k] = list[n];
-                list[n] = value;
             }
         }
     }

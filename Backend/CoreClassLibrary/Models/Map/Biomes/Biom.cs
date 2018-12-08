@@ -5,6 +5,7 @@ using System.Reflection;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Factory;
 using static CoreClassLibrary.Factory.TileFactory;
+using System.Linq;
 
 namespace CoreClassLibrary.Models.Map.Biomes
 {
@@ -17,6 +18,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
             Large = 8,
             Huge = 10,
         };
+
         public struct SizeContainer
         {
             public BiomAttributesSizeDescriptionList description {get; set;}
@@ -30,17 +32,17 @@ namespace CoreClassLibrary.Models.Map.Biomes
             public double mountain {get; set;}
         }
 
-        public struct BiomTypeContainer
-        {
-            public string description {get; set;}
-            public TileProbability probability;
-        }
-
         public List<Tile> tiles = new List<Tile>();
+
         public struct Attributes
         {
-            public BiomTypeContainer type;
+            public Dictionary<Type, double> probability;
+            public string description { get; set; }
             public SizeContainer size;
+            public string type
+            {
+                get { return this.GetType().ToString().Split('.').Last(); }
+            }
         }
 
         public Attributes attributes;
@@ -49,6 +51,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
 
         public Biom()
         {
+            this.attributes.probability = new Dictionary<Type, double>();
             this.GetRndBiomSize();
         }
 
@@ -72,44 +75,14 @@ namespace CoreClassLibrary.Models.Map.Biomes
             double rnd_value = rnd.NextDouble();
 
             double cumulative_probability = 0.0;
-            PropertyInfo[] probabilities = this.attributes.type.probability.GetType().GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            foreach (PropertyInfo pi in probabilities)
+            foreach (KeyValuePair<Type, double> probability in this.attributes.probability)
             {
-                cumulative_probability = cumulative_probability + (double)pi.GetValue(this.attributes.type.probability);
-                if(rnd_value < cumulative_probability)
+                cumulative_probability = cumulative_probability + probability.Value;
+                if (rnd_value < cumulative_probability)
                 {
-                    string name = pi.Name;
-                    TileAttributesGeneralTypeList tile_type;
-                    if(Enum.TryParse(pi.Name, out tile_type))
-                    {
-                        switch (tile_type)
-                        {
-                            case TileAttributesGeneralTypeList.gras:
-                                return new GrasTile(position);
-
-                            case TileAttributesGeneralTypeList.mountain:
-                                return new MountainTile(position);
-
-                            case TileAttributesGeneralTypeList.forest:
-                                return new ForestTile(position);
-
-                            case TileAttributesGeneralTypeList.resource:
-                                ResourceTile resource_tile = new ResourceTile(position);
-                                resource_tile.GetRndResource();
-                                return resource_tile;
-
-                            default:
-                                return new GrasTile(position);
-                        }
-                    }
-                    else
-                    {
-                        while (true);
-                    }
+                    return (Tile)Activator.CreateInstance(probability.Key, position);
                 }
             }
-
-            //If we reach this point, then the cumulative probability is less than 100%
             return new GrasTile(position);
         }
     }
