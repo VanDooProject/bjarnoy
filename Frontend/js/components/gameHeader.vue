@@ -42,8 +42,9 @@
             {
                 var date = new Date();
                 var now = Math.round(date.getTime()/1000);
-                var expires = this.jwtDecode(localStorage.token).exp;
-                var notBefore = this.jwtDecode(localStorage.token).nbf;
+                var token = this.jwtDecode(localStorage.token);
+                var expires = token.exp;
+                var notBefore = token.nbf;
                 if((expires - now) > ((expires - notBefore) / 2))
                 {
                     this.axios
