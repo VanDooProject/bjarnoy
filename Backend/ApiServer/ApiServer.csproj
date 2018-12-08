@@ -27,4 +27,10 @@
     <ProjectReference Include="..\CoreClassLibrary\CoreClassLibrary.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="config\log4net.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
