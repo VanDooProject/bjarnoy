@@ -44,7 +44,5 @@
 <style>
 .mapsubmenu {
     position: absolute;
-
-    /*background-color: oldlace;*/
 }
 </style>

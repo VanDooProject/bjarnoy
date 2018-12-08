@@ -8,6 +8,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public string type {get; set;}
 
+        public Tile()
+        {
+        }
+
         public Tile(int x, int y, int z)
         {
             this.x = x;

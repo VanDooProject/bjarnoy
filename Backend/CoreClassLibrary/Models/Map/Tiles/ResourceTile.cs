@@ -19,10 +19,14 @@ namespace CoreClassLibrary.Models.Map.Tiles
         }
         public ResourceContainer resource;
 
+        public ResourceTile() : base()
+        {
+        }
+
         public ResourceTile(int x, int y, int z) : base(x, y, z)
         {
             this.type = "Resource";
-        }   
+        }
 
         public virtual void GetRndRessource()
         {

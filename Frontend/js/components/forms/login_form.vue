@@ -47,7 +47,6 @@
         methods: {
             onSubmit (evt) {
                 evt.preventDefault();
-                //TODO: Send to Backend
                 this.axios
                 .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-in',
                     {
