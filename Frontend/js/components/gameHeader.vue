@@ -40,15 +40,30 @@
             }
             else
             {
-                console.log(this.jwtDecode(localStorage.token));
-                this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                var date = new Date();
+                var now = Math.round(date.getTime()/1000);
+                var expires = this.jwtDecode(localStorage.token).exp;
+                var notBefore = this.jwtDecode(localStorage.token).nbf;
+                if((expires - now) < (expires - notBefore)/2)
+                {
+                    this.axios
+                    .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => console.log(response))
-                .catch(error => this.$router.push('/login'));
+                    .then(response => console.log(""))
+                    .catch(error => this.$router.push('/login'));
+                }
+                else if ((expires - now) > 0)
+                {
+                    //Request new token
+                    console.log("Requesting");
+                }
+                else
+                {
+                    this.$router.push('/login');
+                }
             }
         },
     }
