@@ -111,6 +111,38 @@ namespace ApiServer.Controllers
         }
 
 
+        // GET api/v1/auth/refresh
+        /// <summary>
+        /// refresh token to prevent logout via timeout
+        /// </summary>
+        /// <returns></returns>
+        [Authorize]
+        [HttpGet("refresh")]
+        public IActionResult RefreshToken()
+        {
+            UserRepository userRepository = new UserRepository();
+
+            string UserId = HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value;
+            if (UserId == "")
+            {
+                // TODO: test (cause this is untested)
+                return base.Forbid();
+            }
+
+            UserModel user = userRepository.GetByUserId(UserId);
+
+            if (user == null)
+            {
+                // user not found
+                return base.BadRequest();
+            }
+
+            // refresh
+            var tokenString = BuildToken(user);
+            return Ok(new { token = tokenString });
+        }
+
+
         // POST api/v1/auth/sign-up
         [AllowAnonymous]
         [HttpPost("sign-up")]
