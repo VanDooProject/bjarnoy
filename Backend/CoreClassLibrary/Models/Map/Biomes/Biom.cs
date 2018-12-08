@@ -57,24 +57,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
             var temp_size_enum_list = Enum.GetValues(typeof(BiomAttributesSizeDescriptionList));
             this.attributes.size.description = (BiomAttributesSizeDescriptionList)temp_size_enum_list.GetValue(rnd.Next(temp_size_enum_list.Length));
 
-            switch (this.attributes.size.description)
-            {
-                case BiomAttributesSizeDescriptionList.Small:
-                    this.attributes.size.value = rnd.Next(((int)(BiomAttributesSizeDescriptionList.Small) - 2), (int)BiomAttributesSizeDescriptionList.Small);
-                    break;
-                case BiomAttributesSizeDescriptionList.Medium:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
-                    break;
-                case BiomAttributesSizeDescriptionList.Large:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Medium + 1), (int)BiomAttributesSizeDescriptionList.Large);
-                    break;
-                case BiomAttributesSizeDescriptionList.Huge:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Large + 1), (int)BiomAttributesSizeDescriptionList.Huge);
-                    break;
-                default:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
-                    break;
-            }
+            this.attributes.size.value = rnd.Next(((int)(this.attributes.size.description) - 1), (int)this.attributes.size.description);
         }
 
         public void AddRndBiomTileAtPosition(int x, int y, int z)
