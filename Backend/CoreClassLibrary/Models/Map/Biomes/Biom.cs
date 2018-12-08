@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Reflection;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Factory;
@@ -60,12 +61,12 @@ namespace CoreClassLibrary.Models.Map.Biomes
             this.attributes.size.value = rnd.Next(((int)(this.attributes.size.description) - 1), (int)this.attributes.size.description);
         }
 
-        public void AddRndBiomTileAtPosition(int x, int y, int z)
+        public void AddRndBiomTileAtPosition(Vector3 position)
         {
-            tiles.Add(GetRndBiomTileAtPosition(x, y, z));
+            tiles.Add(GetRndBiomTileAtPosition(position));
         }
 
-        private Tile GetRndBiomTileAtPosition(int x, int y, int z)
+        private Tile GetRndBiomTileAtPosition(Vector3 position)
         {
             Random rnd = new Random();
             double rnd_value = rnd.NextDouble();
@@ -84,23 +85,22 @@ namespace CoreClassLibrary.Models.Map.Biomes
                         switch (tile_type)
                         {
                             case TileAttributesGeneralTypeList.gras:
-                                return new GrasTile(x, y, z);
+                                return new GrasTile(position);
 
                             case TileAttributesGeneralTypeList.mountain:
-                                return new MountainTile(x, y, z);
+                                return new MountainTile(position);
 
                             case TileAttributesGeneralTypeList.forest:
-                                return new ForestTile(x, y, z);
+                                return new ForestTile(position);
 
                             case TileAttributesGeneralTypeList.resource:
-                                ResourceTile resource_tile = new ResourceTile(x, y, z);
-                                resource_tile.GetRndRessource();
+                                ResourceTile resource_tile = new ResourceTile(position);
+                                resource_tile.GetRndResource();
                                 return resource_tile;
 
                             default:
-                                return new GrasTile(x, y, z);
+                                return new GrasTile(position);
                         }
-
                     }
                     else
                     {
@@ -110,7 +110,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
             }
 
             //If we reach this point, then the cumulative probability is less than 100%
-            return new GrasTile(x, y, z);
+            return new GrasTile(position);
         }
     }
 }

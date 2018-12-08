@@ -25,5 +25,6 @@ namespace CoreClassLibrary.Models.Settings
         public String MongoDatabaseServerAddress { get; set; } = "mongodb";
         public int MongoDatabaseServerPort { get; set; } = 27017;
         public int MongoDatabaseServerTimeoutSeconds { get; set; } = 1;//seconds
+        public float Vector3EqualsAllowedDistanceDisturbance = 0.01f;
     }
 }

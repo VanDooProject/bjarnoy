@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Security.Cryptography;
 using CoreClassLibrary.Models.Map.Biomes;
 using static CoreClassLibrary.Factory.TileFactory;
@@ -25,12 +26,17 @@ namespace CoreClassLibrary.Factory
             return biom;
         }
 
-        public Biom GetRndBiomAtStartCoords(int x, int y, int z)
+        public Biom GetRndBiomAtStartPosition(Vector3 position)
         {
             Biom biom = GetRndBiomType();
-            biom.AddRndBiomTileAtPosition(x, y, z);
+            biom.AddRndBiomTileAtPosition(position);
 
             return biom;
+        }
+
+        public void AddRndBiomTileAtPosition(Biom biom, Vector3 position)
+        {
+            biom.AddRndBiomTileAtPosition(position);
         }
 
         private Biom GetRndBiomType()
@@ -94,7 +100,8 @@ namespace CoreClassLibrary.Factory
             {
                 for(int horizontal_loop_count = 0; horizontal_loop_count < biom.attributes.size.value; horizontal_loop_count++)
                 {
-                    biom.tiles.Add(tile_factory.GetNewSpecificTile((horizontal_loop_count + start_size), vertical_loop_count, 1, TileTypeList[count]));
+                    Vector3 position = new Vector3((horizontal_loop_count + start_size), vertical_loop_count, 1);
+                    biom.tiles.Add(tile_factory.GetNewSpecificTile(position, TileTypeList[count]));
                     count++;
                 }
             }

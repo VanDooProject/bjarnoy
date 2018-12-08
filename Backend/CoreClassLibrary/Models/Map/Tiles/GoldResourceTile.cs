@@ -1,11 +1,13 @@
+using System.Numerics;
+
 namespace CoreClassLibrary.Models.Map.Tiles
 {
     public class GoldResourceTile : ResourceTile
     {
-        public GoldResourceTile(int x, int y, int z) : base(x, y, z)
+        public GoldResourceTile(Vector3 position) : base(position)
         {
-            this.resource.type = TileAttributesResourceTypeList.Gold;
-            this.resource.degradation_rate = 0.2f;
+            this.Resource.Type = TileAttributesResourceTypeList.Gold;
+            this.Resource.DegradationRate = 0.2f;
         }
     }
 }

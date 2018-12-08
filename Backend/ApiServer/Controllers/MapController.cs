@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
@@ -36,7 +37,8 @@ namespace ApiServer.Controllers
                 {
                     for (int y = -size; y < size; y++)
                     {
-                        TileList.Add(new Tile( x,  y, z/*, tileTypes[r.Next(tileTypes.Length)]*/));
+                        Vector3 position = new Vector3(x, y, z);
+                        TileList.Add(new Tile(position));
                     }
                 }
             }
