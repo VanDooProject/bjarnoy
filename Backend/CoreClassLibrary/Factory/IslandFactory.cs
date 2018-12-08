@@ -13,7 +13,9 @@ namespace CoreClassLibrary.Factory
         private BiomFactory biom_factory = new BiomFactory();
         public Island GetRndIsland()
         {
-            Island island = new Island();
+            Vector3 startPosition = new Vector3(0, 0, 1);
+
+            Island island = new Island(startPosition);
 
             island.name = GenerateRandomName();
 
@@ -30,7 +32,8 @@ namespace CoreClassLibrary.Factory
 
         public Island GetRndIslandNew(int size, int z)
         {
-            Island island = new Island();
+            Vector3 startPosition = new Vector3(0, 0, z);
+            Island island = new Island(startPosition);
 
             Random rnd = new Random();
             island.name = GenerateRandomName();
@@ -40,21 +43,21 @@ namespace CoreClassLibrary.Factory
             }
             island.size = rnd.Next(size - 5, size + 5);
 
-            CreateAndAddRndStartBioms(island, z);
+            CreateAndAddRndStartBioms(island);
             ExpandBiomsAndCreateTiles(island);
 
             return island;
         }
 
-        private void CreateAndAddRndStartBioms(Island island, int z)
+        private void CreateAndAddRndStartBioms(Island island)
         {
             Random rnd = new Random();
-            int nof_bioms_in_island = rnd.Next((int)((island.size / 4) + 1), (int)(island.size / 3));
+            int nof_bioms_in_island = rnd.Next((int)((island.size / 4) + 1), (int)((island.size / 3) + 1));
             do
             {
                 int x = rnd.Next(0, island.size);
                 int y = rnd.Next(0, island.size);
-                Vector3 position = new Vector3((float)x, (float)y, (float)z);
+                Vector3 position = new Vector3((float)x, (float)y, island.StartPosition.Z);
 
                 var tile_already_exits = false;
                 foreach (Biom b in island.bioms)
@@ -78,13 +81,43 @@ namespace CoreClassLibrary.Factory
 
         private void ExpandBiomsAndCreateTiles(Island island)
         {
-            for(int loop_count = 0; loop_count < island.size; loop_count++)
+            int biomRadius = 1;
+            do
             {
                 foreach(Biom b in island.bioms)
                 {
+                    for(int yLoopCount = ((int) b.tiles.First().Position.Y - biomRadius); yLoopCount <= (int) b.tiles.First().Position.Y + biomRadius; yLoopCount++)
+                    {
+                        if((yLoopCount >= island.StartPosition.Y) && (yLoopCount < island.StartPosition.Y + island.size))
+                        {
+                            for (int xLoopCount = ((int)b.tiles.First().Position.X - biomRadius); xLoopCount <= (int)b.tiles.First().Position.X + biomRadius; xLoopCount++)
+                            {
+                                if((xLoopCount >= island.StartPosition.X) && (xLoopCount < island.StartPosition.X + island.size))
+                                {
+                                    var tile_already_exits = false;
+                                    Vector3 newTilePosition = new Vector3(xLoopCount, yLoopCount, island.StartPosition.Z);
 
+                                    foreach (Tile t in island.Tiles)
+                                    {
+                                        if (Vector3.DistanceSquared(t.Position, newTilePosition) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance)
+                                        {
+                                            tile_already_exits = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (tile_already_exits == false)
+                                    {
+                                        b.AddRndBiomTileAtPosition(newTilePosition);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                 }
-            }  
+                biomRadius++;
+            } while (island.Tiles.Count < (island.size * island.size));
         }
 
         private string GenerateRandomName()
