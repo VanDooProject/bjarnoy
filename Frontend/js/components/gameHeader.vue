@@ -44,7 +44,7 @@
                 var now = Math.round(date.getTime()/1000);
                 var expires = this.jwtDecode(localStorage.token).exp;
                 var notBefore = this.jwtDecode(localStorage.token).nbf;
-                if((expires - now) < (expires - notBefore)/2)
+                if((expires - now) > ((expires - notBefore) / 2))
                 {
                     this.axios
                     .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
@@ -53,13 +53,20 @@
                         // CORS cookie issue: https://github.com/axios/axios/issues/876
                         withCredentials: true
                     })
-                    .then(response => console.log(""))
+                    .then(response => {})
                     .catch(error => this.$router.push('/login'));
                 }
                 else if ((expires - now) > 0)
                 {
-                    //Request new token
-                    console.log("Requesting");
+                    this.axios
+                    .get(this.$config.RequestUriPrefix + '/api/v1/auth/refresh',
+                    {
+                        headers: {'Authorization': "bearer " + localStorage.token},
+                        // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        withCredentials: true
+                    })
+                    .then(response => localStorage.token = response.data.token)
+                    .catch(error => this.$router.push('/login'));
                 }
                 else
                 {
