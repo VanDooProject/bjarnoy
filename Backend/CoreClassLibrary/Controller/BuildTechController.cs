@@ -6,12 +6,15 @@ using CoreClassLibrary.Models;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Models.Settings;
+using log4net;
 using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Controller
 {
     public class BuildTechController
     {
+        private ILog logger = LogManager.GetLogger(typeof(BuildTechController));
+
         private const string _settingsFile = @"./config/build-tech.json";
 
         private static readonly Lazy<BuildTechController> lazy =
@@ -41,6 +44,8 @@ namespace CoreClassLibrary.Controller
                 // create new
                 createDefaultBuildTech();
             }
+
+            logger.DebugFormat("loaded {0} build techs", _buildtech.Count);
         }
 
         private void createDefaultBuildTech()
