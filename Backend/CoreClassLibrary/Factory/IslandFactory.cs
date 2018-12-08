@@ -114,7 +114,6 @@ namespace CoreClassLibrary.Factory
                             }
                         }
                     }
-                    
                 }
                 biomRadius++;
             } while (island.Tiles.Count < (island.size * island.size));
@@ -126,9 +125,5 @@ namespace CoreClassLibrary.Factory
 
             return RandomName;
         }
-    }
-
-    internal class Vecotr3
-    {
     }
 }

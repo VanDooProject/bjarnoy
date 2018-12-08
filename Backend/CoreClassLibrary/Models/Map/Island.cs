@@ -31,6 +31,8 @@ namespace CoreClassLibrary.Models.Map
                         this._tiles.Add(t);
                     }
                 }
+                //this.bioms.ForEach(b => b.tiles.ForEach(t => _tiles.Add(t)));
+
                 return this._tiles;
             }
         }
