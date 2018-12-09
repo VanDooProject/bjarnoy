@@ -15,13 +15,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
             this.Resource.DegradationRate = 0.5f;
             this.Resource.ResourceVolume = 10000 * rnd.Next(1, 3);
-
-            //this.type = "Resource";
         }
 
         public override void GetRndResource()
         {
-
         }
     }
 }

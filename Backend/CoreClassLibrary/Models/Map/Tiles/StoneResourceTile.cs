@@ -6,7 +6,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
     {
         public StoneResourceTile() : base()
         {
-
         }
 
         public StoneResourceTile(Vector3 position) : base(position)

@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using System;
 using System.Numerics;
 
@@ -14,6 +16,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public struct ResourceContainer
         {
+            [JsonConverter(typeof(StringEnumConverter))]
             public TileAttributesResourceTypeList Type {get; set;}
             public float ResourceVolume {get; set;}
             public float DegradationRate {get; set;}
@@ -22,6 +25,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public ResourceTile() : base()
         {
+            GetRndResource();
         }
 
         public bool isResourceTile
@@ -31,6 +35,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public ResourceTile(Vector3 position) : base(position)
         {
+            GetRndResource();
         }   
 
         public virtual void GetRndResource()

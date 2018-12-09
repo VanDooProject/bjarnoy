@@ -6,7 +6,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
     {
         public GoldResourceTile() : base()
         {
-
         }
 
         public GoldResourceTile(Vector3 position) : base(position)

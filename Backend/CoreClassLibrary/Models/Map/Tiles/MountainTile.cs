@@ -6,7 +6,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
     {
         public MountainTile() : base()
         {
-
         }
 
         public MountainTile(Vector3 position) : base(position)

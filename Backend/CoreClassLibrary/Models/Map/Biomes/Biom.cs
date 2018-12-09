@@ -22,6 +22,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
             get { return this.GetType().ToString().Split('.').Last().Split('+').First(); }
         }
 
+        [JsonIgnore]
         public TileFactory tile_factory;
 
         public Biom()
