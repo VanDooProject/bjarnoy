@@ -1,3 +1,4 @@
+using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map.Tiles;
 
 namespace CoreClassLibrary.Models.Map.Biomes
@@ -6,10 +7,10 @@ namespace CoreClassLibrary.Models.Map.Biomes
     {
         public ForestBiom() : base()
         {
-            this.attributes.description = "Forest";
-            this.attributes.probability.Add(typeof(ForestTile), 0.6);
-            this.attributes.probability.Add(typeof(MountainTile), 0.1);
-            this.attributes.probability.Add(typeof(ResourceTile), 0.1);
+            this.probability.Add(typeof(ForestTile), 0.6);
+            this.probability.Add(typeof(MountainTile), 0.1);
+            this.probability.Add(typeof(ResourceTile), 0.1);
+            this.tile_factory = new TileFactory(this.probability);
         }
     }
 }

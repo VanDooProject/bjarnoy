@@ -17,8 +17,6 @@ namespace CoreClassLibrary.Factory
             Forest = 3,
             Grassland = 4,
         };
-        
-        private TileFactory tile_factory = new TileFactory();
 
         public Biom GetRndBiomAtStartPosition(Vector3 position)
         {

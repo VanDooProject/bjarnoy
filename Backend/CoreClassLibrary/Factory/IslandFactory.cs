@@ -74,7 +74,7 @@ namespace CoreClassLibrary.Factory
                         {
                             for (int xLoopCount = ((int)b.tiles.First().Position.X - biomRadius); xLoopCount <= (int)b.tiles.First().Position.X + biomRadius; xLoopCount++)
                             {
-                                if((xLoopCount >= island.StartPosition.X) && (xLoopCount < island.StartPosition.X + island.size))
+                                if ((xLoopCount >= island.StartPosition.X) && (xLoopCount < island.StartPosition.X + island.size))
                                 {
                                     var tile_already_exits = false;
                                     Vector3 newTilePosition = new Vector3(xLoopCount, yLoopCount, island.StartPosition.Z);
