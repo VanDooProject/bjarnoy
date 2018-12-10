@@ -21,7 +21,17 @@
             
         },
         methods: {
-            
+            //https://stackoverflow.com/questions/38552003/how-to-decode-jwt-token-in-javascript
+            jwtDecode(token){
+                return JSON.parse(
+                    decodeURIComponent(
+                    Array.prototype.map.call(atob(
+                    token.split('.')[1].replace('-', '+').replace('_', '/')
+                    ), c =>
+                    '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+                    ).join(''))
+                )
+            }
         },
         mounted () {
             if (localStorage.token == undefined)
@@ -30,15 +40,39 @@
             }
             else
             {
-                this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                var date = new Date();
+                var now = Math.round(date.getTime()/1000);
+                var token = this.jwtDecode(localStorage.token);
+                var expires = token.exp;
+                var notBefore = token.nbf;
+                if((expires - now) > ((expires - notBefore) / 2))
+                {
+                    this.axios
+                    .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
                         // CORS cookie issue: https://github.com/axios/axios/issues/876
                         withCredentials: true
                     })
-                .then(response => console.log(response))
-                .catch(error => this.$router.push('/login'));
+                    .then(response => {})
+                    .catch(error => this.$router.push('/login'));
+                }
+                else if ((expires - now) > 0)
+                {
+                    this.axios
+                    .get(this.$config.RequestUriPrefix + '/api/v1/auth/refresh',
+                    {
+                        headers: {'Authorization': "bearer " + localStorage.token},
+                        // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        withCredentials: true
+                    })
+                    .then(response => localStorage.token = response.data.token)
+                    .catch(error => this.$router.push('/login'));
+                }
+                else
+                {
+                    this.$router.push('/login');
+                }
             }
         },
     }
