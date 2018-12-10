@@ -1,4 +1,7 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using System;
+using System.Numerics;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -13,41 +16,48 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public struct ResourceContainer
         {
-            public TileAttributesResourceTypeList type {get; set;}
-            public float resource_volume {get; set;}
-            public float degradation_rate {get; set;}
+            [JsonConverter(typeof(StringEnumConverter))]
+            public TileAttributesResourceTypeList Type {get; set;}
+            public float ResourceVolume {get; set;}
+            public float DegradationRate {get; set;}
         }
-        public ResourceContainer resource;
+        public ResourceContainer Resource;
 
         public ResourceTile() : base()
         {
+            GetRndResource();
         }
 
-        public ResourceTile(int x, int y, int z) : base(x, y, z)
+        public bool isResourceTile
         {
-            this.type = "Resource";
+            get { return (this as ResourceTile) != null; }
         }
 
-        public virtual void GetRndRessource()
+        public ResourceTile(Vector3 position) : base(position)
+        {
+            GetRndResource();
+        }   
+
+        public virtual void GetRndResource()
         {
             Random rnd = new Random();
             var temp_enum_list = Enum.GetValues(typeof(TileAttributesResourceTypeList));
-            this.resource.type = (TileAttributesResourceTypeList)temp_enum_list.GetValue(rnd.Next(temp_enum_list.Length));
-            this.resource.resource_volume = 50000 * rnd.Next(1, 3);
+            this.Resource.Type = (TileAttributesResourceTypeList)temp_enum_list.GetValue(rnd.Next(temp_enum_list.Length));
+            this.Resource.ResourceVolume = 50000 * rnd.Next(1, 3);
 
-            switch (this.resource.type)
+            switch (this.Resource.Type)
             {
                 case TileAttributesResourceTypeList.Gold:
-                    this.resource.degradation_rate = 0.2f;
+                    this.Resource.DegradationRate = 0.2f;
                     break;
                 case TileAttributesResourceTypeList.Pumpkin:
-                    this.resource.degradation_rate = 0.4f;
+                    this.Resource.DegradationRate = 0.4f;
                     break;
                 case TileAttributesResourceTypeList.Stone:
-                    this.resource.degradation_rate = 0.6f;
+                    this.Resource.DegradationRate = 0.6f;
                     break;      
                 default:
-                    this.resource.degradation_rate = 0.5f;
+                    this.Resource.DegradationRate = 0.5f;
                     break;
             }
         }

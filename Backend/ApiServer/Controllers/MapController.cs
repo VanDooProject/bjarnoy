@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
@@ -36,7 +37,8 @@ namespace ApiServer.Controllers
                 {
                     for (int y = -size; y < size; y++)
                     {
-                        TileList.Add(new Tile( x,  y, z, tileTypes[r.Next(tileTypes.Length)]));
+                        Vector3 position = new Vector3(x, y, z);
+                        TileList.Add(new Tile(position));
                     }
                 }
             }
@@ -44,25 +46,25 @@ namespace ApiServer.Controllers
             return TileList;
         }
 
-        [HttpGet("demo/biom/{size}")]
+        /*[HttpGet("demo/biom/{size}")]
         public IEnumerable<Biom> GetRndBiom(int size)
         {
             List<Biom> BiomList = new List<Biom>();
             BiomFactory factory = new BiomFactory();
             for (int loop_count = 0; loop_count < size; loop_count++)
             {
-                BiomList.Add(factory.GetRndBiom(loop_count));
+                BiomList.Add(factory.GetRndBiomAndTiles(loop_count));
             }
 
             return BiomList;
-        }
+        }*/
 
-        [HttpGet("demo/island")]
-        public IEnumerable<Island> GetRndIsland()
+        [HttpGet("demo/island/{size}")]
+        public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
             IslandFactory factory = new IslandFactory();
-            IslandList.Add(factory.GetRndIsland());
+            IslandList.Add(factory.GetRndIsland(size, 1));
 
             return IslandList;
         }

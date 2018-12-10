@@ -1,69 +1,38 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
+using System.Reflection;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Factory;
+using static CoreClassLibrary.Factory.TileFactory;
+using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace CoreClassLibrary.Models.Map.Biomes
 {
     public class Biom
     {
-        public enum BiomAttributesSizeDescriptionList
-        {
-            Small = 4,
-            Medium = 6,
-            Large = 8,
-            Huge = 10,
-        };
-        public struct SizeContainer
-        {
-            public BiomAttributesSizeDescriptionList description {get; set;}
-            public float value {get; set;}
-        }
-        public struct BiomTypeContainer
-        {
-            public string description {get; set;}
-            public float resource_probability {get; set;}
-            public float forest_probability {get; set;}
-            public float mountain_probability {get; set;}
-        }
-
         public List<Tile> tiles = new List<Tile>();
-        public struct Attributes
+
+        [JsonIgnore]
+        public Dictionary<Type, double> probability;
+        public string description
         {
-            public BiomTypeContainer type;
-            public SizeContainer size;
+            get { return this.GetType().ToString().Split('.').Last().Split('+').First(); }
         }
 
-        public Attributes attributes;
+        [JsonIgnore]
+        public TileFactory tile_factory;
 
         public Biom()
         {
-            this.GetRndBiomSize();
+            this.probability = new Dictionary<Type, double>();
         }
 
-        public void GetRndBiomSize()
+        public void AddRndBiomTileAtPosition(Vector3 position)
         {
-            Random rnd = new Random();
-            var temp_size_enum_list = Enum.GetValues(typeof(BiomAttributesSizeDescriptionList));
-            this.attributes.size.description = (BiomAttributesSizeDescriptionList)temp_size_enum_list.GetValue(rnd.Next(temp_size_enum_list.Length));
-
-            switch (this.attributes.size.description)
-            {
-                case BiomAttributesSizeDescriptionList.Small:
-                    this.attributes.size.value = rnd.Next(((int)(BiomAttributesSizeDescriptionList.Small) - 2), (int)BiomAttributesSizeDescriptionList.Small);
-                    break;
-                case BiomAttributesSizeDescriptionList.Medium:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
-                    break;
-                case BiomAttributesSizeDescriptionList.Large:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Medium + 1), (int)BiomAttributesSizeDescriptionList.Large);
-                    break;
-                case BiomAttributesSizeDescriptionList.Huge:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Large + 1), (int)BiomAttributesSizeDescriptionList.Huge);
-                    break;
-                default:
-                    this.attributes.size.value = rnd.Next(((int)BiomAttributesSizeDescriptionList.Small + 1), (int)BiomAttributesSizeDescriptionList.Medium);
-                    break;
-            }
+            tiles.Add(tile_factory.GetRndBiomTileAtPosition(position));
         }
     }
 }
