@@ -1,17 +1,20 @@
 using System.Collections.Generic;
 using System.Numerics;
+using CoreClassLibrary.Models.Generic;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.Map
 {
-    public class Island
+    public class Island : MongoEntity
     {
         public string name { get; set; }
         public int size;
         public List<Biom> bioms = new List<Biom>();
 
+        [BsonIgnore]
         public Vector3 StartPosition;
 
         public Island(Vector3 startPosition)
@@ -21,6 +24,7 @@ namespace CoreClassLibrary.Models.Map
 
         private List<Tile> _tiles = new List<Tile>();
         [JsonIgnore]
+        [BsonIgnore]
         public List<Tile> Tiles
         {
             get

@@ -550,6 +550,81 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Installer",
+			"item": [
+				{
+					"name": "create island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/create/islands/",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"create",
+								"islands",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Map",
+			"item": [
+				{
+					"name": "get islands",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/map/islands",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"map",
+								"islands"
+							]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"auth": {

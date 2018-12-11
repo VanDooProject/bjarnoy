@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Tiles;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace CoreClassLibrary.Factory
@@ -35,6 +38,20 @@ namespace CoreClassLibrary.Factory
 
         private MongoCollectionFactory()
         {
+            BsonClassMap.RegisterClassMap<ForestTile>();
+            BsonClassMap.RegisterClassMap<GoldResourceTile>();
+            BsonClassMap.RegisterClassMap<GrasTile>();
+            BsonClassMap.RegisterClassMap<MountainTile>();
+            BsonClassMap.RegisterClassMap<PumpkinResourceTile>();
+            BsonClassMap.RegisterClassMap<ResourceTile>();
+            BsonClassMap.RegisterClassMap<StoneResourceTile>();
+            BsonClassMap.RegisterClassMap<Tile>();
+
+            BsonClassMap.RegisterClassMap<Biom>();
+            BsonClassMap.RegisterClassMap<ForestBiom>();
+            BsonClassMap.RegisterClassMap<GrasslandBiom>();
+            BsonClassMap.RegisterClassMap<MountainBiom>();
+            BsonClassMap.RegisterClassMap<SparseBiom>();
         }
 
 

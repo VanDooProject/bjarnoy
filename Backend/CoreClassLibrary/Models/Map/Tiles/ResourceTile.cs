@@ -14,14 +14,14 @@ namespace CoreClassLibrary.Models.Map.Tiles
             Pumpkin = 3,
         };
 
-        public struct ResourceContainer
+        public class ResourceContainer
         {
             [JsonConverter(typeof(StringEnumConverter))]
             public TileAttributesResourceTypeList Type {get; set;}
             public float ResourceVolume {get; set;}
             public float DegradationRate {get; set;}
         }
-        public ResourceContainer Resource;
+        public ResourceContainer Resource = new ResourceContainer();
 
         public ResourceTile() : base()
         {

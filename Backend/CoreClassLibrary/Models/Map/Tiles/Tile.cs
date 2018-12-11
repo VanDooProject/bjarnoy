@@ -1,11 +1,17 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using CoreClassLibrary.Serializer;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
     public class Tile
     {
+
+        // https://jira.mongodb.org/browse/CSHARP-1759
+        //[BsonSerializer(typeof(Vector3Serializer))]
+        [BsonIgnore]
         public Vector3 Position;
 
         public Tile()
@@ -21,5 +27,5 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
             get { return this.GetType().ToString().Split('.').Last(); }
         }
-    }    
+    }
 }

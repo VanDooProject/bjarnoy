@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Auth;
+using log4net;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -10,6 +11,7 @@ namespace CoreClassLibrary.Respository
 {
     public class UserRepository
     {
+        private ILog logger = LogManager.GetLogger(typeof(UserRepository));
 
         private IMongoCollection<UserModel> collection;
 
@@ -48,7 +50,8 @@ namespace CoreClassLibrary.Respository
 
         public UserModel GetByUserId(string userId)
         {
-            var filter = Builders<UserModel>.Filter.Where(x => x._id == userId);
+            ObjectId objectId = new ObjectId(userId);
+            var filter = Builders<UserModel>.Filter.Where(x => x._id.Equals(objectId));
             var result = collection.Find(filter).ToList();
             if (result.Count == 1)
             {
@@ -66,7 +69,7 @@ namespace CoreClassLibrary.Respository
         {
             List<UserModel> usersList = collection.Find(_ => true).ToList();
 
-            //logger.InfoFormat("found {0} users", usersList.Count);
+            logger.InfoFormat("found {0} users", usersList.Count);
 
             return usersList;
         }
@@ -74,6 +77,14 @@ namespace CoreClassLibrary.Respository
         public void Add(UserModel item)
         {
             collection.InsertOne(item);
+        }
+
+        public void Replace(UserModel user)
+        {
+            var filter = Builders<UserModel>.Filter.Where(x => x._id.Equals(user._id));
+            //var update = Builders<BsonDocument>.Update.Combine(user);
+
+            collection.ReplaceOne(filter, user);
         }
     }
 }
