@@ -4,8 +4,8 @@
         v-on:click="openMenu"
         v-bind:style="{
             position: 'absolute',
-            transform: 'translate(' + tile.y * -100 + 'px, ' + tile.x * 100 + 'px)',
-            zIndex: tile.x - tile.y
+            transform: 'translate(' + tile.position.y * -100 + 'px, ' + tile.position.x * 100 + 'px)',
+            zIndex: tile.position.x - tile.position.y
         }"
     >
         <img v-bind:src="imgSrc"
@@ -32,7 +32,17 @@
         },
         computed: {
             imgSrc() {
-                    return "/images/tile_" + this.tile.type + ".png"
+                switch(this.tile.type)
+                {
+                    case "GrasTile":
+                        return "/images/tile_grass.png"
+                    case "MountainTile":
+                        return "/images/tile_hill.png"
+                    case "ForestTile":
+                        return "/images/tile_for.png"
+                    default:
+                        return "/images/tile_grass.png"
+                }
             }
         }
     }

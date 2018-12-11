@@ -28,8 +28,7 @@
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
-                tiles: [],
-
+                islands: [],
                 menu: {x: 0, y: 0},
                 tile: undefined,
                 isMouseDown: false,
@@ -42,22 +41,38 @@
             TilesArray () {
                 var ls = [[]];
                 this.tiles.forEach(tile => {
-                    if(ls[tile.z] == undefined)
+                    var zLayer = Math.round(tile.position.z);
+                    if(ls[zLayer] == undefined)
                     {
-                        ls[tile.z]=[];
+                        ls[zLayer]=[];
                     }
-                    ls[tile.z].push(tile);
+                    ls[zLayer].push(tile);
                 });
                 return ls;
+            },
+            tiles () {
+                var arr = []
+                if(this.islands)
+                this.islands.forEach(island => {
+                    if(island.bioms)
+                    island.bioms.forEach(biome => {
+                        if(biome.tiles)
+                        biome.tiles.forEach(tile => {
+                            arr.push(tile);
+                        });
+                    });
+                });
+                console.log(arr);
+                return arr;   
             }
         },
         mounted () {
             this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/map/demo/10',
+                .get(this.$config.RequestUriPrefix + '/api/v1/Map/demo/island/10',
                     {
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => ( this.tiles = response.data))
+                .then(response => ( this.islands = response.data))
                 .catch(error => console.log(error));
         },
         methods: {
