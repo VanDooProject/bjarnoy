@@ -11,8 +11,8 @@
         <div  
             v-bind:style="{
                 zIndex: tile.position.x - tile.position.y,
-                backgroundPositionX: '-1400px',
-                backgroundPositionY: '-600px',
+                backgroundPositionX: - imgPos.x + 'px',
+                backgroundPositionY: - imgPos.y + 'px',
             }"
             class="tileimg"
         ></div>
@@ -29,24 +29,41 @@
         },
         data: function() {
             return {
-                
+                imgPos: {x: 0, y: 0}
             }
         },
         computed: {
-            imgSrc() {
-                switch(this.tile.type)
+
+        },
+        mounted () {
+            this.axios
+                .get('/images/data.json',
                 {
-                    case "GrasTile":
-                        return "/images/tile_grass.png"
-                    case "MountainTile":
-                        return "/images/tile_hill.png"
-                    case "ForestTile":
-                        return "/images/tile_for.png"
-                    default:
-                        return "/images/tile_grass.png"
-                }
-            }
-        }
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => { 
+                    var entry;
+                    switch (this.tile.type)
+                    {
+                        case "GrasTile":
+                            entry = response.data.filter(obj => obj.name == "grasstile_E.png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        case "MountainTile":
+                            entry = response.data.filter(obj => obj.name == "mountaintile_E.png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        case "ForestTile":
+                            entry = response.data.filter(obj => obj.name == "foresttile_E.png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        default:
+                            this.imgPos = {x: 600, y: 600}
+                    }
+
+                })
+                .catch(error => console.log(error));
+        },
     }
 
     // https://forum.vuejs.org/t/debugging-vue-files-with-visual-studio-code/8022/5
@@ -66,7 +83,6 @@
     right: 0;
     padding: 0px;
     margin: 0px;
-    background-color: black
 }
 .tileimg {
     background-image:url("/images/master.png");
