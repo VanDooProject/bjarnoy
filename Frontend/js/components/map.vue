@@ -62,7 +62,6 @@
                         });
                     });
                 });
-                console.log(arr);
                 return arr;   
             }
         },
@@ -100,8 +99,8 @@
                     this.mouseMovement.x += Math.abs(event.movementX);
                     this.mouseMovement.y += Math.abs(event.movementY);
                     var angle = -45 * Math.PI / 180;
-                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
-                    this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
+                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * 2 * Math.sin(angle);
+                    this.globalMapOffset.y += (event.movementY * 2 * Math.cos(angle) + event.movementX * Math.sin(angle));
                 }
             },
             mouseLeave: function(event) {
@@ -151,7 +150,7 @@ html, body {
     bottom: 0;
     right: 0;
     z-index: 0;
-    transform: rotateX(45deg) rotateZ(45deg);
+    transform: rotateX(60deg) rotateZ(45deg);
 }
 #mapbg{
     display: block;

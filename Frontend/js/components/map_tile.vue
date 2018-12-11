@@ -4,16 +4,18 @@
         v-on:click="openMenu"
         v-bind:style="{
             position: 'absolute',
-            transform: 'translate(' + tile.position.y * -100 + 'px, ' + tile.position.x * 100 + 'px)',
+            transform: 'translate(' + tile.position.y * -141 + 'px, ' + tile.position.x * 141 + 'px)',
             zIndex: tile.position.x - tile.position.y
         }"
     >
-        <img v-bind:src="imgSrc"
-            draggable="false"
-            width="141px"
-            height="500px"
+        <div  
+            v-bind:style="{
+                zIndex: tile.position.x - tile.position.y,
+                backgroundPositionX: - imgPos.x + 'px',
+                backgroundPositionY: - imgPos.y + 'px',
+            }"
             class="tileimg"
-        >
+        ></div>
     </div>
 </template>
 
@@ -27,24 +29,41 @@
         },
         data: function() {
             return {
-                
+                imgPos: {x: 0, y: 0}
             }
         },
         computed: {
-            imgSrc() {
-                switch(this.tile.type)
+
+        },
+        mounted () {
+            this.axios
+                .get('/images/data.json',
                 {
-                    case "GrasTile":
-                        return "/images/tile_grass.png"
-                    case "MountainTile":
-                        return "/images/tile_hill.png"
-                    case "ForestTile":
-                        return "/images/tile_for.png"
-                    default:
-                        return "/images/tile_grass.png"
-                }
-            }
-        }
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => { 
+                    var entry;
+                    switch (this.tile.type)
+                    {
+                        case "GrasTile":
+                            entry = response.data.filter(obj => obj.name == "grasstile_E.png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        case "MountainTile":
+                            entry = response.data.filter(obj => obj.name == "mountaintile_E.png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        case "ForestTile":
+                            entry = response.data.filter(obj => obj.name == "foresttile_E.png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        default:
+                            this.imgPos = {x: 600, y: 600}
+                    }
+
+                })
+                .catch(error => console.log(error));
+        },
     }
 
     // https://forum.vuejs.org/t/debugging-vue-files-with-visual-studio-code/8022/5
@@ -56,8 +75,8 @@
     position: absolute;
 
     display: block;
-    width: 100px;
-    height: 100px;
+    width: 141px;
+    height: 141px;
     left: 0;
     top: 0;
     bottom: 0;
@@ -66,8 +85,18 @@
     margin: 0px;
 }
 .tileimg {
+    background-image:url("/images/master.png");
     position: absolute;
-    transform: translate(-70px,-250px) rotateZ(-45deg);
+    display: block;
+    width: 200px;
+    height: 300px;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    padding: 0px;
+    margin: 0px;
+    transform: translate(-100px,-150px) rotateZ(-45deg) scaleY(2.38);
     pointer-events: none;
 }
 </style>
