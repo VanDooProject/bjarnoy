@@ -32,7 +32,17 @@
         },
         computed: {
             imgSrc() {
-                return "/images/tile_grass.png"
+                switch(this.tile.type)
+                {
+                    case "GrasTile":
+                        return "/images/tile_grass.png"
+                    case "MountainTile":
+                        return "/images/tile_hill.png"
+                    case "ForestTile":
+                        return "/images/tile_for.png"
+                    default:
+                        return "/images/tile_grass.png"
+                }
             }
         }
     }
