@@ -3,12 +3,12 @@
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
-    v-on:mousedown='closeMenu'
+    v-on:mousedown='mouseDown'
     id="mapbg"
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
-        <div id="map" v-on:mousedown='mouseDown'>
+        <div id="map">
             <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
             <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
@@ -89,6 +89,7 @@
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.mouseMovement = {x:0, y:0};
+                this.closeMenu();
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;
