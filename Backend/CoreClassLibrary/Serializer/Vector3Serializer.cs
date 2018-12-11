@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Reflection;
 using System.Text;
 using MongoDB.Bson;
@@ -8,7 +9,7 @@ using MongoDB.Bson.Serialization;
 
 namespace CoreClassLibrary.Serializer
 {
-    public class Vector3Serializer : IBsonSerializer
+    public class Vector3Serializer :IBsonSerializer
     {
         // https://stackoverflow.com/questions/26788855/how-do-you-serialize-value-types-with-mongodb-c-sharp-serializer
         public object Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)
@@ -80,6 +81,9 @@ namespace CoreClassLibrary.Serializer
             bsonWriter.WriteEndDocument();
         }
 
-        public Type ValueType { get; }
+        public Type ValueType
+        {
+            get { return typeof(Vector3); }
+        }
     }
 }

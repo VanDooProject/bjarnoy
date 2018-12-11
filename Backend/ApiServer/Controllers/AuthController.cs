@@ -102,7 +102,7 @@ namespace ApiServer.Controllers
             if (IsUserInDb == null)
             {
                 // user not found
-                return base.BadRequest();
+                return base.BadRequest("user not found to delete");
             }
 
             // remove user
@@ -135,7 +135,7 @@ namespace ApiServer.Controllers
             if (user == null)
             {
                 // user not found
-                return base.BadRequest();
+                return base.BadRequest("no user found (for this token)");
             }
 
             // refresh

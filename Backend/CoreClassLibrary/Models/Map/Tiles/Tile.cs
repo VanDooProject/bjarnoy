@@ -10,8 +10,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
     {
 
         // https://jira.mongodb.org/browse/CSHARP-1759
-        //[BsonSerializer(typeof(Vector3Serializer))]
-        [BsonIgnore]
+        [BsonSerializer(typeof(Vector3Serializer))]
         public Vector3 Position;
 
         public Tile()

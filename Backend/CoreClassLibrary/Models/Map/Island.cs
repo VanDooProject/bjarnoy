@@ -3,6 +3,7 @@ using System.Numerics;
 using CoreClassLibrary.Models.Generic;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
 
@@ -14,7 +15,7 @@ namespace CoreClassLibrary.Models.Map
         public int size;
         public List<Biom> bioms = new List<Biom>();
 
-        [BsonIgnore]
+        [BsonSerializer(typeof(Vector3Serializer))]
         public Vector3 StartPosition;
 
         public Island(Vector3 startPosition)
