@@ -45,7 +45,7 @@
                     var entry;
                     switch (this.tile.type)
                     {
-                        case "GrasTile":
+                        case "GrassTile":
                             entry = response.data.filter(obj => obj.name == "grasstile_E.png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
