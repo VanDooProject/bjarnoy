@@ -37,7 +37,7 @@
                 <b-button type="reset"  variant="danger" >Reset</b-button>
             </b-form-group>
         </b-form>
-        Don't have an account jet? Click <router-link to="/register">register</router-link> to register.     
+        Don't have an account yet? Click <router-link to="/register">register</router-link> to register.     
     </div>
 </template>
 
