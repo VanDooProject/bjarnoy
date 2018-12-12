@@ -3,12 +3,12 @@
     v-on:mouseup='mouseUp'
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
-    v-on:mousedown='closeMenu'
+    v-on:mousedown='mouseDown'
     id="mapbg"
     >
         <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
 
-        <div id="map" v-on:mousedown='mouseDown'>
+        <div id="map">
             <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
             <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
         </div>
@@ -28,8 +28,7 @@
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
-                tiles: [],
-
+                islands: [],
                 menu: {x: 0, y: 0},
                 tile: undefined,
                 isMouseDown: false,
@@ -42,22 +41,37 @@
             TilesArray () {
                 var ls = [[]];
                 this.tiles.forEach(tile => {
-                    if(ls[tile.z] == undefined)
+                    var zLayer = Math.round(tile.position.z);
+                    if(ls[zLayer] == undefined)
                     {
-                        ls[tile.z]=[];
+                        ls[zLayer]=[];
                     }
-                    ls[tile.z].push(tile);
+                    ls[zLayer].push(tile);
                 });
                 return ls;
+            },
+            tiles () {
+                var arr = []
+                if(this.islands)
+                this.islands.forEach(island => {
+                    if(island.bioms)
+                    island.bioms.forEach(biome => {
+                        if(biome.tiles)
+                        biome.tiles.forEach(tile => {
+                            arr.push(tile);
+                        });
+                    });
+                });
+                return arr;   
             }
         },
         mounted () {
             this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/map/demo/10',
+                .get(this.$config.RequestUriPrefix + '/api/v1/Map/demo/island/10',
                     {
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => ( this.tiles = response.data))
+                .then(response => ( this.islands = response.data))
                 .catch(error => console.log(error));
         },
         methods: {
@@ -75,6 +89,7 @@
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.mouseMovement = {x:0, y:0};
+                this.closeMenu();
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;
@@ -85,8 +100,8 @@
                     this.mouseMovement.x += Math.abs(event.movementX);
                     this.mouseMovement.y += Math.abs(event.movementY);
                     var angle = -45 * Math.PI / 180;
-                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
-                    this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
+                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * 2 * Math.sin(angle);
+                    this.globalMapOffset.y += (event.movementY * 2 * Math.cos(angle) + event.movementX * Math.sin(angle));
                 }
             },
             mouseLeave: function(event) {
@@ -136,7 +151,7 @@ html, body {
     bottom: 0;
     right: 0;
     z-index: 0;
-    transform: rotateX(45deg) rotateZ(45deg);
+    transform: rotateX(60deg) rotateZ(45deg);
 }
 #mapbg{
     display: block;

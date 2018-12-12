@@ -27,7 +27,7 @@
         </div>
 
         <span v-if="tile">
-            {{tile.x}} | {{tile.y}} | {{tile.z}}<br/>
+            {{tile.position.x}} | {{tile.position.y}} | {{tile.position.z}}<br/>
             {{tile.type}}
         </span>
     </div>
