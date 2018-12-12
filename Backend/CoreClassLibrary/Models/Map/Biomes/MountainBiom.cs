@@ -9,8 +9,8 @@ namespace CoreClassLibrary.Models.Map.Biomes
         {
             this.probability.Add(typeof(ForestTile), 0.1);
             this.probability.Add(typeof(MountainTile), 0.6);
-            this.probability.Add(typeof(ResourceTile), 0.1);
-            this.tile_factory = new TileFactory(this.probability, typeof(GrasTile));
+            this.probability.Add(typeof(PumpkinResourceTile), 0.1);
+            this.tile_factory = new TileFactory(this.probability, typeof(GrassTile));
         }
     }
 }

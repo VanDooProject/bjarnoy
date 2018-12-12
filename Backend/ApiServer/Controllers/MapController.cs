@@ -7,13 +7,24 @@ using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Respository;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    public class MapController : Controller
+    public class MapController : ControllerBase
     {
+
+        // GET api/v1/map/islands
+        [HttpGet("islands/")]
+        [Authorize]
+        public IEnumerable<Island> GetIslands()
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.All();
+        }
 
         // GET api/v1/map/demo
         [HttpGet("demo/")]

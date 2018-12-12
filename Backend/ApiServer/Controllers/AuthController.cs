@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using MongoDB.Bson;
 
 namespace ApiServer.Controllers
 {
@@ -63,7 +64,7 @@ namespace ApiServer.Controllers
         // POST api/v1/auth/sign-in
         [AllowAnonymous]
         [HttpPost("sign-in")]
-        public IActionResult CreateToken([FromBody]SignInModel login)
+        public IActionResult SignIn([FromBody]SignInModel login)
         {
             IActionResult response = Unauthorized();
             var user = Authenticate(login);
@@ -101,7 +102,7 @@ namespace ApiServer.Controllers
             if (IsUserInDb == null)
             {
                 // user not found
-                return base.BadRequest();
+                return base.BadRequest("user not found to delete");
             }
 
             // remove user
@@ -134,7 +135,7 @@ namespace ApiServer.Controllers
             if (user == null)
             {
                 // user not found
-                return base.BadRequest();
+                return base.BadRequest("no user found (for this token)");
             }
 
             // refresh
@@ -156,16 +157,21 @@ namespace ApiServer.Controllers
             UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
             if (IsUserInDb != null)
             {
-                return base.BadRequest();
+                return base.BadRequest("user is already in DB");
             }
 
             // use given data for new User(Model)
             UserModel user = new UserModel();
+            //user._id = new ObjectId();
             user.Username = signUp.Username;
             user.Email = signUp.Mail;
-            user.Password = HashHelper.Instance.Hash(signUp.Password, user._id);
 
             userRepository.Add(user);
+
+            string salt = user._id.ToString();
+            user.Password = HashHelper.Instance.Hash(signUp.Password, salt);
+
+            userRepository.Replace(user);
 
             if (user != null)
             {
@@ -189,7 +195,7 @@ namespace ApiServer.Controllers
                 new Claim(ClaimTypes.Role, "Admin"),
 
                 // set user ID
-                new Claim(ClaimTypes.NameIdentifier, user._id)
+                new Claim(ClaimTypes.NameIdentifier, user._id.ToString())
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
@@ -218,7 +224,9 @@ namespace ApiServer.Controllers
             }
 
             // compare password
-            if (user.Password == HashHelper.Instance.Hash(login.Password, user._id))
+            string salt = user._id.ToString();
+            string hash = HashHelper.Instance.Hash(login.Password, salt);
+            if (user.Password == hash)
             {
                 return user;
             }
