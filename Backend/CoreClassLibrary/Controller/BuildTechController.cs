@@ -63,7 +63,7 @@ namespace CoreClassLibrary.Controller
                     requirements = new List<IRequirement>(),
                     allowedTiles = new List<Tile>()
                     {
-                        new GrasTile()
+                        new GrassTile()
                     },
                     StorageCapacity = new Resources()
                     {

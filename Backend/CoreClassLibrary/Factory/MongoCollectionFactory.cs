@@ -38,9 +38,10 @@ namespace CoreClassLibrary.Factory
 
         private MongoCollectionFactory()
         {
+            // TODO: move this to proper place
             BsonClassMap.RegisterClassMap<ForestTile>();
             BsonClassMap.RegisterClassMap<GoldResourceTile>();
-            BsonClassMap.RegisterClassMap<GrasTile>();
+            BsonClassMap.RegisterClassMap<GrassTile>();
             BsonClassMap.RegisterClassMap<MountainTile>();
             BsonClassMap.RegisterClassMap<PumpkinResourceTile>();
             BsonClassMap.RegisterClassMap<ResourceTile>();
