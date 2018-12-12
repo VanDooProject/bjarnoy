@@ -509,45 +509,6 @@
 						}
 					},
 					"response": []
-				},
-				{
-					"name": "test auth remove self",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
-								"exec": [
-									"",
-									"pm.test(\"response is ok\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "DELETE",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "{{url}}/api/v1/auth/delete",
-							"host": [
-								"{{url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"delete"
-							]
-						}
-					},
-					"response": []
 				}
 			]
 		},
@@ -688,6 +649,50 @@
 								"v1",
 								"profile",
 								"self"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "test-teardown",
+			"item": [
+				{
+					"name": "test auth remove self",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/delete",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"delete"
 							]
 						}
 					},
