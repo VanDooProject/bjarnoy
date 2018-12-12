@@ -1,10 +1,8 @@
 <template>
     <div>
-        <ul>
-            <li v-for="entry in text">
-                {{entry}}
-            </li>
-        </ul>
+        <div v-for="entry in text">
+            {{entry}} <br/>
+        </div>
         <button @click=logout>logout</button>
     </div>    
 </template>
