@@ -67,8 +67,9 @@
         },
         mounted () {
             this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/Map/demo/island/10',
+                .get(this.$config.RequestUriPrefix + '/api/v1/map/islands',
                     {
+                        headers: {'Authorization': "bearer " + localStorage.token},
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => ( this.islands = response.data))
