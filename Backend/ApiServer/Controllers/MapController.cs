@@ -14,7 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    public class MapController : Controller
+    public class MapController : ControllerBase
     {
 
         // GET api/v1/map/islands

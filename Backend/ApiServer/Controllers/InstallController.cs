@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    public class InstallController : Controller
+    public class InstallController : ControllerBase
     {
 
         // GET api/v1/install/info
