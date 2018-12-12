@@ -18,11 +18,14 @@ namespace ApiServer.Controllers
     [Route("api/v1/[controller]")]
     public class ProfileController : ControllerBase
     {
-
         // GET api/v1/profile/self
+        /// <summary>
+        /// get profile of current user by token
+        /// </summary>
+        /// <returns>own user</returns>
         [HttpGet("self/")]
         [Authorize]
-        public IActionResult GetSelf()
+        public UserModel GetSelf()
         {
             UserRepository userRepository = new UserRepository();
 
@@ -30,7 +33,6 @@ namespace ApiServer.Controllers
             if (UserId == "")
             {
                 throw new Exception("this case should never happen - token without valid user data");
-                return base.Forbid();
             }
 
             UserModel IsUserInDb = userRepository.GetByUserId(UserId);
@@ -38,11 +40,9 @@ namespace ApiServer.Controllers
             if (IsUserInDb == null)
             {
                 throw new Exception("this case should never happen - token user not found in DB");
-                // user not found
-                return base.BadRequest("user not found");
             }
 
-            return Ok(IsUserInDb);
+            return IsUserInDb;
         }
     }
 }
