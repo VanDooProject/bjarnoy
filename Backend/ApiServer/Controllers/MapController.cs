@@ -26,6 +26,15 @@ namespace ApiServer.Controllers
             return islandRepository.All();
         }
 
+        // GET api/v1/map/tile/0/0/0
+        [HttpGet("tile/{x}/{y}/{z}")]
+        [Authorize]
+        public Tile GetTile(float x, float y, float z)
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.getTile(x, y, z);
+        }
+
         // GET api/v1/map/demo
         [HttpGet("demo/")]
         public IEnumerable<Tile> Get()
