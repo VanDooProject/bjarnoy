@@ -2,6 +2,8 @@
     <div
         class="tile"
         v-on:click="openMenu"
+        v-on:mouseenter="openToolTip"
+        v-on:mouseleave="closeToolTip"
         v-bind:style="{
             position: 'absolute',
             transform: 'translate(' + tile.position.y * -141 + 'px, ' + tile.position.x * 141 + 'px)',
@@ -15,7 +17,13 @@
                 backgroundPositionY: - imgPos.y + 'px',
             }"
             class="tileimg"
-        ></div>
+        >
+        </div>
+        <div v-if="showTT"
+            class="tiletooltip"
+            >
+            {{tile}}
+        </div>
     </div>
 </template>
 
@@ -25,10 +33,17 @@
         methods: {
             openMenu: function(event) {
                 this.$emit('tile_clicked', event, this.tile);
+            },
+            openToolTip: function() {
+                this.showTT = true;
+            },
+            closeToolTip: function() {
+                this.showTT = false;
             }
         },
         data: function() {
             return {
+                showTT: false,
                 imgPos: {x: 0, y: 0}
             }
         },
@@ -112,5 +127,16 @@
     margin: 0px;
     transform: translate(-100px,-150px) rotateZ(-45deg) scaleY(2.38);
     pointer-events: none;
+}
+.tiletooltip{
+    background:rgba(0, 0, 0, 0.75);
+    color: white;
+    transform: rotateZ(-45deg) scaleY(2);
+    position: absolute;
+    width: 400px;
+    bottom: 200px;
+    right: 0px;
+    padding: 10px;
+    border-radius: 10px;
 }
 </style>
