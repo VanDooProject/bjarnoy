@@ -19,14 +19,9 @@
             class="tileimg"
         >
         </div>
-        <div v-bind:style="{
-                backgroundColor: 'lightblue',
-                transform: 'rotateZ(-45deg) scaleY(2)',
-                position: 'absolute',
-                width: '400px',
-                bottom: '200px',
-                right: '0px'
-            }" v-if="showTT">
+        <div v-if="showTT"
+            class="tiletooltip"
+            >
             {{tile}}
         </div>
     </div>
@@ -119,18 +114,15 @@
     transform: translate(-100px,-150px) rotateZ(-45deg) scaleY(2.38);
     pointer-events: none;
 }
-.tooltip{
+.tiletooltip{
+    background:rgba(0, 0, 0, 0.75);
+    color: white;
+    transform: rotateZ(-45deg) scaleY(2);
     position: absolute;
-    display: block;
-    width: 1000px;
-    height: 40px;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    border-color: black;
-    border: 2px;
-    background-color: black;
-    z-index: 1000000;    
+    width: 400px;
+    bottom: 200px;
+    right: 0px;
+    padding: 10px;
+    border-radius: 10px;
 }
 </style>
