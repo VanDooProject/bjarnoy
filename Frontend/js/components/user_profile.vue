@@ -17,7 +17,7 @@
         methods: {
             logout: function() {
                 localStorage.removeItem("token");
-                this.$router.push('/login');
+                this.$store.commit('ReqestErr');
             }
         },
         mounted() {
