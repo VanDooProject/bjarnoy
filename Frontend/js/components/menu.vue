@@ -28,7 +28,8 @@
 
         <span v-if="tile">
             {{tile.position.x}} | {{tile.position.y}} | {{tile.position.z}}<br/>
-            {{tile.type}}
+            {{tile.type}}<br/>
+            {{tile.orientation}}<br/>
         </span>
     </div>
 </template>

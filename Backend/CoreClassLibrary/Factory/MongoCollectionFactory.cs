@@ -46,6 +46,12 @@ namespace CoreClassLibrary.Factory
             BsonClassMap.RegisterClassMap<PumpkinResourceTile>();
             BsonClassMap.RegisterClassMap<ResourceTile>();
             BsonClassMap.RegisterClassMap<StoneResourceTile>();
+
+            BsonClassMap.RegisterClassMap<EdgeTile>();
+            BsonClassMap.RegisterClassMap<QuarterEdgeTile>();
+            BsonClassMap.RegisterClassMap<HalfEdgeTile>();
+            BsonClassMap.RegisterClassMap<TriQuarterEdgeTile>();
+
             BsonClassMap.RegisterClassMap<Tile>();
 
             BsonClassMap.RegisterClassMap<Biom>();
@@ -53,6 +59,7 @@ namespace CoreClassLibrary.Factory
             BsonClassMap.RegisterClassMap<GrasslandBiom>();
             BsonClassMap.RegisterClassMap<MountainBiom>();
             BsonClassMap.RegisterClassMap<SparseBiom>();
+            BsonClassMap.RegisterClassMap<EdgeBiom>();
         }
 
 
