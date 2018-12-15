@@ -610,6 +610,48 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "get tile",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    //pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/map/tile/10/2/1",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"map",
+								"tile",
+								"10",
+								"2",
+								"1"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
