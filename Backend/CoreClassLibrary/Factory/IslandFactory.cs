@@ -2,14 +2,19 @@ using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
+using log4net;
 
 namespace CoreClassLibrary.Factory
 {
     public class IslandFactory
     {
+        private ILog logger = LogManager.GetLogger(typeof(IslandFactory));
+
         private BiomFactory biom_factory = new BiomFactory();
 
         public Island GetRndIsland(int size, int z)
@@ -27,8 +32,119 @@ namespace CoreClassLibrary.Factory
 
             CreateAndAddRndStartBioms(island);
             ExpandBiomsAndCreateTiles(island);
+            CreateEdgeBrim(island);
 
             return island;
+        }
+
+        private void CreateEdgeBrim(Island island)
+        {
+            Biom biom = new EdgeBiom();
+            List<Tile> tiles = new List<Tile>();
+
+            foreach (Tile tile in island.Tiles)
+            {
+                // check neighbor coords, if free try to place edge tile
+                List<Vector3> freeNeighbors = island.getFreeNeighbors(tile);
+
+                foreach (Vector3 pos in freeNeighbors)
+                {
+                    var newTile = CreateNewEdgeTile(island, tile, pos);
+
+                    if (newTile != null)
+                    {
+                        tiles.Add(newTile);
+                    }
+                }
+            }
+            biom.tiles.AddRange(tiles);
+            island.bioms.Add(biom);
+        }
+
+        private Tile CreateNewEdgeTile(Island island, Tile tile, Vector3 pos)
+        {
+            List<Tile> neighbors = island.getNeighbors(pos);
+
+            Tile newTile = null;
+            Tile.eOrientation orientation = Tile.eOrientation.North;
+            // set typ depending on neighbors
+            int count = neighbors.Count(t => !(t is EdgeTile));
+            switch (count)
+            {
+                case 0:
+                case 4:
+                case 6:
+                case 7:
+                case 8:
+                    logger.ErrorFormat("this is no valid edge tile {0}", tile);
+                    break;
+                case 1:
+                    // check 4 relevant tiles for side
+                    if (island.getTile(pos - new Vector3(+1, +1, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.South;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, -1, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.North;
+                    }
+                    else if (island.getTile(pos - new Vector3(+1, -1, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.West;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, +1, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.East;
+                    }
+
+                    newTile = new QuarterEdgeTile(pos, orientation);
+                    break;
+                case 2:
+                case 3:
+                    // check 4 relevant tiles for side
+                    if (island.getTile(pos - new Vector3(0, +1, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.South;
+                    }
+                    else if (island.getTile(pos - new Vector3(0, -1, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.North;
+                    }
+                    else if (island.getTile(pos - new Vector3(+1, 0, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.West;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, 0, 0)) != null)
+                    {
+                        orientation = Tile.eOrientation.East;
+                    }
+
+                    newTile = new HalfEdgeTile(pos, orientation);
+                    break;
+                case 5:
+                    // check 4 relevant tiles for side
+                    if (island.getTile(pos - new Vector3(+1, +1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.South;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, -1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.North;
+                    }
+                    else if (island.getTile(pos - new Vector3(+1, -1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.West;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, +1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.East;
+                    }
+
+                    newTile = new TriQuarterEdgeTile(pos);
+                    break;
+            }
+
+            return newTile;
         }
 
         private void CreateAndAddRndStartBioms(Island island)
