@@ -52,6 +52,7 @@ namespace CoreClassLibrary.Factory
                     List<Tile> neighbors = getNeighbors(island, pos);
                     
                     Tile newTile = null;
+                    Tile.eOrientation orientation = Tile.eOrientation.North;
                     // set typ depending on neighbors
                     //int count = neighbors.Count(t => (t as EdgeTile) != null);
                     int count = neighbors.Count(t => !(t is EdgeTile));
@@ -66,11 +67,47 @@ namespace CoreClassLibrary.Factory
                             logger.ErrorFormat("this is no valid edge tile {0}", tile);
                             break;
                         case 1:
-                            newTile = new QuarterEdgeTile(pos);
+                            // check 4 relevant tiles for side
+                            if (getTile(island, pos - new Vector3(+1, +1, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.South;
+                            }
+                            else if (getTile(island, pos - new Vector3(-1, -1, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.North;
+                            }
+                            else if (getTile(island, pos - new Vector3(+1, -1, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.West;
+                            }
+                            else if (getTile(island, pos - new Vector3(-1, +1, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.East;
+                            }
+
+                            newTile = new QuarterEdgeTile(pos, orientation);
                             break;
                         case 2:
                         case 3:
-                            newTile = new HalfEdgeTile(pos);
+                            // check 4 relevant tiles for side
+                            if (getTile(island, pos - new Vector3(0, +1, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.South;
+                            }
+                            else if (getTile(island, pos - new Vector3(0, -1, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.North;
+                            }
+                            else if (getTile(island, pos - new Vector3(+1, 0, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.West;
+                            }
+                            else if (getTile(island, pos - new Vector3(-1, 0, 0)) != null)
+                            {
+                                orientation = Tile.eOrientation.East;
+                            }
+
+                            newTile = new HalfEdgeTile(pos, orientation);
                             break;
                         case 5:
                             newTile = new TriQuarterEdgeTile(pos);
