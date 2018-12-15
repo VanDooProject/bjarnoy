@@ -2,6 +2,8 @@ using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
@@ -27,8 +29,56 @@ namespace CoreClassLibrary.Factory
 
             CreateAndAddRndStartBioms(island);
             ExpandBiomsAndCreateTiles(island);
+            CreateEdgeBrim(island);
 
             return island;
+        }
+
+        private void CreateEdgeBrim(Island island)
+        {
+            Biom biom = new EdgeBiom();
+            foreach (Tile tile in island.Tiles)
+            {
+                // check neighbor coords, if free try to place edge tile
+                List<Tile> neighbors = getNeighbors(island, tile);
+            }
+            island.bioms.Add(biom);
+        }
+
+        private List<Tile> getNeighbors(Island island, Tile tile)
+        {
+            List<Tile> tiles = new List<Tile>();
+
+            for (float x = tile.Position.X - 1; x <= tile.Position.X + 1; x++)
+            {
+                for (float y = tile.Position.Y - 1; y <= tile.Position.Y + 1; y++)
+                {
+                    Tile neighbor = getTile(island, new Vector3(x, y, tile.Position.Z));
+                    if (neighbor != null)
+                    {
+                        tiles.Add(neighbor);
+                    }
+                }
+            }
+
+            return tiles;
+        }
+
+        private Tile getTile(Island island, Vector3 pos)
+        {
+            Biom biom = island.bioms.FirstOrDefault(b => b.tiles.Any(t => t.CheckIfSameTile(pos)));
+            if (biom == null)
+            {
+                // tile not found
+                return null;
+            }
+
+            List<Tile> biomTiles = biom.tiles;
+            Debug.Assert(biom.tiles.Count >= 1);
+
+            Tile tile = biomTiles.FirstOrDefault(t => t.CheckIfSameTile(pos));
+
+            return tile;
         }
 
         private void CreateAndAddRndStartBioms(Island island)

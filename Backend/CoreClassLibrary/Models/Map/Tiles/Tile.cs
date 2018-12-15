@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using CoreClassLibrary.Controller;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -25,6 +26,13 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public string type
         {
             get { return this.GetType().ToString().Split('.').Last(); }
+        }
+
+
+
+        public bool CheckIfSameTile(Vector3 pos)
+        {
+            return (Vector3.DistanceSquared(this.Position, pos) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance);
         }
     }
 }

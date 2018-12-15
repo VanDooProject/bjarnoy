@@ -22,25 +22,24 @@ namespace CoreClassLibrary.Models.Map
         {
             this.StartPosition = startPosition;
         }
-
-        private List<Tile> _tiles = new List<Tile>();
+        
         [JsonIgnore]
         [BsonIgnore]
         public List<Tile> Tiles
         {
             get
             {
-                _tiles.Clear();
+                List<Tile> _tiles = new List<Tile>();
                 foreach(Biom b in this.bioms)
                 {
                     foreach(Tile t in b.tiles)
                     {
-                        this._tiles.Add(t);
+                        _tiles.Add(t);
                     }
                 }
                 //this.bioms.ForEach(b => b.tiles.ForEach(t => _tiles.Add(t)));
 
-                return this._tiles;
+                return _tiles;
             }
         }
     }
