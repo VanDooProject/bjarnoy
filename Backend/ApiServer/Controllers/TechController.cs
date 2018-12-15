@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    public class TechController : Controller
+    public class TechController : ControllerBase
     {
 
         // GET api/v1/tech/buildings

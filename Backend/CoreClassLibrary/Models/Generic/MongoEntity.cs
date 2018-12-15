@@ -12,7 +12,7 @@ namespace CoreClassLibrary.Models.Generic
         [BsonId]
         //[BsonRepresentation(BsonType.ObjectId)]
         //[BsonRepresentation(System.Guid)]
-        public string _id { get; set; } = ObjectId.GenerateNewId().ToString();
+        public ObjectId _id { get; set; } //= new ObjectId();// = ObjectId.GenerateNewId().ToString();
 
         //System.Guid.NewGuid().ToString();
     }

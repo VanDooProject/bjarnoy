@@ -1,18 +1,39 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Respository;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    public class MapController : Controller
+    public class MapController : ControllerBase
     {
+
+        // GET api/v1/map/islands
+        [HttpGet("islands/")]
+        [Authorize]
+        public IEnumerable<Island> GetIslands()
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.All();
+        }
+
+        // GET api/v1/map/tile/0/0/0
+        [HttpGet("tile/{x}/{y}/{z}")]
+        [Authorize]
+        public Tile GetTile(float x, float y, float z)
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.getTile(x, y, z);
+        }
 
         // GET api/v1/map/demo
         [HttpGet("demo/")]
@@ -36,7 +57,8 @@ namespace ApiServer.Controllers
                 {
                     for (int y = -size; y < size; y++)
                     {
-                        TileList.Add(new Tile( x,  y, z, tileTypes[r.Next(tileTypes.Length)]));
+                        Vector3 position = new Vector3(x, y, z);
+                        TileList.Add(new Tile(position));
                     }
                 }
             }
@@ -44,25 +66,25 @@ namespace ApiServer.Controllers
             return TileList;
         }
 
-        [HttpGet("demo/biom/{size}")]
+        /*[HttpGet("demo/biom/{size}")]
         public IEnumerable<Biom> GetRndBiom(int size)
         {
             List<Biom> BiomList = new List<Biom>();
             BiomFactory factory = new BiomFactory();
             for (int loop_count = 0; loop_count < size; loop_count++)
             {
-                BiomList.Add(factory.GetRndBiom(loop_count));
+                BiomList.Add(factory.GetRndBiomAndTiles(loop_count));
             }
 
             return BiomList;
-        }
+        }*/
 
-        [HttpGet("demo/island")]
-        public IEnumerable<Island> GetRndIsland()
+        [HttpGet("demo/island/{size}")]
+        public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
             IslandFactory factory = new IslandFactory();
-            IslandList.Add(factory.GetRndIsland());
+            IslandList.Add(factory.GetRndIsland(size, 1));
 
             return IslandList;
         }

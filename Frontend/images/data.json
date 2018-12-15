@@ -1,0 +1,122 @@
+[
+    {
+        "y": 0, 
+        "x": 0, 
+        "name": "grasstile_E.png"
+    }, 
+    {
+        "y": 200, 
+        "x": 0, 
+        "name": "grasstile_N.png"
+    }, 
+    {
+        "y": 400, 
+        "x": 0, 
+        "name": "grasstile_S.png"
+    }, 
+    {
+        "y": 600, 
+        "x": 0, 
+        "name": "grasstile_W.png"
+    }, 
+    {
+        "y": 800, 
+        "x": 0, 
+        "name": "mountaintile_E.png"
+    }, 
+    {
+        "y": 1000, 
+        "x": 0, 
+        "name": "mountaintile_N.png"
+    }, 
+    {
+        "y": 1200, 
+        "x": 0, 
+        "name": "mountaintile_S.png"
+    }, 
+    {
+        "y": 1400, 
+        "x": 0, 
+        "name": "mountaintile_W.png"
+    }, 
+    {
+        "y": 0, 
+        "x": 300, 
+        "name": "halfedgetile_E.png"
+    }, 
+    {
+        "y": 200, 
+        "x": 300, 
+        "name": "halfedgetile_N.png"
+    }, 
+    {
+        "y": 400, 
+        "x": 300, 
+        "name": "halfedgetile_S.png"
+    }, 
+    {
+        "y": 600, 
+        "x": 300, 
+        "name": "halfedgetile_W.png"
+    }, 
+    {
+        "y": 800, 
+        "x": 300, 
+        "name": "triquarteredgetile_E.png"
+    }, 
+    {
+        "y": 1000, 
+        "x": 300, 
+        "name": "triquarteredgetile_N.png"
+    }, 
+    {
+        "y": 1200, 
+        "x": 300, 
+        "name": "triquarteredgetile_S.png"
+    }, 
+    {
+        "y": 1400, 
+        "x": 300, 
+        "name": "triquarteredgetile_W.png"
+    }, 
+    {
+        "y": 0, 
+        "x": 600, 
+        "name": "quarteredgetile_E.png"
+    }, 
+    {
+        "y": 200, 
+        "x": 600, 
+        "name": "quarteredgetile_N.png"
+    }, 
+    {
+        "y": 400, 
+        "x": 600, 
+        "name": "quarteredgetile_S.png"
+    }, 
+    {
+        "y": 600, 
+        "x": 600, 
+        "name": "quarteredgetile_W.png"
+    }, 
+    {
+        "y": 800, 
+        "x": 600, 
+        "name": "foresttile_E.png"
+    }, 
+    {
+        "y": 1000, 
+        "x": 600, 
+        "name": "foresttile_N.png"
+    }, 
+    {
+        "y": 1200, 
+        "x": 600, 
+        "name": "foresttile_S.png"
+    }, 
+    {
+        "y": 1400, 
+        "x": 600, 
+        "name": "foresttile_W.png"
+    }
+]

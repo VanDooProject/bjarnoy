@@ -1,31 +1,30 @@
+using System;
+using System.Linq;
+using System.Numerics;
+using CoreClassLibrary.Serializer;
+using MongoDB.Bson.Serialization.Attributes;
+
 namespace CoreClassLibrary.Models.Map.Tiles
 {
     public class Tile
     {
-        public int x;
-        public int y;
-        public int z;
 
-        public string type {get; set;}
+        // https://jira.mongodb.org/browse/CSHARP-1759
+        [BsonSerializer(typeof(Vector3Serializer))]
+        public Vector3 Position;
 
         public Tile()
         {
         }
 
-        public Tile(int x, int y, int z)
+        public Tile(Vector3 position)
         {
-            this.x = x;
-            this.y = y;
-            this.z = z;
+            this.Position = position;
         }
 
-        public Tile(int x, int y, int z, string type)
+        public string type
         {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-
-            this.type = type;
+            get { return this.GetType().ToString().Split('.').Last(); }
         }
-    }    
+    }
 }

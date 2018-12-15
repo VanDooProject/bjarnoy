@@ -38,15 +38,15 @@ import MapComponent from './components/map.vue';
 import GameHeader from './components/gameHeader.vue';
 import LoginForm from './components/forms/login_form.vue';
 import RegisterForm from './components/forms/register_form.vue';
+import UserProfie from './components/user_profile.vue';
 
 
 // 1. Define route components.
-const ComponentUserProfie = { template: '<div>User Profile</div>' };
 
 // 2. Define some routes
 const routes = [
     { path: '/map', component: MapComponent },
-    { path: '/user', component: ComponentUserProfie },
+    { path: '/user', component: UserProfie },
     { path: '/login', component: LoginForm },
     { path: '/register', component: RegisterForm },
 ];
