@@ -46,15 +46,15 @@
                     switch (this.tile.type)
                     {
                         case "GrassTile":
-                            entry = response.data.filter(obj => obj.name == "grasstile_E.png")[0]
+                            entry = response.data.filter(obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
                         case "MountainTile":
-                            entry = response.data.filter(obj => obj.name == "mountaintile_E.png")[0]
+                            entry = response.data.filter(obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
                         case "ForestTile":
-                            entry = response.data.filter(obj => obj.name == "foresttile_E.png")[0]
+                            entry = response.data.filter(obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
 
