@@ -45,7 +45,7 @@ namespace CoreClassLibrary.Factory
             foreach (Tile tile in island.Tiles)
             {
                 // check neighbor coords, if free try to place edge tile
-                List<Vector3> freeNeighbors = getFreeNeighbors(island, tile);
+                List<Vector3> freeNeighbors = island.getFreeNeighbors(tile);
 
                 foreach (Vector3 pos in freeNeighbors)
                 {
@@ -63,7 +63,7 @@ namespace CoreClassLibrary.Factory
 
         private Tile CreateNewEdgeTile(Island island, Tile tile, Vector3 pos)
         {
-            List<Tile> neighbors = getNeighbors(island, pos);
+            List<Tile> neighbors = island.getNeighbors(pos);
 
             Tile newTile = null;
             Tile.eOrientation orientation = Tile.eOrientation.North;
@@ -80,19 +80,19 @@ namespace CoreClassLibrary.Factory
                     break;
                 case 1:
                     // check 4 relevant tiles for side
-                    if (getTile(island, pos - new Vector3(+1, +1, 0)) != null)
+                    if (island.getTile(pos - new Vector3(+1, +1, 0)) != null)
                     {
                         orientation = Tile.eOrientation.South;
                     }
-                    else if (getTile(island, pos - new Vector3(-1, -1, 0)) != null)
+                    else if (island.getTile(pos - new Vector3(-1, -1, 0)) != null)
                     {
                         orientation = Tile.eOrientation.North;
                     }
-                    else if (getTile(island, pos - new Vector3(+1, -1, 0)) != null)
+                    else if (island.getTile(pos - new Vector3(+1, -1, 0)) != null)
                     {
                         orientation = Tile.eOrientation.West;
                     }
-                    else if (getTile(island, pos - new Vector3(-1, +1, 0)) != null)
+                    else if (island.getTile(pos - new Vector3(-1, +1, 0)) != null)
                     {
                         orientation = Tile.eOrientation.East;
                     }
@@ -102,19 +102,19 @@ namespace CoreClassLibrary.Factory
                 case 2:
                 case 3:
                     // check 4 relevant tiles for side
-                    if (getTile(island, pos - new Vector3(0, +1, 0)) != null)
+                    if (island.getTile(pos - new Vector3(0, +1, 0)) != null)
                     {
                         orientation = Tile.eOrientation.South;
                     }
-                    else if (getTile(island, pos - new Vector3(0, -1, 0)) != null)
+                    else if (island.getTile(pos - new Vector3(0, -1, 0)) != null)
                     {
                         orientation = Tile.eOrientation.North;
                     }
-                    else if (getTile(island, pos - new Vector3(+1, 0, 0)) != null)
+                    else if (island.getTile(pos - new Vector3(+1, 0, 0)) != null)
                     {
                         orientation = Tile.eOrientation.West;
                     }
-                    else if (getTile(island, pos - new Vector3(-1, 0, 0)) != null)
+                    else if (island.getTile(pos - new Vector3(-1, 0, 0)) != null)
                     {
                         orientation = Tile.eOrientation.East;
                     }
@@ -122,71 +122,29 @@ namespace CoreClassLibrary.Factory
                     newTile = new HalfEdgeTile(pos, orientation);
                     break;
                 case 5:
+                    // check 4 relevant tiles for side
+                    if (island.getTile(pos - new Vector3(+1, +1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.South;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, -1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.North;
+                    }
+                    else if (island.getTile(pos - new Vector3(+1, -1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.West;
+                    }
+                    else if (island.getTile(pos - new Vector3(-1, +1, 0)) == null)
+                    {
+                        orientation = Tile.eOrientation.East;
+                    }
+
                     newTile = new TriQuarterEdgeTile(pos);
                     break;
             }
 
             return newTile;
-        }
-
-        private List<Tile> getNeighbors(Island island, Vector3 pos)
-        {
-            List<Tile> tiles = new List<Tile>();
-
-            for (float x = pos.X - 1; x <= pos.X + 1; x++)
-            {
-                for (float y = pos.Y - 1; y <= pos.Y + 1; y++)
-                {
-                    Tile neighbor = getTile(island, new Vector3(x, y, pos.Z));
-                    if (neighbor != null)
-                    {
-                        tiles.Add(neighbor);
-                    }
-                }
-            }
-
-            return tiles;
-        }
-
-        private List<Tile> getNeighbors(Island island, Tile tile)
-        {
-            return getNeighbors(island, tile.Position);
-        }
-
-        private List<Vector3> getFreeNeighbors(Island island, Tile tile)
-        {
-            List<Vector3> positions = new List<Vector3>();
-
-            for (float x = tile.Position.X - 1; x <= tile.Position.X + 1; x++)
-            {
-                for (float y = tile.Position.Y - 1; y <= tile.Position.Y + 1; y++)
-                {
-                    Tile neighbor = getTile(island, new Vector3(x, y, tile.Position.Z));
-                    if (neighbor == null)
-                    {
-                        positions.Add(new Vector3(x, y, tile.Position.Z));
-                    }
-                }
-            }
-
-            return positions;
-        }
-
-        private Tile getTile(Island island, Vector3 pos)
-        {
-            Biom biom = island.bioms.FirstOrDefault(b => b.tiles.Any(t => t.CheckIfSameTile(pos)));
-            if (biom == null)
-            {
-                // tile not found
-                return null;
-            }
-
-            List<Tile> biomTiles = biom.tiles;
-            Debug.Assert(biom.tiles.Count >= 1);
-
-            Tile tile = biomTiles.FirstOrDefault(t => t.CheckIfSameTile(pos));
-
-            return tile;
         }
 
         private void CreateAndAddRndStartBioms(Island island)
