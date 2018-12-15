@@ -18,13 +18,14 @@
             }"
             class="tileimg"
         >
+        </div>
         <div v-bind:style="{
                 backgroundColor: 'lightblue',
-                transform: 'rotateZ(-45deg) scaleY(1.5)',
+                transform: 'rotateZ(-45deg) scaleY(2)',
                 position: 'absolute',
                 width: '400px',
-                bottom: '250px',
-                right: '-300px'
+                bottom: '200px',
+                right: '0px'
             }" v-if="showTT">
             {{tile}}
         </div>
@@ -47,7 +48,7 @@
         },
         data: function() {
             return {
-                showTT: false
+                showTT: false,
                 imgPos: {x: 0, y: 0}
             }
         },

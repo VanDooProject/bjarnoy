@@ -109,6 +109,7 @@
                     }
                 )
                 .catch(error => {
+                    console.log(error);
                     this.error = error.response.data.Password[0] + ' <br/>' +
                         error.response.data.Username[0] + ' <br/>' +
                         error.response.data.PasswordConfirm[0] + ' <br/>';
