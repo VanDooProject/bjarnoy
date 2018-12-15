@@ -32,6 +32,9 @@
                     Stay logged in?
                 </b-form-checkbox>
             </b-form-group>
+            <b-alert variant="danger" :show="this.error!=''">
+                {{error}}
+            </b-alert>
             <b-form-group>
                 <b-button type="submit" variant="primary">Submit</b-button>
                 <b-button type="reset"  variant="danger" >Reset</b-button>
@@ -67,7 +70,12 @@
                         .catch(error => console.log(error.response));
                     }
                 )
-                .catch(error => console.log(error.response));
+                .catch(error => {
+                    if(error.response.status == 401)
+                        this.error = "Username or password wrong";
+                    else 
+                        this.error = error.response.data
+                });
                 
             },
             onReset (evt) {
@@ -86,7 +94,8 @@
                     username: '',
                     password: '',
                     stayLogedIn: false
-                }
+                },
+                error: ''
             }
         }
     }
