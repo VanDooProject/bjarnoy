@@ -71,10 +71,7 @@
                     }
                 )
                 .catch(error => {
-                    if(error.response.status == 401)
-                        this.error = "Username or password wrong";
-                    else 
-                        this.error = error.response.data
+                    this.error = "Username or password not correct";
                 });
                 
             },

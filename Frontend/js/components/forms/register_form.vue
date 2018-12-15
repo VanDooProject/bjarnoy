@@ -90,30 +90,32 @@
         methods: {
             onSubmit (evt) {
                 evt.preventDefault();
-                //TODO: Verify inputs in frontend
-                this.axios
-                .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-up',
-                    {
-                        username: this.form.username,
-                        password: this.form.password,
-                        mail: this.form.email,
-                        passwordConfirm: this.form.passwordVerify
-                    },
-                    {
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                    })
-                .then(response => {localStorage.token = response.data.token
+                if(usernameCorrect && passwordCorrectState && passwordVerifiedState)
+                {
                     this.axios
-                        .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
-                            {
-                                headers: {'Authorization': "bearer " + localStorage.token},
-                                withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                            })
-                        .then(response => this.$router.push('/map'))
-                        .catch(error => console.error(error.response));
-                    }
-                )
-                .catch(error => this.error = error.response);
+                    .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-up',
+                        {
+                            username: this.form.username,
+                            password: this.form.password,
+                            mail: this.form.email,
+                            passwordConfirm: this.form.passwordVerify
+                        },
+                        {
+                            withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        })
+                    .then(response => {localStorage.token = response.data.token
+                        this.axios
+                            .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                                {
+                                    headers: {'Authorization': "bearer " + localStorage.token},
+                                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                                })
+                            .then(response => this.$router.push('/map'))
+                            .catch(error => console.error(error.response));
+                        }
+                    )
+                    .catch(error => this.error = error.response);
+                }
             },
             onReset (evt) {
                 evt.preventDefault();
