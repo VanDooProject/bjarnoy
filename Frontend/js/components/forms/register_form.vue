@@ -23,15 +23,18 @@
                     type="text"
                     v-model="form.username"
                     required
+                    :state='usernameCorrect == ""'
                     autocomplete="username"
                     placeholder="Please choose a username"
                 >
-
                 </b-form-input>
+                <b-form-invalid-feedback>
+                    <!-- This will only be shown if the preceeding input has an invalid state -->
+                    {{usernameCorrect}}<br/>
+                </b-form-invalid-feedback>
             </b-form-group>
             <b-form-group label="Password"
                     label-for="password"
-                    :state="passwordCorrectState&&passwordVerifiedState"
             >
                 <b-form-input
                     id="password"
@@ -45,7 +48,7 @@
                 </b-form-input>
                 <b-form-invalid-feedback>
                     <!-- This will only be shown if the preceeding input has an invalid state -->
-                    Enter at least 3 letters<br/>
+                    Enter at least 4 letters<br/>
                 </b-form-invalid-feedback>
                 <b-form-input
                     type="password"
@@ -56,7 +59,7 @@
                     placeholder="Please verify the password"
                 >
                 </b-form-input>
-                <b-form-invalid-feedback id="inputLiveFeedback">
+                <b-form-invalid-feedback v-if="!passwordVerifiedState">
                     <!-- This will only be shown if the preceeding input has an invalid state -->
                     Passwords don't match
                 </b-form-invalid-feedback>
@@ -66,7 +69,9 @@
                     Stay logged in?
                 </b-form-checkbox>
             </b-form-group>
-            {{this.error}}
+            <b-alert variant="danger" :show="this.error!=''">
+                {{error}}
+            </b-alert>
             <b-form-group>
                 <b-button type="submit" variant="primary">Submit</b-button>
                 <b-button type="reset"  variant="danger" >Reset</b-button>
@@ -85,35 +90,32 @@
         methods: {
             onSubmit (evt) {
                 evt.preventDefault();
-                //TODO: Verify inputs in frontend
-                this.axios
-                .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-up',
-                    {
-                        username: this.form.username,
-                        password: this.form.password,
-                        mail: this.form.email,
-                        passwordConfirm: this.form.passwordVerify
-                    },
-                    {
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                    })
-                .then(response => {localStorage.token = response.data.token
+                if(this.usernameCorrect == "" && this.passwordCorrectState && this.passwordVerifiedState)
+                {
                     this.axios
-                        .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
-                            {
-                                headers: {'Authorization': "bearer " + localStorage.token},
-                                withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                            })
-                        .then(response => this.$router.push('/map'))
-                        .catch(error => console.log(error.response));
-                    }
-                )
-                .catch(error => {
-                    console.log(error);
-                    this.error = error.response.data.Password[0] + ' <br/>' +
-                        error.response.data.Username[0] + ' <br/>' +
-                        error.response.data.PasswordConfirm[0] + ' <br/>';
-                });
+                    .post(this.$config.RequestUriPrefix + '/api/v1/auth/sign-up',
+                        {
+                            username: this.form.username,
+                            password: this.form.password,
+                            mail: this.form.email,
+                            passwordConfirm: this.form.passwordVerify
+                        },
+                        {
+                            withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        })
+                    .then(response => {localStorage.token = response.data.token
+                        this.axios
+                            .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
+                                {
+                                    headers: {'Authorization': "bearer " + localStorage.token},
+                                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                                })
+                            .then(response => {this.$store.commit("logIn"); this.$router.push('/map')})
+                            .catch(error => console.error(error.response));
+                        }
+                    )
+                    .catch(error => this.error = error.response);
+                }
             },
             onReset (evt) {
                 evt.preventDefault();
@@ -129,13 +131,21 @@
             }
         },
         computed: {
+            usernameCorrect: function () {
+                var usr = this.form.username;
+                if(!usr.match(/^[a-zA-Z0-9_]*$/))
+                    return "Use only Alphanumeric characters!";
+                if(usr.length > 16)
+                    return "Username to long!";
+                if(usr.length < 4)
+                    return "Username to short!";
+                return "";
+            },
             passwordCorrectState: function () {
-                //TODO: add Password requirements
-                return true;
+                return this.form.password.length >= 4;
             },
             passwordVerifiedState: function () {
-                //TODO: figure out how to stop submit if not correct (like email field)
-                return this.form.password == this.form.passwordVerify
+                return (this.form.password == this.form.passwordVerify);
             }
         },
         data: function () {

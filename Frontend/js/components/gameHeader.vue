@@ -4,8 +4,14 @@
             <!-- use router-link component for navigation. -->
             <!-- specify the link by passing the `to` prop. -->
             <!-- `<router-link>` will be rendered as an `<a>` tag by default -->
-            <router-link to="/map">Go to map</router-link>
-            <router-link to="/user">Go to user profile</router-link>
+            
+            <!-- Logged in -->
+            <router-link v-if="this.$store.state.loggedIn" to="/map">Go to map</router-link>
+            <router-link v-if="this.$store.state.loggedIn" to="/user">Go to user profile</router-link>
+
+            <!-- Not logged in -->
+            <router-link v-if="!this.$store.state.loggedIn" to="/login">Login</router-link>
+            <router-link v-if="!this.$store.state.loggedIn" to="/register">Register</router-link>
         </menu>
     </div>
 </template>
@@ -54,8 +60,8 @@
                         // CORS cookie issue: https://github.com/axios/axios/issues/876
                         withCredentials: true
                     })
-                    .then(response => {})
-                    .catch(error => this.$router.push('/login'));
+                    .then(response => this.$store.commit("logIn"))
+                    .catch(error => this.$store.commit('ReqestErr'));
                 }
                 else if ((expires - now) > 0)
                 {

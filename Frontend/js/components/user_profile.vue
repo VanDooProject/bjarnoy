@@ -17,7 +17,7 @@
         methods: {
             logout: function() {
                 localStorage.removeItem("token");
-                this.$router.push('/login');
+                this.$store.commit('ReqestErr');
             }
         },
         mounted() {
@@ -33,7 +33,7 @@
                             "Email: " + response.data.email,
                             "Created: " + response.data._id.creationTime];
             })
-            .catch(error => console.log(error));
+            .catch(error => this.$store.commit('ReqestErr'));
         }
     }
 </script>

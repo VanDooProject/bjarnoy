@@ -36,7 +36,15 @@ namespace CoreClassLibrary.Models.Map.Biomes
 
         public void AddRndBiomTileAtPosition(Vector3 position)
         {
-            tiles.Add(tile_factory.GetRndBiomTileAtPosition(position));
+            Tile rndBiomTile = tile_factory.GetRndBiomTileAtPosition(position);
+
+            // TODO optimize
+            Array values = Enum.GetValues(typeof(Tile.eOrientation));
+            Random random = new Random();
+            Tile.eOrientation randOrientation = (Tile.eOrientation)values.GetValue(random.Next(values.Length));
+            rndBiomTile.Orientation = randOrientation;
+
+            tiles.Add(rndBiomTile);
         }
     }
 }

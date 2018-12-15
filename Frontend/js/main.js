@@ -1,6 +1,11 @@
 import Vue from 'vue';
 import config from './config.js';
 
+// Vuex
+import Vuex from 'vuex';
+
+Vue.use(Vuex);
+
 // Vue Router
 import VueRouter from 'vue-router';
 
@@ -56,7 +61,27 @@ const router = new VueRouter({
     routes // short for `routes: routes`
 });
 
+
+
 Vue.prototype.$config = config;
+
+const store = new Vuex.Store({
+    state: {
+        loggedIn: false
+      },
+      mutations: {
+        logIn (state) {
+            state.loggedIn = true;
+        },
+        ReqestErr (state) {
+            state.loggedIn = false;
+            if(localStorage.token)
+                router.push("/login");
+            else
+                router.push("/register");
+        }
+      }
+})
 
 // main app
 const vue = new Vue({
@@ -65,6 +90,7 @@ const vue = new Vue({
     components: {
         'gameheader':GameHeader
     },
+    store,
     data: {
 
     },

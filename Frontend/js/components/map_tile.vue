@@ -61,23 +61,37 @@
                     switch (this.tile.type)
                     {
                         case "GrassTile":
-                            entry = response.data.filter(obj => obj.name == "grasstile_E.png")[0]
+                            entry = response.data.filter(obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
                         case "MountainTile":
-                            entry = response.data.filter(obj => obj.name == "mountaintile_E.png")[0]
+                            entry = response.data.filter(obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
                         case "ForestTile":
-                            entry = response.data.filter(obj => obj.name == "foresttile_E.png")[0]
+                            entry = response.data.filter(obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png")[0]
                             this.imgPos = {y: entry.x, x: entry.y}
                             break;
+
+                        case "QuarterEdgeTile":
+                            entry = response.data.filter(obj => obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        case "HalfEdgeTile":
+                            entry = response.data.filter(obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+                        case "TriQuarterEdgeTile":
+                            entry = response.data.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0]
+                            this.imgPos = {y: entry.x, x: entry.y}
+                            break;
+
                         default:
                             this.imgPos = {x: 600, y: 600}
                     }
 
                 })
-                .catch(error => console.log(error));
+                .catch(error => this.$store.commit('ReqestErr'));
         },
     }
 
