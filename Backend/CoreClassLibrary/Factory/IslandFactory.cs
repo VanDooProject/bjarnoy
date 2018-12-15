@@ -7,11 +7,14 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
+using log4net;
 
 namespace CoreClassLibrary.Factory
 {
     public class IslandFactory
     {
+        private ILog logger = LogManager.GetLogger(typeof(IslandFactory));
+
         private BiomFactory biom_factory = new BiomFactory();
 
         public Island GetRndIsland(int size, int z)
@@ -37,23 +40,62 @@ namespace CoreClassLibrary.Factory
         private void CreateEdgeBrim(Island island)
         {
             Biom biom = new EdgeBiom();
+            List<Tile> tiles = new List<Tile>();
+
             foreach (Tile tile in island.Tiles)
             {
                 // check neighbor coords, if free try to place edge tile
-                List<Tile> neighbors = getNeighbors(island, tile);
+                List<Vector3> freeNeighbors = getFreeNeighbors(island, tile);
+
+                foreach (Vector3 pos in freeNeighbors)
+                {
+                    List<Tile> neighbors = getNeighbors(island, pos);
+                    
+                    Tile newTile = null;
+                    // set typ depending on neighbors
+                    //int count = neighbors.Count(t => (t as EdgeTile) != null);
+                    int count = neighbors.Count(t => !(t is EdgeTile));
+                    //int count = neighbors.NotOf(typeof(EdgeTile)).Count;
+                    switch (count)
+                    {
+                        case 0:
+                        case 4:
+                        case 6:
+                        case 7:
+                        case 8:
+                            logger.ErrorFormat("this is no valid edge tile {0}", tile);
+                            break;
+                        case 1:
+                            newTile = new QuarterEdgeTile(pos);
+                            break;
+                        case 2:
+                        case 3:
+                            newTile = new HalfEdgeTile(pos);
+                            break;
+                        case 5:
+                            newTile = new TriQuarterEdgeTile(pos);
+                            break;
+                    }
+
+                    if (newTile != null)
+                    {
+                        tiles.Add(newTile);
+                    }
+                }
             }
+            biom.tiles.AddRange(tiles);
             island.bioms.Add(biom);
         }
 
-        private List<Tile> getNeighbors(Island island, Tile tile)
+        private List<Tile> getNeighbors(Island island, Vector3 pos)
         {
             List<Tile> tiles = new List<Tile>();
 
-            for (float x = tile.Position.X - 1; x <= tile.Position.X + 1; x++)
+            for (float x = pos.X - 1; x <= pos.X + 1; x++)
             {
-                for (float y = tile.Position.Y - 1; y <= tile.Position.Y + 1; y++)
+                for (float y = pos.Y - 1; y <= pos.Y + 1; y++)
                 {
-                    Tile neighbor = getTile(island, new Vector3(x, y, tile.Position.Z));
+                    Tile neighbor = getTile(island, new Vector3(x, y, pos.Z));
                     if (neighbor != null)
                     {
                         tiles.Add(neighbor);
@@ -62,6 +104,30 @@ namespace CoreClassLibrary.Factory
             }
 
             return tiles;
+        }
+
+        private List<Tile> getNeighbors(Island island, Tile tile)
+        {
+            return getNeighbors(island, tile.Position);
+        }
+
+        private List<Vector3> getFreeNeighbors(Island island, Tile tile)
+        {
+            List<Vector3> positions = new List<Vector3>();
+
+            for (float x = tile.Position.X - 1; x <= tile.Position.X + 1; x++)
+            {
+                for (float y = tile.Position.Y - 1; y <= tile.Position.Y + 1; y++)
+                {
+                    Tile neighbor = getTile(island, new Vector3(x, y, tile.Position.Z));
+                    if (neighbor == null)
+                    {
+                        positions.Add(new Vector3(x, y, tile.Position.Z));
+                    }
+                }
+            }
+
+            return positions;
         }
 
         private Tile getTile(Island island, Vector3 pos)
