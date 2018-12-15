@@ -66,7 +66,7 @@
                                 headers: {'Authorization': "bearer " + localStorage.token},
                                 withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                             })
-                        .then(response => this.$router.push('/map'))
+                        .then(response => {this.$store.commit("logIn"); this.$router.push("/map")})
                         .catch(error => console.log(error.response));
                     }
                 )

@@ -72,8 +72,8 @@
                         headers: {'Authorization': "bearer " + localStorage.token},
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => ( this.islands = response.data))
-                .catch(error => console.log(error));
+                .then(response => this.islands = response.data)
+                .catch(error => this.$store.commit('ReqestErr'));
         },
         methods: {
             TileClicked: function(event, tile) {

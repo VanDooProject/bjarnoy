@@ -76,7 +76,7 @@
                     }
 
                 })
-                .catch(error => console.log(error));
+                .catch(error => this.$store.commit('ReqestErr'));
         },
     }
 

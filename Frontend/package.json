@@ -16,7 +16,8 @@
     "highcharts": "^6.1.1",
     "vue": "^2.5.11",
     "vue-axios": "^2.1.2",
-    "vue-router": "^3.0.1"
+    "vue-router": "^3.0.1",
+    "vuex": "^3.0.1"
   },
   "browserslist": [
     "> 1%",
