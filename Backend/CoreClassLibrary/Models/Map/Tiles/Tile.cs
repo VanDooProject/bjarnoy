@@ -4,6 +4,8 @@ using System.Numerics;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -13,6 +15,17 @@ namespace CoreClassLibrary.Models.Map.Tiles
         // https://jira.mongodb.org/browse/CSHARP-1759
         [BsonSerializer(typeof(Vector3Serializer))]
         public Vector3 Position;
+
+        public enum eOrientation
+        {
+            North,
+            East,
+            South,
+            West
+        }
+
+        [JsonConverter(typeof(StringEnumConverter))]
+        public eOrientation Orientation;
 
         public Tile()
         {

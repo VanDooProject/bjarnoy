@@ -17,5 +17,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
 
         }
+
+        public HalfEdgeTile(Vector3 position, eOrientation orientation) : base(position, orientation)
+        {
+
+        }
     }
 }

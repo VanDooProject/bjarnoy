@@ -17,5 +17,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
 
         }
+
+        public EdgeTile(Vector3 position, eOrientation orientation) : base(position)
+        {
+            this.Orientation = orientation;
+        }
     }
 }

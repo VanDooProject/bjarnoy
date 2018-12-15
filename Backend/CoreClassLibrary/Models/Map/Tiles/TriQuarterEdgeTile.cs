@@ -17,5 +17,10 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
 
         }
+
+        public TriQuarterEdgeTile(Vector3 position, eOrientation orientation) : base(position, orientation)
+        {
+
+        }
     }
 }
