@@ -68,6 +68,7 @@
         mounted () {
             this.axios
                 .get(this.$config.RequestUriPrefix + '/api/v1/map/islands',
+                //.get(this.$config.RequestUriPrefix + '/api/v1/map/demo/island/2', // <- for testing
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876

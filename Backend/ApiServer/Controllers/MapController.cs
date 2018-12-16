@@ -79,11 +79,13 @@ namespace ApiServer.Controllers
             return BiomList;
         }*/
 
+        // GET /api/v1/map/demo/island/5
         [HttpGet("demo/island/{size}")]
         public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
             IslandFactory factory = new IslandFactory();
+
             IslandList.Add(factory.GetRndIsland(size, 1));
 
             return IslandList;
