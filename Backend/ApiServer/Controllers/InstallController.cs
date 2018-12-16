@@ -44,6 +44,10 @@ namespace ApiServer.Controllers
             int size = 10;
             int zCoord = 1;
 
+
+            Random rnd = new Random();
+            rnd.Next(size - 5, size + 5);
+
             var island = factory.GetRndIsland(size, zCoord);
 
             // TODO: move island to free location on map

@@ -22,13 +22,12 @@ namespace CoreClassLibrary.Factory
             Vector3 startPosition = new Vector3(0, 0, z);
             Island island = new Island(startPosition);
 
-            Random rnd = new Random();
             island.name = GenerateRandomName();
-            if(size < 10)
+            if(size < 2)
             {
-                size = 10;
+                size = 2;
             }
-            island.size = rnd.Next(size - 5, size + 5);
+            island.size = size;
 
             CreateAndAddRndStartBioms(island);
             ExpandBiomsAndCreateTiles(island);
