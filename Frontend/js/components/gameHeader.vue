@@ -61,7 +61,7 @@
                         withCredentials: true
                     })
                     .then(response => this.$store.commit("logIn"))
-                    .catch(error => this.$store.commit('ReqestErr'));
+                    .catch(error => this.$store.commit('ReqestErr', error.response));
                 }
                 else if ((expires - now) > 0)
                 {

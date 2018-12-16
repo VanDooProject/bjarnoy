@@ -6,11 +6,11 @@
     v-on:mousedown='mouseDown'
     id="mapbg"
     >
-        <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
+        <MapMenu ></MapMenu>
 
         <div id="map">
-            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
+            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
         </div>
     </div>
 </template>
@@ -29,12 +29,7 @@
             return {
                 // will be a three-dimensional array with map coords
                 islands: [],
-                menu: {x: 0, y: 0},
-                tile: undefined,
                 isMouseDown: false,
-                globalMapOffset: {x:0, y:0},
-                mouseMovement: {x:0, y:0},
-                menuClosed: false
             }
         },
         computed: {
@@ -74,24 +69,17 @@
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => this.islands = response.data)
-                .catch(error => this.$store.commit('ReqestErr'));
+                .catch(error => this.$store.commit('ReqestErr', error.response));
         },
         methods: {
-            TileClicked: function(event, tile) {
-                if((this.mouseMovement.x < 5) && (this.mouseMovement.y < 5))
-                {
-                    if(!this.menuClosed)
-                    {
-                        this.menu.x = event.pageX;
-                        this.menu.y = event.pageY;
-                        this.tile = tile;    
-                    }
-                }
-            },
             mouseDown: function(event) {
                 this.isMouseDown = true;
-                this.mouseMovement = {x:0, y:0};
-                this.closeMenu();
+                this.$store.commit("ClearMouseMove");
+                if(this.$store.state.menuVisible == true)
+                {
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
+                }
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;
@@ -99,27 +87,11 @@
             mouseMove: function(event) {
                 if(this.isMouseDown)
                 {
-                    this.mouseMovement.x += Math.abs(event.movementX);
-                    this.mouseMovement.y += Math.abs(event.movementY);
-                    var angle = -45 * Math.PI / 180;
-                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * 2 * Math.sin(angle);
-                    this.globalMapOffset.y += (event.movementY * 2 * Math.cos(angle) + event.movementX * Math.sin(angle));
+                    this.$store.commit("MouseMove", {x: event.movementX, y: event.movementY});
                 }
             },
             mouseLeave: function(event) {
                 this.isMouseDown=false;
-            },
-            closeMenu: function() {
-                if(this.menu.x != 0)
-                {
-                    this.menuClosed = true;
-                    this.menu = {x:0, y:0};
-                    this.tile = undefined;
-                }
-                else
-                {
-                    this.menuClosed = false;
-                }
             }
 
         }

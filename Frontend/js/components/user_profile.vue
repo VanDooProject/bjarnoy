@@ -18,7 +18,8 @@
         methods: {
             logout: function() {
                 localStorage.removeItem("token");
-                this.$store.commit('ReqestErr');
+                // Not realy an error bat has the same handler
+                this.$store.commit('ReqestErr', "Deleted Token");
             }
         },
         mounted() {
