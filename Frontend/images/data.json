@@ -1,122 +1,310 @@
 [
     {
-        "y": 0, 
-        "x": 0, 
-        "name": "grasstile_E.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "grasstile_E.png", 
+        "pos": {
+            "y": 0, 
+            "x": 0
+        }
     }, 
     {
-        "y": 200, 
-        "x": 0, 
-        "name": "grasstile_N.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "grasstile_N.png", 
+        "pos": {
+            "y": 200, 
+            "x": 0
+        }
     }, 
     {
-        "y": 400, 
-        "x": 0, 
-        "name": "grasstile_S.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "grasstile_S.png", 
+        "pos": {
+            "y": 400, 
+            "x": 0
+        }
     }, 
     {
-        "y": 600, 
-        "x": 0, 
-        "name": "grasstile_W.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "grasstile_W.png", 
+        "pos": {
+            "y": 600, 
+            "x": 0
+        }
     }, 
     {
-        "y": 800, 
-        "x": 0, 
-        "name": "mountaintile_E.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "mountaintile_E.png", 
+        "pos": {
+            "y": 800, 
+            "x": 0
+        }
     }, 
     {
-        "y": 1000, 
-        "x": 0, 
-        "name": "mountaintile_N.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "mountaintile_N.png", 
+        "pos": {
+            "y": 1000, 
+            "x": 0
+        }
     }, 
     {
-        "y": 1200, 
-        "x": 0, 
-        "name": "mountaintile_S.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "mountaintile_S.png", 
+        "pos": {
+            "y": 1200, 
+            "x": 0
+        }
     }, 
     {
-        "y": 1400, 
-        "x": 0, 
-        "name": "mountaintile_W.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "mountaintile_W.png", 
+        "pos": {
+            "y": 1400, 
+            "x": 0
+        }
     }, 
     {
-        "y": 0, 
-        "x": 300, 
-        "name": "halfedgetile_E.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "halfedgetile_E.png", 
+        "pos": {
+            "y": 0, 
+            "x": 300
+        }
     }, 
     {
-        "y": 200, 
-        "x": 300, 
-        "name": "halfedgetile_N.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "halfedgetile_N.png", 
+        "pos": {
+            "y": 200, 
+            "x": 300
+        }
     }, 
     {
-        "y": 400, 
-        "x": 300, 
-        "name": "halfedgetile_S.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "halfedgetile_S.png", 
+        "pos": {
+            "y": 400, 
+            "x": 300
+        }
     }, 
     {
-        "y": 600, 
-        "x": 300, 
-        "name": "halfedgetile_W.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "halfedgetile_W.png", 
+        "pos": {
+            "y": 600, 
+            "x": 300
+        }
     }, 
     {
-        "y": 800, 
-        "x": 300, 
-        "name": "triquarteredgetile_E.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "triquarteredgetile_E.png", 
+        "pos": {
+            "y": 800, 
+            "x": 300
+        }
     }, 
     {
-        "y": 1000, 
-        "x": 300, 
-        "name": "triquarteredgetile_N.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "triquarteredgetile_N.png", 
+        "pos": {
+            "y": 1000, 
+            "x": 300
+        }
     }, 
     {
-        "y": 1200, 
-        "x": 300, 
-        "name": "triquarteredgetile_S.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "triquarteredgetile_S.png", 
+        "pos": {
+            "y": 1200, 
+            "x": 300
+        }
     }, 
     {
-        "y": 1400, 
-        "x": 300, 
-        "name": "triquarteredgetile_W.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "triquarteredgetile_W.png", 
+        "pos": {
+            "y": 1400, 
+            "x": 300
+        }
     }, 
     {
-        "y": 0, 
-        "x": 600, 
-        "name": "quarteredgetile_E.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "quarteredgetile_E.png", 
+        "pos": {
+            "y": 0, 
+            "x": 600
+        }
     }, 
     {
-        "y": 200, 
-        "x": 600, 
-        "name": "quarteredgetile_N.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "quarteredgetile_N.png", 
+        "pos": {
+            "y": 200, 
+            "x": 600
+        }
     }, 
     {
-        "y": 400, 
-        "x": 600, 
-        "name": "quarteredgetile_S.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "quarteredgetile_S.png", 
+        "pos": {
+            "y": 400, 
+            "x": 600
+        }
     }, 
     {
-        "y": 600, 
-        "x": 600, 
-        "name": "quarteredgetile_W.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "quarteredgetile_W.png", 
+        "pos": {
+            "y": 600, 
+            "x": 600
+        }
     }, 
     {
-        "y": 800, 
-        "x": 600, 
-        "name": "foresttile_E.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "foresttile_E.png", 
+        "pos": {
+            "y": 800, 
+            "x": 600
+        }
     }, 
     {
-        "y": 1000, 
-        "x": 600, 
-        "name": "foresttile_N.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "foresttile_N.png", 
+        "pos": {
+            "y": 1000, 
+            "x": 600
+        }
     }, 
     {
-        "y": 1200, 
-        "x": 600, 
-        "name": "foresttile_S.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "foresttile_S.png", 
+        "pos": {
+            "y": 1200, 
+            "x": 600
+        }
     }, 
     {
-        "y": 1400, 
-        "x": 600, 
-        "name": "foresttile_W.png"
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "foresttile_W.png", 
+        "pos": {
+            "y": 1400, 
+            "x": 600
+        }
+    }, 
+    {
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "pumpkinresourcetile_E.png", 
+        "pos": {
+            "y": 0, 
+            "x": 900
+        }
+    }, 
+    {
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "pumpkinresourcetile_N.png", 
+        "pos": {
+            "y": 200, 
+            "x": 900
+        }
+    }, 
+    {
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "pumpkinresourcetile_S.png", 
+        "pos": {
+            "y": 400, 
+            "x": 900
+        }
+    }, 
+    {
+        "size": {
+            "y": 300, 
+            "x": 200
+        }, 
+        "name": "pumpkinresourcetile_W.png", 
+        "pos": {
+            "y": 600, 
+            "x": 900
+        }
     }
 ]

@@ -13,8 +13,9 @@
         <div  
             v-bind:style="{
                 zIndex: tile.position.x - tile.position.y,
-                backgroundPositionX: - imgPos.x + 'px',
-                backgroundPositionY: - imgPos.y + 'px',
+                /* ATTENTION: x and y are swapped */
+                backgroundPositionX: - imgPos.y + 'px',
+                backgroundPositionY: - imgPos.x + 'px',
             }"
             class="tileimg"
         >
@@ -58,40 +59,41 @@
                 })
                 .then(response => { 
                     var entry;
+
                     switch (this.tile.type)
                     {
                         case "GrassTile":
-                            entry = response.data.filter(obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png")[0]
-                            this.imgPos = {y: entry.x, x: entry.y}
+                            entry = response.data.filter(obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png")[0];
                             break;
                         case "MountainTile":
-                            entry = response.data.filter(obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png")[0]
-                            this.imgPos = {y: entry.x, x: entry.y}
+                            entry = response.data.filter(obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png")[0];
                             break;
                         case "ForestTile":
-                            entry = response.data.filter(obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png")[0]
-                            this.imgPos = {y: entry.x, x: entry.y}
+                            entry = response.data.filter(obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png")[0];
+                            break;
+                        case "PumpkinResourceTile":
+                            entry = response.data.filter(obj => obj.name == "pumpkinresourcetile_" + this.tile.orientation[0] + ".png")[0];
                             break;
 
                         case "QuarterEdgeTile":
-                            entry = response.data.filter(obj => obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png")[0]
-                            this.imgPos = {y: entry.x, x: entry.y}
+                            entry = response.data.filter(obj => obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png")[0];
                             break;
                         case "HalfEdgeTile":
-                            entry = response.data.filter(obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png")[0]
-                            this.imgPos = {y: entry.x, x: entry.y}
+                            entry = response.data.filter(obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png")[0];
                             break;
                         case "TriQuarterEdgeTile":
-                            entry = response.data.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0]
-                            this.imgPos = {y: entry.x, x: entry.y}
+                            entry = response.data.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0];
                             break;
 
                         default:
-                            this.imgPos = {x: 600, y: 600}
+                            this.imgPos = {x: 600, y: 600};
                     }
-
+                    
+                    this.imgPos = entry.pos;
                 })
-                .catch(error => this.$store.commit('ReqestErr'));
+                .catch(error => {
+                    this.$store.commit('ReqestErr')
+                });
         },
     }
 
