@@ -72,7 +72,8 @@ const store = new Vuex.Store({
         
         menuPos: {x:0, y:0},
         menuTile: {},
-        menuVisible: "false",
+        menuVisible: false,
+        menuClosed: false,
 
         mapOffset: {x: 0, y: 0},
 
@@ -115,10 +116,14 @@ const store = new Vuex.Store({
             state.menuPos.y = pos.y;
         },
         SetMenuTile (state, tile) {
-            state.menuTile = tile
+            state.menuTile = tile;
         },
         SetMenuVisible (state, visible) {
-           state.menuVisible = visible;
+            state.menuVisible = visible;
+        },
+        SetMenuClosed (state, closed)
+        {
+            state.menuClosed = closed;
         },
         ClearMouseMove (state) {
             state.mouseMove = {x:0 , y: 0};

@@ -74,7 +74,11 @@
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.$store.commit("ClearMouseMove");
-                this.$store.commit("SetMenuVisible", false);
+                if(this.$store.state.menuVisible == true)
+                {
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
+                }
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;

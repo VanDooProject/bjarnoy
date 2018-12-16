@@ -26,7 +26,7 @@
            </menu-item>
         </div>
 
-        <span v-if="false">
+        <span v-if="tile.position">
             {{tile.position.x}} | {{tile.position.y}} | {{tile.position.z}}<br/>
             {{tile.type}}<br/>
             {{tile.orientation}}<br/>
