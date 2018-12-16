@@ -68,7 +68,20 @@ Vue.prototype.$config = config;
 const store = new Vuex.Store({
     state: {
         loggedIn: false,
-        imageMap: undefined,
+        imageMap: [],
+        
+        menuPos: {x:0, y:0},
+        menuTile: {},
+        menuVisible: "false",
+
+        mapOffset: {x: 0, y: 0},
+
+        mouseMove: {x:0, y:0},
+      },
+      getters: {
+        menuDisplay: state => {
+            return state.menuVisible == true ? "block" : "none";
+        }
       },
       mutations: {
         logIn (state) {
@@ -90,11 +103,31 @@ const store = new Vuex.Store({
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
-                    store.imageMap = response.data;
+                    state.imageMap = response.data;
                 })
                 .catch(error => {
-                    store.commit('ReqestErr');
+                    state.commit('ReqestErr');
                 });
+        },
+        SetMenuPos (state, pos) {
+            //Removing any unused poperties
+            state.menuPos.x = pos.x;
+            state.menuPos.y = pos.y;
+        },
+        SetMenuTile (state, tile) {
+            state.menuTile = tile
+        },
+        SetMenuVisible (state, visible) {
+           state.menuVisible = visible;
+        },
+        ClearMouseMove (state) {
+            state.mouseMove = {x:0 , y: 0};
+        },
+        MouseMove (state, move) {
+            state.mouseMove = {x: Math.abs(move.x) + state.mouseMove.x, y: Math.abs(move.y) + state.mouseMove.y};
+            var angle = -45 * Math.PI / 180;
+            state.mapOffset.x += move.x * Math.cos(angle) - move.y * 2 * Math.sin(angle);
+            state.mapOffset.y += (move.y * 2 * Math.cos(angle) + move.x * Math.sin(angle));
         }
       }
 });

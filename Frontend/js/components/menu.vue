@@ -26,7 +26,7 @@
            </menu-item>
         </div>
 
-        <span v-if="tile">
+        <span v-if="false">
             {{tile.position.x}} | {{tile.position.y}} | {{tile.position.z}}<br/>
             {{tile.type}}<br/>
             {{tile.orientation}}<br/>
@@ -37,7 +37,7 @@
 <script>
     import MenuItem from './menu_item.vue';
     export default {
-        props:['pos', 'tile'],
+        props:[],
         components: {
             MenuItem
         },
@@ -47,23 +47,27 @@
             }
         },
         computed: {
-            display() {
-                var bHide = (this.pos.x == 0) && (this.pos.y == 0);
-                return bHide ? 'none' : 'block';
-            },
             submenus()
             {
-                if(this.tile == undefined)
+                if(this.$store.state.menuTile == undefined)
                     return []
-                if(this.tile.type == "grass")
+                if(this.$store.state.menuTile == "grass")
                     return [0,1,2,3]
                 return [0,1,2]
+            },
+            tile() { 
+                return this.$store.state.menuTile;
+            },
+            pos() { 
+                return this.$store.state.menuPos;
+            },
+            display() { 
+                return this.$store.getters.menuDisplay;
             }
         },
         methods: {
             close: function(event) {
-                this.pos.x = 0;
-                this.pos.y = 0;
+                this.$store.commit("SetMenuVisible", false)
             },
             clicked: function(event)
             {

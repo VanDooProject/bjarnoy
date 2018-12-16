@@ -33,7 +33,15 @@
         props: ['tile'],
         methods: {
             openMenu: function(event) {
-                this.$emit('tile_clicked', event, this.tile);
+                if((this.$store.state.mouseMove.x < 5) && (this.$store.state.mouseMove.y < 5))
+                {
+                    if(this.$store.state.menuVisible == false)
+                    {
+                        this.$store.commit("SetMenuPos", {x: event.pageX, y: event.pageY});
+                        this.$store.commit("SetMenuTile", this.tile);
+                        this.$store.commit("SetMenuVisible", true);
+                    }
+                }
             },
             openToolTip: function() {
                 this.showTT = true;
@@ -52,7 +60,7 @@
 
         },
         mounted () {
-            const imgmap = this.$store.imageMap;
+            const imgmap = this.$store.state.imageMap;            
             var entry;
             switch (this.tile.type)
             {

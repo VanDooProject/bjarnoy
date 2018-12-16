@@ -1,14 +1,14 @@
 <template>
     <div class="maplayer"
             v-bind:style="{
-                transform: 'translate(' + globalMapOffset.x * scalingFactor + 'px ,' 
-                    + globalMapOffset.y  * scalingFactor + 'px) ' +
+                transform: 'translate(' + mapOffset.x * scalingFactor + 'px ,' 
+                    + mapOffset.y  * scalingFactor + 'px) ' +
                     'scale(' + scalingFactor + ')',
                 // currently maybe not effecting all browsers could be fixed with https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting
                 userSelect: 'none'
             }"    
         >
-        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in tiles" @tile_clicked="TileClicked"></MapTile>
+        <MapTile v-bind:tile=tile v-bind:key="tile.id" v-for="tile in tiles"></MapTile>
     </div>
 </template>
 
@@ -16,20 +16,22 @@
     import MapTile from './map_tile.vue';
 
     export default {
-        props: ['tiles', 'layerZ', 'globalMapOffset'],
+        props: ['tiles', 'layerZ'],
         data: function() {
             return {
+
             }
         },
         computed: {
             scalingFactor() {
                 return 1.25 - (this.layerZ * 0.25);
+            },
+            mapOffset() {
+                return this.$store.state.mapOffset;
             }
         },
         methods: {
-            TileClicked: function(event, tile) {
-                this.$emit('tile_clicked', event, tile);
-            }
+            
         },
         components: {
             MapTile
