@@ -74,8 +74,10 @@ const store = new Vuex.Store({
         logIn (state) {
             state.loggedIn = true;
         },
-        ReqestErr (state) {
+        ReqestErr (state, error) {
             state.loggedIn = false;
+            //TODO Someting usefull with this
+            console.log(error);
             if(localStorage.token)
                 router.push("/login");
             else
