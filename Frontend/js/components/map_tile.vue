@@ -52,48 +52,38 @@
 
         },
         mounted () {
-            this.axios
-                .get('/images/data.json',
-                {
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                })
-                .then(response => { 
-                    var entry;
+            const imgmap = this.$store.imageMap;
+            var entry;
+            switch (this.tile.type)
+            {
+                case "GrassTile":
+                    entry = imgmap.filter(obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
+                case "MountainTile":
+                    entry = imgmap.filter(obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
+                case "ForestTile":
+                    entry = imgmap.filter(obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
+                case "PumpkinResourceTile":
+                    entry = imgmap.filter(obj => obj.name == "pumpkinresourcetile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
 
-                    switch (this.tile.type)
-                    {
-                        case "GrassTile":
-                            entry = response.data.filter(obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
-                        case "MountainTile":
-                            entry = response.data.filter(obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
-                        case "ForestTile":
-                            entry = response.data.filter(obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
-                        case "PumpkinResourceTile":
-                            entry = response.data.filter(obj => obj.name == "pumpkinresourcetile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
+                case "QuarterEdgeTile":
+                    entry = imgmap.filter(obj => obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
+                case "HalfEdgeTile":
+                    entry = imgmap.filter(obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
+                case "TriQuarterEdgeTile":
+                    entry = imgmap.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0];
+                    break;
 
-                        case "QuarterEdgeTile":
-                            entry = response.data.filter(obj => obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
-                        case "HalfEdgeTile":
-                            entry = response.data.filter(obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
-                        case "TriQuarterEdgeTile":
-                            entry = response.data.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0];
-                            break;
-
-                        default:
-                            this.imgPos = {x: 600, y: 600};
-                    }
-                    
-                    this.imgPos = entry.pos;
-                })
-                .catch(error => {
-                    this.$store.commit('ReqestErr')
-                });
+                default:
+                    this.imgPos = {x: 600, y: 600};
+            }
+            
+            this.imgPos = entry.pos;      
         },
     }
 
@@ -140,5 +130,6 @@
     right: 0px;
     padding: 10px;
     border-radius: 10px;
+    z-index: -10000;
 }
 </style>
