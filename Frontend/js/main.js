@@ -67,7 +67,8 @@ Vue.prototype.$config = config;
 
 const store = new Vuex.Store({
     state: {
-        loggedIn: false
+        loggedIn: false,
+        imageMap: undefined,
       },
       mutations: {
         logIn (state) {
@@ -79,9 +80,23 @@ const store = new Vuex.Store({
                 router.push("/login");
             else
                 router.push("/register");
+        },
+        UpdateImageMap (state) {
+            axios
+                .get('/images/data.json',
+                {
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => {
+                    store.imageMap = response.data;
+                })
+                .catch(error => {
+                    store.commit('ReqestErr');
+                });
         }
       }
-})
+});
+store.commit("UpdateImageMap");
 
 // main app
 const vue = new Vue({

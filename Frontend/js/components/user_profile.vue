@@ -1,6 +1,7 @@
 <template>
     <div>
-        <div v-for="entry in text">
+        <!-- TODO: Suppress this error! -->
+        <div v-for="entry in text"> 
             {{entry}} <br/>
         </div>
         <button @click=logout>logout</button>
