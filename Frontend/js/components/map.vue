@@ -1,14 +1,11 @@
 <template>
     <div
-    v-on:mouseup='mouseUp'
-    v-on:mousemove='mouseMove'
-    v-on:mouseleave='mouseLeave'
-    v-on:mousedown='mouseDown'
-    v-on:touchend='mouseUp'
-    v-on:touchmove='mouseMove'
-    v-on:touchleave='mouseLeave'
-    v-on:touchcancel='mouseLeave'
-    v-on:touchstart='mouseDown'
+    v-on:touchend='touchUp'
+    v-on:touchmove='touchMove'
+    v-on:touchleave='touchLeave'
+    v-on:touchcancel='touchLeave'
+    v-on:touchstart='touchDown'
+
     id="mapbg"
     >
         <MapMenu ></MapMenu>
@@ -92,13 +89,33 @@
             mouseMove: function(event) {
                 if(this.isMouseDown)
                 {
-                    this.$store.commit("MouseMove", {x: event.movementX, y: event.movementY});
+                    this.$store.commit("MouseMove", {x: event.changedTouches[0].movementX, y: event.changedTouches[0].movementY});
                 }
             },
             mouseLeave: function(event) {
                 this.isMouseDown=false;
+            },
+            touchDown: function(event) {
+                this.isMouseDown = true;
+                this.$store.commit("ClearMouseMove");
+                if(this.$store.state.menuVisible == true)
+                {
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
+                }
+            },
+            touchUp: function(event) {
+                this.isMouseDown = false;
+            },
+            touchMove: function(event) {
+                if(this.isMouseDown)
+                {
+                    this.$store.commit("MouseMove", {x: event.changedTouches[0].movementX, y: event.changedTouches[0].movementY});
+                }
+            },
+            touchLeave: function(event) {
+                this.isMouseDown=false;
             }
-
         }
     }
 
