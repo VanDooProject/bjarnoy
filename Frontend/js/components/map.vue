@@ -4,6 +4,11 @@
     v-on:mousemove='mouseMove'
     v-on:mouseleave='mouseLeave'
     v-on:mousedown='mouseDown'
+    v-on:touchend='mouseUp'
+    v-on:touchmove='mouseMove'
+    v-on:touchleave='mouseLeave'
+    v-on:touchcancel='mouseLeave'
+    v-on:touchstart='mouseDown'
     id="mapbg"
     >
         <MapMenu ></MapMenu>
