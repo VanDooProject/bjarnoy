@@ -16,6 +16,8 @@
                 /* ATTENTION: x and y are swapped */
                 backgroundPositionX: - imgPos.y + 'px',
                 backgroundPositionY: - imgPos.x + 'px',
+                width: imgSize.x + 'px',
+                height: imgSize.y + 'px'
             }"
             class="tileimg"
         >
@@ -54,7 +56,8 @@
         data: function() {
             return {
                 showTT: false,
-                imgPos: {x: 0, y: 0}
+                imgPos: {x: 0, y: 0},
+                imgSize: {x: 300, y: 200}
             }
         },
         computed: {
@@ -62,7 +65,7 @@
         },
         mounted () {
             const imgmap = this.$store.state.imageMap;            
-            var entry;
+            var entry = {};
             switch (this.tile.type)
             {
                 case "GrassTile":
@@ -89,10 +92,12 @@
                     break;
 
                 default:
-                    this.imgPos = {x: 600, y: 600};
+                    entry.pos = {x: 600, y: 600};
+                    entry.size = {x: 200, y: 300};
             }
             
-            this.imgPos = entry.pos;      
+            this.imgPos = entry.pos;
+            this.imgSize = entry.size;
         },
     }
 
@@ -118,8 +123,6 @@
     background-image:url("/images/master.png");
     position: absolute;
     display: block;
-    width: 200px;
-    height: 300px;
     left: 0;
     top: 0;
     bottom: 0;
