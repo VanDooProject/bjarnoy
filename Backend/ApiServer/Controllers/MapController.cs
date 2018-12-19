@@ -18,12 +18,25 @@ namespace ApiServer.Controllers
     {
 
         // GET api/v1/map/islands
+        /// <summary>
+        /// gets tiles *without* islands
+        /// </summary>
+        /// <returns></returns>
         [HttpGet("islands/")]
         [Authorize]
         public IEnumerable<Island> GetIslands()
         {
             IslandRepository islandRepository = new IslandRepository();
-            return islandRepository.All();
+            return islandRepository.AllIslands();
+        }
+
+        // GET api/v1/map/tiles
+        [HttpGet("tiles/")]
+        [Authorize]
+        public IEnumerable<Tile> GetTiles()
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.AllTiles();
         }
 
         // GET api/v1/map/tile/0/0/0
@@ -65,19 +78,6 @@ namespace ApiServer.Controllers
 
             return TileList;
         }
-
-        /*[HttpGet("demo/biom/{size}")]
-        public IEnumerable<Biom> GetRndBiom(int size)
-        {
-            List<Biom> BiomList = new List<Biom>();
-            BiomFactory factory = new BiomFactory();
-            for (int loop_count = 0; loop_count < size; loop_count++)
-            {
-                BiomList.Add(factory.GetRndBiomAndTiles(loop_count));
-            }
-
-            return BiomList;
-        }*/
 
         // GET /api/v1/map/demo/island/5
         [HttpGet("demo/island/{size}")]

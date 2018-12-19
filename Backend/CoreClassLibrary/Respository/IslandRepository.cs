@@ -20,59 +20,56 @@ namespace CoreClassLibrary.Respository
     {
         private ILog logger = LogManager.GetLogger(typeof(IslandRepository));
 
-        private readonly IMongoCollection<Island> collection;
+        private readonly IMongoCollection<Island> islandCollection;
+        private readonly IMongoCollection<Tile> tileCollection;
 
 
         public IslandRepository()
         {
-            this.collection = MongoCollectionFactory.Instance.Get<Island>();
+            this.islandCollection = MongoCollectionFactory.Instance.Get<Island>();
+            this.tileCollection = MongoCollectionFactory.Instance.Get<Tile>();
         }
 
-
-        public List<Island> All()
+        /// <summary>
+        /// gets tiles *without* islands
+        /// </summary>
+        /// <returns></returns>
+        public List<Island> AllIslands()
         {
-            List<Island> islands = collection.Find(_ => true).ToList();
+            List<Island> islands = islandCollection.Find(_ => true).ToList();
 
             logger.InfoFormat("found {0} islands", islands.Count);
 
             return islands;
         }
 
-        public void Add(Island item)
+        public IEnumerable<Tile> AllTiles()
         {
-            collection.InsertOne(item);
+            List<Tile> tiles = tileCollection.Find(_ => true).ToList();
+
+            logger.InfoFormat("found {0} tiles", tiles.Count);
+
+            return tiles;
+
         }
 
-        // TODO: this code should access Tile collection not island collection
+        public void Add(Island island)
+        {
+            islandCollection.InsertOne(island);
+
+            // set DB refs - so we can get corresponding islands for tiles later
+            island.Tiles.ForEach(t => t.IslandId = new MongoDBRef(islandCollection.CollectionNamespace.CollectionName, island._id));
+
+            tileCollection.InsertMany(island.Tiles);
+        }
+        
         public Tile getTile(float x, float y, float z)
         {
-            var builder = Builders<Island>.Filter;
-            var filter = builder.Eq("bioms.tiles.Position.X", x) & builder.Eq("bioms.tiles.Position.Y", y) & builder.Eq("bioms.tiles.Position.Z", z);
-            var projection = Builders<Island>.Projection.Include("bioms.$.tiles");
-            var result = collection.Find(filter).Project(projection).ToList();
+            var builder = Builders<Tile>.Filter;
+            var filter = builder.Eq("Position.X", x) & builder.Eq("Position.Y", y) & builder.Eq("Position.Z", z);
+            var result = tileCollection.Find(filter).ToList();
 
-            if (result.Count == 1)
-            {
-                var island = BsonSerializer.Deserialize<Island>(result.First());
-
-                Debug.Assert(island.bioms.Count == 1);
-                Biom biom = island.bioms.First(); // mongo should give us only one biom
-
-                List<Tile> biomTiles = biom.tiles;
-                Debug.Assert(biom.tiles.Count >= 1);
-
-                Vector3 position = new Vector3(x, y, z);
-
-                IEnumerable<Tile> tiles = biomTiles.Where(
-                        t => Vector3.DistanceSquared(t.Position, position) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance
-                    );
-
-                //var ts = tiles.ToList(); // <- debuggable list
-
-                return tiles.FirstOrDefault();
-            }
-
-            return null;
+            return result.FirstOrDefault();
         }
     }
 }
