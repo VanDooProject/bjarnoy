@@ -12,18 +12,16 @@ using Newtonsoft.Json.Converters;
 
 namespace CoreClassLibrary.Models.Map.Biomes
 {
-    //[BsonKnownTypes(typeof(ForestBiom), typeof(GrasslandBiom), typeof(MountainBiom), typeof(SparseBiom)]
     public class Biom
     {
+        [BsonIgnore] // since this will be managed by repository
         public List<Tile> tiles = new List<Tile>();
 
         [JsonIgnore]
         [BsonIgnore]
         public Dictionary<Type, double> probability;
-        public string description
-        {
-            get { return this.GetType().ToString().Split('.').Last().Split('+').First(); }
-        }
+
+        public string description => this.GetType().ToString().Split('.').Last().Split('+').First();
 
         [JsonIgnore]
         [BsonIgnore]
@@ -34,7 +32,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
             this.probability = new Dictionary<Type, double>();
         }
 
-        public void AddRndBiomTileAtPosition(Vector3 position)
+        public Tile AddRndBiomTileAtPosition(Vector3 position)
         {
             Tile rndBiomTile = tile_factory.GetRndBiomTileAtPosition(position);
 
@@ -45,6 +43,8 @@ namespace CoreClassLibrary.Models.Map.Biomes
             rndBiomTile.Orientation = randOrientation;
 
             tiles.Add(rndBiomTile);
+
+            return rndBiomTile;
         }
     }
 }

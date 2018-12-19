@@ -18,10 +18,12 @@ namespace CoreClassLibrary.Factory
             Grassland = 4,
         };
 
-        public Biom GetRndBiomAtStartPosition(Vector3 position)
+        public Biom GetRndBiomAtStartPosition(/*Vector3 position*/)
         {
             Biom biom = GetRndBiomType();
-            biom.AddRndBiomTileAtPosition(position);
+
+            // do this in IslandFactory
+            //biom.AddRndBiomTileAtPosition(position);
 
             return biom;
         }

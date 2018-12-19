@@ -14,7 +14,12 @@ namespace CoreClassLibrary.Models.Map
     public class Island : MongoEntity
     {
         public string name { get; set; }
-        public int size;
+
+        [JsonIgnore] // there is no need for the Frontend to know this
+        public int size { get; set; }
+
+
+        [JsonIgnore] // since we only use bioms to create islands -> no return to user interface of bioms
         public List<Biom> bioms = new List<Biom>();
 
         [BsonSerializer(typeof(Vector3Serializer))]
@@ -25,25 +30,25 @@ namespace CoreClassLibrary.Models.Map
             this.StartPosition = startPosition;
         }
         
-        [JsonIgnore]
+        //[JsonIgnore] // since we removed bioms from DB
         [BsonIgnore]
-        public List<Tile> Tiles
-        {
-            get
-            {
-                List<Tile> _tiles = new List<Tile>();
-                foreach(Biom b in this.bioms)
-                {
-                    foreach(Tile t in b.tiles)
-                    {
-                        _tiles.Add(t);
-                    }
-                }
-                //this.bioms.ForEach(b => b.tiles.ForEach(t => _tiles.Add(t)));
-
-                return _tiles;
-            }
-        }
+        public List<Tile> Tiles { get; set; } = new List<Tile>();
+        //{
+        //    get
+        //    {
+        //        List<Tile> _tiles = new List<Tile>();
+        //        foreach(Biom b in this.bioms)
+        //        {
+        //            foreach(Tile t in b.tiles)
+        //            {
+        //                _tiles.Add(t);
+        //            }
+        //        }
+        //        //this.bioms.ForEach(b => b.tiles.ForEach(t => _tiles.Add(t)));
+        //
+        //        return _tiles;
+        //    }
+        //}
 
 
 
@@ -95,15 +100,18 @@ namespace CoreClassLibrary.Models.Map
 
         public Tile getTile(Vector3 pos)
         {
-            Biom biom = this.bioms.FirstOrDefault(b => b.tiles.Any(t => t.CheckIfSameTile(pos)));
-            if (biom == null)
-            {
-                // tile not found
-                return null;
-            }
+            // Biom biom = this.bioms.FirstOrDefault(b => b.tiles.Any(t => t.CheckIfSameTile(pos)));
+            // if (biom == null)
+            // {
+            //     // tile not found
+            //     return null;
+            // }
+            // 
+            // List<Tile> biomTiles = biom.tiles;
+            // Debug.Assert(biom.tiles.Count >= 1);
 
-            List<Tile> biomTiles = biom.tiles;
-            Debug.Assert(biom.tiles.Count >= 1);
+            // don't use bioms for this, we have full list of tiles in island
+            List<Tile> biomTiles = this.Tiles;
 
             Tile tile = biomTiles.FirstOrDefault(t => t.CheckIfSameTile(pos));
 

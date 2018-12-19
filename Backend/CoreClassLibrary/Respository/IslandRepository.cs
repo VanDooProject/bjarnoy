@@ -43,6 +43,7 @@ namespace CoreClassLibrary.Respository
             collection.InsertOne(item);
         }
 
+        // TODO: this code should access Tile collection not island collection
         public Tile getTile(float x, float y, float z)
         {
             var builder = Builders<Island>.Filter;
