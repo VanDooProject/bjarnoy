@@ -34,6 +34,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
         [JsonConverter(typeof(StringEnumConverter))]
         public eOrientation Orientation;
 
+
+        public string type
+        {
+            get { return this.GetType().ToString().Split('.').Last(); }
+        }
+
         public Tile()
         {
         }
@@ -41,11 +47,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public Tile(Vector3 position)
         {
             this.Position = position;
-        }
-
-        public string type
-        {
-            get { return this.GetType().ToString().Split('.').Last(); }
         }
 
 

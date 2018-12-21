@@ -67,8 +67,9 @@ namespace ApiServer.Controllers
             // add entry to queue
             var queueEntry = new BuildingQueue();
             queueEntry.Tile = tile;
-            queueEntry.Building = thisTech; // TODO reduce data (no requirements and no allowed Tiles and no ResourcesNeeded)
+            queueEntry.Building = thisTech.CleanTechData(); // TODO reduce data (no requirements and no allowed Tiles and no ResourcesNeeded)
             // TODO add user ref
+            queueEntry.StartTime = DateTime.Now;
 
             return Ok(queueEntry);
         }
