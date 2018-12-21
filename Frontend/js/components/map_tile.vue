@@ -6,7 +6,7 @@
         v-on:mouseleave="closeToolTip"
         v-bind:style="{
             position: 'absolute',
-            transform: 'translate(' + tile.position.y * -141 + 'px, ' + tile.position.x * 141 + 'px)',
+            transform: 'translate(' + tile.position.y * -282 + 'px, ' + tile.position.x * 282 + 'px)',
             zIndex: tile.position.x - tile.position.y
         }"
     >
@@ -87,12 +87,27 @@
                 case "TriQuarterEdgeTile":
                     entry = imgmap.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0];
                     break;
+            }
 
-                default:
-                    this.imgPos = {x: 600, y: 600};
+            if(this.tile.building != undefined) {
+                function pad(num, size) {
+                    var s = "000000000" + num;
+                    return s.substr(s.length-size);
+                }
+
+                var tilename = this.tile.building.type.toLowerCase() + "_" + this.tile.orientation[0] + "_level" + pad(this.tile.building.level,3) + ".png";
+                console.log(tilename);
+
+                entry = imgmap.filter(obj => obj.name == tilename)[0];
             }
             
-            this.imgPos = entry.pos;      
+            if(entry != undefined) {
+                this.imgPos = entry.pos;    
+            }
+            else {
+                this.imgPos = {x: 0, y: 0};
+                console.error("tile not found - fallback");
+            }  
         },
     }
 
@@ -105,8 +120,8 @@
     position: absolute;
 
     display: block;
-    width: 141px;
-    height: 141px;
+    width: 282px;
+    height: 282px;
     left: 0;
     top: 0;
     bottom: 0;
@@ -118,8 +133,8 @@
     background-image:url("/images/master.png");
     position: absolute;
     display: block;
-    width: 200px;
-    height: 300px;
+    width: 400px;
+    height: 600px;
     left: 0;
     top: 0;
     bottom: 0;
