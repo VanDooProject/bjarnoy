@@ -17,7 +17,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public MongoDBRef IslandId { get; set; }
 
         [BsonIgnore]
-        public string IdOfIsland => IslandId.Id.ToString();
+        public string IdOfIsland => IslandId?.Id?.ToString();
 
         // https://jira.mongodb.org/browse/CSHARP-1759
         [BsonSerializer(typeof(Vector3Serializer))]
