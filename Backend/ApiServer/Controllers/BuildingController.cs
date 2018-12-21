@@ -31,6 +31,7 @@ namespace ApiServer.Controllers
         /// build building on tile
         /// </summary>
         /// <returns></returns>
+        /// TODO: refactor this long method
         [HttpPost("build/")]
         [Authorize]
         public IActionResult PostBuild([FromBody]BuildBuildingModel build)
@@ -45,14 +46,16 @@ namespace ApiServer.Controllers
                 return base.BadRequest();
             }
 
+            // TODO: compute level to be built
+
             // try to get tech for requested building
             var techs = BuildTechController.Instance.GetBuildTech();
-            var thisTech = techs.FirstOrDefault(b =>
+            var buildingToBeBuilt = techs.FirstOrDefault(b =>
                 {
                     return b.GetType().ToString().Split('.').Last() == build.BuildingName && b.Level == build.Level;
                 });
 
-            if (thisTech == null)
+            if (buildingToBeBuilt == null)
             {
                 // TODO: report user
                 logger.Warn("no valid building found in tech tree - probably a user faked this request -> report to bot detector");
@@ -61,29 +64,62 @@ namespace ApiServer.Controllers
 
             UserRepository userRepository = new UserRepository();
             UserModel user = userRepository.GetByUserId(HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value);
+
             // we have a problem with tokens when this triggers
             Debug.Assert(user != null);
 
             // check if requirements are fulfilled
             {
                 // user has enough resources
+
+
                 // tile is allowed here
-                if (!thisTech.allowedTiles.Any(t => t.type == tile.type))
+                if (buildingToBeBuilt.allowedTiles.All(t => t.type != tile.type))
                 {
                     // TODO: report user
                     logger.Warn("no tile for building - probably a user faked this request -> report to bot detector");
                     return base.BadRequest();
                 }
 
+                // if there is a building check if its the same, check if level is correct (if empty level 1, if existing +1)
+                if (tile.Building == null && build.Level != 1)
+                {
+                    // TODO: report user
+                    logger.Warn("wrong level for new building - probably a user faked this request -> report to bot detector");
+                    return base.BadRequest();
+                }
+                if (tile.Building != null)
+                {
+                    // check if same building
+                    if (tile.Building.type != buildingToBeBuilt.type)
+                    {
+                        // TODO: report user
+                        logger.Warn("change of building on tile - probably a user faked this request -> report to bot detector");
+                        return base.BadRequest();
+                    }
+
+                    if (tile.Building.Level + 1 != build.Level)
+                    {
+                        // TODO: report user
+                        logger.Warn("wrong level for existing building - probably a user faked this request -> report to bot detector");
+                        return base.BadRequest();
+                    }
+                }
+
                 // needed tile tech is researched
             }
 
+            // clean building
+            buildingToBeBuilt = buildingToBeBuilt.CleanTechData();
+
             // set building on tile
+            tile.Building = buildingToBeBuilt;
+            islandRepository.ReplaceTile(tile);
 
             // add entry to queue
-            var queueEntry = new BuildingQueue();
+            BuildingQueue queueEntry = new BuildingQueue();
             queueEntry.Tile = tile;
-            queueEntry.Building = thisTech.CleanTechData(); // TODO reduce data (no requirements and no allowed Tiles and no ResourcesNeeded)
+            queueEntry.Building = buildingToBeBuilt;
             // TODO add user ref
             queueEntry.StartTime = DateTime.Now;
 

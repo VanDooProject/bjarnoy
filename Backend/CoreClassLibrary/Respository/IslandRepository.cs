@@ -71,5 +71,13 @@ namespace CoreClassLibrary.Respository
 
             return result.FirstOrDefault();
         }
+
+        public void ReplaceTile(Tile tile)
+        {
+            var filter = Builders<Tile>.Filter.Where(x => x._id.Equals(tile._id));
+            //var update = Builders<BsonDocument>.Update.Combine(user);
+
+            tileCollection.ReplaceOne(filter, tile);
+        }
     }
 }

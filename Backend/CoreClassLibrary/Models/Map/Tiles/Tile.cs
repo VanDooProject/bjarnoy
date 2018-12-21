@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Generic;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
@@ -34,6 +35,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
         [JsonConverter(typeof(StringEnumConverter))]
         public eOrientation Orientation;
 
+        /// <summary>
+        /// building on this tile
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public Building Building;
 
         public string type
         {
