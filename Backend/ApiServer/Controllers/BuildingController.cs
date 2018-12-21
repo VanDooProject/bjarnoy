@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
@@ -44,6 +45,13 @@ namespace ApiServer.Controllers
                 return base.BadRequest("no valid tile");
             }
 
+            // try to get tech for requested building
+            var techs = BuildTechController.Instance.GetBuildTech();
+            var thisTech = techs.FirstOrDefault(b =>
+                {
+                    return b.GetType().ToString().Split('.').Last() == build.BuildingName && b.Level == build.Level;
+                });
+
             UserRepository userRepository = new UserRepository();
             UserModel user = userRepository.GetByUserId(HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value);
             // we have a problem with tokens when this triggers
@@ -59,7 +67,8 @@ namespace ApiServer.Controllers
             // add entry to queue
             var queueEntry = new BuildingQueue();
             queueEntry.Tile = tile;
-            //queueEntry.Building = build.
+            queueEntry.Building = thisTech; // TODO reduce data (no requirements and no allowed Tiles and no ResourcesNeeded)
+            // TODO add user ref
 
             return Ok(queueEntry);
         }

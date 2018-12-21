@@ -15,7 +15,7 @@ namespace CoreClassLibrary.Models.Buildings
         [Required]
         [RegularExpression(@"^[a-zA-Z]*$")]
         [BuildingName] // [BuildingName(ErrorMessage = "")]
-        public string Building { get; set; }
+        public string BuildingName { get; set; }
 
         [Range(1, 100)]
         public int Level { get; set; }

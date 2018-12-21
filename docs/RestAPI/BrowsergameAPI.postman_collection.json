@@ -686,7 +686,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"Tile\": {\r\n    \"position\": {\r\n      \"x\": 0,\r\n      \"y\": 0,\r\n      \"z\": 0\r\n    }\r\n  },\r\n  \"Building\": \"Lumberjacky\",\r\n  \"Level\": 1\r\n}\r\n"
+							"raw": "{\r\n  \"Tile\": {\r\n    \"position\": {\r\n      \"x\": 9,\r\n      \"y\": 3,\r\n      \"z\": 1\r\n    }\r\n  },\r\n  \"BuildingName\": \"Lumberjack\",\r\n  \"Level\": 1\r\n}\r\n"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/building/build",

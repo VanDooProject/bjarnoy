@@ -16,9 +16,11 @@ namespace CoreClassLibrary.ValidationAttributes
         private readonly string[] _allowableValues = 
             Assembly.GetExecutingAssembly().GetTypes()
                 .Where(
-                        t => t.IsClass &&
-                        t != typeof(Building) &&
-                        typeof(Building).IsAssignableFrom(t)
+                        t => 
+                            t.IsClass &&
+                            !t.IsAbstract &&
+                            //t != typeof(Building) &&
+                            typeof(Building).IsAssignableFrom(t)
                     )
                 .Select(t => t.Name).ToArray();
         
