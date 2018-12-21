@@ -41,8 +41,8 @@ namespace ApiServer.Controllers
             if (tile == null)
             {
                 // TODO: report user
-                logger.Warn("probably a user faked this request -> report to bot detector");
-                return base.BadRequest("no valid tile");
+                logger.Warn("no valid tile - probably a user faked this request -> report to bot detector");
+                return base.BadRequest();
             }
 
             // try to get tech for requested building
@@ -52,15 +52,31 @@ namespace ApiServer.Controllers
                     return b.GetType().ToString().Split('.').Last() == build.BuildingName && b.Level == build.Level;
                 });
 
+            if (thisTech == null)
+            {
+                // TODO: report user
+                logger.Warn("no valid building found in tech tree - probably a user faked this request -> report to bot detector");
+                return base.BadRequest();
+            }
+
             UserRepository userRepository = new UserRepository();
             UserModel user = userRepository.GetByUserId(HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value);
             // we have a problem with tokens when this triggers
             Debug.Assert(user != null);
 
             // check if requirements are fulfilled
+            {
                 // user has enough resources
                 // tile is allowed here
+                if (!thisTech.allowedTiles.Any(t => t.type == tile.type))
+                {
+                    // TODO: report user
+                    logger.Warn("no tile for building - probably a user faked this request -> report to bot detector");
+                    return base.BadRequest();
+                }
+
                 // needed tile tech is researched
+            }
 
             // set building on tile
 
