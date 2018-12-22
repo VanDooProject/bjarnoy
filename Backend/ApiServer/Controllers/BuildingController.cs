@@ -123,6 +123,9 @@ namespace ApiServer.Controllers
             // TODO add user ref
             queueEntry.StartTime = DateTime.Now;
 
+            QueueRepository queueRepository = new QueueRepository();
+            queueRepository.Add(queueEntry);
+
             return Ok(queueEntry);
         }
     }
