@@ -28,7 +28,7 @@
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
-                islands: [],
+                tiles: [],
                 isMouseDown: false,
             }
         },
@@ -45,30 +45,16 @@
                 });
                 return ls;
             },
-            tiles () {
-                var arr = []
-                if(this.islands)
-                this.islands.forEach(island => {
-                    if(island.bioms)
-                    island.bioms.forEach(biome => {
-                        if(biome.tiles)
-                        biome.tiles.forEach(tile => {
-                            arr.push(tile);
-                        });
-                    });
-                });
-                return arr;   
-            }
         },
         mounted () {
             this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/map/islands',
+                .get(this.$config.RequestUriPrefix + '/api/v1/map/tiles',
                 //.get(this.$config.RequestUriPrefix + '/api/v1/map/demo/island/2', // <- for testing
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => this.islands = response.data)
+                .then(response => this.tiles = response.data)
                 .catch(error => this.$store.commit('ReqestErr', error.response));
         },
         methods: {

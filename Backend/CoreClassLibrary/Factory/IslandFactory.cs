@@ -56,7 +56,8 @@ namespace CoreClassLibrary.Factory
                     }
                 }
             }
-            biom.tiles.AddRange(tiles);
+            //biom.tiles.AddRange(tiles); // no need to add data here
+            island.Tiles.AddRange(tiles); // add tiles here for DB
             island.bioms.Add(biom);
         }
 
@@ -156,26 +157,38 @@ namespace CoreClassLibrary.Factory
                 int y = rnd.Next(0, island.size);
                 Vector3 position = new Vector3((float)x, (float)y, island.StartPosition.Z);
 
-                var tile_already_exits = false;
-                foreach (Biom b in island.bioms)
+                
+                // this is now (faster /) less code
+                bool tile_already_exits = island.getTile(position) != null;
+                // foreach (Biom b in island.bioms)
+                // {
+                //     Debug.Assert(b.tiles.Count == 1);
+                //     foreach (Tile t in b.tiles)
+                //     {
+                //         if(Vector3.DistanceSquared(t.Position, position) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance)
+                //         {
+                //             tile_already_exits = true;
+                //             break;
+                //         }
+                //     }
+                // }
+
+
+                if (tile_already_exits == false)
                 {
-                    foreach (Tile t in b.tiles)
-                    {
-                        if(Vector3.DistanceSquared(t.Position, position) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance)
-                        {
-                            tile_already_exits = true;
-                            break;
-                        }
-                    }
-                }
-                if(tile_already_exits == false)
-                {
-                    island.bioms.Add(biom_factory.GetRndBiomAtStartPosition(position));
+                    Biom biom = biom_factory.GetRndBiomAtStartPosition(/*position*/);
+                    island.bioms.Add(biom);
+
+                    Tile tile = biom.AddRndBiomTileAtPosition(position);
+                    island.Tiles.Add(tile);
+
                     nof_bioms_in_island--;
                 }
             } while (nof_bioms_in_island > 0);
         }
 
+
+        // TODO: maybe parts of this could be refactored to biom factory which has a reference to island (only for checking free tiles)
         private void ExpandBiomsAndCreateTiles(Island island)
         {
             int biomRadius = 1;
@@ -196,7 +209,7 @@ namespace CoreClassLibrary.Factory
 
                                     foreach (Tile t in island.Tiles)
                                     {
-                                        if (Vector3.DistanceSquared(t.Position, newTilePosition) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance)
+                                        if (island.getTile(newTilePosition) != null)
                                         {
                                             tile_already_exits = true;
                                             break;
@@ -205,7 +218,9 @@ namespace CoreClassLibrary.Factory
 
                                     if (tile_already_exits == false)
                                     {
-                                        b.AddRndBiomTileAtPosition(newTilePosition);
+                                        // TODO: we don't need tiles in bioms for DB - (maybe) only for creation
+                                        Tile t = b.AddRndBiomTileAtPosition(newTilePosition);
+                                        island.Tiles.Add(t); // <- add tile to island, because biom shares no data anymore
                                     }
                                 }
                             }
