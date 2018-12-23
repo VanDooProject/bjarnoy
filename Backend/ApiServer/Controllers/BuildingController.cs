@@ -21,8 +21,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    [ApiController]
-    public class BuildingController : ControllerBase
+    public class BuildingController : GameAPIController
     {
         private ILog logger = LogManager.GetLogger(typeof(BuildingController));
 
@@ -36,6 +35,9 @@ namespace ApiServer.Controllers
         [Authorize]
         public IActionResult PostBuild([FromBody]BuildBuildingModel build)
         {
+            UserModel user = getCurretUser();
+
+
             IslandRepository islandRepository = new IslandRepository();
             Tile tile = islandRepository.getTile(build.Tile.Position.X, build.Tile.Position.Y, build.Tile.Position.Z);
 
@@ -61,12 +63,6 @@ namespace ApiServer.Controllers
                 logger.Warn("no valid building found in tech tree - probably a user faked this request -> report to bot detector");
                 return base.BadRequest();
             }
-
-            UserRepository userRepository = new UserRepository();
-            UserModel user = userRepository.GetByUserId(HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value);
-
-            // we have a problem with tokens when this triggers
-            Debug.Assert(user != null);
 
             // check if requirements are fulfilled
             {
