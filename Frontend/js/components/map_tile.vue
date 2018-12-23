@@ -6,7 +6,7 @@
         v-on:mouseleave="closeToolTip"
         v-bind:style="{
             position: 'absolute',
-            transform: 'translate(' + tile.position.y * -141 + 'px, ' + tile.position.x * 141 + 'px)',
+            transform: 'translate(' + tile.position.y * -141 * imgSize.x/200 + 'px, ' + tile.position.x * 141 * imgSize.x/200 + 'px)',
             zIndex: tile.position.x - tile.position.y
         }"
     >
