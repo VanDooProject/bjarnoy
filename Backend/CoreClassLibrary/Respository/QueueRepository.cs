@@ -6,6 +6,7 @@ using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
+using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
@@ -32,6 +33,13 @@ namespace CoreClassLibrary.Respository
         public void Add(Queue queue)
         {
             collection.InsertOne(queue);
+        }
+
+        public List<Queue> AllByUser(UserModel user)
+        {
+            var builder = Builders<Queue>.Filter;
+            var filter = builder.Eq("Owner._id", user._id);
+            return collection.Find(filter).ToList();
         }
     }
 }

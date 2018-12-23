@@ -120,7 +120,7 @@ namespace ApiServer.Controllers
             BuildingQueue queueEntry = new BuildingQueue();
             queueEntry.Tile = tile;
             queueEntry.Building = buildingToBeBuilt;
-            // TODO add user ref
+            queueEntry.Owner = user;
             queueEntry.StartTime = DateTime.Now;
 
             QueueRepository queueRepository = new QueueRepository();

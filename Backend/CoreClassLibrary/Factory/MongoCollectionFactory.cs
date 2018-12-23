@@ -2,8 +2,10 @@
 using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.TechQueues;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
@@ -60,6 +62,15 @@ namespace CoreClassLibrary.Factory
             BsonClassMap.RegisterClassMap<MountainBiom>();
             BsonClassMap.RegisterClassMap<SparseBiom>();
             BsonClassMap.RegisterClassMap<EdgeBiom>();
+
+
+            BsonClassMap.RegisterClassMap<Queue>();
+            BsonClassMap.RegisterClassMap<BuildingQueue>();
+
+
+            BsonClassMap.RegisterClassMap<Building>();
+            BsonClassMap.RegisterClassMap<Lumberjack>();
+            BsonClassMap.RegisterClassMap<StorageHouse>();
         }
 
 
