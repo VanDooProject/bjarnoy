@@ -15,12 +15,23 @@ namespace ApiServer.Controllers
     {
         protected UserModel getCurretUser()
         {
-            UserRepository userRepository = new UserRepository();
-            UserModel user =
-                userRepository.GetByUserId(HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value);
+            string userId = HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value;
+            Debug.Assert(userId != ""); // we have a problem with tokens when this triggers
+            if (userId == "")
+            {
+                throw new Exception("this case should never happen - token without valid user data");
+            }
 
-            // we have a problem with tokens when this triggers
-            Debug.Assert(user != null);
+
+            UserRepository userRepository = new UserRepository();
+            UserModel user = userRepository.GetByUserId(userId);
+            Debug.Assert(user != null); // we have a problem with tokens when this triggers
+            
+            if (user == null)
+            {
+                throw new Exception("this case should never happen - token user not found in DB");
+            }
+
             return user;
         }
     }
