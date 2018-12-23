@@ -33,8 +33,8 @@ namespace ApiServer.Controllers
             return infoList;
         }
 
-        // POST api/v1/install/create/islands/
-        [HttpPost("create/islands/")]
+        // POST api/v1/install/islands/
+        [HttpPost("islands/")]
         public int CreateIslands()
         {
             IslandRepository islandRepository = new IslandRepository();
@@ -55,6 +55,21 @@ namespace ApiServer.Controllers
             islandRepository.Add(island);
 
             return 0;
+        }
+
+        // DELETE api/v1/install/islands/
+        [HttpDelete("islands/")]
+        public IActionResult DeleteIslands()
+        {
+            IslandRepository islandRepository = new IslandRepository();
+
+            List<Island> islands = islandRepository.AllIslands();
+            foreach (Island island in islands)
+            {
+                islandRepository.Delete(island);
+            }
+
+            return Ok();
         }
 
         private static string GetEnvironmentVariable(string name)

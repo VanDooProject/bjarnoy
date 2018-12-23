@@ -516,6 +516,58 @@
 			"name": "Installer",
 			"item": [
 				{
+					"name": "delete all island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/islands/",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"islands",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "create island",
 					"event": [
 						{
@@ -552,7 +604,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{url}}/api/v1/install/create/islands/",
+							"raw": "{{url}}/api/v1/install/islands/",
 							"host": [
 								"{{url}}"
 							],
@@ -560,7 +612,6 @@
 								"api",
 								"v1",
 								"install",
-								"create",
 								"islands",
 								""
 							]
@@ -648,6 +699,95 @@
 								"10",
 								"2",
 								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Buildings",
+			"item": [
+				{
+					"name": "build building",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"//pm.test(\"response is ok\", function () {",
+									"//    //pm.response.to.have.status(200);",
+									"//    pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"//});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"Tile\": {\r\n    \"position\": {\r\n      \"x\": 9,\r\n      \"y\": 3,\r\n      \"z\": 1\r\n    }\r\n  },\r\n  \"BuildingName\": \"Lumberjack\",\r\n  \"Level\": 1\r\n}\r\n"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/building/build",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"building",
+								"build"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get queues",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/queue/my",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"queue",
+								"my"
 							]
 						}
 					},
