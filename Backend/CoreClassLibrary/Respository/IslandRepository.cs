@@ -92,6 +92,14 @@ namespace CoreClassLibrary.Respository
             tileCollection.DeleteMany(filter);
         }
 
+        public void ReplaceTile(Tile tile)
+        {
+            var filter = Builders<Tile>.Filter.Where(x => x._id.Equals(tile._id));
+            //var update = Builders<BsonDocument>.Update.Combine(user);
+
+            tileCollection.ReplaceOne(filter, tile);
+        }
+
         private MongoDBRef createIslandDbRef(Island island)
         {
             return new MongoDBRef(islandCollection.CollectionNamespace.CollectionName, island._id);

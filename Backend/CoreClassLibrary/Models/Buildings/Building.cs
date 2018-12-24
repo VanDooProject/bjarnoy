@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CoreClassLibrary.Models.Map.Tiles;
 using MongoDB.Bson.Serialization.Attributes;
+using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.Buildings
 {
@@ -14,10 +16,19 @@ namespace CoreClassLibrary.Models.Buildings
         public int Level;
 
         /// <summary>
+        /// return type of building (used mainly for frontend)
+        /// </summary>
+        public string type
+        {
+            get { return this.GetType().ToString().Split('.').Last(); }
+        }
+
+        /// <summary>
         /// resources needed to build this level\n
         /// empty/null if this building was built already
         /// </summary>
         [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public Resources ResourcesNeeded;
 
         /// <summary>
@@ -25,6 +36,7 @@ namespace CoreClassLibrary.Models.Buildings
         /// null if building is already built
         /// </summary>
         [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public List<IRequirement> requirements;
 
         /// <summary>
@@ -32,6 +44,19 @@ namespace CoreClassLibrary.Models.Buildings
         /// null if building is already built
         /// </summary>
         [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public List<Tile> allowedTiles;
+
+        // call this before converting to json not used in techtree stuff or before saveing to DB
+        public Building CleanTechData()
+        {
+            Building b = (Building) this.MemberwiseClone();
+
+            b.ResourcesNeeded = null;
+            b.requirements = null;
+            b.allowedTiles = null;
+
+            return b;
+        }
     }
 }
