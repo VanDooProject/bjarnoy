@@ -58,11 +58,11 @@ namespace CoreClassLibrary.Respository
             islandCollection.InsertOne(island);
 
             // set DB refs - so we can get corresponding islands for tiles later
-            island.Tiles.ForEach(t => t.IslandId = new MongoDBRef(islandCollection.CollectionNamespace.CollectionName, island._id));
+            island.Tiles.ForEach(t => t.IslandId = createIslandDbRef(island));
 
             tileCollection.InsertMany(island.Tiles);
         }
-        
+
         public Tile getTile(float x, float y, float z)
         {
             var builder = Builders<Tile>.Filter;
@@ -70,6 +70,39 @@ namespace CoreClassLibrary.Respository
             var result = tileCollection.Find(filter).ToList();
 
             return result.FirstOrDefault();
+        }
+
+        public void Delete(Island island)
+        {
+            var builder = Builders<Island>.Filter;
+            var filter = builder.Eq("_id", island._id);
+
+            islandCollection.DeleteOne(filter);
+
+            this.DeleteTiles(island);
+        }
+
+        public void DeleteTiles(Island island)
+        {
+            var builder = Builders<Tile>.Filter;
+            var filter = builder.Eq("IslandId", createIslandDbRef(island));
+
+            //var res = tileCollection.Find(filter);
+            //var r = res.ToList();
+            tileCollection.DeleteMany(filter);
+        }
+
+        public void ReplaceTile(Tile tile)
+        {
+            var filter = Builders<Tile>.Filter.Where(x => x._id.Equals(tile._id));
+            //var update = Builders<BsonDocument>.Update.Combine(user);
+
+            tileCollection.ReplaceOne(filter, tile);
+        }
+
+        private MongoDBRef createIslandDbRef(Island island)
+        {
+            return new MongoDBRef(islandCollection.CollectionNamespace.CollectionName, island._id);
         }
     }
 }

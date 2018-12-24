@@ -31,7 +31,7 @@
 export default {
   props: ["tile"],
   methods: {
-    openMenu: function(event) {
+    openMenu: function (event) {
       if (
         this.$store.state.mouseMove.x < 5 &&
         this.$store.state.mouseMove.y < 5
@@ -47,14 +47,14 @@ export default {
       }
       this.$store.commit("SetMenuClosed", false);
     },
-    openToolTip: function() {
+    openToolTip: function () {
       this.showTT = true;
     },
-    closeToolTip: function() {
+    closeToolTip: function () {
       this.showTT = false;
     }
   },
-  data: function() {
+  data: function () {
     return {
       showTT: false,
       imgPos: { x: 0, y: 0 },
@@ -90,32 +90,38 @@ export default {
         break;
 
       case "QuarterEdgeTile":
-        entry = imgmap.filter(
-          obj =>
-            obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png"
-        )[0];
+        entry = imgmap.filter(obj => obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png")[0];
         break;
       case "HalfEdgeTile":
-        entry = imgmap.filter(
-          obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png"
-        )[0];
+        entry = imgmap.filter(obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png")[0];
         break;
       case "TriQuarterEdgeTile":
-        entry = imgmap.filter(
-          obj =>
-            obj.name ==
-            "triquarteredgetile_" + this.tile.orientation[0] + ".png"
-        )[0];
+        entry = imgmap.filter(obj => obj.name == "triquarteredgetile_" + this.tile.orientation[0] + ".png")[0];
         break;
-
-      default:
-        entry.pos = { x: 600, y: 600 };
-        entry.size = { x: 200, y: 300 };
     }
 
-    this.imgPos = entry.pos;
-    this.imgSize = entry.size;
-  }
+    if (this.tile.building != undefined) {
+      function pad(num, size) {
+        var s = "000000000" + num;
+        return s.substr(s.length - size);
+      }
+
+      var tilename = this.tile.building.type.toLowerCase() + "_" + this.tile.orientation[0] + "_level" + pad(this.tile.building.level, 3) + ".png";
+      console.log(tilename);
+
+      entry = imgmap.filter(obj => obj.name == tilename)[0];
+    }
+
+    if (entry != undefined) {
+      this.imgPos = entry.pos;
+      this.imgSize = entry.size;
+    }
+    else {
+      this.imgPos = { x: 0, y: 0 };
+      entry.size = { x: 400, y: 600 };
+      console.error("tile not found - fallback");
+    }
+  },
 };
 
 // https://forum.vuejs.org/t/debugging-vue-files-with-visual-studio-code/8022/5

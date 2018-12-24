@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Generic;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
@@ -17,7 +18,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public MongoDBRef IslandId { get; set; }
 
         [BsonIgnore]
-        public string IdOfIsland => IslandId.Id.ToString();
+        public string IdOfIsland => IslandId?.Id?.ToString();
 
         // https://jira.mongodb.org/browse/CSHARP-1759
         [BsonSerializer(typeof(Vector3Serializer))]
@@ -34,6 +35,18 @@ namespace CoreClassLibrary.Models.Map.Tiles
         [JsonConverter(typeof(StringEnumConverter))]
         public eOrientation Orientation;
 
+        /// <summary>
+        /// building on this tile
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public Building Building;
+
+        public string type
+        {
+            get { return this.GetType().ToString().Split('.').Last(); }
+        }
+
         public Tile()
         {
         }
@@ -41,11 +54,6 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public Tile(Vector3 position)
         {
             this.Position = position;
-        }
-
-        public string type
-        {
-            get { return this.GetType().ToString().Split('.').Last(); }
         }
 
 

@@ -16,7 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace ApiServer.Controllers
 {
     [Route("api/v1/[controller]")]
-    public class ProfileController : ControllerBase
+    public class ProfileController : GameAPIController
     {
         // GET api/v1/profile/self
         /// <summary>
@@ -27,20 +27,7 @@ namespace ApiServer.Controllers
         [Authorize]
         public UserModel GetSelf()
         {
-            UserRepository userRepository = new UserRepository();
-
-            string UserId = HttpContext.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier).Value;
-            if (UserId == "")
-            {
-                throw new Exception("this case should never happen - token without valid user data");
-            }
-
-            UserModel IsUserInDb = userRepository.GetByUserId(UserId);
-
-            if (IsUserInDb == null)
-            {
-                throw new Exception("this case should never happen - token user not found in DB");
-            }
+            UserModel IsUserInDb = getCurretUser();
 
             return IsUserInDb;
         }
