@@ -160,8 +160,8 @@ export default {
   transform: rotateZ(-45deg) scaleY(2);
   position: absolute;
   width: 400px;
-  bottom: 200px;
-  right: 0px;
+  bottom: 400px;
+  right: 200px;
   padding: 10px;
   border-radius: 10px;
   z-index: -10000;
