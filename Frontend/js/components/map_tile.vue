@@ -20,7 +20,8 @@
                 backgroundPositionX: - imgPos.y + 'px',
                 backgroundPositionY: - imgPos.x + 'px',
                 width: imgSize.x + 'px',
-                height: imgSize.y + 'px'
+                height: imgSize.y + 'px',
+                transform: 'translate(-' + imgSize.x/2 + 'px,-' + imgSize.y/2 + 'px) rotateZ(-45deg) scaleY(2.365)'
             }"
       class="tileimg"
     ></div>
@@ -151,7 +152,6 @@ export default {
   right: 0;
   padding: 0px;
   margin: 0px;
-  transform: translate(-100px, -150px) rotateZ(-45deg) scaleY(2.34);
   pointer-events: none;
 }
 .tiletooltip {
