@@ -146,10 +146,14 @@
 									"    var data = pm.response.json();",
 									"    pm.environment.set(\"token\", data.token);",
 									"",
+									"    console.log(\"inner\");",
 									"    console.log(pm.response);",
+									"    console.log(data);",
 									"});",
 									"",
-									"console.log(pm.response);"
+									"console.log(\"outer\");",
+									"console.log(pm.response);",
+									"console.log(data);"
 								],
 								"type": "text/javascript"
 							}
