@@ -6,9 +6,10 @@
     v-on:mouseleave="closeToolTip"
     v-bind:style="{
             position: 'absolute',
-            transform: 'translate(' + tile.position.y * -141 * imgSize.x/200 + 'px, ' + tile.position.x * 141 * imgSize.x/200 + 'px)',
-            width:  141 * imgSize.x/200 + 'px',
-            height: 141 * imgSize.x/200 + 'px',
+            /* ATTENTION: x and y are swapped */
+            transform: 'translate(' + tile.position.x * imgSize.x / Math.SQRT2 + 'px, ' + tile.position.y * -imgSize.x / Math.SQRT2 + 'px)',
+            width:  imgSize.x / Math.SQRT2 + 'px',
+            height: imgSize.x / Math.SQRT2 + 'px',
             zIndex: tile.position.x - tile.position.y
         }"
   >
@@ -19,7 +20,8 @@
                 backgroundPositionX: - imgPos.y + 'px',
                 backgroundPositionY: - imgPos.x + 'px',
                 width: imgSize.x + 'px',
-                height: imgSize.y + 'px'
+                height: imgSize.y + 'px',
+                transform: 'translate(-' + imgSize.x/2 + 'px,-' + imgSize.y/2 + 'px) rotateZ(-45deg) scaleY(2.365)'
             }"
       class="tileimg"
     ></div>
@@ -150,7 +152,6 @@ export default {
   right: 0;
   padding: 0px;
   margin: 0px;
-  transform: translate(-100px, -150px) rotateZ(-45deg) scaleY(2.38);
   pointer-events: none;
 }
 .tiletooltip {

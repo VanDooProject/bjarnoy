@@ -140,12 +140,15 @@
 									"// example using response assertions",
 									"pm.test(\"response should be okay to process\", function () { ",
 									"    pm.response.to.not.be.error; ",
-									"    pm.response.to.have.jsonBody(\"\"); ",
+									"    pm.response.to.have.jsonBody(\"token\"); ",
 									"    pm.response.to.not.have.jsonBody(\"error\"); ",
 									"",
 									"    var data = pm.response.json();",
 									"    pm.environment.set(\"token\", data.token);",
-									"});"
+									"});",
+									"",
+									"//console.log(pm.response);",
+									"console.log(pm.response.text());"
 								],
 								"type": "text/javascript"
 							}
@@ -259,7 +262,7 @@
 									"// example using response assertions",
 									"pm.test(\"response should be okay to process\", function () { ",
 									"    pm.response.to.not.be.error; ",
-									"    pm.response.to.have.jsonBody(\"\"); ",
+									"    pm.response.to.have.jsonBody(\"token\"); ",
 									"    pm.response.to.not.have.jsonBody(\"error\"); ",
 									"    ",
 									"    var data = pm.response.json();",
