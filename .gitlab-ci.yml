@@ -296,8 +296,8 @@ job_test_postman_api:
 
   # https://medium.com/@vdespa/how-to-run-postman-api-tests-with-newman-in-gitlab-ci-the-proper-way-b5a9f6076d79
   script:
-    - ls -ahl && ls -ahl ./docs && ls -ahl ./docs/RestAPI
-    # - newman --version
+    # - ls -ahl && ls -ahl ./docs && ls -ahl ./docs/RestAPI
+    - newman --version
     # - newman --help
     # - newman run --help
     # https://github.com/postmanlabs/newman/issues/1590
