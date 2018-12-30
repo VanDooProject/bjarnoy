@@ -302,9 +302,9 @@ job_test_postman_api:
     # - newman run --help
     # https://github.com/postmanlabs/newman/issues/1590
     - newman run ./docs/RestAPI/BrowsergameAPI.postman_collection.json --environment="./docs/RestAPI/BrowsergameAPI.postman_environment.json" --reporter-junit-export="./newman-report.xml" -r junit --reporters="junit,cli" --global-var "url=http://$CI_COMMIT_REF_SLUG.gamez.mynode.space"
-    - ls -ahl
-    - find . -name "*.xml"
-    - find / -name "*.xml"
+    # - ls -ahl
+    # - find . -name "*.xml"
+    # - find / -name "*.xml"
 
   artifacts:
       expire_in: 15 minutes
