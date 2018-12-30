@@ -145,7 +145,11 @@
 									"",
 									"    var data = pm.response.json();",
 									"    pm.environment.set(\"token\", data.token);",
-									"});"
+									"",
+									"    console.log(pm.response);",
+									"});",
+									"",
+									"console.log(pm.response);"
 								],
 								"type": "text/javascript"
 							}
