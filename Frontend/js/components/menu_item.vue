@@ -50,6 +50,7 @@
                     })
                 .then(response => this.$store.dispatch("UpdateMapTiles"))
                 .catch(error => this.$store.commit('ReqestErr', error.response));
+                this.$store.commit("SetMenuVisible", false);
             }
         },
         mounted () {
