@@ -119,6 +119,7 @@ const store = new Vuex.Store({
             axios
                 .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
                 {
+                    headers: {'Authorization': "bearer " + localStorage.token},
                     withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
