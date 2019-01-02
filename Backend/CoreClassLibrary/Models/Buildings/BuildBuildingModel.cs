@@ -17,6 +17,7 @@ namespace CoreClassLibrary.Models.Buildings
         [BuildingName] // [BuildingName(ErrorMessage = "")]
         public string BuildingName { get; set; }
 
+        [Required]
         [Range(1, 100)]
         public int Level { get; set; }
     }
