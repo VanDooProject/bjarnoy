@@ -120,7 +120,7 @@ export default {
     }
     else {
       this.imgPos = { x: 0, y: 0 };
-      entry.size = { x: 400, y: 600 };
+      this.imgSize = { x: 400, y: 600 };
       console.error("tile not found - fallback");
     }
   },

@@ -1,16 +1,17 @@
 <template>
-    <div
-    v-on:mouseup='mouseUp'
-    v-on:mousemove='mouseMove'
-    v-on:mouseleave='mouseLeave'
-    v-on:mousedown='mouseDown'
-    id="mapbg"
-    >
-        <MapMenu ></MapMenu>
-
-        <div id="map">
-            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
+    <div>
+        <MapMenu></MapMenu>
+        <div
+        v-on:mouseup='mouseUp'
+        v-on:mousemove='mouseMove'
+        v-on:mouseleave='mouseLeave'
+        v-on:mousedown='mouseDown'
+        id="mapbg"
+        >
+            <div id="map">
+                <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
+                <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
+            </div>
         </div>
     </div>
 </template>
@@ -77,7 +78,7 @@
                 }
             },
             mouseLeave: function(event) {
-                this.isMouseDown=false;
+                this.isMouseDown = false;
             }
 
         }

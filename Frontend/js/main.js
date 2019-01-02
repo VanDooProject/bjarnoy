@@ -78,6 +78,7 @@ const store = new Vuex.Store({
         mapOffset: {x: 0, y: 0},
 
         mouseMove: {x:0, y:0},
+        techBildings: [],
       },
       getters: {
         menuDisplay: state => {
@@ -107,7 +108,20 @@ const store = new Vuex.Store({
                     state.imageMap = response.data;
                 })
                 .catch(error => {
-                    state.commit('ReqestErr');
+                    this.commit('ReqestErr');
+                });
+        },
+        UpdateTechBildings (state) {
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
+                {
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => {
+                    state.techBildings = response.data;
+                })
+                .catch(error => {
+                    this.commit('ReqestErr', error);
                 });
         },
         SetMenuPos (state, pos) {
@@ -137,6 +151,7 @@ const store = new Vuex.Store({
       }
 });
 store.commit("UpdateImageMap");
+store.commit("UpdateTechBildings");
 
 // main app
 const vue = new Vue({

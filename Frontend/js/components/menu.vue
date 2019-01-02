@@ -22,15 +22,8 @@
             class="mapmenu"
         >
        
-       <menu-item v-bind:submenu=submenu v-bind:on-click-handler="clicked" v-bind:submenutotal=submenus.length v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" >
-           </menu-item>
+        <menu-item v-bind:submenu="submenu.num" v-bind:type="submenu.type" v-bind:submenutotal="submenus.length" v-bind:key=submenu.key v-for="submenu in submenus" submenulayer="1" ></menu-item>
         </div>
-
-        <span v-if="tile.position">
-            {{tile.position.x}} | {{tile.position.y}} | {{tile.position.z}}<br/>
-            {{tile.type}}<br/>
-            {{tile.orientation}}<br/>
-        </span>
     </div>
 </template>
 
@@ -39,7 +32,7 @@
     export default {
         props:[],
         components: {
-            MenuItem
+            MenuItem,
         },
         data: function() {
             return {
@@ -49,11 +42,11 @@
         computed: {
             submenus()
             {
-                if(this.$store.state.menuTile == undefined)
-                    return []
-                if(this.$store.state.menuTile == "grass")
-                    return [0,1,2,3]
-                return [0,1,2]
+                return this.$store.state.techBildings.filter(entry => {
+                        return entry.allowedTiles.filter(tile => tile.type == this.tile.type).length >= 1;
+                    }).map((entry, index) => {
+                        return {num: index, type: {name: entry.type, level: entry.level}};
+                    });
             },
             tile() { 
                 return this.$store.state.menuTile;
