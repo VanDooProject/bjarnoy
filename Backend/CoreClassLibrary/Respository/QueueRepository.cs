@@ -41,5 +41,18 @@ namespace CoreClassLibrary.Respository
             var filter = builder.Eq("Owner._id", user._id);
             return collection.Find(filter).ToList();
         }
+
+        public List<Queue> GetAndRemoveFinished()
+        {
+            var builder = Builders<Queue>.Filter;
+            var filter = builder.Lt("EndTime", DateTime.Now);
+            var res = collection.FindOneAndDelete(filter);
+            var list = new List<Queue>();
+            if (res != null)
+            {
+                list.Add(res);
+            }
+            return list;
+        }
     }
 }

@@ -38,6 +38,8 @@ namespace CoreClassLibrary.Controller
                 {
                     this._buildtech = (List<Building>)serializer.Deserialize(file, typeof(List<Building>));
                 }
+
+                // TODO check if all is valid (all have level, duration, valid ress,...)
             }
             else
             {
@@ -56,6 +58,7 @@ namespace CoreClassLibrary.Controller
                 new StorageHouse()
                 {
                     Level = 1,
+                    BuildDuration = new TimeSpan(0, 5, 12), // 5 min and 12 sec
                     ResourcesNeeded = new Resources() {
                         wood = 250,
                         stone = 250,
@@ -77,6 +80,7 @@ namespace CoreClassLibrary.Controller
                 new Lumberjack()
                 {
                     Level = 1,
+                    BuildDuration = new TimeSpan(0, 2, 30), // 2 min and 30 sec
                     ResourcesNeeded = new Resources() {
                         wood = 100,
                         stone = 100,
@@ -98,6 +102,8 @@ namespace CoreClassLibrary.Controller
                     gatherRate = 10
                 }
             };
+
+            // TODO check if all is valid (all have level, duration, valid ress,...)
 
             // save them to file
             saveBuildTechToFile();

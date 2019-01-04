@@ -125,7 +125,7 @@ namespace ApiServer
 
             app.UseMvc();
 
-            //QueueObserver.Instance.ToString();
+            QueueObserver.Instance.ToString();
         }
     }
 }

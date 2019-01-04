@@ -61,5 +61,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
             return (Vector3.DistanceSquared(this.Position, pos) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance);
         }
+
+
+
+        public override string ToString()
+        {
+            return $"{this.GetType().ToString().Split('.').Last()}: {this.Position.ToString().Replace('.', '|')}";
+        }
     }
 }
