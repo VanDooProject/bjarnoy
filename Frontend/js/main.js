@@ -78,13 +78,68 @@ const store = new Vuex.Store({
         mapOffset: {x: 0, y: 0},
 
         mouseMove: {x:0, y:0},
-      },
-      getters: {
+        techBildings: [],
+        mapTiles: [],
+    },
+    getters: {
         menuDisplay: state => {
             return state.menuVisible == true ? "block" : "none";
         }
-      },
-      mutations: {
+    },
+    actions: {
+        UpdateMapTiles (context) {
+            console.log("update");
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/map/tiles',
+                {
+                    headers: {'Authorization': "bearer " + localStorage.token},
+                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => {
+                    context.commit("SetMapTiles", response.data);
+                })
+                .catch(error => {
+                    this.commit('ReqestErr', error);
+                });
+        },
+        UpdateImageMap (context) {
+            axios
+                .get('/images/data.json',
+                {
+                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => {
+                    context.commit("SetImageMap", response.data);
+                })
+                .catch(error => {
+                    this.commit('ReqestErr');
+                });
+        },
+        UpdateTechBildings (context) {
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
+                {
+                    headers: {'Authorization': "bearer " + localStorage.token},
+                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => {
+                    context.commit("SetTechBuildings", response.data);
+                })
+                .catch(error => {
+                    this.commit('ReqestErr', error);
+                });
+        },
+    },
+    mutations: {
+        SetMapTiles (state, tiles) {
+            state.mapTiles = tiles;
+        },
+        SetImageMap (state, imageMap) {
+            state.imageMap = imageMap;
+        },
+        SetTechBuildings (state, techBildings) {
+            state.techBildings = techBildings;
+        },
         logIn (state) {
             state.loggedIn = true;
         },
@@ -96,19 +151,6 @@ const store = new Vuex.Store({
                 router.push("/login");
             else
                 router.push("/register");
-        },
-        UpdateImageMap (state) {
-            axios
-                .get('/images/data.json',
-                {
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                })
-                .then(response => {
-                    state.imageMap = response.data;
-                })
-                .catch(error => {
-                    state.commit('ReqestErr');
-                });
         },
         SetMenuPos (state, pos) {
             //Removing any unused poperties
@@ -136,7 +178,8 @@ const store = new Vuex.Store({
         }
       }
 });
-store.commit("UpdateImageMap");
+store.dispatch("UpdateImageMap");
+store.dispatch("UpdateTechBildings");
 
 // main app
 const vue = new Vue({

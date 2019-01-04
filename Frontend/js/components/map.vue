@@ -1,16 +1,17 @@
 <template>
-    <div
-    v-on:mouseup='mouseUp'
-    v-on:mousemove='mouseMove'
-    v-on:mouseleave='mouseLeave'
-    v-on:mousedown='mouseDown'
-    id="mapbg"
-    >
-        <MapMenu ></MapMenu>
-
-        <div id="map">
-            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
+    <div>
+        <MapMenu></MapMenu>
+        <div
+        v-on:mouseup='mouseUp'
+        v-on:mousemove='mouseMove'
+        v-on:mouseleave='mouseLeave'
+        v-on:mousedown='mouseDown'
+        id="mapbg"
+        >
+            <div id="map">
+                <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
+                <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
+            </div>
         </div>
     </div>
 </template>
@@ -28,11 +29,13 @@
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
-                tiles: [],
                 isMouseDown: false,
             }
         },
         computed: {
+            tiles() { 
+                return this.$store.state.mapTiles;
+            },
             TilesArray () {
                 var ls = [[]];
                 this.tiles.forEach(tile => {
@@ -47,15 +50,7 @@
             },
         },
         mounted () {
-            this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/map/tiles',
-                //.get(this.$config.RequestUriPrefix + '/api/v1/map/demo/island/2', // <- for testing
-                    {
-                        headers: {'Authorization': "bearer " + localStorage.token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                    })
-                .then(response => this.tiles = response.data)
-                .catch(error => this.$store.commit('ReqestErr', error.response));
+            this.$store.dispatch("UpdateMapTiles");
         },
         methods: {
             mouseDown: function(event) {
@@ -77,7 +72,7 @@
                 }
             },
             mouseLeave: function(event) {
-                this.isMouseDown=false;
+                this.isMouseDown = false;
             }
 
         }

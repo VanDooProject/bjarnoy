@@ -82,11 +82,11 @@ namespace CoreClassLibrary.Factory
                     // check 4 relevant tiles for side
                     if (island.getTile(pos - new Vector3(+1, +1, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.South;
+                        orientation = Tile.eOrientation.North;
                     }
                     else if (island.getTile(pos - new Vector3(-1, -1, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.North;
+                        orientation = Tile.eOrientation.South;
                     }
                     else if (island.getTile(pos - new Vector3(+1, -1, 0)) != null)
                     {
@@ -104,19 +104,19 @@ namespace CoreClassLibrary.Factory
                     // check 4 relevant tiles for side
                     if (island.getTile(pos - new Vector3(0, +1, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.South;
+                        orientation = Tile.eOrientation.East;
                     }
                     else if (island.getTile(pos - new Vector3(0, -1, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.North;
+                        orientation = Tile.eOrientation.West;
                     }
                     else if (island.getTile(pos - new Vector3(+1, 0, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.West;
+                        orientation = Tile.eOrientation.North;
                     }
                     else if (island.getTile(pos - new Vector3(-1, 0, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.East;
+                        orientation = Tile.eOrientation.South;
                     }
 
                     newTile = new HalfEdgeTile(pos, orientation);
