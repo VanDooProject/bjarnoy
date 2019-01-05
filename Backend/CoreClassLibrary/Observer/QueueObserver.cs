@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using CoreClassLibrary.Controller;
@@ -32,10 +33,11 @@ namespace CoreClassLibrary.Observer
 
             //#if DEBUG
             // in debug build use polling
-            var timer = new System.Timers.Timer(2000);
-            timer.Elapsed += OnTimerEvent;
-            timer.AutoReset = true;
-            timer.Enabled = true;
+            QueueProcessorTask();
+            //var timer = new System.Timers.Timer(2000);
+            //timer.Elapsed += OnTimerEvent;
+            //timer.AutoReset = true;
+            //timer.Enabled = true;
             //#endif
 
 
@@ -62,16 +64,40 @@ namespace CoreClassLibrary.Observer
 
         }
 
+        private QueueRepository queueRepository = new QueueRepository();
+        private void QueueProcessorTask()
+        {
+            var task = Task.Factory.StartNew(() =>
+            {
+                bool moreToDo = true;
+                while (moreToDo)
+                {
+                    // do while there are entries
+                    Queue entry;
+                    while ( (entry = queueRepository.GetAndUpdateFinished()) != null)
+                    {
+                        processQueueEntry(entry);
+
+                        queueRepository.MarkAsProcessed(entry);
+                    }
+
+                    // to low CPU load
+                    #if DEBUG
+                    System.Threading.Thread.Sleep(2000);
+                    #else
+                    System.Threading.Thread.Sleep(2000);
+                    #endif
+                }
+            }); 
+        }
+
         private void OnTimerEvent(object sender, ElapsedEventArgs e)
         {
             // query all finished queue entries and call clb
             QueueRepository queueRepository = new QueueRepository();
-            List<Queue> list = queueRepository.GetAndRemoveFinished();
+            Queue entry = queueRepository.GetAndUpdateFinished();
 
-            foreach (Queue queue in list)
-            {
-                processQueueEntry(queue);
-            }
+            processQueueEntry(entry);
         }
 
         private Task Processor(ChangeStreamDocument<Queue> arg1, int arg2)
@@ -84,6 +110,7 @@ namespace CoreClassLibrary.Observer
         private Task processQueueEntry(Queue entry)
         {
             logger.InfoFormat("processing queue {0}", entry);
+
             return null;
         }
     }

@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Generic;
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.TechQueues
 {
@@ -23,5 +25,31 @@ namespace CoreClassLibrary.Models.TechQueues
         // this is redundant data for json
         [BsonIgnore]
         public TimeSpan Duration => StartTime - EndTime;
+
+        /// <summary>
+        /// tells us state of queue entry
+        /// </summary>
+        [JsonIgnore]
+        [BsonRepresentation(BsonType.String)] // for better debugging
+        public eQueueProcessingState Processing = eQueueProcessingState.unprocessed;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public enum eQueueProcessingState
+        {
+            /// <summary>
+            /// new entry in db
+            /// </summary>
+            unprocessed = 0,
+            /// <summary>
+            /// was taken from db
+            /// </summary>
+            processing,
+            /// <summary>
+            /// is processed -> only for logging in DB
+            /// </summary>
+            processed
+        }
     }
 }
