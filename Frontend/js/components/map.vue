@@ -30,6 +30,9 @@
             return {
                 // will be a three-dimensional array with map coords
                 isMouseDown: false,
+                mouseMoved: false,
+                moveX: 0,
+                moveY: 0,
             }
         },
         computed: {
@@ -51,6 +54,7 @@
         },
         mounted () {
             this.$store.dispatch("UpdateMapTiles");
+            window.requestAnimationFrame(this.animationCallback);
         },
         methods: {
             mouseDown: function(event) {
@@ -68,13 +72,24 @@
             mouseMove: function(event) {
                 if(this.isMouseDown)
                 {
-                    this.$store.commit("MouseMove", {x: event.movementX, y: event.movementY});
+                    this.mouseMoved = true;
+                    this.moveX += event.movementX;
+                    this.moveY += event.movementY;
                 }
             },
             mouseLeave: function(event) {
                 this.isMouseDown = false;
+            },
+            animationCallback: function (timestamp) {
+                requestAnimationFrame(this.animationCallback);
+                if(this.mouseMoved)
+                {
+                    this.$store.commit("MouseMove", {x: this.moveX, y: this.moveY});
+                    this.moveX = 0;
+                    this.moveY = 0;
+                    this.mouseMoved = false;
+                }
             }
-
         }
     }
 
