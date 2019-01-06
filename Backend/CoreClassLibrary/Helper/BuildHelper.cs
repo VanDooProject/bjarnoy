@@ -91,8 +91,10 @@ namespace CoreClassLibrary.Helper
             buildingToBeBuilt = buildingToBeBuilt.CleanTechData();
 
             // set building on tile
+            buildingToBeBuilt.Level--;
             tile.Building = buildingToBeBuilt;
             islandRepository.ReplaceTile(tile);
+            buildingToBeBuilt.Level++;
 
             // add entry to queue
             BuildingQueue queueEntry = new BuildingQueue();
@@ -100,6 +102,14 @@ namespace CoreClassLibrary.Helper
             queueEntry.Building = buildingToBeBuilt;
             queueEntry.Owner = user;
             queueEntry.StartTime = DateTime.Now;
+            if (buildingToBeBuilt.BuildDuration != null)
+            {
+                queueEntry.EndTime = DateTime.Now + (TimeSpan) buildingToBeBuilt.BuildDuration;
+            }
+            else
+            {
+                throw new Exception($"build tech is faulty - missing duration: {buildingToBeBuilt}");
+            }
 
             QueueRepository queueRepository = new QueueRepository();
             queueRepository.Add(queueEntry);

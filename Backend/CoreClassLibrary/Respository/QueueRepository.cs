@@ -35,11 +35,31 @@ namespace CoreClassLibrary.Respository
             collection.InsertOne(queue);
         }
 
-        public List<Queue> AllByUser(UserModel user)
+        public List<Queue> AllUnprocessedByUser(UserModel user)
         {
             var builder = Builders<Queue>.Filter;
-            var filter = builder.Eq("Owner._id", user._id);
+            var filter = builder.Eq("Owner._id", user._id) & builder.Eq("Processing", Queue.eQueueProcessingState.unprocessed);
             return collection.Find(filter).ToList();
+        }
+
+        public Queue GetAndUpdateFinished()
+        {
+            var builder = Builders<Queue>.Filter;
+
+            var filter = builder.Lt("EndTime", DateTime.Now) & builder.Eq("Processing", Queue.eQueueProcessingState.unprocessed);
+            var update = Builders<Queue>.Update.Set(x => x.Processing, Queue.eQueueProcessingState.processing);
+
+            return collection.FindOneAndUpdate(filter, update);
+        }
+
+        public Queue MarkAsProcessed(Queue entry)
+        {
+            var builder = Builders<Queue>.Filter;
+
+            var filter = builder.Eq("_id", entry._id);
+            var update = Builders<Queue>.Update.Set(x => x.Processing, Queue.eQueueProcessingState.processed);
+
+            return collection.FindOneAndUpdate(filter, update);
         }
     }
 }
