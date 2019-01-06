@@ -7,6 +7,7 @@ using System.Timers;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.TechQueues;
+using CoreClassLibrary.QueueHandler;
 using CoreClassLibrary.Respository;
 using log4net;
 using MongoDB.Bson;
@@ -19,6 +20,12 @@ namespace CoreClassLibrary.Observer
         private ILog logger = LogManager.GetLogger(typeof(QueueObserver));
 
         private readonly IMongoCollection<Queue> collection;
+
+
+        private BuildQueueHandler BuildHandler = new BuildQueueHandler();
+
+
+
 
         private static readonly Lazy<QueueObserver> lazy =
             new Lazy<QueueObserver>(() => new QueueObserver());
@@ -110,6 +117,11 @@ namespace CoreClassLibrary.Observer
         private Task processQueueEntry(Queue entry)
         {
             logger.InfoFormat("processing queue {0}", entry);
+
+            if (entry is BuildingQueue buildEntry)
+            {
+                BuildHandler.processEntry(buildEntry);
+            }
 
             return null;
         }
