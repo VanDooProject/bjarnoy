@@ -130,8 +130,9 @@
                 
                 if(this.isMouseDown)
                 {
-                    this.$store.commit("MouseMove", {   x: event.changedTouches[0].clientX - this.touchLastPos.x, 
-                                                        y: event.changedTouches[0].clientY - this.touchLastPos.y});
+                    this.moveX += event.changedTouches[0].clientX - this.touchLastPos.x;
+                    this.moveY += event.changedTouches[0].clientY - this.touchLastPos.y;
+                    this.mouseMoved = true;
                 }
                 this.touchLastPos.x = event.changedTouches[0].clientX;
                 this.touchLastPos.y = event.changedTouches[0].clientY;
