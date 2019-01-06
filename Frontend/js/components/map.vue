@@ -1,17 +1,23 @@
 <template>
-    <div>
-        <MapMenu></MapMenu>
-        <div
-        v-on:mouseup='mouseUp'
-        v-on:mousemove='mouseMove'
-        v-on:mouseleave='mouseLeave'
-        v-on:mousedown='mouseDown'
-        id="mapbg"
-        >
-            <div id="map">
-                <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
-                <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
-            </div>
+    <div
+    v-on:mouseup='mouseUp'
+    v-on:mousemove='mouseMove'
+    v-on:mouseleave='mouseLeave'
+    v-on:mousedown='mouseDown'
+
+    v-on:touchend='touchUp'
+    v-on:touchmove='touchMove'
+    v-on:touchleave='touchLeave'
+    v-on:touchcancel='touchLeave'
+    v-on:touchstart='touchDown'
+
+    id="mapbg"
+    >
+        <MapMenu ></MapMenu>
+
+        <div id="map">
+            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
+            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
         </div>
     </div>
 </template>
@@ -33,6 +39,7 @@
                 mouseMoved: false,
                 moveX: 0,
                 moveY: 0,
+                touchLastPos: {x: 0, y:0}
             }
         },
         computed: {
@@ -57,6 +64,17 @@
             window.requestAnimationFrame(this.animationCallback);
         },
         methods: {
+            animationCallback: function (timestamp) {
+                requestAnimationFrame(this.animationCallback);
+                if(this.mouseMoved)
+                {
+                    this.$store.commit("MouseMove", {x: this.moveX, y: this.moveY});
+                    this.moveX = 0;
+                    this.moveY = 0;
+                    this.mouseMoved = false;
+                }
+            },
+            //Mouse Events
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.$store.commit("ClearMouseMove");
@@ -80,15 +98,47 @@
             mouseLeave: function(event) {
                 this.isMouseDown = false;
             },
-            animationCallback: function (timestamp) {
-                requestAnimationFrame(this.animationCallback);
-                if(this.mouseMoved)
+            //Touch Events
+            touchDown: function(event) {
+                this.isMouseDown = true;
+                this.$store.commit("ClearMouseMove");
+                if(this.$store.state.menuVisible == true)
                 {
-                    this.$store.commit("MouseMove", {x: this.moveX, y: this.moveY});
-                    this.moveX = 0;
-                    this.moveY = 0;
-                    this.mouseMoved = false;
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
                 }
+                this.touchLastPos.x = event.changedTouches[0].clientX;
+                this.touchLastPos.y = event.changedTouches[0].clientY;
+            },
+            touchUp: function(event) {
+                this.isMouseDown = false;
+            },
+            touchMove: function(event) {
+                if(this.isMouseDown)
+                {
+                    this.$store.commit("MouseMove", {x: event.changedTouches[0].movementX, y: event.changedTouches[0].movementY});
+                }
+            },
+            touchLeave: function(event) {
+                this.isMouseDown=false;
+            },
+            touchUp: function(event) {
+                this.isMouseDown = false;
+                
+            },
+            touchMove: function(event) {
+                
+                if(this.isMouseDown)
+                {
+                    this.$store.commit("MouseMove", {   x: event.changedTouches[0].clientX - this.touchLastPos.x, 
+                                                        y: event.changedTouches[0].clientY - this.touchLastPos.y});
+                }
+                this.touchLastPos.x = event.changedTouches[0].clientX;
+                this.touchLastPos.y = event.changedTouches[0].clientY;
+                //console.log(event.changedTouches[0]);
+            },
+            touchLeave: function(event) {
+                this.isMouseDown = false;
             }
         }
     }
