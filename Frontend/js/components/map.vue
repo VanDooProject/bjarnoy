@@ -1,23 +1,25 @@
 <template>
-    <div
-    v-on:mouseup='mouseUp'
-    v-on:mousemove='mouseMove'
-    v-on:mouseleave='mouseLeave'
-    v-on:mousedown='mouseDown'
+    <div>
+        <MapMenu></MapMenu>
+        
+        <div
+        v-on:mouseup='mouseUp'
+        v-on:mousemove='mouseMove'
+        v-on:mouseleave='mouseLeave'
+        v-on:mousedown='mouseDown'
 
-    v-on:touchend='touchUp'
-    v-on:touchmove='touchMove'
-    v-on:touchleave='touchLeave'
-    v-on:touchcancel='touchLeave'
-    v-on:touchstart='touchDown'
+        v-on:touchend='touchUp'
+        v-on:touchmove='touchMove'
+        v-on:touchleave='touchLeave'
+        v-on:touchcancel='touchLeave'
+        v-on:touchstart='touchDown'
 
-    id="mapbg"
-    >
-        <MapMenu ></MapMenu>
-
-        <div id="map">
-            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
+        id="mapbg"
+        >
+            <div id="map">
+                <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
+                <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
+            </div>
         </div>
     </div>
 </template>
@@ -113,33 +115,18 @@
             touchUp: function(event) {
                 this.isMouseDown = false;
             },
-            touchMove: function(event) {
-                if(this.isMouseDown)
-                {
-                    this.$store.commit("MouseMove", {x: event.changedTouches[0].movementX, y: event.changedTouches[0].movementY});
-                }
-            },
             touchLeave: function(event) {
-                this.isMouseDown=false;
-            },
-            touchUp: function(event) {
                 this.isMouseDown = false;
-                
             },
-            touchMove: function(event) {
-                
+            touchMove: function(event) { 
                 if(this.isMouseDown)
                 {
+                    this.mouseMoved = true;
                     this.moveX += event.changedTouches[0].clientX - this.touchLastPos.x;
                     this.moveY += event.changedTouches[0].clientY - this.touchLastPos.y;
-                    this.mouseMoved = true;
                 }
                 this.touchLastPos.x = event.changedTouches[0].clientX;
                 this.touchLastPos.y = event.changedTouches[0].clientY;
-                //console.log(event.changedTouches[0]);
-            },
-            touchLeave: function(event) {
-                this.isMouseDown = false;
             }
         }
     }
