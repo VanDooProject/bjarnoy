@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
+using CoreClassLibrary.Observer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -123,6 +124,8 @@ namespace ApiServer
             });
 
             app.UseMvc();
+
+            QueueObserver.Instance.ToString();
         }
     }
 }

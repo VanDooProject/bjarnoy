@@ -16,6 +16,13 @@ namespace CoreClassLibrary.Models.Buildings
         public int Level;
 
         /// <summary>
+        /// duration of build time needed to reach this level
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public TimeSpan? BuildDuration = null;
+
+        /// <summary>
         /// return type of building (used mainly for frontend)
         /// </summary>
         public string type

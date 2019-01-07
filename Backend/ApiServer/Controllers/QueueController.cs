@@ -42,7 +42,7 @@ namespace ApiServer.Controllers
             Debug.Assert(user != null); // we have a problem with tokens when this triggers
 
             QueueRepository queueRepository = new QueueRepository();
-            return queueRepository.AllByUser(user);
+            return queueRepository.AllUnprocessedByUser(user);
         }
     }
 }

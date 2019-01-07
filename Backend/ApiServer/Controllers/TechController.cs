@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ApiServer.Controllers
@@ -15,6 +16,7 @@ namespace ApiServer.Controllers
 
         // GET api/v1/tech/buildings
         [HttpGet("buildings/")]
+        [Authorize]
         public List<Building> GetBuilding()
         {
             return BuildTechController.Instance.GetBuildTech();
