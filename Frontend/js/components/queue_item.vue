@@ -1,27 +1,25 @@
 <template>
-    <div
-        class="queueitem"
-    >
+    <div>
         {{entry.tile.building.type}} 
         Level: {{entry.tile.building.level}} 
-        Time left: {{difference}} s
+        Time left: {{difference}} s<br/>
+        <b-progress :value="progress" class="mt-1" :max="100" show-value></b-progress>
     </div>
 </template>
 
 <script>
 export default {
-    props: ['entry'],
+    props: ['entry', 'now'],
     components: {
         
     },
     data: function() {
         return {
-            now: new Date(),
         }
     },
     computed: {
         difference() {
-            var end = new Date(this.entry.startTime);
+            var end = new Date(this.entry.endTime);
             var diff = end.getTime() - this.now.getTime();
             if(diff == 0)
             {
@@ -29,22 +27,19 @@ export default {
                 this.$store.dispatch("UpdateMapTiles");
             }
             return Math.round((diff) / 1000);
+        },
+        progress() {
+            var duration = (new Date(this.entry.endTime).getTime() - new Date(this.entry.startTime).getTime()) / 1000;
+            return (1- this.difference / duration) * 100;
         }
     },
     methods: {
-        animationCallback: function() {
-            window.requestAnimationFrame(this.animationCallback);
-            this.now = new Date();
-        }
+        
     },
     mounted() {
-        window.requestAnimationFrame(this.animationCallback);
+
     }
 };
 </script>
-
 <style>
-.queueitem {
-    display: block;
-}
 </style>
