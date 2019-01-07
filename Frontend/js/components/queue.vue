@@ -36,5 +36,6 @@ export default {
 <style>
 .queue {
     position: absolute;
+    z-index: 10000;
 }
 </style>
