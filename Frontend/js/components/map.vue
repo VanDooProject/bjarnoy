@@ -1,6 +1,7 @@
 <template>
     <div>
         <MapMenu></MapMenu>
+        <queue></queue>
         <div
         v-on:mouseup='mouseUp'
         v-on:mousemove='mouseMove'
@@ -19,11 +20,13 @@
 <script>
     import MapLayer from './map_layer.vue';
     import MapMenu from './menu.vue';
+    import Queue from './queue.vue';
     
     export default {
         components: {
             MapLayer,
-            MapMenu
+            MapMenu,
+            Queue
         },
         props: [],
         data: function() {
