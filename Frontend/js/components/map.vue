@@ -1,11 +1,19 @@
 <template>
     <div>
         <MapMenu></MapMenu>
+        
         <div
         v-on:mouseup='mouseUp'
         v-on:mousemove='mouseMove'
         v-on:mouseleave='mouseLeave'
         v-on:mousedown='mouseDown'
+
+        v-on:touchend='touchUp'
+        v-on:touchmove='touchMove'
+        v-on:touchleave='touchLeave'
+        v-on:touchcancel='touchLeave'
+        v-on:touchstart='touchDown'
+
         id="mapbg"
         >
             <div id="map">
@@ -30,6 +38,10 @@
             return {
                 // will be a three-dimensional array with map coords
                 isMouseDown: false,
+                mouseMoved: false,
+                moveX: 0,
+                moveY: 0,
+                touchLastPos: {x: 0, y:0}
             }
         },
         computed: {
@@ -51,8 +63,20 @@
         },
         mounted () {
             this.$store.dispatch("UpdateMapTiles");
+            window.requestAnimationFrame(this.animationCallback);
         },
         methods: {
+            animationCallback: function (timestamp) {
+                requestAnimationFrame(this.animationCallback);
+                if(this.mouseMoved)
+                {
+                    this.$store.commit("MouseMove", {x: this.moveX, y: this.moveY});
+                    this.moveX = 0;
+                    this.moveY = 0;
+                    this.mouseMoved = false;
+                }
+            },
+            //Mouse Events
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.$store.commit("ClearMouseMove");
@@ -68,13 +92,42 @@
             mouseMove: function(event) {
                 if(this.isMouseDown)
                 {
-                    this.$store.commit("MouseMove", {x: event.movementX, y: event.movementY});
+                    this.mouseMoved = true;
+                    this.moveX += event.movementX;
+                    this.moveY += event.movementY;
                 }
             },
             mouseLeave: function(event) {
                 this.isMouseDown = false;
+            },
+            //Touch Events
+            touchDown: function(event) {
+                this.isMouseDown = true;
+                this.$store.commit("ClearMouseMove");
+                if(this.$store.state.menuVisible == true)
+                {
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
+                }
+                this.touchLastPos.x = event.changedTouches[0].clientX;
+                this.touchLastPos.y = event.changedTouches[0].clientY;
+            },
+            touchUp: function(event) {
+                this.isMouseDown = false;
+            },
+            touchLeave: function(event) {
+                this.isMouseDown = false;
+            },
+            touchMove: function(event) { 
+                if(this.isMouseDown)
+                {
+                    this.mouseMoved = true;
+                    this.moveX += event.changedTouches[0].clientX - this.touchLastPos.x;
+                    this.moveY += event.changedTouches[0].clientY - this.touchLastPos.y;
+                }
+                this.touchLastPos.x = event.changedTouches[0].clientX;
+                this.touchLastPos.y = event.changedTouches[0].clientY;
             }
-
         }
     }
 
