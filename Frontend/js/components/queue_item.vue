@@ -2,8 +2,10 @@
     <div>
         {{entry.tile.building.type}} 
         Level: {{entry.tile.building.level}} 
-        Time left: {{difference}} s<br/>
-        <b-progress :value="progress" class="mt-1" :max="100" show-value></b-progress>
+        Time left: {{Math.round(difference/60)}} min {{difference % 60}} s<br/>
+        <b-progress :max="100">
+        <b-progress-bar :value="progress" :label="progress.toFixed(0)+'%'"></b-progress-bar>
+        </b-progress>
     </div>
 </template>
 
