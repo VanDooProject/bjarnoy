@@ -2,7 +2,7 @@
     <div>
         {{entry.tile.building.type}} 
         Level: {{entry.tile.building.level}} 
-        Time left: {{Math.round(difference/60)}} min {{difference % 60}} s<br/>
+        Time left: {{String(Math.floor(difference/(60 * 60))).padStart(2,0)}}:{{String(Math.floor(difference/60) % 60).padStart(2,0)}}:{{String(difference % 60).padStart(2,0)}}<br/>
         <b-progress :max="100">
         <b-progress-bar :value="progress" :label="progress.toFixed(0)+'%'"></b-progress-bar>
         </b-progress>
