@@ -145,7 +145,6 @@ const store = new Vuex.Store({
                 });
         },
         Login (context, token){
-            console.log(token);
             //Make shure the token actualy works
             axios
                 .get(config.RequestUriPrefix + '/api/v1/auth/selftest',
