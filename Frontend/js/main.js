@@ -80,6 +80,7 @@ const store = new Vuex.Store({
         mouseMove: {x:0, y:0},
         techBildings: [],
         mapTiles: [],
+        queued: [],
     },
     getters: {
         menuDisplay: state => {
@@ -88,7 +89,6 @@ const store = new Vuex.Store({
     },
     actions: {
         UpdateMapTiles (context) {
-            console.log("update");
             axios
                 .get(config.RequestUriPrefix + '/api/v1/map/tiles',
                 {
@@ -97,6 +97,20 @@ const store = new Vuex.Store({
                 })
                 .then(response => {
                     context.commit("SetMapTiles", response.data);
+                })
+                .catch(error => {
+                    this.commit('ReqestErr', error);
+                });
+        },
+        UpdateQueued (context) {
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/Queue/my',
+                {
+                    headers: {'Authorization': "bearer " + localStorage.token},
+                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                })
+                .then(response => {
+                    context.commit("SetQueued", response.data);
                 })
                 .catch(error => {
                     this.commit('ReqestErr', error);
@@ -133,6 +147,9 @@ const store = new Vuex.Store({
     mutations: {
         SetMapTiles (state, tiles) {
             state.mapTiles = tiles;
+        },
+        SetQueued (state, queue) {
+            state.queued = queue;
         },
         SetImageMap (state, imageMap) {
             state.imageMap = imageMap;
@@ -180,6 +197,7 @@ const store = new Vuex.Store({
 });
 store.dispatch("UpdateImageMap");
 store.dispatch("UpdateTechBildings");
+store.dispatch("UpdateQueued");
 
 // main app
 const vue = new Vue({
