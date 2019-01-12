@@ -60,7 +60,7 @@
                         // CORS cookie issue: https://github.com/axios/axios/issues/876
                         withCredentials: true
                     })
-                    .then(response => this.$store.commit("logIn"))
+                    .then(response => this.$store.dispatch("Login", localStorage.token))
                     .catch(error => this.$store.commit('ReqestErr', error.response));
                 }
                 else if ((expires - now) > 0)
@@ -72,8 +72,8 @@
                         // CORS cookie issue: https://github.com/axios/axios/issues/876
                         withCredentials: true
                     })
-                    .then(response => localStorage.token = response.data.token)
-                    .catch(error => this.$router.push('/login'));
+                    .then(response => this.$store.dispatch("Login", response.data.token))
+                    .catch(error => this.$store.dispatch("ReqestError", error));
                 }
                 else
                 {
