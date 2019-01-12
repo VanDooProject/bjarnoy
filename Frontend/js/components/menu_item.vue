@@ -48,7 +48,10 @@
                         headers: {'Authorization': "bearer " + localStorage.token},
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
-                .then(response => this.$store.dispatch("UpdateMapTiles"))
+                .then(response => {
+                    this.$store.dispatch("UpdateMapTiles");
+                    this.$store.dispatch("UpdateQueued");
+                })
                 .catch(error => this.$store.commit('ReqestErr', error.response));
                 this.$store.commit("SetMenuVisible", false);
             }
