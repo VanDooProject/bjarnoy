@@ -81,6 +81,7 @@ const store = new Vuex.Store({
         techBildings: [],
         mapTiles: [],
         queued: [],
+        now: new Date()
     },
     getters: {
         menuDisplay: state => {
@@ -218,10 +219,20 @@ const store = new Vuex.Store({
             var angle = -45 * Math.PI / 180;
             state.mapOffset.x += move.x * Math.cos(angle) - move.y * 2 * Math.sin(angle);
             state.mapOffset.y += (move.y * 2 * Math.cos(angle) + move.x * Math.sin(angle));
+        },
+        SetCurrentTime(state, time)
+        {
+            state.now = time;
         }
       }
 });
 store.dispatch("UpdateImageMap");
+
+function callback()
+{
+    store.commit("SetCurrentTime", new Date());
+}
+setInterval(callback, 1000);
 
 // main app
 const vue = new Vue({
