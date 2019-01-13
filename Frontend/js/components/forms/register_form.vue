@@ -103,17 +103,7 @@
                         {
                             withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                         })
-                    .then(response => {localStorage.token = response.data.token
-                        this.axios
-                            .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
-                                {
-                                    headers: {'Authorization': "bearer " + localStorage.token},
-                                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                                })
-                            .then(response => {this.$store.commit("logIn"); this.$router.push('/map')})
-                            .catch(error => console.error(error.response));
-                        }
-                    )
+                    .then(response => this.$store.dispatch("Login", response.data.token))
                     .catch(error => this.error = error.response);
                 }
             },

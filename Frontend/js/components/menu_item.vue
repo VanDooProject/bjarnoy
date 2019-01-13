@@ -52,7 +52,7 @@
                     this.$store.dispatch("UpdateMapTiles");
                     this.$store.dispatch("UpdateQueued");
                 })
-                .catch(error => this.$store.commit('ReqestErr', error.response));
+                .catch(error => this.$store.dispatch('ReqestError', error));
                 this.$store.commit("SetMenuVisible", false);
             }
         },
