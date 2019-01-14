@@ -11,7 +11,7 @@
 
 <script>
 export default {
-    props: ['entry', 'now'],
+    props: ['entry'],
     components: {
         
     },
@@ -22,8 +22,8 @@ export default {
     computed: {
         difference() {
             var end = new Date(this.entry.endTime);
-            var diff = end.getTime() - this.now.getTime();
-            if(diff == 0)
+            var diff = end.getTime() - this.$store.state.now.getTime();
+            if(diff <= -1) //TODO change in the future!
             {
                 this.$store.dispatch("UpdateQueued");
                 this.$store.dispatch("UpdateMapTiles");

@@ -34,7 +34,7 @@
                             "Email: " + response.data.email,
                             "Created: " + response.data._id.creationTime];
             })
-            .catch(error => this.$store.commit('ReqestErr'));
+            .catch(error => this.$store.dispatch('ReqestError'));
         }
     }
 </script>

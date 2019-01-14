@@ -82,6 +82,7 @@ const store = new Vuex.Store({
         techBildings: [],
         mapTiles: [],
         queued: [],
+        now: new Date()
     },
     getters: {
         menuDisplay: state => {
@@ -144,6 +145,37 @@ const store = new Vuex.Store({
                     this.commit('ReqestErr', error);
                 });
         },
+        Login (context, token){
+            //Make shure the token actualy works
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/auth/selftest',
+                    {
+                        headers: {'Authorization': "bearer " + token},
+                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                    })
+                .then(response => {
+                    localStorage.token = token;
+                    store.commit("logIn"); 
+                    store.dispatch("UpdateTechBildings");
+                    store.dispatch("UpdateQueued");
+                    router.push("/map");
+                })
+                .catch(error => console.log(error.response));
+        },
+        ReqestError (error) {
+            //if not logged in
+            if(error.status == "401") {
+                store.commit("logOut");
+                if(localStorage.token)
+                    router.push("/login");
+                else
+                    router.push("/register");
+            }
+            else
+            {
+                console.error(error);
+            }
+        }
     },
     mutations: {
         SetMapTiles (state, tiles) {
@@ -161,14 +193,8 @@ const store = new Vuex.Store({
         logIn (state) {
             state.loggedIn = true;
         },
-        ReqestErr (state, error) {
+        logOut (state) {
             state.loggedIn = false;
-            //TODO Someting usefull with this
-            console.log(error);
-            if(localStorage.token)
-                router.push("/login");
-            else
-                router.push("/register");
         },
         SetMenuPos (state, pos) {
             //Removing any unused poperties
@@ -197,12 +223,20 @@ const store = new Vuex.Store({
         },
         OpenBuildMenu (state) {
             state.menuBuildOpen = true;
+        },
+        SetCurrentTime(state, time)
+        {
+            state.now = time;
         }
       }
 });
 store.dispatch("UpdateImageMap");
-store.dispatch("UpdateTechBildings");
-store.dispatch("UpdateQueued");
+
+function callback()
+{
+    store.commit("SetCurrentTime", new Date());
+}
+setInterval(callback, 1000);
 
 // main app
 const vue = new Vue({
