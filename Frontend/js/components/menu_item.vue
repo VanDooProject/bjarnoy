@@ -37,20 +37,34 @@
         },
         methods: {
             onClick: function (event) {
-                this.axios
-                .post(this.$config.RequestUriPrefix + '/api/v1/Building/build',
+                if(this.type.isBuild)
+                {
+                    this.axios
+                    .post(this.$config.RequestUriPrefix + '/api/v1/Building/build',
+                        {
+                            tile: this.tile,
+                            buildingName: this.type.name,
+                            level: this.type.level,
+                        },
+                        {
+                            headers: {'Authorization': "bearer " + localStorage.token},
+                            withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        })
+                    .then(response => this.$store.dispatch("UpdateMapTiles"))
+                    .catch(error => this.$store.commit('ReqestErr', error.response));
+                    this.$store.commit("SetMenuVisible", false);
+                }
+                else
+                {
+                    if(this.type.name == "build")
                     {
-                        tile: this.tile,
-                        buildingName: this.type.name,
-                        level: this.type.level,
-                    },
+                        this.$store.commit("OpenBuildMenu");
+                    }
+                    else if(this.type.name == "details")
                     {
-                        headers: {'Authorization': "bearer " + localStorage.token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                    })
-                .then(response => this.$store.dispatch("UpdateMapTiles"))
-                .catch(error => this.$store.commit('ReqestErr', error.response));
-                this.$store.commit("SetMenuVisible", false);
+                        console.log(this.tile);
+                    }
+                }
             }
         },
         mounted () {

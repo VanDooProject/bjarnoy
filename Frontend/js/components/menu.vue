@@ -24,10 +24,18 @@
             <menu-item
                 v-bind:submenu="submenu.num"
                 v-bind:type="submenu.type"
-                v-bind:submenutotal="submenus.length"
+                v-bind:submenutotal="submenus1.length"
                 v-bind:key="submenu.key"
-                v-for="submenu in submenus"
+                v-for="submenu in submenus1"
                 submenulayer="1"
+            >
+            </menu-item><menu-item
+                v-bind:submenu="submenu.num"
+                v-bind:type="submenu.type"
+                v-bind:submenutotal="submenus2.length"
+                v-bind:key="submenu.key"
+                v-for="submenu in submenus2"
+                submenulayer="2"
             ></menu-item>
         </div>
     </div>
@@ -42,19 +50,34 @@ export default {
     },
     data: function() {
         return {
-            size: { x: 150, y: 150 }
+            size: { x: 150, y: 150 },
+            submenus1: [{num: 1, type: {name: "build", isBuild: false}}, {num: 2, type: {name: "details", isBuild: false}}]
         };
     },
     computed: {
-        submenus() {
-            return this.$store.state.techBildings
-                .filter(entry => {
-                    return (
-                        entry.allowedTiles.filter(tile => tile.type == this.tile.type)
-                        .length >= 1);
-                }).map((entry, index) => {
-                    return { num: index, type: { name: entry.type, level: entry.level } };
-                });
+        submenus2() {
+            if(this.$store.state.menuBuildOpen == true)
+            {
+                return this.$store.state.techBildings
+                    .filter(entry => {
+                        if(this.tile.building == undefined)
+                        {
+                            return (entry.allowedTiles.filter(tile => tile.type == this.tile.type)
+                                .length >= 1);
+                        }
+                        else
+                        {
+                            return (entry.allowedTiles.filter(tile => (tile.building.level == this.tile.building.level) && (tile.building.type == this.tile.building.type))
+                                .length >= 1);
+                        }
+                    }).map((entry, index) => {
+                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level } };
+                    });
+            }
+            else
+            {
+                return [];
+            }
         },
         tile() {
             return this.$store.state.menuTile;

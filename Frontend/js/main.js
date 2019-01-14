@@ -74,6 +74,7 @@ const store = new Vuex.Store({
         menuTile: {},
         menuVisible: false,
         menuClosed: false,
+        menuBuildOpen: false,
 
         mapOffset: {x: 0, y: 0},
 
@@ -166,6 +167,7 @@ const store = new Vuex.Store({
         SetMenuClosed (state, closed)
         {
             state.menuClosed = closed;
+            state.menuBuildOpen = false;
         },
         ClearMouseMove (state) {
             state.mouseMove = {x:0 , y: 0};
@@ -175,6 +177,9 @@ const store = new Vuex.Store({
             var angle = -45 * Math.PI / 180;
             state.mapOffset.x += move.x * Math.cos(angle) - move.y * 2 * Math.sin(angle);
             state.mapOffset.y += (move.y * 2 * Math.cos(angle) + move.x * Math.sin(angle));
+        },
+        OpenBuildMenu (state) {
+            state.menuBuildOpen = true;
         }
       }
 });

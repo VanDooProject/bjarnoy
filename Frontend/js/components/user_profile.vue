@@ -1,7 +1,6 @@
 <template>
     <div>
-        <!-- TODO: Suppress this error! -->
-        <div v-for="entry in text"> 
+        <div v-bind:key="entry.key" v-for="entry in text"> 
             {{entry}} <br/>
         </div>
         <button @click=logout>logout</button>
