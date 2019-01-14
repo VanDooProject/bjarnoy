@@ -1,6 +1,6 @@
 <template>
     <div>
-        <div v-bind:key="entry.key" v-for="entry in text"> 
+        <div v-bind:key="entry.id" v-for="entry in text"> 
             {{entry}} <br/>
         </div>
         <button @click=logout>logout</button>
@@ -17,7 +17,7 @@
         methods: {
             logout: function() {
                 localStorage.removeItem("token");
-                // Not realy an error bat has the same handler
+                // Not realy an error but has the same handler
                 this.$store.commit('ReqestErr', "Deleted Token");
             }
         },
