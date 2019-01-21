@@ -81,7 +81,8 @@ const store = new Vuex.Store({
         techBildings: [],
         mapTiles: [],
         queued: [],
-        now: new Date()
+        now: new Date(),
+        websocket: new WebSocket(config.WsUriPrefix + "/queue"),
     },
     getters: {
         menuDisplay: state => {
@@ -89,6 +90,17 @@ const store = new Vuex.Store({
         }
     },
     actions: {
+        StartWebSocket(context)
+        {
+            context.state.websocket.onmessage = function (event) {
+                context.dispatch("ReciveWebSocket", event);
+            };
+            context.state
+        },
+        ReciveWebSocket(context, event)
+        {
+            console.log(event.data);
+        },
         UpdateMapTiles (context) {
             axios
                 .get(config.RequestUriPrefix + '/api/v1/map/tiles',
@@ -154,17 +166,18 @@ const store = new Vuex.Store({
                     })
                 .then(response => {
                     localStorage.token = token;
-                    store.commit("logIn"); 
-                    store.dispatch("UpdateTechBildings");
-                    store.dispatch("UpdateQueued");
+                    context.state.websocket.send("baerer " + localStorage.token);
+                    context.commit("logIn"); 
+                    context.dispatch("UpdateTechBildings");
+                    context.dispatch("UpdateQueued");
                     router.push("/map");
                 })
                 .catch(error => console.log(error.response));
         },
-        ReqestError (error) {
+        ReqestError (context, error) {
             //if not logged in
             if(error.status == "401") {
-                store.commit("logOut");
+                context.commit("logOut");
                 if(localStorage.token)
                     router.push("/login");
                 else
@@ -226,6 +239,7 @@ const store = new Vuex.Store({
       }
 });
 store.dispatch("UpdateImageMap");
+store.dispatch("StartWebSocket");
 
 function callback()
 {
