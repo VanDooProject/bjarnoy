@@ -16,9 +16,7 @@
         },
         methods: {
             logout: function() {
-                localStorage.removeItem("token");
-                // Not realy an error but has the same handler
-                this.$store.commit('ReqestErr', "Deleted Token");
+                this.$store.dispatch("Logout");
             }
         },
         mounted() {

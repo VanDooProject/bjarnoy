@@ -174,6 +174,13 @@ const store = new Vuex.Store({
                 })
                 .catch(error => console.log(error.response));
         },
+        Logout (context)
+        {
+            context.state.websocket.close();
+            localStorage.removeItem("token");
+            context.commit("logOut");
+            router.push("/login");
+        },
         ReqestError (context, error) {
             //if not logged in
             if(error.status == "401") {
