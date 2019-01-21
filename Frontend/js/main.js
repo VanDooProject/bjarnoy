@@ -37,6 +37,9 @@ var toastrConfigs = {
 };
 Vue.use(CxltToastr, toastrConfigs);
 
+//SignalR
+require('@aspnet/signalr')
+
 
 // own components:
 import MapComponent from './components/map.vue';
@@ -44,6 +47,7 @@ import GameHeader from './components/gameHeader.vue';
 import LoginForm from './components/forms/login_form.vue';
 import RegisterForm from './components/forms/register_form.vue';
 import UserProfie from './components/user_profile.vue';
+import { HttpTransportType, LogLevel } from '@aspnet/signalr';
 
 
 // 1. Define route components.
@@ -82,7 +86,7 @@ const store = new Vuex.Store({
         mapTiles: [],
         queued: [],
         now: new Date(),
-        websocket: new WebSocket(config.WsUriPrefix + "/queue"),
+        websocket: new signalR.HubConnectionBuilder().withUrl(config.WsUriPrefix + "/api/websockets/queue").configureLogging(LogLevel.Debug).build(),
     },
     getters: {
         menuDisplay: state => {
@@ -92,14 +96,19 @@ const store = new Vuex.Store({
     actions: {
         StartWebSocket(context)
         {
-            context.state.websocket.onmessage = function (event) {
-                context.dispatch("ReciveWebSocket", event);
-            };
-            context.state
+            context.state.websocket.on("ReceiveMessage",(user, message) => {
+                context.dispatch("ReciveWebSocket",user, message);
+            });
+            context.state.websocket.start().catch(err => context.dispatch("ErrorWebSocket", err));
         },
-        ReciveWebSocket(context, event)
+        ReciveWebSocket(context, user, message)
         {
-            console.log(event.data);
+            console.log(user);
+            console.log(message);
+        },
+        ErrorWebSocket(context, error)
+        {
+            console.log(error);
         },
         UpdateMapTiles (context) {
             axios
@@ -176,7 +185,7 @@ const store = new Vuex.Store({
         },
         Logout (context)
         {
-            context.state.websocket.close();
+            context.state.websocket.stop();
             localStorage.removeItem("token");
             context.commit("logOut");
             router.push("/login");
