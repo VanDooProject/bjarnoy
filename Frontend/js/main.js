@@ -86,7 +86,7 @@ const store = new Vuex.Store({
         mapTiles: [],
         queued: [],
         now: new Date(),
-        websocket: new signalR.HubConnectionBuilder().withUrl(config.WsUriPrefix + "/api/websockets/queue").configureLogging(LogLevel.Debug).build(),
+        websocket: new signalR.HubConnectionBuilder().withUrl(config.WsUriPrefix + "/api/ws").configureLogging(LogLevel.Debug).build(),
     },
     getters: {
         menuDisplay: state => {
@@ -175,13 +175,14 @@ const store = new Vuex.Store({
                     })
                 .then(response => {
                     localStorage.token = token;
-                    context.state.websocket.send("baerer " + localStorage.token);
+                    //context.state.websocket.start();
+                    //context.state.websocket.send("baerer " + localStorage.token);
                     context.commit("logIn"); 
                     context.dispatch("UpdateTechBildings");
                     context.dispatch("UpdateQueued");
                     router.push("/map");
                 })
-                .catch(error => console.log(error.response));
+                .catch(error => console.log(error));
         },
         Logout (context)
         {
