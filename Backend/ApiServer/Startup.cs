@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
+using ApiServer.SignalRHubs;
 using CoreClassLibrary.Observer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -67,6 +68,9 @@ namespace ApiServer
 
             services.AddMvc();
 
+            // https://www.codemag.com/Article/1807061/Build-Real-time-Applications-with-ASP.NET-Core-SignalR
+            services.AddSignalR();
+
             // TODO: only for debug builds (to prevent data(API specification) leaks)
             // Register the Swagger generator, defining 1 or more Swagger documents
             services.AddSwaggerGen(c =>
@@ -112,6 +116,12 @@ namespace ApiServer
             // https://docs.microsoft.com/en-us/aspnet/core/fundamentals/static-files?view=aspnetcore-2.1&tabs=aspnetcore2x
             app.UseDefaultFiles();
             app.UseStaticFiles();
+
+            // https://www.codemag.com/Article/1807061/Build-Real-time-Applications-with-ASP.NET-Core-SignalR
+            app.UseSignalR(builder =>
+            {
+                builder.MapHub<BaseHub>("/api/ws");
+            });
 
             // Enable middleware to serve generated Swagger as a JSON endpoint.
             app.UseSwagger();

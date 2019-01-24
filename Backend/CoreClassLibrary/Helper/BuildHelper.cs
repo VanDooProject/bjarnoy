@@ -102,6 +102,8 @@ namespace CoreClassLibrary.Helper
             queueEntry.Building = buildingToBeBuilt;
             queueEntry.Owner = user;
             queueEntry.StartTime = DateTime.Now;
+
+            // test this since it can be null
             if (buildingToBeBuilt.BuildDuration != null)
             {
                 queueEntry.EndTime = DateTime.Now + (TimeSpan) buildingToBeBuilt.BuildDuration;
