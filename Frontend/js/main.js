@@ -38,7 +38,7 @@ var toastrConfigs = {
 Vue.use(CxltToastr, toastrConfigs);
 
 //SignalR
-require('@aspnet/signalr')
+var signalR = require('@aspnet/signalr')
 
 
 // own components:
