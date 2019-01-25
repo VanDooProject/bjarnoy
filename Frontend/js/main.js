@@ -38,7 +38,7 @@ var toastrConfigs = {
 Vue.use(CxltToastr, toastrConfigs);
 
 //SignalR
-require('@aspnet/signalr')
+var signalR = require('@aspnet/signalr')
 
 
 // own components:
@@ -86,7 +86,7 @@ const store = new Vuex.Store({
         mapTiles: [],
         queued: [],
         now: new Date(),
-        websocket: new signalR.HubConnectionBuilder().withUrl(config.WsUriPrefix + "/api/websockets/queue").configureLogging(LogLevel.Debug).build(),
+        websocket: undefined,
     },
     getters: {
         menuDisplay: state => {
@@ -96,10 +96,13 @@ const store = new Vuex.Store({
     actions: {
         StartWebSocket(context)
         {
-            context.state.websocket.on("ReceiveMessage",(user, message) => {
-                context.dispatch("ReciveWebSocket",user, message);
-            });
-            context.state.websocket.start().catch(err => context.dispatch("ErrorWebSocket", err));
+            if(context.state.websocket != undefined)
+            {
+                context.state.websocket.on("ReceiveMessage",(user, message) => {
+                    context.dispatch("ReciveWebSocket",user, message);
+                });
+                context.state.websocket.start().catch(err => context.dispatch("ErrorWebSocket", err));
+            }
         },
         ReciveWebSocket(context, user, message)
         {
@@ -174,14 +177,20 @@ const store = new Vuex.Store({
                         withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => {
+                    if(context.state.websocket == undefined)
+                    {
+                        context.state.websocket = new signalR.HubConnectionBuilder()
+                            .withUrl(config.WsUriPrefix + "/api/ws", {accessTokenFactory: () => localStorage.token}).configureLogging(LogLevel.Debug).build()
+                    }
                     localStorage.token = token;
-                    context.state.websocket.send("baerer " + localStorage.token);
+                    context.dispatch("StartWebSocket");
+                    //context.state.websocket.invoke("SendMessage", "usr", "Hello World");
                     context.commit("logIn"); 
                     context.dispatch("UpdateTechBildings");
                     context.dispatch("UpdateQueued");
                     router.push("/map");
                 })
-                .catch(error => console.log(error.response));
+                .catch(error => console.log(error));
         },
         Logout (context)
         {
