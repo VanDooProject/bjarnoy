@@ -36,7 +36,7 @@ job_build_dotnet_bin_linux:
         ApiServer/ApiServer.csproj
         --self-contained
         -c Release
-        --framework netcoreapp2.0
+        --framework netcoreapp2.2
         -r ubuntu.16.10-x64
 
   artifacts:
