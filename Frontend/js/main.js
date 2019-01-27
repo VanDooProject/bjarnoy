@@ -174,7 +174,11 @@ const store = new Vuex.Store({
                     if(context.state.websocket == undefined)
                     {
                         context.state.websocket = new signalR.HubConnectionBuilder()
-                            .withUrl(config.WsUriPrefix + "/api/ws", {accessTokenFactory: () => localStorage.token}).configureLogging(LogLevel.Debug).build()
+                            .withUrl(config.WsUriPrefix + "/api/ws",
+                            {
+                                accessTokenFactory: () => localStorage.token
+                            }
+                            ).configureLogging(LogLevel.Debug).build()
                     }
                     localStorage.token = token;
                     context.dispatch("StartWebSocket");

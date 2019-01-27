@@ -9,7 +9,8 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace ApiServer.SignalRHubs
 {
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    //[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize]
     public class BaseHub : Hub
     {
         private ILog logger = LogManager.GetLogger(typeof(BaseHub));

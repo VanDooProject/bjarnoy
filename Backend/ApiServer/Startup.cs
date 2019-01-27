@@ -109,7 +109,7 @@ namespace ApiServer
             // https://stackoverflow.com/questions/44379560/how-to-enable-cors-in-asp-net-core-webapi
             // TODO: remove core on release builds
             app.UseCors(builder => builder
-                .AllowAnyOrigin()
+                //.AllowAnyOrigin()
                 .WithOrigins("http://localhost:8080")
                 .AllowAnyMethod()
                 .AllowAnyHeader()
