@@ -98,6 +98,7 @@ const store = new Vuex.Store({
         {
             if(context.state.websocket != undefined)
             {
+                console.log("starting websocket");
                 context.state.websocket.on("ReceiveMessage",(user, message) => {
                     context.dispatch("ReciveWebSocket",user, message);
                 });
@@ -118,7 +119,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/map/tiles',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetMapTiles", response.data);
@@ -132,7 +132,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/Queue/my',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetQueued", response.data);
@@ -143,10 +142,7 @@ const store = new Vuex.Store({
         },
         UpdateImageMap (context) {
             axios
-                .get('/images/data.json',
-                {
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                })
+                .get('/images/data.json')
                 .then(response => {
                     context.commit("SetImageMap", response.data);
                 })
@@ -159,7 +155,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetTechBuildings", response.data);
@@ -174,7 +169,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => {
                     if(context.state.websocket == undefined)

@@ -24,8 +24,6 @@
             .get(this.$config.RequestUriPrefix + '/api/v1/Profile/self/',
             {
                 headers: {'Authorization': "bearer " + localStorage.token},
-                // CORS cookie issue: https://github.com/axios/axios/issues/876
-                withCredentials: true
             })
             .then(response => {
                 this.text = ["Username: " + response.data.username,
