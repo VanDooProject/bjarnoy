@@ -26,13 +26,17 @@ namespace ApiServer.SignalRHubs
             return base.OnDisconnectedAsync(exception);
         }
 
-        public async Task SendMessage(
-            string message)
+        public async Task SendMessage(string message)
         {
             logger.Info($"got message {message}");
-            await Clients.All.SendAsync("newMessage", "anonymous", message);
+            await Clients.All.SendAsync("ReceiveMessage", message);
         }
 
+        public DateTime GetServerTime()
+        {
+            logger.Info($"requested servertime");
+            return DateTime.Now;
+        }
 
     }
 }

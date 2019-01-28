@@ -102,13 +102,31 @@ const store = new Vuex.Store({
                 context.state.websocket.on("ReceiveMessage",(user, message) => {
                     context.dispatch("ReciveWebSocket",user, message);
                 });
-                context.state.websocket.start().catch(err => context.dispatch("ErrorWebSocket", err));
+                context.state.websocket.start()
+                .then(() => {
+                    let message = "test";
+                    context.state.websocket.invoke("SendMessage", message).catch(function (err) {
+                        return console.error(err.toString());
+                    });
+
+                    context.state.websocket.on("ReceiveMessage", function (message) {
+                        return console.info("got message: " + message);
+                    });
+    
+                    context.state.websocket.invoke("GetServerTime").then(function (res) {
+                        return console.info("got servertime: " + res);
+                    })
+                    .catch(function (err) {
+                        return console.error(err.toString());
+                    });
+                })
+                .catch(err => context.dispatch("ErrorWebSocket", err));
             }
         },
         ReciveWebSocket(context, user, message)
         {
-            console.log(user);
-            console.log(message);
+            // console.log(user);
+            // console.log(message);
         },
         ErrorWebSocket(context, error)
         {
