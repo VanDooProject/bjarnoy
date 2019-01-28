@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace ApiServer.SignalRHubs
 {
-    //[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize]
     public class BaseHub : Hub
     {
