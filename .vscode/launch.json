@@ -46,7 +46,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/Backend/ApiServer/bin/Debug/netcoreapp2.0/ApiServer.dll",
+            "program": "${workspaceFolder}/Backend/ApiServer/bin/Debug/netcoreapp2.2/ApiServer.dll",
             "args": [],
             "cwd": "${workspaceFolder}/Backend/ApiServer",
             "stopAtEntry": false,
