@@ -112,6 +112,10 @@ const store = new Vuex.Store({
                     context.state.websocket.on("ReceiveMessage", function (message) {
                         return console.info("got message: " + message);
                     });
+
+                    context.state.websocket.on("Queue", function (queue) {
+                        return console.info("got Queue: " + queue);
+                    });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
                         return console.info("got servertime: " + res);

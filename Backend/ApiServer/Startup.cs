@@ -6,12 +6,14 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
+using ApiServer.BackgroundService;
 using ApiServer.SignalRHubs;
 using CoreClassLibrary.Observer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -94,6 +96,9 @@ namespace ApiServer
             // https://www.codemag.com/Article/1807061/Build-Real-time-Applications-with-ASP.NET-Core-SignalR
             services.AddSignalR();
 
+            // to map our user objects to ids
+            services.AddSingleton<IUserIdProvider, CustomUserIdProvider>();
+
             // TODO: only for debug builds (to prevent data(API specification) leaks)
             // Register the Swagger generator, defining 1 or more Swagger documents
             services.AddSwaggerGen(c =>
@@ -115,6 +120,12 @@ namespace ApiServer
             });
 
             services.AddSingleton<IAuthorizationHandler, SessionAuthorizationHandler>();
+
+
+
+
+            // add Queue Observer service
+            services.AddHostedService<QueueObserverService>();
         }
 
 
@@ -159,8 +170,6 @@ namespace ApiServer
             });
 
             app.UseMvc();
-
-            QueueObserver.Instance.ToString();
         }
     }
 }
