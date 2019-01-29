@@ -40,7 +40,7 @@
                 this.axios
                 .post(this.$config.RequestUriPrefix + '/api/v1/Building/build',
                     {
-                        tile: this.tile,
+                        tile: { position: this.tile.position },
                         buildingName: this.type.name,
                         level: this.type.level,
                     },
