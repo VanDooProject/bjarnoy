@@ -23,11 +23,6 @@ export default {
         difference() {
             var end = new Date(this.entry.endTime);
             var diff = end.getTime() - this.$store.state.now;
-            if(diff <= -1) //TODO change in the future!
-            {
-                this.$store.dispatch("UpdateQueued");
-                this.$store.dispatch("UpdateMapTiles");
-            }
             return Math.round((diff) / 1000);
         },
         progress() {

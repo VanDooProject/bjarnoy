@@ -100,27 +100,21 @@ const store = new Vuex.Store({
             if(context.state.websocket != undefined)
             {
                 console.log("starting websocket");
-                context.state.websocket.on("ReceiveMessage",(user, message) => {
-                    context.dispatch("ReciveWebSocket",user, message);
-                });
                 context.state.websocket.start()
                 .then(() => {
-                    let message = "test";
-                    context.state.websocket.invoke("SendMessage", message).catch(function (err) {
-                        return console.error(err.toString());
-                    });
-
-                    context.state.websocket.on("ReceiveMessage", function (message) {
-                        return console.info("got message: " + message);
-                    });
-
                     context.state.websocket.on("Queue", function (queue) {
+                        context.dispatch("UpdateQueued");
+                        if(queue.startsWith("BuildingQueue"))
+                        {
+                            context.dispatch("UpdateMapTiles");
+                        }
                         return console.info("got Queue: " + queue);
                     });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
                         context.commit("SetDeltaTime", new Date().getTime() - new Date(res).getTime());
-                        return console.info("got servertime: " + res);
+                        
+                        return console.info("got servertime: " + res + " Diff: " + context.state.deltaTime);
                     })
                     .catch(function (err) {
                         return console.error(err.toString());
@@ -128,15 +122,6 @@ const store = new Vuex.Store({
                 })
                 .catch(err => context.dispatch("ErrorWebSocket", err));
             }
-        },
-        ReciveWebSocket(context, user, message)
-        {
-            // console.log(user);
-            // console.log(message);
-        },
-        ErrorWebSocket(context, error)
-        {
-            console.log(error);
         },
         UpdateMapTiles (context) {
             axios
@@ -217,6 +202,7 @@ const store = new Vuex.Store({
         Logout (context)
         {
             context.state.websocket.stop();
+            context.state.websocket = undefined;
             localStorage.removeItem("token");
             context.commit("logOut");
             router.push("/login");
