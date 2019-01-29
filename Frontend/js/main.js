@@ -65,6 +65,17 @@ const router = new VueRouter({
     routes // short for `routes: routes`
 });
 
+//https://stackoverflow.com/questions/38552003/how-to-decode-jwt-token-in-javascript
+function jwtDecode(token){
+    return JSON.parse(
+        decodeURIComponent(
+        Array.prototype.map.call(atob(
+        token.split('.')[1].replace('-', '+').replace('_', '/')
+        ), c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join(''))
+    )
+}
 
 
 Vue.prototype.$config = config;
@@ -95,9 +106,56 @@ const store = new Vuex.Store({
         }
     },
     actions: {
+        Tick(context) //Gets called every 60 seconds
+        {
+            if(localStorage.token != undefined)
+            {
+                var date = new Date();
+                var now = Math.round(date.getTime()/1000);
+                var token = jwtDecode(localStorage.token);
+                var expires = token.exp;
+                var notBefore = token.nbf;
+                if((expires - now) < ((expires - notBefore) / 2) && (expires - now) > 0)
+                {
+                    axios
+                    .get(config.RequestUriPrefix + '/api/v1/auth/refresh',
+                    {
+                        headers: {'Authorization': "bearer " + localStorage.token},
+                    })
+                    .then(response => localStorage.token = response.data.token)
+                    .catch(error => store.dispatch("ReqestError", error));
+                }
+            }
+        },
+        Startup (context)
+        {
+            if(localStorage.token == undefined)
+            {
+                router.push("/login")
+            }
+            else
+            {
+                var date = new Date();
+                var now = Math.round(date.getTime()/1000);
+                var token = jwtDecode(localStorage.token);
+                var expires = token.exp;
+                var notBefore = token.nbf;
+                if((expires - now) > 0 | now < notBefore)
+                {
+                    console.info("token found, trying it");
+                    context.dispatch("Login", localStorage.token);
+                }
+                else
+                {
+                    console.info("Token not valid, deleted");
+                    localStorage.removeItem("token");
+                    router.push("/login");
+                }
+            }
+        },
         StartWebSocket(context)
         {
-            if(context.state.websocket != undefined)
+            if(context.state.websocket != undefined && context.state.websocket.connectionState == 0)
             {
                 console.log("starting websocket");
                 context.state.websocket.start()
@@ -122,6 +180,9 @@ const store = new Vuex.Store({
                 })
                 .catch(err => context.dispatch("ErrorWebSocket", err));
             }
+        },
+        ErrorWebSocket (context, error) {
+            console.error(error);
         },
         UpdateMapTiles (context) {
             axios
@@ -276,10 +337,17 @@ const store = new Vuex.Store({
 });
 store.dispatch("UpdateImageMap");
 store.dispatch("StartWebSocket");
+store.dispatch("Startup");
 
+var lastTick = 0;
 function callback()
 {
     store.commit("SetCurrentTime", new Date() - store.state.deltaTime);
+    if(lastTick++ > 60)
+    {
+        lastTick = 0;
+        store.dispatch("Tick");
+    }
 }
 setInterval(callback, 1000);
 
