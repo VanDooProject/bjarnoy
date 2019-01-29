@@ -87,6 +87,7 @@ const store = new Vuex.Store({
         queued: [],
         now: new Date(),
         websocket: undefined,
+        deltaTime: 0,
     },
     getters: {
         menuDisplay: state => {
@@ -114,6 +115,7 @@ const store = new Vuex.Store({
                     });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
+                        context.commit("SetDeltaTime", new Date().getTime() - new Date(res).getTime());
                         return console.info("got servertime: " + res);
                     })
                     .catch(function (err) {
@@ -231,6 +233,9 @@ const store = new Vuex.Store({
         }
     },
     mutations: {
+        SetDeltaTime (state, dT) {
+            state.deltaTime = dT;
+        },
         SetMapTiles (state, tiles) {
             state.mapTiles = tiles;
         },
@@ -284,7 +289,7 @@ store.dispatch("StartWebSocket");
 
 function callback()
 {
-    store.commit("SetCurrentTime", new Date());
+    store.commit("SetCurrentTime", new Date() - store.state.deltaTime);
 }
 setInterval(callback, 1000);
 
