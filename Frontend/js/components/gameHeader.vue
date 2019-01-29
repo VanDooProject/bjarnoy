@@ -59,7 +59,7 @@
                         headers: {'Authorization': "bearer " + localStorage.token},
                     })
                     .then(response => this.$store.dispatch("Login", localStorage.token))
-                    .catch(error => this.$store.commit('ReqestErr', error.response));
+                    .catch(error => this.$store.dispatch('ReqestError', error));
                 }
                 else if ((expires - now) > 0)
                 {
