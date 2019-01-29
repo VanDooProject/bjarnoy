@@ -57,8 +57,6 @@
                     .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
-                        // CORS cookie issue: https://github.com/axios/axios/issues/876
-                        withCredentials: true
                     })
                     .then(response => this.$store.dispatch("Login", localStorage.token))
                     .catch(error => this.$store.commit('ReqestErr', error.response));
@@ -69,8 +67,6 @@
                     .get(this.$config.RequestUriPrefix + '/api/v1/auth/refresh',
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
-                        // CORS cookie issue: https://github.com/axios/axios/issues/876
-                        withCredentials: true
                     })
                     .then(response => this.$store.dispatch("Login", response.data.token))
                     .catch(error => this.$store.dispatch("ReqestError", error));

@@ -98,16 +98,35 @@ const store = new Vuex.Store({
         {
             if(context.state.websocket != undefined)
             {
+                console.log("starting websocket");
                 context.state.websocket.on("ReceiveMessage",(user, message) => {
                     context.dispatch("ReciveWebSocket",user, message);
                 });
-                context.state.websocket.start().catch(err => context.dispatch("ErrorWebSocket", err));
+                context.state.websocket.start()
+                .then(() => {
+                    let message = "test";
+                    context.state.websocket.invoke("SendMessage", message).catch(function (err) {
+                        return console.error(err.toString());
+                    });
+
+                    context.state.websocket.on("ReceiveMessage", function (message) {
+                        return console.info("got message: " + message);
+                    });
+    
+                    context.state.websocket.invoke("GetServerTime").then(function (res) {
+                        return console.info("got servertime: " + res);
+                    })
+                    .catch(function (err) {
+                        return console.error(err.toString());
+                    });
+                })
+                .catch(err => context.dispatch("ErrorWebSocket", err));
             }
         },
         ReciveWebSocket(context, user, message)
         {
-            console.log(user);
-            console.log(message);
+            // console.log(user);
+            // console.log(message);
         },
         ErrorWebSocket(context, error)
         {
@@ -118,7 +137,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/map/tiles',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetMapTiles", response.data);
@@ -132,7 +150,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/Queue/my',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetQueued", response.data);
@@ -143,10 +160,7 @@ const store = new Vuex.Store({
         },
         UpdateImageMap (context) {
             axios
-                .get('/images/data.json',
-                {
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                })
+                .get('/images/data.json')
                 .then(response => {
                     context.commit("SetImageMap", response.data);
                 })
@@ -159,7 +173,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetTechBuildings", response.data);
@@ -174,13 +187,16 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => {
                     if(context.state.websocket == undefined)
                     {
                         context.state.websocket = new signalR.HubConnectionBuilder()
-                            .withUrl(config.WsUriPrefix + "/api/ws", {accessTokenFactory: () => localStorage.token}).configureLogging(LogLevel.Debug).build()
+                            .withUrl(config.WsUriPrefix + "/api/ws",
+                            {
+                                accessTokenFactory: () => localStorage.token
+                            }
+                            ).configureLogging(LogLevel.Debug).build()
                     }
                     localStorage.token = token;
                     context.dispatch("StartWebSocket");

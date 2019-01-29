@@ -40,13 +40,12 @@
                 this.axios
                 .post(this.$config.RequestUriPrefix + '/api/v1/Building/build',
                     {
-                        tile: this.tile,
+                        tile: { position: this.tile.position },
                         buildingName: this.type.name,
                         level: this.type.level,
                     },
                     {
                         headers: {'Authorization': "bearer " + localStorage.token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => {
                     this.$store.dispatch("UpdateMapTiles");

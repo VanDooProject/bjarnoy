@@ -64,6 +64,29 @@ namespace ApiServer
                         ValidateIssuerSigningKey = true, // verify that the key used to sign the incoming token is part of a list of trusted keys
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Jwt:Key"]))
                     };
+
+                    // https://docs.microsoft.com/en-us/aspnet/core/signalr/authn-and-authz?view=aspnetcore-2.2
+                    // We have to hook the OnMessageReceived event in order to
+                    // allow the JWT authentication handler to read the access
+                    // token from the query string when a WebSocket or 
+                    // Server-Sent Events request comes in.
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+
+                            // If the request is for our hub...
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken) &&
+                                (path.StartsWithSegments("/api/ws")))
+                            {
+                                // Read the token out of the query string
+                                context.Token = accessToken;
+                            }
+                            return Task.CompletedTask;
+                        }
+                    };
                 });
 
             services.AddMvc();
@@ -107,8 +130,10 @@ namespace ApiServer
             app.UseAuthentication();
 
             // https://stackoverflow.com/questions/44379560/how-to-enable-cors-in-asp-net-core-webapi
+            // TODO: remove core on release builds
             app.UseCors(builder => builder
-                .AllowAnyOrigin()
+                //.AllowAnyOrigin()
+                .WithOrigins("http://localhost:8080")
                 .AllowAnyMethod()
                 .AllowAnyHeader()
                 .AllowCredentials());

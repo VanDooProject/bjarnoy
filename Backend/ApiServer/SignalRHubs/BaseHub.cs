@@ -2,19 +2,41 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using log4net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace ApiServer.SignalRHubs
 {
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize]
     public class BaseHub : Hub
     {
-        public async Task SendMessage(
-            string message)
+        private ILog logger = LogManager.GetLogger(typeof(BaseHub));
+
+        public override Task OnConnectedAsync()
         {
-            await Clients.All.SendAsync("newMessage", "anonymous", message);
+            logger.Info("client connected");
+            return base.OnConnectedAsync();
         }
+
+        public override Task OnDisconnectedAsync(Exception exception)
+        {
+            logger.Info("client disconnected");
+            return base.OnDisconnectedAsync(exception);
+        }
+
+        public async Task SendMessage(string message)
+        {
+            logger.Info($"got message {message}");
+            await Clients.All.SendAsync("ReceiveMessage", message);
+        }
+
+        public DateTime GetServerTime()
+        {
+            logger.Info($"requested servertime");
+            return DateTime.Now;
+        }
+
     }
 }
