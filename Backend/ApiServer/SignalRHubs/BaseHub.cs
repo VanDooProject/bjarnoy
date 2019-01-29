@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using log4net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,7 +17,7 @@ namespace ApiServer.SignalRHubs
 
         public override Task OnConnectedAsync()
         {
-            logger.Info("client connected");
+            logger.InfoFormat("client {0} connected", Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value);
             return base.OnConnectedAsync();
         }
 

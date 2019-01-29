@@ -19,102 +19,51 @@ namespace CoreClassLibrary.Observer
     {
         private ILog logger = LogManager.GetLogger(typeof(QueueObserver));
 
-        private readonly IMongoCollection<Queue> collection;
-
 
         private BuildQueueHandler BuildHandler = new BuildQueueHandler();
 
+        private QueueRepository queueRepository = new QueueRepository();
 
 
+        public delegate void EntryProcessedDelegate(Queue q);
 
-        private static readonly Lazy<QueueObserver> lazy =
-            new Lazy<QueueObserver>(() => new QueueObserver());
+        private EntryProcessedDelegate _callback;
 
-        public static QueueObserver Instance { get { return lazy.Value; } }
-
-        public QueueObserver()
+        public QueueObserver(EntryProcessedDelegate clb = null)
         {
             logger.Info("observer started");
 
-            this.collection = MongoCollectionFactory.Instance.Get<Queue>();
-
-            //#if DEBUG
-            // in debug build use polling
-            QueueProcessorTask();
-            //var timer = new System.Timers.Timer(2000);
-            //timer.Elapsed += OnTimerEvent;
-            //timer.AutoReset = true;
-            //timer.Enabled = true;
-            //#endif
-
-
-            /* // TODO: use change streams to proper poll in release build
-
-            // https://stackoverflow.com/questions/48672584/how-to-set-mongodb-change-stream-operationtype-in-the-c-sharp-driver
-
-            //Get the whole document instead of just the changed portion
-            ChangeStreamOptions options = new ChangeStreamOptions() { FullDocument = ChangeStreamFullDocumentOption.UpdateLookup };
-
-
-            //The operationType can be one of the following: insert, update, replace, delete, invalidate
-            var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<Queue>>()
-                .Match("{ operationType: { $in: [ 'replace', 'insert', 'update' ] } }");
-
-            var changeStream = collection.Watch(pipeline,options);
-            //changeStream.MoveNext();    //Blocks until a document is replaced, inserted or updated in the TestCollection
-            //IEnumerable<ChangeStreamDocument<Queue>> next = changeStream.Current;
-            //enumerator.Dispose();
-
-            changeStream.ForEachAsync(Processor);
-            */
-
-
-        }
-
-        private QueueRepository queueRepository = new QueueRepository();
-        private void QueueProcessorTask()
-        {
-            var task = Task.Factory.StartNew(() =>
+            if (clb != null)
             {
-                bool moreToDo = true;
-                while (moreToDo)
+                _callback = clb;
+            }
+        }
+
+
+
+        public void GetAndProcessEntries()
+        {
+            // do while there are entries
+            Queue entry;
+            while ((entry = queueRepository.GetAndUpdateFinished()) != null)
+            {
+                try
                 {
-                    // do while there are entries
-                    Queue entry;
-                    while ( (entry = queueRepository.GetAndUpdateFinished()) != null)
-                    {
-                        processQueueEntry(entry);
+                    processQueueEntry(entry);
 
-                        queueRepository.MarkAsProcessed(entry);
-                    }
-
-                    // to low CPU load
-                    #if DEBUG
-                    System.Threading.Thread.Sleep(2000);
-                    #else
-                    System.Threading.Thread.Sleep(2000);
-                    #endif
+                    queueRepository.MarkAsProcessed(entry);
+                    _callback(entry);
                 }
-            }); 
-        }
-
-        private void OnTimerEvent(object sender, ElapsedEventArgs e)
-        {
-            // query all finished queue entries and call clb
-            QueueRepository queueRepository = new QueueRepository();
-            Queue entry = queueRepository.GetAndUpdateFinished();
-
-            processQueueEntry(entry);
-        }
-
-        private Task Processor(ChangeStreamDocument<Queue> arg1, int arg2)
-        {
-            return null;
+                catch (QueueNotImplementedException e)
+                {
+                    logger.Error(e.Message);
+                }
+            }
         }
 
 
 
-        private Task processQueueEntry(Queue entry)
+        private void processQueueEntry(Queue entry)
         {
             logger.InfoFormat("processing queue {0}", entry);
 
@@ -122,8 +71,27 @@ namespace CoreClassLibrary.Observer
             {
                 BuildHandler.processEntry(buildEntry);
             }
+            else
+            {
+                throw new QueueNotImplementedException("this queue entry is not implemented yet " + entry);
+            }
+        }
 
-            return null;
+
+
+        private class QueueNotImplementedException : NotImplementedException
+        {
+            public QueueNotImplementedException()
+            {
+            }
+
+            public QueueNotImplementedException(string message) : base(message)
+            {
+            }
+
+            public QueueNotImplementedException(string message, Exception inner) : base(message, inner)
+            {
+            }
         }
     }
 }
