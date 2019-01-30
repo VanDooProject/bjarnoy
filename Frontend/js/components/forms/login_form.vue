@@ -55,9 +55,6 @@
                     {
                         username: this.form.username,
                         password: this.form.password,
-                    },
-                    {
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => {
                     this.$store.dispatch("Login", response.data.token);

@@ -119,7 +119,7 @@ export default {
                     "_level" +
                     pad(this.tile.building.level, 3) +
                     ".png";
-                console.log(tilename);
+                //console.log(tilename);
                 entry = imgmap.filter(obj => obj.name == tilename)[0];
             }
             if (entry != undefined) {

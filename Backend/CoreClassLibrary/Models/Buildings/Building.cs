@@ -17,6 +17,8 @@ namespace CoreClassLibrary.Models.Buildings
 
         /// <summary>
         /// duration of build time needed to reach this level
+        /// can be null to have lower amounts of data to be transmitted in communication
+        /// TODO: use own model for this which wraps TimeSpan
         /// </summary>
         [BsonIgnoreIfNull]
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

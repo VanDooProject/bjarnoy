@@ -99,9 +99,6 @@
                             password: this.form.password,
                             mail: this.form.email,
                             passwordConfirm: this.form.passwordVerify
-                        },
-                        {
-                            withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                         })
                     .then(response => this.$store.dispatch("Login", response.data.token))
                     .catch(error => this.error = error.response);

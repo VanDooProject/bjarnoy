@@ -37,6 +37,9 @@ var toastrConfigs = {
 };
 Vue.use(CxltToastr, toastrConfigs);
 
+//SignalR
+var signalR = require('@aspnet/signalr')
+
 
 // own components:
 import MapComponent from './components/map.vue';
@@ -44,6 +47,7 @@ import GameHeader from './components/gameHeader.vue';
 import LoginForm from './components/forms/login_form.vue';
 import RegisterForm from './components/forms/register_form.vue';
 import UserProfie from './components/user_profile.vue';
+import { HttpTransportType, LogLevel } from '@aspnet/signalr';
 
 
 // 1. Define route components.
@@ -82,7 +86,8 @@ const store = new Vuex.Store({
         techBildings: [],
         mapTiles: [],
         queued: [],
-        now: new Date()
+        now: new Date(),
+        websocket: undefined,
     },
     getters: {
         menuDisplay: state => {
@@ -90,12 +95,53 @@ const store = new Vuex.Store({
         }
     },
     actions: {
+        StartWebSocket(context)
+        {
+            if(context.state.websocket != undefined)
+            {
+                console.log("starting websocket");
+                context.state.websocket.on("ReceiveMessage",(user, message) => {
+                    context.dispatch("ReciveWebSocket",user, message);
+                });
+                context.state.websocket.start()
+                .then(() => {
+                    let message = "test";
+                    context.state.websocket.invoke("SendMessage", message).catch(function (err) {
+                        return console.error(err.toString());
+                    });
+
+                    context.state.websocket.on("ReceiveMessage", function (message) {
+                        return console.info("got message: " + message);
+                    });
+
+                    context.state.websocket.on("Queue", function (queue) {
+                        return console.info("got Queue: " + queue);
+                    });
+    
+                    context.state.websocket.invoke("GetServerTime").then(function (res) {
+                        return console.info("got servertime: " + res);
+                    })
+                    .catch(function (err) {
+                        return console.error(err.toString());
+                    });
+                })
+                .catch(err => context.dispatch("ErrorWebSocket", err));
+            }
+        },
+        ReciveWebSocket(context, user, message)
+        {
+            // console.log(user);
+            // console.log(message);
+        },
+        ErrorWebSocket(context, error)
+        {
+            console.log(error);
+        },
         UpdateMapTiles (context) {
             axios
                 .get(config.RequestUriPrefix + '/api/v1/map/tiles',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetMapTiles", response.data);
@@ -109,7 +155,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/Queue/my',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetQueued", response.data);
@@ -120,10 +165,7 @@ const store = new Vuex.Store({
         },
         UpdateImageMap (context) {
             axios
-                .get('/images/data.json',
-                {
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                })
+                .get('/images/data.json')
                 .then(response => {
                     context.commit("SetImageMap", response.data);
                 })
@@ -136,7 +178,6 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
                 {
                     headers: {'Authorization': "bearer " + localStorage.token},
-                    withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                 })
                 .then(response => {
                     context.commit("SetTechBuildings", response.data);
@@ -151,21 +192,38 @@ const store = new Vuex.Store({
                 .get(config.RequestUriPrefix + '/api/v1/auth/selftest',
                     {
                         headers: {'Authorization': "bearer " + token},
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
                     })
                 .then(response => {
+                    if(context.state.websocket == undefined)
+                    {
+                        context.state.websocket = new signalR.HubConnectionBuilder()
+                            .withUrl(config.WsUriPrefix + "/api/ws",
+                            {
+                                accessTokenFactory: () => localStorage.token
+                            }
+                            ).configureLogging(LogLevel.Debug).build()
+                    }
                     localStorage.token = token;
-                    store.commit("logIn"); 
-                    store.dispatch("UpdateTechBildings");
-                    store.dispatch("UpdateQueued");
+                    context.dispatch("StartWebSocket");
+                    //context.state.websocket.invoke("SendMessage", "usr", "Hello World");
+                    context.commit("logIn"); 
+                    context.dispatch("UpdateTechBildings");
+                    context.dispatch("UpdateQueued");
                     router.push("/map");
                 })
-                .catch(error => console.log(error.response));
+                .catch(error => console.log(error));
         },
-        ReqestError (error) {
+        Logout (context)
+        {
+            context.state.websocket.stop();
+            localStorage.removeItem("token");
+            context.commit("logOut");
+            router.push("/login");
+        },
+        ReqestError (context, error) {
             //if not logged in
             if(error.status == "401") {
-                store.commit("logOut");
+                context.commit("logOut");
                 if(localStorage.token)
                     router.push("/login");
                 else
@@ -231,6 +289,7 @@ const store = new Vuex.Store({
       }
 });
 store.dispatch("UpdateImageMap");
+store.dispatch("StartWebSocket");
 
 function callback()
 {

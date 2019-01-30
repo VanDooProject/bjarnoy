@@ -6,11 +6,14 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
+using ApiServer.BackgroundService;
+using ApiServer.SignalRHubs;
 using CoreClassLibrary.Observer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -63,9 +66,38 @@ namespace ApiServer
                         ValidateIssuerSigningKey = true, // verify that the key used to sign the incoming token is part of a list of trusted keys
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Jwt:Key"]))
                     };
+
+                    // https://docs.microsoft.com/en-us/aspnet/core/signalr/authn-and-authz?view=aspnetcore-2.2
+                    // We have to hook the OnMessageReceived event in order to
+                    // allow the JWT authentication handler to read the access
+                    // token from the query string when a WebSocket or 
+                    // Server-Sent Events request comes in.
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+
+                            // If the request is for our hub...
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken) &&
+                                (path.StartsWithSegments("/api/ws")))
+                            {
+                                // Read the token out of the query string
+                                context.Token = accessToken;
+                            }
+                            return Task.CompletedTask;
+                        }
+                    };
                 });
 
             services.AddMvc();
+
+            // https://www.codemag.com/Article/1807061/Build-Real-time-Applications-with-ASP.NET-Core-SignalR
+            services.AddSignalR();
+
+            // to map our user objects to ids
+            services.AddSingleton<IUserIdProvider, CustomUserIdProvider>();
 
             // TODO: only for debug builds (to prevent data(API specification) leaks)
             // Register the Swagger generator, defining 1 or more Swagger documents
@@ -88,6 +120,12 @@ namespace ApiServer
             });
 
             services.AddSingleton<IAuthorizationHandler, SessionAuthorizationHandler>();
+
+
+
+
+            // add Queue Observer service
+            services.AddHostedService<QueueObserverService>();
         }
 
 
@@ -103,8 +141,10 @@ namespace ApiServer
             app.UseAuthentication();
 
             // https://stackoverflow.com/questions/44379560/how-to-enable-cors-in-asp-net-core-webapi
+            // TODO: remove core on release builds
             app.UseCors(builder => builder
-                .AllowAnyOrigin()
+                //.AllowAnyOrigin()
+                .WithOrigins("http://localhost:8080")
                 .AllowAnyMethod()
                 .AllowAnyHeader()
                 .AllowCredentials());
@@ -112,6 +152,12 @@ namespace ApiServer
             // https://docs.microsoft.com/en-us/aspnet/core/fundamentals/static-files?view=aspnetcore-2.1&tabs=aspnetcore2x
             app.UseDefaultFiles();
             app.UseStaticFiles();
+
+            // https://www.codemag.com/Article/1807061/Build-Real-time-Applications-with-ASP.NET-Core-SignalR
+            app.UseSignalR(builder =>
+            {
+                builder.MapHub<BaseHub>("/api/ws");
+            });
 
             // Enable middleware to serve generated Swagger as a JSON endpoint.
             app.UseSwagger();
@@ -124,8 +170,6 @@ namespace ApiServer
             });
 
             app.UseMvc();
-
-            QueueObserver.Instance.ToString();
         }
     }
 }

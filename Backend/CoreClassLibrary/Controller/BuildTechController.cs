@@ -33,13 +33,24 @@ namespace CoreClassLibrary.Controller
             // check if exists in file, if not create new
             if (File.Exists(_settingsFile))
             {
-                // file exists -> parse
-                using (StreamReader file = File.OpenText(_settingsFile))
+                try
                 {
-                    this._buildtech = (List<Building>)serializer.Deserialize(file, typeof(List<Building>));
-                }
+                    // file exists -> parse
+                    using (StreamReader file = File.OpenText(_settingsFile))
+                    {
+                        this._buildtech = (List<Building>)serializer.Deserialize(file, typeof(List<Building>));
+                    }
 
-                // TODO check if all is valid (all have level, duration, valid ress,...)
+                    // TODO check if all is valid (all have level, duration, valid ress,...)
+                }
+                catch (Newtonsoft.Json.JsonSerializationException e)
+                {
+                    logger.ErrorFormat("error in '{0}' can't load because of: {1}", _settingsFile, e);
+
+                    // create new as fallback -> this is better than http 500 error
+                    // TODO: notify admin of this failure
+                    createDefaultBuildTech();
+                }
             }
             else
             {

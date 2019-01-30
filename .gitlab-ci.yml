@@ -36,7 +36,7 @@ job_build_dotnet_bin_linux:
         ApiServer/ApiServer.csproj
         --self-contained
         -c Release
-        --framework netcoreapp2.0
+        --framework netcoreapp2.2
         -r ubuntu.16.10-x64
 
   artifacts:
@@ -165,7 +165,7 @@ job_docker_create:
     #-------------------------------------------------------------------------------
     # copy artifact to docker build dir
     - mkdir -p ./Docker
-    - mv -v Backend/ApiServer/bin/Release/netcoreapp2.0/ubuntu.16.10-x64/publish/* ./Docker/
+    - mv -v Backend/ApiServer/bin/Release/netcoreapp2.2/ubuntu.16.10-x64/publish/* ./Docker/
 
     # vue stuff
     - mkdir -p ./Docker/wwwroot/dist
