@@ -22,12 +22,7 @@ export default {
     computed: {
         difference() {
             var end = new Date(this.entry.endTime);
-            var diff = end.getTime() - this.$store.state.now.getTime();
-            if(diff <= -1) //TODO change in the future!
-            {
-                this.$store.dispatch("UpdateQueued");
-                this.$store.dispatch("UpdateMapTiles");
-            }
+            var diff = end.getTime() - this.$store.state.now;
             return Math.round((diff) / 1000);
         },
         progress() {

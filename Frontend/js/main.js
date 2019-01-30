@@ -65,6 +65,17 @@ const router = new VueRouter({
     routes // short for `routes: routes`
 });
 
+//https://stackoverflow.com/questions/38552003/how-to-decode-jwt-token-in-javascript
+function jwtDecode(token){
+    return JSON.parse(
+        decodeURIComponent(
+        Array.prototype.map.call(atob(
+        token.split('.')[1].replace('-', '+').replace('_', '/')
+        ), c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join(''))
+    )
+}
 
 
 Vue.prototype.$config = config;
@@ -88,6 +99,7 @@ const store = new Vuex.Store({
         queued: [],
         now: new Date(),
         websocket: undefined,
+        deltaTime: 0,
     },
     getters: {
         menuDisplay: state => {
@@ -95,31 +107,73 @@ const store = new Vuex.Store({
         }
     },
     actions: {
+        Tick(context) //Gets called every 60 seconds
+        {
+            if(localStorage.token != undefined)
+            {
+                var date = new Date();
+                var now = Math.round(date.getTime()/1000);
+                var token = jwtDecode(localStorage.token);
+                var expires = token.exp;
+                var notBefore = token.nbf;
+                if((expires - now) < ((expires - notBefore) / 2) && (expires - now) > 0)
+                {
+                    axios
+                    .get(config.RequestUriPrefix + '/api/v1/auth/refresh',
+                    {
+                        headers: {'Authorization': "bearer " + localStorage.token},
+                    })
+                    .then(response => localStorage.token = response.data.token)
+                    .catch(error => store.dispatch("ReqestError", error));
+                }
+            }
+        },
+        Startup (context)
+        {
+            if(localStorage.token == undefined)
+            {
+                router.push("/login")
+            }
+            else
+            {
+                var date = new Date();
+                var now = Math.round(date.getTime()/1000);
+                var token = jwtDecode(localStorage.token);
+                var expires = token.exp;
+                var notBefore = token.nbf;
+                if((expires - now) > 0 | now < notBefore)
+                {
+                    console.info("token found, trying it");
+                    context.dispatch("Login", localStorage.token);
+                }
+                else
+                {
+                    console.info("Token not valid, deleted");
+                    localStorage.removeItem("token");
+                    router.push("/login");
+                }
+            }
+        },
         StartWebSocket(context)
         {
-            if(context.state.websocket != undefined)
+            if(context.state.websocket != undefined && context.state.websocket.connectionState == 0)
             {
                 console.log("starting websocket");
-                context.state.websocket.on("ReceiveMessage",(user, message) => {
-                    context.dispatch("ReciveWebSocket",user, message);
-                });
                 context.state.websocket.start()
                 .then(() => {
-                    let message = "test";
-                    context.state.websocket.invoke("SendMessage", message).catch(function (err) {
-                        return console.error(err.toString());
-                    });
-
-                    context.state.websocket.on("ReceiveMessage", function (message) {
-                        return console.info("got message: " + message);
-                    });
-
                     context.state.websocket.on("Queue", function (queue) {
+                        context.dispatch("UpdateQueued");
+                        if(queue.startsWith("BuildingQueue"))
+                        {
+                            context.dispatch("UpdateMapTiles");
+                        }
                         return console.info("got Queue: " + queue);
                     });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
-                        return console.info("got servertime: " + res);
+                        context.commit("SetDeltaTime", new Date().getTime() - new Date(res).getTime());
+                        
+                        return console.info("got servertime: " + res + " Diff: " + context.state.deltaTime);
                     })
                     .catch(function (err) {
                         return console.error(err.toString());
@@ -128,14 +182,8 @@ const store = new Vuex.Store({
                 .catch(err => context.dispatch("ErrorWebSocket", err));
             }
         },
-        ReciveWebSocket(context, user, message)
-        {
-            // console.log(user);
-            // console.log(message);
-        },
-        ErrorWebSocket(context, error)
-        {
-            console.log(error);
+        ErrorWebSocket (context, error) {
+            console.error(error);
         },
         UpdateMapTiles (context) {
             axios
@@ -216,6 +264,7 @@ const store = new Vuex.Store({
         Logout (context)
         {
             context.state.websocket.stop();
+            context.state.websocket = undefined;
             localStorage.removeItem("token");
             context.commit("logOut");
             router.push("/login");
@@ -236,6 +285,9 @@ const store = new Vuex.Store({
         }
     },
     mutations: {
+        SetDeltaTime (state, dT) {
+            state.deltaTime = dT;
+        },
         SetMapTiles (state, tiles) {
             state.mapTiles = tiles;
         },
@@ -290,10 +342,17 @@ const store = new Vuex.Store({
 });
 store.dispatch("UpdateImageMap");
 store.dispatch("StartWebSocket");
+store.dispatch("Startup");
 
+var lastTick = 0;
 function callback()
 {
-    store.commit("SetCurrentTime", new Date());
+    store.commit("SetCurrentTime", new Date() - store.state.deltaTime);
+    if(lastTick++ > 60)
+    {
+        lastTick = 0;
+        store.dispatch("Tick");
+    }
 }
 setInterval(callback, 1000);
 
