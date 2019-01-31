@@ -21,7 +21,7 @@ namespace CoreClassLibrary.Helper
         public BuildingQueue BuildBuilding(BuildBuildingModel build, UserModel user)
         {
             IslandRepository islandRepository = new IslandRepository();
-            Tile tile = islandRepository.getTile(build.Tile.Position.X, build.Tile.Position.Y, build.Tile.Position.Z);
+            Tile tile = islandRepository.getTile(build.Position.X, build.Position.Y, build.Position.Z);
 
             if (tile == null)
             {
