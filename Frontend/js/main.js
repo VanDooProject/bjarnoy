@@ -92,6 +92,7 @@ const store = new Vuex.Store({
         menuBuildOpen: false,
 
         mapOffset: {x: 0, y: 0},
+        mapScale: 0.5,
 
         mouseMove: {x:0, y:0},
         techBildings: [],
@@ -195,7 +196,7 @@ const store = new Vuex.Store({
                     context.commit("SetMapTiles", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr', error);
+                    context.dispatch('ReqestError', error);
                 });
         },
         UpdateQueued (context) {
@@ -208,7 +209,7 @@ const store = new Vuex.Store({
                     context.commit("SetQueued", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr', error);
+                    context.dispatch('ReqestError', error);
                 });
         },
         UpdateImageMap (context) {
@@ -218,7 +219,7 @@ const store = new Vuex.Store({
                     context.commit("SetImageMap", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr');
+                    context.dispatch('ReqestError', error);
                 });
         },
         UpdateTechBildings (context) {
@@ -231,7 +232,7 @@ const store = new Vuex.Store({
                     context.commit("SetTechBuildings", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr', error);
+                    context.dispatch('ReqestError', error);
                 });
         },
         Login (context, token){
@@ -289,7 +290,10 @@ const store = new Vuex.Store({
             state.deltaTime = dT;
         },
         SetMapTiles (state, tiles) {
-            state.mapTiles = tiles;
+            state.mapTiles = tiles.sort((a,b) => {
+                //Sort list when adding instead of using zIndex
+                return b.position.x - b.position.y - (a.position.x - a.position.y);
+            });
         },
         SetQueued (state, queue) {
             state.queued = queue;

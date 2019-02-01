@@ -6,6 +6,8 @@
         v-bind:y="ypos"
 
         xlink:href="/images/master.png"
+        v-on:mouseenter="openToolTip"
+        v-on:mouseleave="closeToolTip"
     ></image>
 </template>
 
@@ -39,18 +41,30 @@ export default {
     data: function () {
         return {
             showTT: false,
-            width: 300,
-            height: 600,
+            imgWidth: 300,
+            imgHeight: 600,
             angle: -45 * Math.PI / 180,
         };
     },
     computed: {
         xpos() {
-            return this.width * (this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle))/Math.SQRT2 + this.mapOffset.x;
-            
+            return this.width * (
+                    this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
+                    ) / Math.SQRT2 + this.mapOffset.x;  
         },
         ypos() {
-            return this.height *(this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle))/Math.SQRT2 + this.mapOffset.y;
+            return this.width * (
+                    this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle)
+                    )/ 2 + this.mapOffset.y;
+        },
+        width() {
+            return this.imgWidth * this.mapScale;
+        },
+        height() {
+            return this.imgHeight * this.mapScale;
+        },
+        mapScale() {
+            return this.$store.state.mapScale;
         },
         mapOffset() {
             return this.$store.state.mapOffset;
