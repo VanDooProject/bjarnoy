@@ -1,32 +1,12 @@
 <template>
-  <div
-    class="tile"
-    v-on:click="openMenu"
-    v-on:mouseenter="openToolTip"
-    v-on:mouseleave="closeToolTip"
-    v-bind:style="{
-            position: 'absolute',
-            /* ATTENTION: x and y are swapped */
-            transform: 'translate(' + tile.position.x * img.size.x / Math.SQRT2 + 'px, ' + tile.position.y * -img.size.x / Math.SQRT2 + 'px)',
-            width:  img.size.x / Math.SQRT2 + 'px',
-            height: img.size.x / Math.SQRT2 + 'px',
-            zIndex: tile.position.x - tile.position.y
-        }"
-  >
-    <div
-      v-bind:style="{
-                zIndex: tile.position.x - tile.position.y,
-                /* ATTENTION: x and y are swapped */
-                backgroundPositionX: - img.pos.y + 'px',
-                backgroundPositionY: - img.pos.x + 'px',
-                width: img.size.x + 'px',
-                height: img.size.y + 'px',
-                transform: 'translate(-' + img.size.x/2 + 'px,-' + img.size.y/2 + 'px) rotateZ(-45deg) scaleY(2.365)'
-            }"
-      class="tileimg"
-    ></div>
-    <div v-if="showTT" class="tiletooltip">{{tile}}</div>
-  </div>
+    <image 
+        v-bind:width=width
+        v-bind:height=height
+        v-bind:x="xpos"
+        v-bind:y="ypos"
+
+        xlink:href="/images/master.png"
+    ></image>
 </template>
 
 <script>
@@ -59,76 +39,21 @@ export default {
     data: function () {
         return {
             showTT: false,
+            width: 300,
+            height: 600,
+            angle: -45 * Math.PI / 180,
         };
     },
     computed: {
-        img() {
-            const imgmap = this.$store.state.imageMap;
-            var entry = {};
-            switch (this.tile.type) {
-            case "GrassTile":
-                entry = imgmap.filter(
-                obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "MountainTile":
-                entry = imgmap.filter(
-                obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "ForestTile":
-                entry = imgmap.filter(
-                obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "PumpkinResourceTile":
-                entry = imgmap.filter(
-                obj =>
-                    obj.name ==
-                    "pumpkinresourcetile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "QuarterEdgeTile":
-                entry = imgmap.filter(
-                    obj =>
-                        obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png"
-                    )[0];
-                break;
-            case "HalfEdgeTile":
-                entry = imgmap.filter(
-                    obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png"
-                    )[0];
-                break;
-            case "TriQuarterEdgeTile":
-                entry = imgmap.filter(
-                    obj =>
-                        obj.name ==
-                        "triquarteredgetile_" + this.tile.orientation[0] + ".png"
-                    )[0];
-                break;
-            }
-            if (this.tile.building != undefined) {
-                function pad(num, size) {
-                    var s = "000000000" + num;
-                    return s.substr(s.length - size);
-                }
-                var tilename =
-                    this.tile.building.type.toLowerCase() +
-                    "_" +
-                    this.tile.orientation[0] +
-                    "_level" +
-                    pad(this.tile.building.level, 3) +
-                    ".png";
-                //console.log(tilename);
-                entry = imgmap.filter(obj => obj.name == tilename)[0];
-            }
-            if (entry != undefined) {
-                return {pos: entry.pos, size: entry.size};
-            }
-            else {
-                console.error("tile not found - fallback");
-                return {pos: { x: 0, y: 0 }, size: { x: 400, y: 600 }};
-            }
+        xpos() {
+            return this.width * (this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle))/Math.SQRT2 + this.mapOffset.x;
+            
+        },
+        ypos() {
+            return this.height *(this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle))/Math.SQRT2 + this.mapOffset.y;
+        },
+        mapOffset() {
+            return this.$store.state.mapOffset;
         }
     }
 };

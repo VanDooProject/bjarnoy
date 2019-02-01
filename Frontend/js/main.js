@@ -326,10 +326,8 @@ const store = new Vuex.Store({
             state.mouseMove = {x:0 , y: 0};
         },
         MouseMove (state, move) {
-            state.mouseMove = {x: Math.abs(move.x) + state.mouseMove.x, y: Math.abs(move.y) + state.mouseMove.y};
-            var angle = -45 * Math.PI / 180;
-            state.mapOffset.x += move.x * Math.cos(angle) - move.y * 2 * Math.sin(angle);
-            state.mapOffset.y += (move.y * 2 * Math.cos(angle) + move.x * Math.sin(angle));
+            state.mapOffset.x += move.x;
+            state.mapOffset.y += move.y;
         },
         OpenBuildMenu (state) {
             state.menuBuildOpen = true;

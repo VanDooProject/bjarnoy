@@ -17,22 +17,21 @@
 
         id="mapbg"
         >
-            <div id="map">
-                <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
-                <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
-            </div>
+            <svg id="map">
+                <MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"></MapTile>
+            </svg>
         </div>
     </div>
 </template>
 
 <script>
-    import MapLayer from './map_layer.vue';
+    import MapTile from './map_tile.vue';
     import MapMenu from './menu.vue';
     import Queue from './queue.vue';
     
     export default {
         components: {
-            MapLayer,
+            MapTile,
             MapMenu,
             Queue
         },
@@ -152,8 +151,6 @@ html, body {
     display: block;
     padding: 0px;
     margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
     position: fixed;
     width: 100%;
     height: 100%;
@@ -162,7 +159,6 @@ html, body {
     bottom: 0;
     right: 0;
     z-index: 0;
-    transform: rotateX(60deg) rotateZ(45deg);
 }
 #mapbg{
     display: block;
