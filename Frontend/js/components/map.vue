@@ -8,6 +8,7 @@
         v-on:mousemove='mouseMove'
         v-on:mouseleave='mouseLeave'
         v-on:mousedown='mouseDown'
+        v-on:wheel='wheelMove'
 
         v-on:touchend='touchUp'
         v-on:touchmove='touchMove'
@@ -77,6 +78,12 @@
                     this.moveY = 0;
                     this.mouseMoved = false;
                 }
+            },
+            //Mousewheel Event
+            wheelMove: function (event) {
+                console.log(event.deltaY);
+                this.$store.commit("SetMenuVisible",false);
+                this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY /1000);
             },
             //Mouse Events
             mouseDown: function(event) {

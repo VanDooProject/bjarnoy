@@ -8,6 +8,7 @@
         xlink:href="/images/master.png"
         v-on:mouseenter="openToolTip"
         v-on:mouseleave="closeToolTip"
+        v-on:click="openMenu"
     ></image>
 </template>
 
@@ -55,7 +56,7 @@ export default {
         ypos() {
             return this.width * (
                     this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle)
-                    )/ 2 + this.mapOffset.y;
+                    ) / 2 + this.mapOffset.y;
         },
         width() {
             return this.imgWidth * this.mapScale;

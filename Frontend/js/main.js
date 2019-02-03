@@ -92,7 +92,7 @@ const store = new Vuex.Store({
         menuBuildOpen: false,
 
         mapOffset: {x: 0, y: 0},
-        mapScale: 0.5,
+        mapScale: 1,
 
         mouseMove: {x:0, y:0},
         techBildings: [],
@@ -286,6 +286,10 @@ const store = new Vuex.Store({
         }
     },
     mutations: {
+        AddMapScale (state, dScale)
+        {
+            state.mapScale += dScale;
+        },
         SetDeltaTime (state, dT) {
             state.deltaTime = dT;
         },
