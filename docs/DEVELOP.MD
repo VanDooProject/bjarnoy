@@ -19,8 +19,8 @@ When you first open the directory of the project you will be prompted to install
 
 https://code.visualstudio.com/download
 
-## (ASP).Net Core 2.0 SDK
-To build the Backend code you need the .Net Core 2.0 development kit.
+## (ASP).Net Core 2.2 SDK
+To build the Backend code you need the .Net Core 2.2 development kit.
 
 https://www.microsoft.com/net/download
 
