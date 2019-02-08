@@ -20,7 +20,7 @@
         >
             Type: {{tile.type}}
             <tspan v-bind:x="xpos" v-bind:y="ypos+25-100" v-if="tile.resource!=undefined">
-                Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}})
+                Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
             </tspan>
             <tspan v-bind:x="xpos" v-bind:y="ypos+25-100" v-if="tile.building!=undefined && tile.resource==undefined">
                 Building: {{tile.building.type}} Level {{tile.building.level}}
