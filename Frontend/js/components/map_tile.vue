@@ -12,23 +12,23 @@
             xlink:href="/images/master.png"
             v-on:click="openMenu"
         ></image>
-        <text
+        <foreignObject
             v-bind:x="xpos"
             v-bind:y="ypos-100"
             v-if="showTT"
-            class="tiletooltip"
+            width=400
+            height=100
         >
-            Type: {{tile.type}}
-            <tspan v-bind:x="xpos" v-bind:y="ypos+25-100" v-if="tile.resource!=undefined">
-                Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
-            </tspan>
-            <tspan v-bind:x="xpos" v-bind:y="ypos+25-100" v-if="tile.building!=undefined && tile.resource==undefined">
-                Building: {{tile.building.type}} Level {{tile.building.level}}
-            </tspan>
-            <tspan v-bind:x="xpos" v-bind:y="ypos+50-100" v-if="tile.building!=undefined && tile.resource!=undefined" >
-                Building: {{tile.building.type}} Level {{tile.building.level}}
-            </tspan>
-        </text>
+            <div class="tiletooltip">
+                Type: {{tile.type}}
+                <div v-if="tile.resource!=undefined">
+                    Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
+                </div>
+                <div v-if="tile.building!=undefined">
+                    Building: {{tile.building.type}} Level {{tile.building.level}}
+                </div>
+            </div>
+        </foreignObject>
     </g>
 </template>
 
@@ -127,5 +127,6 @@ export default {
     padding: 10px;
     border-radius: 10px;
     z-index: 0;
+    font-size: 16px;
 }
 </style>
