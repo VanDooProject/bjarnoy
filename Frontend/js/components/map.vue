@@ -18,7 +18,7 @@
 
         id="mapbg"
         >
-            <svg id="map">
+            <svg id="map" viewBox="0 0 1000 1000"> 
                 <MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"></MapTile>
             </svg>
         </div>
@@ -63,6 +63,9 @@
                 });
                 return ls;
             },
+            mapScale() {
+                return this.$store.state.mapScale;
+            },
         },
         mounted () {
             this.$store.dispatch("UpdateMapTiles");
@@ -73,7 +76,7 @@
                 requestAnimationFrame(this.animationCallback);
                 if(this.mouseMoved)
                 {
-                    this.$store.commit("MouseMove", {x: this.moveX, y: this.moveY});
+                    this.$store.commit("MouseMove", {x: this.moveX / this.mapScale, y: this.moveY / this.mapScale});
                     this.moveX = 0;
                     this.moveY = 0;
                     this.mouseMoved = false;
@@ -81,7 +84,6 @@
             },
             //Mousewheel Event
             wheelMove: function (event) {
-                console.log(event.deltaY);
                 this.$store.commit("SetMenuVisible",false);
                 this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY /1000);
             },

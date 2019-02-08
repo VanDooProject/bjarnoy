@@ -1,15 +1,35 @@
 <template>
-    <image 
-        v-bind:width=width
-        v-bind:height=height
-        v-bind:x="xpos"
-        v-bind:y="ypos"
-
-        xlink:href="/images/master.png"
+    <g
         v-on:mouseenter="openToolTip"
         v-on:mouseleave="closeToolTip"
-        v-on:click="openMenu"
-    ></image>
+    >
+        <image 
+            v-bind:width=width
+            v-bind:height=height
+            v-bind:x="xpos"
+            v-bind:y="ypos"
+
+            xlink:href="/images/master.png"
+            v-on:click="openMenu"
+        ></image>
+        <text
+            v-bind:x="xpos"
+            v-bind:y="ypos-100"
+            v-if="showTT"
+            class="tiletooltip"
+        >
+            Type: {{tile.type}}
+            <tspan v-bind:x="xpos" v-bind:y="ypos+25-100" v-if="tile.resource!=undefined">
+                Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}})
+            </tspan>
+            <tspan v-bind:x="xpos" v-bind:y="ypos+25-100" v-if="tile.building!=undefined && tile.resource==undefined">
+                Building: {{tile.building.type}} Level {{tile.building.level}}
+            </tspan>
+            <tspan v-bind:x="xpos" v-bind:y="ypos+50-100" v-if="tile.building!=undefined && tile.resource!=undefined" >
+                Building: {{tile.building.type}} Level {{tile.building.level}}
+            </tspan>
+        </text>
+    </g>
 </template>
 
 <script>
@@ -51,12 +71,12 @@ export default {
         xpos() {
             return this.width * (
                     this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
-                    ) / Math.SQRT2 + this.mapOffset.x;  
+            ) / Math.SQRT2 + this.mapOffset.x * this.mapScale + 500;  
         },
         ypos() {
             return this.width * (
                     this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle)
-                    ) / 2 + this.mapOffset.y;
+            ) / 2 + this.mapOffset.y * this.mapScale + 500;
         },
         width() {
             return this.imgWidth * this.mapScale;
@@ -104,13 +124,8 @@ export default {
 .tiletooltip {
     background: rgba(0, 0, 0, 0.75);
     color: white;
-    transform: rotateZ(-45deg) scaleY(2);
-    position: absolute;
-    width: 400px;
-    bottom: 400px;
-    right: 200px;
     padding: 10px;
     border-radius: 10px;
-    z-index: -10000;
+    z-index: 0;
 }
 </style>
