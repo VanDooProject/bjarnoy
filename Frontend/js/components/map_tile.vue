@@ -20,7 +20,7 @@
             height=100
         >
             <div class="tiletooltip">
-                Type: {{tile.type}}
+                Type: {{tile.type}} ({{tile.position.x}}/{{tile.position.y}})
                 <div v-if="tile.resource!=undefined">
                     Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
                 </div>
@@ -75,7 +75,7 @@ export default {
         },
         ypos() {
             return this.width * (
-                    this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle)
+                    -this.tile.position.y * Math.cos(this.angle) - this.tile.position.x * Math.sin(this.angle)
             ) /Math.SQRT2 * Math.cos(64.6 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + 500;
         },
         width() {

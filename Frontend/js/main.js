@@ -285,7 +285,7 @@ const store = new Vuex.Store({
         SetMapTiles (state, tiles) {
             state.mapTiles = tiles.sort((a,b) => {
                 //Sort list when adding instead of using zIndex
-                return b.position.x - b.position.y - (a.position.x - a.position.y);
+                return a.position.x - a.position.y - (b.position.x - b.position.y);
             });
         },
         SetQueued (state, queue) {
