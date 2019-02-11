@@ -67,7 +67,11 @@ export default {
                         }
                         else
                         {
-                            return (entry.allowedTiles.filter(tile => (tile.building.level == this.tile.building.level) && (tile.building.type == this.tile.building.type))
+                            return (entry.allowedTiles.filter(tile => {
+                                    if(tile.building == undefined)
+                                        return false;
+                                    return (tile.building.level == this.tile.building.level) && (tile.building.type == this.tile.building.type)
+                                })
                                 .length >= 1);
                         }
                     }).map((entry, index) => {
