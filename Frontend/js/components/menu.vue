@@ -68,12 +68,12 @@ export default {
                         {
                             if (entry.level == this.tile.building.level + 1)
                             {
-                                return true;
+                                return entry.allowedTiles.some(tile => tile.type == this.tile.type);
                             }
                             return false;
                         }
                     }).map((entry, index) => {
-                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level } };
+                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level} };
                     });
             }
             else
