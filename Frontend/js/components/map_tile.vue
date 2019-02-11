@@ -76,7 +76,7 @@ export default {
         ypos() {
             return this.width * (
                     -this.tile.position.y * Math.cos(this.angle) - this.tile.position.x * Math.sin(this.angle)
-            ) /Math.SQRT2 * Math.cos(64.6 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + 500;
+            ) /Math.SQRT2 * Math.cos(65 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + 500;
         },
         width() {
             return this.imgWidth * this.mapScale;
