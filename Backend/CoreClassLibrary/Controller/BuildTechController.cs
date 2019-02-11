@@ -66,6 +66,42 @@ namespace CoreClassLibrary.Controller
             // TODO: refactor this to multiple files for better overview or to json (but there is no syntax checking)
             _buildtech = new List<Building>()
             {
+                new Tower()
+                {
+                    Level = 1,
+                    BuildDuration = new TimeSpan(00, 15, 00),
+                    ResourcesNeeded = new Resources() {
+                        wood = 250,
+                        stone = 1000,
+                        iron = 100,
+                        gold = 100,
+                    },
+                    requirements = new List<IRequirement>(),
+                    allowedTiles = new List<Tile>()
+                    {
+                        new GrassTile()
+                    },
+                    RangeOfInfluence = 1,
+                },
+                new Tower()
+                {
+                    Level = 2,
+                    BuildDuration = new TimeSpan(01, 10, 00),
+                    ResourcesNeeded = new Resources() {
+                        wood = 1000,
+                        stone = 3000,
+                        iron = 300,
+                        gold = 300,
+                    },
+                    requirements = new List<IRequirement>(),
+                    // todo: remove since this should not matter anymore
+                    allowedTiles = new List<Tile>()
+                    {
+                        new GrassTile()
+                    },
+                    RangeOfInfluence = 2,
+                },
+
                 new StorageHouse()
                 {
                     Level = 1,
