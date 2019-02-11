@@ -83,7 +83,6 @@ Vue.prototype.$config = config;
 const store = new Vuex.Store({
     state: {
         loggedIn: false,
-        imageMap: [],
         
         menuPos: {x:0, y:0},
         menuTile: {},
@@ -212,16 +211,6 @@ const store = new Vuex.Store({
                     context.dispatch('ReqestError', error);
                 });
         },
-        UpdateImageMap (context) {
-            axios
-                .get('/images/data.json')
-                .then(response => {
-                    context.commit("SetImageMap", response.data);
-                })
-                .catch(error => {
-                    context.dispatch('ReqestError', error);
-                });
-        },
         UpdateTechBildings (context) {
             axios
                 .get(config.RequestUriPrefix + '/api/v1/Tech/buildings',
@@ -302,9 +291,6 @@ const store = new Vuex.Store({
         SetQueued (state, queue) {
             state.queued = queue;
         },
-        SetImageMap (state, imageMap) {
-            state.imageMap = imageMap;
-        },
         SetTechBuildings (state, techBildings) {
             state.techBildings = techBildings;
         },
@@ -346,7 +332,6 @@ const store = new Vuex.Store({
         }
       }
 });
-store.dispatch("UpdateImageMap");
 store.dispatch("StartWebSocket");
 store.dispatch("Startup");
 

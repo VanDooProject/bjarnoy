@@ -9,7 +9,7 @@
             v-bind:x="xpos"
             v-bind:y="ypos"
 
-            xlink:href="/images/master.png"
+            v-bind:xlink:href=imgsrc
             v-on:click="openMenu"
         ></image>
         <foreignObject
@@ -62,7 +62,7 @@ export default {
     data: function () {
         return {
             showTT: false,
-            imgWidth: 300,
+            imgWidth: 400,
             imgHeight: 600,
             angle: -45 * Math.PI / 180,
         };
@@ -76,7 +76,7 @@ export default {
         ypos() {
             return this.width * (
                     this.tile.position.y * Math.cos(this.angle) + this.tile.position.x * Math.sin(this.angle)
-            ) / 2 + this.mapOffset.y * this.mapScale + 500;
+            ) /Math.SQRT2 * Math.cos(64.6 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + 500;
         },
         width() {
             return this.imgWidth * this.mapScale;
@@ -89,6 +89,16 @@ export default {
         },
         mapOffset() {
             return this.$store.state.mapOffset;
+        },
+        imgsrc() { 
+            if(this.tile.building == undefined)
+            {
+                return "images/tiles/" + this.tile.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + ".png";
+            }
+            else
+            {
+                return "images/tiles/" + this.tile.building.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + "_level" + this.tile.building.level.toString().padStart(3,'0') + ".png";
+            }
         }
     }
 };
@@ -110,13 +120,7 @@ export default {
     margin: 0px;
 }
 .tileimg {
-    background-image: url("/images/master.png");
     position: absolute;
-    display: block;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
     padding: 0px;
     margin: 0px;
     pointer-events: none;
