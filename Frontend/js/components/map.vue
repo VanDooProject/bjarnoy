@@ -2,8 +2,9 @@
     <div>
         <MapMenu></MapMenu>
         <queue></queue>
-        
-        <div
+
+        <svg 
+        id="map"
         v-on:mouseup='mouseUp'
         v-on:mousemove='mouseMove'
         v-on:mouseleave='mouseLeave'
@@ -15,13 +16,10 @@
         v-on:touchleave='touchLeave'
         v-on:touchcancel='touchLeave'
         v-on:touchstart='touchDown'
-
-        id="mapbg"
         >
-            <svg id="map" viewBox="0 0 1000 1000"> 
-                <MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"></MapTile>
-            </svg>
-        </div>
+            <g><MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"/></g>
+            <ZoomButtons/>
+        </svg>
     </div>
 </template>
 
@@ -29,12 +27,14 @@
     import MapTile from './map_tile.vue';
     import MapMenu from './menu.vue';
     import Queue from './queue.vue';
+    import ZoomButtons from './zoom_buttons.vue';
     
     export default {
         components: {
             MapTile,
             MapMenu,
-            Queue
+            Queue,
+            ZoomButtons,
         },
         props: [],
         data: function() {
@@ -157,31 +157,12 @@ html, body {
 }
 
 #map {
-    display: block;
     padding: 0px;
     margin: 0px;
-    position: fixed;
-    width: 100%;
+    position: absolute;
+    top:0;
+    left:0;
+    width:100%;
     height: 100%;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 0;
 }
-#mapbg{
-    display: block;
-    padding: 0px;
-    margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-}
-
 </style>

@@ -38,5 +38,7 @@ export default {
     position: absolute;
     z-index: 10000;
     pointer-events: none;
+    float: right;
+    width: 20%
 }
 </style>

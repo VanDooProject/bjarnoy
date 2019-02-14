@@ -90,7 +90,7 @@ const store = new Vuex.Store({
         menuClosed: false,
         menuBuildOpen: false,
 
-        mapOffset: {x: 0, y: 0},
+        mapOffset: {x: -window.innerWidth/2, y: -window.innerHeight/2},
         mapScale: 1,
 
         mouseMove: {x:0, y:0},
@@ -100,6 +100,8 @@ const store = new Vuex.Store({
         now: new Date(),
         websocket: undefined,
         deltaTime: 0,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
     },
     getters: {
         menuDisplay: state => {
@@ -275,6 +277,10 @@ const store = new Vuex.Store({
         }
     },
     mutations: {
+        SetWindowSize (state, size) {
+            state.windowWidth = size.x;
+            state.windowHeight = size.y;
+        },
         AddMapScale (state, dScale)
         {
             state.mapScale += dScale;

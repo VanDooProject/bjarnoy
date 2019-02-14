@@ -1,8 +1,5 @@
 <template>
-    <g
-        v-on:mouseenter="openToolTip"
-        v-on:mouseleave="closeToolTip"
-    >
+    <g>
         <image 
             v-bind:width=width
             v-bind:height=height
@@ -10,14 +7,25 @@
             v-bind:y="ypos"
 
             v-bind:xlink:href=imgsrc
-            v-on:click="openMenu"
+
+            class="tileimg"
         ></image>
+        <polygon 
+            v-bind:points="points"
+            style="fill-opacity:0"
+
+            v-on:mouseenter="openToolTip"
+            v-on:mouseleave="closeToolTip"
+
+            v-on:click="openMenu"
+        />
         <foreignObject
-            v-bind:x="xpos"
-            v-bind:y="ypos-100"
             v-if="showTT"
+
+            v-bind:x="xpos"
+            v-bind:y="ypos-ttHeight + 200 * mapScale"
             width=400
-            height=100
+            v-bind:height="ttHeight"
         >
             <div class="tiletooltip">
                 Type: {{tile.type}} ({{tile.position.x}}/{{tile.position.y}})
@@ -68,15 +76,39 @@ export default {
         };
     },
     computed: {
+        ttHeight () {
+            var h = 56;
+            if(this.tile.resource!=undefined)
+            {
+                h+=25;
+            }
+            if(this.tile.building!=undefined)
+            {
+                h+=25
+            }
+            return h;
+        },
+        points () {
+            return (this.xpos + this.width/2)    + "," + (this.ypos + this.height/2 ) + " "
+                +  (this.xpos + this.width)      + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " "
+                +  (this.xpos + this.width/2)    + "," + (this.ypos + this.height/2 + this.width     * Math.cos(65 / 180 * Math.PI)) + " "
+                +  (this.xpos)                   + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " ";
+        },
         xpos() {
             return this.width * (
                     this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
-            ) / Math.SQRT2 + this.mapOffset.x * this.mapScale + 500;  
+            ) / Math.SQRT2 + this.mapOffset.x * this.mapScale + this.windowWidth/2;  
         },
         ypos() {
             return this.width * (
                     -this.tile.position.y * Math.cos(this.angle) - this.tile.position.x * Math.sin(this.angle)
-            ) /Math.SQRT2 * Math.cos(65 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + 500;
+            ) /Math.SQRT2 * Math.cos(65 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + this.windowHeight/2;
+        },
+        windowWidth() {
+            return this.$store.state.windowWidth;
+        },
+        windowHeight() {
+            return this.$store.state.windowHeight;
         },
         width() {
             return this.imgWidth * this.mapScale;
@@ -120,9 +152,6 @@ export default {
     margin: 0px;
 }
 .tileimg {
-    position: absolute;
-    padding: 0px;
-    margin: 0px;
     pointer-events: none;
 }
 .tiletooltip {
@@ -132,5 +161,15 @@ export default {
     border-radius: 10px;
     z-index: 0;
     font-size: 16px;
+    pointer-events: none;
+
+    /* noselect  https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting*/
+    -webkit-touch-callout: none; /* iOS Safari */
+      -webkit-user-select: none; /* Safari */
+       -khtml-user-select: none; /* Konqueror HTML */
+         -moz-user-select: none; /* Firefox */
+          -ms-user-select: none; /* Internet Explorer/Edge */
+              user-select: none; /* Non-prefixed version, currently
+                                    supported by Chrome and Opera */
 }
 </style>
