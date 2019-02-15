@@ -1,7 +1,7 @@
 <template>
     <g>
-        <foreignObject x=5 y=32 width=32 height=32 v-on:click="zoomPlus"  class=zoombutton>+</foreignObject>
-        <foreignObject x=5 y=70 width=32 height=32 v-on:click="zoomMinus" class=zoombutton>-</foreignObject>
+        <foreignObject x=5 y=32 width=32 height=32 v-on:click="zoomPlus" ><div class=zoombutton>+</div></foreignObject>
+        <foreignObject x=5 y=70 width=32 height=32 v-on:click="zoomMinus"><div class=zoombutton>-</div></foreignObject>
     </g>
 </template>
 
