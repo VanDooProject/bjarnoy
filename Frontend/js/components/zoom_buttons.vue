@@ -42,7 +42,6 @@ export default {
 .zoombutton {
     background: rgba(0, 0, 0, 0.6);
     color: rgba(255, 255, 255, 0.8);
-    padding-top: 0;
     padding: 0;
     border-radius: 2px;
     text-align: center;
