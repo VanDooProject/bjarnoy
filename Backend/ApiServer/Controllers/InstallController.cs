@@ -32,8 +32,7 @@ namespace ApiServer.Controllers
 
             return infoList;
         }
-
-        // POST api/v1/install/islands/
+        // POST http://localhost:41527/api/v1/install/islands/ HTTP/1.1
         [HttpPost("islands/")]
         public int CreateIslands()
         {
