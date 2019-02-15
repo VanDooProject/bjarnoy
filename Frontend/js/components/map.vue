@@ -85,7 +85,12 @@
             //Mousewheel Event
             wheelMove: function (event) {
                 this.$store.commit("SetMenuVisible",false);
-                this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY /1000);
+                if(event.deltaMode == 0)        //Chrome    | pixels
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 1000);
+                else if(event.deltaMode == 1)   //Firefox   | lines
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 100);
+                else if(event.deltaMode == 2)   //          | pages
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 10);
             },
             //Mouse Events
             mouseDown: function(event) {
