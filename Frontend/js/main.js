@@ -353,6 +353,12 @@ function callback()
 }
 setInterval(callback, 1000);
 
+function resizeEvent()
+{
+    store.commit("SetWindowSize", {x: window.innerWidth, y: window.innerHeight});
+}
+window.addEventListener("resize", resizeEvent);
+
 // main app
 const vue = new Vue({
     router,
