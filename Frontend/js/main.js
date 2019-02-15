@@ -356,6 +356,7 @@ setInterval(callback, 1000);
 function resizeEvent()
 {
     store.commit("SetWindowSize", {x: window.innerWidth, y: window.innerHeight});
+    store.commit("SetMenuVisible", false);
 }
 window.addEventListener("resize", resizeEvent);
 
