@@ -39,14 +39,6 @@ export default {
 </script>
 
 <style>
-.queue {
-    position: absolute;
-    z-index: 10000;
-    pointer-events: none;
-    position: relative;
-    float: right;
-    width: 20%
-}
 .zoombutton {
     background: rgba(0, 0, 0, 0.6);
     color: rgba(255, 255, 255, 0.8);
