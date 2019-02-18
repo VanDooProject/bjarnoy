@@ -73,6 +73,10 @@ export default {
             imgWidth: 400,
             imgHeight: 600,
             angle: -45 * Math.PI / 180,
+
+            xFactor: Math.SQRT2 * 3/4, // 3/4 comes from the geometry of stacking Hexagons
+            yFactor: Math.SQRT2 * 3/4 / Math.sqrt(3) // sqrt(3) is also from the geometry
+                    * Math.cos((57.8) / 180 * Math.PI), // the angle is from the Graphics
         };
     },
     computed: {
@@ -95,14 +99,30 @@ export default {
                 +  (this.xpos)                   + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " ";
         },
         xpos() {
-            return this.width * (
+            return this.width // use the (current) width to scale the vetor
+            * (
+                // Rotate Coordinate system 45° and get x value
                     this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
-            ) / Math.SQRT2 + this.mapOffset.x * this.mapScale + this.windowWidth/2;  
+            ) 
+            // Adjustment Factor
+            * this.xFactor  
+            // Add Offsets
+            + this.mapOffset.x * this.mapScale
+            // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
+            + this.windowWidth/2;
         },
         ypos() {
-            return this.width * (
+            return this.width //use the (current) width to scale the vetor
+                * (
+                    //Rotate Coordinate system 45° and get y value
                     -this.tile.position.y * Math.cos(this.angle) - this.tile.position.x * Math.sin(this.angle)
-            ) /Math.SQRT2 * Math.cos(65 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + this.windowHeight/2;
+                )
+                // Adjustment Factor
+                * this.yFactor
+                // Add Offset
+                + this.mapOffset.y * this.mapScale
+                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
+                + this.windowHeight/2;
         },
         windowWidth() {
             return this.$store.state.windowWidth;
@@ -123,6 +143,10 @@ export default {
             return this.$store.state.mapOffset;
         },
         imgsrc() { 
+            //Hardcoded for testing
+            return "images/hextiles/grasstile_E.png";
+
+
             if(this.tile.building == undefined)
             {
                 return "images/tiles/" + this.tile.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + ".png";
