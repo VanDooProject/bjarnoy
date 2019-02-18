@@ -1,32 +1,43 @@
 <template>
-  <div
-    class="tile"
-    v-on:click="openMenu"
-    v-on:mouseenter="openToolTip"
-    v-on:mouseleave="closeToolTip"
-    v-bind:style="{
-            position: 'absolute',
-            /* ATTENTION: x and y are swapped */
-            transform: 'translate(' + tile.position.x * img.size.x / Math.SQRT2 + 'px, ' + tile.position.y * -img.size.x / Math.SQRT2 + 'px)',
-            width:  img.size.x / Math.SQRT2 + 'px',
-            height: img.size.x / Math.SQRT2 + 'px',
-            zIndex: tile.position.x - tile.position.y
-        }"
-  >
-    <div
-      v-bind:style="{
-                zIndex: tile.position.x - tile.position.y,
-                /* ATTENTION: x and y are swapped */
-                backgroundPositionX: - img.pos.y + 'px',
-                backgroundPositionY: - img.pos.x + 'px',
-                width: img.size.x + 'px',
-                height: img.size.y + 'px',
-                transform: 'translate(-' + img.size.x/2 + 'px,-' + img.size.y/2 + 'px) rotateZ(-45deg) scaleY(2.365)'
-            }"
-      class="tileimg"
-    ></div>
-    <div v-if="showTT" class="tiletooltip">{{tile}}</div>
-  </div>
+    <g>
+        <image 
+            v-bind:width=width
+            v-bind:height=height
+            v-bind:x="xpos"
+            v-bind:y="ypos"
+
+            v-bind:xlink:href=imgsrc
+
+            class="tileimg"
+        ></image>
+        <polygon 
+            v-bind:points="points"
+            style="fill-opacity:0"
+
+            v-on:mouseenter="openToolTip"
+            v-on:mouseleave="closeToolTip"
+
+            v-on:click="openMenu"
+        />
+        <foreignObject
+            v-if="showTT"
+
+            v-bind:x="xpos"
+            v-bind:y="ypos-ttHeight + 200 * mapScale"
+            width=400
+            v-bind:height="ttHeight"
+        >
+            <div class="tiletooltip">
+                Type: {{tile.type}} ({{tile.position.x}}/{{tile.position.y}})
+                <div v-if="tile.resource!=undefined">
+                    Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
+                </div>
+                <div v-if="tile.building!=undefined">
+                    Building: {{tile.building.type}} Level {{tile.building.level}}
+                </div>
+            </div>
+        </foreignObject>
+    </g>
 </template>
 
 <script>
@@ -59,75 +70,66 @@ export default {
     data: function () {
         return {
             showTT: false,
+            imgWidth: 400,
+            imgHeight: 600,
+            angle: -45 * Math.PI / 180,
         };
     },
     computed: {
-        img() {
-            const imgmap = this.$store.state.imageMap;
-            var entry = {};
-            switch (this.tile.type) {
-            case "GrassTile":
-                entry = imgmap.filter(
-                obj => obj.name == "grasstile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "MountainTile":
-                entry = imgmap.filter(
-                obj => obj.name == "mountaintile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "ForestTile":
-                entry = imgmap.filter(
-                obj => obj.name == "foresttile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "PumpkinResourceTile":
-                entry = imgmap.filter(
-                obj =>
-                    obj.name ==
-                    "pumpkinresourcetile_" + this.tile.orientation[0] + ".png"
-                )[0];
-                break;
-            case "QuarterEdgeTile":
-                entry = imgmap.filter(
-                    obj =>
-                        obj.name == "quarteredgetile_" + this.tile.orientation[0] + ".png"
-                    )[0];
-                break;
-            case "HalfEdgeTile":
-                entry = imgmap.filter(
-                    obj => obj.name == "halfedgetile_" + this.tile.orientation[0] + ".png"
-                    )[0];
-                break;
-            case "TriQuarterEdgeTile":
-                entry = imgmap.filter(
-                    obj =>
-                        obj.name ==
-                        "triquarteredgetile_" + this.tile.orientation[0] + ".png"
-                    )[0];
-                break;
+        ttHeight () {
+            var h = 56;
+            if(this.tile.resource!=undefined)
+            {
+                h+=25;
             }
-            if (this.tile.building != undefined) {
-                function pad(num, size) {
-                    var s = "000000000" + num;
-                    return s.substr(s.length - size);
-                }
-                var tilename =
-                    this.tile.building.type.toLowerCase() +
-                    "_" +
-                    this.tile.orientation[0] +
-                    "_level" +
-                    pad(this.tile.building.level, 3) +
-                    ".png";
-                //console.log(tilename);
-                entry = imgmap.filter(obj => obj.name == tilename)[0];
+            if(this.tile.building!=undefined)
+            {
+                h+=25
             }
-            if (entry != undefined) {
-                return {pos: entry.pos, size: entry.size};
+            return h;
+        },
+        points () {
+            return (this.xpos + this.width/2)    + "," + (this.ypos + this.height/2 ) + " "
+                +  (this.xpos + this.width)      + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " "
+                +  (this.xpos + this.width/2)    + "," + (this.ypos + this.height/2 + this.width     * Math.cos(65 / 180 * Math.PI)) + " "
+                +  (this.xpos)                   + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " ";
+        },
+        xpos() {
+            return this.width * (
+                    this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
+            ) / Math.SQRT2 + this.mapOffset.x * this.mapScale + this.windowWidth/2;  
+        },
+        ypos() {
+            return this.width * (
+                    -this.tile.position.y * Math.cos(this.angle) - this.tile.position.x * Math.sin(this.angle)
+            ) /Math.SQRT2 * Math.cos(65 / 180 * Math.PI) + this.mapOffset.y * this.mapScale + this.windowHeight/2;
+        },
+        windowWidth() {
+            return this.$store.state.windowWidth;
+        },
+        windowHeight() {
+            return this.$store.state.windowHeight;
+        },
+        width() {
+            return this.imgWidth * this.mapScale;
+        },
+        height() {
+            return this.imgHeight * this.mapScale;
+        },
+        mapScale() {
+            return this.$store.state.mapScale;
+        },
+        mapOffset() {
+            return this.$store.state.mapOffset;
+        },
+        imgsrc() { 
+            if(this.tile.building == undefined)
+            {
+                return "images/tiles/" + this.tile.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + ".png";
             }
-            else {
-                console.error("tile not found - fallback");
-                return {pos: { x: 0, y: 0 }, size: { x: 400, y: 600 }};
+            else
+            {
+                return "images/tiles/" + this.tile.building.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + "_level" + this.tile.building.level.toString().padStart(3,'0') + ".png";
             }
         }
     }
@@ -138,39 +140,25 @@ export default {
 </script>
 
 <style>
-.tile {
-    position: absolute;
-
-    display: block;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    padding: 0px;
-    margin: 0px;
-}
 .tileimg {
-    background-image: url("/images/master.png");
-    position: absolute;
-    display: block;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    padding: 0px;
-    margin: 0px;
     pointer-events: none;
 }
 .tiletooltip {
     background: rgba(0, 0, 0, 0.75);
     color: white;
-    transform: rotateZ(-45deg) scaleY(2);
-    position: absolute;
-    width: 400px;
-    bottom: 400px;
-    right: 200px;
     padding: 10px;
     border-radius: 10px;
-    z-index: -10000;
+    z-index: 0;
+    font-size: 16px;
+    pointer-events: none;
+
+    /* noselect  https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting*/
+    -webkit-touch-callout: none; /* iOS Safari */
+      -webkit-user-select: none; /* Safari */
+       -khtml-user-select: none; /* Konqueror HTML */
+         -moz-user-select: none; /* Firefox */
+          -ms-user-select: none; /* Internet Explorer/Edge */
+              user-select: none; /* Non-prefixed version, currently
+                                    supported by Chrome and Opera */
 }
 </style>
