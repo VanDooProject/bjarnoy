@@ -92,11 +92,22 @@ export default {
             }
             return h;
         },
-        points () {
-            return (this.xpos + this.width/2)    + "," + (this.ypos + this.height/2 ) + " "
-                +  (this.xpos + this.width)      + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " "
-                +  (this.xpos + this.width/2)    + "," + (this.ypos + this.height/2 + this.width     * Math.cos(65 / 180 * Math.PI)) + " "
-                +  (this.xpos)                   + "," + (this.ypos + this.height/2 + this.width/2   * Math.cos(65 / 180 * Math.PI)) + " ";
+        points () { // the point list for the hexagon that is used for mouse (and touch) events
+            //x is straight forward
+            //for y I have to offset it by 280 (Measured from the graphics y position of higher horizontal line) 
+            //because the actual graphics start there
+            var xOff = this.xpos;
+            var yOff = this.ypos + 280 * this.mapScale;
+
+            var yFac = Math.sqrt(3)/2 //From the geometry
+                * Math.cos((57.8) / 180 * Math.PI); //From the graphics
+
+            return (xOff + this.width/4)    + "," + (yOff)                          + " "
+                +  (xOff + this.width*3/4)  + "," + (yOff)                          + " "
+                +  (xOff + this.width)      + "," + (yOff + this.width/2 * yFac)    + " "
+                +  (xOff + this.width*3/4)  + "," + (yOff + this.width   * yFac)    + " "
+                +  (xOff + this.width/4)    + "," + (yOff + this.width   * yFac)    + " "
+                +  (xOff)                   + "," + (yOff + this.width/2 * yFac)    + " ";
         },
         xpos() {
             return this.width // use the (current) width to scale the vetor
