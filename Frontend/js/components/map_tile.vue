@@ -22,13 +22,13 @@
         <foreignObject
             v-if="showTT"
 
-            v-bind:x="xpos"
+            v-bind:x="xpos -200 + width/2"
             v-bind:y="ypos-ttHeight + 200 * mapScale"
             width=400
             v-bind:height="ttHeight"
         >
             <div class="tiletooltip">
-                Type: {{tile.type}} ({{tile.position.x}}/{{tile.position.y}})
+                Type: {{tile.type}} {{tile.orientation}} ({{tile.position.x}}/{{tile.position.y}}) 
                 <div v-if="tile.resource!=undefined">
                     Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
                 </div>
