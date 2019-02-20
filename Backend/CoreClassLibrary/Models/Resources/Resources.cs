@@ -1,4 +1,7 @@
-﻿namespace CoreClassLibrary.Models.Resources
+﻿using CoreClassLibrary.Serializer;
+using Newtonsoft.Json;
+
+namespace CoreClassLibrary.Models.Resources
 {
     /// <summary>
     /// resources needed to build something
@@ -6,9 +9,16 @@
     /// </summary>
     public class Resources
     {
+        [JsonConverter(typeof(JsonConverterDoubleToInt))]
         public double wood;
+
+        [JsonConverter(typeof(JsonConverterDoubleToInt))]
         public double stone;
+
+        [JsonConverter(typeof(JsonConverterDoubleToInt))]
         public double iron;
+
+        [JsonConverter(typeof(JsonConverterDoubleToInt))]
         public double gold;
 
         /// <summary>
