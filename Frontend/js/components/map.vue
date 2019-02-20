@@ -1,81 +1,106 @@
 <template>
-    <div
-    v-on:mouseup='mouseUp'
-    v-on:mousemove='mouseMove'
-    v-on:mouseleave='mouseLeave'
-    v-on:mousedown='mouseDown'
-    id="mapbg"
-    >
-        <MapMenu v-bind:pos="menu" v-bind:tile="tile"></MapMenu>
+    <div>
+        <MapMenu></MapMenu>
+        <queue></queue>
 
-        <div id="map">
-            <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-            <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]" v-bind:globalMapOffset="globalMapOffset" @tile_clicked="TileClicked"></MapLayer>
-        </div>
+        <svg 
+        id="map"
+        v-on:mouseup='mouseUp'
+        v-on:mousemove='mouseMove'
+        v-on:mouseleave='mouseLeave'
+        v-on:mousedown='mouseDown'
+        v-on:wheel='wheelMove'
+
+        v-on:touchend='touchUp'
+        v-on:touchmove='touchMove'
+        v-on:touchleave='touchLeave'
+        v-on:touchcancel='touchLeave'
+        v-on:touchstart='touchDown'
+        >
+            <g><MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"/></g>
+            <ZoomButtons/>
+        </svg>
     </div>
 </template>
 
 <script>
-    import MapLayer from './map_layer.vue';
+    import MapTile from './map_tile.vue';
     import MapMenu from './menu.vue';
+    import Queue from './queue.vue';
+    import ZoomButtons from './zoom_buttons.vue';
     
     export default {
         components: {
-            MapLayer,
-            MapMenu
+            MapTile,
+            MapMenu,
+            Queue,
+            ZoomButtons,
         },
         props: [],
         data: function() {
             return {
                 // will be a three-dimensional array with map coords
-                tiles: [],
-
-                menu: {x: 0, y: 0},
-                tile: undefined,
                 isMouseDown: false,
-                globalMapOffset: {x:0, y:0},
-                mouseMovement: {x:0, y:0},
-                menuClosed: false
+                mouseMoved: false,
+                moveX: 0,
+                moveY: 0,
+                touchLastPos: {x: 0, y:0}
             }
         },
         computed: {
+            tiles() { 
+                return this.$store.state.mapTiles;
+            },
             TilesArray () {
                 var ls = [[]];
                 this.tiles.forEach(tile => {
-                    if(ls[tile.z] == undefined)
+                    var zLayer = Math.round(tile.position.z);
+                    if(ls[zLayer] == undefined)
                     {
-                        ls[tile.z]=[];
+                        ls[zLayer]=[];
                     }
-                    ls[tile.z].push(tile);
+                    ls[zLayer].push(tile);
                 });
                 return ls;
-            }
+            },
+            mapScale() {
+                return this.$store.state.mapScale;
+            },
         },
         mounted () {
-            this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/map/demo/10',
-                    {
-                        withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
-                    })
-                .then(response => ( this.tiles = response.data))
-                .catch(error => console.log(error));
+            this.$store.dispatch("UpdateMapTiles");
+            window.requestAnimationFrame(this.animationCallback);
         },
         methods: {
-            TileClicked: function(event, tile) {
-                if((this.mouseMovement.x < 5) && (this.mouseMovement.y < 5))
+            animationCallback: function (timestamp) {
+                requestAnimationFrame(this.animationCallback);
+                if(this.mouseMoved)
                 {
-                    if(!this.menuClosed)
-                    {
-                        this.menu.x = event.pageX;
-                        this.menu.y = event.pageY;
-                        this.tile = tile;    
-                    }
+                    this.$store.commit("MouseMove", {x: this.moveX / this.mapScale, y: this.moveY / this.mapScale});
+                    this.moveX = 0;
+                    this.moveY = 0;
+                    this.mouseMoved = false;
                 }
             },
+            //Mousewheel Event
+            wheelMove: function (event) {
+                this.$store.commit("SetMenuVisible",false);
+                if(event.deltaMode == 0)        //Chrome    | pixels
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 1000);
+                else if(event.deltaMode == 1)   //Firefox   | lines
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 100);
+                else if(event.deltaMode == 2)   //          | pages
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 10);
+            },
+            //Mouse Events
             mouseDown: function(event) {
                 this.isMouseDown = true;
-                this.mouseMovement = {x:0, y:0};
-                this.closeMenu();
+                this.$store.commit("ClearMouseMove");
+                if(this.$store.state.menuVisible == true)
+                {
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
+                }
             },
             mouseUp: function(event) {
                 this.isMouseDown = false;
@@ -83,29 +108,42 @@
             mouseMove: function(event) {
                 if(this.isMouseDown)
                 {
-                    this.mouseMovement.x += Math.abs(event.movementX);
-                    this.mouseMovement.y += Math.abs(event.movementY);
-                    var angle = -45 * Math.PI / 180;
-                    this.globalMapOffset.x += event.movementX * Math.cos(angle) - event.movementY * Math.sin(angle);
-                    this.globalMapOffset.y += (event.movementY * Math.cos(angle) + event.movementX * Math.sin(angle));
+                    this.mouseMoved = true;
+                    this.moveX += event.movementX;
+                    this.moveY += event.movementY;
                 }
             },
             mouseLeave: function(event) {
-                this.isMouseDown=false;
+                this.isMouseDown = false;
             },
-            closeMenu: function() {
-                if(this.menu.x != 0)
+            //Touch Events
+            touchDown: function(event) {
+                this.isMouseDown = true;
+                this.$store.commit("ClearMouseMove");
+                if(this.$store.state.menuVisible == true)
                 {
-                    this.menuClosed = true;
-                    this.menu = {x:0, y:0};
-                    this.tile = undefined;
+                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("SetMenuClosed", true);
                 }
-                else
+                this.touchLastPos.x = event.changedTouches[0].clientX;
+                this.touchLastPos.y = event.changedTouches[0].clientY;
+            },
+            touchUp: function(event) {
+                this.isMouseDown = false;
+            },
+            touchLeave: function(event) {
+                this.isMouseDown = false;
+            },
+            touchMove: function(event) { 
+                if(this.isMouseDown)
                 {
-                    this.menuClosed = false;
+                    this.mouseMoved = true;
+                    this.moveX += event.changedTouches[0].clientX - this.touchLastPos.x;
+                    this.moveY += event.changedTouches[0].clientY - this.touchLastPos.y;
                 }
+                this.touchLastPos.x = event.changedTouches[0].clientX;
+                this.touchLastPos.y = event.changedTouches[0].clientY;
             }
-
         }
     }
 
@@ -124,34 +162,12 @@ html, body {
 }
 
 #map {
-    display: block;
     padding: 0px;
     margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
-    position: fixed;
-    width: 100%;
+    position: absolute;
+    top:0;
+    left:0;
+    width:100%;
     height: 100%;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 0;
-    transform: rotateX(45deg) rotateZ(45deg);
 }
-#mapbg{
-    display: block;
-    padding: 0px;
-    margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-}
-
 </style>

@@ -1,11 +1,17 @@
+using System.Numerics;
+
 namespace CoreClassLibrary.Models.Map.Tiles
 {
     public class StoneResourceTile : ResourceTile
     {
-        public StoneResourceTile(int x, int y, int z) : base(x, y, z)
+        public StoneResourceTile() : base()
         {
-            this.resource.type = TileAttributesResourceTypeList.Stone;
-            this.resource.degradation_rate = 0.6f;
+        }
+
+        public StoneResourceTile(Vector3 position) : base(position)
+        {
+            this.Resource.Type = TileAttributesResourceTypeList.Stone;
+            this.Resource.DegradationRate = 0.6f;
         }
     }
 }

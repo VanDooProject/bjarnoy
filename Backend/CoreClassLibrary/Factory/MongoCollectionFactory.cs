@@ -2,6 +2,11 @@
 using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Models.Buildings;
+using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.TechQueues;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 
 namespace CoreClassLibrary.Factory
@@ -35,6 +40,37 @@ namespace CoreClassLibrary.Factory
 
         private MongoCollectionFactory()
         {
+            // TODO: move this to proper place
+            BsonClassMap.RegisterClassMap<ForestTile>();
+            BsonClassMap.RegisterClassMap<GoldResourceTile>();
+            BsonClassMap.RegisterClassMap<GrassTile>();
+            BsonClassMap.RegisterClassMap<MountainTile>();
+            BsonClassMap.RegisterClassMap<PumpkinResourceTile>();
+            BsonClassMap.RegisterClassMap<ResourceTile>();
+            BsonClassMap.RegisterClassMap<StoneResourceTile>();
+
+            BsonClassMap.RegisterClassMap<EdgeTile>();
+            BsonClassMap.RegisterClassMap<QuarterEdgeTile>();
+            BsonClassMap.RegisterClassMap<HalfEdgeTile>();
+            BsonClassMap.RegisterClassMap<TriQuarterEdgeTile>();
+
+            BsonClassMap.RegisterClassMap<Tile>();
+
+            BsonClassMap.RegisterClassMap<Biom>();
+            BsonClassMap.RegisterClassMap<ForestBiom>();
+            BsonClassMap.RegisterClassMap<GrasslandBiom>();
+            BsonClassMap.RegisterClassMap<MountainBiom>();
+            BsonClassMap.RegisterClassMap<SparseBiom>();
+            BsonClassMap.RegisterClassMap<EdgeBiom>();
+
+
+            BsonClassMap.RegisterClassMap<Queue>();
+            BsonClassMap.RegisterClassMap<BuildingQueue>();
+
+
+            BsonClassMap.RegisterClassMap<Building>();
+            BsonClassMap.RegisterClassMap<Lumberjack>();
+            BsonClassMap.RegisterClassMap<StorageHouse>();
         }
 
 

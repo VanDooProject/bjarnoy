@@ -8,14 +8,14 @@
             height: size + 'px',
             zIndex: 50001
         }"
-        v-on:click="onClickHandler"
+        v-on:click="onClick"
         class="mapsubmenu"
     />
 </template>
 
 <script>
     export default {
-        props:["submenu", "submenutotal", "submenulayer", 'onClickHandler'],
+        props:["submenu", "submenutotal", "submenulayer", "type"],
         data: function() {
             return {
 
@@ -28,12 +28,47 @@
             pos() {
                 return {x: Math.sin(this.angle)*this.submenulayer*100, y: Math.cos(this.angle)*this.submenulayer*100};
             },
+            tile() { 
+                return this.$store.state.menuTile;
+            },
             size() {
-                return 75 / this.submenulayer;
+                return 75 * this.submenulayer;
             }
         },
         methods: {
-            
+            onClick: function (event) {
+                if(this.type.isBuild)
+                {
+                    this.axios
+                    .post(this.$config.RequestUriPrefix + '/api/v1/Building/build',
+                        {
+                            position: this.tile.position,
+                            buildingName: this.type.name,
+                            level: this.type.level,
+                        },
+                        {
+                            headers: {'Authorization': "bearer " + localStorage.token},
+                            withCredentials: true // CORS cookie issue: https://github.com/axios/axios/issues/876
+                        })
+                    .then(response => {
+                        this.$store.dispatch("UpdateMapTiles");
+                        this.$store.dispatch("UpdateQueued");
+                    })
+                    .catch(error => this.$store.dispatch('ReqestError', error));
+                    this.$store.commit("SetMenuVisible", false);
+                }
+                else
+                {
+                    if(this.type.name == "build")
+                    {
+                        this.$store.commit("OpenBuildMenu");
+                    }
+                    else if(this.type.name == "details")
+                    {
+                        console.log(this.tile);
+                    }
+                }
+            }
         },
         mounted () {
             

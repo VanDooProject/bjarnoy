@@ -33,10 +33,23 @@ namespace CoreClassLibrary.Controller
             // check if exists in file, if not create new
             if (File.Exists(_settingsFile))
             {
-                // file exists -> parse
-                using (StreamReader file = File.OpenText(_settingsFile))
+                try
                 {
-                    this._buildtech = (List<Building>)serializer.Deserialize(file, typeof(List<Building>));
+                    // file exists -> parse
+                    using (StreamReader file = File.OpenText(_settingsFile))
+                    {
+                        this._buildtech = (List<Building>)serializer.Deserialize(file, typeof(List<Building>));
+                    }
+
+                    // TODO check if all is valid (all have level, duration, valid ress,...)
+                }
+                catch (Newtonsoft.Json.JsonSerializationException e)
+                {
+                    logger.ErrorFormat("error in '{0}' can't load because of: {1}", _settingsFile, e);
+
+                    // create new as fallback -> this is better than http 500 error
+                    // TODO: notify admin of this failure
+                    createDefaultBuildTech();
                 }
             }
             else
@@ -53,9 +66,46 @@ namespace CoreClassLibrary.Controller
             // TODO: refactor this to multiple files for better overview or to json (but there is no syntax checking)
             _buildtech = new List<Building>()
             {
+                new Tower()
+                {
+                    Level = 1,
+                    BuildDuration = new TimeSpan(00, 15, 00),
+                    ResourcesNeeded = new Resources() {
+                        wood = 250,
+                        stone = 1000,
+                        iron = 100,
+                        gold = 100,
+                    },
+                    requirements = new List<IRequirement>(),
+                    allowedTiles = new List<Tile>()
+                    {
+                        new GrassTile()
+                    },
+                    RangeOfInfluence = 1,
+                },
+                new Tower()
+                {
+                    Level = 2,
+                    BuildDuration = new TimeSpan(01, 10, 00),
+                    ResourcesNeeded = new Resources() {
+                        wood = 1000,
+                        stone = 3000,
+                        iron = 300,
+                        gold = 300,
+                    },
+                    requirements = new List<IRequirement>(),
+                    // todo: remove since this should not matter anymore
+                    allowedTiles = new List<Tile>()
+                    {
+                        new GrassTile()
+                    },
+                    RangeOfInfluence = 2,
+                },
+
                 new StorageHouse()
                 {
                     Level = 1,
+                    BuildDuration = new TimeSpan(0, 5, 12), // 5 min and 12 sec
                     ResourcesNeeded = new Resources() {
                         wood = 250,
                         stone = 250,
@@ -63,7 +113,7 @@ namespace CoreClassLibrary.Controller
                     requirements = new List<IRequirement>(),
                     allowedTiles = new List<Tile>()
                     {
-                        new GrasTile()
+                        new GrassTile()
                     },
                     StorageCapacity = new Resources()
                     {
@@ -77,6 +127,7 @@ namespace CoreClassLibrary.Controller
                 new Lumberjack()
                 {
                     Level = 1,
+                    BuildDuration = new TimeSpan(0, 2, 30), // 2 min and 30 sec
                     ResourcesNeeded = new Resources() {
                         wood = 100,
                         stone = 100,
@@ -98,6 +149,8 @@ namespace CoreClassLibrary.Controller
                     gatherRate = 10
                 }
             };
+
+            // TODO check if all is valid (all have level, duration, valid ress,...)
 
             // save them to file
             saveBuildTechToFile();

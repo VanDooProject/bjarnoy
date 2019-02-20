@@ -1,40 +1,39 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Tiles;
+using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Factory
 {
     public class TileFactory
     {
-        public enum TileAttributesGeneralTypeList  
-        {
-            Gras = 1,
-            Mountain = 2,
-            Forest = 3,
-            Resource = 4,
-        };
+        public Type defaultType;
+        private Dictionary<Type, double> probability;
 
-        public Tile GetNewSpecificTile(int x, int y, int z, TileAttributesGeneralTypeList type)
+        public TileFactory(Dictionary<Type, double> probability, Type defaultType)
         {
-            switch (type)
+            this.probability = probability;
+            this.defaultType = defaultType;
+        }
+            
+        public Tile GetRndBiomTileAtPosition(Vector3 position)
+        {
+            Random rnd = new Random();
+            double rnd_value = rnd.NextDouble();
+
+            double cumulative_probability = 0.0;
+            foreach (KeyValuePair<Type, double> probability in this.probability)
             {
-                case TileAttributesGeneralTypeList.Gras:
-                    return new GrasTile(x, y, z);
-
-                case TileAttributesGeneralTypeList.Mountain:
-                    return new MountainTile(x, y, z);
-
-                case TileAttributesGeneralTypeList.Forest:
-                    return new ForestTile(x, y, z);
-
-                case TileAttributesGeneralTypeList.Resource:
-                    ResourceTile resource_tile = new ResourceTile(x, y, z);
-                    resource_tile.GetRndRessource();
-                    return resource_tile;
-
-                default:
-                    return new GrasTile(x, y, z);
+                cumulative_probability = cumulative_probability + probability.Value;
+                if (rnd_value < cumulative_probability)
+                {
+                    return (Tile)Activator.CreateInstance(probability.Key, position);
+                }
             }
+            return (Tile)Activator.CreateInstance(this.defaultType, position);
         }
     }
 }

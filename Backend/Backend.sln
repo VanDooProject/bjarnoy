@@ -5,7 +5,12 @@ VisualStudioVersion = 15.0.27703.2047
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ApiServer", "ApiServer\ApiServer.csproj", "{EB715478-AE4E-41C5-961D-35D55B2BA037}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoreClassLibrary", "CoreClassLibrary\CoreClassLibrary.csproj", "{6A20313A-176A-4F85-9F6D-6057063A7D6E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CoreClassLibrary", "CoreClassLibrary\CoreClassLibrary.csproj", "{6A20313A-176A-4F85-9F6D-6057063A7D6E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{CEE4F8E6-27B5-4BAD-867D-E2365C416741}"
+	ProjectSection(SolutionItems) = preProject
+		..\.gitlab-ci.yml = ..\.gitlab-ci.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

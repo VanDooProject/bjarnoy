@@ -4,8 +4,14 @@
             <!-- use router-link component for navigation. -->
             <!-- specify the link by passing the `to` prop. -->
             <!-- `<router-link>` will be rendered as an `<a>` tag by default -->
-            <router-link to="/map">Go to map</router-link>
-            <router-link to="/user">Go to user profile</router-link>
+            
+            <!-- Logged in -->
+            <router-link v-if="this.$store.state.loggedIn" to="/map">Go to map</router-link>
+            <router-link v-if="this.$store.state.loggedIn" to="/user">Go to user profile</router-link>
+
+            <!-- Not logged in -->
+            <router-link v-if="!this.$store.state.loggedIn" to="/login">Login</router-link>
+            <router-link v-if="!this.$store.state.loggedIn" to="/register">Register</router-link>
         </menu>
     </div>
 </template>
@@ -24,22 +30,7 @@
             
         },
         mounted () {
-            if (localStorage.token == undefined)
-            {
-                this.$router.push('/register');
-            }
-            else
-            {
-                this.axios
-                .get(this.$config.RequestUriPrefix + '/api/v1/auth/selftest',
-                    {
-                        headers: {'Authorization': "bearer " + localStorage.token},
-                        // CORS cookie issue: https://github.com/axios/axios/issues/876
-                        withCredentials: true
-                    })
-                .then(response => console.log(response))
-                .catch(error => this.$router.push('/login'));
-            }
+
         },
     }
 </script>

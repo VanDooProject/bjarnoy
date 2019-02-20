@@ -26,7 +26,15 @@
             "port": 9222,
             "url": "http://localhost:8080/",
             "cwd": "${workspaceFolder}/Frontend",
-            "webRoot": "${workspaceRoot}/Frontend/js",
+            "webRoot": "${workspaceRoot}/Frontend",
+            "sourceMapPathOverrides": {
+            //    "webpack:///.": "${workspaceRoot}/Frontend/",
+                "webpack:///./*": "${workspaceRoot}/Frontend/*",
+                "webpack:///./js/*": "${workspaceRoot}/Frontend/js/*",
+                "webpack:///js/*": "${workspaceRoot}/Frontend/js/*",
+                "webpack:///./js/components/*": "${workspaceRoot}/Frontend/js/components/*",
+                "webpack:///js/components/*": "${workspaceRoot}/Frontend/js/components/*",
+            },
             "sourceMaps": true,
             "timeout": 10000,
         //    "trace":"verbose",
@@ -38,14 +46,14 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/Backend/ApiServer/bin/Debug/netcoreapp2.0/ApiServer.dll",
+            "program": "${workspaceFolder}/Backend/ApiServer/bin/Debug/netcoreapp2.2/ApiServer.dll",
             "args": [],
             "cwd": "${workspaceFolder}/Backend/ApiServer",
             "stopAtEntry": false,
             "internalConsoleOptions": "openOnSessionStart",
             "launchBrowser": {
                 "enabled": true,
-                "args": "${auto-detect-url}",
+                "args": "${auto-detect-url}/swagger",
                 "windows": {
                     "command": "cmd.exe",
                     "args": "/C start ${auto-detect-url}/swagger"
