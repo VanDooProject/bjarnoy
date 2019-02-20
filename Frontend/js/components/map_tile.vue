@@ -81,16 +81,16 @@ export default {
     },
     computed: {
         ttHeight () {
-            var h = 56;
+            var height = 46;     //Textsize + 2 * Padding + BorderRadius (.tiletooltip)
             if(this.tile.resource!=undefined)
             {
-                h+=25;
+                height+=26;      //Textsize + Padding (.tiletooltip)
             }
             if(this.tile.building!=undefined)
             {
-                h+=25
+                height+=26       //Textsize + Padding (.tiletooltip)
             }
-            return h;
+            return height;
         },
         points () { // the point list for the hexagon that is used for mouse (and touch) events
             //x is straight forward
