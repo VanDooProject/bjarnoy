@@ -62,16 +62,18 @@ export default {
                     .filter(entry => {
                         if(this.tile.building == undefined)
                         {
-                            return (entry.allowedTiles.filter(tile => tile.type == this.tile.type)
-                                .length >= 1);
+                            return (entry.allowedTiles.some(tile => ((entry.level == 1) && (tile.type == this.tile.type))));
                         }
                         else
                         {
-                            return (entry.allowedTiles.filter(tile => (tile.building.level == this.tile.building.level) && (tile.building.type == this.tile.building.type))
-                                .length >= 1);
+                            if (entry.level == this.tile.building.level + 1)
+                            {
+                                return entry.allowedTiles.some(tile => tile.type == this.tile.type);
+                            }
+                            return false;
                         }
                     }).map((entry, index) => {
-                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level } };
+                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level} };
                     });
             }
             else

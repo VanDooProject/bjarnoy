@@ -35,8 +35,10 @@ export default {
 
 <style>
 .queue {
-    position: absolute;
+    position: relative;
     z-index: 10000;
     pointer-events: none;
+    float: right;
+    width: 20%
 }
 </style>

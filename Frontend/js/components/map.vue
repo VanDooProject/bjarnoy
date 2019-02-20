@@ -2,39 +2,39 @@
     <div>
         <MapMenu></MapMenu>
         <queue></queue>
-        
-        <div
+
+        <svg 
+        id="map"
         v-on:mouseup='mouseUp'
         v-on:mousemove='mouseMove'
         v-on:mouseleave='mouseLeave'
         v-on:mousedown='mouseDown'
+        v-on:wheel='wheelMove'
 
         v-on:touchend='touchUp'
         v-on:touchmove='touchMove'
         v-on:touchleave='touchLeave'
         v-on:touchcancel='touchLeave'
         v-on:touchstart='touchDown'
-
-        id="mapbg"
         >
-            <div id="map">
-                <MapLayer layerZ="2" v-bind:tiles="TilesArray[2]"></MapLayer>
-                <MapLayer layerZ="1" v-bind:tiles="TilesArray[1]"></MapLayer>
-            </div>
-        </div>
+            <g><MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"/></g>
+            <ZoomButtons/>
+        </svg>
     </div>
 </template>
 
 <script>
-    import MapLayer from './map_layer.vue';
+    import MapTile from './map_tile.vue';
     import MapMenu from './menu.vue';
     import Queue from './queue.vue';
+    import ZoomButtons from './zoom_buttons.vue';
     
     export default {
         components: {
-            MapLayer,
+            MapTile,
             MapMenu,
-            Queue
+            Queue,
+            ZoomButtons,
         },
         props: [],
         data: function() {
@@ -63,6 +63,9 @@
                 });
                 return ls;
             },
+            mapScale() {
+                return this.$store.state.mapScale;
+            },
         },
         mounted () {
             this.$store.dispatch("UpdateMapTiles");
@@ -73,11 +76,21 @@
                 requestAnimationFrame(this.animationCallback);
                 if(this.mouseMoved)
                 {
-                    this.$store.commit("MouseMove", {x: this.moveX, y: this.moveY});
+                    this.$store.commit("MouseMove", {x: this.moveX / this.mapScale, y: this.moveY / this.mapScale});
                     this.moveX = 0;
                     this.moveY = 0;
                     this.mouseMoved = false;
                 }
+            },
+            //Mousewheel Event
+            wheelMove: function (event) {
+                this.$store.commit("SetMenuVisible",false);
+                if(event.deltaMode == 0)        //Chrome    | pixels
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 1000);
+                else if(event.deltaMode == 1)   //Firefox   | lines
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 100);
+                else if(event.deltaMode == 2)   //          | pages
+                    this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 10);
             },
             //Mouse Events
             mouseDown: function(event) {
@@ -149,34 +162,12 @@ html, body {
 }
 
 #map {
-    display: block;
     padding: 0px;
     margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
-    position: fixed;
-    width: 100%;
+    position: absolute;
+    top:0;
+    left:0;
+    width:100%;
     height: 100%;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 0;
-    transform: rotateX(60deg) rotateZ(45deg);
 }
-#mapbg{
-    display: block;
-    padding: 0px;
-    margin: 0px;
-    min-width: 100%;
-    min-height: 100%;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    right: 0;
-}
-
 </style>

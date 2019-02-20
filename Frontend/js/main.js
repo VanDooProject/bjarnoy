@@ -83,7 +83,6 @@ Vue.prototype.$config = config;
 const store = new Vuex.Store({
     state: {
         loggedIn: false,
-        imageMap: [],
         
         menuPos: {x:0, y:0},
         menuTile: {},
@@ -91,7 +90,8 @@ const store = new Vuex.Store({
         menuClosed: false,
         menuBuildOpen: false,
 
-        mapOffset: {x: 0, y: 0},
+        mapOffset: {x: -window.innerWidth/2, y: -window.innerHeight/2},
+        mapScale: 1,
 
         mouseMove: {x:0, y:0},
         techBildings: [],
@@ -100,6 +100,8 @@ const store = new Vuex.Store({
         now: new Date(),
         websocket: undefined,
         deltaTime: 0,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
     },
     getters: {
         menuDisplay: state => {
@@ -195,7 +197,7 @@ const store = new Vuex.Store({
                     context.commit("SetMapTiles", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr', error);
+                    context.dispatch('ReqestError', error);
                 });
         },
         UpdateQueued (context) {
@@ -208,17 +210,7 @@ const store = new Vuex.Store({
                     context.commit("SetQueued", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr', error);
-                });
-        },
-        UpdateImageMap (context) {
-            axios
-                .get('/images/data.json')
-                .then(response => {
-                    context.commit("SetImageMap", response.data);
-                })
-                .catch(error => {
-                    this.commit('ReqestErr');
+                    context.dispatch('ReqestError', error);
                 });
         },
         UpdateTechBildings (context) {
@@ -231,7 +223,7 @@ const store = new Vuex.Store({
                     context.commit("SetTechBuildings", response.data);
                 })
                 .catch(error => {
-                    this.commit('ReqestErr', error);
+                    context.dispatch('ReqestError', error);
                 });
         },
         Login (context, token){
@@ -285,17 +277,25 @@ const store = new Vuex.Store({
         }
     },
     mutations: {
+        SetWindowSize (state, size) {
+            state.windowWidth = size.x;
+            state.windowHeight = size.y;
+        },
+        AddMapScale (state, dScale)
+        {
+            state.mapScale += dScale;
+        },
         SetDeltaTime (state, dT) {
             state.deltaTime = dT;
         },
         SetMapTiles (state, tiles) {
-            state.mapTiles = tiles;
+            state.mapTiles = tiles.sort((a,b) => {
+                //Sort list when adding instead of using zIndex
+                return a.position.x - a.position.y - (b.position.x - b.position.y);
+            });
         },
         SetQueued (state, queue) {
             state.queued = queue;
-        },
-        SetImageMap (state, imageMap) {
-            state.imageMap = imageMap;
         },
         SetTechBuildings (state, techBildings) {
             state.techBildings = techBildings;
@@ -326,10 +326,8 @@ const store = new Vuex.Store({
             state.mouseMove = {x:0 , y: 0};
         },
         MouseMove (state, move) {
-            state.mouseMove = {x: Math.abs(move.x) + state.mouseMove.x, y: Math.abs(move.y) + state.mouseMove.y};
-            var angle = -45 * Math.PI / 180;
-            state.mapOffset.x += move.x * Math.cos(angle) - move.y * 2 * Math.sin(angle);
-            state.mapOffset.y += (move.y * 2 * Math.cos(angle) + move.x * Math.sin(angle));
+            state.mapOffset.x += move.x;
+            state.mapOffset.y += move.y;
         },
         OpenBuildMenu (state) {
             state.menuBuildOpen = true;
@@ -340,7 +338,6 @@ const store = new Vuex.Store({
         }
       }
 });
-store.dispatch("UpdateImageMap");
 store.dispatch("StartWebSocket");
 store.dispatch("Startup");
 
@@ -355,6 +352,13 @@ function callback()
     }
 }
 setInterval(callback, 1000);
+
+function resizeEvent()
+{
+    store.commit("SetWindowSize", {x: window.innerWidth, y: window.innerHeight});
+    store.commit("SetMenuVisible", false);
+}
+window.addEventListener("resize", resizeEvent);
 
 // main app
 const vue = new Vue({
