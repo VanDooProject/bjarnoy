@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Serializer
 {
+    // ideas taken from: https://stackoverflow.com/a/39526179/2298744
 
     /// <summary>
     /// use like:

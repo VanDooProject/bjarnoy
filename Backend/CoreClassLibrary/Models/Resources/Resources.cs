@@ -74,5 +74,39 @@ namespace CoreClassLibrary.Models.Resources
 
             return res;
         }
+
+        public static bool operator <(Resources a, Resources b)
+        {
+            if (!(a.wood < b.wood))
+                return false;
+
+            if (!(a.stone < b.stone))
+                return false;
+
+            if (!(a.iron < b.iron))
+                return false;
+
+            if (!(a.gold < b.gold))
+                return false;
+
+            return true;
+        }
+
+        public static bool operator >(Resources a, Resources b)
+        {
+            if (!(a.wood > b.wood))
+                return false;
+
+            if (!(a.stone > b.stone))
+                return false;
+
+            if (!(a.iron > b.iron))
+                return false;
+
+            if (!(a.gold > b.gold))
+                return false;
+
+            return true;
+        }
     }
 }
