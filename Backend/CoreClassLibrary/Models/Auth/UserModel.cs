@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Models.Generic;
+using CoreClassLibrary.Models.Resources;
 using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.Auth
@@ -16,5 +17,8 @@ namespace CoreClassLibrary.Models.Auth
 
 
         public string Email { get; set; }
+
+        [JsonIgnore] // <- should be gathered as own data not with user object
+        public UserResources UserResources { get; set; }
     }
 }
