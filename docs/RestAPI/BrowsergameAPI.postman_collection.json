@@ -516,6 +516,48 @@
 			]
 		},
 		{
+			"name": "General",
+			"item": [
+				{
+					"name": "get ServerTime",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "67ddb54e-8f3f-462b-950d-14fccbfcb23d",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"})"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/ServerTime",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ServerTime"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Installer",
 			"item": [
 				{
