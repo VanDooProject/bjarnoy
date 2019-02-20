@@ -81,23 +81,23 @@ export default {
     },
     computed: {
         ttHeight () {
-            var h = 56;
+            var height = 46;     //Textsize + 2 * Padding + BorderRadius (.tiletooltip)
             if(this.tile.resource!=undefined)
             {
-                h+=25;
+                height+=26;      //Textsize + Padding (.tiletooltip)
             }
             if(this.tile.building!=undefined)
             {
-                h+=25
+                height+=26       //Textsize + Padding (.tiletooltip)
             }
-            return h;
+            return height;
         },
         points () { // the point list for the hexagon that is used for mouse (and touch) events
             //x is straight forward
-            //for y I have to offset it by 280 (Measured from the graphics y position of higher horizontal line) 
+            //for y I have to add 47% of the height (Measured from Graphics ratio between the space below the first horizontal line and the hight of the image) 
             //because the actual graphics start there
             var xOff = this.xpos;
-            var yOff = this.ypos + 280 * this.mapScale;
+            var yOff = this.ypos + this.height * 0.47;
 
             var yFac = Math.sqrt(3)/2 //From the geometry
                 * Math.cos((57.8) / 180 * Math.PI); //From the graphics
