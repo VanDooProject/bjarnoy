@@ -51,7 +51,9 @@ job_test_dotnet:
   image: microsoft/dotnet:latest
   <<: *cache_nuget
   script: 
-    - dotnet test ApiServer/UnitTests.csproj --framework netcoreapp2.2
+    - cd Backend/
+    - dotnet restore
+    - dotnet test UnitTests/UnitTests.csproj --framework netcoreapp2.2
 
 
 
