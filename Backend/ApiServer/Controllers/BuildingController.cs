@@ -1,4 +1,5 @@
 ﻿using System;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
@@ -31,9 +32,17 @@ namespace ApiServer.Controllers
         public IActionResult PostBuild([FromBody]BuildBuildingModel build)
         {
             UserModel user = getCurretUser();
-            
-            BuildingQueue queueEntry = _buildHelper.BuildBuilding(build, user);
-            return (queueEntry == null) ? (IActionResult)BadRequest() : Ok(queueEntry);
+
+            try
+            {
+                BuildingQueue queueEntry = _buildHelper.BuildBuilding(build, user);
+                return (queueEntry == null) ? (IActionResult) BadRequest() : Ok(queueEntry);
+            }
+            catch (BuildBuildingException e)
+            {
+                logger.Warn(e.Message);
+                return BadRequest(e.Message);
+            }
         }
     }
 }

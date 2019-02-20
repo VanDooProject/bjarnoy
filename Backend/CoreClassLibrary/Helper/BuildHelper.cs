@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
@@ -46,8 +47,11 @@ namespace CoreClassLibrary.Helper
 
             // check if requirements are fulfilled
             {
-                // TODO: user has enough resources
-
+                // check if user has enough resources
+                if (user.UserResources.ResourcesStoredCurrently < buildingToBeBuilt.ResourcesNeeded)
+                {
+                    throw new BuildBuildingException("user has not enough resources to build");
+                }
 
                 // tile is allowed here
                 if (buildingToBeBuilt.allowedTiles.All(t => t.type != tile.type))
@@ -84,8 +88,10 @@ namespace CoreClassLibrary.Helper
                     }
                 }
 
-                // TODO: needed tile tech is researched
+                // TODO: check if needed tile tech is researched
             }
+
+            // TODO: remove resources from user - think of race conditions
 
             // clean building
             buildingToBeBuilt = buildingToBeBuilt.CleanTechData();
