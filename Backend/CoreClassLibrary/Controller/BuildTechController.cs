@@ -5,6 +5,7 @@ using System.Text;
 using CoreClassLibrary.Models;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Models.Settings;
 using log4net;
 using Newtonsoft.Json;

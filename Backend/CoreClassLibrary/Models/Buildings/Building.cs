@@ -38,7 +38,7 @@ namespace CoreClassLibrary.Models.Buildings
         /// </summary>
         [BsonIgnoreIfNull]
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public Resources ResourcesNeeded;
+        public Resources.Resources ResourcesNeeded;
 
         /// <summary>
         /// requirements which must be fulfilled to build this\n
