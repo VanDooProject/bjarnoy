@@ -45,6 +45,16 @@ job_build_dotnet_bin_linux:
       - Backend/ApiServer/bin/Release/*
 
 
+## test backend core logic
+job_test_dotnet:
+  stage: build
+  image: microsoft/dotnet:latest
+  <<: *cache_nuget
+  script: 
+    - dotnet test ApiServer/UnitTests.csproj --framework netcoreapp2.2
+
+
+
 ## scripts for type/javascript
 job_build_vue:
   stage: build
@@ -101,6 +111,9 @@ job_build_postman_docs:
       expire_in: 45 minutes
       paths:
         - ./*.html
+
+
+
 
 
 

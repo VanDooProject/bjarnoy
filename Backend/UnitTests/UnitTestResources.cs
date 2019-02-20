@@ -21,20 +21,106 @@ namespace UnitTests
         {
             var res1 = new Resources()
             {
+                wood = 200,
+                stone = 200,
+                iron = 200,
+                gold = 200
+            };
+            var res2 = new Resources()
+            {
+                wood = 100,
+                stone = 100,
+                iron = 100,
+                gold = 100
+            };
+
+            Debug.Assert(res1 > res2);
+        }
+
+        [Fact]
+        public void TestResourceLessThanComparisonInvalid()
+        {
+            var res1 = new Resources()
+            {
+                wood  = 200,
+                stone = 100,
+                iron  = 100,
+                gold  = 100
+            };
+            var res2 = new Resources()
+            {
                 wood  = 200,
                 stone = 200,
                 iron  = 200,
                 gold  = 200
             };
+
+            Debug.Assert(res1 < res2 == false);
+        }
+
+        [Fact]
+        public void TestResourceMoreThanComparisonInvalid()
+        {
+            var res1 = new Resources()
+            {
+                wood = 200,
+                stone = 200,
+                iron = 200,
+                gold = 200
+            };
             var res2 = new Resources()
             {
-                wood  = 100,
-                stone = 100,
-                iron  = 100,
-                gold  = 100
+                wood = 200,
+                stone = 199,
+                iron = 200,
+                gold = 200
             };
 
-            Debug.Assert(res1 > res2);
+            Debug.Assert(res1 > res2 == false);
+        }
+
+
+        [Fact]
+        public void TestResourceMoreThanComparisonButEquals()
+        {
+            var res1 = new Resources()
+            {
+                wood = 100,
+                stone = 100,
+                iron = 100,
+                gold = 100
+            };
+            var res2 = new Resources()
+            {
+                wood = 100,
+                stone = 100,
+                iron = 100,
+                gold = 100
+            };
+
+            Debug.Assert(res1 > res2 == false);
+        }
+
+
+        [Fact]
+        public void TestResourceLessThanComparisonButEquals()
+        {
+            var res1 = new Resources()
+            {
+                wood = 100,
+                stone = 100,
+                iron = 100,
+                gold = 100
+            };
+            var res2 = new Resources()
+            {
+                wood = 100,
+                stone = 100,
+                iron = 100,
+                gold = 100
+            };
+
+            Debug.Assert(res1 < res2 == false);
         }
     }
 }

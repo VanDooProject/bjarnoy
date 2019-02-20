@@ -10,16 +10,16 @@ namespace CoreClassLibrary.Models.Resources
     public class Resources
     {
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double wood;
+        public double wood = 0.0;
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double stone;
+        public double stone = 0.0;
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double iron;
+        public double iron = 0.0;
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double gold;
+        public double gold = 0.0;
 
         /// <summary>
         /// clips all resources to given max
