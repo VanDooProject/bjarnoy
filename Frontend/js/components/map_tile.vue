@@ -111,16 +111,16 @@ export default {
         },
         xpos() {
             return this.width // use the (current) width to scale the vetor
-            * (
-                // Rotate Coordinate system 45° and get x value
-                    this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
-            ) 
-            // Adjustment Factor
-            * this.xFactor  
-            // Add Offsets
-            + this.mapOffset.x * this.mapScale
-            // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-            + this.windowWidth/2;
+                * (
+                    // Rotate Coordinate system 45° and get x value
+                        this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
+                ) 
+                // Adjustment Factor
+                * this.xFactor  
+                // Add Offsets
+                + this.mapOffset.x * this.mapScale
+                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
+                + this.windowWidth/2;
         },
         ypos() {
             return this.width //use the (current) width to scale the vetor

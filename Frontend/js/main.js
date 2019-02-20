@@ -169,7 +169,7 @@ const store = new Vuex.Store({
                         {
                             context.dispatch("UpdateMapTiles");
                         }
-                        return console.info("got Queue: " + queue);
+                        return context.commit("SendNotification",{title: "got Queue", body:  queue});
                     });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
@@ -335,7 +335,30 @@ const store = new Vuex.Store({
         SetCurrentTime(state, time)
         {
             state.now = time;
-        }
+        },
+        SendNotification(state, msg)   //https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API/Using_the_Notifications_API
+        {
+            if (!("Notification" in window)) {
+                    console.log("Browser doesn't support Notiffications, failed to send Message: " + msg);
+            }
+        
+            // Let's check whether notification permissions have already been granted
+            else if (Notification.permission === "granted") {
+                // If it's okay let's create a notification
+                var notification = new Notification(msg.tilte, {body: msg.body});
+                setTimeout(notification.close.bind(notification), 4000);
+            }
+            // Otherwise, we need to ask the user for permission
+            else if (Notification.permission !== 'denied') {
+                Notification.requestPermission(function (permission) {
+                    // If the user accepts, let's create a notification
+                    if (permission === "granted") {
+                        var notification = new Notification(msg.tilte, {body: msg.body});
+                        setTimeout(notification.close.bind(notification), 4000);
+                    }
+                });
+            }
+        },
       }
 });
 store.dispatch("StartWebSocket");
