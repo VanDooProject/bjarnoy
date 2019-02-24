@@ -1,4 +1,5 @@
-﻿using CoreClassLibrary.Serializer;
+﻿using System.Reflection;
+using CoreClassLibrary.Serializer;
 using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.Resources
@@ -10,16 +11,21 @@ namespace CoreClassLibrary.Models.Resources
     public class Resources
     {
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double wood = 0.0;
+        public double wood { get; set; }
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double stone = 0.0;
+        public double stone { get; set; }
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double iron = 0.0;
+        public double iron { get; set; }
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double gold = 0.0;
+        public double gold { get; set; }
+
+        /// <summary>
+        /// properties of this class to use for iterating over resTypes
+        /// </summary>
+        private static readonly PropertyInfo[] properties = typeof(Resources).GetProperties();
 
         /// <summary>
         /// clips all resources to given max
@@ -27,22 +33,26 @@ namespace CoreClassLibrary.Models.Resources
         /// <param name="ClipToResources">max amount of each resource</param>
         public void Clip(Resources ClipToResources)
         {
-            // TODO: find out if this could be refactored to be more generic
-            this.wood  = (this.wood  > ClipToResources.wood) ? ClipToResources.wood  : this.wood;
-            this.stone = (this.stone > ClipToResources.wood) ? ClipToResources.stone : this.stone;
-            this.iron  = (this.iron  > ClipToResources.iron) ? ClipToResources.iron  : this.iron;
-            this.gold  = (this.gold  > ClipToResources.gold) ? ClipToResources.gold  : this.gold;
+            // this.wood  = (this.wood  > ClipToResources.wood) ? ClipToResources.wood  : this.wood;
+
+            foreach (PropertyInfo property in properties)
+            {
+                if ((double)property.GetValue(this) > (double)property.GetValue(ClipToResources))
+                {
+                    property.SetValue(this, property.GetValue(ClipToResources));
+                }
+            }
         }
 
         public static Resources operator +(Resources a, Resources b)
         {
             Resources res = new Resources();
 
-            // TODO: find out if this could be refactored to be more generic
-            res.wood = a.wood + b.wood;
-            res.stone = a.stone + b.stone;
-            res.iron = a.iron + b.iron;
-            res.gold = a.gold + b.gold;
+            // res.wood = a.wood + b.wood;
+            foreach (PropertyInfo property in properties)
+            {
+                property.SetValue(res, (double) property.GetValue(a) + (double) property.GetValue(b));
+            }
 
             return res;
         }
@@ -50,12 +60,12 @@ namespace CoreClassLibrary.Models.Resources
         public static Resources operator -(Resources a, Resources b)
         {
             Resources res = new Resources();
-
-            // TODO: find out if this could be refactored to be more generic
-            res.wood = a.wood - b.wood;
-            res.stone = a.stone - b.stone;
-            res.iron = a.iron - b.iron;
-            res.gold = a.gold - b.gold;
+            
+            // res.wood = a.wood - b.wood;
+            foreach (PropertyInfo property in properties)
+            {
+                property.SetValue(res, (double)property.GetValue(a) - (double)property.GetValue(b));
+            }
 
             // TODO: what should happen if values get negative?
 
@@ -66,45 +76,39 @@ namespace CoreClassLibrary.Models.Resources
         {
             Resources res = new Resources();
 
-            // TODO: find out if this could be refactored to be more generic
-            res.wood  = a.wood  * factor;
-            res.stone = a.stone * factor;
-            res.iron  = a.iron  * factor;
-            res.gold  = a.gold  * factor;
+            // res.wood  = a.wood  * factor;
+            foreach (PropertyInfo property in properties)
+            {
+                property.SetValue(res, (double)property.GetValue(a) * factor);
+            }
 
             return res;
         }
 
         public static bool operator <(Resources a, Resources b)
         {
-            if (!(a.wood < b.wood))
-                return false;
+            // if (!(a.wood < b.wood))
+            //     return false;
 
-            if (!(a.stone < b.stone))
-                return false;
-
-            if (!(a.iron < b.iron))
-                return false;
-
-            if (!(a.gold < b.gold))
-                return false;
+            foreach (PropertyInfo property in properties)
+            {
+                if (!((double)property.GetValue(a) < (double)property.GetValue(b)))
+                    return false;
+            }
 
             return true;
         }
 
         public static bool operator >(Resources a, Resources b)
         {
-            if (!(a.wood > b.wood))
-                return false;
+            // if (!(a.wood > b.wood))
+            //     return false;
 
-            if (!(a.stone > b.stone))
-                return false;
-
-            if (!(a.iron > b.iron))
-                return false;
-
-            if (!(a.gold > b.gold))
-                return false;
+            foreach (PropertyInfo property in properties)
+            {
+                if (!((double)property.GetValue(a) > (double)property.GetValue(b)))
+                    return false;
+            }
 
             return true;
         }
