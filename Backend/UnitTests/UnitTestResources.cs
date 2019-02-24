@@ -35,6 +35,33 @@ namespace UnitTests
             Debug.Assert(Math.Abs(res3.gold - 8) < TOLERANCE);
         }
 
+
+        [Fact]
+        public void TestResourceSubtract()
+        {
+            var res1 = new Resources()
+            {
+                wood = 1,
+                stone = 2,
+                iron = 3,
+                gold = 4
+            };
+            var res2 = new Resources()
+            {
+                wood = 1,
+                stone = 2,
+                iron = 3,
+                gold = 4
+            };
+
+            var res3 = res1 - res2;
+
+            Debug.Assert(Math.Abs(res3.wood) < TOLERANCE);
+            Debug.Assert(Math.Abs(res3.stone) < TOLERANCE);
+            Debug.Assert(Math.Abs(res3.iron) < TOLERANCE);
+            Debug.Assert(Math.Abs(res3.gold) < TOLERANCE);
+        }
+
         [Fact]
         public void TestResourceLessThanComparison()
         {
