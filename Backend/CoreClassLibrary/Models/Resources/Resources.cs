@@ -53,7 +53,10 @@ namespace CoreClassLibrary.Models.Resources
 
             foreach (PropertyInfo property in properties)
             {
-                PropertiesGetterSetterPairs.Add(new GetterSetterPair(property));
+                if (property.PropertyType == typeof(double))
+                {
+                    PropertiesGetterSetterPairs.Add(new GetterSetterPair(property));
+                }
             }
 
             return PropertiesGetterSetterPairs;
@@ -66,7 +69,6 @@ namespace CoreClassLibrary.Models.Resources
         public void Clip(Resources ClipToResources)
         {
             // this.wood  = (this.wood  > ClipToResources.wood) ? ClipToResources.wood  : this.wood;
-
             foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
                 if ((double)property.getter(this) > (double)property.getter(ClipToResources))
