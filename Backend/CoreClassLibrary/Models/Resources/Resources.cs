@@ -13,16 +13,16 @@ namespace CoreClassLibrary.Models.Resources
     public class Resources
     {
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double wood { get; set; }
+        public double wood { get; set; } = 0.0;
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double stone { get; set; }
+        public double stone { get; set; } = 0.0;
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double iron { get; set; }
+        public double iron { get; set; } = 0.0;
 
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
-        public double gold { get; set; }
+        public double gold { get; set; } = 0.0;
 
         /// <summary>
         /// property setter & getter of this class to use for iterating over resTypes
