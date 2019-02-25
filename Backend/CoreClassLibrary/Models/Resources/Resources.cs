@@ -1,4 +1,6 @@
-﻿using System.Reflection;
+﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
 using CoreClassLibrary.Serializer;
 using Newtonsoft.Json;
 
@@ -23,9 +25,39 @@ namespace CoreClassLibrary.Models.Resources
         public double gold { get; set; }
 
         /// <summary>
-        /// properties of this class to use for iterating over resTypes
+        /// property setter & getter of this class to use for iterating over resTypes
         /// </summary>
-        private static readonly PropertyInfo[] properties = typeof(Resources).GetProperties();
+        private static readonly List<GetterSetterPair> PropertiesGetterSetterPairs = CreateGetterSetterList();
+
+        /// <summary>
+        /// ideas from https://www.c-sharpcorner.com/article/boosting-up-the-reflection-performance-in-c-sharp/
+        /// </summary>
+        private class GetterSetterPair
+        {
+            internal Action<Resources, double> setter;
+
+            internal Func<Resources, double> getter;
+
+            public GetterSetterPair(PropertyInfo property)
+            {
+                setter = (Action<Resources, double>)Delegate.CreateDelegate(typeof(Action<Resources, double>), null, property.GetSetMethod());
+                getter = (Func<Resources, double>) Delegate.CreateDelegate(typeof(Func<Resources, double>), null, property.GetGetMethod());
+            }
+        }
+
+        private static List<GetterSetterPair> CreateGetterSetterList()
+        {
+            List<GetterSetterPair> PropertiesGetterSetterPairs = new List<GetterSetterPair>();
+
+            PropertyInfo[] properties = typeof(Resources).GetProperties();
+
+            foreach (PropertyInfo property in properties)
+            {
+                PropertiesGetterSetterPairs.Add(new GetterSetterPair(property));
+            }
+
+            return PropertiesGetterSetterPairs;
+        }
 
         /// <summary>
         /// clips all resources to given max
@@ -35,11 +67,11 @@ namespace CoreClassLibrary.Models.Resources
         {
             // this.wood  = (this.wood  > ClipToResources.wood) ? ClipToResources.wood  : this.wood;
 
-            foreach (PropertyInfo property in properties)
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
-                if ((double)property.GetValue(this) > (double)property.GetValue(ClipToResources))
+                if ((double)property.getter(this) > (double)property.getter(ClipToResources))
                 {
-                    property.SetValue(this, property.GetValue(ClipToResources));
+                    property.setter(this, property.getter(ClipToResources));
                 }
             }
         }
@@ -49,9 +81,9 @@ namespace CoreClassLibrary.Models.Resources
             Resources res = new Resources();
 
             // res.wood = a.wood + b.wood;
-            foreach (PropertyInfo property in properties)
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
-                property.SetValue(res, (double) property.GetValue(a) + (double) property.GetValue(b));
+                property.setter(res, (double) property.getter(a) + (double) property.getter(b));
             }
 
             return res;
@@ -62,9 +94,9 @@ namespace CoreClassLibrary.Models.Resources
             Resources res = new Resources();
             
             // res.wood = a.wood - b.wood;
-            foreach (PropertyInfo property in properties)
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
-                property.SetValue(res, (double)property.GetValue(a) - (double)property.GetValue(b));
+                property.setter(res, (double)property.getter(a) - (double)property.getter(b));
             }
 
             // TODO: what should happen if values get negative?
@@ -77,9 +109,9 @@ namespace CoreClassLibrary.Models.Resources
             Resources res = new Resources();
 
             // res.wood  = a.wood  * factor;
-            foreach (PropertyInfo property in properties)
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
-                property.SetValue(res, (double)property.GetValue(a) * factor);
+                property.setter(res, (double)property.getter(a) * factor);
             }
 
             return res;
@@ -90,9 +122,9 @@ namespace CoreClassLibrary.Models.Resources
             // if (!(a.wood < b.wood))
             //     return false;
 
-            foreach (PropertyInfo property in properties)
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
-                if (!((double)property.GetValue(a) < (double)property.GetValue(b)))
+                if (!((double)property.getter(a) < (double)property.getter(b)))
                     return false;
             }
 
@@ -104,9 +136,9 @@ namespace CoreClassLibrary.Models.Resources
             // if (!(a.wood > b.wood))
             //     return false;
 
-            foreach (PropertyInfo property in properties)
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
             {
-                if (!((double)property.GetValue(a) > (double)property.GetValue(b)))
+                if (!((double)property.getter(a) > (double)property.getter(b)))
                     return false;
             }
 
