@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using CoreClassLibrary.Helper;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
 
@@ -26,7 +27,7 @@ namespace CoreClassLibrary.Models.Resources
         /// users global stored res
         /// </summary>
         [JsonIgnore] // frontend should not know this - only the calculated property
-        public Resources ResourceStorageAmount;
+        public Resources ResourceStoredAtLastCalculation;
 
         /// <summary>
         /// returns current amount of available resources
@@ -36,9 +37,9 @@ namespace CoreClassLibrary.Models.Resources
         {
             get
             {
-                double hoursSinceLastCalculation = (DateTime.Now - this.LastResourceStorageRefresh).TotalHours;
+                double hoursSinceLastCalculation = (Time.Now - this.LastResourceStorageRefresh).TotalHours;
 
-                Resources storage = this.ResourceStorageAmount +  
+                Resources storage = this.ResourceStoredAtLastCalculation +  
                        this.HourlyResourceProduction * hoursSinceLastCalculation;
 
                 storage.Clip(this.ResourceStorageCapacity);

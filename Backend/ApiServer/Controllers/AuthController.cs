@@ -171,7 +171,7 @@ namespace ApiServer.Controllers
             user.UserResources = new UserResources()
             {
                 LastResourceStorageRefresh = DateTime.Now,
-                ResourceStorageAmount = new Resources() { wood = 100, stone = 100, iron = 100, gold = 100 },
+                ResourceStoredAtLastCalculation = new Resources() { wood = 100, stone = 100, iron = 100, gold = 100 },
                 ResourceStorageCapacity = new Resources() { wood = 800, stone = 800, iron = 800, gold = 800 },
                 HourlyResourceProduction = new Resources() { wood = 10, stone = 10, iron = 10, gold = 10 },
             };
