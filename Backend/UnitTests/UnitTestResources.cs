@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using CoreClassLibrary.Models.Resources;
-using Xunit;
+using NUnit.Framework;
 
 namespace UnitTests
 {
@@ -9,7 +9,7 @@ namespace UnitTests
     {
         public const double TOLERANCE = 0.001;
 
-        [Fact]
+        [Test]
         public void TestResourceAdd()
         {
             var res1 = new Resources()
@@ -36,7 +36,7 @@ namespace UnitTests
         }
 
 
-        [Fact]
+        [Test]
         public void TestResourceSubtract()
         {
             var res1 = new Resources()
@@ -62,7 +62,27 @@ namespace UnitTests
             Debug.Assert(Math.Abs(res3.gold) < TOLERANCE);
         }
 
-        [Fact]
+
+        [Test]
+        public void TestResourceMultiplication()
+        {
+            var res1 = new Resources()
+            {
+                wood = 1,
+                stone = 2,
+                iron = 3,
+                gold = 4
+            };
+
+            var res3 = res1 * 100;
+
+            Debug.Assert(Math.Abs(res3.wood - 100) < TOLERANCE);
+            Debug.Assert(Math.Abs(res3.stone - 200) < TOLERANCE);
+            Debug.Assert(Math.Abs(res3.iron - 300) < TOLERANCE);
+            Debug.Assert(Math.Abs(res3.gold - 400) < TOLERANCE);
+        }
+
+        [Test]
         public void TestResourceLessThanComparison()
         {
             var res1 = new Resources() { wood = 100, stone = 100, iron = 100, gold = 100 };
@@ -71,7 +91,7 @@ namespace UnitTests
             Debug.Assert(res1 < res2);
         }
 
-        [Fact]
+        [Test]
         public void TestResourceMoreThanComparison()
         {
             var res1 = new Resources()
@@ -92,7 +112,7 @@ namespace UnitTests
             Debug.Assert(res1 > res2);
         }
 
-        [Fact]
+        [Test]
         public void TestResourceLessThanComparisonInvalid()
         {
             var res1 = new Resources()
@@ -113,7 +133,7 @@ namespace UnitTests
             Debug.Assert(res1 < res2 == false);
         }
 
-        [Fact]
+        [Test]
         public void TestResourceMoreThanComparisonInvalid()
         {
             var res1 = new Resources()
@@ -135,7 +155,7 @@ namespace UnitTests
         }
 
 
-        [Fact]
+        [Test]
         public void TestResourceMoreThanComparisonButEquals()
         {
             var res1 = new Resources()
@@ -157,7 +177,7 @@ namespace UnitTests
         }
 
 
-        [Fact]
+        [Test]
         public void TestResourceLessThanComparisonButEquals()
         {
             var res1 = new Resources()
@@ -179,7 +199,7 @@ namespace UnitTests
         }
 
 
-        [Fact]
+        [Test]
         public void TestResourceComparisonAgainstScalar()
         {
             var res1 = new Resources()
@@ -198,7 +218,7 @@ namespace UnitTests
         }
 
 
-        [Fact]
+        [Test]
         public void TestResourceClip()
         {
             var res1 = new Resources()
