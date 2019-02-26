@@ -3,7 +3,6 @@ using System.Diagnostics;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Resources;
 using NUnit.Framework;
-using Pose;
 
 namespace UnitTests
 {
