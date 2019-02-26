@@ -146,5 +146,27 @@ namespace CoreClassLibrary.Models.Resources
 
             return true;
         }
+
+        public static bool operator <(Resources a, double b)
+        {
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
+            {
+                if (!((double)property.getter(a) < b))
+                    return false;
+            }
+
+            return true;
+        }
+
+        public static bool operator >(Resources a, double b)
+        {
+            foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
+            {
+                if (!((double)property.getter(a) > b))
+                    return false;
+            }
+
+            return true;
+        }
     }
 }

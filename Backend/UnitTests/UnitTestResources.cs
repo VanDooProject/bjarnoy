@@ -180,6 +180,25 @@ namespace UnitTests
 
 
         [Fact]
+        public void TestResourceComparisonAgainstScalar()
+        {
+            var res1 = new Resources()
+            {
+                wood = 200,
+                stone = 200,
+                iron = 200,
+                gold = 200
+            };
+
+            Debug.Assert(res1 < 100 == false);
+            Debug.Assert(res1 < 201);
+
+            Debug.Assert(res1 > 201 == false);
+            Debug.Assert(res1 > 199);
+        }
+
+
+        [Fact]
         public void TestResourceClip()
         {
             var res1 = new Resources()
