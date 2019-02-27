@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
@@ -69,7 +70,14 @@ namespace CoreClassLibrary.Respository
             var filter = builder.Eq("Position.X", x) & builder.Eq("Position.Y", y) & builder.Eq("Position.Z", z);
             var result = tileCollection.Find(filter).ToList();
 
-            return result.FirstOrDefault();
+            Tile tile = result.FirstOrDefault();
+
+            if (tile == null)
+            {
+                throw new IllegalTileException("tile not found");
+            }
+
+            return tile;
         }
 
         public void Delete(Island island)

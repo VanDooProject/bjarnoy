@@ -43,6 +43,11 @@ namespace ApiServer.Controllers
                 logger.Warn(e.Message);
                 return BadRequest(e.Message);
             }
+            catch (GameException e)
+            {
+                logger.Warn(e.Message);
+                return BadRequest(e.Message);
+            }
         }
     }
 }
