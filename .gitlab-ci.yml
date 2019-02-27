@@ -86,36 +86,6 @@ job_build_vue:
         - Frontend/images/*
 
 
-## create postman docs
-# https://stackoverflow.com/questions/29238120/creating-html-doc-from-postman-collection
-job_build_postman_docs:
-  stage: build
-  image: 
-    name: hughmp/postmanerator:latest
-    # ATTENTION: this container hash no shell as entrypoint -> set it ( https://docs.gitlab.com/ee/ci/docker/using_docker_images.html#overriding-the-entrypoint-of-an-image )
-    entrypoint: [""]
-
-  allow_failure: true
-
-  # need to use correct container typ for: https://github.com/postmanlabs/postman-collection-transformer
-  before_script:
-    - apk add --update nodejs nodejs-npm
-    - npm install -g postman-collection-transformer
-  
-  script:
-    - node /usr/bin/transform-collection.js --help
-    - node /usr/bin/transform-collection.js convert --help
-    - node /usr/bin/transform-collection.js convert -i="./docs/RestAPI/BrowsergameAPI.postman_collection.json" -j="2.1.0" -o="./docs/RestAPI/BrowsergameAPI.V1.postman_collection.json" -p="1.0.0" -P -w
-    - find . -name "*.json"
-    - postmanerator -output=./doc.html -collection=./docs/RestAPI/BrowsergameAPI.postman_collection.json -environment=./docs/RestAPI/BrowsergameAPI.postman_environment.json
-
-  artifacts:
-      expire_in: 45 minutes
-      paths:
-        - ./*.html
-
-
-
 
 
 
