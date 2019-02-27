@@ -57,10 +57,19 @@ job_test_dotnet:
     # https://github.com/tonerdo/coverlet
     #- cat UnitTests/coverage.json
     #  Regex for coverage: \|[ ]*Total[ ]*\|[ ]*\d+,\d+%[ ]*\|[ ]*(\d+,\d+%)[ ]*
+    #  Regex for coverage: \|[ ]*Total[ ]*\|[ ]*\d+,\d+%[ ]*\|[ ]*(\d+(,\d+)?%)[ ]*
+
+    # Test Results
+    - dotnet tool install -g trx2junit
+    - trx2junit UnitTests/TestResults/*.trx
+  
   artifacts:
       expire_in: 6 hours
+      paths:
+        - Backend/UnitTests/TestResults/*.trx
+        - Backend/UnitTests/TestResults/*.xml
       reports:
-        junit: Backend/UnitTests/TestResults/*.trx
+        junit: Backend/UnitTests/TestResults/*.xml
 
 
 
