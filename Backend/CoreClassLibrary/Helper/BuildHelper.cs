@@ -90,16 +90,12 @@ namespace CoreClassLibrary.Helper
             var techs = BuildTechController.Instance.GetBuildTech();
             Technology tech = techs.FirstOrDefault(t =>
             {
-                BuildTechnology BuildTech = t as BuildTechnology;
-                if (BuildTech != null)
+                if (t is BuildTechnology b)
                 {
-                    return BuildTech.Building.GetType().ToString().Split('.').Last() == build.BuildingName &&
-                        BuildTech.Building.Level == build.Level;
+                    return b.Building.GetType().ToString().Split('.').Last() == build.BuildingName &&
+                        b.Building.Level == build.Level;
                 }
-                else
-                {
-                    return false;
-                }
+                return false;
             });
 
             BuildTechnology buildTech = tech as BuildTechnology;
