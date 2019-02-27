@@ -5,12 +5,12 @@ using NUnit.Framework;
 
 namespace UnitTests
 {
-    public class UnitTestResources
+    public class TestResources
     {
         public const double TOLERANCE = 0.001;
 
         [Test]
-        public void TestResourceAdd()
+        public void ResourceAdd()
         {
             var res1 = new Resources()
             {
@@ -37,7 +37,7 @@ namespace UnitTests
 
 
         [Test]
-        public void TestResourceSubtract()
+        public void ResourceSubtract()
         {
             var res1 = new Resources()
             {
@@ -64,7 +64,7 @@ namespace UnitTests
 
 
         [Test]
-        public void TestResourceMultiplication()
+        public void ResourceMultiplication()
         {
             var res1 = new Resources()
             {
@@ -83,7 +83,7 @@ namespace UnitTests
         }
 
         [Test]
-        public void TestResourceLessThanComparison()
+        public void ResourceLessThanComparison()
         {
             var res1 = new Resources() { wood = 100, stone = 100, iron = 100, gold = 100 };
             var res2 = new Resources() { wood = 200, stone = 200, iron = 200, gold = 200 };
@@ -92,7 +92,7 @@ namespace UnitTests
         }
 
         [Test]
-        public void TestResourceMoreThanComparison()
+        public void ResourceMoreThanComparison()
         {
             var res1 = new Resources()
             {
@@ -113,7 +113,7 @@ namespace UnitTests
         }
 
         [Test]
-        public void TestResourceLessThanComparisonInvalid()
+        public void ResourceLessThanComparisonInvalid()
         {
             var res1 = new Resources()
             {
@@ -134,7 +134,7 @@ namespace UnitTests
         }
 
         [Test]
-        public void TestResourceMoreThanComparisonInvalid()
+        public void ResourceMoreThanComparisonInvalid()
         {
             var res1 = new Resources()
             {
@@ -156,7 +156,7 @@ namespace UnitTests
 
 
         [Test]
-        public void TestResourceMoreThanComparisonButEquals()
+        public void ResourceMoreThanComparisonButEquals()
         {
             var res1 = new Resources()
             {
@@ -178,7 +178,7 @@ namespace UnitTests
 
 
         [Test]
-        public void TestResourceLessThanComparisonButEquals()
+        public void ResourceLessThanComparisonButEquals()
         {
             var res1 = new Resources()
             {
@@ -200,7 +200,7 @@ namespace UnitTests
 
 
         [Test]
-        public void TestResourceComparisonAgainstScalar()
+        public void ResourceComparisonAgainstScalar()
         {
             var res1 = new Resources()
             {
@@ -219,7 +219,7 @@ namespace UnitTests
 
 
         [Test]
-        public void TestResourceClip()
+        public void ResourceClip()
         {
             var res1 = new Resources()
             {

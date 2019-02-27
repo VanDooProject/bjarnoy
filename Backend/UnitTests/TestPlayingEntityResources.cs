@@ -6,7 +6,7 @@ using NUnit.Framework;
 
 namespace UnitTests
 {
-    class PlayingEntityResources
+    public class TestPlayingEntityResources
     {
         [Test]
         public void ResourceGeneration()
