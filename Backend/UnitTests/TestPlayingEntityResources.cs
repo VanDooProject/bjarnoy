@@ -43,8 +43,7 @@ namespace UnitTests
             };
 
             // check
-            double TOLERANCE = 0.001;
-            Debug.Assert(Math.Abs(res.ResourcesStoredCurrently.wood - (alreadyStoredRes + production)) < TOLERANCE);
+            Debug.Assert( (int) res.ResourcesStoredCurrently.wood == alreadyStoredRes + production);
         }
     }
 }
