@@ -8,7 +8,7 @@ visit live demo of current production state:
 http://master.gamez.mynode.space
 
 [![pipeline status](https://gitlab.mynode.space/browsergame/browsergame/badges/master/pipeline.svg)](https://gitlab.mynode.space/browsergame/browsergame/commits/master)
-
+[![pipeline status](https://gitlab.mynode.space/browsergame/browsergame/badges/development/pipeline.svg)](https://gitlab.mynode.space/browsergame/browsergame/commits/development)
 
 # Architecture
 
