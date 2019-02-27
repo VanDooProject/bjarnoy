@@ -1,3 +1,4 @@
 node_modules/
 Backend/ApiServer/config/settings.json
 Backend/ApiServer/config/build-tech.json
+Backend/UnitTests/coverage.json

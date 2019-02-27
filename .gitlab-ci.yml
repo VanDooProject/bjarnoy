@@ -53,7 +53,10 @@ job_test_dotnet:
   script: 
     - cd Backend/
     - dotnet restore
-    - dotnet test UnitTests/UnitTests.csproj --framework netcoreapp2.2
+    - dotnet test UnitTests/UnitTests.csproj --framework netcoreapp2.2 -p:CollectCoverage=true 
+    # https://github.com/tonerdo/coverlet
+    #- cat UnitTests/coverage.json
+    #  Regex for coverage: \|[ ]*Total[ ]*\|[ ]*\d+,\d+%[ ]*\|[ ]*(\d+,\d+%)[ ]*
 
 
 
