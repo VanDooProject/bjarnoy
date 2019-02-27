@@ -24,6 +24,30 @@ namespace CoreClassLibrary.Models.Resources
         [JsonConverter(typeof(JsonConverterDoubleToInt))]
         public double gold { get; set; } = 0.0;
 
+
+
+        #region consts
+
+        public static Resources Max
+        {
+            get
+            {
+                var res = new Resources();
+
+                foreach (GetterSetterPair property in PropertiesGetterSetterPairs)
+                {
+                    property.setter(res, Double.MaxValue);
+                }
+
+                return res;
+            }
+        }
+
+        #endregion
+
+
+
+
         /// <summary>
         /// property setter & getter of this class to use for iterating over resTypes
         /// </summary>

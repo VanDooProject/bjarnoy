@@ -17,7 +17,7 @@ using MongoDB.Driver;
 
 namespace CoreClassLibrary.Respository
 {
-    public class IslandRepository
+    public class IslandRepository : IIslandRepository
     {
         private ILog logger = LogManager.GetLogger(typeof(IslandRepository));
 

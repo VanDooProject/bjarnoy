@@ -16,18 +16,25 @@ namespace CoreClassLibrary.Helper
     {
         private ILog logger = LogManager.GetLogger(typeof(BuildHelper));
 
+        private readonly IIslandRepository _islandRepository = new IslandRepository();
+        private readonly IQueueRepository _queueRepository = new QueueRepository();
+
         public BuildHelper()
         {
+        }
+
+        public BuildHelper(IIslandRepository islandRepository, IQueueRepository queueRepository)
+        {
+            this._islandRepository = islandRepository;
+            this._queueRepository = queueRepository;
         }
 
 
         public BuildingQueue BuildBuilding(BuildBuildingModel requestedBuilding, UserModel user)
         {
-            IslandRepository islandRepository = new IslandRepository();
-
             try
             {
-                Tile tile = islandRepository.getTile(requestedBuilding.Position.X, requestedBuilding.Position.Y, requestedBuilding.Position.Z);
+                Tile tile = _islandRepository.getTile(requestedBuilding.Position.X, requestedBuilding.Position.Y, requestedBuilding.Position.Z);
 
                 // TODO: compute level to be built
 
@@ -47,7 +54,7 @@ namespace CoreClassLibrary.Helper
                 // set building on tile
                 buildingToBeBuilt.Level--;
                 tile.Building = buildingToBeBuilt;
-                islandRepository.ReplaceTile(tile);
+                _islandRepository.ReplaceTile(tile);
                 buildingToBeBuilt.Level++;
 
                 // add entry to queue
@@ -67,19 +74,14 @@ namespace CoreClassLibrary.Helper
                     throw new Exception($"build tech is faulty - missing duration: {buildTech}");
                 }
 
-                QueueRepository queueRepository = new QueueRepository();
-                queueRepository.Add(queueEntry);
+                _queueRepository.Add(queueEntry);
 
                 return queueEntry;
             }
-            catch (IllegalTileException)
+            catch (IllegalTileException e)
             {
                 logger.Warn("no valid tile - probably a user faked this request -> report to bot detector");
-                return null;
-            }
-            catch (GameException)
-            {
-                return null;
+                throw new GameException("no valid tile", e);
             }
         }
 
@@ -123,8 +125,14 @@ namespace CoreClassLibrary.Helper
 
         private void checkBuildingRequirements(Tile tile, BuildTechnology buildTech)
         {
+            if (tile == null)
+            {
+                throw new ArgumentNullException("tile not set");
+            }
+
+
             // tile is allowed here
-            if (buildTech.AllowedTiles.All(t => t.type != tile.type))
+            if (buildTech.AllowedTiles != null && buildTech.AllowedTiles.All(t => t.type != tile.type))
             {
                 // TODO: report user
                 logger.Warn("no tile for building - probably a user faked this request -> report to bot detector");
