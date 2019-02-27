@@ -10,9 +10,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{CEE4F8E6-27B5-4BAD-867D-E2365C416741}"
 	ProjectSection(SolutionItems) = preProject
 		..\.gitlab-ci.yml = ..\.gitlab-ci.yml
+		..\README.md = ..\README.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\UnitTests.csproj", "{8E3813B6-902B-43E0-9A30-9CC44904CACB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UnitTests", "UnitTests\UnitTests.csproj", "{8E3813B6-902B-43E0-9A30-9CC44904CACB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
