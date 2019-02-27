@@ -61,7 +61,7 @@ job_test_dotnet:
 
     # Test Results
     - dotnet tool install -g trx2junit
-    - trx2junit UnitTests/TestResults/*.trx
+    - /root/.dotnet/tools/trx2junit UnitTests/TestResults/*.trx
   
   artifacts:
       expire_in: 6 hours
