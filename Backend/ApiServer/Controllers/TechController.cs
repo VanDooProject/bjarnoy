@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Technologies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,9 +18,9 @@ namespace ApiServer.Controllers
         // GET api/v1/tech/buildings
         [HttpGet("buildings/")]
         [Authorize]
-        public List<Building> GetBuilding()
+        public List<Technology> GetBuilding()
         {
-            return BuildTechController.Instance.GetBuildTech();
+            return BuildTechController.Instance.GetBuildTech().Where(t => t is BuildTechnology).ToList();
         }
     }
 }
