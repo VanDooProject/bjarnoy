@@ -45,10 +45,7 @@ namespace CoreClassLibrary.Helper
                 checkBuildingResources(user, buildTech);
                 checkBuildingRequirements(tile, buildTech);
 
-                // TODO: remove resources from user - think of race conditions
-
                 // clean building
-                //buildTech = buildTech.CleanTechData();
                 Building buildingToBeBuilt = buildTech.Building; // <- TODO deep copy / clone
 
                 // set building on tile
@@ -62,18 +59,21 @@ namespace CoreClassLibrary.Helper
                 queueEntry.Tile = tile;
                 queueEntry.Building = buildingToBeBuilt;
                 queueEntry.Owner = user;
-                queueEntry.StartTime = DateTime.Now;
+                queueEntry.StartTime = Time.Now;
 
                 // test this since it can be null TODO refactor
                 if (buildTech.ResearchDuration != null)
                 {
-                    queueEntry.EndTime = DateTime.Now + (TimeSpan)buildTech.ResearchDuration;
+                    queueEntry.EndTime = Time.Now + (TimeSpan)buildTech.ResearchDuration;
                 }
                 else
                 {
                     throw new Exception($"build tech is faulty - missing duration: {buildTech}");
                 }
 
+                // TODO: remove resources from user - think of race conditions
+
+                // TODO refactor -> remove this out of the helper & rename helper
                 _queueRepository.Add(queueEntry);
 
                 return queueEntry;
