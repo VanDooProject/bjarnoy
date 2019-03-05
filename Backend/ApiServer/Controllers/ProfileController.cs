@@ -27,7 +27,7 @@ namespace ApiServer.Controllers
         [Authorize]
         public UserModel GetSelf()
         {
-            UserModel IsUserInDb = getCurretUser();
+            UserModel IsUserInDb = getCurrentUser();
 
             return IsUserInDb;
         }

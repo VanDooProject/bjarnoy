@@ -25,7 +25,7 @@ namespace UnitTests
             int production = 10;
             int alreadyStoredRes = 100;
 
-            var res = new UserResources()
+            var res = new EntityResources()
             {
                 LastResourceStorageRefresh = Time.Now.AddHours(-1),
                 ResourceStorageCapacity = new Resources()

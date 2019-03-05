@@ -29,7 +29,7 @@ namespace ApiServer.BackgroundService
         private void QueueEntryProcessedCallback(Queue q)
         {
             string userId = q.Owner._id.ToString();
-            logger.DebugFormat("Notify '{0}' #{1} for {2}", q.Owner.Username, userId, q);
+            logger.DebugFormat("Notify '{0}' #{1} for {2}", q.Owner.DisplayName, userId, q);
 
 
             // send notification to all affected users

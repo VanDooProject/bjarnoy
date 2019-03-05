@@ -5,6 +5,7 @@ using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Technologies;
 using CoreClassLibrary.Models.TechQueues;
 using CoreClassLibrary.Respository;
@@ -30,7 +31,7 @@ namespace CoreClassLibrary.Helper
         }
 
 
-        public BuildingQueue BuildBuilding(BuildBuildingModel requestedBuilding, UserModel user)
+        public BuildingQueue BuildBuilding(BuildBuildingModel requestedBuilding, Player player)
         {
             try
             {
@@ -42,7 +43,7 @@ namespace CoreClassLibrary.Helper
                 BuildTechnology buildTech = findTech(requestedBuilding);
 
                 // check if requirements are fulfilled
-                checkBuildingResources(user, buildTech);
+                checkBuildingResources(player, buildTech);
                 checkBuildingRequirements(tile, buildTech);
 
                 // clean building
@@ -58,7 +59,7 @@ namespace CoreClassLibrary.Helper
                 BuildingQueue queueEntry = new BuildingQueue();
                 queueEntry.Tile = tile;
                 queueEntry.Building = buildingToBeBuilt;
-                queueEntry.Owner = user;
+                queueEntry.Owner = player;
                 queueEntry.StartTime = Time.Now;
 
                 // test this since it can be null TODO refactor
@@ -110,10 +111,10 @@ namespace CoreClassLibrary.Helper
             return buildTech;
         }
 
-        private void checkBuildingResources(UserModel user, BuildTechnology buildTech)
+        private void checkBuildingResources(Player player, BuildTechnology buildTech)
         {
             // check if user has enough resources
-            if (user.UserResources.ResourcesStoredCurrently < buildTech.ResourcesNeeded)
+            if (player.EntityResources.ResourcesStoredCurrently < buildTech.ResourcesNeeded)
             {
                 throw new BuildBuildingException("user has not enough resources to build");
             }

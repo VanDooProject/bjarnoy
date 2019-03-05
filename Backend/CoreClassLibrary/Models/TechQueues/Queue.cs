@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Generic;
+using CoreClassLibrary.Models.Player;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
@@ -14,7 +15,7 @@ namespace CoreClassLibrary.Models.TechQueues
         /// <summary>
         /// User who created this Queue
         /// </summary>
-        public UserModel Owner;
+        public Player.Player Owner;
 
         [BsonIgnoreIfNull]
         public UserModel Target; // for trades, attacks,.... TODO: maybe refactor to other child class(es) ... e.g TargetableQueues
