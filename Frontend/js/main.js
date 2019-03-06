@@ -250,6 +250,16 @@ const store = new Vuex.Store({
                     context.dispatch("UpdateTechBildings");
                     context.dispatch("UpdateQueued");
                     router.push("/map");
+
+
+                    // Check if notifications are supported
+                    if (!("Notification" in window)) {
+                        console.log("Browser doesn't support Notiffications");
+                    }
+                    // Check if the user has already granted or denied permission
+                    else if (Notification.permission !== 'denied' && Notification.permission !== "granted") {
+                        Notification.requestPermission();
+                    }
                 })
                 .catch(error => console.log(error));
         },
@@ -341,22 +351,12 @@ const store = new Vuex.Store({
             if (!("Notification" in window)) {
                     console.log("Browser doesn't support Notiffications, failed to send Message: " + msg);
             }
-        
-            // Let's check whether notification permissions have already been granted
+            // Check whether notification permissions have been granted
             else if (Notification.permission === "granted") {
-                // If it's okay let's create a notification
-                var notification = new Notification(msg.tilte, {body: msg.body});
+                var notification = new Notification(msg.title, {body: msg.body});
+
+                //Some browsers dont automaticaly close Notiffication so we have to make sure they get closed
                 setTimeout(notification.close.bind(notification), 4000);
-            }
-            // Otherwise, we need to ask the user for permission
-            else if (Notification.permission !== 'denied') {
-                Notification.requestPermission(function (permission) {
-                    // If the user accepts, let's create a notification
-                    if (permission === "granted") {
-                        var notification = new Notification(msg.tilte, {body: msg.body});
-                        setTimeout(notification.close.bind(notification), 4000);
-                    }
-                });
             }
         },
       }
