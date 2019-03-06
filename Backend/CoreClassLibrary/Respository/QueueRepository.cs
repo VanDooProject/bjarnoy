@@ -18,7 +18,7 @@ using MongoDB.Driver;
 
 namespace CoreClassLibrary.Respository
 {
-    public class QueueRepository
+    public class QueueRepository : IQueueRepository
     {
         private ILog logger = LogManager.GetLogger(typeof(QueueRepository));
 

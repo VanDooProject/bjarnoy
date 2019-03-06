@@ -10,6 +10,6 @@ namespace CoreClassLibrary.Models.Buildings
         /// how much can be stored in this building\n
         /// or how much is stored in this building if built
         /// </summary>
-        public Resources StorageCapacity;
+        public Resources.Resources StorageCapacity;
     }
 }

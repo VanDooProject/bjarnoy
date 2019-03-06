@@ -5,7 +5,9 @@ using System.Text;
 using CoreClassLibrary.Models;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Models.Settings;
+using CoreClassLibrary.Models.Technologies;
 using log4net;
 using Newtonsoft.Json;
 
@@ -38,7 +40,7 @@ namespace CoreClassLibrary.Controller
                     // file exists -> parse
                     using (StreamReader file = File.OpenText(_settingsFile))
                     {
-                        this._buildtech = (List<Building>)serializer.Deserialize(file, typeof(List<Building>));
+                        this._buildtech = (List<Technology>)serializer.Deserialize(file, typeof(List<Technology>));
                     }
 
                     // TODO check if all is valid (all have level, duration, valid ress,...)
@@ -64,12 +66,16 @@ namespace CoreClassLibrary.Controller
         private void createDefaultBuildTech()
         {
             // TODO: refactor this to multiple files for better overview or to json (but there is no syntax checking)
-            _buildtech = new List<Building>()
+            _buildtech = new List<Technology>()
             {
-                new Tower()
+                new BuildTechnology()
                 {
-                    Level = 1,
-                    BuildDuration = new TimeSpan(00, 15, 00),
+                    Building = new Tower()
+                    {
+                        Level = 1,
+                        RangeOfInfluence = 1,
+                    },
+                    ResearchDuration = new TimeSpan(00, 15, 00),
                     ResourcesNeeded = new Resources() {
                         wood = 250,
                         stone = 1000,
@@ -77,16 +83,19 @@ namespace CoreClassLibrary.Controller
                         gold = 100,
                     },
                     requirements = new List<IRequirement>(),
-                    allowedTiles = new List<Tile>()
+                    AllowedTiles = new List<Tile>()
                     {
                         new GrassTile()
                     },
-                    RangeOfInfluence = 1,
                 },
-                new Tower()
+                new BuildTechnology()
                 {
-                    Level = 2,
-                    BuildDuration = new TimeSpan(01, 10, 00),
+                    Building = new Tower()
+                    {
+                        Level = 2,
+                        RangeOfInfluence = 2,
+                    },
+                    ResearchDuration = new TimeSpan(01, 10, 00),
                     ResourcesNeeded = new Resources() {
                         wood = 1000,
                         stone = 3000,
@@ -95,39 +104,45 @@ namespace CoreClassLibrary.Controller
                     },
                     requirements = new List<IRequirement>(),
                     // todo: remove since this should not matter anymore
-                    allowedTiles = new List<Tile>()
+                    AllowedTiles = new List<Tile>()
                     {
                         new GrassTile()
                     },
-                    RangeOfInfluence = 2,
                 },
 
-                new StorageHouse()
+                new BuildTechnology()
                 {
-                    Level = 1,
-                    BuildDuration = new TimeSpan(0, 5, 12), // 5 min and 12 sec
+                    Building = new StorageHouse()
+                    {
+                        Level = 1,
+                        StorageCapacity = new Resources()
+                        {
+                            wood = 1000,
+                            stone = 1000,
+                            iron = 100,
+                            gold = 10,
+                        }
+                    },
+                    ResearchDuration = new TimeSpan(0, 5, 12), // 5 min and 12 sec
                     ResourcesNeeded = new Resources() {
                         wood = 250,
                         stone = 250,
                     },
                     requirements = new List<IRequirement>(),
-                    allowedTiles = new List<Tile>()
+                    AllowedTiles = new List<Tile>()
                     {
                         new GrassTile()
                     },
-                    StorageCapacity = new Resources()
-                    {
-                        wood = 1000,
-                        stone = 1000,
-                        iron = 100,
-                        gold = 10,
-                    }
                 },
 
-                new Lumberjack()
+                new BuildTechnology()
                 {
-                    Level = 1,
-                    BuildDuration = new TimeSpan(0, 2, 30), // 2 min and 30 sec
+                    Building = new Lumberjack()
+                    {
+                        Level = 1,
+                        gatherRate = 10
+                    },
+                    ResearchDuration = new TimeSpan(0, 2, 30), // 2 min and 30 sec
                     ResourcesNeeded = new Resources() {
                         wood = 100,
                         stone = 100,
@@ -142,11 +157,10 @@ namespace CoreClassLibrary.Controller
                             }
                         }
                     },
-                    allowedTiles = new List<Tile>()
+                    AllowedTiles = new List<Tile>()
                     {
                         new ForestTile()
                     },
-                    gatherRate = 10
                 }
             };
 
@@ -168,10 +182,10 @@ namespace CoreClassLibrary.Controller
         }
 
 
-        private List<Building> _buildtech;
+        private List<Technology> _buildtech;
 
 
-        public List<Building> GetBuildTech()
+        public List<Technology> GetBuildTech()
         {
             return _buildtech;
         }

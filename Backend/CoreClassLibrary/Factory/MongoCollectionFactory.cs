@@ -75,7 +75,7 @@ namespace CoreClassLibrary.Factory
 
 
 
-        public IMongoCollection<T> Get<T>()
+        public IMongoCollection<T> Get<T>(string forceName = "")
         {
             if (client == null || db == null)
             {
@@ -83,7 +83,7 @@ namespace CoreClassLibrary.Factory
                 db = client.GetDatabase(DatabaseName);
             }
 
-            string name = typeof(T).Name.ToLower();
+            string name = string.IsNullOrEmpty(forceName)? typeof(T).Name.ToLower() : forceName;
 
             return db.GetCollection<T>(name);
         }
