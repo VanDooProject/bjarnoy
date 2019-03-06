@@ -102,6 +102,7 @@ const store = new Vuex.Store({
         deltaTime: 0,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
+        userResources: undefined,
     },
     getters: {
         menuDisplay: state => {
@@ -109,7 +110,7 @@ const store = new Vuex.Store({
         }
     },
     actions: {
-        Tick(context) //Gets called every 60 seconds
+        Tick60s(context) //Gets called every 60 seconds
         {
             if(localStorage.token != undefined)
             {
@@ -126,8 +127,15 @@ const store = new Vuex.Store({
                         headers: {'Authorization': "bearer " + localStorage.token},
                     })
                     .then(response => localStorage.token = response.data.token)
-                    .catch(error => store.dispatch("ReqestError", error));
+                    .catch(error => context.dispatch("ReqestError", error));
                 }
+            }
+        },
+        Tick1s(context)
+        {
+            if(context.state.userResources != undefined)
+            {
+                context.commit("calcUserResources");
             }
         },
         Startup (context)
@@ -186,6 +194,19 @@ const store = new Vuex.Store({
         },
         ErrorWebSocket (context, error) {
             console.error(error);
+        },
+        UpdateResources (context) {
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/Resource/user',
+                {
+                    headers: {'Authorization': "bearer " + localStorage.token},
+                })
+                .then(response => {
+                    context.commit("SetResources", response.data);
+                })
+                .catch(error => {
+                    context.dispatch('ReqestError', error);
+                });
         },
         UpdateMapTiles (context) {
             axios
@@ -247,6 +268,7 @@ const store = new Vuex.Store({
                     context.dispatch("StartWebSocket");
                     //context.state.websocket.invoke("SendMessage", "usr", "Hello World");
                     context.commit("logIn"); 
+                    context.dispatch("UpdateResources");
                     context.dispatch("UpdateTechBildings");
                     context.dispatch("UpdateQueued");
                     router.push("/map");
@@ -283,7 +305,7 @@ const store = new Vuex.Store({
         },
         AddMapScale (state, dScale)
         {
-            state.mapScale += dScale;
+            state.mapScale = Math.min(Math.max(state.mapScale + dScale, 0.05), 3); //Clamping scale to max 3 and min 0.05
         },
         SetDeltaTime (state, dT) {
             state.deltaTime = dT;
@@ -293,6 +315,41 @@ const store = new Vuex.Store({
                 //Sort list when adding instead of using zIndex
                 return a.position.x - a.position.y - (b.position.x - b.position.y);
             });
+        },
+        calcUserResources(state) {
+            //Make sure that the time alway exists (Should not be needed after some changes in the backend)
+            if(state.userResources.LastResourceStorageRefresh==undefined){
+                state.userResources.LastResourceStorageRefresh=state.now;
+                return;
+            }
+
+            //Resource update calculations
+            var hoursSinceLastCalculation = (state.now - state.userResources.LastResourceStorageRefresh)/3600000 ;// /1000 => s , /60=> min, /60=> h Ges: 3600000
+            state.userResources.LastResourceStorageRefresh=state.now;
+
+            state.userResources.resourcesStoredCurrently.wood = Math.min(
+                state.userResources.resourceStorageCapacity.wood,
+                state.userResources.resourcesStoredCurrently.wood +
+                    state.userResources.hourlyResourceProduction.stone * hoursSinceLastCalculation);
+
+            state.userResources.resourcesStoredCurrently.stone = Math.min(
+                state.userResources.resourceStorageCapacity.stone,
+                state.userResources.resourcesStoredCurrently.stone + 
+                    state.userResources.hourlyResourceProduction.stone * hoursSinceLastCalculation);
+
+            state.userResources.resourcesStoredCurrently.iron = Math.min(
+                state.userResources.resourceStorageCapacity.iron,
+                state.userResources.resourcesStoredCurrently.iron +
+                    state.userResources.hourlyResourceProduction.iron * hoursSinceLastCalculation);
+
+            state.userResources.resourcesStoredCurrently.gold = Math.min(
+                state.userResources.resourceStorageCapacity.gold,
+                state.userResources.resourcesStoredCurrently.gold + 
+                    state.userResources.hourlyResourceProduction.gold * hoursSinceLastCalculation);
+                        
+        },
+        SetResources( state, resources) {
+            state.userResources = resources;
         },
         SetQueued (state, queue) {
             state.queued = queue;
@@ -345,10 +402,11 @@ var lastTick = 0;
 function callback()
 {
     store.commit("SetCurrentTime", new Date() - store.state.deltaTime);
+    store.dispatch("Tick1s");
     if(lastTick++ > 60)
     {
         lastTick = 0;
-        store.dispatch("Tick");
+        store.dispatch("Tick60s");
     }
 }
 setInterval(callback, 1000);

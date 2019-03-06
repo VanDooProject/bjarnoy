@@ -62,7 +62,7 @@ export default {
                     .filter(entry => {
                         if(this.tile.building == undefined)
                         {
-                            return (entry.allowedTiles.some(tile => ((entry.level == 1) && (tile.type == this.tile.type))));
+                            return (entry.allowedTiles.some(tile => ((entry.building.level == 1) && (tile.type == this.tile.type))));
                         }
                         else
                         {
@@ -73,7 +73,7 @@ export default {
                             return false;
                         }
                     }).map((entry, index) => {
-                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level} };
+                        return { num: index, type: { name: entry.building.type, isBuild: true, level: entry.building.level} };
                     });
             }
             else

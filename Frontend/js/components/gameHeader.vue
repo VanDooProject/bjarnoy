@@ -12,14 +12,18 @@
             <!-- Not logged in -->
             <router-link v-if="!this.$store.state.loggedIn" to="/login">Login</router-link>
             <router-link v-if="!this.$store.state.loggedIn" to="/register">Register</router-link>
+            
+            <!-- Display the users Resources (if they exist) -->
+            <ResourceDisplay v-if="this.$store.state.userResources!=undefined"/>
         </menu>
     </div>
 </template>
 
 <script>
+import ResourceDisplay from "./resource_display";
     export default {
         components:{
-            
+            ResourceDisplay,
         },
         name: "GameHeader",
         props:[],
