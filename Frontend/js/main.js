@@ -169,7 +169,7 @@ const store = new Vuex.Store({
                         {
                             context.dispatch("UpdateMapTiles");
                         }
-                        return console.info("got Queue: " + queue);
+                        return context.commit("SendNotification",{title: "got Queue", body:  queue});
                     });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
@@ -250,6 +250,16 @@ const store = new Vuex.Store({
                     context.dispatch("UpdateTechBildings");
                     context.dispatch("UpdateQueued");
                     router.push("/map");
+
+
+                    // Check if notifications are supported
+                    if (!("Notification" in window)) {
+                        console.log("Browser doesn't support Notiffications");
+                    }
+                    // Check if the user has already granted or denied permission
+                    else if (Notification.permission !== 'denied' && Notification.permission !== "granted") {
+                        Notification.requestPermission();
+                    }
                 })
                 .catch(error => console.log(error));
         },
@@ -335,7 +345,20 @@ const store = new Vuex.Store({
         SetCurrentTime(state, time)
         {
             state.now = time;
-        }
+        },
+        SendNotification(state, msg)   //https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API/Using_the_Notifications_API
+        {
+            if (!("Notification" in window)) {
+                    console.log("Browser doesn't support Notiffications, failed to send Message: " + msg);
+            }
+            // Check whether notification permissions have been granted
+            else if (Notification.permission === "granted") {
+                var notification = new Notification(msg.title, {body: msg.body});
+
+                //Some browsers dont automaticaly close Notiffication so we have to make sure they get closed
+                setTimeout(notification.close.bind(notification), 4000);
+            }
+        },
       }
 });
 store.dispatch("StartWebSocket");
