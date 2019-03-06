@@ -173,6 +173,7 @@ const store = new Vuex.Store({
                 .then(() => {
                     context.state.websocket.on("Queue", function (queue) {
                         context.dispatch("UpdateQueued");
+                        context.dispatch("UpdateResources");
                         if(queue.startsWith("BuildingQueue"))
                         {
                             context.dispatch("UpdateMapTiles");
