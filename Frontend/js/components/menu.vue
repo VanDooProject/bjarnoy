@@ -60,6 +60,24 @@ export default {
             {
                 return this.$store.state.techBildings
                     .filter(entry => {
+                        if(entry.resourcesNeeded.wood > this.$store.state.userResources.resourcesStoredCurrently.wood)
+                        {
+                            return false;
+                        }
+                        if(entry.resourcesNeeded.stone > this.$store.state.userResources.resourcesStoredCurrently.stone)
+                        {
+                            return false;
+                        }
+                        if(entry.resourcesNeeded.iron > this.$store.state.userResources.resourcesStoredCurrently.iron)
+                        {
+                            return false;
+                        }
+                        if(entry.resourcesNeeded.gold > this.$store.state.userResources.resourcesStoredCurrently.gold)
+                        {
+                            return false;
+                        }
+
+
                         if(this.tile.building == undefined)
                         {
                             return (entry.allowedTiles.some(tile => ((entry.building.level == 1) && (tile.type == this.tile.type))));
