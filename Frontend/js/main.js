@@ -102,10 +102,57 @@ const store = new Vuex.Store({
         deltaTime: 0,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
+
     },
     getters: {
         menuDisplay: state => {
             return state.menuVisible == true ? "block" : "none";
+        },
+        dispayedMapTiles: state => {
+
+            
+            //TODO calculate this only after big changes in offset or scale
+            var xFactor = Math.SQRT2 * 3/4;                     // 3/4 comes from the geometry of stacking Hexagons
+            var yFactor = Math.SQRT2 * 3/4 / Math.sqrt(3)       // sqrt(3) is also from the geometry
+                        * Math.cos((57.8) / 180 * Math.PI);     // the angle is from the Graphics
+            
+            var imageWidth = 400;
+            var imageHeight = 600;
+            var angle = -45 * Math.PI / 180;
+
+            //Position the center would be if there wasnt any Rotation
+            var centerX = (-state.mapOffset.x) / (imageWidth) / xFactor;
+            var centerY = (-state.mapOffset.y) / (imageHeight) / yFactor;
+            
+            //Actual center Position (Coordinates of center tile)
+            var centerXrot = Math.round(centerX * Math.cos(angle) - centerY * Math.sin(angle));
+            var centerYrot = Math.round(-centerY * Math.cos(angle) - centerX * Math.sin(angle));
+
+            var displaySize = 10; //TODO Change this dynamicaly
+            var displayedTiles = [];
+            for(let x = centerXrot - displaySize; x <= centerXrot + displaySize; x+=1)
+            {
+                for(let y = centerYrot + displaySize; y >= centerYrot - displaySize; y-=1)
+                {
+                    if(!state.mapTiles.some(tile => {
+                        if(tile.position.x ==  x &&  tile.position.y == y)
+                        {
+                            //if tile is found add to displayed tiles
+                            displayedTiles.push(tile);
+                            return true;
+                        }
+                        return false;
+                    }))
+                            //Otherwise Add water
+                    {
+                        displayedTiles.push({position: {x: x,y: y,z: 1}, type: "water", orientation: "East"})
+                    }
+                }
+            }
+
+
+            return displayedTiles;
+            
         }
     },
     actions: {

@@ -120,7 +120,9 @@ export default {
                 // Add Offsets
                 + this.mapOffset.x * this.mapScale
                 // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowWidth/2;
+                + this.windowWidth / 2
+                 // move reference point to center of image
+                - this.width / 2 ;
         },
         ypos() {
             return this.width //use the (current) width to scale the vetor
@@ -133,7 +135,9 @@ export default {
                 // Add Offset
                 + this.mapOffset.y * this.mapScale
                 // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowHeight/2;
+                + this.windowHeight / 2
+                // move reference point to center of image
+                - this.height / 2;
         },
         windowWidth() {
             return this.$store.state.windowWidth;
@@ -155,6 +159,8 @@ export default {
         },
         imgsrc() { 
             //Hardcoded for testing
+            if(this.tile.type == "water")
+                return "images/hextiles/water_E.png";
             return "images/hextiles/grasstile_E.png";
 
 
