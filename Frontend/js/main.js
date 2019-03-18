@@ -105,6 +105,8 @@ const store = new Vuex.Store({
         userResources: undefined,
 
         displayedMapTiles: [],
+        lastMapOffset: {x: 0, y: 0},
+        lastMapScale: 0,
     },
     getters: {
         menuDisplay: state => {
@@ -139,7 +141,14 @@ const store = new Vuex.Store({
             {
                 context.commit("calcUserResources");
             }
-            context.commit("RecalcDisplayedMapTiles")
+
+            //Recalc only if over Threshhold (20%)
+            if( Math.abs(context.state.lastMapScale    - context.state.mapScale)    > 0.2 * context.mapScale ||          //Map Scale
+                Math.abs(context.state.lastMapOffset.x - context.state.mapOffset.x) > 0.2 * context.state.mapOffset.x || //Map Offset x
+                Math.abs(context.state.lastMapOffset.y - context.state.mapOffset.y) > 0.2 * context.state.mapOffset.x    //Map Offset y
+            ) {
+                context.commit("RecalcDisplayedMapTiles");
+            }
         },
         Startup (context)
         {
@@ -314,7 +323,8 @@ const store = new Vuex.Store({
     },
     mutations: {
         RecalcDisplayedMapTiles (state) {
-            //TODO calculate this only after big changes in offset or scale
+            state.lastMapScale = state.mapScale;
+            state.lastMapOffset = state.mapOffset;
             var xFactor = Math.SQRT2 * 3/4;                     // 3/4 comes from the geometry of stacking Hexagons
             var yFactor = Math.SQRT2 * 3/4 / Math.sqrt(3)       // sqrt(3) is also from the geometry
                         * Math.cos((57.8) / 180 * Math.PI);     // the angle is from the Graphics
@@ -331,7 +341,11 @@ const store = new Vuex.Store({
             var centerXrot = Math.round(centerX * Math.cos(angle) - centerY * Math.sin(angle));
             var centerYrot = Math.round(-centerY * Math.cos(angle) - centerX * Math.sin(angle));
 
-            var displaySize = 10; //TODO Change this dynamicaly
+
+            //Describes the size of the loaded Area
+            var displaySize = Math.ceil(Math.max(state.windowWidth, state.windowHeight * 2) / imageWidth / state.mapScale);
+            
+            
             var displayedTiles = [];
             for(let x = centerXrot - displaySize; x <= centerXrot + displaySize; x+=1)
             {
@@ -346,7 +360,7 @@ const store = new Vuex.Store({
                         }
                         return false;
                     }))
-                            //Otherwise Add water
+                    //Otherwise Add water
                     {
                         displayedTiles.push({position: {x: x,y: y,z: 1}, type: "water", orientation: "East"})
                     }
@@ -360,7 +374,7 @@ const store = new Vuex.Store({
         },
         AddMapScale (state, dScale)
         {
-            state.mapScale = Math.min(Math.max(state.mapScale + dScale, 0.05), 3); //Clamping scale to max 3 and min 0.05
+            state.mapScale = Math.min(Math.max(state.mapScale + dScale, 0.4), 3); //Clamping scale to max 3 and min 0.05
         },
         SetDeltaTime (state, dT) {
             state.deltaTime = dT;
@@ -370,6 +384,7 @@ const store = new Vuex.Store({
                 //Sort list when adding instead of using zIndex
                 return a.position.x - a.position.y - (b.position.x - b.position.y);
             });
+            store.commit("RecalcDisplayedMapTiles");
         },
         calcUserResources(state) {
             //Make sure that the time alway exists (Should not be needed after some changes in the backend)
@@ -483,6 +498,7 @@ function resizeEvent()
 {
     store.commit("SetWindowSize", {x: window.innerWidth, y: window.innerHeight});
     store.commit("SetMenuVisible", false);
+    store.commit("RecalcDisplayedMapTiles")
 }
 window.addEventListener("resize", resizeEvent);
 
