@@ -343,7 +343,7 @@ const store = new Vuex.Store({
 
 
             //Describes the size of the loaded Area
-            var displaySize = Math.ceil(Math.max(state.windowWidth, state.windowHeight * 2) / imageWidth / state.mapScale);
+            var displaySize = Math.ceil(Math.max(state.windowWidth, state.windowHeight * 2) / imageWidth / state.mapScale *2);
             
             
             var displayedTiles = [];
