@@ -42,7 +42,7 @@ namespace ApiServer.Controllers
             //factory = new IslandFactorySquare();
             factory = new IslandFactoryOrganic();
 
-            int size = 100;
+            int size = 25;
             int zCoord = 1;
 
 

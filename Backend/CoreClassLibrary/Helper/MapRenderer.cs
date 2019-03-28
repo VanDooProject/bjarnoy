@@ -13,12 +13,10 @@ namespace CoreClassLibrary.Helper
 
         public void GenerateBitmapFromIsland(Island island, string Filename)
         {
-            double factor = 2;
+            double factor = 12;
 
             float maxX = island.Tiles.Max(x => x.Position.X);
             float maxY = island.Tiles.Max(x => x.Position.Y);
-            float minX = island.Tiles.Min(x => x.Position.X);
-            float minY = island.Tiles.Min(x => x.Position.Y);
 
             MagickImage image = new MagickImage(new MagickColor("#ff00ff"),
                 (int)(maxY * factor),

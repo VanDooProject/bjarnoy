@@ -10,6 +10,11 @@ namespace CoreClassLibrary.Models.Map.Tiles
         /// </summary>
         public double Elevation = Double.NaN;
 
+        /// <summary>
+        /// Humidity level of tile
+        /// </summary>
+        public double Humidity = Double.NaN;
+
         public RawTile() : base()
         {
         }
