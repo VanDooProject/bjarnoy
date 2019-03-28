@@ -10,7 +10,7 @@ namespace CoreClassLibrary.Models.Resources
     /// <summary>
     /// this model contains information about the users overall production and storage of resources
     /// </summary>
-    public class UserResources
+    public class EntityResources
     {
         /// <summary>
         /// amount of res produced hourly in users global space

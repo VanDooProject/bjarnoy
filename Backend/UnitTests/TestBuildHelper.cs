@@ -9,6 +9,7 @@ using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Respository;
 using NSubstitute;
@@ -34,11 +35,11 @@ namespace UnitTests
 
             var helper = new BuildHelper(islandRepo, queueRepo);
             var building = new BuildBuildingModel();
-            var playingEntity = new UserModel();
+            var player = new Player();
 
             Assert.Throws<BuildBuildingException>(() =>
             {
-                helper.BuildBuilding(building, playingEntity);
+                helper.BuildBuilding(building, player);
             });
 
         }
@@ -71,9 +72,9 @@ namespace UnitTests
                 Level = 1,
                 BuildingName = typeof(Lumberjack).ToString().Split('.').Last()
             };
-            var playingEntity = new UserModel()
+            var playingEntity = new Player()
             {
-                UserResources = new UserResources()
+                EntityResources = new EntityResources()
                 {
                     ResourceStorageCapacity = Resources.Max,
                     LastResourceStorageRefresh = Time.Now,

@@ -1,13 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using CoreClassLibrary;
+using CoreClassLibrary.Controller;
+using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Authorization;
@@ -69,10 +73,11 @@ namespace ApiServer.Controllers
         {
             IActionResult response = Unauthorized();
             var user = Authenticate(login);
+            var player = GetOwnedPlayerBy(user);
 
             if (user != null)
             {
-                var tokenString = BuildToken(user);
+                var tokenString = BuildToken(user, player);
                 response = Ok(new { token = tokenString });
             }
 
@@ -139,8 +144,20 @@ namespace ApiServer.Controllers
                 return base.BadRequest("no user found (for this token)");
             }
 
+            PlayerRepository playerRepository = new PlayerRepository();
+
+            string playerId = HttpContext.User.FindFirst(c => c.Type == GameClaims.PlayerId).Value;
+            Debug.Assert(playerId != "");
+            Player player = playerRepository.GetByPlayerId(playerId);
+
+            // TODO test - and refactor -> extract (to make unit tests possible)
+            if (!player.Permissions.Any(p => p.User._id == user._id))
+            {
+                return base.BadRequest("rights for this player were removed");
+            }
+
             // refresh
-            var tokenString = BuildToken(user);
+            var tokenString = BuildToken(user, player);
             return Ok(new { token = tokenString });
         }
 
@@ -153,6 +170,7 @@ namespace ApiServer.Controllers
             IActionResult response = StatusCode(500);
 
             UserRepository userRepository = new UserRepository();
+            PlayerRepository playerRepository = new PlayerRepository();
 
             // check if user already exists
             UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
@@ -167,16 +185,15 @@ namespace ApiServer.Controllers
             user.Username = signUp.Username;
             user.Email = signUp.Mail;
 
-            // TODO: maybe seperate this logic to a user factory?
-            user.UserResources = new UserResources()
-            {
-                LastResourceStorageRefresh = DateTime.Now,
-                ResourceStoredAtLastCalculation = new Resources() { wood = 100, stone = 100, iron = 100, gold = 100 },
-                ResourceStorageCapacity = new Resources() { wood = 800, stone = 800, iron = 800, gold = 800 },
-                HourlyResourceProduction = new Resources() { wood = 10, stone = 10, iron = 10, gold = 10 },
-            };
-
             userRepository.Add(user);
+
+
+            // TODO: maybe seperate this logic to a user factory?
+            var PlayerFactory = new PlayerFactory();
+            var player = PlayerFactory.GetStartingPlayer(user.Username);
+            player.setOwner(user);
+
+            playerRepository.Add(player);
 
             string salt = user._id.ToString();
             user.Password = HashHelper.Instance.Hash(signUp.Password, salt);
@@ -185,14 +202,14 @@ namespace ApiServer.Controllers
 
             if (user != null)
             {
-                var tokenString = BuildToken(user);
+                var tokenString = BuildToken(user, player);
                 response = Ok(new { token = tokenString });
             }
 
             return response;
         }
 
-        private string BuildToken(UserModel user)
+        private string BuildToken(UserModel user, Player player)
         {
             // most claims are defined here: http://tools.ietf.org/html/rfc7519#section-4
             var claims = new[] {
@@ -205,7 +222,16 @@ namespace ApiServer.Controllers
                 new Claim(ClaimTypes.Role, "Admin"),
 
                 // set user ID
-                new Claim(ClaimTypes.NameIdentifier, user._id.ToString())
+                new Claim(ClaimTypes.NameIdentifier, user._id.ToString()),
+
+
+                //set game specific parts
+                new Claim(GameClaims.WorldId, SettingsController.Instance.GetSettings().V1.WorldId),
+
+                // set access to player
+                new Claim(GameClaims.PlayerId, player._id.ToString()),
+                //new Claim(GameClaims.PlayerName, player.Name),
+                new Claim(GameClaims.PlayerPermission, player.Permissions.First(u => u.User._id == user._id).Permission.ToString()),
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
@@ -221,6 +247,7 @@ namespace ApiServer.Controllers
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        // TODO use exceptions
         private UserModel Authenticate(SignInModel login)
         {
             UserRepository userRepository = new UserRepository();
@@ -243,6 +270,17 @@ namespace ApiServer.Controllers
 
             // user found -> password wrong
             return null;
+        }
+
+        private Player GetOwnedPlayerBy(UserModel user)
+        {
+            var playerRepository = new PlayerRepository();
+
+            Player player = playerRepository.GetPlayerOwnedBy(user);
+
+            Debug.Assert(player != null);
+
+            return player;
         }
     }
 }
