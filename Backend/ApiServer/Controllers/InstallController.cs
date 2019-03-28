@@ -36,17 +36,18 @@ namespace ApiServer.Controllers
         [HttpPost("islands/")]
         public int CreateIslands()
         {
+            Random rnd = new Random();
+
             IslandRepository islandRepository = new IslandRepository();
 
             IIslandFactory factory;
             //factory = new IslandFactorySquare();
-            factory = new IslandFactoryOrganic();
+            factory = new IslandFactoryOrganic(rnd.Next(0, 10));
 
             int size = 25;
             int zCoord = 1;
 
 
-            Random rnd = new Random();
             rnd.Next(size - 5, size + 5); // TODO - fix, never used
 
             var island = factory.GetRndIsland(size, zCoord);

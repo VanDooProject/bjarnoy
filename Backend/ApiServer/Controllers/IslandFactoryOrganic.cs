@@ -17,10 +17,13 @@ namespace ApiServer.Controllers
     {
         private readonly ILog logger = LogManager.GetLogger(typeof(IslandFactoryOrganic));
 
+        public IslandFactoryOrganic(int seed)
+        {
+            Noise.Seed = seed;
+        }
+
         public Island GetRndIsland(int size, int z)
         {
-            int seed = 3;
-            Noise.Seed = seed;
 
             Vector3 startPosition = new Vector3(0, 0, z);
             Island island = new Island(startPosition);
@@ -47,6 +50,8 @@ namespace ApiServer.Controllers
             var SubIslands = this.ScanIslands(island);
             Island BiggestIsland = SubIslands.OrderByDescending(i => i.Tiles.Count).First();
             MapRenderer.GenerateBitmapFromIsland(BiggestIsland, "map_05.png");
+
+            // TODO: handle error when no island was found
 
             return BiggestIsland;
         }
