@@ -73,5 +73,18 @@ namespace CoreClassLibrary.Models.Resources
             // update version for db -> only onw operation can be done on this entity before DB has to be updated
             this.Version++;
         }
+
+        public void addProduction(Resources resources)
+        {
+            // save new values - TODO: refactor to own method
+            this.ResourceStoredAtLastCalculation = this.ResourcesStoredCurrently;
+            this.LastResourceStorageRefresh = Time.Now; // TODO - fix using other time then the line above
+
+            // subtract
+            this.HourlyResourceProduction = HourlyResourceProduction + resources;
+
+            // update version for db -> only onw operation can be done on this entity before DB has to be updated
+            this.Version++;
+        }
     }
 }

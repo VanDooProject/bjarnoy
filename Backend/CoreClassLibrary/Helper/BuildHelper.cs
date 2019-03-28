@@ -103,25 +103,7 @@ namespace CoreClassLibrary.Helper
 
         private BuildTechnology findTech(BuildBuildingModel build)
         {
-            var techs = BuildTechController.Instance.GetBuildTech();
-            Technology tech = techs.FirstOrDefault(t =>
-            {
-                if (t is BuildTechnology b)
-                {
-                    return b.Building.GetType().ToString().Split('.').Last() == build.BuildingName &&
-                        b.Building.Level == build.Level;
-                }
-                return false;
-            });
-
-            BuildTechnology buildTech = tech as BuildTechnology;
-
-            if (buildTech == null)
-            {
-                // TODO: report user
-                logger.Warn("no valid building found in tech tree - probably a user faked this request -> report to bot detector");
-                throw new BuildBuildingException("no valid building found in tech tree");
-            }
+            var buildTech = BuildTechController.Instance.findTech(build.BuildingName, build.Level);
 
             return buildTech;
         }
