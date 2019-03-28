@@ -203,7 +203,17 @@ namespace ApiServer.Controllers
             foreach (Tile tile in island.Tiles)
             {
                 if (tile is RawTile rawTile)
-                    tmpIsland.Tiles.Add(this.ConvertRawTileToSpecific(rawTile));
+                {
+                    Tile convertedTile = this.ConvertRawTileToSpecific(rawTile);
+
+                    // TODO - refactor to somewhere else
+                    Array values = Enum.GetValues(typeof(Tile.eOrientation));
+                    Random random = new Random();
+                    Tile.eOrientation randOrientation = (Tile.eOrientation)values.GetValue(random.Next(values.Length));
+                    convertedTile.Orientation = randOrientation;
+
+                    tmpIsland.Tiles.Add(convertedTile);
+                }
             }
 
             return tmpIsland;
