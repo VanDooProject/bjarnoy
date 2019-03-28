@@ -66,7 +66,7 @@ namespace CoreClassLibrary.Factory
             List<Tile> neighbors = island.getNeighbors(pos);
 
             Tile newTile = null;
-            Tile.eOrientation orientation = Tile.eOrientation.North;
+            Tile.eOrientation orientation = Tile.eOrientation.East;
             // set typ depending on neighbors
             int count = neighbors.Count(t => !(t is EdgeTile));
             switch (count)
@@ -82,11 +82,11 @@ namespace CoreClassLibrary.Factory
                     // check 4 relevant tiles for side
                     if (island.getTile(pos - new Vector3(+1, +1, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.North;
+                        //orientation = Tile.eOrientation.North;
                     }
                     else if (island.getTile(pos - new Vector3(-1, -1, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.South;
+                        //orientation = Tile.eOrientation.South;
                     }
                     else if (island.getTile(pos - new Vector3(+1, -1, 0)) != null)
                     {
@@ -112,11 +112,11 @@ namespace CoreClassLibrary.Factory
                     }
                     else if (island.getTile(pos - new Vector3(+1, 0, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.North;
+                        //orientation = Tile.eOrientation.North;
                     }
                     else if (island.getTile(pos - new Vector3(-1, 0, 0)) != null)
                     {
-                        orientation = Tile.eOrientation.South;
+                        //orientation = Tile.eOrientation.South;
                     }
 
                     newTile = new HalfEdgeTile(pos, orientation);
@@ -125,11 +125,11 @@ namespace CoreClassLibrary.Factory
                     // check 4 relevant tiles for side
                     if (island.getTile(pos - new Vector3(+1, +1, 0)) == null)
                     {
-                        orientation = Tile.eOrientation.South;
+                        //orientation = Tile.eOrientation.South;
                     }
                     else if (island.getTile(pos - new Vector3(-1, -1, 0)) == null)
                     {
-                        orientation = Tile.eOrientation.North;
+                        //orientation = Tile.eOrientation.North;
                     }
                     else if (island.getTile(pos - new Vector3(+1, -1, 0)) == null)
                     {

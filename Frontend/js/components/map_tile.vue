@@ -161,16 +161,37 @@ export default {
             //Hardcoded for testing
             if(this.tile.type == "water")
                 return "images/hextiles/water_E.png";
-            return "images/hextiles/grasstile_E.png";
+            //return "images/hextiles/grasstile_E.png";
 
+            let orientation = '';
+            switch(this.tile.orientation) {
+                case 'NorthEast' :
+                    orientation = 'NE';
+                    break;
+                case 'East' :
+                    orientation = 'E';
+                    break;
+                case 'SouthEast' :
+                    orientation = 'SE';
+                    break;
+                case 'SouthWest' :
+                    orientation = 'SW';
+                    break;
+                case 'West' :
+                    orientation = 'W';
+                    break;
+                case 'NorthWest' :
+                    orientation = 'NW';
+                    break;
+            }
 
             if(this.tile.building == undefined)
             {
-                return "images/tiles/" + this.tile.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + ".png";
+                return "images/hextiles/" + this.tile.type.toLowerCase() + "_" + orientation + ".png";
             }
             else
             {
-                return "images/tiles/" + this.tile.building.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + "_level" + this.tile.building.level.toString().padStart(3,'0') + ".png";
+                return "images/hextiles/" + this.tile.building.type.toLowerCase() + "_" + orientation + "_level" + this.tile.building.level.toString().padStart(3,'0') + ".png";
             }
         }
     }

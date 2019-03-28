@@ -26,10 +26,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public enum eOrientation
         {
-            North,
+            NorthEast,
             East,
-            South,
-            West
+            SouthEast,
+            SouthWest,
+            West,
+            NorthWest,
         }
 
         [JsonConverter(typeof(StringEnumConverter))]
