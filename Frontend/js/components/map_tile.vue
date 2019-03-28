@@ -81,23 +81,23 @@ export default {
     },
     computed: {
         ttHeight () {
-            var h = 56;
+            var height = 46;     //Textsize + 2 * Padding + BorderRadius (.tiletooltip)
             if(this.tile.resource!=undefined)
             {
-                h+=25;
+                height+=26;      //Textsize + Padding (.tiletooltip)
             }
             if(this.tile.building!=undefined)
             {
-                h+=25
+                height+=26       //Textsize + Padding (.tiletooltip)
             }
-            return h;
+            return height;
         },
         points () { // the point list for the hexagon that is used for mouse (and touch) events
             //x is straight forward
-            //for y I have to offset it by 280 (Measured from the graphics y position of higher horizontal line) 
+            //for y I have to add 47% of the height (Measured from Graphics ratio between the space below the first horizontal line and the hight of the image) 
             //because the actual graphics start there
             var xOff = this.xpos;
-            var yOff = this.ypos + 280 * this.mapScale;
+            var yOff = this.ypos + this.height * 0.47;
 
             var yFac = Math.sqrt(3)/2 //From the geometry
                 * Math.cos((57.8) / 180 * Math.PI); //From the graphics
@@ -111,16 +111,18 @@ export default {
         },
         xpos() {
             return this.width // use the (current) width to scale the vetor
-            * (
-                // Rotate Coordinate system 45° and get x value
-                    this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
-            ) 
-            // Adjustment Factor
-            * this.xFactor  
-            // Add Offsets
-            + this.mapOffset.x * this.mapScale
-            // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-            + this.windowWidth/2;
+                * (
+                    // Rotate Coordinate system 45° and get x value
+                        this.tile.position.x * Math.cos(this.angle) - this.tile.position.y * Math.sin(this.angle)
+                ) 
+                // Adjustment Factor
+                * this.xFactor  
+                // Add Offsets
+                + this.mapOffset.x * this.mapScale
+                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
+                + this.windowWidth / 2
+                 // move reference point to center of image
+                - this.width / 2 ;
         },
         ypos() {
             return this.width //use the (current) width to scale the vetor
@@ -133,7 +135,9 @@ export default {
                 // Add Offset
                 + this.mapOffset.y * this.mapScale
                 // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowHeight/2;
+                + this.windowHeight / 2
+                // move reference point to center of image
+                - this.height / 2;
         },
         windowWidth() {
             return this.$store.state.windowWidth;
@@ -155,6 +159,8 @@ export default {
         },
         imgsrc() { 
             //Hardcoded for testing
+            if(this.tile.type == "water")
+                return "images/hextiles/water_E.png";
             return "images/hextiles/grasstile_E.png";
 
 

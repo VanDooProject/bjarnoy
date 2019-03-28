@@ -60,20 +60,38 @@ export default {
             {
                 return this.$store.state.techBildings
                     .filter(entry => {
+                        if(entry.resourcesNeeded.wood > this.$store.state.userResources.resourcesStoredCurrently.wood)
+                        {
+                            return false;
+                        }
+                        if(entry.resourcesNeeded.stone > this.$store.state.userResources.resourcesStoredCurrently.stone)
+                        {
+                            return false;
+                        }
+                        if(entry.resourcesNeeded.iron > this.$store.state.userResources.resourcesStoredCurrently.iron)
+                        {
+                            return false;
+                        }
+                        if(entry.resourcesNeeded.gold > this.$store.state.userResources.resourcesStoredCurrently.gold)
+                        {
+                            return false;
+                        }
+
+
                         if(this.tile.building == undefined)
                         {
-                            return (entry.allowedTiles.some(tile => ((entry.level == 1) && (tile.type == this.tile.type))));
+                            return (entry.allowedTiles.some(tile => ((entry.building.level == 1) && (tile.type == this.tile.type))));
                         }
                         else
                         {
-                            if (entry.level == this.tile.building.level + 1)
+                            if (entry.level > 1 && entry.level == this.tile.building.level + 1 && entry.type==this.tile.building.type)
                             {
                                 return entry.allowedTiles.some(tile => tile.type == this.tile.type);
                             }
                             return false;
                         }
                     }).map((entry, index) => {
-                        return { num: index, type: { name: entry.type, isBuild: true, level: entry.level} };
+                        return { num: index, type: { name: entry.building.type, isBuild: true, level: entry.building.level} };
                     });
             }
             else

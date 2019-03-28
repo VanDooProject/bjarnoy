@@ -102,14 +102,19 @@ const store = new Vuex.Store({
         deltaTime: 0,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
+        userResources: undefined,
+
+        displayedMapTiles: [],
+        lastMapOffset: {x: 0, y: 0},
+        lastMapScale: 0,
     },
     getters: {
         menuDisplay: state => {
             return state.menuVisible == true ? "block" : "none";
-        }
+        },
     },
     actions: {
-        Tick(context) //Gets called every 60 seconds
+        Tick60s(context) //Gets called every 60 seconds
         {
             if(localStorage.token != undefined)
             {
@@ -126,8 +131,23 @@ const store = new Vuex.Store({
                         headers: {'Authorization': "bearer " + localStorage.token},
                     })
                     .then(response => localStorage.token = response.data.token)
-                    .catch(error => store.dispatch("ReqestError", error));
+                    .catch(error => context.dispatch("ReqestError", error));
                 }
+            }
+        },
+        Tick1s(context)
+        {
+            if(context.state.userResources != undefined)
+            {
+                context.commit("calcUserResources");
+            }
+
+            //Recalc only if over Threshhold (20%)
+            if( Math.abs(context.state.lastMapScale    - context.state.mapScale)    > 0.2 * context.mapScale ||          //Map Scale
+                Math.abs(context.state.lastMapOffset.x - context.state.mapOffset.x) > 0.2 * context.state.mapOffset.x || //Map Offset x
+                Math.abs(context.state.lastMapOffset.y - context.state.mapOffset.y) > 0.2 * context.state.mapOffset.x    //Map Offset y
+            ) {
+                context.commit("RecalcDisplayedMapTiles");
             }
         },
         Startup (context)
@@ -165,11 +185,12 @@ const store = new Vuex.Store({
                 .then(() => {
                     context.state.websocket.on("Queue", function (queue) {
                         context.dispatch("UpdateQueued");
+                        context.dispatch("UpdateResources");
                         if(queue.startsWith("BuildingQueue"))
                         {
                             context.dispatch("UpdateMapTiles");
                         }
-                        return console.info("got Queue: " + queue);
+                        return context.commit("SendNotification",{title: "got Queue", body:  queue});
                     });
     
                     context.state.websocket.invoke("GetServerTime").then(function (res) {
@@ -186,6 +207,19 @@ const store = new Vuex.Store({
         },
         ErrorWebSocket (context, error) {
             console.error(error);
+        },
+        UpdateResources (context) {
+            axios
+                .get(config.RequestUriPrefix + '/api/v1/Resource/user',
+                {
+                    headers: {'Authorization': "bearer " + localStorage.token},
+                })
+                .then(response => {
+                    context.commit("SetResources", response.data);
+                })
+                .catch(error => {
+                    context.dispatch('ReqestError', error);
+                });
         },
         UpdateMapTiles (context) {
             axios
@@ -247,9 +281,20 @@ const store = new Vuex.Store({
                     context.dispatch("StartWebSocket");
                     //context.state.websocket.invoke("SendMessage", "usr", "Hello World");
                     context.commit("logIn"); 
+                    context.dispatch("UpdateResources");
                     context.dispatch("UpdateTechBildings");
                     context.dispatch("UpdateQueued");
                     router.push("/map");
+
+
+                    // Check if notifications are supported
+                    if (!("Notification" in window)) {
+                        console.log("Browser doesn't support Notiffications");
+                    }
+                    // Check if the user has already granted or denied permission
+                    else if (Notification.permission !== 'denied' && Notification.permission !== "granted") {
+                        Notification.requestPermission();
+                    }
                 })
                 .catch(error => console.log(error));
         },
@@ -277,13 +322,59 @@ const store = new Vuex.Store({
         }
     },
     mutations: {
+        RecalcDisplayedMapTiles (state) {
+            state.lastMapScale = state.mapScale;
+            state.lastMapOffset = state.mapOffset;
+            var xFactor = Math.SQRT2 * 3/4;                     // 3/4 comes from the geometry of stacking Hexagons
+            var yFactor = Math.SQRT2 * 3/4 / Math.sqrt(3)       // sqrt(3) is also from the geometry
+                        * Math.cos((57.8) / 180 * Math.PI);     // the angle is from the Graphics
+            
+            var imageWidth = 400;
+            var imageHeight = 600;
+            var angle = -45 * Math.PI / 180;
+
+            //Position the center would be if there wasnt any Rotation
+            var centerX = (-state.mapOffset.x) / (imageWidth) / xFactor;
+            var centerY = (-state.mapOffset.y) / (imageHeight) / yFactor;
+            
+            //Actual center Position (Coordinates of center tile)
+            var centerXrot = Math.round(centerX * Math.cos(angle) - centerY * Math.sin(angle));
+            var centerYrot = Math.round(-centerY * Math.cos(angle) - centerX * Math.sin(angle));
+
+
+            //Describes the size of the loaded Area
+            var displaySize = Math.ceil(Math.max(state.windowWidth, state.windowHeight * 2) / imageWidth / state.mapScale *2);
+            
+            
+            var displayedTiles = [];
+            for(let x = centerXrot - displaySize; x <= centerXrot + displaySize; x+=1)
+            {
+                for(let y = centerYrot + displaySize; y >= centerYrot - displaySize; y-=1)
+                {
+                    if(!state.mapTiles.some(tile => {
+                        if(tile.position.x ==  x &&  tile.position.y == y)
+                        {
+                            //if tile is found add to displayed tiles
+                            displayedTiles.push(tile);
+                            return true;
+                        }
+                        return false;
+                    }))
+                    //Otherwise Add water
+                    {
+                        displayedTiles.push({position: {x: x,y: y,z: 1}, type: "water", orientation: "East"})
+                    }
+                }
+            }
+            state.displayedMapTiles = displayedTiles;
+        },
         SetWindowSize (state, size) {
             state.windowWidth = size.x;
             state.windowHeight = size.y;
         },
         AddMapScale (state, dScale)
         {
-            state.mapScale += dScale;
+            state.mapScale = Math.min(Math.max(state.mapScale + dScale, 0.4), 3); //Clamping scale to max 3 and min 0.05
         },
         SetDeltaTime (state, dT) {
             state.deltaTime = dT;
@@ -293,6 +384,42 @@ const store = new Vuex.Store({
                 //Sort list when adding instead of using zIndex
                 return a.position.x - a.position.y - (b.position.x - b.position.y);
             });
+            store.commit("RecalcDisplayedMapTiles");
+        },
+        calcUserResources(state) {
+            //Make sure that the time alway exists (Should not be needed after some changes in the backend)
+            if(state.userResources.LastResourceStorageRefresh==undefined){
+                state.userResources.LastResourceStorageRefresh=state.now;
+                return;
+            }
+
+            //Resource update calculations
+            var hoursSinceLastCalculation = (state.now - state.userResources.LastResourceStorageRefresh)/3600000 ;// /1000 => s , /60=> min, /60=> h Ges: 3600000
+            state.userResources.LastResourceStorageRefresh=state.now;
+
+            state.userResources.resourcesStoredCurrently.wood = Math.min(
+                state.userResources.resourceStorageCapacity.wood,
+                state.userResources.resourcesStoredCurrently.wood +
+                    state.userResources.hourlyResourceProduction.stone * hoursSinceLastCalculation);
+
+            state.userResources.resourcesStoredCurrently.stone = Math.min(
+                state.userResources.resourceStorageCapacity.stone,
+                state.userResources.resourcesStoredCurrently.stone + 
+                    state.userResources.hourlyResourceProduction.stone * hoursSinceLastCalculation);
+
+            state.userResources.resourcesStoredCurrently.iron = Math.min(
+                state.userResources.resourceStorageCapacity.iron,
+                state.userResources.resourcesStoredCurrently.iron +
+                    state.userResources.hourlyResourceProduction.iron * hoursSinceLastCalculation);
+
+            state.userResources.resourcesStoredCurrently.gold = Math.min(
+                state.userResources.resourceStorageCapacity.gold,
+                state.userResources.resourcesStoredCurrently.gold + 
+                    state.userResources.hourlyResourceProduction.gold * hoursSinceLastCalculation);
+                        
+        },
+        SetResources( state, resources) {
+            state.userResources = resources;
         },
         SetQueued (state, queue) {
             state.queued = queue;
@@ -335,7 +462,20 @@ const store = new Vuex.Store({
         SetCurrentTime(state, time)
         {
             state.now = time;
-        }
+        },
+        SendNotification(state, msg)   //https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API/Using_the_Notifications_API
+        {
+            if (!("Notification" in window)) {
+                    console.log("Browser doesn't support Notiffications, failed to send Message: " + msg);
+            }
+            // Check whether notification permissions have been granted
+            else if (Notification.permission === "granted") {
+                var notification = new Notification(msg.title, {body: msg.body});
+
+                //Some browsers dont automaticaly close Notiffication so we have to make sure they get closed
+                setTimeout(notification.close.bind(notification), 4000);
+            }
+        },
       }
 });
 store.dispatch("StartWebSocket");
@@ -345,10 +485,11 @@ var lastTick = 0;
 function callback()
 {
     store.commit("SetCurrentTime", new Date() - store.state.deltaTime);
+    store.dispatch("Tick1s");
     if(lastTick++ > 60)
     {
         lastTick = 0;
-        store.dispatch("Tick");
+        store.dispatch("Tick60s");
     }
 }
 setInterval(callback, 1000);
@@ -357,6 +498,7 @@ function resizeEvent()
 {
     store.commit("SetWindowSize", {x: window.innerWidth, y: window.innerHeight});
     store.commit("SetMenuVisible", false);
+    store.commit("RecalcDisplayedMapTiles")
 }
 window.addEventListener("resize", resizeEvent);
 
