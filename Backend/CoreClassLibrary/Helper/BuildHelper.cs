@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Exceptions;
@@ -18,7 +19,8 @@ namespace CoreClassLibrary.Helper
         private ILog logger = LogManager.GetLogger(typeof(BuildHelper));
 
         private readonly IIslandRepository _islandRepository = new IslandRepository();
-        private readonly IQueueRepository _queueRepository = new QueueRepository();
+        //private readonly IQueueRepository _queueRepository = new QueueRepository();
+        private readonly PlayerRepository _playerRepository = new PlayerRepository();
 
         public BuildHelper()
         {
@@ -27,10 +29,19 @@ namespace CoreClassLibrary.Helper
         public BuildHelper(IIslandRepository islandRepository, IQueueRepository queueRepository)
         {
             this._islandRepository = islandRepository;
-            this._queueRepository = queueRepository;
+            //this._queueRepository = queueRepository;
         }
 
-
+        /// <summary>
+        /// helper to create build queue entries
+        ///  * checks all requirements
+        ///  * saves building to tile
+        ///  * takes resources from given user
+        ///  * generates queue entry
+        /// </summary>
+        /// <param name="requestedBuilding"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
         public BuildingQueue BuildBuilding(BuildBuildingModel requestedBuilding, Player player)
         {
             try
@@ -38,6 +49,7 @@ namespace CoreClassLibrary.Helper
                 Tile tile = _islandRepository.getTile(requestedBuilding.Position.X, requestedBuilding.Position.Y, requestedBuilding.Position.Z);
 
                 // TODO: compute level to be built
+                // level is checked in - checkBuildingRequirements()
 
                 // try to get tech for requested building
                 BuildTechnology buildTech = findTech(requestedBuilding);
@@ -45,6 +57,12 @@ namespace CoreClassLibrary.Helper
                 // check if requirements are fulfilled
                 checkBuildingResources(player, buildTech);
                 checkBuildingRequirements(tile, buildTech);
+
+                // remove resources from user - think of race conditions
+                player.EntityResources.SubtractResources(buildTech.ResourcesNeeded);
+                // this throws an exception when there is a race condition -> do this first so all other operations which would change DB fail here
+                _playerRepository.ReplaceAwareOfResources(player);
+
 
                 // clean building
                 Building buildingToBeBuilt = buildTech.Building; // <- TODO deep copy / clone
@@ -72,10 +90,8 @@ namespace CoreClassLibrary.Helper
                     throw new Exception($"build tech is faulty - missing duration: {buildTech}");
                 }
 
-                // TODO: remove resources from user - think of race conditions
-
                 // TODO refactor -> remove this out of the helper & rename helper
-                _queueRepository.Add(queueEntry);
+                //_queueRepository.Add(queueEntry);
 
                 return queueEntry;
             }

@@ -1,6 +1,7 @@
 ﻿
 using System;
 using System.Collections.Generic;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Player;
@@ -105,6 +106,23 @@ namespace CoreClassLibrary.Respository
             //var update = Builders<BsonDocument>.Update.Combine(user);
 
             collection.ReplaceOne(filter, player);
+        }
+
+        /// <summary>
+        /// only replaces user when resources version matches
+        /// </summary>
+        /// <param name="player"></param>
+        public void ReplaceAwareOfResources(Player player)
+        {
+            var filter = Builders<Player>.Filter.Where(
+                x => x._id.Equals(player._id) & x.EntityResources.Version == player.EntityResources.Version - 1
+                );
+
+            var result = collection.ReplaceOne(filter, player);
+            if (result.ModifiedCount != 1)
+            {
+                throw new UpdateResourceException("could not update player since there was a race condition when updating resources");
+            }
         }
     }
 }

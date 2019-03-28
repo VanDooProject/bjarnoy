@@ -51,5 +51,27 @@ namespace CoreClassLibrary.Models.Resources
         /// users global storage capacity
         /// </summary>
         public Resources ResourceStorageCapacity;
+
+        /// <summary>
+        /// version of data in database
+        /// has to be incremented every time data is changed to avoid race conditions
+        /// </summary>
+        [JsonIgnore] // frontend should not know this internal value
+        public int Version = 0;
+
+
+
+        public void SubtractResources(Resources resources)
+        {
+            // save new values - TODO: refactor to own method
+            this.ResourceStoredAtLastCalculation = this.ResourcesStoredCurrently;
+            this.LastResourceStorageRefresh = Time.Now;
+
+            // subtract
+            this.ResourceStoredAtLastCalculation = ResourceStoredAtLastCalculation - resources;
+
+            // update version for db -> only onw operation can be done on this entity before DB has to be updated
+            this.Version++;
+        }
     }
 }
