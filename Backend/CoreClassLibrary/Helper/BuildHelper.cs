@@ -19,17 +19,16 @@ namespace CoreClassLibrary.Helper
         private ILog logger = LogManager.GetLogger(typeof(BuildHelper));
 
         private readonly IIslandRepository _islandRepository = new IslandRepository();
-        //private readonly IQueueRepository _queueRepository = new QueueRepository();
-        private readonly PlayerRepository _playerRepository = new PlayerRepository();
+        private readonly IPlayerRepository _playerRepository = new PlayerRepository();
 
         public BuildHelper()
         {
         }
 
-        public BuildHelper(IIslandRepository islandRepository, IQueueRepository queueRepository)
+        public BuildHelper(IIslandRepository islandRepository, IPlayerRepository playerRepository)
         {
             this._islandRepository = islandRepository;
-            //this._queueRepository = queueRepository;
+            this._playerRepository = playerRepository;
         }
 
         /// <summary>

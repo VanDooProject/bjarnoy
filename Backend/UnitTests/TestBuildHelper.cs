@@ -31,9 +31,9 @@ namespace UnitTests
         public void CheckUnkownTech()
         {
             IIslandRepository islandRepo = Substitute.For<IIslandRepository>();
-            IQueueRepository queueRepo = Substitute.For<IQueueRepository>();
+            PlayerRepository playerRepo = Substitute.For<PlayerRepository>();
 
-            var helper = new BuildHelper(islandRepo, queueRepo);
+            var helper = new BuildHelper(islandRepo, playerRepo);
             var building = new BuildBuildingModel();
             var player = new Player();
 
@@ -65,8 +65,10 @@ namespace UnitTests
 
             IQueueRepository queueRepo = Substitute.For<IQueueRepository>();
             //queueRepo.Add(null)...
+            IPlayerRepository playerRepo = Substitute.For<IPlayerRepository>();
+            playerRepo.When(x => x.ReplaceAwareOfResources(Arg.Any<Player>())).Do(info => { });
 
-            var helper = new BuildHelper(islandRepo, queueRepo);
+            var helper = new BuildHelper(islandRepo, playerRepo);
             var building = new BuildBuildingModel()
             {
                 Level = 1,

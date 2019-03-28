@@ -11,7 +11,7 @@ using MongoDB.Driver;
 
 namespace CoreClassLibrary.Respository
 {
-    public class PlayerRepository
+    public class PlayerRepository : IPlayerRepository
     {
         private readonly ILog logger = LogManager.GetLogger(typeof(PlayerRepository));
 

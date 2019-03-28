@@ -65,7 +65,7 @@ namespace CoreClassLibrary.Models.Resources
         {
             // save new values - TODO: refactor to own method
             this.ResourceStoredAtLastCalculation = this.ResourcesStoredCurrently;
-            this.LastResourceStorageRefresh = Time.Now;
+            this.LastResourceStorageRefresh = Time.Now; // TODO - fix using other time then the line above
 
             // subtract
             this.ResourceStoredAtLastCalculation = ResourceStoredAtLastCalculation - resources;
