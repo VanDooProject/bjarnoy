@@ -17,9 +17,14 @@ namespace ApiServer.Controllers
     {
         private readonly ILog logger = LogManager.GetLogger(typeof(IslandFactoryOrganic));
 
+        private readonly Random randomGenerator;
+
+        private readonly Array OrientationValues = Enum.GetValues(typeof(Tile.eOrientation));
+
         public IslandFactoryOrganic(int seed)
         {
             Noise.Seed = seed;
+            randomGenerator = new Random(seed);
         }
 
         public Island GetRndIsland(int size, int z)
@@ -206,17 +211,19 @@ namespace ApiServer.Controllers
                 {
                     Tile convertedTile = this.ConvertRawTileToSpecific(rawTile);
 
-                    // TODO - refactor to somewhere else
-                    Array values = Enum.GetValues(typeof(Tile.eOrientation));
-                    Random random = new Random();
-                    Tile.eOrientation randOrientation = (Tile.eOrientation)values.GetValue(random.Next(values.Length));
-                    convertedTile.Orientation = randOrientation;
+                    // TODO - refactor to somewhere else (maybe the convert method)
+                    convertedTile.Orientation = getRandomOrientation();
 
                     tmpIsland.Tiles.Add(convertedTile);
                 }
             }
 
             return tmpIsland;
+        }
+
+        private Tile.eOrientation getRandomOrientation()
+        {
+            return (Tile.eOrientation)OrientationValues.GetValue(randomGenerator.Next(OrientationValues.Length));
         }
 
         private string GenerateRandomName()
