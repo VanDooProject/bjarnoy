@@ -38,7 +38,8 @@ namespace ApiServer.Controllers
         {
             IslandRepository islandRepository = new IslandRepository();
 
-            IslandFactory factory = new IslandFactory();
+            IIslandFactory factory;
+            factory = new IslandFactorySquare();
 
             int size = 10;
             int zCoord = 1;
