@@ -39,14 +39,15 @@ namespace ApiServer.Controllers
             IslandRepository islandRepository = new IslandRepository();
 
             IIslandFactory factory;
-            factory = new IslandFactorySquare();
+            //factory = new IslandFactorySquare();
+            factory = new IslandFactoryOrganic();
 
-            int size = 10;
+            int size = 100;
             int zCoord = 1;
 
 
             Random rnd = new Random();
-            rnd.Next(size - 5, size + 5);
+            rnd.Next(size - 5, size + 5); // TODO - fix, never used
 
             var island = factory.GetRndIsland(size, zCoord);
 
