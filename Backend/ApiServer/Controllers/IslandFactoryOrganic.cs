@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Factory;
@@ -6,6 +7,7 @@ using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Tiles;
 using ImageMagick;
+using log4net;
 using SimplexNoise;
 
 
@@ -13,6 +15,8 @@ namespace ApiServer.Controllers
 {
     public class IslandFactoryOrganic : IIslandFactory
     {
+        private readonly ILog logger = LogManager.GetLogger(typeof(IslandFactoryOrganic));
+
         public Island GetRndIsland(int size, int z)
         {
             int seed = 3;
@@ -39,7 +43,63 @@ namespace ApiServer.Controllers
             MapRenderer.GenerateBitmapFromIsland(island, "map_03.png");
             MapRenderer.GenerateBitmapFromIsland(ConvertIslandFromRawTiles(island), "map_04.png");
 
-            return island;
+            island = ConvertIslandFromRawTiles(island);
+            var SubIslands = this.ScanIslands(island);
+            Island BiggestIsland = SubIslands.OrderByDescending(i => i.Tiles.Count).First();
+            MapRenderer.GenerateBitmapFromIsland(BiggestIsland, "map_05.png");
+
+            return BiggestIsland;
+        }
+
+        private List<Island> ScanIslands(Island MainIsland)
+        {
+            List<Tile> ScannedTiles = new List<Tile>();
+            List<Island> SubIslands = new List<Island>();
+
+            foreach (Tile tile in MainIsland.Tiles)
+            {
+                if (! (tile is WaterTile))
+                {
+                    if (!ScannedTiles.Contains(tile))
+                    {
+                        Island subIsland = this.ScanIsland(MainIsland, tile);
+                        SubIslands.Add( subIsland );
+
+                        ScannedTiles.AddRange(subIsland.Tiles);
+
+                        logger.DebugFormat("Found SubIsland with size {0}", subIsland.Tiles.Count);
+                    }
+                }
+            }
+
+            return SubIslands;
+        }
+
+        private Island ScanIsland(Island MainIsland, Tile startTile)
+        {
+            // TODO: fix "deepcopy"
+            Island tmpIsland = new Island(MainIsland.StartPosition);
+            tmpIsland.name = MainIsland.name;
+
+            tmpIsland.Tiles.Add(startTile);
+            scanFromTile(MainIsland, startTile, tmpIsland);
+
+            return tmpIsland;
+        }
+
+        private static void scanFromTile(Island MainIsland, Tile startTile, Island tmpIsland)
+        {
+            foreach (Tile tile in MainIsland.getNeighbors(startTile))
+            {
+                if (tile is WaterTile || tmpIsland.Tiles.Contains(tile))
+                {
+                    // ignore this tile - because its water or already scanned
+                    continue;
+                }
+
+                tmpIsland.Tiles.Add(tile);
+                scanFromTile(MainIsland, tile, tmpIsland);
+            }
         }
 
         private void MakeWaterSurrounding(Island island)
