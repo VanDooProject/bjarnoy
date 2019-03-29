@@ -10,7 +10,7 @@ namespace CoreClassLibrary.Models.Resources
     /// <summary>
     /// this model contains information about the users overall production and storage of resources
     /// </summary>
-    public class UserResources
+    public class EntityResources
     {
         /// <summary>
         /// amount of res produced hourly in users global space
@@ -51,5 +51,40 @@ namespace CoreClassLibrary.Models.Resources
         /// users global storage capacity
         /// </summary>
         public Resources ResourceStorageCapacity;
+
+        /// <summary>
+        /// version of data in database
+        /// has to be incremented every time data is changed to avoid race conditions
+        /// </summary>
+        [JsonIgnore] // frontend should not know this internal value
+        public int Version = 0;
+
+
+
+        public void SubtractResources(Resources resources)
+        {
+            // save new values - TODO: refactor to own method
+            this.ResourceStoredAtLastCalculation = this.ResourcesStoredCurrently;
+            this.LastResourceStorageRefresh = Time.Now; // TODO - fix using other time then the line above
+
+            // subtract
+            this.ResourceStoredAtLastCalculation = ResourceStoredAtLastCalculation - resources;
+
+            // update version for db -> only onw operation can be done on this entity before DB has to be updated
+            this.Version++;
+        }
+
+        public void addProduction(Resources resources)
+        {
+            // save new values - TODO: refactor to own method
+            this.ResourceStoredAtLastCalculation = this.ResourcesStoredCurrently;
+            this.LastResourceStorageRefresh = Time.Now; // TODO - fix using other time then the line above
+
+            // subtract
+            this.HourlyResourceProduction = HourlyResourceProduction + resources;
+
+            // update version for db -> only onw operation can be done on this entity before DB has to be updated
+            this.Version++;
+        }
     }
 }

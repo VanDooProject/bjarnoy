@@ -7,6 +7,6 @@ namespace CoreClassLibrary.Models.Buildings
         /// <summary>
         /// hourly gather rate
         /// </summary>
-        public double gatherRate;
+        public Resources.Resources gatherRate;
     }
 }

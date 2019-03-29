@@ -84,7 +84,7 @@ namespace ApiServer.Controllers
         public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
-            IslandFactory factory = new IslandFactory();
+            IslandFactorySquare factory = new IslandFactorySquare();
 
             IslandList.Add(factory.GetRndIsland(size, 1));
 

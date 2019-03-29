@@ -2,3 +2,9 @@ node_modules/
 Backend/ApiServer/config/settings.json
 Backend/ApiServer/config/build-tech.json
 Backend/UnitTests/coverage.json
+Backend/ApiServer/map.png
+Backend/ApiServer/map_04.png
+Backend/ApiServer/map_03.png
+Backend/ApiServer/map_02.png
+Backend/ApiServer/map_01.png
+Backend/ApiServer/map_05.png

@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Models;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
@@ -140,7 +142,9 @@ namespace CoreClassLibrary.Controller
                     Building = new Lumberjack()
                     {
                         Level = 1,
-                        gatherRate = 10
+                        gatherRate = new Resources() {
+                            wood = 10,
+                        },
                     },
                     ResearchDuration = new TimeSpan(0, 2, 30), // 2 min and 30 sec
                     ResourcesNeeded = new Resources() {
@@ -188,6 +192,31 @@ namespace CoreClassLibrary.Controller
         public List<Technology> GetBuildTech()
         {
             return _buildtech;
+        }
+
+        public BuildTechnology findTech(string BuildingName, int level)
+        {
+            var techs = BuildTechController.Instance.GetBuildTech();
+            Technology tech = techs.FirstOrDefault(t =>
+            {
+                if (t is BuildTechnology b)
+                {
+                    return b.Building.type == BuildingName && // b.Building.GetType().ToString().Split('.').Last()     -> the same as type
+                           b.Building.Level == level;
+                }
+                return false;
+            });
+
+            BuildTechnology buildTech = tech as BuildTechnology;
+
+            if (buildTech == null)
+            {
+                // TODO: report user
+                logger.Warn("no valid building found in tech tree - probably a user faked this request -> report to bot detector");
+                throw new BuildBuildingException("no valid building found in tech tree");
+            }
+
+            return buildTech;
         }
     }
 }

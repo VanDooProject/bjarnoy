@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,7 +14,7 @@ using MongoDB.Driver;
 
 namespace CoreClassLibrary.Observer
 {
-    public class QueueObserver
+    public partial class QueueObserver
     {
         private ILog logger = LogManager.GetLogger(typeof(QueueObserver));
 
@@ -74,23 +73,6 @@ namespace CoreClassLibrary.Observer
             else
             {
                 throw new QueueNotImplementedException("this queue entry is not implemented yet " + entry);
-            }
-        }
-
-
-
-        private class QueueNotImplementedException : NotImplementedException
-        {
-            public QueueNotImplementedException()
-            {
-            }
-
-            public QueueNotImplementedException(string message) : base(message)
-            {
-            }
-
-            public QueueNotImplementedException(string message, Exception inner) : base(message, inner)
-            {
             }
         }
     }
