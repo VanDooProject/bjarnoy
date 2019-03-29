@@ -2,7 +2,6 @@
     <div>
         <MapMenu></MapMenu>
         <queue></queue>
-
         <svg 
         id="map"
         v-on:mouseup='mouseUp'
@@ -16,10 +15,15 @@
         v-on:touchleave='touchLeave'
         v-on:touchcancel='touchLeave'
         v-on:touchstart='touchDown'
+
+        v-bind:viewBox = viewBoxString
         >
-            <g><MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"/></g>
-            <ZoomButtons/>
+
+            <MapTile v-bind:key=tile._id v-bind:tile=tile v-for="tile in tiles"/>
         </svg>
+
+
+        <ZoomButtons/>
     </div>
 </template>
 
@@ -49,22 +53,15 @@
         },
         computed: {
             tiles() { 
-                return this.$store.state.displayedMapTiles;
-            },
-            TilesArray () {
-                var ls = [[]];
-                this.tiles.forEach(tile => {
-                    var zLayer = Math.round(tile.position.z);
-                    if(ls[zLayer] == undefined)
-                    {
-                        ls[zLayer]=[];
-                    }
-                    ls[zLayer].push(tile);
-                });
-                return ls;
+                return this.$store.state.mapTiles;
             },
             mapScale() {
                 return this.$store.state.mapScale;
+            },
+            viewBoxString() {
+                return -(this.$store.state.mapOffset.x + this.$store.state.windowWidth / this.mapScale /2) + 
+                    ' ' + -(this.$store.state.mapOffset.y + this.$store.state.windowHeight / this.mapScale /2) +
+                    ' ' + this.$store.state.windowWidth/this.mapScale + ' ' + this.$store.state.windowHeight/this.mapScale;
             },
         },
         mounted () {

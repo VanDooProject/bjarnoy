@@ -23,8 +23,8 @@
             v-if="showTT"
 
             v-bind:x="xpos -200 + width/2"
-            v-bind:y="ypos-ttHeight + 200 * mapScale"
-            width=400
+            v-bind:y="ypos-ttHeight"
+            v-bind:width="400"
             v-bind:height="ttHeight"
         >
             <div class="tiletooltip">
@@ -118,9 +118,6 @@ export default {
                 // Adjustment Factor
                 * this.xFactor  
                 // Add Offsets
-                + this.mapOffset.x * this.mapScale
-                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowWidth / 2
                  // move reference point to center of image
                 - this.width / 2 ;
         },
@@ -133,9 +130,6 @@ export default {
                 // Adjustment Factor
                 * this.yFactor
                 // Add Offset
-                + this.mapOffset.y * this.mapScale
-                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowHeight / 2
                 // move reference point to center of image
                 - this.height / 2;
         },
@@ -146,16 +140,10 @@ export default {
             return this.$store.state.windowHeight;
         },
         width() {
-            return this.imgWidth * this.mapScale;
+            return this.imgWidth;
         },
         height() {
-            return this.imgHeight * this.mapScale;
-        },
-        mapScale() {
-            return this.$store.state.mapScale;
-        },
-        mapOffset() {
-            return this.$store.state.mapOffset;
+            return this.imgHeight;
         },
         imgsrc() { 
             //Hardcoded for testing

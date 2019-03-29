@@ -1,8 +1,8 @@
 <template>
-    <g>
-        <foreignObject x=5 y=32 width=32 height=32 v-on:click="zoomPlus" ><div class=zoombutton>+</div></foreignObject>
-        <foreignObject x=5 y=70 width=32 height=32 v-on:click="zoomMinus"><div class=zoombutton>-</div></foreignObject>
-    </g>
+    <div>
+        <div class=zoombutton  v-on:click="zoomPlus" x=5 y=32 >+</div>
+        <div class=zoombutton v-on:click="zoomMinus" x=5 y=70 >-</div>
+    </div>
 </template>
 
 <script>
@@ -48,6 +48,11 @@ export default {
     z-index: 0;
     font-size: 30px;
     line-height: 32px;
+    width: 32px;
+    height: 32px;
+    margin: 10px;
+    position: relative;
+    z-index: 100;
 
     /* noselect  https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting*/
     -webkit-touch-callout: none; /* iOS Safari */
