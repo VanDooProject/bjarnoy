@@ -15,7 +15,7 @@ namespace CoreClassLibrary.Models.TechQueues
         /// <summary>
         /// User who created this Queue
         /// </summary>
-        public Player.Player Owner;
+        public MinimalPlayer Owner;
 
         [BsonIgnoreIfNull]
         public UserModel Target; // for trades, attacks,.... TODO: maybe refactor to other child class(es) ... e.g TargetableQueues
