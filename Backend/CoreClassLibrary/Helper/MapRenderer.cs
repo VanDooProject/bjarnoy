@@ -17,6 +17,8 @@ namespace CoreClassLibrary.Helper
 
             float maxX = island.Tiles.Max(x => x.Position.X);
             float maxY = island.Tiles.Max(x => x.Position.Y);
+            float minX = island.Tiles.Min(x => x.Position.X);
+            float minY = island.Tiles.Min(x => x.Position.Y);
 
             MagickImage image = new MagickImage(new MagickColor("#ff00ff"),
                 (int)(maxY * factor),
@@ -49,6 +51,10 @@ namespace CoreClassLibrary.Helper
                 {
                     color = MagickColor.FromRgb(94, 96, 93);
                 }
+                else if (tile is SandTile)
+                {
+                    color = MagickColor.FromRgb(244, 229, 66);
+                }
 
                 if (color != null)
                 {
@@ -56,10 +62,10 @@ namespace CoreClassLibrary.Helper
                         .StrokeColor(color)
                         .FillColor(color)
                         .Rectangle(
-                            tile.Position.X * factor,
-                            tile.Position.Y * factor,
-                            tile.Position.X * factor + (factor - 1),
-                            tile.Position.Y * factor + (factor - 1)
+                            (tile.Position.X * factor) - (minX * factor),
+                            (tile.Position.Y * factor) - (minY * factor),
+                            (tile.Position.X * factor) - (minX * factor) + (factor - 1),
+                            (tile.Position.Y * factor) - (minY * factor) + (factor - 1)
                         )
                         .Draw(image);
                 }

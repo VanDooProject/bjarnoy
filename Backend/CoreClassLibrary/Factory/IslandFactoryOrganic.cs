@@ -27,7 +27,7 @@ namespace ApiServer.Controllers
             randomGenerator = new Random(seed);
         }
 
-        public Island GetRndIsland(int size, int z)
+        public Island GetRndIsland(int sizeOfIsland, int z)
         {
 
             Vector3 startPosition = new Vector3(0, 0, z);
@@ -35,11 +35,11 @@ namespace ApiServer.Controllers
 
             island.name = GenerateRandomName();
 
-            for (int y = 0; y < size; y++)
+            for (int y = 0; y < sizeOfIsland; y++)
             {
-                for (int x = 0; x < size; x++)
+                for (int x = 0; x < sizeOfIsland; x++)
                 {
-                    island.Tiles.Add(this.GetRawTile(x, y, z));
+                    island.Tiles.Add(this.GetRawTile(x, y, z, sizeOfIsland));
                 }
             }
 
@@ -143,10 +143,14 @@ namespace ApiServer.Controllers
             }
         }
 
-        private Tile GetRawTile(int x, int y, int z)
+        private Tile GetRawTile(int x, int y, int z, int sizeOfIsland)
         {
-            float Elevation = Noise.CalcPixel2D(x, y, 0.08f); // for size 100 -  0.01f - works well
-            float Humidity = Noise.CalcPixel2D(x, y, 0.1f); // for size 100 - 0.025f - works well
+            float ElevationFactor = (100 / sizeOfIsland) * 0.02f;
+            float HumidityFactor  = (100 / sizeOfIsland) * 0.0025f;
+
+            float Elevation = Noise.CalcPixel2D(x, y, 0.08f); // for size 100 -  0.01f - works well  for 25 - 0.08f
+            float Humidity = Noise.CalcPixel2D(x, y,  0.1f);  // for size 100 - 0.025f - works well  for 25 - 0.1f
+
             Vector3 position = new Vector3(x, y, z);
 
             return new RawTile(position)
@@ -158,15 +162,15 @@ namespace ApiServer.Controllers
 
         private Tile ConvertRawTileToSpecific(RawTile rawTile)
         {
-            if (rawTile.Elevation < 100)
+            if (rawTile.Elevation < 105)
             {
                 return new WaterTile(rawTile.Position);
             }
-            else if (rawTile.Elevation < 115)
+            else if (rawTile.Elevation < 130)
             {
-                return new GrassTile(rawTile.Position);
+                return new SandTile(rawTile.Position);
             }
-            else if (rawTile.Elevation < 180)
+            else if (rawTile.Elevation < 190)
             {
                 if (rawTile.Humidity > 128)
                 {
@@ -177,7 +181,7 @@ namespace ApiServer.Controllers
                     return new ForestTile(rawTile.Position);
                 }
             }
-            else if (rawTile.Elevation < 220)
+            else if (rawTile.Elevation < 230)
             {
                 if (rawTile.Humidity > 180)
                 {

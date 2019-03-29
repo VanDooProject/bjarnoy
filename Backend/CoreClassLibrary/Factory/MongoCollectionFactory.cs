@@ -49,6 +49,7 @@ namespace CoreClassLibrary.Factory
             BsonClassMap.RegisterClassMap<ResourceTile>();
             BsonClassMap.RegisterClassMap<StoneResourceTile>();
             BsonClassMap.RegisterClassMap<WaterTile>();
+            BsonClassMap.RegisterClassMap<SandTile>();
 
             BsonClassMap.RegisterClassMap<EdgeTile>();
             BsonClassMap.RegisterClassMap<QuarterEdgeTile>();
