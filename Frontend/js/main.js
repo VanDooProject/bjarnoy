@@ -330,18 +330,6 @@ const store = new Vuex.Store({
             state.deltaTime = dT;
         },
         SetMapTiles (state, tiles) {
-            var range = 20;
-            var offset  = 10;
-            for(var x = -range + offset; x < range + offset; x++)
-            {
-                for(var y = -range + offset; y < range + offset; y++)
-                {
-                    if(!tiles.some(tile => {return tile.position.x == x && tile.position.y==y}))
-                    {
-                        tiles.push({position: {x: x, y: y, z:1},type: "water"});
-                    }
-                }
-            }
             state.mapTiles = tiles.sort((a,b) => {
                 //Sort list when adding instead of using zIndex
                 return a.position.x - a.position.y - (b.position.x - b.position.y);
