@@ -2,8 +2,10 @@
 using System.Collections.Generic;
 using System.Text;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Models.TechQueues;
 using CoreClassLibrary.Respository;
@@ -28,14 +30,27 @@ namespace CoreClassLibrary.QueueHandler
             {
                 // find old production
                 Resources oldProduction = new Resources();
-                var oldTech = BuildTechController.Instance.findTech(resBuilding.type, resBuilding.Level - 1);
-                if (oldTech != null && oldTech.Building is ResourceBuilding oldResourceBuilding)
+                try
                 {
-                    oldProduction = oldResourceBuilding.gatherRate;
+                    var oldTech = BuildTechController.Instance.findTech(resBuilding.type, resBuilding.Level - 1);
+                    if (oldTech != null && oldTech.Building is ResourceBuilding oldResourceBuilding)
+                    {
+                        oldProduction = oldResourceBuilding.gatherRate;
+                    }
+                }
+                catch (BuildBuildingException ex)
+                {
+                    // -> fallback to zero resources before
+                    if (resBuilding.Level != 1)
+                    {
+                        throw new GameException("didn't find tech for building which is not level 1 -> missing techtree!!", ex);
+                    }
                 }
 
+                PlayerRepository playerRepository = new PlayerRepository();
+                Player player = playerRepository.GetByPlayerId(entry.Owner._id);
+
                 // set new production -> remove old production and add new production
-                var player = entry.Owner;
                 player.EntityResources.addProduction(resBuilding.gatherRate - oldProduction);
 
                 // save production
