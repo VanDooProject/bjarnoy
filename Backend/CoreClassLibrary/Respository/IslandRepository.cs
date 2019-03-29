@@ -59,9 +59,20 @@ namespace CoreClassLibrary.Respository
             islandCollection.InsertOne(island);
 
             // set DB refs - so we can get corresponding islands for tiles later
-            island.Tiles.ForEach(t => t.IslandId = createIslandDbRef(island));
+            MongoDBRef mongoDbRef = createIslandDbRef(island);
+            island.Tiles.ForEach(t => t.IslandId = mongoDbRef);
 
             tileCollection.InsertMany(island.Tiles);
+        }
+
+        public void AddTile(Tile tile)
+        {
+            tileCollection.InsertOne(tile);
+        }
+
+        public void AddTiles(List<Tile> tiles)
+        {
+            tileCollection.InsertMany(tiles);
         }
 
         public Tile getTile(float x, float y, float z)
@@ -97,6 +108,14 @@ namespace CoreClassLibrary.Respository
 
             //var res = tileCollection.Find(filter);
             //var r = res.ToList();
+            tileCollection.DeleteMany(filter);
+        }
+
+        public void DeleteAllTiles()
+        {
+            var builder = Builders<Tile>.Filter;
+            var filter = builder.Empty; // matches all
+
             tileCollection.DeleteMany(filter);
         }
 

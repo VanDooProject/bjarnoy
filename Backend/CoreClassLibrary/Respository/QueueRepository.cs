@@ -10,6 +10,7 @@ using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.TechQueues;
 using log4net;
 using MongoDB.Bson;
@@ -35,10 +36,10 @@ namespace CoreClassLibrary.Respository
             collection.InsertOne(queue);
         }
 
-        public List<Queue> AllUnprocessedByUser(UserModel user)
+        public List<Queue> AllUnprocessedByUser(Player player)
         {
             var builder = Builders<Queue>.Filter;
-            var filter = builder.Eq("Owner._id", user._id) & builder.Eq("Processing", Queue.eQueueProcessingState.unprocessed);
+            var filter = builder.Eq("Owner._id", player._id) & builder.Eq("Processing", Queue.eQueueProcessingState.unprocessed);
             return collection.Find(filter).ToList();
         }
 

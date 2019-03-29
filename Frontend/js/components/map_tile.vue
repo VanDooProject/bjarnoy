@@ -148,7 +148,7 @@ export default {
         imgsrc() { 
             //Hardcoded for testing
             if(this.tile.type == "water")
-                return "images/hextiles/water_E.png";
+                return "images/hextiles/watertile_E.png";
             //return "images/hextiles/grasstile_E.png";
 
             let orientation = '';
