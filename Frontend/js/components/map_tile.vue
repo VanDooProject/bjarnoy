@@ -52,15 +52,15 @@ export default {
                 this.$store.state.mouseMove.y < 5
             ) {
                 if (
-                this.$store.state.menuVisible == false &&
-                this.$store.state.menuClosed == false
+                this.$store.state.menu.menuVisible == false &&
+                this.$store.state.menu.menuClosed == false
                 ) {
-                this.$store.commit("SetMenuPos", { x: event.pageX, y: event.pageY });
-                this.$store.commit("SetMenuTile", this.tile);
-                this.$store.commit("SetMenuVisible", true);
+                this.$store.commit("menu/SetMenuPos", { x: event.pageX, y: event.pageY });
+                this.$store.commit("menu/SetMenuTile", this.tile);
+                this.$store.commit("menu/SetMenuVisible", true);
                 }
             }
-            this.$store.commit("SetMenuClosed", false);
+            this.$store.commit("menu/SetMenuClosed", false);
         },
         openToolTip: function () {
             this.showTT = true;

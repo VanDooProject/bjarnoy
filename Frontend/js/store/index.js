@@ -9,6 +9,9 @@ import axios from 'axios';
 import config from '../config.js';
 import {router} from '../main.js';
 
+//Own Modules
+import menu from './modules/menu.js'
+
 
 //SignalR
 var signalR = require('@aspnet/signalr')
@@ -27,17 +30,12 @@ function jwtDecode(token){
 }
 Vue.use(Vuex);
 
-
-
 export default new Vuex.Store({
+    modules: {
+        menu,
+    },
     state: {
         loggedIn: false,
-        
-        menuPos: {x:0, y:0},
-        menuTile: {},
-        menuVisible: false,
-        menuClosed: false,
-        menuBuildOpen: false,
 
         mapOffset: {x: -window.innerWidth/2, y: -window.innerHeight/2},
         mapScale: 1,
@@ -328,31 +326,12 @@ export default new Vuex.Store({
         logOut (state) {
             state.loggedIn = false;
         },
-        SetMenuPos (state, pos) {
-            //Removing any unused poperties
-            state.menuPos.x = pos.x;
-            state.menuPos.y = pos.y;
-        },
-        SetMenuTile (state, tile) {
-            state.menuTile = tile;
-        },
-        SetMenuVisible (state, visible) {
-            state.menuVisible = visible;
-        },
-        SetMenuClosed (state, closed)
-        {
-            state.menuClosed = closed;
-            state.menuBuildOpen = false;
-        },
         ClearMouseMove (state) {
             state.mouseMove = {x:0 , y: 0};
         },
         MouseMove (state, move) {
             state.mapOffset.x += move.x;
             state.mapOffset.y += move.y;
-        },
-        OpenBuildMenu (state) {
-            state.menuBuildOpen = true;
         },
         SetCurrentTime(state, time)
         {

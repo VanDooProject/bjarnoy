@@ -58,7 +58,7 @@ export default {
     },
     computed: {
         submenus2() {
-            if(this.$store.state.menuBuildOpen == true)
+            if(this.$store.state.menu.menuBuildOpen == true)
             {
                 return this.$store.state.techBildings
                     .filter(entry => {
@@ -102,18 +102,18 @@ export default {
             }
         },
         tile() {
-            return this.$store.state.menuTile;
+            return this.$store.state.menu.menuTile;
         },
         pos() {
-            return this.$store.state.menuPos;
+            return this.$store.state.menu.menuPos;
         },
         menuVisible() {
-            return this.$store.state.menuVisible;
+            return this.$store.state.menu.menuVisible;
         }
   },
   methods: {
     close: function(event) {
-        this.$store.commit("SetMenuVisible", false);
+        this.$store.commit("menu/SetMenuVisible", false);
     },
     clicked: function(event) {
         console.log(event);
