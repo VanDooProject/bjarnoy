@@ -109,9 +109,6 @@ const store = new Vuex.Store({
         lastMapScale: 0,
     },
     getters: {
-        menuDisplay: state => {
-            return state.menuVisible == true ? "block" : "none";
-        },
     },
     actions: {
         Tick60s(context) //Gets called every 60 seconds
