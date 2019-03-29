@@ -331,7 +331,7 @@ const store = new Vuex.Store({
         },
         SetMapTiles (state, tiles) {
             var range = 20;
-            var offset  = 5;
+            var offset  = 10;
             for(var x = -range + offset; x < range + offset; x++)
             {
                 for(var y = -range + offset; y < range + offset; y++)
