@@ -10,7 +10,10 @@ namespace CoreClassLibrary.Factory
     {
         public Player GetStartingPlayer(string DisplayName)
         {
-            var player = new Player();
+            var player = new Player()
+            {
+                DisplayName = DisplayName
+            };
 
             // set res
             player.EntityResources = new EntityResources()
