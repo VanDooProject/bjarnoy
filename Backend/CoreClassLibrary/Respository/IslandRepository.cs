@@ -111,6 +111,14 @@ namespace CoreClassLibrary.Respository
             tileCollection.DeleteMany(filter);
         }
 
+        public void DeleteAllTiles()
+        {
+            var builder = Builders<Tile>.Filter;
+            var filter = builder.Empty; // matches all
+
+            tileCollection.DeleteMany(filter);
+        }
+
         public void ReplaceTile(Tile tile)
         {
             var filter = Builders<Tile>.Filter.Where(x => x._id.Equals(tile._id));

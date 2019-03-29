@@ -111,6 +111,21 @@ namespace ApiServer.Controllers
             return Ok();
         }
 
+        // DELETE api/v1/install/map/
+        /// <summary>
+        /// only deletes tiles not islands
+        /// </summary>
+        /// <returns></returns>
+        [HttpDelete("map/")]
+        public IActionResult DeleteMap()
+        {
+            IslandRepository islandRepository = new IslandRepository();
+
+            islandRepository.DeleteAllTiles();
+
+            return Ok();
+        }
+
         private static string GetEnvironmentVariable(string name)
         {
             return String.Format("{0}={1}", name, Environment.GetEnvironmentVariable(name));
