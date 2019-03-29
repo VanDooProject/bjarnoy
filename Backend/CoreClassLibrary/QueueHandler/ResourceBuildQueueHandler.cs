@@ -13,19 +13,15 @@ using log4net;
 
 namespace CoreClassLibrary.QueueHandler
 {
-    public class BuildQueueHandler
+    public class ResourceBuildQueueHandler : IBuildQueueHandler
     {
-        private ILog logger = LogManager.GetLogger(typeof(BuildQueueHandler));
+        private ILog logger = LogManager.GetLogger(typeof(ResourceBuildQueueHandler));
 
         private readonly IslandRepository _islandRepository = new IslandRepository();
         private readonly IPlayerRepository _playerRepository = new PlayerRepository();
 
         public void processEntry(BuildingQueue entry)
         {
-            Tile tile = entry.Tile;
-            tile.Building = entry.Building;
-            _islandRepository.ReplaceTile(tile);
-
             if (entry.Building is ResourceBuilding resBuilding)
             {
                 // find old production

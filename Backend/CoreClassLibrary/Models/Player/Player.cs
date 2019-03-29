@@ -25,5 +25,16 @@ namespace CoreClassLibrary.Models.Player
                 User = user
             });
         }
+
+        public MinimalPlayer GetMinimalClone()
+        {
+            // TODO - make proper deep copy
+            var player = new MinimalPlayer()
+            {
+                _id = this._id,
+                DisplayName = this.DisplayName
+            };
+            return player;
+        }
     }
 }
