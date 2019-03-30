@@ -58,7 +58,28 @@ namespace ApiServer.Controllers
 
             // TODO: handle error when no island was found
 
+
+            this.addShallowWater(BiggestIsland, z, sizeOfIsland);
+            MapRenderer.GenerateBitmapFromIsland(BiggestIsland, "map_06.png");
+
             return BiggestIsland;
+        }
+
+        private void addShallowWater(Island island, int z, int sizeOfIsland)
+        {
+            for (int y = 0; y < sizeOfIsland; y++)
+            {
+                for (int x = 0; x < sizeOfIsland; x++)
+                {
+                    Vector3 pos = new Vector3(x, y, z);
+                    List<Tile> neighbors = island.getNeighbors(pos);
+
+                    if (neighbors.Count(t => !(t is CoastalWaterTile)) > 0 && island.getTile(pos) == null)
+                    {
+                        island.Tiles.Add(new CoastalWaterTile(pos));
+                    }
+                }
+            }
         }
 
         private List<Island> ScanIslands(Island MainIsland)

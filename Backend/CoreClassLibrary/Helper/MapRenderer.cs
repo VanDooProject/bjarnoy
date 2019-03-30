@@ -39,6 +39,10 @@ namespace CoreClassLibrary.Helper
                 {
                     color = MagickColor.FromRgb(66, 134, 244);
                 }
+                else if (tile is CoastalWaterTile)
+                {
+                    color = MagickColor.FromRgb(66, 188, 244);
+                }
                 else if (tile is GrassTile)
                 {
                     color = MagickColor.FromRgb(101, 219, 32);
