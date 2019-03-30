@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
+using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
@@ -35,28 +36,15 @@ namespace ApiServer.Controllers
             return infoList;
         }
         // POST api/v1/install/islands/
-        [HttpPost("islands/")]
-        public IActionResult CreateIslands()
+        [HttpPost("islands/{count=2}/{seed=1}")]
+        public IActionResult CreateIslands(int count, int seed)
         {
-            Random rnd = new Random();
+            var IslandHelper = new MapCreatorHelper(seed);
 
-            IslandRepository islandRepository = new IslandRepository();
+            var islands = IslandHelper.createIslands(count);
 
-            IIslandFactory factory;
-            //factory = new IslandFactorySquare();
-            factory = new IslandFactoryOrganic(rnd.Next(0, 10));
-
-            int size = 30;
-            int zCoord = 1;
-
-
-            rnd.Next(size - 5, size + 5); // TODO - fix, never used
-
-            var island = factory.GetRndIsland(size, zCoord);
-
-            // TODO: move island to free location on map
-
-            islandRepository.Add(island);
+            MapRenderer renderer = new MapRenderer();
+            renderer.GenerateBitmapFromIslands(islands, "map_full.png");
 
             return Ok();
         }

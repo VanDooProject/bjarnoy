@@ -32,6 +32,7 @@ namespace ApiServer.Controllers
 
             Vector3 startPosition = new Vector3(0, 0, z);
             Island island = new Island(startPosition);
+            island.size = sizeOfIsland;
 
             island.name = GenerateRandomName();
 
@@ -111,6 +112,7 @@ namespace ApiServer.Controllers
             // TODO: fix "deepcopy"
             Island tmpIsland = new Island(MainIsland.StartPosition);
             tmpIsland.name = MainIsland.name;
+            tmpIsland.size = MainIsland.size;
 
             tmpIsland.Tiles.Add(startTile);
             scanFromTile(MainIsland, startTile, tmpIsland);
@@ -229,6 +231,7 @@ namespace ApiServer.Controllers
             // TODO: fix "deepcopy"
             Island tmpIsland = new Island(island.StartPosition);
             tmpIsland.name = island.name;
+            tmpIsland.size = island.size;
 
             foreach (Tile tile in island.Tiles)
             {
