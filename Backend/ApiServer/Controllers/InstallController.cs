@@ -36,7 +36,7 @@ namespace ApiServer.Controllers
         }
         // POST api/v1/install/islands/
         [HttpPost("islands/")]
-        public int CreateIslands()
+        public IActionResult CreateIslands()
         {
             Random rnd = new Random();
 
@@ -46,7 +46,7 @@ namespace ApiServer.Controllers
             //factory = new IslandFactorySquare();
             factory = new IslandFactoryOrganic(rnd.Next(0, 10));
 
-            int size = 25;
+            int size = 30;
             int zCoord = 1;
 
 
@@ -58,7 +58,7 @@ namespace ApiServer.Controllers
 
             islandRepository.Add(island);
 
-            return 0;
+            return Ok();
         }
 
         // POST api/v1/install/water/
