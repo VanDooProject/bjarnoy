@@ -16,5 +16,6 @@ namespace CoreClassLibrary.Respository
         Player GetPlayerOwnedBy(UserModel user);
         void Replace(Player player);
         void ReplaceAwareOfResources(Player player);
+        Player GetByPlayerId(ObjectId id);
     }
 }

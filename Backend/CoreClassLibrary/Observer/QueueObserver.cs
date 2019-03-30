@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,15 +20,15 @@ namespace CoreClassLibrary.Observer
     {
         private ILog logger = LogManager.GetLogger(typeof(QueueObserver));
 
-
-        private BuildQueueHandler BuildHandler = new BuildQueueHandler();
-
         private QueueRepository queueRepository = new QueueRepository();
 
 
         public delegate void EntryProcessedDelegate(Queue q);
 
         private EntryProcessedDelegate _callback;
+
+        private List<IBuildQueueHandler> BuildQueueHandler = new List<IBuildQueueHandler>();
+
 
         public QueueObserver(EntryProcessedDelegate clb = null)
         {
@@ -36,8 +38,21 @@ namespace CoreClassLibrary.Observer
             {
                 _callback = clb;
             }
-        }
 
+            // get all handler
+            var BuildQueueHandlerTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(s => s.GetTypes())
+                .Where(p => typeof(IBuildQueueHandler).IsAssignableFrom(p))
+                .Where(p => !p.IsAbstract && !p.IsInterface);
+
+            // create instance of handler
+            foreach (Type handlerType in BuildQueueHandlerTypes)
+            {
+                this.BuildQueueHandler.Add( (IBuildQueueHandler) Activator.CreateInstance(handlerType) );
+            }
+
+            logger.DebugFormat("setup {0} BuildQueueHandler", BuildQueueHandler.Count);
+        }
 
 
         public void GetAndProcessEntries()
@@ -68,7 +83,10 @@ namespace CoreClassLibrary.Observer
 
             if (entry is BuildingQueue buildEntry)
             {
-                BuildHandler.processEntry(buildEntry);
+                foreach (IBuildQueueHandler handler in this.BuildQueueHandler)
+                {
+                    handler.processEntry(buildEntry);
+                }
             }
             else
             {

@@ -4,6 +4,7 @@ using System.Numerics;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Generic;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
@@ -43,6 +44,13 @@ namespace CoreClassLibrary.Models.Map.Tiles
         [BsonIgnoreIfNull]
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public Building Building;
+
+        /// <summary>
+        /// building on this tile
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public MinimalPlayer Owner;
 
         public string type
         {

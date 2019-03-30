@@ -5,6 +5,7 @@ using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Biomes;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.TechQueues;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
@@ -72,7 +73,12 @@ namespace CoreClassLibrary.Factory
 
             BsonClassMap.RegisterClassMap<Building>();
             BsonClassMap.RegisterClassMap<Lumberjack>();
+            BsonClassMap.RegisterClassMap<Tower>();
             BsonClassMap.RegisterClassMap<StorageHouse>();
+
+
+            //BsonClassMap.RegisterClassMap<PlayerMinimal>();
+            //BsonClassMap.RegisterClassMap<Player>();
         }
 
 
