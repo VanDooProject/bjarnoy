@@ -1,44 +1,46 @@
 <template>
-    <div
-        v-bind:style="{
-            top: pos.y - size.y/2 + 'px',
-            left: pos.x - size.x/2 + 'px',
-            width: size.x + 'px',
-            height: size.y + 'px',
-            display: display,
-            zIndex: 50000
-        }"
-        class="mapmenu"
-    >
-        <img src="/images/circle.png"
-            v-bind:height="size.x"
-            v-bind:width="size.y"
-        />
+    <transition name="fade">
         <div
             v-bind:style="{
-                top:  size.y/2 + 'px',
-                left: size.x/2 + 'px',
-                }"
+                top: pos.y - size.y/2 + 'px',
+                left: pos.x - size.x/2 + 'px',
+                width: size.x + 'px',
+                height: size.y + 'px',
+                zIndex: 50000
+            }"
             class="mapmenu"
+            v-if="menuVisible"
         >
-            <menu-item
-                v-bind:submenu="submenu.num"
-                v-bind:type="submenu.type"
-                v-bind:submenutotal="submenus1.length"
-                v-bind:key="submenu.key"
-                v-for="submenu in submenus1"
-                submenulayer="1"
+            <img src="/images/circle.png"
+                v-bind:height="size.x"
+                v-bind:width="size.y"
+            />
+            <div
+                v-bind:style="{
+                    top:  size.y/2 + 'px',
+                    left: size.x/2 + 'px',
+                    }"
+                class="mapmenu"
             >
-            </menu-item><menu-item
-                v-bind:submenu="submenu.num"
-                v-bind:type="submenu.type"
-                v-bind:submenutotal="submenus2.length"
-                v-bind:key="submenu.key"
-                v-for="submenu in submenus2"
-                submenulayer="2"
-            ></menu-item>
+                <menu-item
+                    v-bind:submenu="submenu.num"
+                    v-bind:type="submenu.type"
+                    v-bind:submenutotal="submenus1.length"
+                    v-bind:key="submenu.key"
+                    v-for="submenu in submenus1"
+                    submenulayer="1"
+                >
+                </menu-item><menu-item
+                    v-bind:submenu="submenu.num"
+                    v-bind:type="submenu.type"
+                    v-bind:submenutotal="submenus2.length"
+                    v-bind:key="submenu.key"
+                    v-for="submenu in submenus2"
+                    submenulayer="2"
+                ></menu-item>
+            </div>
         </div>
-    </div>
+    </transition>
 </template>
 
 <script>
@@ -105,8 +107,8 @@ export default {
         pos() {
             return this.$store.state.menuPos;
         },
-        display() {
-            return this.$store.getters.menuDisplay;
+        menuVisible() {
+            return this.$store.state.menuVisible;
         }
   },
   methods: {

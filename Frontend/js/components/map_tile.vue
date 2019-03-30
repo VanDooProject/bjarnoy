@@ -7,7 +7,7 @@
             v-bind:y="ypos"
 
             v-bind:xlink:href=imgsrc
-
+            
             class="tileimg"
         ></image>
         <polygon 
@@ -19,24 +19,26 @@
 
             v-on:click="openMenu"
         />
-        <foreignObject
-            v-if="showTT"
+        <transition name="fade">
+            <foreignObject
+                v-if="showTT"
 
-            v-bind:x="xpos -200 + width/2"
-            v-bind:y="ypos-ttHeight + 200 * mapScale"
-            width=400
-            v-bind:height="ttHeight"
-        >
-            <div class="tiletooltip">
-                Type: {{tile.type}} {{tile.orientation}} ({{tile.position.x}}/{{tile.position.y}}) 
-                <div v-if="tile.resource!=undefined">
-                    Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
+                v-bind:x="xpos -200 + width/2"
+                v-bind:y="ypos-ttHeight"
+                v-bind:width="400"
+                v-bind:height="ttHeight"
+            >
+                <div class="tiletooltip">
+                    Type: {{tile.type}} {{tile.orientation}} ({{tile.position.x}}/{{tile.position.y}}) 
+                    <div v-if="tile.resource!=undefined">
+                        Resource: {{tile.resource.type}} Volume: {{tile.resource.resourceVolume}} Rate:{{tile.resource.degradationRate}}
+                    </div>
+                    <div v-if="tile.building!=undefined">
+                        Building: {{tile.building.type}} Level {{tile.building.level}}
+                    </div>
                 </div>
-                <div v-if="tile.building!=undefined">
-                    Building: {{tile.building.type}} Level {{tile.building.level}}
-                </div>
-            </div>
-        </foreignObject>
+            </foreignObject>
+        </transition>
     </g>
 </template>
 
@@ -118,9 +120,6 @@ export default {
                 // Adjustment Factor
                 * this.xFactor  
                 // Add Offsets
-                + this.mapOffset.x * this.mapScale
-                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowWidth / 2
                  // move reference point to center of image
                 - this.width / 2 ;
         },
@@ -133,9 +132,6 @@ export default {
                 // Adjustment Factor
                 * this.yFactor
                 // Add Offset
-                + this.mapOffset.y * this.mapScale
-                // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowHeight / 2
                 // move reference point to center of image
                 - this.height / 2;
         },
@@ -146,16 +142,10 @@ export default {
             return this.$store.state.windowHeight;
         },
         width() {
-            return this.imgWidth * this.mapScale;
+            return this.imgWidth;
         },
         height() {
-            return this.imgHeight * this.mapScale;
-        },
-        mapScale() {
-            return this.$store.state.mapScale;
-        },
-        mapOffset() {
-            return this.$store.state.mapOffset;
+            return this.imgHeight;
         },
         imgsrc() { 
             //Hardcoded for testing
@@ -205,7 +195,15 @@ export default {
 .tileimg {
     pointer-events: none;
 }
+.fade-enter-active, .fade-leave-active {
+  transition: opacity .2s;
+}
+.fade-enter, .fade-leave-to /* .fade-leave-active below version 2.1.8 */ {
+  opacity: 0;
+}
 .tiletooltip {
+
+
     background: rgba(0, 0, 0, 0.75);
     color: white;
     padding: 10px;

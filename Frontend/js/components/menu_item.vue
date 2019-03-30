@@ -8,7 +8,8 @@
             height: size + 'px',
             zIndex: 50001
         }"
-        v-on:click="onClick"
+        v-on:click="onClick" 
+        v-b-popover.hover="popOverText"
         class="mapsubmenu"
     />
 </template>
@@ -33,6 +34,9 @@
             },
             size() {
                 return 75 * this.submenulayer;
+            },
+            popOverText() {
+                return this.type.name;
             }
         },
         methods: {
