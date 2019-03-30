@@ -701,7 +701,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{url}}/api/v1/install/islands/",
+							"raw": "{{url}}/api/v1/install/islands/20/2",
 							"host": [
 								"{{url}}"
 							],
@@ -710,7 +710,8 @@
 								"v1",
 								"install",
 								"islands",
-								""
+								"20",
+								"2"
 							]
 						}
 					},
@@ -753,7 +754,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{url}}/api/v1/install/water/100/100",
+							"raw": "{{url}}/api/v1/install/water",
 							"host": [
 								"{{url}}"
 							],
@@ -761,9 +762,7 @@
 								"api",
 								"v1",
 								"install",
-								"water",
-								"100",
-								"100"
+								"water"
 							]
 						}
 					},

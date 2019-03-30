@@ -50,13 +50,13 @@ namespace ApiServer.Controllers
         }
 
         // POST api/v1/install/water/
-        [HttpPost("water/{width}/{height}")]
-        public IActionResult FillMapWithWater(int width, int height)
+        [HttpPost("water/")]
+        public IActionResult FillMapWithWater(/*int width, int height*/)
         {
-            if (width < 1 || height < 1)
-            {
-                return BadRequest();
-            }
+            //if (width < 1 || height < 1)
+            //{
+            //    return BadRequest();
+            //}
 
             int countAddedWaterTiles = 0;
 
@@ -65,11 +65,16 @@ namespace ApiServer.Controllers
             IslandRepository islandRepository = new IslandRepository();
             var tiles =  islandRepository.AllTiles();
 
+            float maxX = tiles.Max(x => x.Position.X);
+            float maxY = tiles.Max(x => x.Position.Y);
+            float minX = tiles.Min(x => x.Position.X);
+            float minY = tiles.Min(x => x.Position.Y);
+
             List<Tile> WaterTiles = new List<Tile>();
 
-            for (int y = 0; y < width; y++)
+            for (float y = minY; y <= maxY; y++)
             {
-                for (int x = 0; x < height; x++)
+                for (float x = minX; x <= maxX; x++)
                 {
                     if (!tiles.Any(t => Math.Abs(t.Position.X - x) < TOLERANCE && Math.Abs(t.Position.Y - y) < TOLERANCE ))
                     {
