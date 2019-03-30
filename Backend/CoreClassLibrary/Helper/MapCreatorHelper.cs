@@ -24,10 +24,6 @@ namespace CoreClassLibrary.Helper
             _rnd = new Random(seed);
 
             _islandRepository = new IslandRepository();
-
-            //factory = new IslandFactorySquare();
-
-            // 
         }
 
         /// <summary>
@@ -40,7 +36,7 @@ namespace CoreClassLibrary.Helper
 
             for (int createdIslands = 0; createdIslands < count; createdIslands++)
             {
-                int size = _rnd.Next(20, 30);
+                int size = _rnd.Next(15, 35);
                 int seed = _rnd.Next(0, 10);
 
                 Island island = this.createIsland(size, seed);
@@ -72,8 +68,8 @@ namespace CoreClassLibrary.Helper
         /// <param name="island"></param>
         private void MoveIsland(Island island)
         {
-            int moveX = _rnd.Next(island.size / -3, island.size / 3);
-            int moveY = _rnd.Next(island.size / -3, island.size / 3);
+            int moveX = _rnd.Next(island.size / -2, island.size / 2);
+            int moveY = _rnd.Next(island.size / -2, island.size / 2);
 
             foreach (Tile tile in island.Tiles)
             {

@@ -41,7 +41,10 @@ namespace CoreClassLibrary.Helper
             float offsetX = (minX < 0) ? Math.Abs(minX) + 1 : 0;
             float offsetY = (minY < 0) ? Math.Abs(minY) + 1 : 0;
 
-            MagickImage image = new MagickImage(new MagickColor("#ff00ff"),
+            MagickColor BackgroundColor = new MagickColor("#ff00ff"); // pink
+            BackgroundColor = MagickColor.FromRgb(2, 87, 224); // dark blue
+
+            MagickImage image = new MagickImage(BackgroundColor,
                 (int) Math.Ceiling((maxY + offsetY) * factor),
                 (int) Math.Ceiling((maxX + offsetX) * factor)
             );
