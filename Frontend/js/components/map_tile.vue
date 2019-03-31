@@ -19,6 +19,23 @@
 
             v-on:click="openMenu"
         />
+        <g v-if="tileDebug">
+            <text v-bind:x="(xpos+width/3)/3"
+                v-bind:y="(ypos+height*5/8)/3"
+                transform="scale(3)"
+                style="user-select: none;"
+                >
+                ({{tile.position.x}}/{{tile.position.y}})
+            </text>
+            <text v-bind:x="(xpos+width/3)/3"
+                v-bind:y="(ypos+height*5/8)/3+16"
+                transform="scale(3)"
+                v-if="tile.owner != undefined"
+                style="user-select: none;"
+                >
+                {{tile.owner.displayName}}
+            </text>
+        </g>
         <transition name="fade">
             <foreignObject
                 v-if="showTT"
@@ -52,22 +69,22 @@ export default {
                 this.$store.state.mouseMove.y < 5
             ) {
                 if (
-                this.$store.state.menuVisible == false &&
-                this.$store.state.menuClosed == false
+                this.$store.state.menu.menuVisible == false &&
+                this.$store.state.menu.menuClosed == false
                 ) {
-                this.$store.commit("SetMenuPos", { x: event.pageX, y: event.pageY });
-                this.$store.commit("SetMenuTile", this.tile);
-                this.$store.commit("SetMenuVisible", true);
+                this.$store.commit("menu/SetMenuPos", { x: event.pageX, y: event.pageY });
+                this.$store.commit("menu/SetMenuTile", this.tile);
+                this.$store.commit("menu/SetMenuVisible", true);
                 }
             }
-            this.$store.commit("SetMenuClosed", false);
+            this.$store.commit("menu/SetMenuClosed", false);
         },
         openToolTip: function () {
             this.showTT = true;
         },
         closeToolTip: function () {
             this.showTT = false;
-        }
+        },
     },
     data: function () {
         return {
@@ -82,6 +99,9 @@ export default {
         };
     },
     computed: {
+        tileDebug () {
+            return this.$store.state.tileDebug;
+        },
         ttHeight () {
             var height = 46;     //Textsize + 2 * Padding + BorderRadius (.tiletooltip)
             if(this.tile.resource!=undefined)

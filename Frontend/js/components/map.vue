@@ -81,7 +81,7 @@
             },
             //Mousewheel Event
             wheelMove: function (event) {
-                this.$store.commit("SetMenuVisible",false);
+                this.$store.commit("menu/SetMenuVisible",false);
                 if(event.deltaMode == 0)        //Chrome    | pixels
                     this.$store.commit("AddMapScale", -this.$store.state.mapScale * event.deltaY / 1000);
                 else if(event.deltaMode == 1)   //Firefox   | lines
@@ -93,10 +93,10 @@
             mouseDown: function(event) {
                 this.isMouseDown = true;
                 this.$store.commit("ClearMouseMove");
-                if(this.$store.state.menuVisible == true)
+                if(this.$store.state.menu.menuVisible == true)
                 {
-                    this.$store.commit("SetMenuVisible", false);
-                    this.$store.commit("SetMenuClosed", true);
+                    this.$store.commit("menu/SetMenuVisible", false);
+                    this.$store.commit("menu/SetMenuClosed", true);
                 }
             },
             mouseUp: function(event) {
@@ -117,10 +117,10 @@
             touchDown: function(event) {
                 this.isMouseDown = true;
                 this.$store.commit("ClearMouseMove");
-                if(this.$store.state.menuVisible == true)
+                if(this.$store.state.menu.menuVisible == true)
                 {
-                    this.$store.commit("SetMenuVisible", false);
-                    this.$store.commit("SetMenuClosed", true);
+                    this.$store.commit("menu/SetMenuVisible", false);
+                    this.$store.commit("menu/SetMenuClosed", true);
                 }
                 this.touchLastPos.x = event.changedTouches[0].clientX;
                 this.touchLastPos.y = event.changedTouches[0].clientY;
