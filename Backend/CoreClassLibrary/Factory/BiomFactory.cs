@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Security.Cryptography;
 using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Coordinates;
 using static CoreClassLibrary.Factory.TileFactory;
 using static CoreClassLibrary.Models.Map.Biomes.Biom;
 
@@ -28,7 +29,7 @@ namespace CoreClassLibrary.Factory
             return biom;
         }
 
-        public void AddRndBiomTileAtPosition(Biom biom, Vector3 position)
+        public void AddRndBiomTileAtPosition(Biom biom, HexCoordinates3D position)
         {
             biom.AddRndBiomTileAtPosition(position);
         }

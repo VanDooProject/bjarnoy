@@ -1,4 +1,5 @@
 using System.Numerics;
+using CoreClassLibrary.Models.Map.Coordinates;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -9,7 +10,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
         }
 
-        public CoastalWaterTile(Vector3 position) : base(position)
+        public CoastalWaterTile(HexCoordinates3D position) : base(position)
         {
         }
     }

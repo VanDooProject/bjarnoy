@@ -6,6 +6,7 @@ using System.Text;
 using ApiServer.Controllers;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
 using log4net;
@@ -73,7 +74,7 @@ namespace CoreClassLibrary.Helper
 
             foreach (Tile tile in island.Tiles)
             {
-                tile.Position = tile.Position + new Vector3(moveX, moveY, 0);
+                tile.Position = tile.Position + new HexCoordinates3D(moveX, moveY);
             }
 
             logger.DebugFormat("island {0}, moved by ({1}|{2})", island, moveX, moveY);
@@ -102,10 +103,8 @@ namespace CoreClassLibrary.Helper
 
         private Island createIsland(int size, int seed)
         {
-            int zCoord = 1;
-
             IIslandFactory factory = new IslandFactoryOrganic(seed);
-            var island = factory.GetRndIsland(size, zCoord);
+            var island = factory.GetRndIsland(size);
 
             return island;
         }

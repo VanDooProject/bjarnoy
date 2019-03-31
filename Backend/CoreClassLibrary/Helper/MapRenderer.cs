@@ -33,10 +33,10 @@ namespace CoreClassLibrary.Helper
         {
             double factor = 12;
 
-            float maxX = tiles.Max(x => x.Position.X);
-            float maxY = tiles.Max(x => x.Position.Y);
-            float minX = tiles.Min(x => x.Position.X);
-            float minY = tiles.Min(x => x.Position.Y);
+            float maxX = tiles.Max(x => x.Position.x);
+            float maxY = tiles.Max(x => x.Position.y);
+            float minX = tiles.Min(x => x.Position.x);
+            float minY = tiles.Min(x => x.Position.y);
 
             float offsetX = (minX < 0) ? Math.Abs(minX) + 1 : 0;
             float offsetY = (minY < 0) ? Math.Abs(minY) + 1 : 0;
@@ -59,10 +59,10 @@ namespace CoreClassLibrary.Helper
                         .StrokeColor(color)
                         .FillColor(color)
                         .Rectangle(
-                            (tile.Position.Y + offsetY) * factor - (minY + offsetY) * factor,
-                            (tile.Position.X + offsetX) * factor - (minX + offsetX) * factor,
-                            (tile.Position.Y + offsetY) * factor - (minY + offsetY) * factor + (factor - 1),
-                            (tile.Position.X + offsetX) * factor - (minX + offsetX) * factor + (factor - 1)
+                            (tile.Position.y + offsetY) * factor - (minY + offsetY) * factor,
+                            (tile.Position.x + offsetX) * factor - (minX + offsetX) * factor,
+                            (tile.Position.y + offsetY) * factor - (minY + offsetY) * factor + (factor - 1),
+                            (tile.Position.x + offsetX) * factor - (minX + offsetX) * factor + (factor - 1)
                         )
                         .Draw(image);
                 }

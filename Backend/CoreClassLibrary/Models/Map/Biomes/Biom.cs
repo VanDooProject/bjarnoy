@@ -6,6 +6,7 @@ using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Factory;
 using static CoreClassLibrary.Factory.TileFactory;
 using System.Linq;
+using CoreClassLibrary.Models.Map.Coordinates;
 using MongoDB.Bson.Serialization.Attributes;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -32,7 +33,7 @@ namespace CoreClassLibrary.Models.Map.Biomes
             this.probability = new Dictionary<Type, double>();
         }
 
-        public Tile AddRndBiomTileAtPosition(Vector3 position)
+        public Tile AddRndBiomTileAtPosition(HexCoordinates3D position)
         {
             Tile rndBiomTile = tile_factory.GetRndBiomTileAtPosition(position);
 

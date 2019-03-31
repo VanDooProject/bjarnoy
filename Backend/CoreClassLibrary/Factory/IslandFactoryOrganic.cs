@@ -5,6 +5,7 @@ using System.Numerics;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using ImageMagick;
 using log4net;
@@ -27,10 +28,10 @@ namespace ApiServer.Controllers
             randomGenerator = new Random(seed);
         }
 
-        public Island GetRndIsland(int sizeOfIsland, int z)
+        public Island GetRndIsland(int sizeOfIsland)
         {
 
-            Vector3 startPosition = new Vector3(0, 0, z);
+            HexCoordinates3D startPosition = new HexCoordinates3D(0, 0);
             Island island = new Island(startPosition);
             island.size = sizeOfIsland;
 
@@ -40,7 +41,7 @@ namespace ApiServer.Controllers
             {
                 for (int x = 0; x < sizeOfIsland; x++)
                 {
-                    island.Tiles.Add(this.GetRawTile(x, y, z, sizeOfIsland));
+                    island.Tiles.Add(this.GetRawTile(x, y, sizeOfIsland));
                 }
             }
 
@@ -60,19 +61,19 @@ namespace ApiServer.Controllers
             // TODO: handle error when no island was found
 
 
-            this.addShallowWater(BiggestIsland, z, sizeOfIsland);
+            this.addShallowWater(BiggestIsland, sizeOfIsland);
             MapRenderer.GenerateBitmapFromIsland(BiggestIsland, "map_06.png");
 
             return BiggestIsland;
         }
 
-        private void addShallowWater(Island island, int z, int sizeOfIsland)
+        private void addShallowWater(Island island, int sizeOfIsland)
         {
             for (int y = 0; y < sizeOfIsland; y++)
             {
                 for (int x = 0; x < sizeOfIsland; x++)
                 {
-                    Vector3 pos = new Vector3(x, y, z);
+                    HexCoordinates3D pos = new HexCoordinates3D(x, y);
                     List<Tile> neighbors = island.getNeighbors(pos);
 
                     if (neighbors.Count(t => !(t is CoastalWaterTile)) > 0 && island.getTile(pos) == null)
@@ -137,10 +138,10 @@ namespace ApiServer.Controllers
 
         private void MakeWaterSurrounding(Island island)
         {
-            float maxX = island.Tiles.Max(x => x.Position.X);
-            float maxY = island.Tiles.Max(x => x.Position.Y);
-            float minX = island.Tiles.Min(x => x.Position.X);
-            float minY = island.Tiles.Min(x => x.Position.Y);
+            float maxX = island.Tiles.Max(x => x.Position.x);
+            float maxY = island.Tiles.Max(x => x.Position.y);
+            float minX = island.Tiles.Min(x => x.Position.x);
+            float minY = island.Tiles.Min(x => x.Position.y);
 
             float size = maxX - minX;
 
@@ -151,10 +152,10 @@ namespace ApiServer.Controllers
             foreach (Tile tile in island.Tiles)
             {
                 // calculate distance to edge
-                double distanceFactorMaxX = Math.Abs(tile.Position.X - maxX) / size;
-                double distanceFactorMaxY = Math.Abs(tile.Position.Y - maxY) / size;
-                double distanceFactorMinX = Math.Abs(tile.Position.X - minX) / size;
-                double distanceFactorMinY = Math.Abs(tile.Position.Y - minY) / size;
+                double distanceFactorMaxX = Math.Abs(tile.Position.x - maxX) / size;
+                double distanceFactorMaxY = Math.Abs(tile.Position.y - maxY) / size;
+                double distanceFactorMinX = Math.Abs(tile.Position.x - minX) / size;
+                double distanceFactorMinY = Math.Abs(tile.Position.y - minY) / size;
 
                 if (tile is RawTile rawTile)
                 {
@@ -166,7 +167,7 @@ namespace ApiServer.Controllers
             }
         }
 
-        private Tile GetRawTile(int x, int y, int z, int sizeOfIsland)
+        private Tile GetRawTile(int x, int y, int sizeOfIsland)
         {
             float ElevationFactor = (100 / sizeOfIsland) * 0.02f;
             float HumidityFactor  = (100 / sizeOfIsland) * 0.0025f;
@@ -174,7 +175,7 @@ namespace ApiServer.Controllers
             float Elevation = Noise.CalcPixel2D(x, y, 0.08f); // for size 100 -  0.01f - works well  for 25 - 0.08f
             float Humidity = Noise.CalcPixel2D(x, y,  0.1f);  // for size 100 - 0.025f - works well  for 25 - 0.1f
 
-            Vector3 position = new Vector3(x, y, z);
+            HexCoordinates3D position = new HexCoordinates3D(x, y);
 
             return new RawTile(position)
             {

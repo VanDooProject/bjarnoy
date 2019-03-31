@@ -8,6 +8,7 @@ using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
@@ -48,7 +49,7 @@ namespace UnitTests
         public void AllWorking()
         {
             IIslandRepository islandRepo = Substitute.For<IIslandRepository>();
-            islandRepo.getTile(0, 0, 0).ReturnsForAnyArgs(new ForestTile(new Vector3(0, 0, 0)));
+            islandRepo.getTile(0, 0, 0).ReturnsForAnyArgs(new ForestTile(new HexCoordinates3D(0, 0)));
 
             //float posX = 1;
             //repo.getTile(posX, 0, 0).Returns(new Tile(new Vector3(posX, 0, 0)));

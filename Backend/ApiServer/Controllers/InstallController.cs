@@ -7,6 +7,7 @@ using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Mvc;
@@ -60,25 +61,24 @@ namespace ApiServer.Controllers
 
             int countAddedWaterTiles = 0;
 
-            int z = 1;
             const double TOLERANCE = 0.001;
             IslandRepository islandRepository = new IslandRepository();
             var tiles =  islandRepository.AllTiles();
 
-            float maxX = tiles.Max(x => x.Position.X);
-            float maxY = tiles.Max(x => x.Position.Y);
-            float minX = tiles.Min(x => x.Position.X);
-            float minY = tiles.Min(x => x.Position.Y);
+            int maxX = tiles.Max(x => x.Position.x);
+            int maxY = tiles.Max(x => x.Position.y);
+            int minX = tiles.Min(x => x.Position.x);
+            int minY = tiles.Min(x => x.Position.y);
 
             List<Tile> WaterTiles = new List<Tile>();
 
-            for (float y = minY; y <= maxY; y++)
+            for (int y = minY; y <= maxY; y++)
             {
-                for (float x = minX; x <= maxX; x++)
+                for (int x = minX; x <= maxX; x++)
                 {
-                    if (!tiles.Any(t => Math.Abs(t.Position.X - x) < TOLERANCE && Math.Abs(t.Position.Y - y) < TOLERANCE ))
+                    if (!tiles.Any(t => Math.Abs(t.Position.x - x) < TOLERANCE && Math.Abs(t.Position.y - y) < TOLERANCE ))
                     {
-                        WaterTiles.Add(new WaterTile(new Vector3(x, y, z)));
+                        WaterTiles.Add(new WaterTile(new HexCoordinates3D(x, y)));
                         countAddedWaterTiles++;
                     }
                 }

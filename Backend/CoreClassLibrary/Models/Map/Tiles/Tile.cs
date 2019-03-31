@@ -4,6 +4,7 @@ using System.Numerics;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Generic;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
@@ -22,8 +23,8 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public string IdOfIsland => IslandId?.Id?.ToString();
 
         // https://jira.mongodb.org/browse/CSHARP-1759
-        [BsonSerializer(typeof(Vector3Serializer))]
-        public Vector3 Position;
+        //[BsonSerializer(typeof(Vector3Serializer))]
+        public HexCoordinates3D Position;
 
         public enum eOrientation
         {
@@ -61,15 +62,15 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
         }
 
-        public Tile(Vector3 position)
+        public Tile(HexCoordinates3D position)
         {
             this.Position = position;
         }
 
 
-        public bool CheckIfSameTile(Vector3 pos)
+        public bool CheckIfSameTile(HexCoordinates3D pos)
         {
-            return (Vector3.DistanceSquared(this.Position, pos) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance);
+            return (HexCoordinates3D.Distance(this.Position, pos) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance);
         }
 
 

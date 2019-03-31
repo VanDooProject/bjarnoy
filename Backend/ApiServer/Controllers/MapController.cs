@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Authorization;
@@ -61,18 +62,15 @@ namespace ApiServer.Controllers
         public IEnumerable<Tile> Get(int size)
         {
             List<Tile> TileList = new List<Tile>();
-            int layers = 3;
             Random r = new Random();
             String[] tileTypes = {"grass", "hill"};
-            for (int z = 0; z < layers; z++)
+
+            for (int x = -size; x < size; x++)
             {
-                for (int x = -size; x < size; x++)
+                for (int y = -size; y < size; y++)
                 {
-                    for (int y = -size; y < size; y++)
-                    {
-                        Vector3 position = new Vector3(x, y, z);
-                        TileList.Add(new Tile(position));
-                    }
+                    HexCoordinates3D position = new HexCoordinates3D(x, y);
+                    TileList.Add(new Tile(position));
                 }
             }
 
@@ -84,9 +82,9 @@ namespace ApiServer.Controllers
         public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
-            IslandFactorySquare factory = new IslandFactorySquare();
+            IIslandFactory factory = new IslandFactoryOrganic(0);
 
-            IslandList.Add(factory.GetRndIsland(size, 1));
+            IslandList.Add(factory.GetRndIsland(size));
 
             return IslandList;
         }
