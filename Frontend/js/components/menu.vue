@@ -86,7 +86,7 @@ export default {
                         }
                         else
                         {
-                            if (entry.level > 1 && entry.level == this.tile.building.level + 1 && entry.type==this.tile.building.type)
+                            if (entry.building.level > 1 && entry.building.level == (this.tile.building.level + 1) && entry.building.type == this.tile.building.type)
                             {
                                 return entry.allowedTiles.some(tile => tile.type == this.tile.type);
                             }
