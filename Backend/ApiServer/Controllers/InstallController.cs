@@ -40,6 +40,11 @@ namespace ApiServer.Controllers
         [HttpPost("islands/{count=2}/{seed=1}")]
         public IActionResult CreateIslands(int count, int seed)
         {
+            if (count < 1)
+            {
+                return BadRequest("count has to be larger than 0");
+            }
+
             var IslandHelper = new MapCreatorHelper(seed);
 
             var islands = IslandHelper.createIslands(count);
