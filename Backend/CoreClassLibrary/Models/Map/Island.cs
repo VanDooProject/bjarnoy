@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -51,6 +52,38 @@ namespace CoreClassLibrary.Models.Map
         //    }
         //}
 
+
+        /// <summary>
+        /// gets neighbors in given range
+        /// 
+        /// https://www.redblobgames.com/grids/hexagons/#range
+        /// </summary>
+        /// <param name="pos"></param>
+        /// <param name="distance"></param>
+        /// <returns></returns>
+        public List<Tile> getRange(HexCoordinates3D pos, int distance)
+        {
+            List<Tile> tiles = new List<Tile>();
+
+            for (int x = -distance; x <= +distance; x++)
+            {
+                for (int y = Math.Max(-distance, -x-distance); y <= Math.Min(+distance, -x+distance); y++)
+                {
+                    Tile neighbor = this.getTile(new HexCoordinates3D(pos.x + x, pos.y + y));
+                    if (neighbor != null)
+                    {
+                        tiles.Add(neighbor);
+                    }
+                }
+            }
+
+            return tiles;
+        }
+
+        public List<Tile> getRange(Tile tile, int distance)
+        {
+            return this.getRange(tile.Position, distance);
+        }
 
 
         public List<Tile> getNeighbors(HexCoordinates3D pos)

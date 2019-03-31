@@ -44,5 +44,11 @@ namespace CoreClassLibrary.Models.Map.Coordinates
 
             return coord;
         }
+
+
+        public override string ToString()
+        {
+            return $"( {this.x} | {this.y} | {this.z} )";
+        }
     }
 }

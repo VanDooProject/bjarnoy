@@ -58,5 +58,11 @@ namespace CoreClassLibrary.Models.Map.Coordinates
                 y = a.y - b.y
             };
         }
+
+
+        public override string ToString()
+        {
+            return $"( {this.x} | {this.y} )";
+        }
     }
 }

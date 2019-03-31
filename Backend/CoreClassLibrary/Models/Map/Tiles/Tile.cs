@@ -77,7 +77,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public override string ToString()
         {
-            return $"{this.GetType().ToString().Split('.').Last()}: {this.Position.ToString().Replace('.', '|')}";
+            return $"{this.GetType().ToString().Split('.').Last()}: {this.Position.ToString()}";
         }
     }
 }

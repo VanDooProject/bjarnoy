@@ -9,6 +9,6 @@ namespace CoreClassLibrary.Models.Buildings
         /// <summary>
         /// defines range around tower where user is able to build buildings
         /// </summary>
-        public float RangeOfInfluence;
+        public int RangeOfInfluence;
     }
 }

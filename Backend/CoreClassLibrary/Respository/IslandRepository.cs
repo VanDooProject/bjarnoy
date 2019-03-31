@@ -111,7 +111,7 @@ namespace CoreClassLibrary.Respository
         public Tile getTile(float x, float y, float z)
         {
             var builder = Builders<Tile>.Filter;
-            var filter = builder.Eq("Position.X", x) & builder.Eq("Position.Y", y) & builder.Eq("Position.Z", z);
+            var filter = builder.Eq("Position.x", x) & builder.Eq("Position.y", y) & builder.Eq("Position.z", z);
             var result = tileCollection.Find(filter).ToList();
 
             Tile tile = result.FirstOrDefault();
