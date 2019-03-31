@@ -2,6 +2,7 @@
     <div>
         <div class=zoombutton  v-on:click="zoomPlus" x=5 y=32 >+</div>
         <div class=zoombutton v-on:click="zoomMinus" x=5 y=70 >-</div>
+        <div class=zoombutton v-on:click="debug" x=5 y=70 >D</div>
     </div>
 </template>
 
@@ -31,6 +32,10 @@ export default {
        {
            this.$store.commit("AddMapScale", -this.mapScale /8);
        },
+       debug()
+       {
+           this.$store.commit("ToggleDebug");
+       }
     },
     mounted() {
 

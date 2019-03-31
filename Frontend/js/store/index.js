@@ -35,6 +35,7 @@ export default new Vuex.Store({
         menu,
     },
     state: {
+        tileDebug: false,
         loggedIn: false,
 
         mapOffset: {x: -window.innerWidth/2, y: -window.innerHeight/2},
@@ -258,7 +259,9 @@ export default new Vuex.Store({
         }
     },
     mutations: {
-        
+        ToggleDebug (state){
+            state.tileDebug = ! state.tileDebug;
+        },
         SetTooltipTile (state, tile){
             state.tooltipTile = tile;
         },
