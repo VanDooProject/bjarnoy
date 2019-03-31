@@ -39,6 +39,14 @@ namespace ApiServer.Controllers
             IslandRepository islandRepository = new IslandRepository();
             return islandRepository.AllTiles();
         }
+        // GET api/v1/map/tiles/0/0/10/10
+        [HttpGet("tiles/{x1}/{y1}/{x2}/{y2}")]
+        [Authorize]
+        public IEnumerable<Tile> GetTilesRange(int x1, int y1, int x2, int y2)
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.GetTilesRange(new HexCoordinates3D(x1, y1), new HexCoordinates3D(x2, y2));
+        }
 
         // GET api/v1/map/tile/0/0/0
         [HttpGet("tile/{x}/{y}/{z}")]
