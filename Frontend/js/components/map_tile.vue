@@ -19,6 +19,10 @@
 
             v-on:click="openMenu"
         />
+        <line v-bind:key="num" v-for="num in bordersShown"
+            :x1="borderPoints[num].x" :x2="borderPoints[num + 1].x" 
+            :y1="borderPoints[num].y" :y2="borderPoints[num + 1].y" style="stroke:rgb(255,0,0); stroke-width:5"
+        />
         <g v-if="tileDebug">
             <text v-bind:x="(xpos+width/3)/3"
                 v-bind:y="(ypos+height*5/8)/3"
@@ -130,6 +134,58 @@ export default {
                 +  (xOff + this.width*3/4)  + "," + (yOff + this.width   * yFac)    + " "
                 +  (xOff + this.width/4)    + "," + (yOff + this.width   * yFac)    + " "
                 +  (xOff)                   + "," + (yOff + this.width/2 * yFac)    + " ";
+        },
+        borderPoints () {
+            //Array of points used for tile borders
+            var xOff = this.xpos;
+            var yOff = this.ypos + this.height * 0.47;
+
+            var yFac = Math.sqrt(3)/2 //From the geometry
+                * Math.cos((57.8) / 180 * Math.PI); //From the graphics
+
+            return [{x: xOff,                    y: yOff + this.width/2 * yFac - 5}, //y - 5(Line Width) because otherwise the line is behind the next tile
+                    {x: xOff + this.width/4,     y: yOff + this.width   * yFac - 5}, 
+                    {x: (xOff + this.width*3/4), y: yOff + this.width   * yFac - 5},
+                    {x: xOff + this.width,       y: yOff + this.width/2 * yFac - 5}];
+        },
+        bordersShown () {
+            let arr = [{x:0, y:-1, pos:0}, {x: 1, y: -1, pos:1}, {x:1, y:0, pos:2}];
+            let owner = this.tile.owner;
+            return arr.filter(offset => {
+                
+                let remoteTiles = this.$store.state.mapTiles.filter(tile =>    tile.position.x == this.tile.position.x + offset.x 
+                                                                            && tile.position.y == this.tile.position.y + offset.y);
+                if (remoteTiles.length == 0)
+                {
+                    return false;   //Map end has no border lines
+                }
+                let remoteOwner = remoteTiles[0].owner;
+                if(this.tile.position.x == 7 && this.tile.position.y == 10)
+                {
+                    console.log(offset);
+                    if(remoteTiles[0].owner) console.log(remoteTiles[0].owner.displayName);
+                    //if(owner)console.log(owner.displayName);
+                }
+                if(owner != undefined)
+                {
+                    if(remoteOwner != undefined)
+                    {
+                        return this.tile.owner._id != remoteOwner._id;
+                    }
+                    else 
+                    {   
+                        return true;
+                    }
+                }
+                if(remoteOwner != undefined)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }).map(offset => offset.pos);
         },
         xpos() {
             return this.width // use the (current) width to scale the vetor
