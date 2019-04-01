@@ -19,9 +19,15 @@
 
             v-on:click="openMenu"
         />
-        <line v-bind:key="num" v-for="num in bordersShown"
-            :x1="borderPoints[num].x" :x2="borderPoints[num + 1].x" 
-            :y1="borderPoints[num].y" :y2="borderPoints[num + 1].y" style="stroke:rgb(255,0,0); stroke-width:5"
+        <line v-bind:key="border.index" v-for="border in bordersShown"
+            :x1="borderPoints[border.index].x" :x2="borderPoints[border.index + 1].x" 
+            :y1="borderPoints[border.index].y - borderWidth" :y2="borderPoints[border.index + 1].y - borderWidth"
+            :style="'stroke:' + border.colorOut + '; stroke-width:' + borderWidth"
+        />
+        <line v-bind:key="border.index + 100" v-for="border in bordersShown"
+            :x1="borderPoints[border.index].x" :x2="borderPoints[border.index + 1].x" 
+            :y1="borderPoints[border.index].y - borderWidth * 2" :y2="borderPoints[border.index + 1].y - borderWidth * 2"
+            :style="'stroke:' + border.colorIn + '; stroke-width:' + borderWidth"
         />
         <g v-if="tileDebug">
             <text v-bind:x="(xpos+width/3)/3"
@@ -64,6 +70,14 @@
 </template>
 
 <script>
+function getColor(user) {
+    let colors = ['#FFAA55', '#FFAA66', '#FFAA77', '#FFAA88',
+                  '#FFBB55', '#FFBB66', '#FFBB77', '#FFBB88',
+                  '#FFCC55', '#FFCC66', '#FFCC77', '#FFCC88',
+                  '#FFDD55', '#FFDD66', '#FFDD77', '#FFDD88',
+    ];
+    return colors[user._id.substr(0,5).split("").reduce((summ, x) => summ + x.charCodeAt(0))%16];
+}
 export default {
     props: ["tile"],
     methods: {
@@ -83,6 +97,14 @@ export default {
             }
             this.$store.commit("menu/SetMenuClosed", false);
         },
+        getColor: function (user) {
+            let colors = ['#FFAA55', '#FFAA66', '#FFAA77', '#FFAA88',
+                        '#FFBB55', '#FFBB66', '#FFBB77', '#FFBB88',
+                        '#FFCC55', '#FFCC66', '#FFCC77', '#FFCC88',
+                        '#FFDD55', '#FFDD66', '#FFDD77', '#FFDD88',
+            ];
+            return colors[user._id.substr(0,5).split("").reduce((summ, x) => summ + x.charCodeAt(0))%16];
+        },
         openToolTip: function () {
             this.showTT = true;
         },
@@ -96,6 +118,8 @@ export default {
             imgWidth: 400,
             imgHeight: 600,
             angle: -45 * Math.PI / 180,
+            borderWidth: 5,
+
 
             xFactor: Math.SQRT2 * 3/4, // 3/4 comes from the geometry of stacking Hexagons
             yFactor: Math.SQRT2 * 3/4 / Math.sqrt(3) // sqrt(3) is also from the geometry
@@ -143,49 +167,48 @@ export default {
             var yFac = Math.sqrt(3)/2 //From the geometry
                 * Math.cos((57.8) / 180 * Math.PI); //From the graphics
 
-            return [{x: xOff,                    y: yOff + this.width/2 * yFac - 5}, //y - 5(Line Width) because otherwise the line is behind the next tile
-                    {x: xOff + this.width/4,     y: yOff + this.width   * yFac - 5}, 
-                    {x: (xOff + this.width*3/4), y: yOff + this.width   * yFac - 5},
-                    {x: xOff + this.width,       y: yOff + this.width/2 * yFac - 5}];
+            return [{x: xOff,                    y: yOff + this.width/2 * yFac}, //y - 5(Line Width) because otherwise the line is behind the next tile
+                    {x: xOff + this.width/4,     y: yOff + this.width   * yFac}, 
+                    {x: (xOff + this.width*3/4), y: yOff + this.width   * yFac},
+                    {x: xOff + this.width,       y: yOff + this.width/2 * yFac},];
         },
         bordersShown () {
-            let arr = [{x:0, y:-1, pos:0}, {x: 1, y: -1, pos:1}, {x:1, y:0, pos:2}];
+            let arr = [{x:0, y:-1}, {x: 1, y: -1}, {x:1, y:0}];
             let owner = this.tile.owner;
-            return arr.filter(offset => {
-                
+            let none = {index:-1};
+            let wilderness = 'black';
+
+            return arr.map((offset, index) => {
                 let remoteTiles = this.$store.state.mapTiles.filter(tile =>    tile.position.x == this.tile.position.x + offset.x 
                                                                             && tile.position.y == this.tile.position.y + offset.y);
                 if (remoteTiles.length == 0)
                 {
-                    return false;   //Map end has no border lines
+                    return none;   //Map end has no border lines
                 }
                 let remoteOwner = remoteTiles[0].owner;
-                if(this.tile.position.x == 7 && this.tile.position.y == 10)
-                {
-                    console.log(offset);
-                    if(remoteTiles[0].owner) console.log(remoteTiles[0].owner.displayName);
-                    //if(owner)console.log(owner.displayName);
-                }
+
                 if(owner != undefined)
                 {
                     if(remoteOwner != undefined)
                     {
-                        return this.tile.owner._id != remoteOwner._id;
+                        if(this.tile.owner._id != remoteOwner._id)
+                            return {index: index, colorIn: getColor(owner), colorOut: getColor(remoteOwner)};
+                        return none;
                     }
                     else 
                     {   
-                        return true;
+                        return {index: index, colorIn: getColor(owner), colorOut: wilderness};
                     }
                 }
                 if(remoteOwner != undefined)
                 {
-                    return true;
+                    return {index: index, colorIn: wilderness, colorOut: getColor(remoteOwner)};
                 }
                 else
                 {
-                    return false;
+                    return none;
                 }
-            }).map(offset => offset.pos);
+            }).filter(border => border.index != none.index);
         },
         xpos() {
             return this.width // use the (current) width to scale the vetor
