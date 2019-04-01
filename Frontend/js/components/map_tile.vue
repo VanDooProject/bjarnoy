@@ -22,12 +22,12 @@
         <line v-bind:key="border.index" v-for="border in bordersShown"
             :x1="borderPoints[border.index].x" :x2="borderPoints[border.index + 1].x" 
             :y1="borderPoints[border.index].y - borderWidth" :y2="borderPoints[border.index + 1].y - borderWidth"
-            :style="'stroke:' + border.colorOut + '; stroke-width:' + borderWidth"
+            :style="'stroke:' + border.colorOut + '; stroke-width:' + borderWidth + '; stroke-linecap:round'"
         />
         <line v-bind:key="border.index + 100" v-for="border in bordersShown"
             :x1="borderPoints[border.index].x" :x2="borderPoints[border.index + 1].x" 
             :y1="borderPoints[border.index].y - borderWidth * 2" :y2="borderPoints[border.index + 1].y - borderWidth * 2"
-            :style="'stroke:' + border.colorIn + '; stroke-width:' + borderWidth"
+            :style="'stroke:' + border.colorIn + '; stroke-width:' + borderWidth  + '; stroke-linecap:round'"
         />
         <g v-if="tileDebug">
             <text v-bind:x="(xpos+width/3)/3"
@@ -70,14 +70,6 @@
 </template>
 
 <script>
-function getColor(user) {
-    let colors = ['#FFAA55', '#FFAA66', '#FFAA77', '#FFAA88',
-                  '#FFBB55', '#FFBB66', '#FFBB77', '#FFBB88',
-                  '#FFCC55', '#FFCC66', '#FFCC77', '#FFCC88',
-                  '#FFDD55', '#FFDD66', '#FFDD77', '#FFDD88',
-    ];
-    return colors[user._id.substr(0,5).split("").reduce((summ, x) => summ + x.charCodeAt(0))%16];
-}
 export default {
     props: ["tile"],
     methods: {
@@ -192,17 +184,17 @@ export default {
                     if(remoteOwner != undefined)
                     {
                         if(this.tile.owner._id != remoteOwner._id)
-                            return {index: index, colorIn: getColor(owner), colorOut: getColor(remoteOwner)};
+                            return {index: index, colorIn: this.getColor(owner), colorOut: this.getColor(remoteOwner)};
                         return none;
                     }
                     else 
                     {   
-                        return {index: index, colorIn: getColor(owner), colorOut: wilderness};
+                        return {index: index, colorIn: this.getColor(owner), colorOut: wilderness};
                     }
                 }
                 if(remoteOwner != undefined)
                 {
-                    return {index: index, colorIn: wilderness, colorOut: getColor(remoteOwner)};
+                    return {index: index, colorIn: wilderness, colorOut: this.getColor(remoteOwner)};
                 }
                 else
                 {
