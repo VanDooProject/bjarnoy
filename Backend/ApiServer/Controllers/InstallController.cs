@@ -4,11 +4,14 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
+using CoreClassLibrary.Models.TechQueues;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Mvc;
 
@@ -36,6 +39,42 @@ namespace ApiServer.Controllers
 
             return infoList;
         }
+
+        // POST api/v1/install/tower
+        [HttpPost("tower/")]
+        public IActionResult CreateTowerForAllPlayer()
+        {
+            QueueRepository queueRepository = new QueueRepository();
+
+            PlayerRepository playerRepository = new PlayerRepository();
+            List<Player> PlayerList = playerRepository.All();
+
+            IslandRepository islandRepository = new IslandRepository();
+            Island island = islandRepository.AllIslands().First();
+            island = islandRepository.GetIslandById(island._id); // to get tiles for islands
+
+            StartPositionHelper StartHelper = new StartPositionHelper(island);
+
+            foreach (Player player in PlayerList)
+            {
+                Tile startPosition = StartHelper.getStartPosition();
+                if (startPosition == null)
+                {
+                    throw new GameException("no tile found to create tower");
+                }
+
+                // own this tile
+                startPosition.Owner = player;
+                islandRepository.ReplaceTile(startPosition);
+
+                // build tower
+                BuildingQueue queueEntry = StartHelper.createQueueEntry(startPosition, player);
+                queueRepository.Add(queueEntry);
+            }
+
+            return Ok();
+        }
+
         // POST api/v1/install/islands/
         [HttpPost("islands/{count=2}/{seed=1}")]
         public IActionResult CreateIslands(int count, int seed)
