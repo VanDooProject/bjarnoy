@@ -49,27 +49,11 @@ namespace ApiServer.Controllers
             PlayerRepository playerRepository = new PlayerRepository();
             List<Player> PlayerList = playerRepository.All();
 
-            IslandRepository islandRepository = new IslandRepository();
-            Island island = islandRepository.AllIslands().First();
-            island = islandRepository.GetIslandById(island._id); // to get tiles for islands
-
-            StartPositionHelper StartHelper = new StartPositionHelper(island);
+            var playerFactory = new PlayerFactory();
 
             foreach (Player player in PlayerList)
             {
-                Tile startPosition = StartHelper.getStartPosition();
-                if (startPosition == null)
-                {
-                    throw new GameException("no tile found to create tower");
-                }
-
-                // own this tile
-                startPosition.Owner = player;
-                islandRepository.ReplaceTile(startPosition);
-
-                // build tower
-                BuildingQueue queueEntry = StartHelper.createQueueEntry(startPosition, player);
-                queueRepository.Add(queueEntry);
+                playerFactory.createAndSavePlayerBase(player);
             }
 
             return Ok();

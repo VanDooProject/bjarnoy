@@ -189,8 +189,8 @@ namespace ApiServer.Controllers
 
 
             // TODO: maybe seperate this logic to a user factory?
-            var PlayerFactory = new PlayerFactory();
-            var player = PlayerFactory.GetStartingPlayer(user.Username);
+            var playerFactory = new PlayerFactory();
+            var player = playerFactory.GetStartingPlayer(user.Username);
             player.setOwner(user);
 
             playerRepository.Add(player);
@@ -207,7 +207,7 @@ namespace ApiServer.Controllers
             }
 
             // create tower for new player
-            PlayerFactory.createAndSavePlayerBase(player);
+            playerFactory.createAndSavePlayerBase(player);
 
             return response;
         }
