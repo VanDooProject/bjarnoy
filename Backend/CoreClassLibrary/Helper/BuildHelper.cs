@@ -106,7 +106,8 @@ namespace CoreClassLibrary.Helper
 
         private void checkOwnership(Tile tile, Player player)
         {
-            if (tile.Owner._id != player._id)
+            // unowned OR owned by someone else
+            if (tile.Owner == null || tile.Owner._id != player._id)
             {
                 logger.Warn("player does not own this tile - probably a user faked this request -> report to bot detector");
                 throw new BuildBuildingException("player does not own this tile");
