@@ -47,7 +47,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\"}"
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-up",
@@ -103,7 +103,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret123\", \"Mail\": \"mario.browsergame@andesia.org\"}"
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret123\", \"Mail\": \"manfred.browsergame@andesia.org\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-up",
@@ -167,7 +167,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"mario.browsergame@andesia.org\"}"
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"manfred.browsergame@andesia.org\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-up",
@@ -225,7 +225,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"mario\"}"
+							"raw": "{\"Username\": \"manfred\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-in",
@@ -288,7 +288,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"mario\", \"Password\": \"secret\"}"
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-in",
