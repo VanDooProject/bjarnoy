@@ -206,6 +206,9 @@ namespace ApiServer.Controllers
                 response = Ok(new { token = tokenString });
             }
 
+            // create tower for new player
+            PlayerFactory.createAndSavePlayerBase(player);
+
             return response;
         }
 

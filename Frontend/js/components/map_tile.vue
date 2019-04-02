@@ -35,7 +35,7 @@
                 transform="scale(3)"
                 style="user-select: none;"
                 >
-                ({{tile.position.x}}/{{tile.position.y}})
+                ({{tile.position.x}} | {{tile.position.y}})
             </text>
             <text v-bind:x="(xpos+width/3)/3"
                 v-bind:y="(ypos+height*5/8)/3+16"

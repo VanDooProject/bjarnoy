@@ -1,8 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using CoreClassLibrary.Exceptions;
+using CoreClassLibrary.Helper;
+using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
+using CoreClassLibrary.Models.TechQueues;
+using CoreClassLibrary.Respository;
 
 namespace CoreClassLibrary.Factory
 {
@@ -31,6 +38,33 @@ namespace CoreClassLibrary.Factory
 
 
             return player;
+        }
+
+        public Tile createAndSavePlayerBase(Player player)
+        {
+            QueueRepository queueRepository = new QueueRepository();
+
+            IslandRepository islandRepository = new IslandRepository();
+            Island island = islandRepository.AllIslands().First();
+            island = islandRepository.GetIslandById(island._id); // to get tiles for islands
+
+            StartPositionHelper StartHelper = new StartPositionHelper(island);
+
+            Tile startPosition = StartHelper.getStartPosition();
+            if (startPosition == null)
+            {
+                throw new GameException("no tile found to create tower");
+            }
+
+            // own this tile
+            startPosition.Owner = player;
+            islandRepository.ReplaceTile(startPosition);
+
+            // build tower
+            BuildingQueue queueEntry = StartHelper.createQueueEntry(startPosition, player);
+            queueRepository.Add(queueEntry);
+
+            return startPosition;
         }
     }
 }
