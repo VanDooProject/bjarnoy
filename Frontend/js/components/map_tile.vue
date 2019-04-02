@@ -90,12 +90,15 @@ export default {
             this.$store.commit("menu/SetMenuClosed", false);
         },
         getColor: function (user) {
-            let colors = ['#FFAA55', '#FFAA66', '#FFAA77', '#FFAA88',
-                        '#FFBB55', '#FFBB66', '#FFBB77', '#FFBB88',
-                        '#FFCC55', '#FFCC66', '#FFCC77', '#FFCC88',
-                        '#FFDD55', '#FFDD66', '#FFDD77', '#FFDD88',
+            let colors = [
+                        // '#FFAA55', '#FFAA66', '#FFAA77', '#FFAA88',
+                        // '#FFBB55', '#FFBB66', '#FFBB77', '#FFBB88',
+                        // '#FFCC55', '#FFCC66', '#FFCC77', '#FFCC88',
+                        // '#FFDD55', '#FFDD66', '#FFDD77', '#FFDD88',
+                        '#800000', '#000075',
+                        '#e619eb', '#f58231', '#ffe119', '#bcf60c', '#3cb44b', '46f0f0', '#4363d8', '#9114b4', '#f032e6',
             ];
-            return colors[user._id.substr(0,5).split("").reduce((summ, x) => summ + x.charCodeAt(0))%16];
+            return colors[user._id.substr(0,5).split("").reduce((summ, x) => summ + x.charCodeAt(0))%colors.length];
         },
         openToolTip: function () {
             this.showTT = true;
@@ -168,7 +171,7 @@ export default {
             let arr = [{x:0, y:-1}, {x: 1, y: -1}, {x:1, y:0}];
             let owner = this.tile.owner;
             let none = {index:-1};
-            let wilderness = 'black';
+            let wilderness = 'transparent';
 
             return arr.map((offset, index) => {
                 let remoteTiles = this.$store.state.mapTiles.filter(tile =>    tile.position.x == this.tile.position.x + offset.x 
