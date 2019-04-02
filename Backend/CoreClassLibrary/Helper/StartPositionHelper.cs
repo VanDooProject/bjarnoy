@@ -50,14 +50,15 @@ namespace CoreClassLibrary.Helper
                 }
 
                 List<Tile> neighbors = _island.getNeighbors(tile);
+                List<Tile> neighborsRange2 = _island.getRange(tile, 2); // range to space players apart from each other
 
-                int ownedTiles = neighbors.Count(t => t.Owner != null);
+                int ownedTiles = neighborsRange2.Count(t => t.Owner != null);
                 if (ownedTiles > 0)
                 {
                     continue; // skip since neighbor-tiles are owned by someone
                 }
 
-                int waterTiles = neighbors.Count(t => t is WaterTile || t is CoastalWaterTile);
+                int waterTiles = neighborsRange2.Count(t => t is WaterTile || t is CoastalWaterTile);
                 int forestTiles = neighbors.Count(t => t is ForestTile);
                 int grassTiles = neighbors.Count(t => t is GrassTile);
                 if (
