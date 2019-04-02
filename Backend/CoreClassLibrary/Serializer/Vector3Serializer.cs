@@ -9,7 +9,7 @@ using MongoDB.Bson.Serialization;
 
 namespace CoreClassLibrary.Serializer
 {
-    public class Vector3Serializer :IBsonSerializer
+    public class Vector3Serializer : IBsonSerializer
     {
         // https://stackoverflow.com/questions/26788855/how-do-you-serialize-value-types-with-mongodb-c-sharp-serializer
         public object Deserialize(BsonDeserializationContext context, BsonDeserializationArgs args)
