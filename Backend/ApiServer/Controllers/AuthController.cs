@@ -173,10 +173,15 @@ namespace ApiServer.Controllers
             PlayerRepository playerRepository = new PlayerRepository();
 
             // check if user already exists
-            UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
-            if (IsUserInDb != null)
+            if (userRepository.GetByUsername(signUp.Username) != null)
             {
                 return base.BadRequest("user is already in DB");
+            }
+
+            // check if mail is already in DB
+            if (userRepository.GetByMail(signUp.Mail) != null)
+            {
+                return base.BadRequest("Mail is already in DB");
             }
 
             // use given data for new User(Model)
