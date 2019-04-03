@@ -53,7 +53,7 @@ namespace CoreClassLibrary.Respository
         {
             var filter = Builders<UserModel>.Filter.Where(x => x.Email == Mail);
             List<UserModel> result = collection.Find(filter).ToList();
-            return result.First();
+            return result.FirstOrDefault();
         }
 
         public UserModel GetByUserId(string userId)
