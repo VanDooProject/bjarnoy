@@ -48,7 +48,7 @@ namespace CoreClassLibrary.Factory
             QueueRepository queueRepository = new QueueRepository();
 
             IslandRepository islandRepository = new IslandRepository();
-            List<Island> islands = islandRepository.AllIslands();
+            List<Island> islands = islandRepository.AllIslands(); // TODO - only get nonFull-Islands, only get marked islands for noobz
             int island_index = 0;
             Island island = islandRepository.GetIslandById(islands[island_index]._id); // to get tiles for islands
             logger.DebugFormat("search start pos on island {0}", island);
