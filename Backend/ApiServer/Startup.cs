@@ -146,14 +146,13 @@ namespace ApiServer
                 // Do logging or other work that doesn't write to the Response.
 
                 string userId = context.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-                string username = context.User.FindFirst(c => c.Type == ClaimTypes.Name)?.Value;
 
-                logger.InfoFormat("{0} \"{2} {3}\" \t {1} \t #{4} '{5}' \t {6}",
+                logger.InfoFormat("{0} {1} \"{2} {3}\"\t#{4} {5}",
                     context.Connection.RemoteIpAddress,
-                    context.Response.StatusCode + " = " + ReasonPhrases.GetReasonPhrase(context.Response.StatusCode),
-                    context.Request.Method, context.Request.Path,
-                    userId, username,
-                    context.Request.Headers[HeaderNames.UserAgent /*"User-Agent"*/]
+                    context.Response.StatusCode/* + " = " + ReasonPhrases.GetReasonPhrase(context.Response.StatusCode)*/,
+                    context.Request.Method, context.Request.Path+context.Request.QueryString,
+                    userId,
+                    context.Request.Headers[HeaderNames.UserAgent]
                 );
             });
 
