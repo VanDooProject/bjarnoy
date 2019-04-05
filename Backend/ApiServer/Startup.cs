@@ -147,6 +147,7 @@ namespace ApiServer
 
                 string userId = context.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 
+                // TODO - fix possible injections #126
                 logger.InfoFormat("{0} {1} \"{2} {3}\"\t#{4} {5}",
                     context.Connection.RemoteIpAddress,
                     context.Response.StatusCode/* + " = " + ReasonPhrases.GetReasonPhrase(context.Response.StatusCode)*/,
