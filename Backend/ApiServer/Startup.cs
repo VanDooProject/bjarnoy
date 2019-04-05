@@ -9,16 +9,19 @@ using ApiServer.Authorization;
 using ApiServer.BackgroundService;
 using ApiServer.SignalRHubs;
 using CoreClassLibrary.Observer;
+using log4net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
 
 namespace ApiServer
@@ -132,6 +135,24 @@ namespace ApiServer
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
+            // TODO refactor this to own class
+            ILog logger = LogManager.GetLogger(typeof(Startup)); //GetLogger("WebServer", "Requests");
+            app.Use(async (context, next) =>
+            {
+                // Do logging
+                // Do work that doesn't write to the Response.
+                await next.Invoke();
+                // Do logging or other work that doesn't write to the Response.
+
+                logger.InfoFormat("{0} \"{2} {3}\" \t {1} \t {4}",
+                    context.Connection.RemoteIpAddress,
+                    context.Response.StatusCode + " = " + ReasonPhrases.GetReasonPhrase(context.Response.StatusCode),
+                    context.Request.Method, context.Request.Path,
+                    context.Request.Headers[HeaderNames.UserAgent /*"User-Agent"*/]
+                );
+            });
+
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
