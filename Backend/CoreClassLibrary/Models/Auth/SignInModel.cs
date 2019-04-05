@@ -17,5 +17,11 @@ namespace CoreClassLibrary.Models.Auth
         [Required]
         [MinLength(4)]
         public string Password { get; set; }
+
+
+        public override string ToString()
+        {
+            return this.Username;
+        }
     }
 }
