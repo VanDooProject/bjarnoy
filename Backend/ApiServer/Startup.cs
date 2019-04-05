@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
@@ -144,10 +145,14 @@ namespace ApiServer
                 await next.Invoke();
                 // Do logging or other work that doesn't write to the Response.
 
-                logger.InfoFormat("{0} \"{2} {3}\" \t {1} \t {4}",
+                string userId = context.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+                string username = context.User.FindFirst(c => c.Type == ClaimTypes.Name)?.Value;
+
+                logger.InfoFormat("{0} \"{2} {3}\" \t {1} \t #{4} '{5}' \t {6}",
                     context.Connection.RemoteIpAddress,
                     context.Response.StatusCode + " = " + ReasonPhrases.GetReasonPhrase(context.Response.StatusCode),
                     context.Request.Method, context.Request.Path,
+                    userId, username,
                     context.Request.Headers[HeaderNames.UserAgent /*"User-Agent"*/]
                 );
             });
