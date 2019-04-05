@@ -40,7 +40,7 @@ namespace CoreClassLibrary.Observer
             }
 
             // get all handler
-            var BuildQueueHandlerTypes = AppDomain.CurrentDomain.GetAssemblies()
+            IEnumerable<Type> BuildQueueHandlerTypes = AppDomain.CurrentDomain.GetAssemblies()
                 .SelectMany(s => s.GetTypes())
                 .Where(p => typeof(IBuildQueueHandler).IsAssignableFrom(p))
                 .Where(p => !p.IsAbstract && !p.IsInterface);
