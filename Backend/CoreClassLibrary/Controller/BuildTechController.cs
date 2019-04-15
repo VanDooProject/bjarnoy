@@ -77,12 +77,12 @@ namespace CoreClassLibrary.Controller
                         Level = 1,
                         RangeOfInfluence = 1,
                     },
-                    ResearchDuration = new TimeSpan(00, 15, 00),
+                    ResearchDuration = new TimeSpan(00, 00, 30),
                     ResourcesNeeded = new Resources() {
-                        wood = 250,
-                        stone = 1000,
-                        iron = 100,
-                        gold = 100,
+                        wood = 10,
+                        stone = 30,
+                        iron = 5,
+                        gold = 5,
                     },
                     requirements = new List<IRequirement>(),
                     AllowedTiles = new List<Tile>()

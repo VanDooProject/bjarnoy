@@ -8,14 +8,8 @@ using Newtonsoft.Json;
 
 namespace CoreClassLibrary.Models.Player
 {
-    public class Player : MongoEntity
+    public class Player : MinimalPlayer
     {
-        /// <summary>
-        /// name which is shown to other users
-        /// </summary>
-        public string DisplayName;
-
-
         [JsonIgnore] // <- should be gathered as own data not with user object
         public EntityResources EntityResources { get; set; }
 
@@ -30,6 +24,17 @@ namespace CoreClassLibrary.Models.Player
                 Permission = PlayerPermission.PermissionLevel.owner,
                 User = user
             });
+        }
+
+        public MinimalPlayer GetMinimalClone()
+        {
+            // TODO - make proper deep copy
+            var player = new MinimalPlayer()
+            {
+                _id = this._id,
+                DisplayName = this.DisplayName
+            };
+            return player;
         }
     }
 }

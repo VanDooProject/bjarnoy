@@ -31,8 +31,11 @@ namespace CoreClassLibrary.Respository
             this.tileCollection = MongoCollectionFactory.Instance.Get<Tile>();
         }
 
+
+
+
         /// <summary>
-        /// gets tiles *without* islands
+        /// gets islands *without* tiles
         /// </summary>
         /// <returns></returns>
         public List<Island> AllIslands()
@@ -42,6 +45,36 @@ namespace CoreClassLibrary.Respository
             logger.InfoFormat("found {0} islands", islands.Count);
 
             return islands;
+        }
+
+        public Island GetIslandById(ObjectId objectId)
+        {
+            var filter = Builders<Island>.Filter.Where(x => x._id.Equals(objectId));
+            var result = islandCollection.Find(filter).ToList();
+            if (result.Count == 1)
+            {
+                Island island = result[0];
+
+                logger.InfoFormat("found island {0}", island.name);
+
+                island.Tiles = AllTilesOfIsland(island);
+
+                return island;
+            }
+
+            throw new GameException("island not found by ID");
+            //return null;
+        }
+
+        public List<Tile> AllTilesOfIsland(Island island)
+        {
+            List<Tile> tiles = tileCollection.Find(t => t.IslandId.Id == island._id).ToList();
+
+            logger.InfoFormat("found {0} tiles for island {1}", tiles.Count, island.name);
+
+            Debug.Assert(tiles.Count > 0);
+
+            return tiles;
         }
 
         public IEnumerable<Tile> AllTiles()
@@ -59,9 +92,20 @@ namespace CoreClassLibrary.Respository
             islandCollection.InsertOne(island);
 
             // set DB refs - so we can get corresponding islands for tiles later
-            island.Tiles.ForEach(t => t.IslandId = createIslandDbRef(island));
+            MongoDBRef mongoDbRef = createIslandDbRef(island);
+            island.Tiles.ForEach(t => t.IslandId = mongoDbRef);
 
             tileCollection.InsertMany(island.Tiles);
+        }
+
+        public void AddTile(Tile tile)
+        {
+            tileCollection.InsertOne(tile);
+        }
+
+        public void AddTiles(List<Tile> tiles)
+        {
+            tileCollection.InsertMany(tiles);
         }
 
         public Tile getTile(float x, float y, float z)
@@ -97,6 +141,14 @@ namespace CoreClassLibrary.Respository
 
             //var res = tileCollection.Find(filter);
             //var r = res.ToList();
+            tileCollection.DeleteMany(filter);
+        }
+
+        public void DeleteAllTiles()
+        {
+            var builder = Builders<Tile>.Filter;
+            var filter = builder.Empty; // matches all
+
             tileCollection.DeleteMany(filter);
         }
 

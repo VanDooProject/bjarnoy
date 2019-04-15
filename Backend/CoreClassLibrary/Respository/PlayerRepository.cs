@@ -79,10 +79,21 @@ namespace CoreClassLibrary.Respository
                 Player player = result[0];
                 return player;
             }
-            else
+
+            return null;
+        }
+
+        public Player GetByPlayerId(ObjectId objectId)
+        {
+            var filter = Builders<Player>.Filter.Where(x => x._id.Equals(objectId));
+            var result = collection.Find(filter).ToList();
+            if (result.Count == 1)
             {
-                return null;
+                Player player = result[0];
+                return player;
             }
+
+            return null;
         }
 
 
