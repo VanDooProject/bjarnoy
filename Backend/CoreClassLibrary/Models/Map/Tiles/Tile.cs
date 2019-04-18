@@ -20,10 +20,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
         public MongoDBRef IslandId { get; set; }
 
         [BsonIgnore]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string IdOfIsland => IslandId?.Id?.ToString();
 
         // https://jira.mongodb.org/browse/CSHARP-1759
         //[BsonSerializer(typeof(Vector3Serializer))]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public HexCoordinates3D Position;
 
         public enum eOrientation

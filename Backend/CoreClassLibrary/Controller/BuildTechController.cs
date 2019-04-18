@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Models;
@@ -10,6 +11,7 @@ using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Models.Settings;
 using CoreClassLibrary.Models.Technologies;
+using CoreClassLibrary.TechTree;
 using log4net;
 using Newtonsoft.Json;
 
@@ -67,132 +69,36 @@ namespace CoreClassLibrary.Controller
 
         private void createDefaultBuildTech()
         {
-            // TODO: refactor this to multiple files for better overview or to json (but there is no syntax checking)
-            _buildtech = new List<Technology>()
+            List<Technology> techList = new List<Technology>();
+
+            // get all Initializer and execute them
+            IEnumerable<Type> treeInitializerTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(s => s.GetTypes())
+                .Where(
+                    t =>
+                        t.IsClass &&
+                        !t.IsAbstract && !t.IsInterface &&
+                        typeof(ITreeInitializer).IsAssignableFrom(t)
+                );
+
+            // create instance of handler
+            foreach (Type initializerType in treeInitializerTypes)
             {
-                new BuildTechnology()
-                {
-                    Building = new Tower()
-                    {
-                        Level = 1,
-                        RangeOfInfluence = 1,
-                    },
-                    ResearchDuration = new TimeSpan(00, 00, 30),
-                    ResourcesNeeded = new Resources() {
-                        wood = 10,
-                        stone = 30,
-                        iron = 5,
-                        gold = 5,
-                    },
-                    requirements = new List<IRequirement>(),
-                    AllowedTiles = new List<Tile>()
-                    {
-                        new GrassTile(),
-                        new SandTile(),
-                    },
-                },
-                new BuildTechnology()
-                {
-                    Building = new Tower()
-                    {
-                        Level = 2,
-                        RangeOfInfluence = 2,
-                    },
-                    ResearchDuration = new TimeSpan(00, 00, 30),
-                    ResourcesNeeded = new Resources() {
-                        wood = 10,
-                        stone = 30,
-                        iron = 5,
-                        gold = 5,
-                    },
-                    requirements = new List<IRequirement>(),
-                    // todo: remove since this should not matter anymore
-                    AllowedTiles = new List<Tile>()
-                    {
-                        new GrassTile(),
-                        new SandTile(),
-                    },
-                },
-                new BuildTechnology()
-                {
-                    Building = new Tower()
-                    {
-                        Level = 3,
-                        RangeOfInfluence = 3,
-                    },
-                    ResearchDuration = new TimeSpan(00, 00, 30),
-                    ResourcesNeeded = new Resources() {
-                        wood = 10,
-                        stone = 30,
-                        iron = 5,
-                        gold = 5,
-                    },
-                    requirements = new List<IRequirement>(),
-                    // todo: remove since this should not matter anymore
-                    AllowedTiles = new List<Tile>()
-                    {
-                        new GrassTile(),
-                        new SandTile(),
-                    },
-                },
+                ITreeInitializer initializer = (ITreeInitializer) Activator.CreateInstance(initializerType);
 
-                new BuildTechnology()
-                {
-                    Building = new StorageHouse()
-                    {
-                        Level = 1,
-                        StorageCapacity = new Resources()
-                        {
-                            wood = 1000,
-                            stone = 1000,
-                            iron = 100,
-                            gold = 10,
-                        }
-                    },
-                    ResearchDuration = new TimeSpan(0, 5, 12), // 5 min and 12 sec
-                    ResourcesNeeded = new Resources() {
-                        wood = 250,
-                        stone = 250,
-                    },
-                    requirements = new List<IRequirement>(),
-                    AllowedTiles = new List<Tile>()
-                    {
-                        new GrassTile()
-                    },
-                },
+                techList.AddRange(initializer.GetTechnologies());
+            }
 
-                new BuildTechnology()
-                {
-                    Building = new Lumberjack()
-                    {
-                        Level = 1,
-                        gatherRate = new Resources() {
-                            wood = 10,
-                        },
-                    },
-                    ResearchDuration = new TimeSpan(0, 2, 30), // 2 min and 30 sec
-                    ResourcesNeeded = new Resources() {
-                        wood = 100,
-                        stone = 100,
-                    },
-                    requirements = new List<IRequirement>()
-                    {
-                        new BuildingRequirement()
-                        {
-                            RequiredBuilding = new StorageHouse()
-                            {
-                                Level = 1
-                            }
-                        }
-                    },
-                    AllowedTiles = new List<Tile>()
-                    {
-                        new ForestTile()
-                    },
-                }
-            };
 
-            // TODO check if all is valid (all have level, duration, valid ress,...)
+
+            // TODO check if all is valid (all have level, duration, valid res,...)
+
+
+            //_buildtech = new List<Technology>();
+            // TODO: later do this after checks
+            //_buildtech.AddRange(techList);
+            _buildtech = techList;
+
 
             // save them to file
             saveBuildTechToFile();
