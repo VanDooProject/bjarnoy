@@ -3,22 +3,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using ApiServer.Authorization;
 using ApiServer.BackgroundService;
 using ApiServer.SignalRHubs;
 using CoreClassLibrary.Observer;
+using log4net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
 
 namespace ApiServer
@@ -132,6 +136,28 @@ namespace ApiServer
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
+            // TODO refactor this to own class
+            ILog logger = LogManager.GetLogger(typeof(Startup)); //GetLogger("WebServer", "Requests");
+            app.Use(async (context, next) =>
+            {
+                // Do logging
+                // Do work that doesn't write to the Response.
+                await next.Invoke();
+                // Do logging or other work that doesn't write to the Response.
+
+                string userId = context.User.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+
+                // TODO - fix possible injections #126
+                logger.InfoFormat("{0} {1} \"{2} {3}\"\t#{4} {5}",
+                    context.Connection.RemoteIpAddress,
+                    context.Response.StatusCode/* + " = " + ReasonPhrases.GetReasonPhrase(context.Response.StatusCode)*/,
+                    context.Request.Method, context.Request.Path+context.Request.QueryString,
+                    userId,
+                    context.Request.Headers[HeaderNames.UserAgent]
+                );
+            });
+
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
