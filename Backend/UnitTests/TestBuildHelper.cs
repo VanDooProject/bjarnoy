@@ -48,21 +48,23 @@ namespace UnitTests
         [Test]
         public void AllWorking()
         {
+            var playingEntity = new Player()
+            {
+                EntityResources = new EntityResources()
+                {
+                    ResourceStorageCapacity = Resources.Max,
+                    LastResourceStorageRefresh = Time.Now,
+                    HourlyResourceProduction = Resources.Max,
+                    ResourceStoredAtLastCalculation = Resources.Max,
+                }
+            };
+
             IIslandRepository islandRepo = Substitute.For<IIslandRepository>();
-            islandRepo.getTile(0, 0, 0).ReturnsForAnyArgs(new ForestTile(new HexCoordinates3D(0, 0)));
-
-            //float posX = 1;
-            //repo.getTile(posX, 0, 0).Returns(new Tile(new Vector3(posX, 0, 0)));
-            //Assert.AreEqual(posX, repo.getTile(posX, 0, 0).Position.X);
-
-            //UserResources UserResources = Substitute.For<UserResources>();
-            //UserResources.ResourcesStoredCurrently.Returns(new Resources()
-            //{
-            //    wood = double.MaxValue,
-            //    stone = double.MaxValue,
-            //    iron = double.MaxValue,
-            //    gold = double.MaxValue,
-            //});
+            Tile dummyTile = new ForestTile(new HexCoordinates3D(0, 0))
+            {
+                Owner = playingEntity
+            };
+            islandRepo.getTile(0, 0, 0).ReturnsForAnyArgs(dummyTile);
 
             IQueueRepository queueRepo = Substitute.For<IQueueRepository>();
             //queueRepo.Add(null)...
@@ -75,18 +77,6 @@ namespace UnitTests
                 Level = 1,
                 BuildingName = typeof(Lumberjack).ToString().Split('.').Last()
             };
-            var playingEntity = new Player()
-            {
-                EntityResources = new EntityResources()
-                {
-                    ResourceStorageCapacity = Resources.Max,
-                    LastResourceStorageRefresh = Time.Now,
-                    HourlyResourceProduction = Resources.Max,
-                    ResourceStoredAtLastCalculation = Resources.Max,
-                }
-            };
-
-
 
 
             // run helper
