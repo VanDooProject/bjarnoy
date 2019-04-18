@@ -31,17 +31,22 @@ namespace CoreClassLibrary.QueueHandler
                 var island = _islandRepository.GetIslandById( (ObjectId) entry.Tile.IslandId.Id);
 
                 // set ownership of neighbours
-                List<Tile> neighbours = new List<Tile>();
-                neighbours.Add(currentTile);
-                for (int range = 0; range < tower.RangeOfInfluence; range++)
-                {
-                    List<Tile> tempNeighbours = new List<Tile>();
-                    foreach (Tile tile in neighbours)
-                    {
-                        tempNeighbours.AddRange(island.getNeighbors(currentTile));
-                    }
-                    neighbours.AddRange(tempNeighbours);
-                }
+                //List<Tile> neighbours = new List<Tile>();
+                //neighbours.Add(currentTile);
+                //for (int range = 0; range < tower.RangeOfInfluence; range++)
+                //{
+                //    List<Tile> tempNeighbours = new List<Tile>();
+                //    foreach (Tile tile in neighbours)
+                //    {
+                //        tempNeighbours.AddRange(island.getNeighbors(currentTile));
+                //    }
+                //    neighbours.AddRange(tempNeighbours);
+                //}
+                //
+                //island.getRange(currentTile, 1);
+                //island.getRange(currentTile, 2);
+
+                List<Tile> neighbours = island.getRange(currentTile, tower.RangeOfInfluence);
 
                 // set new ownership
                 Player player = _playerRepository.GetByPlayerId(entry.Owner._id);

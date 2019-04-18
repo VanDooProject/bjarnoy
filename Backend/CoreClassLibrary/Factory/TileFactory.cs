@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using Newtonsoft.Json;
 
@@ -19,7 +20,7 @@ namespace CoreClassLibrary.Factory
             this.defaultType = defaultType;
         }
             
-        public Tile GetRndBiomTileAtPosition(Vector3 position)
+        public Tile GetRndBiomTileAtPosition(HexCoordinates3D position)
         {
             Random rnd = new Random();
             double rnd_value = rnd.NextDouble();

@@ -9,6 +9,7 @@ using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using log4net;
 using MongoDB.Bson;
@@ -87,6 +88,16 @@ namespace CoreClassLibrary.Respository
 
         }
 
+        public IEnumerable<Tile> GetTilesRange(HexCoordinates3D a, HexCoordinates3D b)
+        {
+            List<Tile> tiles = tileCollection.Find(t => t.Position.x > a.x && t.Position.y > a.y && t.Position.x < b.x && t.Position.y < b.y).ToList();
+
+            logger.InfoFormat("found {0} tiles", tiles.Count);
+
+            return tiles;
+
+        }
+
         public void Add(Island island)
         {
             islandCollection.InsertOne(island);
@@ -111,7 +122,7 @@ namespace CoreClassLibrary.Respository
         public Tile getTile(float x, float y, float z)
         {
             var builder = Builders<Tile>.Filter;
-            var filter = builder.Eq("Position.X", x) & builder.Eq("Position.Y", y) & builder.Eq("Position.Z", z);
+            var filter = builder.Eq("Position.x", x) & builder.Eq("Position.y", y) & builder.Eq("Position.z", z);
             var result = tileCollection.Find(filter).ToList();
 
             Tile tile = result.FirstOrDefault();

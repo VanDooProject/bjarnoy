@@ -1,4 +1,5 @@
 using System.Numerics;
+using CoreClassLibrary.Models.Map.Coordinates;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -8,7 +9,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
         }
 
-        public StoneResourceTile(Vector3 position) : base(position)
+        public StoneResourceTile(HexCoordinates3D position) : base(position)
         {
             this.Resource.Type = TileAttributesResourceTypeList.Stone;
             this.Resource.DegradationRate = 0.6f;

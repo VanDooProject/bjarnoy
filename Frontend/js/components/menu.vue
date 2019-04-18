@@ -1,44 +1,46 @@
 <template>
-    <div
-        v-bind:style="{
-            top: pos.y - size.y/2 + 'px',
-            left: pos.x - size.x/2 + 'px',
-            width: size.x + 'px',
-            height: size.y + 'px',
-            display: display,
-            zIndex: 50000
-        }"
-        class="mapmenu"
-    >
-        <img src="/images/circle.png"
-            v-bind:height="size.x"
-            v-bind:width="size.y"
-        />
+    <transition name="fade">
         <div
             v-bind:style="{
-                top:  size.y/2 + 'px',
-                left: size.x/2 + 'px',
-                }"
+                top: pos.y - size.y/2 + 'px',
+                left: pos.x - size.x/2 + 'px',
+                width: size.x + 'px',
+                height: size.y + 'px',
+                zIndex: 50000
+            }"
             class="mapmenu"
+            v-if="menuVisible"
         >
-            <menu-item
-                v-bind:submenu="submenu.num"
-                v-bind:type="submenu.type"
-                v-bind:submenutotal="submenus1.length"
-                v-bind:key="submenu.key"
-                v-for="submenu in submenus1"
-                submenulayer="1"
+            <img src="/images/circle.png"
+                v-bind:height="size.x"
+                v-bind:width="size.y"
+            />
+            <div
+                v-bind:style="{
+                    top:  size.y/2 + 'px',
+                    left: size.x/2 + 'px',
+                    }"
+                class="mapmenu"
             >
-            </menu-item><menu-item
-                v-bind:submenu="submenu.num"
-                v-bind:type="submenu.type"
-                v-bind:submenutotal="submenus2.length"
-                v-bind:key="submenu.key"
-                v-for="submenu in submenus2"
-                submenulayer="2"
-            ></menu-item>
+                <menu-item
+                    v-bind:submenu="submenu.num"
+                    v-bind:type="submenu.type"
+                    v-bind:submenutotal="submenus1.length"
+                    v-bind:key="submenu.key"
+                    v-for="submenu in submenus1"
+                    submenulayer="1"
+                >
+                </menu-item><menu-item
+                    v-bind:submenu="submenu.num"
+                    v-bind:type="submenu.type"
+                    v-bind:submenutotal="submenus2.length"
+                    v-bind:key="submenu.key"
+                    v-for="submenu in submenus2"
+                    submenulayer="2"
+                ></menu-item>
+            </div>
         </div>
-    </div>
+    </transition>
 </template>
 
 <script>
@@ -56,7 +58,7 @@ export default {
     },
     computed: {
         submenus2() {
-            if(this.$store.state.menuBuildOpen == true)
+            if(this.$store.state.menu.menuBuildOpen == true)
             {
                 return this.$store.state.techBildings
                     .filter(entry => {
@@ -84,7 +86,7 @@ export default {
                         }
                         else
                         {
-                            if (entry.level > 1 && entry.level == this.tile.building.level + 1 && entry.type==this.tile.building.type)
+                            if (entry.building.level > 1 && entry.building.level == (this.tile.building.level + 1) && entry.building.type == this.tile.building.type)
                             {
                                 return entry.allowedTiles.some(tile => tile.type == this.tile.type);
                             }
@@ -100,18 +102,18 @@ export default {
             }
         },
         tile() {
-            return this.$store.state.menuTile;
+            return this.$store.state.menu.menuTile;
         },
         pos() {
-            return this.$store.state.menuPos;
+            return this.$store.state.menu.menuPos;
         },
-        display() {
-            return this.$store.getters.menuDisplay;
+        menuVisible() {
+            return this.$store.state.menu.menuVisible;
         }
   },
   methods: {
     close: function(event) {
-        this.$store.commit("SetMenuVisible", false);
+        this.$store.commit("menu/SetMenuVisible", false);
     },
     clicked: function(event) {
         console.log(event);

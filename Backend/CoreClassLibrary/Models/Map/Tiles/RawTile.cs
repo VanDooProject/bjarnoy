@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using CoreClassLibrary.Models.Map.Coordinates;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -19,7 +20,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
         {
         }
 
-        public RawTile(Vector3 position) : base(position)
+        public RawTile(HexCoordinates3D position) : base(position)
         {
         }
     }

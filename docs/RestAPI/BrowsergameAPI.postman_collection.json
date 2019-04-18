@@ -701,7 +701,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{url}}/api/v1/install/islands/",
+							"raw": "{{url}}/api/v1/install/islands/3/2",
 							"host": [
 								"{{url}}"
 							],
@@ -710,7 +710,8 @@
 								"v1",
 								"install",
 								"islands",
-								""
+								"3",
+								"2"
 							]
 						}
 					},
@@ -753,7 +754,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "{{url}}/api/v1/install/water/100/100",
+							"raw": "{{url}}/api/v1/install/water",
 							"host": [
 								"{{url}}"
 							],
@@ -761,9 +762,7 @@
 								"api",
 								"v1",
 								"install",
-								"water",
-								"100",
-								"100"
+								"water"
 							]
 						}
 					},
@@ -820,10 +819,10 @@
 							"script": {
 								"id": "f25d5983-b338-469f-a430-494357127021",
 								"exec": [
-									"pm.test(\"response is ok\", function () {",
-									"    //pm.response.to.have.status(200);",
-									"    pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
-									"});"
+									"// pm.test(\"response is ok\", function () {",
+									"//     //pm.response.to.have.status(200);",
+									"//     pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"// });"
 								],
 								"type": "text/javascript"
 							}
@@ -849,6 +848,49 @@
 								"10",
 								"2",
 								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get range of tiles",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    //pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/map/tiles/0/0/10/10",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"map",
+								"tiles",
+								"0",
+								"0",
+								"10",
+								"10"
 							]
 						}
 					},

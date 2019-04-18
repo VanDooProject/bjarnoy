@@ -5,7 +5,9 @@ using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
+using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Mvc;
@@ -35,57 +37,53 @@ namespace ApiServer.Controllers
             return infoList;
         }
         // POST api/v1/install/islands/
-        [HttpPost("islands/")]
-        public IActionResult CreateIslands()
+        [HttpPost("islands/{count=2}/{seed=1}")]
+        public IActionResult CreateIslands(int count, int seed)
         {
-            Random rnd = new Random();
+            if (count < 1)
+            {
+                return BadRequest("count has to be larger than 0");
+            }
 
-            IslandRepository islandRepository = new IslandRepository();
+            var IslandHelper = new MapCreatorHelper(seed);
 
-            IIslandFactory factory;
-            //factory = new IslandFactorySquare();
-            factory = new IslandFactoryOrganic(rnd.Next(0, 10));
+            var islands = IslandHelper.createIslands(count);
 
-            int size = 30;
-            int zCoord = 1;
-
-
-            rnd.Next(size - 5, size + 5); // TODO - fix, never used
-
-            var island = factory.GetRndIsland(size, zCoord);
-
-            // TODO: move island to free location on map
-
-            islandRepository.Add(island);
+            MapRenderer renderer = new MapRenderer();
+            renderer.GenerateBitmapFromIslands(islands, "map_full.png");
 
             return Ok();
         }
 
         // POST api/v1/install/water/
-        [HttpPost("water/{width}/{height}")]
-        public IActionResult FillMapWithWater(int width, int height)
+        [HttpPost("water/")]
+        public IActionResult FillMapWithWater(/*int width, int height*/)
         {
-            if (width < 1 || height < 1)
-            {
-                return BadRequest();
-            }
+            //if (width < 1 || height < 1)
+            //{
+            //    return BadRequest();
+            //}
 
             int countAddedWaterTiles = 0;
 
-            int z = 1;
             const double TOLERANCE = 0.001;
             IslandRepository islandRepository = new IslandRepository();
             var tiles =  islandRepository.AllTiles();
 
+            int maxX = tiles.Max(x => x.Position.x);
+            int maxY = tiles.Max(x => x.Position.y);
+            int minX = tiles.Min(x => x.Position.x);
+            int minY = tiles.Min(x => x.Position.y);
+
             List<Tile> WaterTiles = new List<Tile>();
 
-            for (int y = 0; y < width; y++)
+            for (int y = minY; y <= maxY; y++)
             {
-                for (int x = 0; x < height; x++)
+                for (int x = minX; x <= maxX; x++)
                 {
-                    if (!tiles.Any(t => Math.Abs(t.Position.X - x) < TOLERANCE && Math.Abs(t.Position.Y - y) < TOLERANCE ))
+                    if (!tiles.Any(t => Math.Abs(t.Position.x - x) < TOLERANCE && Math.Abs(t.Position.y - y) < TOLERANCE ))
                     {
-                        WaterTiles.Add(new WaterTile(new Vector3(x, y, z)));
+                        WaterTiles.Add(new WaterTile(new HexCoordinates3D(x, y)));
                         countAddedWaterTiles++;
                     }
                 }

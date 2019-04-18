@@ -45,7 +45,7 @@ namespace CoreClassLibrary.Controller
                         this._buildtech = (List<Technology>)serializer.Deserialize(file, typeof(List<Technology>));
                     }
 
-                    // TODO check if all is valid (all have level, duration, valid ress,...)
+                    // TODO check if all is valid (all have level, duration, valid res,...)
                 }
                 catch (Newtonsoft.Json.JsonSerializationException e)
                 {
@@ -87,7 +87,8 @@ namespace CoreClassLibrary.Controller
                     requirements = new List<IRequirement>(),
                     AllowedTiles = new List<Tile>()
                     {
-                        new GrassTile()
+                        new GrassTile(),
+                        new SandTile(),
                     },
                 },
                 new BuildTechnology()
@@ -97,18 +98,41 @@ namespace CoreClassLibrary.Controller
                         Level = 2,
                         RangeOfInfluence = 2,
                     },
-                    ResearchDuration = new TimeSpan(01, 10, 00),
+                    ResearchDuration = new TimeSpan(00, 00, 30),
                     ResourcesNeeded = new Resources() {
-                        wood = 1000,
-                        stone = 3000,
-                        iron = 300,
-                        gold = 300,
+                        wood = 10,
+                        stone = 30,
+                        iron = 5,
+                        gold = 5,
                     },
                     requirements = new List<IRequirement>(),
                     // todo: remove since this should not matter anymore
                     AllowedTiles = new List<Tile>()
                     {
-                        new GrassTile()
+                        new GrassTile(),
+                        new SandTile(),
+                    },
+                },
+                new BuildTechnology()
+                {
+                    Building = new Tower()
+                    {
+                        Level = 3,
+                        RangeOfInfluence = 3,
+                    },
+                    ResearchDuration = new TimeSpan(00, 00, 30),
+                    ResourcesNeeded = new Resources() {
+                        wood = 10,
+                        stone = 30,
+                        iron = 5,
+                        gold = 5,
+                    },
+                    requirements = new List<IRequirement>(),
+                    // todo: remove since this should not matter anymore
+                    AllowedTiles = new List<Tile>()
+                    {
+                        new GrassTile(),
+                        new SandTile(),
                     },
                 },
 

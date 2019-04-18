@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System;
 using System.Numerics;
+using CoreClassLibrary.Models.Map.Coordinates;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -13,12 +14,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         }
 
-        public EdgeTile(Vector3 position) : base(position)
+        public EdgeTile(HexCoordinates3D position) : base(position)
         {
 
         }
 
-        public EdgeTile(Vector3 position, eOrientation orientation) : base(position)
+        public EdgeTile(HexCoordinates3D position, eOrientation orientation) : base(position)
         {
             this.Orientation = orientation;
         }
