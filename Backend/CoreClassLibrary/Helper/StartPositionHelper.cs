@@ -61,6 +61,7 @@ namespace CoreClassLibrary.Helper
                 int waterTiles = neighborsRange2.Count(t => t is WaterTile || t is CoastalWaterTile);
                 int forestTiles = neighbors.Count(t => t is ForestTile);
                 int grassTiles = neighbors.Count(t => t is GrassTile);
+                // TODO - make this values configurable
                 if (
                     waterTiles == 0 &&
                     forestTiles >= 1 &&
