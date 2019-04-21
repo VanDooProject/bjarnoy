@@ -120,7 +120,9 @@ export default {
                 // Add Offsets
                 + this.mapOffset.x * this.mapScale
                 // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowWidth/2;
+                + this.windowWidth / 2
+                 // move reference point to center of image
+                - this.width / 2 ;
         },
         ypos() {
             return this.width //use the (current) width to scale the vetor
@@ -133,7 +135,9 @@ export default {
                 // Add Offset
                 + this.mapOffset.y * this.mapScale
                 // move the Origin to the middle of the screen (Probably not needed when the game is further in development)
-                + this.windowHeight/2;
+                + this.windowHeight / 2
+                // move reference point to center of image
+                - this.height / 2;
         },
         windowWidth() {
             return this.$store.state.windowWidth;
@@ -155,16 +159,39 @@ export default {
         },
         imgsrc() { 
             //Hardcoded for testing
-            return "images/hextiles/grasstile_E.png";
+            if(this.tile.type == "water")
+                return "images/hextiles/watertile_E.png";
+            //return "images/hextiles/grasstile_E.png";
 
+            let orientation = '';
+            switch(this.tile.orientation) {
+                case 'NorthEast' :
+                    orientation = 'NE';
+                    break;
+                case 'East' :
+                    orientation = 'E';
+                    break;
+                case 'SouthEast' :
+                    orientation = 'SE';
+                    break;
+                case 'SouthWest' :
+                    orientation = 'SW';
+                    break;
+                case 'West' :
+                    orientation = 'W';
+                    break;
+                case 'NorthWest' :
+                    orientation = 'NW';
+                    break;
+            }
 
             if(this.tile.building == undefined)
             {
-                return "images/tiles/" + this.tile.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + ".png";
+                return "images/hextiles/" + this.tile.type.toLowerCase() + "_" + orientation + ".png";
             }
             else
             {
-                return "images/tiles/" + this.tile.building.type.toLowerCase() + "_" + this.tile.orientation.charAt(0) + "_level" + this.tile.building.level.toString().padStart(3,'0') + ".png";
+                return "images/hextiles/" + this.tile.building.type.toLowerCase() + "_" + orientation + "_level" + this.tile.building.level.toString().padStart(3,'0') + ".png";
             }
         }
     }

@@ -3,7 +3,9 @@ using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.TechQueues;
+using CoreClassLibrary.Respository;
 using log4net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,10 +17,12 @@ namespace ApiServer.Controllers
     {
         private ILog logger = LogManager.GetLogger(typeof(BuildingController));
         private readonly BuildHelper _buildHelper;
+        private readonly IQueueRepository _queueRepository;
 
         public BuildingController()
         {
             _buildHelper = new BuildHelper();
+            _queueRepository = new QueueRepository();
         }
 
         // POST api/v1/building/build
@@ -31,11 +35,13 @@ namespace ApiServer.Controllers
         [Authorize]
         public IActionResult PostBuild([FromBody]BuildBuildingModel build)
         {
-            UserModel user = getCurretUser();
+            Player player = getCurrentPlayer();
 
             try
             {
-                BuildingQueue queueEntry = _buildHelper.BuildBuilding(build, user);
+                BuildingQueue queueEntry = _buildHelper.BuildBuilding(build, player);
+                _queueRepository.Add(queueEntry);
+
                 return (queueEntry == null) ? (IActionResult) BadRequest() : Ok(queueEntry);
             }
             catch (BuildBuildingException e)

@@ -49,7 +49,7 @@
         },
         computed: {
             tiles() { 
-                return this.$store.state.mapTiles;
+                return this.$store.state.displayedMapTiles;
             },
             TilesArray () {
                 var ls = [[]];

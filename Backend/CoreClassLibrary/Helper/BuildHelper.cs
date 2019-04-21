@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Technologies;
 using CoreClassLibrary.Models.TechQueues;
 using CoreClassLibrary.Respository;
@@ -17,33 +19,49 @@ namespace CoreClassLibrary.Helper
         private ILog logger = LogManager.GetLogger(typeof(BuildHelper));
 
         private readonly IIslandRepository _islandRepository = new IslandRepository();
-        private readonly IQueueRepository _queueRepository = new QueueRepository();
+        private readonly IPlayerRepository _playerRepository = new PlayerRepository();
 
         public BuildHelper()
         {
         }
 
-        public BuildHelper(IIslandRepository islandRepository, IQueueRepository queueRepository)
+        public BuildHelper(IIslandRepository islandRepository, IPlayerRepository playerRepository)
         {
             this._islandRepository = islandRepository;
-            this._queueRepository = queueRepository;
+            this._playerRepository = playerRepository;
         }
 
-
-        public BuildingQueue BuildBuilding(BuildBuildingModel requestedBuilding, UserModel user)
+        /// <summary>
+        /// helper to create build queue entries
+        ///  * checks all requirements
+        ///  * saves building to tile
+        ///  * takes resources from given user
+        ///  * generates queue entry
+        /// </summary>
+        /// <param name="requestedBuilding"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
+        public BuildingQueue BuildBuilding(BuildBuildingModel requestedBuilding, Player player)
         {
             try
             {
                 Tile tile = _islandRepository.getTile(requestedBuilding.Position.X, requestedBuilding.Position.Y, requestedBuilding.Position.Z);
 
                 // TODO: compute level to be built
+                // level is checked in - checkBuildingRequirements()
 
                 // try to get tech for requested building
                 BuildTechnology buildTech = findTech(requestedBuilding);
 
                 // check if requirements are fulfilled
-                checkBuildingResources(user, buildTech);
+                checkBuildingResources(player, buildTech);
                 checkBuildingRequirements(tile, buildTech);
+
+                // remove resources from user - think of race conditions
+                player.EntityResources.SubtractResources(buildTech.ResourcesNeeded);
+                // this throws an exception when there is a race condition -> do this first so all other operations which would change DB fail here
+                _playerRepository.ReplaceAwareOfResources(player);
+
 
                 // clean building
                 Building buildingToBeBuilt = buildTech.Building; // <- TODO deep copy / clone
@@ -58,7 +76,7 @@ namespace CoreClassLibrary.Helper
                 BuildingQueue queueEntry = new BuildingQueue();
                 queueEntry.Tile = tile;
                 queueEntry.Building = buildingToBeBuilt;
-                queueEntry.Owner = user;
+                queueEntry.Owner = player;
                 queueEntry.StartTime = Time.Now;
 
                 // test this since it can be null TODO refactor
@@ -71,10 +89,8 @@ namespace CoreClassLibrary.Helper
                     throw new Exception($"build tech is faulty - missing duration: {buildTech}");
                 }
 
-                // TODO: remove resources from user - think of race conditions
-
                 // TODO refactor -> remove this out of the helper & rename helper
-                _queueRepository.Add(queueEntry);
+                //_queueRepository.Add(queueEntry);
 
                 return queueEntry;
             }
@@ -87,33 +103,15 @@ namespace CoreClassLibrary.Helper
 
         private BuildTechnology findTech(BuildBuildingModel build)
         {
-            var techs = BuildTechController.Instance.GetBuildTech();
-            Technology tech = techs.FirstOrDefault(t =>
-            {
-                if (t is BuildTechnology b)
-                {
-                    return b.Building.GetType().ToString().Split('.').Last() == build.BuildingName &&
-                        b.Building.Level == build.Level;
-                }
-                return false;
-            });
-
-            BuildTechnology buildTech = tech as BuildTechnology;
-
-            if (buildTech == null)
-            {
-                // TODO: report user
-                logger.Warn("no valid building found in tech tree - probably a user faked this request -> report to bot detector");
-                throw new BuildBuildingException("no valid building found in tech tree");
-            }
+            var buildTech = BuildTechController.Instance.findTech(build.BuildingName, build.Level);
 
             return buildTech;
         }
 
-        private void checkBuildingResources(UserModel user, BuildTechnology buildTech)
+        private void checkBuildingResources(Player player, BuildTechnology buildTech)
         {
             // check if user has enough resources
-            if (user.UserResources.ResourcesStoredCurrently < buildTech.ResourcesNeeded)
+            if (player.EntityResources.ResourcesStoredCurrently < buildTech.ResourcesNeeded)
             {
                 throw new BuildBuildingException("user has not enough resources to build");
             }

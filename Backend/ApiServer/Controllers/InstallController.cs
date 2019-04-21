@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,18 +36,21 @@ namespace ApiServer.Controllers
         }
         // POST api/v1/install/islands/
         [HttpPost("islands/")]
-        public int CreateIslands()
+        public IActionResult CreateIslands()
         {
+            Random rnd = new Random();
+
             IslandRepository islandRepository = new IslandRepository();
 
-            IslandFactory factory = new IslandFactory();
+            IIslandFactory factory;
+            //factory = new IslandFactorySquare();
+            factory = new IslandFactoryOrganic(rnd.Next(0, 10));
 
-            int size = 10;
+            int size = 30;
             int zCoord = 1;
 
 
-            Random rnd = new Random();
-            rnd.Next(size - 5, size + 5);
+            rnd.Next(size - 5, size + 5); // TODO - fix, never used
 
             var island = factory.GetRndIsland(size, zCoord);
 
@@ -53,7 +58,42 @@ namespace ApiServer.Controllers
 
             islandRepository.Add(island);
 
-            return 0;
+            return Ok();
+        }
+
+        // POST api/v1/install/water/
+        [HttpPost("water/{width}/{height}")]
+        public IActionResult FillMapWithWater(int width, int height)
+        {
+            if (width < 1 || height < 1)
+            {
+                return BadRequest();
+            }
+
+            int countAddedWaterTiles = 0;
+
+            int z = 1;
+            const double TOLERANCE = 0.001;
+            IslandRepository islandRepository = new IslandRepository();
+            var tiles =  islandRepository.AllTiles();
+
+            List<Tile> WaterTiles = new List<Tile>();
+
+            for (int y = 0; y < width; y++)
+            {
+                for (int x = 0; x < height; x++)
+                {
+                    if (!tiles.Any(t => Math.Abs(t.Position.X - x) < TOLERANCE && Math.Abs(t.Position.Y - y) < TOLERANCE ))
+                    {
+                        WaterTiles.Add(new WaterTile(new Vector3(x, y, z)));
+                        countAddedWaterTiles++;
+                    }
+                }
+            }
+
+            islandRepository.AddTiles(WaterTiles);
+
+            return Ok(countAddedWaterTiles);
         }
 
         // DELETE api/v1/install/islands/
@@ -67,6 +107,21 @@ namespace ApiServer.Controllers
             {
                 islandRepository.Delete(island);
             }
+
+            return Ok();
+        }
+
+        // DELETE api/v1/install/map/
+        /// <summary>
+        /// only deletes tiles not islands
+        /// </summary>
+        /// <returns></returns>
+        [HttpDelete("map/")]
+        public IActionResult DeleteMap()
+        {
+            IslandRepository islandRepository = new IslandRepository();
+
+            islandRepository.DeleteAllTiles();
 
             return Ok();
         }

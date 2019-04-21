@@ -4,6 +4,7 @@ using System.Numerics;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Generic;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
@@ -26,10 +27,12 @@ namespace CoreClassLibrary.Models.Map.Tiles
 
         public enum eOrientation
         {
-            North,
+            NorthEast,
             East,
-            South,
-            West
+            SouthEast,
+            SouthWest,
+            West,
+            NorthWest,
         }
 
         [JsonConverter(typeof(StringEnumConverter))]
@@ -41,6 +44,13 @@ namespace CoreClassLibrary.Models.Map.Tiles
         [BsonIgnoreIfNull]
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public Building Building;
+
+        /// <summary>
+        /// building on this tile
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public MinimalPlayer Owner;
 
         public string type
         {

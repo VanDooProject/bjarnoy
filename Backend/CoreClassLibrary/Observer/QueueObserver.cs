@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,12 +16,9 @@ using MongoDB.Driver;
 
 namespace CoreClassLibrary.Observer
 {
-    public class QueueObserver
+    public partial class QueueObserver
     {
         private ILog logger = LogManager.GetLogger(typeof(QueueObserver));
-
-
-        private BuildQueueHandler BuildHandler = new BuildQueueHandler();
 
         private QueueRepository queueRepository = new QueueRepository();
 
@@ -28,6 +26,9 @@ namespace CoreClassLibrary.Observer
         public delegate void EntryProcessedDelegate(Queue q);
 
         private EntryProcessedDelegate _callback;
+
+        private List<IBuildQueueHandler> BuildQueueHandler = new List<IBuildQueueHandler>();
+
 
         public QueueObserver(EntryProcessedDelegate clb = null)
         {
@@ -37,8 +38,21 @@ namespace CoreClassLibrary.Observer
             {
                 _callback = clb;
             }
-        }
 
+            // get all handler
+            var BuildQueueHandlerTypes = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(s => s.GetTypes())
+                .Where(p => typeof(IBuildQueueHandler).IsAssignableFrom(p))
+                .Where(p => !p.IsAbstract && !p.IsInterface);
+
+            // create instance of handler
+            foreach (Type handlerType in BuildQueueHandlerTypes)
+            {
+                this.BuildQueueHandler.Add( (IBuildQueueHandler) Activator.CreateInstance(handlerType) );
+            }
+
+            logger.DebugFormat("setup {0} BuildQueueHandler", BuildQueueHandler.Count);
+        }
 
 
         public void GetAndProcessEntries()
@@ -69,28 +83,14 @@ namespace CoreClassLibrary.Observer
 
             if (entry is BuildingQueue buildEntry)
             {
-                BuildHandler.processEntry(buildEntry);
+                foreach (IBuildQueueHandler handler in this.BuildQueueHandler)
+                {
+                    handler.processEntry(buildEntry);
+                }
             }
             else
             {
                 throw new QueueNotImplementedException("this queue entry is not implemented yet " + entry);
-            }
-        }
-
-
-
-        private class QueueNotImplementedException : NotImplementedException
-        {
-            public QueueNotImplementedException()
-            {
-            }
-
-            public QueueNotImplementedException(string message) : base(message)
-            {
-            }
-
-            public QueueNotImplementedException(string message, Exception inner) : base(message, inner)
-            {
             }
         }
     }

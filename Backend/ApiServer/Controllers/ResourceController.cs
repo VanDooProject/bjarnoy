@@ -6,6 +6,7 @@ using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Auth;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map;
+using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Authorization;
@@ -20,11 +21,11 @@ namespace ApiServer.Controllers
         // GET api/v1/resource/user
         [HttpGet("user/")]
         [Authorize]
-        public UserResources GetResourcesOfCurrentUser()
+        public EntityResources GetResourcesOfCurrentPlayer()
         {
-            UserModel user = getCurretUser();
+            Player player = getCurrentPlayer();
 
-            return user.UserResources;
+            return player.EntityResources;
         }
     }
 }
