@@ -4,6 +4,7 @@ using System.Text;
 using CoreClassLibrary.Controller;
 using CoreClassLibrary.Models.Buildings;
 using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.TechQueues;
@@ -42,6 +43,9 @@ namespace CoreClassLibrary.Factory
         private MongoCollectionFactory()
         {
             // TODO: move this to proper place
+            BsonClassMap.RegisterClassMap<HexCoordinates3D>();
+            BsonClassMap.RegisterClassMap<CubeCoordinates3D>();
+
             BsonClassMap.RegisterClassMap<ForestTile>();
             BsonClassMap.RegisterClassMap<GoldResourceTile>();
             BsonClassMap.RegisterClassMap<GrassTile>();
@@ -51,6 +55,7 @@ namespace CoreClassLibrary.Factory
             BsonClassMap.RegisterClassMap<StoneResourceTile>();
             BsonClassMap.RegisterClassMap<WaterTile>();
             BsonClassMap.RegisterClassMap<SandTile>();
+            BsonClassMap.RegisterClassMap<CoastalWaterTile>();
 
             BsonClassMap.RegisterClassMap<EdgeTile>();
             BsonClassMap.RegisterClassMap<QuarterEdgeTile>();

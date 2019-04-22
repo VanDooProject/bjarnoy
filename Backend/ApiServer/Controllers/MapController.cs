@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Authorization;
@@ -38,6 +39,14 @@ namespace ApiServer.Controllers
             IslandRepository islandRepository = new IslandRepository();
             return islandRepository.AllTiles();
         }
+        // GET api/v1/map/tiles/0/0/10/10
+        [HttpGet("tiles/{x1}/{y1}/{x2}/{y2}")]
+        [Authorize]
+        public IEnumerable<Tile> GetTilesRange(int x1, int y1, int x2, int y2)
+        {
+            IslandRepository islandRepository = new IslandRepository();
+            return islandRepository.GetTilesRange(new HexCoordinates3D(x1, y1), new HexCoordinates3D(x2, y2));
+        }
 
         // GET api/v1/map/tile/0/0/0
         [HttpGet("tile/{x}/{y}/{z}")]
@@ -61,18 +70,15 @@ namespace ApiServer.Controllers
         public IEnumerable<Tile> Get(int size)
         {
             List<Tile> TileList = new List<Tile>();
-            int layers = 3;
             Random r = new Random();
             String[] tileTypes = {"grass", "hill"};
-            for (int z = 0; z < layers; z++)
+
+            for (int x = -size; x < size; x++)
             {
-                for (int x = -size; x < size; x++)
+                for (int y = -size; y < size; y++)
                 {
-                    for (int y = -size; y < size; y++)
-                    {
-                        Vector3 position = new Vector3(x, y, z);
-                        TileList.Add(new Tile(position));
-                    }
+                    HexCoordinates3D position = new HexCoordinates3D(x, y);
+                    TileList.Add(new Tile(position));
                 }
             }
 
@@ -84,9 +90,9 @@ namespace ApiServer.Controllers
         public IEnumerable<Island> GetRndIsland(int size)
         {
             List<Island> IslandList = new List<Island>();
-            IslandFactorySquare factory = new IslandFactorySquare();
+            IIslandFactory factory = new IslandFactoryOrganic(0);
 
-            IslandList.Add(factory.GetRndIsland(size, 1));
+            IslandList.Add(factory.GetRndIsland(size));
 
             return IslandList;
         }

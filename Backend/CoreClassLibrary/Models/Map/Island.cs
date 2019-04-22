@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using CoreClassLibrary.Models.Generic;
 using CoreClassLibrary.Models.Map.Biomes;
+using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
 using CoreClassLibrary.Serializer;
 using MongoDB.Bson.Serialization.Attributes;
@@ -22,10 +24,10 @@ namespace CoreClassLibrary.Models.Map
         [JsonIgnore] // since we only use bioms to create islands -> no return to user interface of bioms
         public List<Biom> bioms = new List<Biom>();
 
-        [BsonSerializer(typeof(Vector3Serializer))]
-        public Vector3 StartPosition;
+        //[BsonSerializer(typeof(Vector3Serializer))]
+        public HexCoordinates3D StartPosition;
 
-        public Island(Vector3 startPosition)
+        public Island(HexCoordinates3D startPosition)
         {
             this.StartPosition = startPosition;
         }
@@ -51,16 +53,48 @@ namespace CoreClassLibrary.Models.Map
         //}
 
 
-
-        public List<Tile> getNeighbors(Vector3 pos)
+        /// <summary>
+        /// gets neighbors in given range
+        /// 
+        /// https://www.redblobgames.com/grids/hexagons/#range
+        /// </summary>
+        /// <param name="pos"></param>
+        /// <param name="distance"></param>
+        /// <returns></returns>
+        public List<Tile> getRange(HexCoordinates3D pos, int distance)
         {
             List<Tile> tiles = new List<Tile>();
 
-            for (float x = pos.X - 1; x <= pos.X + 1; x++)
+            for (int x = -distance; x <= +distance; x++)
             {
-                for (float y = pos.Y - 1; y <= pos.Y + 1; y++)
+                for (int y = Math.Max(-distance, -x-distance); y <= Math.Min(+distance, -x+distance); y++)
                 {
-                    Tile neighbor = this.getTile(new Vector3(x, y, pos.Z));
+                    Tile neighbor = this.getTile(new HexCoordinates3D(pos.x + x, pos.y + y));
+                    if (neighbor != null)
+                    {
+                        tiles.Add(neighbor);
+                    }
+                }
+            }
+
+            return tiles;
+        }
+
+        public List<Tile> getRange(Tile tile, int distance)
+        {
+            return this.getRange(tile.Position, distance);
+        }
+
+
+        public List<Tile> getNeighbors(HexCoordinates3D pos)
+        {
+            List<Tile> tiles = new List<Tile>();
+
+            for (int x = pos.x - 1; x <= pos.x + 1; x++)
+            {
+                for (int y = pos.y - 1; y <= pos.y + 1; y++)
+                {
+                    Tile neighbor = this.getTile(new HexCoordinates3D(x, y));
                     if (neighbor != null)
                     {
                         tiles.Add(neighbor);
@@ -77,18 +111,18 @@ namespace CoreClassLibrary.Models.Map
         }
 
 
-        public List<Vector3> getFreeNeighbors(Tile tile)
+        public List<HexCoordinates3D> getFreeNeighbors(Tile tile)
         {
-            List<Vector3> positions = new List<Vector3>();
+            List<HexCoordinates3D> positions = new List<HexCoordinates3D>();
 
-            for (float x = tile.Position.X - 1; x <= tile.Position.X + 1; x++)
+            for (int x = tile.Position.x - 1; x <= tile.Position.x + 1; x++)
             {
-                for (float y = tile.Position.Y - 1; y <= tile.Position.Y + 1; y++)
+                for (int y = tile.Position.y - 1; y <= tile.Position.y + 1; y++)
                 {
-                    Tile neighbor = this.getTile(new Vector3(x, y, tile.Position.Z));
+                    Tile neighbor = this.getTile(new HexCoordinates3D(x, y));
                     if (neighbor == null)
                     {
-                        positions.Add(new Vector3(x, y, tile.Position.Z));
+                        positions.Add(new HexCoordinates3D(x, y));
                     }
                 }
             }
@@ -98,7 +132,7 @@ namespace CoreClassLibrary.Models.Map
 
 
 
-        public Tile getTile(Vector3 pos)
+        public Tile getTile(HexCoordinates3D pos)
         {
             // Biom biom = this.bioms.FirstOrDefault(b => b.tiles.Any(t => t.CheckIfSameTile(pos)));
             // if (biom == null)

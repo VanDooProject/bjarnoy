@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System;
 using System.Numerics;
+using CoreClassLibrary.Models.Map.Coordinates;
 
 namespace CoreClassLibrary.Models.Map.Tiles
 {
@@ -33,7 +34,7 @@ namespace CoreClassLibrary.Models.Map.Tiles
             get { return (this as ResourceTile) != null; }
         }
 
-        public ResourceTile(Vector3 position) : base(position)
+        public ResourceTile(HexCoordinates3D position) : base(position)
         {
             GetRndResource();
         }   

@@ -8,7 +8,8 @@
             height: size + 'px',
             zIndex: 50001
         }"
-        v-on:click="onClick"
+        v-on:click="onClick" 
+        v-b-popover.hover="popOverText"
         class="mapsubmenu"
     />
 </template>
@@ -29,10 +30,13 @@
                 return {x: Math.sin(this.angle)*this.submenulayer*100, y: Math.cos(this.angle)*this.submenulayer*100};
             },
             tile() { 
-                return this.$store.state.menuTile;
+                return this.$store.state.menu.menuTile;
             },
             size() {
                 return 75 * this.submenulayer;
+            },
+            popOverText() {
+                return this.type.name;
             }
         },
         methods: {
@@ -56,13 +60,13 @@
                         this.$store.dispatch("UpdateQueued");
                     })
                     .catch(error => this.$store.dispatch('ReqestError', error));
-                    this.$store.commit("SetMenuVisible", false);
+                    this.$store.commit("menu/SetMenuVisible", false);
                 }
                 else
                 {
                     if(this.type.name == "build")
                     {
-                        this.$store.commit("OpenBuildMenu");
+                        this.$store.commit("menu/OpenBuildMenu");
                     }
                     else if(this.type.name == "details")
                     {
