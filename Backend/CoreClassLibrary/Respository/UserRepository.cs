@@ -1,6 +1,7 @@
 ﻿
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Models.Auth;
 using log4net;
@@ -46,6 +47,13 @@ namespace CoreClassLibrary.Respository
             {
                 return null;
             }
+        }
+
+        public UserModel GetByMail(string Mail)
+        {
+            var filter = Builders<UserModel>.Filter.Where(x => x.Email == Mail);
+            List<UserModel> result = collection.Find(filter).ToList();
+            return result.FirstOrDefault();
         }
 
         public UserModel GetByUserId(string userId)

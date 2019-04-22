@@ -17,6 +17,8 @@ services:
     image: "$CONTAINER_IMAGE"
     container_name: "docker_browsergame_${BRANCH}"
 
+    restart: always
+
     volumes:
       - config:/app/config
 
@@ -44,6 +46,8 @@ services:
     image: mongo:latest
     container_name: "docker_browsergame_${BRANCH}_mongo"
 
+    restart: always
+
     # Expose ports without publishing them to the host machine - they’ll only be accessible to linked services. Only the internal port can be specified.
     expose:
       - "27017"
@@ -59,12 +63,16 @@ services:
   mongoWeb:
     image: mongo-express:latest
     container_name: "docker_browsergame_${BRANCH}_mongo_express"
+
+    restart: always
+
     environment:
     - ME_CONFIG_MONGODB_SERVER=mongodb
     - ME_CONFIG_MONGODB_PORT=27017
     - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
 #    - ME_CONFIG_MONGODB_ENABLE_ADMIN=false # default is true
 #    - ME_CONFIG_MONGODB_AUTH_DATABASE=admin
+    - VIRTUAL_HOST=mongo.${BRANCH}.gamez.mynode.space
 
     ports:
       - 8081
@@ -72,9 +80,6 @@ services:
     network_mode: "bridge"
     #networks:
     #  reverse-proxy-network: {}
-
-    environment:
-      - VIRTUAL_HOST=mongo.${BRANCH}.gamez.mynode.space
 
     
     links:

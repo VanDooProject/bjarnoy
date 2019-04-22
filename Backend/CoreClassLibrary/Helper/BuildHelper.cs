@@ -53,6 +53,9 @@ namespace CoreClassLibrary.Helper
                 // try to get tech for requested building
                 BuildTechnology buildTech = findTech(requestedBuilding);
 
+                // check ownership
+                this.checkOwnership(tile, player);
+
                 // check if requirements are fulfilled
                 checkBuildingResources(player, buildTech);
                 checkBuildingRequirements(tile, buildTech);
@@ -101,6 +104,16 @@ namespace CoreClassLibrary.Helper
             }
         }
 
+        private void checkOwnership(Tile tile, Player player)
+        {
+            // unowned OR owned by someone else
+            if (tile.Owner == null || tile.Owner._id != player._id)
+            {
+                logger.Warn("player does not own this tile - probably a user faked this request -> report to bot detector");
+                throw new BuildBuildingException("player does not own this tile");
+            }
+        }
+
         private BuildTechnology findTech(BuildBuildingModel build)
         {
             var buildTech = BuildTechController.Instance.findTech(build.BuildingName, build.Level);
@@ -130,7 +143,7 @@ namespace CoreClassLibrary.Helper
             {
                 // TODO: report user
                 logger.Warn("no tile for building - probably a user faked this request -> report to bot detector");
-                throw new BuildBuildingException();
+                throw new BuildBuildingException("tile not allowed");
             }
 
             // if there is a building check if its the same, check if level is correct (if empty level 1, if existing +1)

@@ -14,6 +14,7 @@ using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Player;
 using CoreClassLibrary.Models.Resources;
 using CoreClassLibrary.Respository;
+using log4net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +29,7 @@ namespace ApiServer.Controllers
     [Route("api/v1/[controller]")]
     public class AuthController : ControllerBase
     {
+        private readonly ILog logger = LogManager.GetLogger(typeof(AuthController));
         private IConfiguration _config;
 
         public AuthController(IConfiguration config)
@@ -45,6 +47,7 @@ namespace ApiServer.Controllers
 
             return String.Format("user({0}) is allowed to view page", currentUser);
         }
+
         // GET api/v1/auth/selftest/session/
         [HttpGet("selftest/session/")]
         [Authorize(Policy = "ValidSession")]
@@ -71,17 +74,23 @@ namespace ApiServer.Controllers
         [HttpPost("sign-in")]
         public IActionResult SignIn([FromBody]SignInModel login)
         {
-            IActionResult response = Unauthorized();
             var user = Authenticate(login);
-            var player = GetOwnedPlayerBy(user);
-
-            if (user != null)
+            if (user == null)
             {
-                var tokenString = BuildToken(user, player);
-                response = Ok(new { token = tokenString });
+                logger.DebugFormat("user not found for SignIn {0}", login);
+                return Unauthorized();
             }
 
-            return response;
+            var player = GetOwnedPlayerBy(user);
+            if (player == null)
+            {
+                logger.DebugFormat("no player found for user '{1}' SignIn {0}", login, user);
+                return Unauthorized();
+            }
+
+
+            var tokenString = BuildToken(user, player);
+            return Ok(new { token = tokenString });
         }
 
 
@@ -173,10 +182,15 @@ namespace ApiServer.Controllers
             PlayerRepository playerRepository = new PlayerRepository();
 
             // check if user already exists
-            UserModel IsUserInDb = userRepository.GetByUsername(signUp.Username);
-            if (IsUserInDb != null)
+            if (userRepository.GetByUsername(signUp.Username) != null)
             {
                 return base.BadRequest("user is already in DB");
+            }
+
+            // check if mail is already in DB
+            if (userRepository.GetByMail(signUp.Mail) != null)
+            {
+                return base.BadRequest("Mail is already in DB");
             }
 
             // use given data for new User(Model)
@@ -189,8 +203,8 @@ namespace ApiServer.Controllers
 
 
             // TODO: maybe seperate this logic to a user factory?
-            var PlayerFactory = new PlayerFactory();
-            var player = PlayerFactory.GetStartingPlayer(user.Username);
+            var playerFactory = new PlayerFactory();
+            var player = playerFactory.GetStartingPlayer(user.Username);
             player.setOwner(user);
 
             playerRepository.Add(player);
@@ -205,6 +219,9 @@ namespace ApiServer.Controllers
                 var tokenString = BuildToken(user, player);
                 response = Ok(new { token = tokenString });
             }
+
+            // create tower for new player
+            playerFactory.createAndSavePlayerBase(player);
 
             return response;
         }

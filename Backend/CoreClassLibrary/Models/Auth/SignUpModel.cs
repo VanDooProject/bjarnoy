@@ -16,5 +16,11 @@ namespace CoreClassLibrary.Models.Auth
         [Required]
         [EmailAddress(ErrorMessage = "no valid Mail given")]
         public string Mail { get; set; }
+
+
+        public override string ToString()
+        {
+            return this.Username + " | " + this.Mail + " | passwords are " + ((this.Password == this.PasswordConfirm)?"equal":"not equal");
+        }
     }
 }

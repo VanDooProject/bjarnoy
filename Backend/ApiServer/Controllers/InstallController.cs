@@ -4,11 +4,14 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using CoreClassLibrary.Controller;
+using CoreClassLibrary.Exceptions;
 using CoreClassLibrary.Factory;
 using CoreClassLibrary.Helper;
 using CoreClassLibrary.Models.Map;
 using CoreClassLibrary.Models.Map.Coordinates;
 using CoreClassLibrary.Models.Map.Tiles;
+using CoreClassLibrary.Models.Player;
+using CoreClassLibrary.Models.TechQueues;
 using CoreClassLibrary.Respository;
 using Microsoft.AspNetCore.Mvc;
 
@@ -36,6 +39,26 @@ namespace ApiServer.Controllers
 
             return infoList;
         }
+
+        // POST api/v1/install/tower
+        [HttpPost("tower/")]
+        public IActionResult CreateTowerForAllPlayer()
+        {
+            QueueRepository queueRepository = new QueueRepository();
+
+            PlayerRepository playerRepository = new PlayerRepository();
+            List<Player> PlayerList = playerRepository.All();
+
+            var playerFactory = new PlayerFactory();
+
+            foreach (Player player in PlayerList)
+            {
+                playerFactory.createAndSavePlayerBase(player);
+            }
+
+            return Ok();
+        }
+
         // POST api/v1/install/islands/
         [HttpPost("islands/{count=2}/{seed=1}")]
         public IActionResult CreateIslands(int count, int seed)
