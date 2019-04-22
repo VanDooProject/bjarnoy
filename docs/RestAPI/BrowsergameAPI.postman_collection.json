@@ -6,6 +6,270 @@
 	},
 	"item": [
 		{
+			"name": "Installer",
+			"item": [
+				{
+					"name": "delete all island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/islands/",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"islands",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete all tiles (not islands)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/map/",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"map",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/islands/3/2",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"islands",
+								"3",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create tower for player on first island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/tower",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"tower"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "fill map with water",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/water",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"water"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Authentication",
 			"item": [
 				{
@@ -167,7 +431,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"manfred.browsergame@andesia.org\"}"
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"mario.browsergame@andesia.org\"}"
 						},
 						"url": {
 							"raw": "{{url}}/api/v1/auth/sign-up",
@@ -550,270 +814,6 @@
 								"api",
 								"v1",
 								"ServerTime"
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "Installer",
-			"item": [
-				{
-					"name": "delete all island",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
-								"exec": [
-									"pm.test(\"response is ok\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
-								"exec": [
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "DELETE",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "{{url}}/api/v1/install/islands/",
-							"host": [
-								"{{url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"install",
-								"islands",
-								""
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "delete all tiles (not islands)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
-								"exec": [
-									"pm.test(\"response is ok\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
-								"exec": [
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "DELETE",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "{{url}}/api/v1/install/map/",
-							"host": [
-								"{{url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"install",
-								"map",
-								""
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "create island",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
-								"exec": [
-									"pm.test(\"response is ok\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
-								"exec": [
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "{{url}}/api/v1/install/islands/3/2",
-							"host": [
-								"{{url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"install",
-								"islands",
-								"3",
-								"2"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "create tower for player on first island",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
-								"exec": [
-									"pm.test(\"response is ok\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
-								"exec": [
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "{{url}}/api/v1/install/tower",
-							"host": [
-								"{{url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"install",
-								"tower"
-							]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "fill map with water",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
-								"exec": [
-									"pm.test(\"response is ok\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "prerequest",
-							"script": {
-								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
-								"exec": [
-									""
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": ""
-						},
-						"url": {
-							"raw": "{{url}}/api/v1/install/water",
-							"host": [
-								"{{url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"install",
-								"water"
 							]
 						}
 					},
