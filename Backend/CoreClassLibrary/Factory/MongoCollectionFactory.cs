@@ -20,6 +20,7 @@ namespace CoreClassLibrary.Factory
 
         //#if DEBUG
         //        private string ServerUri = "mongodb://10.0.0.137:27017";
+        //        private string ServerUri = "mongodb://127.0.0.1:27017";
         //#else
         //        private string ServerUri = "mongodb://mongodb:27017";
         //#endif

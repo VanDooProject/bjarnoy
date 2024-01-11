@@ -22,7 +22,7 @@ namespace CoreClassLibrary.Models.Settings
         //} = "mongodb";
 
 
-        public String MongoDatabaseServerAddress { get; set; } = "mongodb";
+        public String MongoDatabaseServerAddress { get; set; } = "127.0.0.1"; // "mongodb";
         public int MongoDatabaseServerPort { get; set; } = 27017;
         public int MongoDatabaseServerTimeoutSeconds { get; set; } = 5;//seconds
 

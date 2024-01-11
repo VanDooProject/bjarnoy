@@ -11,7 +11,6 @@ using ApiServer.BackgroundService;
 using ApiServer.SignalRHubs;
 using CoreClassLibrary.Observer;
 using log4net;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -21,7 +20,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
 using Microsoft.OpenApi.Models;
 
@@ -45,55 +43,55 @@ namespace ApiServer
             // add JWT authentication
             // from https://auth0.com/blog/securing-asp-dot-net-core-2-applications-with-jwts/
             // added comments from https://developer.okta.com/blog/2018/03/23/token-authentication-aspnetcore-complete-guide
-            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
-                {
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        // Clock skew compensates for server time drift.
-                        // We recommend 5 minutes or less:
-                        ClockSkew = TimeSpan.FromMinutes(1),
-
-                        // Ensure the token hasn't expired:
-                        RequireExpirationTime = true,
-                        ValidateLifetime = true, // check that the token is not expired and that the signing key of the issuer is valid
-
-                        // Ensure the token audience matches our audience value (default true):
-                        ValidateAudience = true, // ensure that the recipient of the token is authorized to receive it 
-                        ValidAudience = Configuration["Jwt:Issuer"], // <- taken from appsettings.json
-
-                        // Ensure the token was issued by a trusted authorization server (default true):
-                        ValidateIssuer = true, // validate the server that created that token
-                        ValidIssuer = Configuration["Jwt:Issuer"], // <- taken from appsettings.json
-
-                        // ?? signing key stuff
-                        ValidateIssuerSigningKey = true, // verify that the key used to sign the incoming token is part of a list of trusted keys
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Jwt:Key"]))
-                    };
-
-                    // https://docs.microsoft.com/en-us/aspnet/core/signalr/authn-and-authz?view=aspnetcore-2.2
-                    // We have to hook the OnMessageReceived event in order to
-                    // allow the JWT authentication handler to read the access
-                    // token from the query string when a WebSocket or 
-                    // Server-Sent Events request comes in.
-                    options.Events = new JwtBearerEvents
-                    {
-                        OnMessageReceived = context =>
-                        {
-                            var accessToken = context.Request.Query["access_token"];
-
-                            // If the request is for our hub...
-                            var path = context.HttpContext.Request.Path;
-                            if (!string.IsNullOrEmpty(accessToken) &&
-                                (path.StartsWithSegments("/api/ws")))
-                            {
-                                // Read the token out of the query string
-                                context.Token = accessToken;
-                            }
-                            return Task.CompletedTask;
-                        }
-                    };
-                });
+            //services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            //    .AddJwtBearer(options =>
+            //    {
+            //        options.TokenValidationParameters = new TokenValidationParameters
+            //        {
+            //            // Clock skew compensates for server time drift.
+            //            // We recommend 5 minutes or less:
+            //            ClockSkew = TimeSpan.FromMinutes(1),
+            //
+            //            // Ensure the token hasn't expired:
+            //            RequireExpirationTime = true,
+            //            ValidateLifetime = true, // check that the token is not expired and that the signing key of the issuer is valid
+            //
+            //            // Ensure the token audience matches our audience value (default true):
+            //            ValidateAudience = true, // ensure that the recipient of the token is authorized to receive it 
+            //            ValidAudience = Configuration["Jwt:Issuer"], // <- taken from appsettings.json
+            //
+            //            // Ensure the token was issued by a trusted authorization server (default true):
+            //            ValidateIssuer = true, // validate the server that created that token
+            //            ValidIssuer = Configuration["Jwt:Issuer"], // <- taken from appsettings.json
+            //
+            //            // ?? signing key stuff
+            //            ValidateIssuerSigningKey = true, // verify that the key used to sign the incoming token is part of a list of trusted keys
+            //            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Jwt:Key"]))
+            //        };
+            //
+            //        // https://docs.microsoft.com/en-us/aspnet/core/signalr/authn-and-authz?view=aspnetcore-2.2
+            //        // We have to hook the OnMessageReceived event in order to
+            //        // allow the JWT authentication handler to read the access
+            //        // token from the query string when a WebSocket or 
+            //        // Server-Sent Events request comes in.
+            //        options.Events = new JwtBearerEvents
+            //        {
+            //            OnMessageReceived = context =>
+            //            {
+            //                var accessToken = context.Request.Query["access_token"];
+            //
+            //                // If the request is for our hub...
+            //                var path = context.HttpContext.Request.Path;
+            //                if (!string.IsNullOrEmpty(accessToken) &&
+            //                    (path.StartsWithSegments("/api/ws")))
+            //                {
+            //                    // Read the token out of the query string
+            //                    context.Token = accessToken;
+            //                }
+            //                return Task.CompletedTask;
+            //            }
+            //        };
+            //    });
 
             services.AddMvc();
 
@@ -180,10 +178,10 @@ namespace ApiServer
             app.UseStaticFiles();
 
             // https://www.codemag.com/Article/1807061/Build-Real-time-Applications-with-ASP.NET-Core-SignalR
-            app.UseSignalR(builder =>
-            {
-                builder.MapHub<BaseHub>("/api/ws");
-            });
+            //app.UseSignalR(builder =>
+            //{
+            //    builder.MapHub<BaseHub>("/api/ws");
+            //});
 
             // Enable middleware to serve generated Swagger as a JSON endpoint.
             app.UseSwagger();
@@ -195,7 +193,7 @@ namespace ApiServer
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "Browsergame API V1");
             });
 
-            app.UseMvc();
+            //app.UseMvc();
         }
     }
 }

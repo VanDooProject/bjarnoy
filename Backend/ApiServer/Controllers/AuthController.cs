@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
@@ -19,7 +18,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
 using MongoDB.Bson;
 
 namespace ApiServer.Controllers
@@ -228,40 +226,41 @@ namespace ApiServer.Controllers
 
         private string BuildToken(UserModel user, Player player)
         {
-            // most claims are defined here: http://tools.ietf.org/html/rfc7519#section-4
-            var claims = new[] {
-                //new Claim(JwtRegisteredClaimNames.Sub, user.Username), // Subject
-                //new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                //new Claim(JwtRegisteredClaimNames.Birthdate, user.Birthdate.ToString("yyyy-MM-dd")),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // JWT ID - security measure against replay attacks
-
-                // https://stackoverflow.com/a/38426677/2298744
-                new Claim(ClaimTypes.Role, "Admin"),
-
-                // set user ID
-                new Claim(ClaimTypes.NameIdentifier, user._id.ToString()),
-
-
-                //set game specific parts
-                new Claim(GameClaims.WorldId, SettingsController.Instance.GetSettings().V1.WorldId),
-
-                // set access to player
-                new Claim(GameClaims.PlayerId, player._id.ToString()),
-                //new Claim(GameClaims.PlayerName, player.Name),
-                new Claim(GameClaims.PlayerPermission, player.Permissions.First(u => u.User._id == user._id).Permission.ToString()),
-            };
-
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(_config["Jwt:Issuer"],
-                _config["Jwt:Issuer"],
-                claims: claims,
-                notBefore: DateTime.UtcNow,
-                expires: DateTime.Now.AddMinutes(30), // time how long cookie is valid
-                signingCredentials: creds);
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            throw new NotImplementedException();
+        //    // most claims are defined here: http://tools.ietf.org/html/rfc7519#section-4
+        //    var claims = new[] {
+        //        //new Claim(JwtRegisteredClaimNames.Sub, user.Username), // Subject
+        //        //new Claim(JwtRegisteredClaimNames.Email, user.Email),
+        //        //new Claim(JwtRegisteredClaimNames.Birthdate, user.Birthdate.ToString("yyyy-MM-dd")),
+        //        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // JWT ID - security measure against replay attacks
+        //
+        //        // https://stackoverflow.com/a/38426677/2298744
+        //        new Claim(ClaimTypes.Role, "Admin"),
+        //
+        //        // set user ID
+        //        new Claim(ClaimTypes.NameIdentifier, user._id.ToString()),
+        //
+        //
+        //        //set game specific parts
+        //        new Claim(GameClaims.WorldId, SettingsController.Instance.GetSettings().V1.WorldId),
+        //
+        //        // set access to player
+        //        new Claim(GameClaims.PlayerId, player._id.ToString()),
+        //        //new Claim(GameClaims.PlayerName, player.Name),
+        //        new Claim(GameClaims.PlayerPermission, player.Permissions.First(u => u.User._id == user._id).Permission.ToString()),
+        //    };
+        //
+        //    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
+        //    var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        //
+        //    var token = new JwtSecurityToken(_config["Jwt:Issuer"],
+        //        _config["Jwt:Issuer"],
+        //        claims: claims,
+        //        notBefore: DateTime.UtcNow,
+        //        expires: DateTime.Now.AddMinutes(30), // time how long cookie is valid
+        //        signingCredentials: creds);
+        //
+        //    return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         // TODO use exceptions
