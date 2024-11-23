@@ -1,0 +1,25 @@
+variables:
+  DOCKER_REG: gitlab.mynode.space:1443
+
+  GIT_SUBMODULE_STRATEGY: recursive # needed for heatmap npm / vue package
+
+stages:
+  - build
+
+build:
+  image: node:22
+  stage: build
+
+  cache:
+    paths:
+      - map/node_modules/
+
+  script:
+    - cd ./map
+    - npm install
+    - npm run build
+
+    - npx jest # --testPathPattern=directoryName
+  artifacts:
+    paths:
+      - map/dist/
