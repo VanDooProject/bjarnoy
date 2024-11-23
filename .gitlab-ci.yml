@@ -14,13 +14,20 @@ build:
     paths:
       - map/node_modules/
 
+  services:
+    - name: selenium/standalone-chrome
+      alias: browser
+
   script:
     - cd ./map
     - npm install
     - npm run build
 
     # maybe we need an image with chrome for these tests to work
-    - ng test --sourceMap=false --browsers=ChromeHeadless --watch=false
+    # Use the --no-browsers command line option to override the value of this setting specified in the configuration file with an empty list.
+    #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false
+    # TODO set remote browser to docker container service
+    - npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run
   artifacts:
     paths:
       - map/dist/
