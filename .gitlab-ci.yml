@@ -19,7 +19,8 @@ build:
     - npm install
     - npm run build
 
-    - npx jest # --testPathPattern=directoryName
+    # maybe we need an image with chrome for these tests to work
+    - ng test --sourceMap=false --browsers=ChromeHeadless --watch=false
   artifacts:
     paths:
       - map/dist/
