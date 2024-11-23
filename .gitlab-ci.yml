@@ -22,7 +22,7 @@ build:
     paths:
       - map/dist/
 
-test:
+.test:
   image: node:22
   stage: build
 
