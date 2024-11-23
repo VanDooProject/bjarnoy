@@ -58,7 +58,9 @@ module.exports = function (config) {
                     // https://stackoverflow.com/questions/58481584/karma-not-able-to-launch-browser-using-karma-webdriver-launcher
                     path: '/wd/hub', // https://www.npmjs.com/package/wd#defaults
                 },
-                browserName: 'chrome'
+                browserName: 'chrome',
+                //version: 'ANY',
+                //platform: 'ANY',
             }
         } : {},
 
@@ -74,11 +76,11 @@ module.exports = function (config) {
         plugins: isCI ? [
             'karma-jasmine',
             'karma-jasmine-html-reporter',
-            'karma-webdriver-launcher'
+            'karma-webdriver-launcher',
         ] : [
-            'karma-chrome-launcher',
             'karma-jasmine',
-            'karma-jasmine-html-reporter'
+            'karma-jasmine-html-reporter',
+            'karma-chrome-launcher',
         ],
 
         // frameworks to use
