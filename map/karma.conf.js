@@ -61,6 +61,17 @@ module.exports = function (config) {
                 browserName: 'chrome',
                 //version: 'ANY',
                 //platform: 'ANY',
+                
+                //spec: {
+                //    platform: 'ANY',
+                //    testName: 'Karma test',
+                //    tags: [],
+                //    version: '',
+                //    base: 'WebDriver',
+                //    browserName: 'chrome'
+                //  },
+                testName: '',
+                platform: '',
             }
         } : {},
 
