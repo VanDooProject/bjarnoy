@@ -15,9 +15,9 @@ if (process.env.CI) {
                 "src/**/*.d.ts",
             ],
             // ...
-            browsers: ['Chrome'],
+            browsers: ['ChromeHeadless'],
             customLaunchers: {
-                Chrome: {
+                ChromeHeadless: {
                     base: 'WebDriver',
                     config: {
                         hostname: 'browser',
@@ -26,6 +26,12 @@ if (process.env.CI) {
                     browserName: 'chrome'
                 }
             },
+            plugins: [
+                'karma-chrome-launcher',
+                'karma-jasmine',
+                'karma-jasmine-html-reporter',
+                'karma-webdriver-launcher'
+            ],
             frameworks: ['jasmine', 'webdriver'],
         });
     }

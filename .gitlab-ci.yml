@@ -14,6 +14,22 @@ build:
     paths:
       - map/node_modules/
 
+  script:
+    - cd ./map
+    - npm install
+    - npm run build
+  artifacts:
+    paths:
+      - map/dist/
+
+test:
+  image: node:22
+  stage: build
+
+  cache:
+    paths:
+      - map/node_modules/
+
   services:
     - name: selenium/standalone-chrome
       alias: browser
@@ -21,13 +37,9 @@ build:
   script:
     - cd ./map
     - npm install
-    - npm run build
 
     # maybe we need an image with chrome for these tests to work
     # Use the --no-browsers command line option to override the value of this setting specified in the configuration file with an empty list.
     #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false
     # TODO set remote browser to docker container service
     - npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run
-  artifacts:
-    paths:
-      - map/dist/
