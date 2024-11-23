@@ -82,8 +82,7 @@ module.exports = function (config) {
         // frameworks to use
         // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
         //frameworks: ['jasmine', 'webdriver'],
-        //frameworks: ['jasmine'],
-        frameworks: isCI ? ['jasmine', 'webdriver-launcher'] : ['jasmine'],
+        frameworks: ['jasmine'],
         // list of reporters
         //reporters: ['progress', 'kjhtml'],
     });
