@@ -45,4 +45,6 @@ test:
     # Use the --no-browsers command line option to override the value of this setting specified in the configuration file with an empty list.
     #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false
     # TODO set remote browser to docker container service
-    - npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run --verbose
+    #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run --verbose
+    # `test2` has watch disabled
+    - npm run test2 --sourceMap=false --no-browsers --browsers=ChromeHeadless --verbose
