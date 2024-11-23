@@ -54,7 +54,9 @@ module.exports = function (config) {
                 base: 'WebDriver',
                 config: {
                     hostname: 'browser',
-                    port: 4444
+                    port: 4444, // 4444=selenium,7900 vnc port
+                    // https://stackoverflow.com/questions/58481584/karma-not-able-to-launch-browser-using-karma-webdriver-launcher
+                    path: '/wd/hub', // https://www.npmjs.com/package/wd#defaults
                 },
                 browserName: 'chrome'
             }
