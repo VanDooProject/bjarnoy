@@ -70,7 +70,6 @@ module.exports = function (config) {
         //],
         // use only one launcher plugin depending on CI
         plugins: isCI ? [
-            'karma-chrome-launcher',
             'karma-jasmine',
             'karma-jasmine-html-reporter',
             'karma-webdriver-launcher'
@@ -84,7 +83,7 @@ module.exports = function (config) {
         // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
         //frameworks: ['jasmine', 'webdriver'],
         //frameworks: ['jasmine'],
-        frameworks: isCI ? ['jasmine', 'webdriver'] : ['jasmine'],
+        frameworks: isCI ? ['jasmine', 'webdriver-launcher'] : ['jasmine'],
         // list of reporters
         //reporters: ['progress', 'kjhtml'],
     });
