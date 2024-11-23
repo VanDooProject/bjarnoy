@@ -26,6 +26,9 @@ test:
   image: node:22
   stage: build
 
+  variables:
+    CI: "true"
+
   cache:
     paths:
       - map/node_modules/
@@ -42,4 +45,4 @@ test:
     # Use the --no-browsers command line option to override the value of this setting specified in the configuration file with an empty list.
     #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false
     # TODO set remote browser to docker container service
-    - npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run
+    - npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run --verbose

@@ -2,6 +2,33 @@
 // address/hostname for selenium server/chrome is `browser`
 // locally we want to use default chrome and in CI/CD we want to use selenium server
 
+console.log("process.env.CI: ", process.env.CI);
+
+var baseSettings = {
+    // // list of files / patterns to load in the browser
+    // files: [
+    //     'test/e2e/**/*.js'
+    // ],
+    // files for angular
+    files: [
+        "src/**/*.spec.ts",
+        "src/**/*.d.ts",
+    ],
+    // // list of files to exclude
+    // exclude: [],
+    // // web server port
+    // port: 9876,
+    // enable / disable colors in the output (reporters and logs)
+    colors: true,
+
+    // enable / disable watching file and executing tests whenever any file changes
+    autoWatch: false,
+
+    // Continuous Integration mode
+    // if true, Karma captures browsers, runs the tests and exits
+    singleRun: true,
+};
+
 if (process.env.CI) {
     //let webdriverConfig = {
     //    hostname: 'browser',
@@ -10,10 +37,11 @@ if (process.env.CI) {
 
     module.exports = function (config) {
         config.set({
-            files: [
-                "src/**/*.spec.ts",
-                "src/**/*.d.ts",
-            ],
+            ...baseSettings,
+
+            // level of logging
+            logLevel: config.LOG_INFO,
+
             // ...
             browsers: ['ChromeHeadless'],
             customLaunchers: {
@@ -26,12 +54,14 @@ if (process.env.CI) {
                     browserName: 'chrome'
                 }
             },
+
             plugins: [
                 'karma-chrome-launcher',
                 'karma-jasmine',
                 'karma-jasmine-html-reporter',
                 'karma-webdriver-launcher'
             ],
+
             frameworks: ['jasmine', 'webdriver'],
         });
     }
@@ -40,40 +70,19 @@ else
 {
     module.exports = function (config) {
         config.set({
-            // // list of files / patterns to load in the browser
-            // files: [
-            //     'test/e2e/**/*.js'
-            // ],
-            // files for angular
-            files: [
-                "src/**/*.spec.ts",
-                "src/**/*.d.ts",
-            ],
-            // // list of files to exclude
-            // exclude: [],
-            // // web server port
-            // port: 9876,
-            // enable / disable colors in the output (reporters and logs)
-            colors: true,
+            ...baseSettings,
+            
             // level of logging
             logLevel: config.LOG_INFO,
-            // enable / disable watching file and executing tests whenever any file changes
-            autoWatch: false,
+
             // start these browsers
             browsers: ['Chrome'],
-            // Continuous Integration mode
-            // if true, Karma captures browsers, runs the tests and exits
-            singleRun: true,
+            //browsers: ['ChromeHeadlessCI'],
+
             // Concurrency level
             // how many browser should be started simultaneous
             concurrency: Infinity,
-            // custom launcher
-            customLaunchers: {
-                ChromeHeadlessCI: {
-                    base: 'ChromeHeadless',
-                    flags: ['--no-sandbox']
-                }
-            },
+
             // plugins
             plugins: [
                 'karma-chrome-launcher',
@@ -81,6 +90,7 @@ else
                 'karma-jasmine-html-reporter',
             //    'karma-webdriver-launcher'
             ],
+
             // frameworks to use
             // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
             //frameworks: ['jasmine', 'webdriver'],
