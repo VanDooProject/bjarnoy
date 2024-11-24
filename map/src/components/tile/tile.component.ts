@@ -15,7 +15,7 @@ import { ElementRef } from '@angular/core';
 export class TileComponent { 
     @Input() x: number = 0;
     @Input() y: number = 0;
-    @Input() heigth: number = 300;
+    @Input() height: number = 300;
     @Input() width: number = 200;
     @Input() label: string = '';
     
