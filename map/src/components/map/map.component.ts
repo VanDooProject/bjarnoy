@@ -4,6 +4,14 @@ import { TileComponent } from '../tile/tile.component';
 import { MapService } from '../../services/map.service';
 import { Tile } from '../../app/models/tile';
 
+interface MapTile {
+    x: number;
+    y: number;
+    color: string;
+    label: string;
+    src: string; // ./images/hextiles/foresttile_W.png
+}
+
 @Component({
     selector: 'app-map',
     standalone: true,
@@ -28,27 +36,32 @@ export class MapComponent {
     //    //{ x: 200, y: 100, color: 'yellow', label: 'B2' },
     //    { x: 150, y: 150, color: 'yellow', label: 'B2' },
     //];
-    tiles = [
-        { x: 0, y: 0, color: 'yellow', label: 'A1' },
-        { x: 2, y: 0, color: 'yellow', label: 'C1' },
-        { x: 1, y: 0, color: 'yellow', label: 'B1' },
-        { x: 3, y: 0, color: 'yellow', label: 'D1' },
-
-        { x: 0, y: 1, color: 'yellow', label: 'A2' },
-        { x: 2, y: 1, color: 'yellow', label: 'C2' },
-        { x: 1, y: 1, color: 'yellow', label: 'B2' },
-        { x: 3, y: 1, color: 'yellow', label: 'D2' },
-
-        { x: 0, y: 2, color: 'yellow', label: 'A3' },
-        { x: 2, y: 2, color: 'yellow', label: 'C3' },
-        { x: 1, y: 2, color: 'yellow', label: 'B3' },
-        { x: 3, y: 2, color: 'yellow', label: 'D3' },
-    ];
+    //tiles = [
+    //    { x: 0, y: 0, color: 'yellow', label: 'A1' },
+    //    { x: 2, y: 0, color: 'yellow', label: 'C1' },
+    //    { x: 1, y: 0, color: 'yellow', label: 'B1' },
+    //    { x: 3, y: 0, color: 'yellow', label: 'D1' },
+    //
+    //    { x: 0, y: 1, color: 'yellow', label: 'A2' },
+    //    { x: 2, y: 1, color: 'yellow', label: 'C2' },
+    //    { x: 1, y: 1, color: 'yellow', label: 'B2' },
+    //    { x: 3, y: 1, color: 'yellow', label: 'D2' },
+    //
+    //    { x: 0, y: 2, color: 'yellow', label: 'A3' },
+    //    { x: 2, y: 2, color: 'yellow', label: 'C3' },
+    //    { x: 1, y: 2, color: 'yellow', label: 'B3' },
+    //    { x: 3, y: 2, color: 'yellow', label: 'D3' },
+    //] as MapTile[];
+    //];
+    tiles = [] as MapTile[];
 
     constructor(private mapService : MapService) {
-        this.tiles = [];
+        this.tiles = [] as MapTile[];
         var rawTiles = mapService.getTiles(); // [x][y]
         var intermediateArray = [] as Tile[][]; // [y][x]
+
+        // chunk size
+        let chunkSize = rawTiles.length;
 
         // this.tiles.push({ x: x, y: y, color: "red", label: `(${x}|${y})` });
 
@@ -63,17 +76,17 @@ export class MapComponent {
         }
 
         //for (let y = intermediateArray.length * 2; y > 0; y--) {
-        let coordY = 0;
-        for (let y = 0; y < intermediateArray.length * 2; y++) {
+        let y = 0;
+        for (let row = 0; row < intermediateArray.length * 2; row++) {
 
-            for (let x = 0; x < intermediateArray[y % intermediateArray.length].length; x++) {
-                let tile = intermediateArray[y % intermediateArray.length][x];
-                //this.tiles.push({ x: x, y: coordY, color: "red", label: `(${x}|${coordY})` });
+            for (let x = 0; x < intermediateArray[row % intermediateArray.length].length; x++) {
+                let coordY = y * -1 + (chunkSize-1);
+                let tile = rawTiles[x][coordY];
 
                 // skip every second row
                 //if(x % 2 == 1) {
-                if(x % 2 == y % 2) {
-                    this.tiles.push({ x: x, y: coordY, color: "red", label: `(${x}|${coordY})` });
+                if(x % 2 == row % 2) {
+                    this.tiles.push({ x: x, y: y, color: "red", label: `(${x}|${coordY})`, src: tile.type });
                 }
                 else {
                     continue;
@@ -81,8 +94,8 @@ export class MapComponent {
             }
 
             // increment y only every second row
-            if(y % 2 == 1) {
-                coordY++;
+            if(row % 2 == 1) {
+                y++;
             }
         }
         

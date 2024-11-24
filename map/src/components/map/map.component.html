@@ -16,14 +16,17 @@
 
 
     <!-- loop over our tile list -->
-    
     <g app-tile 
       *ngFor="let tile of tiles"
       [x]="tile.x" 
       [y]="tile.y" 
-      [label]="tile.label">
+      [label]="tile.label"
+      [src]="tile.src"
+      >
 	</g>
- <!-- create a hexagon outline for the tile -->
+
+
+    <!-- create a hexagon outline for the tile -->
     <!-- <g transform="translate(0, 185)">
         <polygon points="0,0 50,50 150,50 200,0 150,-50 150,-50 50,-50 0,0"
         fill="none" stroke="red" stroke-width="3" />

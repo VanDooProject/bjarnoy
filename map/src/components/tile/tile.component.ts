@@ -18,7 +18,17 @@ export class TileComponent {
     @Input() height: number = 300;
     @Input() width: number = 200;
     @Input() label: string = '';
-    
+    @Input() src: string = '';
+    //href: string = '';
+
+    constructor() {
+        // src = ./images/hextiles/foresttile_W.png
+        //this.href = `./images/hextiles/${this.src}`;
+    }
+
+    get href(): string {
+        return `./images/hextiles/${this.src}`;
+    }    
     get transform(): string {
         //return `translate(${this.x}, ${this.y})`;
 
