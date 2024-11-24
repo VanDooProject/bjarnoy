@@ -13,6 +13,8 @@ export class MapService {
     "mountaintile",
     "sandtile",
     "watertile",
+    "fishinghutbuilding",
+    "towerbuilding",
   ];
 
   private orientations = [
@@ -49,7 +51,16 @@ export class MapService {
         let typeIndex = Math.floor(Math.random() * this.tileTypes.length);
         let orientationIndex = Math.floor(Math.random() * this.orientations.length);
 
-        this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}.png`;
+        if(this.tileTypes[typeIndex] == "towerbuilding") {
+          let level = Math.floor(Math.random() * 2);
+          // level should be attached to the path; it should be formated with 3 digits with leading zeros
+          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
+        }
+        else
+        {
+          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}.png`;
+        }
+
 
         // randomly select color
         let colorIndex = Math.floor(Math.random() * this.colors.length);
