@@ -20,6 +20,18 @@ export class TileComponent {
     @Input() label: string = '';
     
     get transform(): string {
-        return `translate(${this.x}, ${this.y})`;
+        //return `translate(${this.x}, ${this.y})`;
+
+        // image and tile hight do not match
+        var tileHeight = 100;
+        // width is also different since they are offset
+        var tileWidth = 150;
+        
+        // convert x and y coordinates to actual pixel values; every second tile is offset by half the width and height
+        if(this.x % 2 == 1) {
+            return `translate(${this.x * tileWidth}, ${this.y * tileHeight + tileHeight / 2})`;
+        } else {
+            return `translate(${this.x * tileWidth}, ${this.y * tileHeight})`;
+        }
     }
 }

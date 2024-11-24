@@ -18,5 +18,9 @@ export class MapService {
     }
   }
 
+  getTiles(): Tile[][] {
+    return this.tiles;
+  }
+
 
 }
