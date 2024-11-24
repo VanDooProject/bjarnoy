@@ -15,6 +15,17 @@ import { MapService } from '../../services/map.service';
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MapComponent { 
+    tileSize: number = 50;
+    mapWidth: number = 500;
+    mapHeight: number = 500;
+
+    tiles = [
+        { x: 0, y: 0, color: 'red', label: 'A1' },
+        { x: 50, y: 0, color: 'green', label: 'A2' },
+        { x: 0, y: 50, color: 'blue', label: 'B1' },
+        { x: 50, y: 50, color: 'yellow', label: 'B2' },
+    ];
+
     constructor(private mapService : MapService) {
     }
 }

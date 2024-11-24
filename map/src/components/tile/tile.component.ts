@@ -1,10 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { Attribute, ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ElementRef } from '@angular/core';
 
 @Component({
-    // selector - https://github.com/angular/angular/issues/1632
-    // https://stackoverflow.com/questions/58927837/can-we-render-angular-components-inside-of-our-svg-templates
-    selector: 'g[app-tile]',
+    selector: '[app-tile]',
     standalone: true,
     imports: [
         CommonModule,
@@ -13,6 +12,14 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
     styleUrl: './tile.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TileComponent {
-
+export class TileComponent { 
+    @Input() x: number = 0;
+    @Input() y: number = 0;
+    @Input() size: number = 50;
+    @Input() color: string = 'blue';
+    @Input() label: string = '';
+    
+    get transform(): string {
+        return `translate(${this.x}, ${this.y})`;
+    }
 }

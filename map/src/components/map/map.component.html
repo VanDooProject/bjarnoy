@@ -1,8 +1,7 @@
 
 <h2>Map Component</h2>
 
-
-<svg>
+<svg [attr.width]="mapWidth" [attr.height]="mapHeight" xmlns="http://www.w3.org/2000/svg">
     <!-- define a blue gradient for the sea of the map -->
     <defs>
         <linearGradient id="seaGradient" x1="0" y1="0" x2="0" y2="1">
@@ -18,20 +17,21 @@
 
     <!-- loop over our tile list -->
     
-
-    <g app-tile ></g>
-
-
-    <!-- create a hexagon outline for the tile -->
-     <g transform="translate(50, 185)">
+    <g app-tile 
+      *ngFor="let tile of tiles"
+      [x]="tile.x" 
+      [y]="tile.y" 
+      [size]="tileSize" 
+      [color]="tile.color" 
+      [label]="tile.label">
+	</g>
+ <!-- create a hexagon outline for the tile -->
+    <g transform="translate(50, 185)">
         <polygon points="0,0 50,50 150,50 200,0 150,-50 150,-50 50,-50 0,0"
         fill="none" stroke="orange" stroke-width="3" />
-     </g>
-     <g transform="translate(50, 285)">
+    </g>
+    <g transform="translate(50, 285)">
         <polyline points="50,-50 0,0 50,50 150,50 200,0 150,-50 "
-        fill="none" stroke="red" stroke-width="3" />
-     </g>
-
-
-    <rect width="50" height="50" x="500" y="500" rx="10" ry="10" fill="blue" />
+    	fill="none" stroke="red" stroke-width="3" />
+    </g>
 </svg>
