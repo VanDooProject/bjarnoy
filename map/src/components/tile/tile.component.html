@@ -1,4 +1,8 @@
+<svg:g [attr.transform]="transform">
+    <rect [attr.x]="x" [attr.y]="y" [attr.width]="size" [attr.height]="size" [attr.fill]="color"></rect>
+    <text [attr.x]="x + size / 2" [attr.y]="y + size / 2" dy=".3em" text-anchor="middle" fill="white">
+        {{ label }}
+    </text>
+</g>
 
-
-<svg:image x="0" y="20" width="200" height="300" xlink:href="./images/hextiles/foresttile_W.png" />
-<svg:rect width="50" height="50" x="400" y="400" rx="10" ry="10" fill="red" />
+    

@@ -1,12 +1,13 @@
 
 <h2>Map Component</h2>
 
-<app-tile ></app-tile>
-
-<svg style="width: 700px; height: 700px">
-    <!-- loop over our tile list -->
-    
-
-
-    <rect width="50" height="50" x="500" y="500" rx="10" ry="10" fill="blue" />
+<svg [attr.width]="mapWidth" [attr.height]="mapHeight" xmlns="http://www.w3.org/2000/svg">
+    <g app-tile 
+      *ngFor="let tile of tiles"
+      [x]="tile.x" 
+      [y]="tile.y" 
+      [size]="tileSize" 
+      [color]="tile.color" 
+      [label]="tile.label">
+</g>
 </svg>
