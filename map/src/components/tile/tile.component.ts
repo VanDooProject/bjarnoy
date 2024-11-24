@@ -33,7 +33,7 @@ export class TileComponent {
         //return `translate(${this.x}, ${this.y})`;
 
         // image and tile hight do not match
-        var tileHeight = 100;
+        var tileHeight = 92;
         // width is also different since they are offset
         var tileWidth = 150;
         
