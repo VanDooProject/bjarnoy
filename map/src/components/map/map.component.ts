@@ -7,7 +7,7 @@ import { Tile } from '../../app/models/tile';
 interface MapTile {
     x: number;
     y: number;
-    color: string;
+    color: string | null;
     label: string;
     src: string; // ./images/hextiles/foresttile_W.png
 }
@@ -86,7 +86,7 @@ export class MapComponent {
                 // skip every second row
                 //if(x % 2 == 1) {
                 if(x % 2 == row % 2) {
-                    this.tiles.push({ x: x, y: y, color: "red", label: `(${x}|${coordY})`, src: tile.type });
+                    this.tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type });
                 }
                 else {
                     continue;

@@ -24,6 +24,18 @@ export class MapService {
     "W",
   ];
 
+  private colors = [
+    //null,
+    //null,
+    //null,
+    "red",
+    "green",
+    "blue",
+    "yellow",
+    "purple",
+    "orange",
+  ];
+
   private tiles: Tile[][];
 
   constructor() {
@@ -38,6 +50,10 @@ export class MapService {
         let orientationIndex = Math.floor(Math.random() * this.orientations.length);
 
         this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}.png`;
+
+        // randomly select color
+        let colorIndex = Math.floor(Math.random() * this.colors.length);
+        this.tiles[x][y].color = this.colors[colorIndex];
       }
     }
   }

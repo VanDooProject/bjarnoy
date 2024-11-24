@@ -18,6 +18,7 @@ export class TileComponent {
     @Input() height: number = 300;
     @Input() width: number = 200;
     @Input() label: string = '';
+    @Input() color: string | null = null;
     @Input() src: string = '';
     //href: string = '';
 
