@@ -1,3 +1,8 @@
+<svg:g [attr.transform]="transform">
+    <image [attr.x]="x" [attr.y]="y" [attr.width]="width" [attr.heigth]="heigth" xlink:href="./images/hextiles/foresttile_W.png"></image>
+    <text [attr.x]="x + width / 2" [attr.y]="y + heigth / 2" dy=".3em" text-anchor="middle" fill="white">
+        {{ label }}
+    </text>
+</g>
 
-
-<svg:image x="50" y="0" width="200" height="300" xlink:href="./images/hextiles/foresttile_W.png" />
+    

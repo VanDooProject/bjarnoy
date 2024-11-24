@@ -15,8 +15,8 @@ import { ElementRef } from '@angular/core';
 export class TileComponent { 
     @Input() x: number = 0;
     @Input() y: number = 0;
-    @Input() size: number = 50;
-    @Input() color: string = 'blue';
+    @Input() heigth: number = 300;
+    @Input() width: number = 200;
     @Input() label: string = '';
     
     get transform(): string {
