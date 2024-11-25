@@ -1,12 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { Attribute, ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { ElementRef } from '@angular/core';
+import { NgIf } from '@angular/common';
 
 @Component({
     selector: '[app-tile]',
     standalone: true,
     imports: [
         CommonModule,
+        //NgIf,
     ],
     templateUrl: './tile.component.svg',
     styleUrl: './tile.component.css',

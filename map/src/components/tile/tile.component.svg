@@ -24,12 +24,15 @@
     
 
     
-    <ng-template [ngIf]="color != null">
-        <svg:g transform="translate(0, 184)">
+    <!-- <ng-template *ngIf="color != null"> -->
+    <!-- <ng-template [ngIf]="color != null"> -->
+    <!-- <ng-template [ngIf]="true == true"> -->
+    <!-- <ng-template *ngIf="true == true"> -->
+        <svg:g transform="translate(0, 184)" *ngIf="color != null">
             <polyline points="0,0 50,46 150,46 200,0"
             fill="none" [attr.stroke]="color" stroke-width="3" />
         </g>
-    </ng-template>
+    <!-- </ng-template> -->
 </g>
 
     

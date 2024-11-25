@@ -27,9 +27,6 @@ export class MapService {
   ];
 
   private colors = [
-    //null,
-    //null,
-    //null,
     "red",
     "green",
     "blue",
@@ -63,8 +60,12 @@ export class MapService {
 
 
         // randomly select color
-        let colorIndex = Math.floor(Math.random() * this.colors.length);
-        this.tiles[x][y].color = this.colors[colorIndex];
+        let colorIndex = Math.floor(Math.random() * this.colors.length * 4);
+        if(colorIndex >= this.colors.length) {
+          this.tiles[x][y].color = null;
+        } else {
+          this.tiles[x][y].color = this.colors[colorIndex];
+        }
       }
     }
   }
