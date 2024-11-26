@@ -7,15 +7,18 @@ import { Tile } from '../app/models/tile';
 export class MapService {
   // types: map/public/images/hextiles/coastalwatertile_E.png map/public/images/hextiles/coastalwatertile_NE.png map/public/images/hextiles/coastalwatertile_NW.png map/public/images/hextiles/coastalwatertile_SE.png map/public/images/hextiles/coastalwatertile_SW.png map/public/images/hextiles/coastalwatertile_W.png map/public/images/hextiles/foresttile_E.png map/public/images/hextiles/foresttile_NE.png map/public/images/hextiles/foresttile_NW.png map/public/images/hextiles/foresttile_SE.png map/public/images/hextiles/foresttile_SW.png map/public/images/hextiles/foresttile_W.png map/public/images/hextiles/grasstile_E.png map/public/images/hextiles/grasstile_NE.png map/public/images/hextiles/grasstile_NW.png map/public/images/hextiles/grasstile_SE.png map/public/images/hextiles/grasstile_SW.png map/public/images/hextiles/grasstile_W.png map/public/images/hextiles/mountaintile_E.png map/public/images/hextiles/mountaintile_NE.png map/public/images/hextiles/mountaintile_NW.png map/public/images/hextiles/mountaintile_SE.png map/public/images/hextiles/mountaintile_SW.png map/public/images/hextiles/mountaintile_W.png map/public/images/hextiles/sandtile_E.png map/public/images/hextiles/sandtile_NE.png map/public/images/hextiles/sandtile_NW.png map/public/images/hextiles/sandtile_SE.png map/public/images/hextiles/sandtile_SW.png map/public/images/hextiles/sandtile_W.png map/public/images/hextiles/watertile_E.png map/public/images/hextiles/watertile_NE.png map/public/images/hextiles/watertile_NW.png map/public/images/hextiles/watertile_SE.png map/public/images/hextiles/watertile_SW.png map/public/images/hextiles/watertile_W.png
   private tileTypes = [
-    "coastalwatertile",
+    //"coastalwatertile",
     "foresttile",
     "grasstile",
-    "mountaintile",
-    "sandtile",
-    "watertile",
+    //"mountaintile",
+    //"sandtile",
+    //"watertile",
     "fishinghutbuilding",
-    "towerbuilding",
+    //"towerbuilding",
     "vikinghut",
+    //"magictower",
+    "farm_crop",
+    "farm_pumpkin",
   ];
 
   private orientations = [
@@ -39,10 +42,11 @@ export class MapService {
   private tiles: Tile[][];
 
   constructor() {
+    let chunkSize = 20;
     this.tiles = [];
-    for (let x = 0; x <= 10; x++) {
+    for (let x = 0; x <= chunkSize; x++) {
       this.tiles[x] = [];
-      for (let y = 0; y <= 10; y++) {
+      for (let y = 0; y <= chunkSize; y++) {
         this.tiles[x][y] = new Tile();
 
         // randomly select from type list and orientation
@@ -59,7 +63,14 @@ export class MapService {
         else if(
           this.tileTypes[typeIndex] == "vikinghut"
         ) {
-          let level = Math.floor(Math.random() * 2) + 1;
+          let level = Math.floor(Math.random() * 5) + 0;
+          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
+        }
+        else if(
+          this.tileTypes[typeIndex] == "farm_crop"
+          || this.tileTypes[typeIndex] == "farm_pumpkin"
+        ) {
+          let level = Math.floor(Math.random() * 2) + 0;
           this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
         }
         else
@@ -73,7 +84,7 @@ export class MapService {
         if(colorIndex >= this.colors.length) {
           this.tiles[x][y].color = null;
         } else {
-          this.tiles[x][y].color = this.colors[colorIndex];
+          //this.tiles[x][y].color = this.colors[colorIndex];
         }
       }
     }

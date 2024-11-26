@@ -1,19 +1,18 @@
-<svg:g [attr.transform]="transform">
+<svg:g [attr.transform]="transform" class="tile">
     <image
         [attr.x]="0"
         [attr.y]="0"
         [attr.width]="width"
         [attr.height]="height"
-        [attr.xlink:href]="href"
+        [attr.href]="href"
     ></image>
+
 
     <text [attr.x]="width / 2" [attr.y]="155" dy=".3em" text-anchor="middle" fill="white">
         <tspan [attr.x]="width / 2" dy="1.2em">{{ label }}</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{src}}</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{color}}</tspan>
     </text>
-
-
 
     <g transform="translate(0, 186)">
         <!-- <polyline points="50,-46 0,0 50,46 150,46 200,0 150,-46"
@@ -33,6 +32,19 @@
             fill="none" [attr.stroke]="color" stroke-width="3" />
         </g>
     <!-- </ng-template> -->
+</g>
+
+<svg:g [attr.transform]="transform" class="tile-text" *ngIf="false">
+
+    <!-- transparent react which triggers hover, should be full with and 100px (-> third) the height -->
+    <rect
+        [attr.x]="0"
+        [attr.y]="(height / 3) * 1.4"
+        [attr.width]="width"
+        [attr.height]="height / 3"
+        fill="rgba(200,0,0,0.2)"
+        />
+
 </g>
 
     
