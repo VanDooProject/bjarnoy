@@ -5,6 +5,7 @@ variables:
 
 stages:
   - build
+  - deploy
 
 build:
   image: node:22
@@ -48,3 +49,36 @@ build:
     #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run --verbose
     # `test2` has watch disabled
     - npm run test2 --sourceMap=false --no-browsers --browsers=ChromeHeadless --verbose
+
+# setup infra via terraform on netlify; set branch tf var from gitlab CI
+.terraform-plan:
+  image: hashicorp/terraform:light
+  stage: build
+  script:
+    - terraform init
+    #- terraform apply -auto-approve -var="branch=${CI_COMMIT_REF_NAME}"
+    - terraform plan -var="branch=${CI_COMMIT_REF_NAME}" ./terraform/netlify.tf
+  only:
+    - master
+
+deploy_netlify:
+  image: node:latest
+  stage: deploy
+
+  only:
+    refs:
+      - master
+
+  #when: manual
+
+  needs:
+    - build
+
+  before_script:
+    - npm install -g netlify-cli --unsafe-perm=true
+  script:
+    - cd map
+    - ls -ahl dist/
+    - ls -ahl dist/browser
+    # https://cli.netlify.com/commands/deploy/
+    - netlify deploy --dir dist/browser/ --prod --message "${CI_COMMIT_REF_NAME}-$CI_COMMIT_SHA"
