@@ -87,4 +87,4 @@ deploy_netlify:
     - ls -ahl map/dist/map/browser
     # https://cli.netlify.com/commands/deploy/
     #- netlify deploy --dir dist/map/browser/ --prod --message "${CI_COMMIT_REF_NAME}-$CI_COMMIT_SHA"
-    - netlify deploy --prod --message "${CI_COMMIT_REF_NAME}-$CI_COMMIT_SHA"
+    - netlify deploy --dir dist/map/browser/ --prod --debug --message "${CI_COMMIT_REF_NAME}-$CI_COMMIT_SHA"
