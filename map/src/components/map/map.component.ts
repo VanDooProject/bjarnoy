@@ -80,13 +80,14 @@ export class MapComponent {
         for (let row = 0; row < intermediateArray.length * 2; row++) {
 
             for (let x = 0; x < intermediateArray[row % intermediateArray.length].length; x++) {
-                let coordY = y * -1 + (chunkSize-1);
+                //let coordY = y * -1 + (chunkSize-1); // invert Y
+                let coordY = y;
                 let tile = rawTiles[x][coordY];
 
                 // skip every second row
                 //if(x % 2 == 1) {
                 if(x % 2 == row % 2) {
-                    this.tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type });
+                    this.tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type_src });
                 }
                 else {
                     continue;
