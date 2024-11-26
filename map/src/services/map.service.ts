@@ -57,7 +57,7 @@ export class MapService {
           this.tileTypes[typeIndex] == "towerbuilding"
         ) {
           let level = Math.floor(Math.random() * 2);
-          // level should be attached to the path; it should be formated with 3 digits with leading zeros
+          // level should be attached to the path; it should be formatted with 3 digits with leading zeros
           this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
         }
         else if(

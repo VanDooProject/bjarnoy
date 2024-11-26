@@ -1,0 +1,8 @@
+[submodule "map/public/images/tile"]
+	path = map/public/images/tile
+	url = https://gitlab.mynode.space/browsergame/bg_assets_hextile.git
+	branch = master
+[submodule "map/public/images/tiles"]
+	path = map/public/images/tiles
+	url = https://gitlab.mynode.space/browsergame/bg_assets_hextile.git
+	branch = master

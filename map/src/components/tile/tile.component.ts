@@ -30,7 +30,7 @@ export class TileComponent {
     }
 
     get href(): string {
-        return `./images/hextiles/${this.src}`;
+        return `./images/tiles/hextiles/${this.src}`;
     }    
     get transform(): string {
         //return `translate(${this.x}, ${this.y})`;
