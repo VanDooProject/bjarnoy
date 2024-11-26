@@ -6,4 +6,4 @@
 
 # code is in `dist/map/browser/`
 [context.prod]
-  publish = "dist/map/browser/"
+  publish = "map/dist/map/browser/"
