@@ -57,6 +57,7 @@ export class MapComponent {
 
     constructor(private mapService : MapService) {
         this.tiles = [] as MapTile[];
+        let tiles  = [] as MapTile[];
         var rawTiles = mapService.getTiles(); // [x][y]
         var intermediateArray = [] as Tile[][]; // [y][x]
 
@@ -87,7 +88,7 @@ export class MapComponent {
                 // skip every second row
                 //if(x % 2 == 1) {
                 if(x % 2 == row % 2) {
-                    this.tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type_src });
+                    tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type_src });
                 }
                 else {
                     continue;
@@ -100,6 +101,7 @@ export class MapComponent {
             }
         }
         
-
+        // set in the end to replace references to trigger change detection only once
+        this.tiles = tiles;
     }
 }
