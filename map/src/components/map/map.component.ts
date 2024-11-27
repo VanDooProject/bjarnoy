@@ -26,7 +26,7 @@ interface MapTile {
 export class MapComponent { 
     tileSize: number = 50;
     mapWidth: number = 500;
-    mapHeight: number = 500;
+    mapHeight: number = 200;
 
     //tiles = [
     //    { x: 0, y: 0, color: 'red', label: 'A1' },

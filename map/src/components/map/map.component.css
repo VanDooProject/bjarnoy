@@ -1,16 +1,23 @@
 :host {
   display: block;
 
-  width: 100%;
-  height: 100%;
+  /* width: 100%;
+  height: 100%; */
 }
 
 
 svg {
+  position: absolute;
+  left: -50%;
+  top: -40%;
+
   /*width: 700px; height: 700px;*/
-  width: 100%;
-  height: 100%;
+  width: 200%;
+  height: 200%;
 
   /* border: 1px solid #000; */
-  background-color: var(--background);
+  /* background-color: var(--background); */
+
+  /* scale to 50% */
+  transform: scale(0.5);
 }

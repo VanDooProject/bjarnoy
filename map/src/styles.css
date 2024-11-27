@@ -1,19 +1,34 @@
 /* You can add global styles to this file, and also import other style files */
 body {
-    color: blue;
-    height: 100%;
-    min-height: 100%;
+    /* color: blue; */
+    /* height: 100%;
+    min-height: 100%; */
     width: 100%;
 
     margin: 0;
     padding: 0;
 
+    /* background-color: var(--light-teal); */
+    /* gradient from light teal on top to beige on bottom as background */
+    /* background: linear-gradient(to bottom, var(--light-teal), var(--beige)); */
+    /* gradient should be about 1 third blue and the rest beige */
+    background: linear-gradient(to bottom, var(--light-teal) 10%, var(--beige) 50%);
+    /* gradient should not loop; overall bg-color should be beige */
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: cover;
+    background-color: var(--beige);
 }
 
 html {
-    height: 100%;
+    /* height: 100%; */
 }
 
 :root {
     --background: #f0f0f0;
+    --light-teal: rgb(130, 162, 161);
+    --beige: rgb(227, 217, 190);
+    --dark-beige: rgb(215, 192, 163);
+    --dark-grey: rgb(44, 57, 60); /* used in navbar */
+    --light-creme: rgb(248, 236, 210); 
 }

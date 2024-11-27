@@ -149,6 +149,7 @@ export class MapService {
     "farm_crop": ["grasstile", "foresttile"], // 2 level (starting with 0) -> 0,1
     "farm_pumpkin": ["grasstile", "foresttile"], // 2 level (starting with 0)
     "vikinghut": ["grasstile", "foresttile"], // 4 level (starting with 0) -> 0,1,2,3,4
+    "fishinghutbuilding": ["sandtile", "coastalwatertile"/*, "watertile"*/],
   } as { [key: string]: string[] };
 
   setRandomIterator(x: number, y: number): void {
@@ -218,6 +219,17 @@ export class MapService {
         || neighborTileTypes[i] == "vikinghut"
       ) {
         neighborTileTypes[i] = "grasstile";
+      }
+      //else if(
+      //  neighborTileTypes[i] == "towerbuilding"
+      //  || neighborTileTypes[i] == "magictower"
+      //) {
+      //  neighborTileTypes[i] = "mountaintile";
+      //}
+      else if(
+        neighborTileTypes[i] == "fishinghutbuilding"
+      ) {
+        neighborTileTypes[i] = "coastalwatertile";
       }
     }
 
