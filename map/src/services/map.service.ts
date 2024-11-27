@@ -52,9 +52,7 @@ export class MapService {
         this.tiles[x][y] = new Tile(x, y);
 
         // randomly select from type list and orientation
-        let typeIndex = Math.floor(Math.random() * this.tileTypes.length);
         let orientationIndex = Math.floor(Math.random() * this.orientations.length);
-
         this.tiles[x][y].orientation = this.orientations[orientationIndex];
 
         /*
@@ -83,8 +81,8 @@ export class MapService {
           this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}.png`;
         }
         */
+        
         //this.tiles[x][y].type_src = `watertile_${this.orientations[orientationIndex]}.png`;
-
 
         // randomly select color
         let colorIndex = Math.floor(Math.random() * this.colors.length * 4);
@@ -139,6 +137,7 @@ export class MapService {
     "watertile": ["watertile", "coastalwatertile"],
     "coastalwatertile": ["watertile", "coastalwatertile", "sandtile"],
     "sandtile": ["coastalwatertile", "sandtile", "grasstile"],
+    //"sandtile": ["coastalwatertile", "sandtile", "grasstile", "watertile", "foresttile"], // enable way more so we get less conflicts
 
     "grasstile": ["grasstile", "foresttile", "sandtile"],
     "foresttile": ["grasstile", "foresttile", "mountaintile"],
@@ -273,6 +272,14 @@ export class MapService {
     ) {
       let level = Math.floor(Math.random() * 5) + 0;
       this.tiles[x][y].level = level;
+    }
+    else if(
+      this.tiles[x][y].type == "coastalwatertile"
+    ) {
+      //let variant = Math.floor(Math.random() * (1 + 2)) - 1;
+      // fix distribution, for about 80% of the time we do not want a variant
+      let variant = Math.floor(Math.random() * 2) + 0;
+      this.tiles[x][y].variant = Math.floor(Math.random() * 12) == 0 ? variant : null;
     }
 
     // recursively call setRandomTileType for all neighbors
