@@ -15,6 +15,15 @@
     </text> -->
 
 
+    <g transform="translate(0, 186)" class="grid">
+        <!-- <polyline points="50,-46 0,0 50,46 150,46 200,0 150,-46"
+    	fill="none" stroke="orange" stroke-width="1" /> -->
+        <!-- <polyline points="0,0 50,46 150,46 200,0 "
+    	fill="none" stroke="lightgrey" stroke-width="1" /> -->
+        <polygon points="0,0 50,46 150,46 200,0 150,-46 50,-46"
+    	fill="none" stroke="lightgrey" stroke-width="1" />
+        <!-- rgba(255,255,255,0.5) -->
+    </g>
     
     <!-- <svg:g transform="translate(0, 184)">
         <polygon points="
@@ -57,15 +66,6 @@
         *ngIf="hrefTopping"></image>
 
 
-    <g transform="translate(0, 186)" class="grid">
-        <!-- <polyline points="50,-46 0,0 50,46 150,46 200,0 150,-46"
-    	fill="none" stroke="orange" stroke-width="1" /> -->
-        <!-- <polyline points="0,0 50,46 150,46 200,0 "
-    	fill="none" stroke="lightgrey" stroke-width="1" /> -->
-        <polygon points="0,0 50,46 150,46 200,0 150,-46 50,-46"
-    	fill="none" stroke="lightgrey" stroke-width="1" />
-        <!-- rgba(255,255,255,0.5) -->
-    </g>
 
     <!-- <text [attr.x]="width / 2" [attr.y]="-35" dy=".3em" text-anchor="middle" fill="white"> -->
     <text [attr.x]="width / 2" [attr.y]="155" dy=".3em" text-anchor="middle" fill="white">
