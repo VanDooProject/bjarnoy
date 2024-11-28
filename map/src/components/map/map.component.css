@@ -8,16 +8,16 @@
 
 svg {
   position: absolute;
-  left: -50%;
-  top: -40%;
+  left: -100%;
+  top: -93%;
 
   /*width: 700px; height: 700px;*/
-  width: 200%;
-  height: 200%;
+  width: 300%;
+  height: 290%;
 
   /* border: 1px solid #000; */
   /* background-color: var(--background); */
 
   /* scale to 50% */
-  transform: scale(0.5);
+  transform: scale(0.33);
 }

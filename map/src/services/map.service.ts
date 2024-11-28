@@ -44,7 +44,7 @@ export class MapService {
   private tiles: Tile[][];
 
   constructor() {
-    let chunkSize = 30;
+    let chunkSize = 50;
     this.tiles = [];
     for (let x = 0; x <= chunkSize; x++) {
       this.tiles[x] = [];
