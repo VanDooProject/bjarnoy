@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Attribute, ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { ElementRef } from '@angular/core';
 import { NgIf } from '@angular/common';
+import { Tile } from '../../app/models/tile';
 
 @Component({
     selector: '[app-tile]',
@@ -20,18 +21,36 @@ export class TileComponent {
     @Input() height: number = 300;
     @Input() width: number = 200;
     @Input() label: string = '';
-    @Input() color: string | null = null;
-    @Input() src: string = '';
-    //href: string = '';
+
+    @Input() tile: Tile | null = null;
 
     constructor() {
-        // src = ./images/hextiles/foresttile_W.png
-        //this.href = `./images/hextiles/${this.src}`;
+    }
+
+    get type_src(): string {
+      let variant = this.tile?.variant == null ? '' : `_variant${String(this.tile?.variant).padStart(3, '0')}`;
+  
+      if(this.tile?.level == null)
+        return `${this.tile?.type}_${this.tile?.orientation}${variant}`;
+      else
+        return `${this.tile?.type}_${this.tile?.orientation}_level${String(this.tile?.level).padStart(3, '0')}${variant}`;
     }
 
     get href(): string {
-        return `./images/tiles/hextiles/${this.src}`;
-    }    
+        if(this.hrefTopping != null)
+            return `./images/tiles/hextiles/base/${this.tile?.type}_${this.tile?.orientation}_base.png`;
+
+        return `./images/tiles/hextiles/${this.type_src}.png`;
+    }
+
+    get hrefTopping(): string | null{
+        if(this.tile?.type != 'vikinghut')
+            return null;
+
+        
+        return `./images/tiles/hextiles/top/${this.type_src}.png`;
+    }
+
     get transform(): string {
         //return `translate(${this.x}, ${this.y})`;
 

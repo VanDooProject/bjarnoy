@@ -85,12 +85,9 @@ export class MapService {
         //this.tiles[x][y].type_src = `watertile_${this.orientations[orientationIndex]}.png`;
 
         // randomly select color
-        let colorIndex = Math.floor(Math.random() * this.colors.length * 4);
-        if(colorIndex >= this.colors.length) {
-          this.tiles[x][y].color = null;
-        } else {
-          //this.tiles[x][y].color = this.colors[colorIndex];
-        }
+        let colorIndex = Math.floor(Math.random() * this.colors.length);
+        //this.tiles[x][y].color = this.colors[colorIndex];
+        this.tiles[x][y].color = Math.floor(Math.random() * 12) == 0 ? this.colors[colorIndex] : null;
       }
     }
 

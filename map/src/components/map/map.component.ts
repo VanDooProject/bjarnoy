@@ -53,11 +53,11 @@ export class MapComponent {
     //    { x: 3, y: 2, color: 'yellow', label: 'D3' },
     //] as MapTile[];
     //];
-    tiles = [] as MapTile[];
+    tiles = [] as Tile[];
 
     constructor(private mapService : MapService) {
-        this.tiles = [] as MapTile[];
-        let tiles  = [] as MapTile[];
+        this.tiles = [] as Tile[];
+        let tiles  = [] as Tile[];
         var rawTiles = mapService.getTiles(); // [x][y]
         var intermediateArray = [] as Tile[][]; // [y][x]
 
@@ -88,7 +88,8 @@ export class MapComponent {
                 // skip every second row
                 //if(x % 2 == 1) {
                 if(x % 2 == row % 2) {
-                    tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type_src });
+                    //tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type_src });
+                    tiles.push(tile);
                 }
                 else {
                     continue;

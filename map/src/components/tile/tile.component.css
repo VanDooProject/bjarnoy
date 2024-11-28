@@ -6,8 +6,52 @@ rect {
 /* svg text {display: none;}
 svg g:hover text {display: block;} */
 
+/*
 g.tile text {display: none;}
 g.tile:hover text {display: block;}
 
 g.tile-text text {display: block;}
 g.tile-text:hover text {display: none;}
+*/
+
+/* g.tile g.grid text {display: block; }
+g.tile g.grid:hover text {display: none;}
+g.tile g.grid polygon {
+  stroke: black;
+  fill: black; 
+}
+g.tile:hover g.grid polygon {
+  stroke: white;
+  fill: white; 
+} */
+
+
+
+/* otherwise the images will overlap the polygon */
+g.tile image,
+g.tile text
+{
+  pointer-events: none;
+}
+
+g.grid polygon {
+  /* fill: rgba(255,255,255,0.5);  */
+
+  /* if fill is none we need to set this https://stackoverflow.com/questions/9208244/how-to-hover-over-an-svg-rect */
+  pointer-events: fill;
+}
+g.tile g.grid:hover polygon {
+  /* stroke: white; */
+  fill: rgba(255,255,255,0.2);
+}
+
+ g.tile text {
+  display: none;
+}
+/*g.tile g.grid:hover text {
+  display: block;
+} */
+ /* same as above but the text is in the parent of g.grid -> traverse back in selector */
+g.tile:has(g.grid:hover) text {
+  display: block;
+}

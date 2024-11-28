@@ -16,13 +16,20 @@
 
 
     <!-- loop over our tile list -->
-    <g app-tile 
+    <!-- <g app-tile 
       *ngFor="let tile of tiles"
       [x]="tile.x" 
       [y]="tile.y" 
       [label]="tile.label"
       [src]="tile.src"
       [color]="tile.color"
+      >
+	</g> -->
+    <g app-tile 
+      *ngFor="let tile of tiles"
+      [x]="tile.x" 
+      [y]="tile.y" 
+      [tile]="tile"
       >
 	</g>
 
