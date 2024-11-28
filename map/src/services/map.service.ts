@@ -130,7 +130,53 @@ export class MapService {
     // call setRandomTileType for all neighbors
     this.setRandomIterator(x, y);
 
+    this.cleanMap();
+    this.cleanMap();
+
     return this.tiles;
+  }
+
+  // removes all sandtiles which do not have a neighbor of type grasstile or coastalwatertile
+  // removes all coastalwatertile which do not have a neighbor of type sandtile
+  private cleanMap(): void {
+    for (let x = 0; x < this.tiles.length; x++) {
+      for (let y = 0; y < this.tiles[x].length; y++) {
+        let neighbors = this.getNeighbors(x, y);
+        let neighborTypes = neighbors.map(n => n.type);
+
+        if (this.tiles[x][y].type == "sandtile") {
+          if (
+            !neighborTypes.includes("grasstile") &&
+            // also check alternative tiles
+            !neighborTypes.includes("farm_crop") &&
+            !neighborTypes.includes("farm_pumpkin") &&
+            !neighborTypes.includes("vikinghut")
+          ) {
+            this.tiles[x][y].type = "coastalwatertile";
+          }
+          else if (
+            !neighborTypes.includes("coastalwatertile") &&
+            // also check alternative tiles
+            !neighborTypes.includes("fishinghutbuilding")
+          ) {
+            this.tiles[x][y].type = "grasstile";
+          }
+        }
+        else if (this.tiles[x][y].type == "coastalwatertile") {
+          if (!neighborTypes.includes("sandtile")) {
+            //this.tiles[x][y].type = null;
+            this.tiles[x][y].type = "watertile";
+            // reset variant
+            this.tiles[x][y].variant = null;
+          }
+        }
+        else if (this.tiles[x][y].type == "fishinghutbuilding") {
+          if (!neighborTypes.includes("sandtile")) {
+            this.tiles[x][y].type = "watertile";
+          }
+        }
+      }
+    }
   }
 
   private rules = {
@@ -151,7 +197,7 @@ export class MapService {
     "fishinghutbuilding": ["sandtile", "coastalwatertile"/*, "watertile"*/],
   } as { [key: string]: string[] };
 
-  setRandomIterator(x: number, y: number): void {
+  private setRandomIterator(x: number, y: number): void {
     //if (this.tiles[x][y].type) {
     //  return;
     //}
@@ -184,7 +230,7 @@ export class MapService {
     //}
   }
 
-  setRandomTileType(x: number, y: number): void {
+  private setRandomTileType(x: number, y: number): void {
     // set type if not already set
     if (this.tiles[x][y].type) {
       return;
@@ -291,7 +337,7 @@ export class MapService {
 
   // get neighboring tiles on a odd-q hex grid - https://www.redblobgames.com/grids/hexagons/#neighbors
   // just coords as tuples
-  getNeighborCoords(x: number, y: number) : [number, number][] {
+  private getNeighborCoords(x: number, y: number) : [number, number][] {
     return [
       //[x, y - 1],
       //[x + 1, y - 1],
@@ -328,7 +374,7 @@ export class MapService {
   }
 
   // gets a list of actual neighboring tiles, leaving out the ones that are out of bounds
-  getNeighbors(x: number, y: number): Tile[] {
+  private getNeighbors(x: number, y: number): Tile[] {
     let neighbors = this.getNeighborCoords(x, y);
     let result = [];
     for (let i = 0; i < neighbors.length; i++) {
