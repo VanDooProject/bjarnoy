@@ -317,7 +317,8 @@ export class MapService {
       this.tiles[x][y].level = level;
     }
     else if(
-      this.tiles[x][y].type == "coastalwatertile"
+      this.tiles[x][y].type == "coastalwatertile" ||
+      this.tiles[x][y].type == "foresttile"
     ) {
       //let variant = Math.floor(Math.random() * (1 + 2)) - 1;
       // fix distribution, for about 80% of the time we do not want a variant

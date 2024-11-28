@@ -42,7 +42,7 @@ g.grid polygon {
 }
 g.tile g.grid:hover polygon {
   /* stroke: white; */
-  fill: rgba(255,255,255,0.2);
+  fill: rgba(255,255,255,0.4);
 }
 
  g.tile text {
