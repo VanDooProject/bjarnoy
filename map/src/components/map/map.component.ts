@@ -2,15 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { TileComponent } from '../tile/tile.component';
 import { MapService } from '../../services/map.service';
-import { Tile } from '../../app/models/tile';
-
-interface MapTile {
-    x: number;
-    y: number;
-    color: string | null;
-    label: string;
-    src: string; // ./images/hextiles/foresttile_W.png
-}
+import { Tile } from '../../models/tile';
 
 @Component({
     selector: 'app-map',
@@ -28,31 +20,6 @@ export class MapComponent {
     mapWidth: number = 500;
     mapHeight: number = 200;
 
-    //tiles = [
-    //    { x: 0, y: 0, color: 'red', label: 'A1' },
-    //    //{ x: 200, y: 0, color: 'green', label: 'A2' },
-    //    { x: 150, y: 50, color: 'green', label: 'A2' },
-    //    { x: 0, y: 100, color: 'blue', label: 'B1' },
-    //    //{ x: 200, y: 100, color: 'yellow', label: 'B2' },
-    //    { x: 150, y: 150, color: 'yellow', label: 'B2' },
-    //];
-    //tiles = [
-    //    { x: 0, y: 0, color: 'yellow', label: 'A1' },
-    //    { x: 2, y: 0, color: 'yellow', label: 'C1' },
-    //    { x: 1, y: 0, color: 'yellow', label: 'B1' },
-    //    { x: 3, y: 0, color: 'yellow', label: 'D1' },
-    //
-    //    { x: 0, y: 1, color: 'yellow', label: 'A2' },
-    //    { x: 2, y: 1, color: 'yellow', label: 'C2' },
-    //    { x: 1, y: 1, color: 'yellow', label: 'B2' },
-    //    { x: 3, y: 1, color: 'yellow', label: 'D2' },
-    //
-    //    { x: 0, y: 2, color: 'yellow', label: 'A3' },
-    //    { x: 2, y: 2, color: 'yellow', label: 'C3' },
-    //    { x: 1, y: 2, color: 'yellow', label: 'B3' },
-    //    { x: 3, y: 2, color: 'yellow', label: 'D3' },
-    //] as MapTile[];
-    //];
     tiles = [] as Tile[];
 
     constructor(private mapService : MapService) {

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Tile } from '../app/models/tile';
+import { Tile } from '../models/tile';
 
 @Injectable({
   providedIn: 'root'
