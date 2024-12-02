@@ -48,7 +48,10 @@ export class TileComponent {
             this.tile?.type != 'vikinghut' &&
             this.tile?.type != 'foresttile' &&
             this.tile?.type != 'farm_crop' &&
-            this.tile?.type != 'farm_pumpkin'
+            this.tile?.type != 'farm_pumpkin' &&
+            this.tile?.type != 'rivertile' &&
+            this.tile?.type != 'rivertile_bend' &&
+            this.tile?.type != 'rivertile_spring'
         )
             return null;
 

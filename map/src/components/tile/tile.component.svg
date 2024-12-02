@@ -69,7 +69,7 @@
 
     <!-- <text [attr.x]="width / 2" [attr.y]="-35" dy=".3em" text-anchor="middle" fill="white"> -->
     <text [attr.x]="width / 2" [attr.y]="155" dy=".3em" text-anchor="middle" fill="white">
-        <tspan [attr.x]="width / 2" dy="1.2em">({{ tile?.x }} | {{ tile?.x }})</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">({{ tile?.x }} | {{ tile?.y }})</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.type}} lvl:{{tile?.level}} var:{{tile?.variant}}</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.color}}</tspan>
     </text>
