@@ -32,7 +32,7 @@ nav::after {
     height: var(--height-fancy-border);
     /* background-image: url('http://localhost:4200/images/navbar.png'); */
     /* background-image: url('./../../public/images/navbar.png'); */
-    background-image: url('./../../images/navbar.png');
+    background-image: url('./../../../images/navbar.png');
     background-size: 100% 100%;
     background-repeat: repeat-x;
 

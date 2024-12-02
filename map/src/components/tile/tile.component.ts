@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Attribute, ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { ElementRef } from '@angular/core';
 import { NgIf } from '@angular/common';
-import { Tile } from '../../app/models/tile';
+import { Tile } from '../../models/tile';
 
 @Component({
     selector: '[app-tile]',
@@ -15,16 +15,22 @@ import { Tile } from '../../app/models/tile';
     styleUrl: './tile.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TileComponent { 
-    @Input() x: number = 0;
-    @Input() y: number = 0;
+export class TileComponent {
     @Input() height: number = 300;
     @Input() width: number = 200;
     @Input() label: string = '';
 
-    @Input() tile: Tile | null = null;
+    @Input() tile: Tile = {} as Tile;
 
     constructor() {
+    }
+
+    get x(): number {
+        return this.tile?.x || 0;
+    }
+
+    get y(): number {
+        return this.tile?.y || 0;
     }
 
     get type_src(): string {
