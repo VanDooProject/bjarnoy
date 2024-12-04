@@ -91,7 +91,7 @@ export class MapService {
       }
     }
 
-    this.generateMap();
+    //this.generateMap();
   }
 
   getTiles(): Tile[][] {

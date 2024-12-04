@@ -1,7 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { TileComponent } from '../tile/tile.component';
 import { MapService } from '../../services/map.service';
+import { ChunkComponent } from '../components/chunk/chunk.component';
+import { ComponentRef, ViewChild, ViewContainerRef } from '@angular/core';
+import { Injector } from '@angular/core';
+
+import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
 
 @Component({
@@ -9,7 +13,7 @@ import { Tile } from '../../models/tile';
     standalone: true,
     imports: [
         CommonModule,
-        TileComponent,
+        ChunkComponent,
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
@@ -22,11 +26,62 @@ export class MapComponent {
 
     tiles = [] as Tile[];
 
-    constructor(private mapService : MapService) {
+    @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
+    container!: ViewContainerRef;
+
+    // Store references to dynamically created components
+    private componentRefs: ComponentRef<ChunkComponent>[] = [];
+    
+
+    //@ViewChild('chunkContainerRef', { read: ViewContainerRef })
+    //@ViewChild('chunkContainer')
+    //chunkContainerRef: ViewContainerRef;
+
+    ngAfterViewInit() {
+        console.log('Values on ngAfterViewInit():');
+        //console.log("chunkContainerRef:", this.chunkContainerRef);
+        console.log("chunkContainerRef:", this.container);
+
+        const injector = Injector.create({
+            providers: [
+                { provide: 'baseCoordX', useValue: 42 },
+                { provide: 'baseCoordY', useValue: 69 },
+            ]
+        });
+        
+        const componentRef = this.container.createComponent(ChunkComponent, { injector });
+        this.componentRefs.push(componentRef);
+        //componentRef.setInput('baseCoordX', -69);
+        //componentRef.instance.baseCoordY = 69;
+        componentRef.instance.tiles = this.tiles;
+
+        
+        this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
+        this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
+        
+        // Remove the last added component if any
+        //if (this.componentRefs.length > 0) {
+        //    const componentRef = this.componentRefs.pop();
+        //    componentRef?.destroy();
+        //}
+
+        // remove `componentRef` from this.componentRefs
+        //componentRef?.destroy();
+
+        const componentRef2 = this.componentRefs[2];
+        componentRef2.destroy();
+
+    }  
+
+    constructor(private mapService : MapService, private viewContainer: ViewContainerRef) {
         this.tiles = [] as Tile[];
         let tiles  = [] as Tile[];
         var rawTiles = mapService.getTiles(); // [x][y]
         var intermediateArray = [] as Tile[][]; // [y][x]
+
+
+        //this.viewContainer.createComponent(ChunkComponent);
+        //this.viewContainer.createComponent(ChunkComponent);
 
         // chunk size
         let chunkSize = rawTiles.length;
