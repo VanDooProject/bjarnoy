@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Tile } from '../models/tile';
+import { River, RiverTile, Tile } from '../models/tile';
 
 @Injectable({
   providedIn: 'root'
@@ -44,7 +44,7 @@ export class MapService {
   private tiles: Tile[][];
 
   constructor() {
-    let chunkSize = 50;
+    let chunkSize = 30;
     this.tiles = [];
     for (let x = 0; x <= chunkSize; x++) {
       this.tiles[x] = [];
@@ -131,7 +131,7 @@ export class MapService {
     this.cleanMap();
 
     for (let i = 0; i < 10; i++) {
-      this.carveRiver();
+      this.carveRiver(i);
     }
 
     return this.tiles;
@@ -180,11 +180,14 @@ export class MapService {
     }
   }
 
-  private carveRiver(): void {
+  private carveRiver(riverId : number): [number, number][] {
     let [x, y] = this.getStartPoint();
 
+    let river = new River(riverId, `riverId_${riverId}`);
+
     // use dijkstra to find the shortest path to the next sandtile
-    let path = this.dijkstra(x, y, ["sandtile", "rivertile", "rivertile_bend"]);
+    //let path = this.dijkstra(x, y, ["sandtile", /*"rivertile",*/ "rivertile_bend"]); // only to bend so we get nicer Y crossings
+    let path = this.dijkstra(x, y, ["sandtile", "rivertile", "rivertile_bend"]); // only to bend so we get nicer Y crossings
 
     console.log("path", path);
 
@@ -192,6 +195,7 @@ export class MapService {
     for (let i = 0; i < path.length; i++) {
       let [x, y] = path[i];
       this.tiles[x][y].type = "rivertile";
+      this.tiles[x][y].riverTile = new RiverTile(river, i);
     }
 
     // corect river flow
@@ -199,6 +203,8 @@ export class MapService {
       let [x, y] = path[i];
       this.fixRiver(x, y);
     }
+
+    return path;
   }
 
 /*
@@ -224,16 +230,52 @@ export class MapService {
   * - SE top left/bottom
   * - SW bottom left/bottom right
   * - W top right/bottom
+  * 
+  * rivertile_y_narrow:
+  * - E top/bottom left/bottom
+  * - NE top left/bottom left/top right
+  * - NW top left/top/bottom right
+  * - SE top left/bottom right/bottom
+  * - SW bottom left/top right/bottom right
+  * - W top/top right/bottom
   */
-  private fixRiver(x: number, y: number): void {
+  private fixRiver(x: number, y: number, allowNesting = true): void {
     // get neighbors, filter only river
     let neighbors = this.getNeighbors(x, y).filter(n =>
       n.type == "rivertile" ||
       n.type == "rivertile_bend" ||
       n.type == "rivertile_spring" ||
       n.type == "coastalwatertile" ||
+      n.type == "rivertile_y_narrow" ||
       n.type == "fishinghutbuilding" // TODO remove this
     );
+
+    // if multiple costalwatertiles, drop all except one
+    let coastalWaterTiles = neighbors.filter(n => n.type == "coastalwatertile");
+    if(coastalWaterTiles.length > 1) {
+      neighbors = neighbors.filter(n => n.type != "coastalwatertile");
+      neighbors.push(coastalWaterTiles[0]);
+    }
+
+    // if there are other rivers multiple times, drop the ones farther from the spring (higher pos)
+    let riverTiles = neighbors.filter(
+      n => n.riverTile != null &&
+      n.riverTile?.river.id != this.tiles[x][y].riverTile?.river.id);
+    if(riverTiles.length > 1) {
+      let nearestToSpring = riverTiles.reduce((prev, current) => {
+        return prev.riverTile!.position < current.riverTile!.position ? prev : current;
+      });
+
+      // remove other river
+      neighbors = neighbors.filter(n => n.riverTile == null || n.riverTile?.river.id == this.tiles[x][y].riverTile?.river.id);
+      // add back nearest to spring
+      neighbors.push(nearestToSpring);
+
+      // fix other river first, because the main river should have the Y - this would likely loop if we add Y to filter list at beginning of this method
+      if(allowNesting)
+        this.fixRiver(nearestToSpring.x, nearestToSpring.y, false);
+    }
+
 
     if(
       neighbors.length == 0 ||
@@ -351,7 +393,65 @@ export class MapService {
       }
     }
     else if(neighbors.length == 3) {
-      // add Y crossing
+      // add Y crossing - rivertile_y_narrow
+      let tile1 = neighbors[0];
+      let tile2 = neighbors[1];
+      let tile3 = neighbors[2];
+
+      let x1 = tile1.x;
+      let y1 = tile1.y;
+      let x2 = tile2.x;
+      let y2 = tile2.y;
+      let x3 = tile3.x;
+      let y3 = tile3.y;
+
+      let direction1 = this.getDirectionFromCoords(x, y, x1, y1);
+      let direction2 = this.getDirectionFromCoords(x, y, x2, y2);
+      let direction3 = this.getDirectionFromCoords(x, y, x3, y3);
+
+      // rivertile_y_narrow
+      if(
+        this.isDirection3(direction1, direction2, direction3, "top", "bottom left", "bottom")
+      ) {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "E";
+      }
+      else if(
+        this.isDirection3(direction1, direction2, direction3, "top left", "bottom left", "top right")
+      ) {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "NE";
+      }
+      else if(
+        this.isDirection3(direction1, direction2, direction3, "top left", "top", "bottom right")
+      ) {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "NW";
+      }
+      else if(
+        this.isDirection3(direction1, direction2, direction3, "top left", "bottom right", "bottom")
+      ) {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "SE";
+      }
+      else if(
+        this.isDirection3(direction1, direction2, direction3, "bottom left", "top right", "bottom right")
+      ) {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "SW";
+      }
+      else if(
+        this.isDirection3(direction1, direction2, direction3, "top right", "top", "bottom")
+      ) {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "W";
+      }
+      else
+      {
+        this.tiles[x][y].type = "rivertile_y_narrow";
+        this.tiles[x][y].orientation = "W"; // TODO replace tis dummy
+        console.error(`unknown river Y ${x},${y}`, direction1, direction2, direction3);
+      }
     }
 
 
@@ -369,6 +469,28 @@ export class MapService {
     return (
       (assert1 == expect1 && assert2 == expect2) ||
       (assert1 == expect2 && assert2 == expect1)
+    );
+  }
+
+  // is direction str comparison for 3 directions
+  private isDirection3(
+    assert1 : string | null,
+    assert2 : string | null,
+    assert3 : string | null,
+    expect1 : string,
+    expect2 : string,
+    expect3 : string): boolean {
+    if(assert1 == null || assert2 == null || assert3 == null) {
+      return false;
+    }
+
+    return (
+      (assert1 == expect1 && assert2 == expect2 && assert3 == expect3) ||
+      (assert1 == expect1 && assert2 == expect3 && assert3 == expect2) ||
+      (assert1 == expect2 && assert2 == expect1 && assert3 == expect3) ||
+      (assert1 == expect2 && assert2 == expect3 && assert3 == expect1) ||
+      (assert1 == expect3 && assert2 == expect1 && assert3 == expect2) ||
+      (assert1 == expect3 && assert2 == expect2 && assert3 == expect1)
     );
   }
 
