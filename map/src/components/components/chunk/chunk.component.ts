@@ -2,12 +2,16 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { Input } from '@angular/core';
 import { Tile } from '../../../models/tile';
 import { NgFor } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { TileComponent } from '../../tile/tile.component';
 import { Inject } from '@angular/core';
 
 @Component({
   selector: 'app-chunk',
-  imports: [TileComponent],
+  imports: [
+    CommonModule,
+    TileComponent,
+  ],
   templateUrl: './chunk.component.html',
   styleUrl: './chunk.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -16,11 +20,11 @@ export class ChunkComponent {
   //baseCoordX : number;
   //baseCoordY : number;
 
-  //chunkSize : number;
+  chunkSize : number = 10;
 
-  tiles = [] as Tile[];
+  tiles = [] as Tile[][];
 
-  chunkHeight: number = 1000;
+  chunkHeight: number = 350;
   chunkWidth: number = 2000;
 
   constructor(

@@ -2,12 +2,17 @@
 
 
 
-<!-- <svg [attr.width]="chunkWidth" [attr.height]="chunkHeight" xmlns="http://www.w3.org/2000/svg" >
+<svg
+  [attr.width]="chunkWidth"
+  [attr.height]="chunkHeight"
+  xmlns="http://www.w3.org/2000/svg"
+  *ngFor="let tileRow of tiles"
+  >
 
     <g app-tile 
-      *ngFor="let tile of tiles"
+      *ngFor="let tile of tileRow"
       [tile]="tile"
       >
 	</g>
     
-</svg> -->
+</svg>

@@ -91,11 +91,27 @@ export class MapService {
       }
     }
 
-    //this.generateMap();
+    this.generateMap();
   }
 
   getTiles(): Tile[][] {
     return this.tiles;
+  }
+
+  // get chunk of map by size and x,y
+  getChunk(x: number, y: number, size: number): Tile[][] {
+    let chunk = [] as Tile[][];
+    for (let i = 0; i < size; i++) {
+      let cy = y + i;
+      chunk[i] = [];
+      for (let j = 0; j < size; j++) {
+        let cx = x + j;
+        // this.tiles is in [x][y] format
+        chunk[i][j] = this.tiles[cx][cy];
+      }
+    }
+
+    return chunk; // chunk[y][x]
   }
 
   /*
@@ -127,12 +143,12 @@ export class MapService {
     // call setRandomTileType for all neighbors
     this.setRandomIterator(x, y);
 
-    this.cleanMap();
-    this.cleanMap();
+    //this.cleanMap();
+    //this.cleanMap();
 
-    for (let i = 0; i < 10; i++) {
-      this.carveRiver(i);
-    }
+    //for (let i = 0; i < 10; i++) {
+    //  this.carveRiver(i);
+    //}
 
     return this.tiles;
   }

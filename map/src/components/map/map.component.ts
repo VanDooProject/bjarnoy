@@ -13,7 +13,6 @@ import { Tile } from '../../models/tile';
     standalone: true,
     imports: [
         CommonModule,
-        ChunkComponent,
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
@@ -42,34 +41,48 @@ export class MapComponent {
         //console.log("chunkContainerRef:", this.chunkContainerRef);
         console.log("chunkContainerRef:", this.container);
 
-        const injector = Injector.create({
-            providers: [
-                { provide: 'baseCoordX', useValue: 42 },
-                { provide: 'baseCoordY', useValue: 69 },
-            ]
+        //const injector = Injector.create({
+        //    providers: [
+        //        { provide: 'baseCoordX', useValue: 0 },
+        //        { provide: 'baseCoordY', useValue: 0 },
+        //    ]
+        //});
+
+        // create a list of injectors so we can use another for each component
+        const injectors = [] as Injector[];
+        // each injector should move 10 tiles (first by row then by column)
+        for (let x = 0; x < 3; x++) {
+            for (let y = 0; y < 3; y++) {
+                const injector = Injector.create({
+                    providers: [
+                        { provide: 'baseCoordX', useValue: x*10 },
+                        { provide: 'baseCoordY', useValue: y*10 },
+                    ],
+                }) as Injector;
+                injectors.push(injector);
+            }
+        }
+
+        // for each injector create a component
+        injectors.forEach(injector =>
+        {
+            this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
         });
         
-        const componentRef = this.container.createComponent(ChunkComponent, { injector });
-        this.componentRefs.push(componentRef);
-        //componentRef.setInput('baseCoordX', -69);
-        //componentRef.instance.baseCoordY = 69;
-        componentRef.instance.tiles = this.tiles;
 
         
-        this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-        this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-        
-        // Remove the last added component if any
-        //if (this.componentRefs.length > 0) {
-        //    const componentRef = this.componentRefs.pop();
-        //    componentRef?.destroy();
-        //}
+        //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
 
-        // remove `componentRef` from this.componentRefs
-        //componentRef?.destroy();
+        // set tiles for each comp
+        for (let i = 0; i < this.componentRefs.length; i++) {
+            //this.componentRefs[i].instance.tiles = this.tiles;
 
-        const componentRef2 = this.componentRefs[2];
-        componentRef2.destroy();
+            let comp = this.componentRefs[i].instance
+            comp.tiles = this.mapService.getChunk(comp.baseCoordX, comp.baseCoordY, 10);
+        }
+
+        //const componentRef2 = this.componentRefs[2];
+        //componentRef2.destroy();
 
     }  
 
