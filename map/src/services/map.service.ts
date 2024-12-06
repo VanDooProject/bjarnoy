@@ -46,50 +46,23 @@ export class MapService {
   private tiles: Tile[][]; // [x][y]
   private tilesHex: Tile[][]; // [r][s]
 
+  private mapSize = 30;
+  private mapStart = -15;
+
   constructor() {
-    let chunkSize = 30;
     this.tiles = [];
     this.tilesHex = [];
 
-    for (let x = -10; x <= chunkSize; x++) {
+    for (let x = this.mapStart; x <= this.mapSize; x++) {
       this.tiles[x] = [];
-      for (let y = -10; y <= chunkSize; y++) {
+      for (let y = this.mapStart; y <= this.mapSize; y++) {
         this.tiles[x][y] = new Tile(x, y);
 
         // randomly select from type list and orientation
         let orientationIndex = Math.floor(Math.random() * this.orientations.length);
         this.tiles[x][y].orientation = this.orientations[orientationIndex];
 
-        /*
-        if(
-          this.tileTypes[typeIndex] == "towerbuilding"
-        ) {
-          let level = Math.floor(Math.random() * 2);
-          // level should be attached to the path; it should be formatted with 3 digits with leading zeros
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
-        }
-        else if(
-          this.tileTypes[typeIndex] == "vikinghut"
-        ) {
-          let level = Math.floor(Math.random() * 5) + 0;
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
-        }
-        else if(
-          this.tileTypes[typeIndex] == "farm_crop"
-          || this.tileTypes[typeIndex] == "farm_pumpkin"
-        ) {
-          let level = Math.floor(Math.random() * 2) + 0;
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
-        }
-        else
-        {
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}.png`;
-        }
-        */
-        
-        //this.tiles[x][y].type_src = `watertile_${this.orientations[orientationIndex]}.png`;
-
-        // randomly select color
+                // randomly select color
         let colorIndex = Math.floor(Math.random() * this.colors.length);
         //this.tiles[x][y].color = this.colors[colorIndex];
         this.tiles[x][y].color = Math.floor(Math.random() * 12) == 0 ? this.colors[colorIndex] : null;
@@ -124,8 +97,8 @@ export class MapService {
   calculateMapHexCoord(): void {
     this.tilesHex = [] as Tile[][]; // [r][s]
 
-    for (let x = 0; x < this.tiles.length; x++) {
-      for (let y = 0; y < this.tiles[x].length; y++) {
+    for (let x = this.mapStart; x < this.tiles.length; x++) {
+      for (let y = this.mapStart; y < this.tiles[x].length; y++) {
         let hexCoord = new OffsetCoord(x, y).oddQToAxial();
         let s = hexCoord.s;
         let r = hexCoord.r;

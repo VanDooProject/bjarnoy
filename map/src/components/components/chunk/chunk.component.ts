@@ -20,7 +20,7 @@ export class ChunkComponent {
   baseCoordS : number = 0;
   baseCoordR : number = 0;
 
-  chunkSize : number = 10;
+  chunkSize : number = 3;
 
   @Input() tiles = [] as Tile[][];
 
