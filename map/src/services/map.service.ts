@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { River, RiverTile, Tile } from '../models/tile';
+import { OffsetCoord } from '../models/offsetCoord';
+import { HexCoord } from '../models/hexCoord';
 
 @Injectable({
   providedIn: 'root'
@@ -41,11 +43,14 @@ export class MapService {
     "orange",
   ];
 
-  private tiles: Tile[][];
+  private tiles: Tile[][]; // [x][y]
+  private tilesHex: Tile[][]; // [r][s]
 
   constructor() {
     let chunkSize = 30;
     this.tiles = [];
+    this.tilesHex = [];
+
     for (let x = -10; x <= chunkSize; x++) {
       this.tiles[x] = [];
       for (let y = -10; y <= chunkSize; y++) {
@@ -92,6 +97,8 @@ export class MapService {
     }
 
     this.generateMap();
+
+    this.calculateMapHexCoord();
   }
 
   getTiles(): Tile[][] {
@@ -112,6 +119,43 @@ export class MapService {
     }
 
     return chunk; // chunk[y][x]
+  }
+
+  calculateMapHexCoord(): void {
+    this.tilesHex = [] as Tile[][]; // [r][s]
+
+    for (let x = 0; x < this.tiles.length; x++) {
+      for (let y = 0; y < this.tiles[x].length; y++) {
+        let hexCoord = new OffsetCoord(x, y).oddQToAxial();
+        let s = hexCoord.s;
+        let r = hexCoord.r;
+
+        this.tilesHex[r] = this.tilesHex[r] || [];
+        this.tilesHex[r][s] = this.tiles[x][y];
+      }
+    }
+  }
+
+  getChunkHex(s: number, r: number, size: number): Tile[][] {
+    let chunk = [] as Tile[][]; // [r][s]
+
+    // this.tiles[x][y]
+
+    let top = new HexCoord(s, r).axialToOddQ();
+    let right = new HexCoord(s - size, r).axialToOddQ();
+    let bottom = new HexCoord(s - size, r + size).axialToOddQ();
+    let left = new HexCoord(s, r + size).axialToOddQ();
+
+    console.log("getChunkHex", top, right, bottom, left);
+
+    for (let i = r; i <= r+size; i++) {
+      chunk[i] = [];
+      for (let j = s; j <= s+size; j++) {
+        chunk[i][j] = this.tilesHex[r+i][s+j];
+      }
+    }
+
+    return chunk; // chunk[r][s]
   }
 
   /*

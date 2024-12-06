@@ -6,13 +6,13 @@ export class HexCoord {
     r: number = 0;
     s: number = 0;
 
-    constructor(q: number, r: number) {
-        this.q = q;
+    constructor(s: number, r: number) {
+        this.q = -s - r;
         this.r = r;
-        this.s = -r -q;
+        this.s = s
     }
 
-    axialToOddR() {
+    axialToOddQ() {
         var col = this.q;
         var row = this.r + (this.q - (this.q & 1)) / 2;
         return new OffsetCoord(col, row);

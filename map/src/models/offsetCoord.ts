@@ -9,9 +9,10 @@ export class OffsetCoord {
         this.y = y;
     }
 
-    oddRToAxial() {
+    oddQToAxial() {
         var q = this.x
         var r = this.y - (this.x - (this.x & 1)) / 2
-        return new HexCoord(q, r)
+        let s = -q - r;
+        return new HexCoord(s, r)
     }
 }

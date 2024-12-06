@@ -146,11 +146,13 @@ export class MapComponent {
         this.tiles = tiles;
 
         
-        this.chunkTiles = this.mapService.getChunk(0, 0, 10);
+        //this.chunkTiles = this.mapService.getChunk(0, 0, 10);
         this.chunks = [];
-        this.chunks[0] = this.mapService.getChunk(-3, 0, 7);
+        //this.chunks[0] = this.mapService.getChunk(-3, 0, 7);
         //this.chunks[1] = this.mapService.getChunk(0, 10, 10);
         //this.chunks[2] = this.mapService.getChunk(10, 0, 10);
         //this.chunks[1] = this.mapService.getChunk(10, 10, 10);
+
+        this.chunks[0] = this.mapService.getChunkHex(0,0,3);
     }
 }
