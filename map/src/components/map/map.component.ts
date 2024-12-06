@@ -148,7 +148,7 @@ export class MapComponent {
         this.tiles = tiles;
 
         
-        let size = 5;
+        let size = 2;
 
         //this.chunkTiles = this.mapService.getChunk(0, 0, 10);
         this.chunks = [];
@@ -159,25 +159,36 @@ export class MapComponent {
         //this.chunks.push(this.mapService.getChunkHex(0, 0, size));
         //this.chunks.push(this.mapService.getChunkHex(0, size-2, size));
 
-        this.chunks.push(this.mapService.getChunkHex(size, -size-1, size));
-        this.chunks.push(this.mapService.getChunkHex(size, 0, size));
-        this.chunks.push(this.mapService.getChunkHex(size, size, size));
 
-        this.chunks.push(this.mapService.getChunkHex(0, -size-1, size));
+
+        //this.chunks.push(this.mapService.getChunkHex(size, -size-1, size));
+        //this.chunks.push(this.mapService.getChunkHex(size, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(size, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(0, -size-1, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size-1, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size*2-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size*2-1, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size*3-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size*3-1, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size*4-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size*4-1, size, size));
+
+
+        
+        this.chunks.push(this.mapService.getChunkHex(0, -size, size));
         this.chunks.push(this.mapService.getChunkHex(0, 0, size));
         this.chunks.push(this.mapService.getChunkHex(0, size, size));
+        this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
 
-        this.chunks.push(this.mapService.getChunkHex(-size-1, 0, size));
-        this.chunks.push(this.mapService.getChunkHex(-size-1, size, size));
 
-        this.chunks.push(this.mapService.getChunkHex(-size*2-1, 0, size));
-        this.chunks.push(this.mapService.getChunkHex(-size*2-1, size, size));
-        
-        this.chunks.push(this.mapService.getChunkHex(-size*3-1, 0, size));
-        this.chunks.push(this.mapService.getChunkHex(-size*3-1, size, size));
-        
-        this.chunks.push(this.mapService.getChunkHex(-size*4-1, 0, size));
-        this.chunks.push(this.mapService.getChunkHex(-size*4-1, size, size));
 
         //this.chunks[0] = this.mapService.getChunkHex(size-2, 0, size);
         //this.chunks[1] = this.mapService.getChunkHex(size-2, size-2, size);
@@ -191,7 +202,7 @@ export class MapComponent {
         //this.chunks.push(this.mapService.getChunkHex(size, size, size+2));
 
         //let chunk = this.mapService.getChunkHex(0,0,3);
-        let chunk = this.mapService.getChunkHex(0,0,3);
+        //let chunk = this.mapService.getChunkHex(0,0,3);
         //console.log("chunk", chunk);
         //this.chunks[0] = chunk;
     }
