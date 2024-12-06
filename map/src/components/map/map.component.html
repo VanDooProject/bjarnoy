@@ -5,3 +5,28 @@
 
 <!-- <ng-template #chunkContainerRef></ng-template> -->
 <div #chunkContainerRef></div>
+
+<h1>map</h1>
+
+
+<!-- <ul>
+    <li>test</li>
+    <li *ngFor="let tileRow of chunkTiles">
+        asd
+        {{ tileRow[0] }}
+    </li>
+</ul> -->
+
+
+<svg
+  [attr.width]="1000"
+  [attr.height]="1000"
+  xmlns="http://www.w3.org/2000/svg"
+  >
+    <!-- <g *ngFor="let tileRow of chunkTiles"> -->
+    <g *ngFor="let chunkTiles of chunks">
+        <g app-chunk [tiles]="chunkTiles" />
+    </g>
+</svg>
+
+

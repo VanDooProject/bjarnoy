@@ -4,6 +4,7 @@ import { MapService } from '../../services/map.service';
 import { ChunkComponent } from '../components/chunk/chunk.component';
 import { ComponentRef, ViewChild, ViewContainerRef } from '@angular/core';
 import { Injector } from '@angular/core';
+import { NgFor } from '@angular/common';
 
 import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
@@ -13,6 +14,7 @@ import { Tile } from '../../models/tile';
     standalone: true,
     imports: [
         CommonModule,
+        ChunkComponent
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
@@ -24,6 +26,8 @@ export class MapComponent {
     mapHeight: number = 200;
 
     tiles = [] as Tile[];
+    chunkTiles = [] as Tile[][];
+    chunks = [] as Tile[][][]; // List<List<List<Tile>>>
 
     @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
     container!: ViewContainerRef;
@@ -36,55 +40,56 @@ export class MapComponent {
     //@ViewChild('chunkContainer')
     //chunkContainerRef: ViewContainerRef;
 
-    ngAfterViewInit() {
-        console.log('Values on ngAfterViewInit():');
-        //console.log("chunkContainerRef:", this.chunkContainerRef);
-        console.log("chunkContainerRef:", this.container);
+    // ngAfterViewInit() {
+    //     console.log('Values on ngAfterViewInit():');
+    //     //console.log("chunkContainerRef:", this.chunkContainerRef);
+    //     console.log("chunkContainerRef:", this.container);
 
-        //const injector = Injector.create({
-        //    providers: [
-        //        { provide: 'baseCoordX', useValue: 0 },
-        //        { provide: 'baseCoordY', useValue: 0 },
-        //    ]
-        //});
+    //     //const injector = Injector.create({
+    //     //    providers: [
+    //     //        { provide: 'baseCoordX', useValue: 0 },
+    //     //        { provide: 'baseCoordY', useValue: 0 },
+    //     //    ]
+    //     //});
 
-        // create a list of injectors so we can use another for each component
-        const injectors = [] as Injector[];
-        // each injector should move 10 tiles (first by row then by column)
-        for (let x = 0; x < 3; x++) {
-            for (let y = 0; y < 3; y++) {
-                const injector = Injector.create({
-                    providers: [
-                        { provide: 'baseCoordX', useValue: x*10 },
-                        { provide: 'baseCoordY', useValue: y*10 },
-                    ],
-                }) as Injector;
-                injectors.push(injector);
-            }
-        }
+    //     // create a list of injectors so we can use another for each component
+    //     const injectors = [] as Injector[];
+    //     // each injector should move 10 tiles (first by row then by column)
+    //     for (let x = 0; x < 3; x++) {
+    //         for (let y = 0; y < 3; y++) {
+    //             const injector = Injector.create({
+    //                 providers: [
+    //                     { provide: 'baseCoordX', useValue: x*10 },
+    //                     { provide: 'baseCoordY', useValue: y*10 },
+    //                 ],
+    //             }) as Injector;
+    //             injectors.push(injector);
+    //         }
+    //     }
 
-        // for each injector create a component
-        injectors.forEach(injector =>
-        {
-            this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-        });
+    //     // for each injector create a component
+    //     injectors.forEach(injector =>
+    //     {
+    //         //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
+    //     });
         
 
         
-        //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
+    //     //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
 
-        // set tiles for each comp
-        for (let i = 0; i < this.componentRefs.length; i++) {
-            //this.componentRefs[i].instance.tiles = this.tiles;
+    //     // set tiles for each comp
+    //     for (let i = 0; i < this.componentRefs.length; i++) {
+    //         //this.componentRefs[i].instance.tiles = this.tiles;
 
-            let comp = this.componentRefs[i].instance
-            comp.tiles = this.mapService.getChunk(comp.baseCoordX, comp.baseCoordY, 10);
-        }
+    //         let comp = this.componentRefs[i].instance
+    //         comp.tiles = this.mapService.getChunk(comp.baseCoordS, comp.baseCoordR, 10)[0];
+    //     }
 
-        //const componentRef2 = this.componentRefs[2];
-        //componentRef2.destroy();
 
-    }  
+    //     //const componentRef2 = this.componentRefs[2];
+    //     //componentRef2.destroy();
+
+    // }  
 
     constructor(private mapService : MapService, private viewContainer: ViewContainerRef) {
         this.tiles = [] as Tile[];
@@ -139,5 +144,13 @@ export class MapComponent {
         
         // set in the end to replace references to trigger change detection only once
         this.tiles = tiles;
+
+        
+        this.chunkTiles = this.mapService.getChunk(0, 0, 10);
+        this.chunks = [];
+        this.chunks[0] = this.mapService.getChunk(-3, 0, 7);
+        //this.chunks[1] = this.mapService.getChunk(0, 10, 10);
+        //this.chunks[2] = this.mapService.getChunk(10, 0, 10);
+        //this.chunks[1] = this.mapService.getChunk(10, 10, 10);
     }
 }

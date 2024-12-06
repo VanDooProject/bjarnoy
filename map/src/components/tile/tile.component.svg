@@ -1,7 +1,5 @@
 <svg:g [attr.transform]="transform" class="tile">
     <image
-        [attr.x]="0"
-        [attr.y]="0"
         [attr.width]="width"
         [attr.height]="height"
         [attr.href]="href"
@@ -69,7 +67,7 @@
 
     <!-- <text [attr.x]="width / 2" [attr.y]="-35" dy=".3em" text-anchor="middle" fill="white"> -->
     <text [attr.x]="width / 2" [attr.y]="155" dy=".3em" text-anchor="middle" fill="white">
-        <tspan [attr.x]="width / 2" dy="1.2em">({{ tile.x }} | {{ tile.y }})</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">({{ tile.x }} | {{ tile.y }}) - qrs {{ axial }}</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{tile.type}} lvl:{{tile.level}} var:{{tile.variant}}</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{tile.color}}</tspan>
         <tspan [attr.x]="width / 2" dy="1.2em">{{tile.riverTile?.river?.id}}</tspan>

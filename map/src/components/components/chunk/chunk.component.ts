@@ -7,30 +7,30 @@ import { TileComponent } from '../../tile/tile.component';
 import { Inject } from '@angular/core';
 
 @Component({
-  selector: 'app-chunk',
+  selector: '[app-chunk]',
   imports: [
     CommonModule,
     TileComponent,
   ],
-  templateUrl: './chunk.component.html',
+  templateUrl: './chunk.component.svg',
   styleUrl: './chunk.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChunkComponent {
-  //baseCoordX : number;
-  //baseCoordY : number;
+  baseCoordS : number = 0;
+  baseCoordR : number = 0;
 
   chunkSize : number = 10;
 
-  tiles = [] as Tile[][];
+  @Input() tiles = [] as Tile[][];
 
   chunkHeight: number = 350;
   chunkWidth: number = 2000;
 
-  constructor(
-    @Inject('baseCoordX') public baseCoordX: number,
-    @Inject('baseCoordY') public baseCoordY: number
-  ) {
-    console.log(`chunk created ${this.baseCoordX}|${this.baseCoordY}`);
-  }
+  // constructor(
+  //   @Inject('baseCoordX') public baseCoordX: number,
+  //   @Inject('baseCoordY') public baseCoordY: number
+  // ) {
+  //   console.log(`chunk created ${this.baseCoordX}|${this.baseCoordY}`);
+  // }
 }

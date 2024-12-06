@@ -46,9 +46,9 @@ export class MapService {
   constructor() {
     let chunkSize = 30;
     this.tiles = [];
-    for (let x = 0; x <= chunkSize; x++) {
+    for (let x = -10; x <= chunkSize; x++) {
       this.tiles[x] = [];
-      for (let y = 0; y <= chunkSize; y++) {
+      for (let y = -10; y <= chunkSize; y++) {
         this.tiles[x][y] = new Tile(x, y);
 
         // randomly select from type list and orientation

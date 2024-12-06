@@ -3,6 +3,7 @@ import { Attribute, ChangeDetectionStrategy, Component, Input } from '@angular/c
 import { ElementRef } from '@angular/core';
 import { NgIf } from '@angular/common';
 import { Tile } from '../../models/tile';
+import { HexCoord } from '../../models/hexCoord';
 
 @Component({
     selector: '[app-tile]',
@@ -31,6 +32,9 @@ export class TileComponent {
 
     get y(): number {
         return this.tile?.y || 0;
+    }
+    get axial(): HexCoord | null {
+        return this.tile?.offsetCoord.oddRToAxial() || 0;
     }
 
     get type_src(): string {
@@ -73,12 +77,28 @@ export class TileComponent {
         var tileHeight = 92;
         // width is also different since they are offset
         var tileWidth = 150;
+
+        if(this.axial == null)
+            return '';
         
-        // convert x and y coordinates to actual pixel values; every second tile is offset by half the width and height
-        if(this.x % 2 == 1) {
-            return `translate(${this.x * tileWidth}, ${this.y * tileHeight + tileHeight / 2})`;
+        //return `translate(${this.axial.s * tileWidth + 600}, ${this.y * tileHeight + (tileHeight / 2) * this.axial.s})`;
+        //return `translate(${this.axial.q * tileWidth +300}, ${-this.axial.s * tileHeight + (tileHeight / 2) * -this.axial.q})`;
+        //return `translate(${this.axial.q * tileWidth +600}, ${this.axial.r * tileHeight + 300})`;
+
+        if(this.axial.q % 2 == 1) {
+            return `translate(${this.axial.q * tileWidth +600}, ${this.axial.r * tileHeight + 300 - (tileHeight / 2)})`;
         } else {
-            return `translate(${this.x * tileWidth}, ${this.y * tileHeight})`;
+            return `translate(${this.axial.q * tileWidth +600}, ${this.axial.r * tileHeight + 300})`;
         }
+        
+
+        // convert x and y coordinates to actual pixel values; every second tile is offset by half the width and height
+        //return `translate(${this.x * tileWidth}, ${this.y * tileHeight + (tileHeight / 2) * this.x})`;
+        
+        // if(this.x % 2 == 1) {
+        //     return `translate(${this.x * tileWidth}, ${this.y * tileHeight + tileHeight / 2})`;
+        // } else {
+        //     return `translate(${this.x * tileWidth}, ${this.y * tileHeight})`;
+        // }
     }
 }
