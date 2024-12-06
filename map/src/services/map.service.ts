@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { River, RiverTile, Tile } from '../models/tile';
 import { OffsetCoord } from '../models/offsetCoord';
 import { HexCoord } from '../models/hexCoord';
+import { Chunk } from '../models/chunk';
 
 @Injectable({
   providedIn: 'root'
@@ -46,8 +47,8 @@ export class MapService {
   private tiles: Tile[][]; // [x][y]
   private tilesHex: Tile[][]; // [r][s]
 
-  private mapSize = 30;
-  private mapStart = -15;
+  private mapSize = 40;
+  private mapStart = -20;
 
   constructor() {
     this.tiles = [];
@@ -109,7 +110,8 @@ export class MapService {
     }
   }
 
-  getChunkHex(s: number, r: number, size: number): Tile[][] {
+  //getChunkHex(s: number, r: number, size: number): Tile[][] {
+  getChunkHex(s: number, r: number, size: number): Chunk {
     let chunk = [] as Tile[][]; // [r][s]
 
     // this.tiles[x][y]
@@ -124,11 +126,14 @@ export class MapService {
     for (let i = r; i <= r+size; i++) {
       chunk[i] = [];
       for (let j = s; j <= s+size; j++) {
+      //for (let j = size; j >= s-size; j--) {
         chunk[i][j] = this.tilesHex[r+i][s+j];
       }
+      chunk[i].reverse();
     }
 
-    return chunk; // chunk[r][s]
+    //return chunk; // chunk[r][s]
+    return new Chunk(s, r, chunk);
   }
 
   /*

@@ -24,8 +24,8 @@
   xmlns="http://www.w3.org/2000/svg"
   >
     <!-- <g *ngFor="let tileRow of chunkTiles"> -->
-    <g *ngFor="let chunkTiles of chunks">
-        <g app-chunk [tiles]="chunkTiles" />
+    <g *ngFor="let chunk of chunks">
+        <g app-chunk [chunk]="chunk" />
     </g>
 </svg>
 

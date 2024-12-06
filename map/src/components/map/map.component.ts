@@ -8,6 +8,7 @@ import { NgFor } from '@angular/common';
 
 import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
+import { Chunk } from '../../models/chunk';
 
 @Component({
     selector: 'app-map',
@@ -27,7 +28,8 @@ export class MapComponent {
 
     tiles = [] as Tile[];
     chunkTiles = [] as Tile[][];
-    chunks = [] as Tile[][][]; // List<List<List<Tile>>>
+    //chunks = [] as Tile[][][]; // List<List<List<Tile>>>
+    chunks = [] as Chunk[]; // List<List<List<Tile>>>
 
     @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
     container!: ViewContainerRef;
@@ -146,15 +148,24 @@ export class MapComponent {
         this.tiles = tiles;
 
         
+        let size = 3;
+
         //this.chunkTiles = this.mapService.getChunk(0, 0, 10);
         this.chunks = [];
         //this.chunks[0] = this.mapService.getChunk(-3, 0, 7);
-        //this.chunks[1] = this.mapService.getChunk(0, 10, 10);
-        //this.chunks[2] = this.mapService.getChunk(10, 0, 10);
-        //this.chunks[1] = this.mapService.getChunk(10, 10, 10);
+        this.chunks.push(this.mapService.getChunkHex(size, 0, size));
+        this.chunks.push(this.mapService.getChunkHex(size, size, size));
+        this.chunks.push(this.mapService.getChunkHex(0, 0, size));
+        this.chunks.push(this.mapService.getChunkHex(0, size, size));
+        
+        
+        //this.chunks.push(this.mapService.getChunkHex(size, 0, 2));
+        //this.chunks.push(this.mapService.getChunkHex(size, 0, size+2));
+        //this.chunks.push(this.mapService.getChunkHex(size, size, size+2));
 
+        //let chunk = this.mapService.getChunkHex(0,0,3);
         let chunk = this.mapService.getChunkHex(0,0,3);
-        console.log("chunk", chunk);
-        this.chunks[0] = chunk;
+        //console.log("chunk", chunk);
+        //this.chunks[0] = chunk;
     }
 }

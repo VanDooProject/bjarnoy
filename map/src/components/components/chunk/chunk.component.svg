@@ -3,15 +3,16 @@
 
 <svg:g>
 
-    <text>chunk works! ({{ baseCoordS }}|{{ baseCoordR }}) with tiles {{ tiles.length }}</text>
+    <!-- <text>chunk works! ({{ baseCoordS }}|{{ baseCoordR }}) with tiles {{ chunk.tiles.length }}</text> -->
 
     <g 
-      *ngFor="let tileX of tiles">
-      <g app-tile 
-
-      *ngFor="let tile of tileX"
-      [tile]="tile"
+      *ngFor="let tileX of chunk.tiles"
+      [attr.transform]="transform"
       >
+        <g app-tile
+          *ngFor="let tile of tileX"
+          [tile]="tile"
+        >
       </g>
 	</g>
     
