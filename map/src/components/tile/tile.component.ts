@@ -78,7 +78,7 @@ export class TileComponent {
         // image and tile hight do not match
         var tileHeight = 92; // of tile, image is 300
         // width is also different since they are offset
-        var tileWidth = 150 + 0; // of tile image is 200
+        var tileWidth = 150; // of tile image is 200
 
         if(this.axial == null)
             return '';
@@ -103,9 +103,9 @@ export class TileComponent {
         //return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight + (tileHeight / 2) * this.x})`;
         
         if(this.x % 2 == 1 || this.x % 2 == -1) {
-            return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight + tileHeight / 2})`;
+            return `translate(${this.x * tileWidth}, ${this.y * tileHeight + tileHeight / 2})`;
         } else {
-            return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight})`;
+            return `translate(${this.x * tileWidth}, ${this.y * tileHeight})`;
         }
     }
 }

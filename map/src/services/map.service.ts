@@ -123,10 +123,11 @@ export class MapService {
 
     console.log("getChunkHex", top, right, bottom, left);
 
-    for (let i = r; i <= r+size; i++) {
+    //for (let i = r; i <= r+size; i++) {
+    for (let i = size; i > r-size; i--) {
       chunk[i] = [];
-      for (let j = s; j <= s+size; j++) {
-      //for (let j = size; j >= s-size; j--) {
+      //for (let j = s; j <= s+size; j++) {
+      for (let j = size; j > s-size; j--) {
         chunk[i][j] = this.tilesHex[r+i][s+j];
       }
       chunk[i].reverse();
@@ -698,7 +699,7 @@ export class MapService {
 
     // TODO we need a fallback for conflicting tiles
     if (possibleTypes.length == 0) {
-      console.log(`(${x}|${y}) no possible types found for: ${neighborTileTypes}`);
+      console.debug(`(${x}|${y}) no possible types found for: ${neighborTileTypes}`);
       return;
     }
 
@@ -715,7 +716,7 @@ export class MapService {
     this.tiles[x][y].type = possibleTypes[typeIndex];
 
     //console.log(`(${x}|${y}) set type: ${this.tiles[x][y].type}`);
-    console.log(`(${x}|${y}) possible types: `, possibleTypes,
+    console.debug(`(${x}|${y}) possible types: `, possibleTypes,
       "neighborTileTypes", neighborTileTypes,
       "set type: ", this.tiles[x][y].type
     );

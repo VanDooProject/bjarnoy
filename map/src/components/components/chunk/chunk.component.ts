@@ -44,7 +44,7 @@ export class ChunkComponent {
   }
 
   ngOnInit() {
-    console.log(`chunk component inited ${this.chunk.s}|${this.chunk.r}`);
+    console.log(`chunk component inited ${this.chunk?.s}|${this.chunk?.r}`);
   }
 
   
@@ -59,6 +59,6 @@ export class ChunkComponent {
     var tileWidth = 150; // of tile image is 200
 
     //return `translate(${coord.x * tileWidth + 2000}, ${coord.y * tileHeight})`;
-    return `translate(2000,500)`;
+    return `translate(3500,1000)`;
 }
 }
