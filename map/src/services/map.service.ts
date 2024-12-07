@@ -46,7 +46,7 @@ export class MapService {
   private tiles: Tile[][]; // [x][y]
   private tilesHex: Tile[][]; // [r][s]
 
-  private mapSize = 30;
+  private mapSize = 60;
   private mapStart = -15;
 
   constructor() {

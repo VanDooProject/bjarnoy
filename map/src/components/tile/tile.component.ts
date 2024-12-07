@@ -103,9 +103,9 @@ export class TileComponent {
         //return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight + (tileHeight / 2) * this.x})`;
         
         if(this.x % 2 == 1 || this.x % 2 == -1) {
-            return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight + tileHeight / 2})`;
+            return `translate(${this.x * tileWidth + 1400}, ${this.y * tileHeight + tileHeight / 2 + 300})`;
         } else {
-            return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight})`;
+            return `translate(${this.x * tileWidth + 1400}, ${this.y * tileHeight + 300})`;
         }
     }
 }
