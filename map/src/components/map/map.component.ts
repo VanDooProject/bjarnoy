@@ -205,5 +205,16 @@ export class MapComponent {
         //let chunk = this.mapService.getChunkHex(0,0,3);
         //console.log("chunk", chunk);
         //this.chunks[0] = chunk;
+
+
+        // let chunk = this.mapService.getChunkHex(0,0,3);
+        // console.log("chunk0", chunk);
+        // this.chunks[0] = chunk;
+        // this.chunks[1] = this.mapService.getChunkHex(0,-4,3);
+        // console.log("chunk1", this.chunks[1]);
+        // this.chunks[2] = this.mapService.getChunkHex(4,0,3);
+        // console.log("chunk1", this.chunks[2]);
+        // this.chunks[3] = this.mapService.getChunkHex(4,-4,3);
+        // console.log("chunk1", this.chunks[3]);
     }
 }

@@ -47,7 +47,7 @@ export class MapService {
   private tiles: Tile[][]; // [x][y]
   private tilesHex: Tile[][]; // [r][s]
 
-  private mapSize = 40;
+  private mapSize = 60;
   private mapStart = -20;
 
   constructor() {
@@ -123,14 +123,11 @@ export class MapService {
 
     console.log("getChunkHex", top, right, bottom, left);
 
-    //for (let i = r; i <= r+size; i++) {
-    for (let i = r+size; i > r-size; i--) {
-      chunk[i] = [];
-      //for (let j = s; j <= s+size; j++) {
-      for (let j = s+size; j > s-size; j--) {
-        chunk[i][j] = this.tilesHex[r+i][s+j];
+    for (let i = r; i <= r+size; i++) {
+      chunk[i-r] = [];
+      for (let j = s; j >= s - size; j--) {
+        chunk[i-r][-j+s] = this.tilesHex[i][j];
       }
-      chunk[i].reverse();
     }
 
     //return chunk; // chunk[r][s]
