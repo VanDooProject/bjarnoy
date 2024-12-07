@@ -5,6 +5,7 @@ export class Tile {
     offsetCoord: OffsetCoord = new OffsetCoord(0, 0);
     //x: number = 0;
     //y: number = 0;
+    hexCoord : HexCoord = new HexCoord(0, 0);
 
     type: string | null = null;
     orientation: string = 'W';
@@ -18,6 +19,7 @@ export class Tile {
         // this.x = x;
         // this.y = y;
         this.offsetCoord = new OffsetCoord(x, y);
+        this.hexCoord = this.offsetCoord.oddQToAxial();
     }
 
     get x(): number {
@@ -26,6 +28,11 @@ export class Tile {
 
     get y(): number {
         return this.offsetCoord.y;
+    }
+
+    public toString() {
+        let tmp = this.offsetCoord.oddQToAxial();
+        return `xy: ${this.offsetCoord.x},${this.offsetCoord.y},   qrs:${tmp.q},${tmp.r},${tmp.s}`;
     }
 }
 

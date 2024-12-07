@@ -123,8 +123,8 @@ export class MapService {
 
     for (let i = r; i <= r+size; i++) {
       chunk[i] = [];
-      for (let j = s; j <= s+size; j++) {
-        chunk[i][j] = this.tilesHex[r+i][s+j];
+      for (let j = s; j >= s - size; j--) {
+        chunk[i][-j] = this.tilesHex[r+i][s+j];
       }
     }
 
