@@ -109,7 +109,7 @@ export class MapService {
     }
   }
 
-  getChunkHex(s: number, r: number, size: number): Tile[][] {
+  getChunkHex(r: number, s: number, size: number): Tile[][] {
     let chunk = [] as Tile[][]; // [r][s]
 
     // this.tiles[x][y]
@@ -122,9 +122,9 @@ export class MapService {
     console.log("getChunkHex", top, right, bottom, left);
 
     for (let i = r; i <= r+size; i++) {
-      chunk[i] = [];
+      chunk[i-r] = [];
       for (let j = s; j >= s - size; j--) {
-        chunk[i][-j] = this.tilesHex[r+i][s+j];
+        chunk[i-r][-j+s] = this.tilesHex[i][j];
       }
     }
 
