@@ -186,7 +186,8 @@ export class MapComponent {
         this.chunks.push(this.mapService.getChunkHex(0, -size, size));
         this.chunks.push(this.mapService.getChunkHex(0, 0, size));
         this.chunks.push(this.mapService.getChunkHex(0, size, size));
-        this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
+        this.chunks.push(this.mapService.getChunkHex(0, size*3, size));
 
 
 
