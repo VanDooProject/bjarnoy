@@ -741,6 +741,12 @@ export class MapService {
       let variant = Math.floor(Math.random() * 2) + 0;
       this.tiles[x][y].variant = Math.floor(Math.random() * 12) == 0 ? variant : null;
     }
+    else if(
+      this.tiles[x][y].type == "grasstile"
+    ) {
+      let variant = Math.floor(Math.random() * 3) + 0;
+      this.tiles[x][y].variant = Math.floor(Math.random() * 3) == 0 ? variant : null;
+    }
 
     // recursively call setRandomTileType for all neighbors
     //let neighbors = this.getNeighbors(x, y);

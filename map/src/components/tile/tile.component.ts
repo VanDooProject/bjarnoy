@@ -55,6 +55,7 @@ export class TileComponent {
 
     get hrefTopping(): string | null{
         if(
+            this.tile?.type != 'grasstile' &&
             this.tile?.type != 'vikinghut' &&
             this.tile?.type != 'foresttile' &&
             this.tile?.type != 'farm_crop' &&

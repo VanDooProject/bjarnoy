@@ -148,7 +148,7 @@ export class MapComponent {
         this.tiles = tiles;
 
         
-        let size = 2;
+        let size = 15;
 
         //this.chunkTiles = this.mapService.getChunk(0, 0, 10);
         this.chunks = [];
