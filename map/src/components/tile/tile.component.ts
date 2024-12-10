@@ -3,6 +3,7 @@ import { Attribute, ChangeDetectionStrategy, Component, Input } from '@angular/c
 import { ElementRef } from '@angular/core';
 import { NgIf } from '@angular/common';
 import { Tile } from '../../models/tile';
+import { HexCoord } from '../../models/hexCoord';
 
 @Component({
     selector: '[app-tile]',
@@ -20,7 +21,7 @@ export class TileComponent {
     @Input() width: number = 200;
     @Input() label: string = '';
 
-    @Input() tile: Tile = {} as Tile;
+    @Input() tile: Tile | null = {} as Tile;
 
     constructor() {
     }
@@ -31,6 +32,10 @@ export class TileComponent {
 
     get y(): number {
         return this.tile?.y || 0;
+    }
+    
+    get axial(): HexCoord | null {
+        return this.tile?.offsetCoord.oddQToAxial() || null;
     }
 
     get type_src(): string {
@@ -51,6 +56,7 @@ export class TileComponent {
 
     get hrefTopping(): string | null{
         if(
+            this.tile?.type != 'grasstile' &&
             this.tile?.type != 'vikinghut' &&
             this.tile?.type != 'foresttile' &&
             this.tile?.type != 'farm_crop' &&
@@ -69,13 +75,36 @@ export class TileComponent {
     get transform(): string {
         //return `translate(${this.x}, ${this.y})`;
 
+        // ori image is 200x300
+
         // image and tile hight do not match
-        var tileHeight = 92;
+        var tileHeight = 92; // of tile, image is 300
         // width is also different since they are offset
-        var tileWidth = 150;
+        var tileWidth = 150; // of tile image is 200
+
+        if(this.axial == null)
+            return '';
         
+        //return `translate(${this.axial.s * tileWidth + 600}, ${this.y * tileHeight + (tileHeight / 2) * this.axial.s})`;
+        //return `translate(${this.axial.q * tileWidth +300}, ${-this.axial.s * tileHeight + (tileHeight / 2) * -this.axial.q})`;
+        //return `translate(${this.axial.q * tileWidth +600}, ${this.axial.r * tileHeight + 300})`;
+        
+        //return `translate(${this.axial.q * tileWidth + 600}, ${this.axial.s * tileHeight + 300})`;
+
+        //if(this.axial.q % 2 == 1 || this.axial.q % 2 == -1) {
+        //    return `translate(${this.axial.q * tileWidth +450}, ${this.axial.r * tileHeight + 250 - (tileHeight / 2)})`;
+        //} else {
+        //    return `translate(${this.axial.q * tileWidth +450}, ${this.axial.r * tileHeight + 250})`;
+        //}
+
+        //return `translate(${this.axial.q * tileWidth +450}, ${this.y * tileHeight + 250 + this.axial.q * (tileHeight / 2)})`;
+        //return `translate(${this.axial.q * tileWidth +450}, ${this.y * tileHeight + 250})`;
+        
+
         // convert x and y coordinates to actual pixel values; every second tile is offset by half the width and height
-        if(this.x % 2 == 1) {
+        //return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight + (tileHeight / 2) * this.x})`;
+        
+        if(this.x % 2 == 1 || this.x % 2 == -1) {
             return `translate(${this.x * tileWidth}, ${this.y * tileHeight + tileHeight / 2})`;
         } else {
             return `translate(${this.x * tileWidth}, ${this.y * tileHeight})`;

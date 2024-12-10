@@ -1,15 +1,28 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { TileComponent } from '../tile/tile.component';
 import { MapService } from '../../services/map.service';
+import { ChunkComponent } from '../components/chunk/chunk.component';
+import { ComponentRef, ViewChild, ViewContainerRef } from '@angular/core';
+import { Injector } from '@angular/core';
+import { NgFor } from '@angular/common';
+
+import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
+import { Chunk } from '../../models/chunk';
+
+import { NgxDrag, type NgxInjectDrag } from 'ngxtension/gestures';
+import { HostListener } from '@angular/core';
 
 @Component({
     selector: 'app-map',
     standalone: true,
     imports: [
         CommonModule,
-        TileComponent,
+        ChunkComponent,
+        NgxDrag,
+    ],
+    hostDirectives: [
+        { directive: NgxDrag, outputs: ['ngxDrag'] },
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
@@ -21,12 +34,132 @@ export class MapComponent {
     mapHeight: number = 200;
 
     tiles = [] as Tile[];
+    chunkTiles = [] as Tile[][];
+    //chunks = [] as Tile[][][]; // List<List<List<Tile>>>
+    chunks = [] as Chunk[]; // List<List<List<Tile>>>
 
-    constructor(private mapService : MapService) {
+    @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
+    container!: ViewContainerRef;
+
+    private offsetX = -300;
+    private offsetY = -900;
+
+    private startX = 0;
+    private startY = 0;
+    private scale = 0.33;
+    
+    transform: string = `scale(${this.scale}) translate(${this.offsetX} ${this.offsetY})`;
+
+    positionX: number = this.offsetX;
+    positionY: number = this.offsetY;
+
+    
+
+
+    @HostListener('ngxDrag', ['$event'])
+    onDrag(state: NgxInjectDrag['state']) {
+        // fire every time a drag event happens
+        let x = 0;
+        console.log("move peter enis", state);
+
+        if (state.first) {
+            let boundingBox = (state.currentTarget as HTMLElement).getBoundingClientRect();
+
+            console.log("boundingBox", boundingBox);
+
+            // honor element scaling
+            let computedStyle = window.getComputedStyle(state.currentTarget as HTMLElement);
+            let scaleX = parseFloat(computedStyle.transform.split(',')[0].slice(7));
+            let scaleY = parseFloat(computedStyle.transform.split(',')[3]);
+            console.log("scale", computedStyle.transform, scaleX, scaleY);
+
+            this.startX = this.positionX;
+            this.startY = this.positionY;
+
+            console.log("start", this.startX, this.startY);
+        }
+
+        console.log("movement1", this.positionX, this.positionY, state.movement[0], state.movement[1]);
+
+        this.positionX = this.startX + (state.movement[0]) / this.scale;
+        this.positionY = this.startY + (state.movement[1]) / this.scale;
+
+        this.transform = `scale(${this.scale}) translate(${this.positionX} ${this.positionY})`;
+
+        console.log("movement2", this.positionX, this.positionY, state.movement[0], state.movement[1]);
+
+        state.event.preventDefault();
+        state.event.stopPropagation();
+    }
+
+    // Store references to dynamically created components
+    private componentRefs: ComponentRef<ChunkComponent>[] = [];
+    
+
+    //@ViewChild('chunkContainerRef', { read: ViewContainerRef })
+    //@ViewChild('chunkContainer')
+    //chunkContainerRef: ViewContainerRef;
+
+    // ngAfterViewInit() {
+    //     console.log('Values on ngAfterViewInit():');
+    //     //console.log("chunkContainerRef:", this.chunkContainerRef);
+    //     console.log("chunkContainerRef:", this.container);
+
+    //     //const injector = Injector.create({
+    //     //    providers: [
+    //     //        { provide: 'baseCoordX', useValue: 0 },
+    //     //        { provide: 'baseCoordY', useValue: 0 },
+    //     //    ]
+    //     //});
+
+    //     // create a list of injectors so we can use another for each component
+    //     const injectors = [] as Injector[];
+    //     // each injector should move 10 tiles (first by row then by column)
+    //     for (let x = 0; x < 3; x++) {
+    //         for (let y = 0; y < 3; y++) {
+    //             const injector = Injector.create({
+    //                 providers: [
+    //                     { provide: 'baseCoordX', useValue: x*10 },
+    //                     { provide: 'baseCoordY', useValue: y*10 },
+    //                 ],
+    //             }) as Injector;
+    //             injectors.push(injector);
+    //         }
+    //     }
+
+    //     // for each injector create a component
+    //     injectors.forEach(injector =>
+    //     {
+    //         //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
+    //     });
+        
+
+        
+    //     //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
+
+    //     // set tiles for each comp
+    //     for (let i = 0; i < this.componentRefs.length; i++) {
+    //         //this.componentRefs[i].instance.tiles = this.tiles;
+
+    //         let comp = this.componentRefs[i].instance
+    //         comp.tiles = this.mapService.getChunk(comp.baseCoordS, comp.baseCoordR, 10)[0];
+    //     }
+
+
+    //     //const componentRef2 = this.componentRefs[2];
+    //     //componentRef2.destroy();
+
+    // }  
+
+    constructor(private mapService : MapService, private viewContainer: ViewContainerRef) {
         this.tiles = [] as Tile[];
         let tiles  = [] as Tile[];
         var rawTiles = mapService.getTiles(); // [x][y]
         var intermediateArray = [] as Tile[][]; // [y][x]
+
+
+        //this.viewContainer.createComponent(ChunkComponent);
+        //this.viewContainer.createComponent(ChunkComponent);
 
         // chunk size
         let chunkSize = rawTiles.length;
@@ -71,5 +204,76 @@ export class MapComponent {
         
         // set in the end to replace references to trigger change detection only once
         this.tiles = tiles;
+
+        
+        let size = 15;
+
+        //this.chunkTiles = this.mapService.getChunk(0, 0, 10);
+        this.chunks = [];
+        //this.chunks[0] = this.mapService.getChunk(-3, 0, 7);
+        
+        //this.chunks.push(this.mapService.getChunkHex(size-2, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(size-2, size-2, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, size-2, size));
+
+
+
+        //this.chunks.push(this.mapService.getChunkHex(size, -size-1, size));
+        //this.chunks.push(this.mapService.getChunkHex(size, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(size, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(0, -size-1, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size-1, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size*2-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size*2-1, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size*3-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size*3-1, size, size));
+        //
+        //this.chunks.push(this.mapService.getChunkHex(-size*4-1, 0, size));
+        //this.chunks.push(this.mapService.getChunkHex(-size*4-1, size, size));
+
+
+        
+        this.chunks.push(this.mapService.getChunkHex(0, -size, size));
+        this.chunks.push(this.mapService.getChunkHex(0, 0, size));
+        this.chunks.push(this.mapService.getChunkHex(0, size, size));
+        //this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
+        this.chunks.push(this.mapService.getChunkHex(0, size*3, size));
+
+
+
+        //this.chunks[0] = this.mapService.getChunkHex(size-2, 0, size);
+        //this.chunks[1] = this.mapService.getChunkHex(size-2, size-2, size);
+        //this.chunks[2] = this.mapService.getChunkHex(0, 0, size);
+        //this.chunks[4] = this.mapService.getChunkHex(0, size-2, size);
+        //this.chunks[5] = this.mapService.getChunkHex(0, size-2, size);
+        
+        
+        //this.chunks.push(this.mapService.getChunkHex(size, 0, 2));
+        //this.chunks.push(this.mapService.getChunkHex(size, 0, size+2));
+        //this.chunks.push(this.mapService.getChunkHex(size, size, size+2));
+
+        //let chunk = this.mapService.getChunkHex(0,0,3);
+        //let chunk = this.mapService.getChunkHex(0,0,3);
+        //console.log("chunk", chunk);
+        //this.chunks[0] = chunk;
+
+
+        // let chunk = this.mapService.getChunkHex(0,0,3);
+        // console.log("chunk0", chunk);
+        // this.chunks[0] = chunk;
+        // this.chunks[1] = this.mapService.getChunkHex(0,-4,3);
+        // console.log("chunk1", this.chunks[1]);
+        // this.chunks[2] = this.mapService.getChunkHex(4,0,3);
+        // console.log("chunk1", this.chunks[2]);
+        // this.chunks[3] = this.mapService.getChunkHex(4,-4,3);
+        // console.log("chunk1", this.chunks[3]);
     }
 }

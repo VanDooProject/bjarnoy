@@ -1,5 +1,8 @@
 import { Injectable } from '@angular/core';
 import { River, RiverTile, Tile } from '../models/tile';
+import { OffsetCoord } from '../models/offsetCoord';
+import { HexCoord } from '../models/hexCoord';
+import { Chunk } from '../models/chunk';
 
 @Injectable({
   providedIn: 'root'
@@ -41,50 +44,26 @@ export class MapService {
     "orange",
   ];
 
-  private tiles: Tile[][];
+  private tiles: Tile[][]; // [x][y]
+  private tilesHex: Tile[][]; // [r][s]
+
+  private mapSize = 60;
+  private mapStart = -20;
 
   constructor() {
-    let chunkSize = 30;
     this.tiles = [];
-    for (let x = 0; x <= chunkSize; x++) {
+    this.tilesHex = [];
+
+    for (let x = this.mapStart; x <= this.mapSize; x++) {
       this.tiles[x] = [];
-      for (let y = 0; y <= chunkSize; y++) {
+      for (let y = this.mapStart; y <= this.mapSize; y++) {
         this.tiles[x][y] = new Tile(x, y);
 
         // randomly select from type list and orientation
         let orientationIndex = Math.floor(Math.random() * this.orientations.length);
         this.tiles[x][y].orientation = this.orientations[orientationIndex];
 
-        /*
-        if(
-          this.tileTypes[typeIndex] == "towerbuilding"
-        ) {
-          let level = Math.floor(Math.random() * 2);
-          // level should be attached to the path; it should be formatted with 3 digits with leading zeros
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
-        }
-        else if(
-          this.tileTypes[typeIndex] == "vikinghut"
-        ) {
-          let level = Math.floor(Math.random() * 5) + 0;
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
-        }
-        else if(
-          this.tileTypes[typeIndex] == "farm_crop"
-          || this.tileTypes[typeIndex] == "farm_pumpkin"
-        ) {
-          let level = Math.floor(Math.random() * 2) + 0;
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}_level${String(level).padStart(3, '0')}.png`;
-        }
-        else
-        {
-          this.tiles[x][y].type = `${this.tileTypes[typeIndex]}_${this.orientations[orientationIndex]}.png`;
-        }
-        */
-        
-        //this.tiles[x][y].type_src = `watertile_${this.orientations[orientationIndex]}.png`;
-
-        // randomly select color
+                // randomly select color
         let colorIndex = Math.floor(Math.random() * this.colors.length);
         //this.tiles[x][y].color = this.colors[colorIndex];
         this.tiles[x][y].color = Math.floor(Math.random() * 12) == 0 ? this.colors[colorIndex] : null;
@@ -92,10 +71,67 @@ export class MapService {
     }
 
     this.generateMap();
+
+    this.calculateMapHexCoord();
   }
 
   getTiles(): Tile[][] {
     return this.tiles;
+  }
+
+  // get chunk of map by size and x,y
+  getChunk(x: number, y: number, size: number): Tile[][] {
+    let chunk = [] as Tile[][];
+    for (let i = 0; i < size; i++) {
+      let cy = y + i;
+      chunk[i] = [];
+      for (let j = 0; j < size; j++) {
+        let cx = x + j;
+        // this.tiles is in [x][y] format
+        chunk[i][j] = this.tiles[cx][cy];
+      }
+    }
+
+    return chunk; // chunk[y][x]
+  }
+
+  calculateMapHexCoord(): void {
+    this.tilesHex = [] as Tile[][]; // [r][s]
+
+    for (let x = this.mapStart; x < this.tiles.length; x++) {
+      for (let y = this.mapStart; y < this.tiles[x].length; y++) {
+        let hexCoord = new OffsetCoord(x, y).oddQToAxial();
+        let s = hexCoord.s;
+        let r = hexCoord.r;
+
+        this.tilesHex[r] = this.tilesHex[r] || [];
+        this.tilesHex[r][s] = this.tiles[x][y];
+      }
+    }
+  }
+
+  //getChunkHex(s: number, r: number, size: number): Tile[][] {
+  getChunkHex(s: number, r: number, size: number): Chunk {
+    let chunk = [] as Tile[][]; // [r][s]
+
+    // this.tiles[x][y]
+
+    let top = new HexCoord(s, r).axialToOddQ();
+    let right = new HexCoord(s - size, r).axialToOddQ();
+    let bottom = new HexCoord(s - size, r + size).axialToOddQ();
+    let left = new HexCoord(s, r + size).axialToOddQ();
+
+    console.log("getChunkHex", top, right, bottom, left);
+
+    for (let i = r; i <= r+size; i++) {
+      chunk[i-r] = [];
+      for (let j = s; j >= s - size; j--) {
+        chunk[i-r][-j+s] = this.tilesHex[i][j];
+      }
+    }
+
+    //return chunk; // chunk[r][s]
+    return new Chunk(s, r, chunk);
   }
 
   /*
@@ -127,12 +163,12 @@ export class MapService {
     // call setRandomTileType for all neighbors
     this.setRandomIterator(x, y);
 
-    this.cleanMap();
-    this.cleanMap();
+    //this.cleanMap();
+    //this.cleanMap();
 
-    for (let i = 0; i < 10; i++) {
-      this.carveRiver(i);
-    }
+    //for (let i = 0; i < 10; i++) {
+    //  this.carveRiver(i);
+    //}
 
     return this.tiles;
   }
@@ -660,7 +696,7 @@ export class MapService {
 
     // TODO we need a fallback for conflicting tiles
     if (possibleTypes.length == 0) {
-      console.log(`(${x}|${y}) no possible types found for: ${neighborTileTypes}`);
+      console.debug(`(${x}|${y}) no possible types found for: ${neighborTileTypes}`);
       return;
     }
 
@@ -677,7 +713,7 @@ export class MapService {
     this.tiles[x][y].type = possibleTypes[typeIndex];
 
     //console.log(`(${x}|${y}) set type: ${this.tiles[x][y].type}`);
-    console.log(`(${x}|${y}) possible types: `, possibleTypes,
+    console.debug(`(${x}|${y}) possible types: `, possibleTypes,
       "neighborTileTypes", neighborTileTypes,
       "set type: ", this.tiles[x][y].type
     );
@@ -704,6 +740,12 @@ export class MapService {
       // fix distribution, for about 80% of the time we do not want a variant
       let variant = Math.floor(Math.random() * 2) + 0;
       this.tiles[x][y].variant = Math.floor(Math.random() * 12) == 0 ? variant : null;
+    }
+    else if(
+      this.tiles[x][y].type == "grasstile"
+    ) {
+      let variant = Math.floor(Math.random() * 3) + 0;
+      this.tiles[x][y].variant = Math.floor(Math.random() * 3) == 0 ? variant : null;
     }
 
     // recursively call setRandomTileType for all neighbors
