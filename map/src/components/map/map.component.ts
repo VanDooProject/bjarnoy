@@ -10,7 +10,7 @@ import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
 import { Chunk } from '../../models/chunk';
 
-import { NgxDrag, type NgxInjectDrag } from 'ngxtension/gestures';
+import { NgxDrag, NgxWheel, type NgxInjectDrag, type NgxInjectWheel } from 'ngxtension/gestures';
 import { HostListener } from '@angular/core';
 
 @Component({
@@ -20,9 +20,11 @@ import { HostListener } from '@angular/core';
         CommonModule,
         ChunkComponent,
         NgxDrag,
+        NgxWheel,
     ],
     hostDirectives: [
         { directive: NgxDrag, outputs: ['ngxDrag'] },
+        { directive: NgxWheel, outputs: ['ngxWheel'] },
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
@@ -63,16 +65,6 @@ export class MapComponent {
         console.log("move peter enis", state);
 
         if (state.first) {
-            let boundingBox = (state.currentTarget as HTMLElement).getBoundingClientRect();
-
-            console.log("boundingBox", boundingBox);
-
-            // honor element scaling
-            let computedStyle = window.getComputedStyle(state.currentTarget as HTMLElement);
-            let scaleX = parseFloat(computedStyle.transform.split(',')[0].slice(7));
-            let scaleY = parseFloat(computedStyle.transform.split(',')[3]);
-            console.log("scale", computedStyle.transform, scaleX, scaleY);
-
             this.startX = this.positionX;
             this.startY = this.positionY;
 
@@ -90,6 +82,50 @@ export class MapComponent {
 
         state.event.preventDefault();
         state.event.stopPropagation();
+    }
+
+    @HostListener('ngxWheel', ['$event'])
+    onWheel(state: NgxInjectWheel['state']) {
+        state.event.preventDefault();
+        state.event.stopPropagation();
+
+        console.log("Wheeeeeeee", state);
+
+        let x = state.event.clientX;
+        let y = state.event.clientY;
+        console.log("client x - y", x, y);
+
+        const svgRect = (state.event.target as SVGSVGElement).getBoundingClientRect();
+        const mouseX = state.event.clientX - svgRect.left;
+        const mouseY = state.event.clientY - svgRect.top;
+
+        console.log("mouse x - y", mouseX, mouseY);
+
+        // get current mouse position
+        
+        let newScale = this.scale - state.movement[1] / 3000;
+        newScale = Math.max(0.1, newScale);
+        newScale = Math.min(2, newScale);
+
+        console.log("scale old - new", this.scale, newScale);
+        
+        const newPositionX = this.positionX - (mouseX * (newScale - this.scale));
+        const newPositionY = this.positionY - (mouseY * (newScale - this.scale));
+
+        console.log("PositionX old - new", this.positionX, newPositionX);
+        console.log("PositionY old - new", this.positionY, newPositionY);
+
+        this.scale = newScale;
+        this.positionX = newPositionX;
+        this.positionY = newPositionY;
+
+        // this.scale -= state.movement[1] / 3000;
+        // this.scale = Math.max(0.1, this.scale);
+        // this.scale = Math.min(2, this.scale);
+        
+        this.transform = `scale(${this.scale}) translate(${this.positionX} ${this.positionY})`;
+
+        
     }
 
     // Store references to dynamically created components

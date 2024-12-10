@@ -24,9 +24,13 @@
   xmlns="http://www.w3.org/2000/svg"
   class="map" 
   (ngxDrag)="onDrag($event)"
+  (ngxWheel)="onWheel($event)"
   [style.position]="'absolute'"
   >
-    <g [attr.transform]="transform">
+  <!-- add light grey background -->
+    <g
+    [attr.transform]="transform"
+    >
         <!-- <g *ngFor="let tileRow of chunkTiles"> -->
         <g *ngFor="let chunk of chunks">
             <g app-chunk [chunk]="chunk" />
