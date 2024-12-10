@@ -22,6 +22,11 @@
   [attr.width]="1000"
   [attr.height]="1000"
   xmlns="http://www.w3.org/2000/svg"
+  class="map" 
+  (ngxDrag)="onDrag($event)"
+  [style.position]="'absolute'"
+  [style.top.px]="positionY"
+  [style.left.px]="positionX"
   >
     <!-- <g *ngFor="let tileRow of chunkTiles"> -->
     <g *ngFor="let chunk of chunks">

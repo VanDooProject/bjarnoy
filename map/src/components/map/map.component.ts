@@ -10,12 +10,19 @@ import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
 import { Chunk } from '../../models/chunk';
 
+import { NgxDrag, type NgxInjectDrag } from 'ngxtension/gestures';
+import { HostListener } from '@angular/core';
+
 @Component({
     selector: 'app-map',
     standalone: true,
     imports: [
         CommonModule,
-        ChunkComponent
+        ChunkComponent,
+        NgxDrag,
+    ],
+    hostDirectives: [
+        { directive: NgxDrag, outputs: ['ngxDrag'] },
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
@@ -33,6 +40,39 @@ export class MapComponent {
 
     @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
     container!: ViewContainerRef;
+
+    private offsetX = -1500;
+    private offsetY = -1500;
+
+    private startX = -1500;
+    private startY = -1500;
+
+    positionX: number = this.offsetX;
+    positionY: number = this.offsetY;
+
+    @HostListener('ngxDrag', ['$event'])
+    onDrag(state: NgxInjectDrag['state']) {
+        // fire every time a drag event happens
+        let x = 0;
+        console.log("move peter enis", state);
+
+        if (state.first) {
+            // get pos of state.currentTarget without css
+            let absX = (state.currentTarget as HTMLElement).getBoundingClientRect().left;
+            let absY = (state.currentTarget as HTMLElement).getBoundingClientRect().top;
+
+            let posX = (state.currentTarget as HTMLElement).style.left;
+
+            this.startX = absX;// + state.initial[0];
+            this.startY = absY;// + state.initial[1];
+        }
+
+        this.positionX = this.startX + state.movement[0];
+        this.positionY = this.startY + state.movement[1];
+
+        state.event.preventDefault();
+        state.event.stopPropagation();
+    }
 
     // Store references to dynamically created components
     private componentRefs: ComponentRef<ChunkComponent>[] = [];

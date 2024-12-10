@@ -21,7 +21,7 @@ export class TileComponent {
     @Input() width: number = 200;
     @Input() label: string = '';
 
-    @Input() tile: Tile = {} as Tile;
+    @Input() tile: Tile | null = {} as Tile;
 
     constructor() {
     }
@@ -33,8 +33,9 @@ export class TileComponent {
     get y(): number {
         return this.tile?.y || 0;
     }
+    
     get axial(): HexCoord | null {
-        return this.tile?.offsetCoord.oddQToAxial() || 0;
+        return this.tile?.offsetCoord.oddQToAxial() || null;
     }
 
     get type_src(): string {

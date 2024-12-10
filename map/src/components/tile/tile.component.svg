@@ -50,7 +50,7 @@
                 149,-45
                 51,-45
             1,0"
-        fill="none" [attr.stroke]="tile.color" stroke-width="3" />
+        fill="none" [attr.stroke]="tile?.color" stroke-width="3" />
     </g>
     <!-- </ng-template> -->
     
