@@ -41,14 +41,20 @@ export class MapComponent {
     @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
     container!: ViewContainerRef;
 
-    private offsetX = -1500;
-    private offsetY = -1500;
+    private offsetX = -300;
+    private offsetY = -900;
 
-    private startX = -1500;
-    private startY = -1500;
+    private startX = 0;
+    private startY = 0;
+    private scale = 0.33;
+    
+    transform: string = `scale(${this.scale}) translate(${this.offsetX} ${this.offsetY})`;
 
     positionX: number = this.offsetX;
     positionY: number = this.offsetY;
+
+    
+
 
     @HostListener('ngxDrag', ['$event'])
     onDrag(state: NgxInjectDrag['state']) {
@@ -57,18 +63,30 @@ export class MapComponent {
         console.log("move peter enis", state);
 
         if (state.first) {
-            // get pos of state.currentTarget without css
-            let absX = (state.currentTarget as HTMLElement).getBoundingClientRect().left;
-            let absY = (state.currentTarget as HTMLElement).getBoundingClientRect().top;
+            let boundingBox = (state.currentTarget as HTMLElement).getBoundingClientRect();
 
-            let posX = (state.currentTarget as HTMLElement).style.left;
+            console.log("boundingBox", boundingBox);
 
-            this.startX = absX;// + state.initial[0];
-            this.startY = absY;// + state.initial[1];
+            // honor element scaling
+            let computedStyle = window.getComputedStyle(state.currentTarget as HTMLElement);
+            let scaleX = parseFloat(computedStyle.transform.split(',')[0].slice(7));
+            let scaleY = parseFloat(computedStyle.transform.split(',')[3]);
+            console.log("scale", computedStyle.transform, scaleX, scaleY);
+
+            this.startX = this.positionX;
+            this.startY = this.positionY;
+
+            console.log("start", this.startX, this.startY);
         }
 
-        this.positionX = this.startX + state.movement[0];
-        this.positionY = this.startY + state.movement[1];
+        console.log("movement1", this.positionX, this.positionY, state.movement[0], state.movement[1]);
+
+        this.positionX = this.startX + (state.movement[0]) / this.scale;
+        this.positionY = this.startY + (state.movement[1]) / this.scale;
+
+        this.transform = `scale(${this.scale}) translate(${this.positionX} ${this.positionY})`;
+
+        console.log("movement2", this.positionX, this.positionY, state.movement[0], state.movement[1]);
 
         state.event.preventDefault();
         state.event.stopPropagation();

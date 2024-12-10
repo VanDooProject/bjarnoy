@@ -12,8 +12,8 @@ svg {
   top: -93%; */
 
   /*width: 700px; height: 700px;*/
-  width: 300%;
-  height: 290%;
+  width: 100%;
+  height: 100%;
 
   /* border: 1px solid #000; */
   background-color: var(--background);
