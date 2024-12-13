@@ -163,12 +163,12 @@ export class MapService {
     // call setRandomTileType for all neighbors
     this.setRandomIterator(x, y);
 
-    //this.cleanMap();
-    //this.cleanMap();
+    this.cleanMap();
+    this.cleanMap();
 
-    //for (let i = 0; i < 10; i++) {
-    //  this.carveRiver(i);
-    //}
+    for (let i = 0; i < 3; i++) {
+      this.carveRiver(i);
+    }
 
     return this.tiles;
   }
@@ -176,8 +176,8 @@ export class MapService {
   // removes all sandtiles which do not have a neighbor of type grasstile or coastalwatertile
   // removes all coastalwatertile which do not have a neighbor of type sandtile
   private cleanMap(): void {
-    for (let x = 0; x < this.tiles.length; x++) {
-      for (let y = 0; y < this.tiles[x].length; y++) {
+    for (let x = this.mapStart; x < this.tiles.length; x++) {
+      for (let y = this.mapStart; y < this.tiles[x].length; y++) {
         let neighbors = this.getNeighbors(x, y);
         let neighborTypes = neighbors.map(n => n.type);
 

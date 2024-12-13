@@ -16,7 +16,7 @@ svg {
   height: calc(100% - 169px);
 
   /* border: 1px solid #000; */
-  background-color: var(--background);
+  /* background-color: var(--background); */
 
   /* scale to 50% */
   /* transform: scale(0.33); */
