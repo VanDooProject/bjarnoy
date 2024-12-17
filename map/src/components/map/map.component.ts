@@ -10,8 +10,13 @@ import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
 import { Chunk } from '../../models/chunk';
 
-import { NgxDrag, type NgxInjectDrag } from 'ngxtension/gestures';
 import { HostListener } from '@angular/core';
+
+import { ElementRef } from '@angular/core';
+
+// import svg-pan-zoom mdoule
+//import * as svgPanZoom from 'svg-pan-zoom';
+import svgPanZoom from 'svg-pan-zoom';
 
 @Component({
     selector: 'app-map',
@@ -19,16 +24,14 @@ import { HostListener } from '@angular/core';
     imports: [
         CommonModule,
         ChunkComponent,
-        NgxDrag,
-    ],
-    hostDirectives: [
-        { directive: NgxDrag, outputs: ['ngxDrag'] },
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MapComponent { 
+export class MapComponent {     
+    panZoomInstance!: SvgPanZoom.Instance;
+    
     tileSize: number = 50;
     mapWidth: number = 500;
     mapHeight: number = 200;
@@ -41,117 +44,28 @@ export class MapComponent {
     @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
     container!: ViewContainerRef;
 
-    private offsetX = -300;
-    private offsetY = -900;
+    @ViewChild('svgMap')
+    private mapElem!: ElementRef<SVGElement>;
 
-    private startX = 0;
-    private startY = 0;
-    private scale = 0.33;
-    
-    transform: string = `scale(${this.scale}) translate(${this.offsetX} ${this.offsetY})`;
+    ngAfterViewInit() {
+        this.panZoomInstance = svgPanZoom(this.mapElem.nativeElement, {
+            zoomEnabled: true,
+            panEnabled: true,
+            controlIconsEnabled: false,
+            dblClickZoomEnabled: true,
+            mouseWheelZoomEnabled: true,
+            fit: true,
+            center: true,
+            minZoom: 2,
+            maxZoom: 10,
+            zoomScaleSensitivity: 0.4,
+            preventMouseEventsDefault: true,
+        });
+        console.log("initial.zoom", this.panZoomInstance.getZoom());
+        this.panZoomInstance.zoom(2.5);
+    }  
 
-    positionX: number = this.offsetX;
-    positionY: number = this.offsetY;
-
-    
-
-
-    @HostListener('ngxDrag', ['$event'])
-    onDrag(state: NgxInjectDrag['state']) {
-        // fire every time a drag event happens
-        let x = 0;
-        console.log("move peter enis", state);
-
-        if (state.first) {
-            let boundingBox = (state.currentTarget as HTMLElement).getBoundingClientRect();
-
-            console.log("boundingBox", boundingBox);
-
-            // honor element scaling
-            let computedStyle = window.getComputedStyle(state.currentTarget as HTMLElement);
-            let scaleX = parseFloat(computedStyle.transform.split(',')[0].slice(7));
-            let scaleY = parseFloat(computedStyle.transform.split(',')[3]);
-            console.log("scale", computedStyle.transform, scaleX, scaleY);
-
-            this.startX = this.positionX;
-            this.startY = this.positionY;
-
-            console.log("start", this.startX, this.startY);
-        }
-
-        console.log("movement1", this.positionX, this.positionY, state.movement[0], state.movement[1]);
-
-        this.positionX = this.startX + (state.movement[0]) / this.scale;
-        this.positionY = this.startY + (state.movement[1]) / this.scale;
-
-        this.transform = `scale(${this.scale}) translate(${this.positionX} ${this.positionY})`;
-
-        console.log("movement2", this.positionX, this.positionY, state.movement[0], state.movement[1]);
-
-        state.event.preventDefault();
-        state.event.stopPropagation();
-    }
-
-    // Store references to dynamically created components
-    private componentRefs: ComponentRef<ChunkComponent>[] = [];
-    
-
-    //@ViewChild('chunkContainerRef', { read: ViewContainerRef })
-    //@ViewChild('chunkContainer')
-    //chunkContainerRef: ViewContainerRef;
-
-    // ngAfterViewInit() {
-    //     console.log('Values on ngAfterViewInit():');
-    //     //console.log("chunkContainerRef:", this.chunkContainerRef);
-    //     console.log("chunkContainerRef:", this.container);
-
-    //     //const injector = Injector.create({
-    //     //    providers: [
-    //     //        { provide: 'baseCoordX', useValue: 0 },
-    //     //        { provide: 'baseCoordY', useValue: 0 },
-    //     //    ]
-    //     //});
-
-    //     // create a list of injectors so we can use another for each component
-    //     const injectors = [] as Injector[];
-    //     // each injector should move 10 tiles (first by row then by column)
-    //     for (let x = 0; x < 3; x++) {
-    //         for (let y = 0; y < 3; y++) {
-    //             const injector = Injector.create({
-    //                 providers: [
-    //                     { provide: 'baseCoordX', useValue: x*10 },
-    //                     { provide: 'baseCoordY', useValue: y*10 },
-    //                 ],
-    //             }) as Injector;
-    //             injectors.push(injector);
-    //         }
-    //     }
-
-    //     // for each injector create a component
-    //     injectors.forEach(injector =>
-    //     {
-    //         //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-    //     });
-        
-
-        
-    //     //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-
-    //     // set tiles for each comp
-    //     for (let i = 0; i < this.componentRefs.length; i++) {
-    //         //this.componentRefs[i].instance.tiles = this.tiles;
-
-    //         let comp = this.componentRefs[i].instance
-    //         comp.tiles = this.mapService.getChunk(comp.baseCoordS, comp.baseCoordR, 10)[0];
-    //     }
-
-
-    //     //const componentRef2 = this.componentRefs[2];
-    //     //componentRef2.destroy();
-
-    // }  
-
-    constructor(private mapService : MapService, private viewContainer: ViewContainerRef) {
+    constructor(private mapService: MapService, private viewContainer: ViewContainerRef) {        
         this.tiles = [] as Tile[];
         let tiles  = [] as Tile[];
         var rawTiles = mapService.getTiles(); // [x][y]

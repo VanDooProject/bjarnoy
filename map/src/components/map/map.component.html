@@ -23,15 +23,13 @@
   [attr.height]="1000"
   xmlns="http://www.w3.org/2000/svg"
   class="map" 
-  (ngxDrag)="onDrag($event)"
   [style.position]="'absolute'"
+  #svgMap
   >
-    <g [attr.transform]="transform">
         <!-- <g *ngFor="let tileRow of chunkTiles"> -->
         <g *ngFor="let chunk of chunks">
             <g app-chunk [chunk]="chunk" />
         </g>
-    </g>
 </svg>
 
 
