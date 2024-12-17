@@ -23,9 +23,8 @@
   [attr.height]="1000"
   xmlns="http://www.w3.org/2000/svg"
   class="map" 
-  (ngxDrag)="onDrag($event)"
-  (ngxWheel)="onWheel($event)"
   [style.position]="'absolute'"
+  #svgMap
   >
   <!-- add light grey background -->
     <g

@@ -10,8 +10,13 @@ import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
 import { Chunk } from '../../models/chunk';
 
-import { NgxDrag, NgxWheel, type NgxInjectDrag, type NgxInjectWheel } from 'ngxtension/gestures';
 import { HostListener } from '@angular/core';
+
+import { ElementRef } from '@angular/core';
+
+// import svg-pan-zoom mdoule
+//import * as svgPanZoom from 'svg-pan-zoom';
+import svgPanZoom from 'svg-pan-zoom';
 
 @Component({
     selector: 'app-map',
@@ -19,18 +24,14 @@ import { HostListener } from '@angular/core';
     imports: [
         CommonModule,
         ChunkComponent,
-        NgxDrag,
-        NgxWheel,
-    ],
-    hostDirectives: [
-        { directive: NgxDrag, outputs: ['ngxDrag'] },
-        { directive: NgxWheel, outputs: ['ngxWheel'] },
     ],
     templateUrl: './map.component.html',
     styleUrl: './map.component.css',
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MapComponent { 
+export class MapComponent {     
+    panZoomInstance!: SvgPanZoom.Instance;
+    
     tileSize: number = 50;
     mapWidth: number = 500;
     mapHeight: number = 200;
@@ -42,6 +43,9 @@ export class MapComponent {
 
     @ViewChild('chunkContainerRef', { read: ViewContainerRef, static: true })
     container!: ViewContainerRef;
+
+    @ViewChild('svgMap')
+    private mapElem!: ElementRef<SVGElement>;
 
     private offsetX = -300;
     private offsetY = -900;
@@ -55,139 +59,18 @@ export class MapComponent {
     positionX: number = this.offsetX;
     positionY: number = this.offsetY;
 
-    
+    ngAfterViewInit() {
+        this.panZoomInstance = svgPanZoom(this.mapElem.nativeElement, {
+            zoomEnabled: true,
+            controlIconsEnabled: false,
+            fit: true,
+            center: true,
+            minZoom: 0.5,
+            maxZoom: 10,
+        });
+    }  
 
-
-    @HostListener('ngxDrag', ['$event'])
-    onDrag(state: NgxInjectDrag['state']) {
-        // fire every time a drag event happens
-        let x = 0;
-        console.log("move peter enis", state);
-
-        if (state.first) {
-            this.startX = this.positionX;
-            this.startY = this.positionY;
-
-            console.log("start", this.startX, this.startY);
-        }
-
-        console.log("movement1", this.positionX, this.positionY, state.movement[0], state.movement[1]);
-
-        this.positionX = this.startX + (state.movement[0]) / this.scale;
-        this.positionY = this.startY + (state.movement[1]) / this.scale;
-
-        this.transform = `scale(${this.scale}) translate(${this.positionX} ${this.positionY})`;
-
-        console.log("movement2", this.positionX, this.positionY, state.movement[0], state.movement[1]);
-
-        state.event.preventDefault();
-        state.event.stopPropagation();
-    }
-
-    @HostListener('ngxWheel', ['$event'])
-    onWheel(state: NgxInjectWheel['state']) {
-        state.event.preventDefault();
-        state.event.stopPropagation();
-
-        console.log("Wheeeeeeee", state);
-
-        let x = state.event.clientX;
-        let y = state.event.clientY;
-        console.log("client x - y", x, y);
-
-        const svgRect = (state.event.target as SVGSVGElement).getBoundingClientRect();
-        const mouseX = state.event.clientX - svgRect.left;
-        const mouseY = state.event.clientY - svgRect.top;
-
-        console.log("mouse x - y", mouseX, mouseY);
-
-        // get current mouse position
-        
-        let newScale = this.scale - state.movement[1] / 3000;
-        newScale = Math.max(0.1, newScale);
-        newScale = Math.min(2, newScale);
-
-        console.log("scale old - new", this.scale, newScale);
-        
-        const newPositionX = this.positionX - (mouseX * (newScale - this.scale));
-        const newPositionY = this.positionY - (mouseY * (newScale - this.scale));
-
-        console.log("PositionX old - new", this.positionX, newPositionX);
-        console.log("PositionY old - new", this.positionY, newPositionY);
-
-        this.scale = newScale;
-        this.positionX = newPositionX;
-        this.positionY = newPositionY;
-
-        // this.scale -= state.movement[1] / 3000;
-        // this.scale = Math.max(0.1, this.scale);
-        // this.scale = Math.min(2, this.scale);
-        
-        this.transform = `scale(${this.scale}) translate(${this.positionX} ${this.positionY})`;
-
-        
-    }
-
-    // Store references to dynamically created components
-    private componentRefs: ComponentRef<ChunkComponent>[] = [];
-    
-
-    //@ViewChild('chunkContainerRef', { read: ViewContainerRef })
-    //@ViewChild('chunkContainer')
-    //chunkContainerRef: ViewContainerRef;
-
-    // ngAfterViewInit() {
-    //     console.log('Values on ngAfterViewInit():');
-    //     //console.log("chunkContainerRef:", this.chunkContainerRef);
-    //     console.log("chunkContainerRef:", this.container);
-
-    //     //const injector = Injector.create({
-    //     //    providers: [
-    //     //        { provide: 'baseCoordX', useValue: 0 },
-    //     //        { provide: 'baseCoordY', useValue: 0 },
-    //     //    ]
-    //     //});
-
-    //     // create a list of injectors so we can use another for each component
-    //     const injectors = [] as Injector[];
-    //     // each injector should move 10 tiles (first by row then by column)
-    //     for (let x = 0; x < 3; x++) {
-    //         for (let y = 0; y < 3; y++) {
-    //             const injector = Injector.create({
-    //                 providers: [
-    //                     { provide: 'baseCoordX', useValue: x*10 },
-    //                     { provide: 'baseCoordY', useValue: y*10 },
-    //                 ],
-    //             }) as Injector;
-    //             injectors.push(injector);
-    //         }
-    //     }
-
-    //     // for each injector create a component
-    //     injectors.forEach(injector =>
-    //     {
-    //         //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-    //     });
-        
-
-        
-    //     //this.componentRefs.push(this.container.createComponent(ChunkComponent, { injector }));
-
-    //     // set tiles for each comp
-    //     for (let i = 0; i < this.componentRefs.length; i++) {
-    //         //this.componentRefs[i].instance.tiles = this.tiles;
-
-    //         let comp = this.componentRefs[i].instance
-    //         comp.tiles = this.mapService.getChunk(comp.baseCoordS, comp.baseCoordR, 10)[0];
-    //     }
-
-
-    //     //const componentRef2 = this.componentRefs[2];
-    //     //componentRef2.destroy();
-
-    // }  
-
-    constructor(private mapService : MapService, private viewContainer: ViewContainerRef) {
+    constructor(private mapService: MapService, private viewContainer: ViewContainerRef) {        
         this.tiles = [] as Tile[];
         let tiles  = [] as Tile[];
         var rawTiles = mapService.getTiles(); // [x][y]
