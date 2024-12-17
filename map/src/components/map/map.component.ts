@@ -48,6 +48,24 @@ export class MapComponent {
     private mapElem!: ElementRef<SVGElement>;
 
     ngAfterViewInit() {
+        let minZoom = 1.5;
+        let maxZoom = 10;
+
+        // adopt min and max by DPI; and device resolution
+        let dpi = window.devicePixelRatio;
+        console.log("dpi", dpi);
+        let resolution = window.screen.availWidth;
+        console.log("resolution", resolution, window.innerWidth);
+        // screen of 1080p is default, if the screen is bigger we need to reduce the zoom by a caclulated FACTOR
+        let factor = 1920 / window.screen.availWidth;
+        console.log("factor", factor);
+        minZoom = minZoom / factor / dpi;
+        maxZoom = maxZoom / factor / dpi;
+
+        console.log("zoom", minZoom, maxZoom);
+       
+
+
         this.panZoomInstance = svgPanZoom(this.mapElem.nativeElement, {
             zoomEnabled: true,
             panEnabled: true,
@@ -56,8 +74,8 @@ export class MapComponent {
             mouseWheelZoomEnabled: true,
             fit: true,
             center: true,
-            minZoom: 2,
-            maxZoom: 10,
+            minZoom,
+            maxZoom,
             zoomScaleSensitivity: 0.4,
             preventMouseEventsDefault: true,
         });
