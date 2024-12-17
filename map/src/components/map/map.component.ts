@@ -47,27 +47,22 @@ export class MapComponent {
     @ViewChild('svgMap')
     private mapElem!: ElementRef<SVGElement>;
 
-    private offsetX = -300;
-    private offsetY = -900;
-
-    private startX = 0;
-    private startY = 0;
-    private scale = 0.33;
-    
-    transform: string = `scale(${this.scale}) translate(${this.offsetX} ${this.offsetY})`;
-
-    positionX: number = this.offsetX;
-    positionY: number = this.offsetY;
-
     ngAfterViewInit() {
         this.panZoomInstance = svgPanZoom(this.mapElem.nativeElement, {
             zoomEnabled: true,
+            panEnabled: true,
             controlIconsEnabled: false,
+            dblClickZoomEnabled: true,
+            mouseWheelZoomEnabled: true,
             fit: true,
             center: true,
-            minZoom: 0.5,
+            minZoom: 2,
             maxZoom: 10,
+            zoomScaleSensitivity: 0.4,
+            preventMouseEventsDefault: true,
         });
+        console.log("initial.zoom", this.panZoomInstance.getZoom());
+        this.panZoomInstance.zoom(2.5);
     }  
 
     constructor(private mapService: MapService, private viewContainer: ViewContainerRef) {        
