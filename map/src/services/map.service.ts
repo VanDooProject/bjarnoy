@@ -125,7 +125,14 @@ export class MapService {
 
     for (let i = r; i < r+size; i++) {
       chunk[i-r] = [];
+
+      if(this.tilesHex[i] == undefined || this.tilesHex[i] == null || this.tilesHex[i].length == 0)
+        continue;
+
       for (let j = s; j > s - size; j--) {
+        if(this.tilesHex[i][j] == undefined || this.tilesHex[i][j] == null)
+          continue;
+        
         chunk[i-r][-j+s] = this.tilesHex[i][j];
       }
     }

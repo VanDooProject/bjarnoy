@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, NgZone } from '@angular/core';
 import { MapService } from '../../services/map.service';
-import { ChunkComponent } from '../components/chunk/chunk.component';
+import { ChunkComponent } from '../chunk/chunk.component';
 import { ComponentRef, ViewChild, ViewContainerRef } from '@angular/core';
 import { Injector } from '@angular/core';
 import { NgFor } from '@angular/common';
@@ -9,10 +9,12 @@ import { NgFor } from '@angular/common';
 import { TileComponent } from '../tile/tile.component';
 import { Tile } from '../../models/tile';
 import { Chunk } from '../../models/chunk';
+import { TILE_WIDTH, TILE_HEIGHT } from '../tile/tile.component';
+import { OffsetCoord } from '../../models/offsetCoord';
 
 import { HostListener } from '@angular/core';
 
-import { ElementRef } from '@angular/core';
+import { ElementRef, ChangeDetectorRef } from '@angular/core';
 
 import { BehaviorSubject } from 'rxjs';
 
@@ -34,7 +36,7 @@ import svgPanZoom from 'svg-pan-zoom';
 export class MapComponent {     
     centerPosition$ = new BehaviorSubject<{ x: number; y: number }>({ x: 69, y: 69 });
 
-    boundingBox = new BehaviorSubject<{ width: number; height: number; x: number; y: number }>({ width: 420, height: 420, x: 69, y: 69 });
+    boundingBox$ = new BehaviorSubject<{ width: number; height: number; x: number; y: number }>({ width: 420, height: 420, x: 69, y: 69 });
 
     svgBoundingBox = { x: 0, y: 0, width: 0, height: 0 };
     //svgBoundingBox : DOMRect | null = null;
@@ -69,8 +71,8 @@ export class MapComponent {
     zone: NgZone = new NgZone({ enableLongStackTrace: false });
 
     ngAfterViewInit() {
-        let minZoom = 1.5;
-        let maxZoom = 10;
+        let minZoom = 0.25;
+        let maxZoom = 1.25;
 
         // adopt min and max by DPI; and device resolution
         let dpi = window.devicePixelRatio;
@@ -86,14 +88,7 @@ export class MapComponent {
         console.log("zoom", minZoom, maxZoom);
        
         
-        //this.svgBoundingBox = this.svgBoundingBox ?? this.mapElem.nativeElement.getBoundingClientRect();
-        // set bounding box initially to browser window size
-        this.svgBoundingBox = {
-            x: 0,
-            y: 0,
-            width: window.innerWidth,
-            height: window.innerHeight
-        }
+        
 
         this.panZoomInstance = svgPanZoom(this.mapElem.nativeElement, {
             zoomEnabled: true,
@@ -120,10 +115,25 @@ export class MapComponent {
             //},
         });
         console.log("initial.zoom", this.panZoomInstance.getZoom());
-        this.panZoomInstance.zoom(2.5);
+        this.panZoomInstance.pan({ x: 0, y: 0 });
+        this.panZoomInstance.zoom(0.5);
+
+        //this.clickLoadChunks();
+        let viewportBoundingBox = this.calculateViewportBoundingBox(this.panZoomInstance.getSizes(), this.panZoomInstance.getPan());
+        let visibleTiles = this.calculateVisibleTiles(viewportBoundingBox);
+        console.log("initial visibleTiles", visibleTiles);
+        this.loadChunks(visibleTiles);
+
+        this.cdr.markForCheck();
+        this.cdr.detectChanges();
     }  
 
-    constructor(private mapService: MapService, private viewContainer: ViewContainerRef) {        
+    constructor(
+        private mapService: MapService,
+        private viewContainer: ViewContainerRef,
+        private cdr: ChangeDetectorRef) {    
+        
+            
         this.tiles = [] as Tile[];
         let tiles  = [] as Tile[];
         var rawTiles = mapService.getTiles(); // [x][y]
@@ -182,12 +192,52 @@ export class MapComponent {
 
         this.chunks = [];
 
-        this.chunks.push(this.mapService.getChunkHex(0, -size, size));
-        this.chunks.push(this.mapService.getChunkHex(0, 0, size));
-        this.chunks.push(this.mapService.getChunkHex(0, size, size));
-        //this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
-        this.chunks.push(this.mapService.getChunkHex(0, size*3, size));
+        // this.chunks.push(this.mapService.getChunkHex(0, -size, size));
+        // this.chunks.push(this.mapService.getChunkHex(0, 0, size));
+        // this.chunks.push(this.mapService.getChunkHex(0, size, size));
+        // //this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
+        // this.chunks.push(this.mapService.getChunkHex(0, size*3, size));
+
+        
+        
+        //this.svgBoundingBox = this.svgBoundingBox ?? this.mapElem.nativeElement.getBoundingClientRect();
+        // set bounding box initially to browser window size
+        this.svgBoundingBox = {
+            x: 0,
+            y: 0,
+            width: window.innerWidth,
+            height: window.innerHeight
+        }
     }
+
+    clickLoadChunks() {
+        this.loadChunks(this.visibleTiles);
+    }
+
+
+    // x and y are offsets
+    loadChunks( tiles: {width: number, height: number, x: number, y: number} ) {
+        let size = 4;
+
+        let chunkCountWidth = Math.ceil(tiles.width / size)+1;
+        let chunkCountHeight = Math.ceil(tiles.height / size)+1;
+
+        tiles.x = Math.floor(tiles.x);
+        tiles.y = Math.floor(tiles.y);
+        
+        let offsetCoord = new OffsetCoord(tiles.x, tiles.y);
+        let hexCoord = offsetCoord.oddQToAxial();
+
+        // add new chunks
+        for(let s = 0; s > -chunkCountWidth; s--) {
+            for(let r = 0; r < chunkCountHeight; r++) {
+                let chunk = this.mapService.getChunkHex(hexCoord.s + s * size, hexCoord.r + r * size, size);
+                this.chunks.push(chunk);
+            }
+        }
+    }
+
+
 
     panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : void | boolean | SvgPanZoom.PointModifier {
     //panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : { x: number, y: number } {
@@ -219,16 +269,18 @@ export class MapComponent {
         // var positionY = -1*svgPanZoom.getPan.y/svgPanZoom.getSizes.realZoom;
 
         this.centerPosition$.next({ x: newPan.x, y: newPan.y });
-        this.boundingBox.next({
-            //width: sizes.width   / sizes.realZoom,
-            //height: sizes.height / sizes.realZoom,
-            width:  this.svgBoundingBox.width   / sizes.realZoom,
-            height: this.svgBoundingBox.height / sizes.realZoom,
-            x: -1*newPan.x/sizes.realZoom,
-            y: -1*newPan.y/sizes.realZoom,
-        });
+        this.boundingBox$.next(this.calculateViewportBoundingBox(sizes, newPan));
 
         //return { x: newPan.x / zoom, y: newPan.y / zoom };
+    }
+
+    private calculateViewportBoundingBox(sizes: SvgPanZoom.Sizes, newPan: SvgPanZoom.Point): { width: number; height: number; x: number; y: number; } {
+        return {
+            width: this.svgBoundingBox.width / sizes.realZoom,
+            height: this.svgBoundingBox.height / sizes.realZoom,
+            x: -1 * newPan.x / sizes.realZoom,
+            y: -1 * newPan.y / sizes.realZoom,
+        };
     }
 
     // reset center position
@@ -246,5 +298,20 @@ export class MapComponent {
         this.svgBoundingBox = this.mapElem.nativeElement.getBoundingClientRect();
 
         console.log("windowResize", this.svgBoundingBox);
+    }
+
+    get visibleTiles(): {width: number, height: number, x: number, y: number} {
+        return this.calculateVisibleTiles(this.boundingBox$.value);
+    }
+
+    private calculateVisibleTiles(tiles : { width: number; height: number; x: number; y: number; }):
+        { width: number; height: number; x: number; y: number; }
+    {
+        return {
+            width: tiles.width / TILE_WIDTH,
+            height: tiles.height / TILE_HEIGHT,
+            x: tiles.x / TILE_WIDTH,
+            y: tiles.y / TILE_HEIGHT,
+        };
     }
 }

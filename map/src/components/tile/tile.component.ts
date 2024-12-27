@@ -5,6 +5,15 @@ import { NgIf } from '@angular/common';
 import { Tile } from '../../models/tile';
 import { HexCoord } from '../../models/hexCoord';
 
+
+
+// ori image is 200x300
+
+// image and tile hight do not match
+export const TILE_HEIGHT = 92; // of tile, image is 300
+// width is also different since they are offset
+export const TILE_WIDTH = 150; // of tile image is 200
+
 @Component({
     selector: '[app-tile]',
     standalone: true,
@@ -75,12 +84,6 @@ export class TileComponent {
     get transform(): string {
         //return `translate(${this.x}, ${this.y})`;
 
-        // ori image is 200x300
-
-        // image and tile hight do not match
-        var tileHeight = 92; // of tile, image is 300
-        // width is also different since they are offset
-        var tileWidth = 150; // of tile image is 200
 
         if(this.axial == null)
             return '';
@@ -105,9 +108,9 @@ export class TileComponent {
         //return `translate(${this.x * tileWidth + 600}, ${this.y * tileHeight + (tileHeight / 2) * this.x})`;
         
         if(this.x % 2 == 1 || this.x % 2 == -1) {
-            return `translate(${this.x * tileWidth}, ${this.y * tileHeight + tileHeight / 2})`;
+            return `translate(${this.x * TILE_WIDTH}, ${this.y * TILE_HEIGHT + TILE_HEIGHT / 2})`;
         } else {
-            return `translate(${this.x * tileWidth}, ${this.y * tileHeight})`;
+            return `translate(${this.x * TILE_WIDTH}, ${this.y * TILE_HEIGHT})`;
         }
     }
 }
