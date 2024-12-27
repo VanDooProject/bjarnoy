@@ -1,6 +1,9 @@
 {
     "recommendations": [
         "angular.ng-template",
-        "cyrilletuzi.angular-schematics"
+        "cyrilletuzi.angular-schematics",
+        "github.copilot",
+        "lokalise.i18n-ally",
+        "ms-vsliveshare.vsliveshare"
     ]
 }

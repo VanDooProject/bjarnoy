@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { Input } from '@angular/core';
-import { Tile } from '../../../models/tile';
+import { Tile } from '../../models/tile';
 import { NgFor } from '@angular/common';
 import { CommonModule } from '@angular/common';
-import { TileComponent } from '../../tile/tile.component';
+import { TileComponent } from '../tile/tile.component';
 import { Inject } from '@angular/core';
-import { Chunk } from '../../../models/chunk';
-import { HexCoord } from '../../../models/hexCoord';
+import { Chunk } from '../../models/chunk';
+import { HexCoord } from '../../models/hexCoord';
 
 @Component({
   selector: '[app-chunk]',
@@ -59,6 +59,6 @@ export class ChunkComponent {
     var tileWidth = 150; // of tile image is 200
 
     //return `translate(${coord.x * tileWidth + 2000}, ${coord.y * tileHeight})`;
-    return `translate(3500,1000)`;
+    return `translate(0,0)`;
 }
 }
