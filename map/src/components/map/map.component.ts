@@ -71,8 +71,8 @@ export class MapComponent {
     zone: NgZone = new NgZone({ enableLongStackTrace: false });
 
     ngAfterViewInit() {
-        let minZoom = 0.25;
-        let maxZoom = 1.25;
+        let minZoom = 0.05;
+        let maxZoom = 0.30;
 
         // adopt min and max by DPI; and device resolution
         let dpi = window.devicePixelRatio;
@@ -100,7 +100,7 @@ export class MapComponent {
             center: true,
             minZoom,
             maxZoom,
-            zoomScaleSensitivity: 0.4,
+            zoomScaleSensitivity: 0.5,
             preventMouseEventsDefault: true,
             //beforePan: this.panHandler,
             beforePan: (oldPan, newPan) => { this.panHandler(oldPan, newPan); },
@@ -116,7 +116,7 @@ export class MapComponent {
         });
         console.log("initial.zoom", this.panZoomInstance.getZoom());
         this.panZoomInstance.pan({ x: 0, y: 0 });
-        this.panZoomInstance.zoom(0.5);
+        this.panZoomInstance.zoom(0.10);
 
         //this.clickLoadChunks();
         let viewportBoundingBox = this.calculateViewportBoundingBox(this.panZoomInstance.getSizes(), this.panZoomInstance.getPan());

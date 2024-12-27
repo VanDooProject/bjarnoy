@@ -30,10 +30,12 @@
   [attr.height]="1000" -->
 
 <svg
-  xmlns="http://www.w3.org/2000/svg"
-  class="map" 
-  [style.position]="'absolute'"
-  #svgMap
+    [attr.width]="svgBoundingBox.width"
+    [attr.height]="svgBoundingBox.height"
+    xmlns="http://www.w3.org/2000/svg"
+    class="map" 
+    [style.position]="'absolute'"
+    #svgMap
   >
         <!-- <g *ngFor="let tileRow of chunkTiles"> -->
         <g *ngFor="let chunk of chunks">
