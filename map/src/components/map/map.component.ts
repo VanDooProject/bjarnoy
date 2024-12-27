@@ -78,6 +78,7 @@ export class MapComponent {
             maxZoom,
             zoomScaleSensitivity: 0.4,
             preventMouseEventsDefault: true,
+            beforePan: this.panHandler,
         });
         console.log("initial.zoom", this.panZoomInstance.getZoom());
         this.panZoomInstance.zoom(2.5);
@@ -138,74 +139,22 @@ export class MapComponent {
         this.tiles = tiles;
 
         
-        let size = 15;
+        let size = 4;
 
-        //this.chunkTiles = this.mapService.getChunk(0, 0, 10);
         this.chunks = [];
-        //this.chunks[0] = this.mapService.getChunk(-3, 0, 7);
-        
-        //this.chunks.push(this.mapService.getChunkHex(size-2, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(size-2, size-2, size));
-        //this.chunks.push(this.mapService.getChunkHex(0, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(0, size-2, size));
 
-
-
-        //this.chunks.push(this.mapService.getChunkHex(size, -size-1, size));
-        //this.chunks.push(this.mapService.getChunkHex(size, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(size, size, size));
-        //
-        //this.chunks.push(this.mapService.getChunkHex(0, -size-1, size));
-        //this.chunks.push(this.mapService.getChunkHex(0, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(0, size, size));
-        //
-        //this.chunks.push(this.mapService.getChunkHex(-size-1, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(-size-1, size, size));
-        //
-        //this.chunks.push(this.mapService.getChunkHex(-size*2-1, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(-size*2-1, size, size));
-        //
-        //this.chunks.push(this.mapService.getChunkHex(-size*3-1, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(-size*3-1, size, size));
-        //
-        //this.chunks.push(this.mapService.getChunkHex(-size*4-1, 0, size));
-        //this.chunks.push(this.mapService.getChunkHex(-size*4-1, size, size));
-
-
-        
         this.chunks.push(this.mapService.getChunkHex(0, -size, size));
         this.chunks.push(this.mapService.getChunkHex(0, 0, size));
         this.chunks.push(this.mapService.getChunkHex(0, size, size));
         //this.chunks.push(this.mapService.getChunkHex(0, size*2, size));
         this.chunks.push(this.mapService.getChunkHex(0, size*3, size));
+    }
 
-
-
-        //this.chunks[0] = this.mapService.getChunkHex(size-2, 0, size);
-        //this.chunks[1] = this.mapService.getChunkHex(size-2, size-2, size);
-        //this.chunks[2] = this.mapService.getChunkHex(0, 0, size);
-        //this.chunks[4] = this.mapService.getChunkHex(0, size-2, size);
-        //this.chunks[5] = this.mapService.getChunkHex(0, size-2, size);
-        
-        
-        //this.chunks.push(this.mapService.getChunkHex(size, 0, 2));
-        //this.chunks.push(this.mapService.getChunkHex(size, 0, size+2));
-        //this.chunks.push(this.mapService.getChunkHex(size, size, size+2));
-
-        //let chunk = this.mapService.getChunkHex(0,0,3);
-        //let chunk = this.mapService.getChunkHex(0,0,3);
-        //console.log("chunk", chunk);
-        //this.chunks[0] = chunk;
-
-
-        // let chunk = this.mapService.getChunkHex(0,0,3);
-        // console.log("chunk0", chunk);
-        // this.chunks[0] = chunk;
-        // this.chunks[1] = this.mapService.getChunkHex(0,-4,3);
-        // console.log("chunk1", this.chunks[1]);
-        // this.chunks[2] = this.mapService.getChunkHex(4,0,3);
-        // console.log("chunk1", this.chunks[2]);
-        // this.chunks[3] = this.mapService.getChunkHex(4,-4,3);
-        // console.log("chunk1", this.chunks[3]);
+    panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : void | boolean | SvgPanZoom.PointModifier {
+        console.log("panHandler", {
+            xo: oldPan.x / (this as any).getZoom(), 
+            yo: oldPan.y / (this as any).getZoom()}, {
+            x: newPan.x / (this as any).getZoom(), 
+            y: newPan.y / (this as any).getZoom()})
     }
 }

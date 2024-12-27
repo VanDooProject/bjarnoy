@@ -123,9 +123,9 @@ export class MapService {
 
     console.log("getChunkHex", top, right, bottom, left);
 
-    for (let i = r; i <= r+size; i++) {
+    for (let i = r; i < r+size; i++) {
       chunk[i-r] = [];
-      for (let j = s; j >= s - size; j--) {
+      for (let j = s; j > s - size; j--) {
         chunk[i-r][-j+s] = this.tilesHex[i][j];
       }
     }
