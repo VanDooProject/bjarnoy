@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, NgZone } from '@angular/core';
 import { MapService } from '../../services/map.service';
 import { ChunkComponent } from '../components/chunk/chunk.component';
 import { ComponentRef, ViewChild, ViewContainerRef } from '@angular/core';
@@ -13,6 +13,8 @@ import { Chunk } from '../../models/chunk';
 import { HostListener } from '@angular/core';
 
 import { ElementRef } from '@angular/core';
+
+import { BehaviorSubject } from 'rxjs';
 
 // import svg-pan-zoom mdoule
 //import * as svgPanZoom from 'svg-pan-zoom';
@@ -30,6 +32,23 @@ import svgPanZoom from 'svg-pan-zoom';
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MapComponent {     
+    centerPosition$ = new BehaviorSubject<{ x: number; y: number }>({ x: 69, y: 69 });
+
+    boundingBox = new BehaviorSubject<{ width: number; height: number; x: number; y: number }>({ width: 420, height: 420, x: 69, y: 69 });
+
+    svgBoundingBox = { x: 0, y: 0, width: 0, height: 0 };
+    //svgBoundingBox : DOMRect | null = null;
+
+    centerPosition: { x: number, y: number } = { x: 69, y: 69 };
+
+    // getter for centerPosition
+    get centerPositionX(): number {
+        return this.centerPosition.x;
+    }
+    get centerPositionY(): number {
+        return this.centerPosition.y;
+    }
+
     panZoomInstance!: SvgPanZoom.Instance;
     
     tileSize: number = 50;
@@ -46,6 +65,8 @@ export class MapComponent {
 
     @ViewChild('svgMap')
     private mapElem!: ElementRef<SVGElement>;
+
+    zone: NgZone = new NgZone({ enableLongStackTrace: false });
 
     ngAfterViewInit() {
         let minZoom = 1.5;
@@ -64,7 +85,15 @@ export class MapComponent {
 
         console.log("zoom", minZoom, maxZoom);
        
-
+        
+        //this.svgBoundingBox = this.svgBoundingBox ?? this.mapElem.nativeElement.getBoundingClientRect();
+        // set bounding box initially to browser window size
+        this.svgBoundingBox = {
+            x: 0,
+            y: 0,
+            width: window.innerWidth,
+            height: window.innerHeight
+        }
 
         this.panZoomInstance = svgPanZoom(this.mapElem.nativeElement, {
             zoomEnabled: true,
@@ -78,7 +107,17 @@ export class MapComponent {
             maxZoom,
             zoomScaleSensitivity: 0.4,
             preventMouseEventsDefault: true,
-            beforePan: this.panHandler,
+            //beforePan: this.panHandler,
+            beforePan: (oldPan, newPan) => { this.panHandler(oldPan, newPan); },
+            //beforePan: (oldPan, newPan) => {
+            //    this.centerPosition = this.panHandler(oldPan, newPan);
+            //
+            //    // set center position in default NgZone
+            //    this.zone.run(() => {
+            //        this.centerPosition = { ...this.centerPosition }//{ x: this.centerPosition.x, y: this.centerPosition.y };
+            //        //self.centerPosition = { x: 420, y: 420 }
+            //    });
+            //},
         });
         console.log("initial.zoom", this.panZoomInstance.getZoom());
         this.panZoomInstance.zoom(2.5);
@@ -151,10 +190,61 @@ export class MapComponent {
     }
 
     panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : void | boolean | SvgPanZoom.PointModifier {
-        console.log("panHandler", {
-            xo: oldPan.x / (this as any).getZoom(), 
-            yo: oldPan.y / (this as any).getZoom()}, {
-            x: newPan.x / (this as any).getZoom(), 
-            y: newPan.y / (this as any).getZoom()})
+    //panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : { x: number, y: number } {
+        //let zoom = (this as any).getZoom();
+        let zoom = this.panZoomInstance.getZoom();
+
+        //this.svgBoundingBox = this.svgBoundingBox ?? this.mapElem.nativeElement.getBoundingClientRect();
+        console.log("svgBoundingBox", this.svgBoundingBox);
+
+        this.panZoomInstance.updateBBox(); // Update viewport bounding box
+        let sizes = this.panZoomInstance.getSizes();
+        console.log("panHandler",
+                //this.centerPosition,
+                zoom,
+                sizes,
+                sizes.viewBox,
+            //{            
+            //    xo: oldPan.x / zoom, 
+            //    yo: oldPan.y / zoom
+            //},
+            //{
+            //    x: newPan.x / zoom, 
+            //    y: newPan.y / zoom
+            //}
+        );
+
+        // https://stackoverflow.com/questions/28490814/using-svg-js-and-svg-pan-zoom-how-can-i-get-current-viewport-center-point
+        // var positionX = -1*svgPanZoom.getPan.x/svgPanZoom.getSizes.realZoom;
+        // var positionY = -1*svgPanZoom.getPan.y/svgPanZoom.getSizes.realZoom;
+
+        this.centerPosition$.next({ x: newPan.x, y: newPan.y });
+        this.boundingBox.next({
+            //width: sizes.width   / sizes.realZoom,
+            //height: sizes.height / sizes.realZoom,
+            width:  this.svgBoundingBox.width   / sizes.realZoom,
+            height: this.svgBoundingBox.height / sizes.realZoom,
+            x: -1*newPan.x/sizes.realZoom,
+            y: -1*newPan.y/sizes.realZoom,
+        });
+
+        //return { x: newPan.x / zoom, y: newPan.y / zoom };
+    }
+
+    // reset center position
+    resetCenterPosition() {
+        //this.centerPosition = { x: 0, y: 0 };
+        this.centerPosition = { x: this.centerPosition.x, y: this.centerPosition.y };
+
+        
+        //this.ngModel.update.emit(value);
+    }
+
+    // on window resize; save svg `this.mapElem` bounding box
+    @HostListener('window:resize', ['$event'])
+    windowResize(event: Event) {
+        this.svgBoundingBox = this.mapElem.nativeElement.getBoundingClientRect();
+
+        console.log("windowResize", this.svgBoundingBox);
     }
 }
