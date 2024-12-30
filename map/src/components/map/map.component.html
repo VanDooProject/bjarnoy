@@ -38,7 +38,11 @@
     #svgMap
   >
         <!-- <g *ngFor="let tileRow of chunkTiles"> -->
-        <g *ngFor="let chunk of chunks">
+
+        <!-- chunk should be "keyed" -> `*ngForTrackBy="trackByChunk"`-->
+        <g
+            *ngFor="let chunk of chunks; trackBy: trackByChunk"
+        >
             <g app-chunk [chunk]="chunk" />
         </g>
 
