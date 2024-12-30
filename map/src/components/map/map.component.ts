@@ -72,8 +72,8 @@ export class MapComponent {
     zone: NgZone = new NgZone({ enableLongStackTrace: false });
 
     ngAfterViewInit() {
-        let minZoom = 0.025;
-        let maxZoom = 0.30;
+        let minZoom = 0.015;
+        let maxZoom = 0.10;
 
         // adopt min and max by DPI; and device resolution
         let dpi = window.devicePixelRatio;
@@ -117,7 +117,7 @@ export class MapComponent {
         });
         console.log("initial.zoom", this.panZoomInstance.getZoom());
         this.panZoomInstance.pan({ x: 0, y: 0 });
-        this.panZoomInstance.zoom(0.10); // TODO save last zoom level in local storage
+        this.panZoomInstance.zoom(0.025); // TODO save last zoom level in local storage
 
         //this.clickLoadChunks();
         let viewportBoundingBox = this.calculateViewportBoundingBox(this.panZoomInstance.getSizes(), this.panZoomInstance.getPan());
@@ -218,13 +218,13 @@ export class MapComponent {
 
     // x and y are offsets
     loadChunks( tiles: {width: number, height: number, x: number, y: number} ) {
-        let size = 10;
+        let size = 5;
 
-        let chunkCountWidth = Math.ceil(tiles.width / size)+1;
+        let chunkCountWidth  = Math.ceil(tiles.width  / size)+1;
         let chunkCountHeight = Math.ceil(tiles.height / size)+1;
 
-        tiles.x = Math.floor(tiles.x);
-        tiles.y = Math.floor(tiles.y);
+        tiles.x = Math.floor(tiles.x / size) * size;
+        tiles.y = Math.floor(tiles.y / size) * size;
 
         
         //for(let x = 0; x > -chunkCountWidth; x--) {
@@ -239,7 +239,7 @@ export class MapComponent {
         
         //let offsetCoord = new OffsetCoord(tiles.x, tiles.y);
         // offsetCoord should have multiple of size for x and y
-        let offsetCoord = new OffsetCoord(Math.floor(tiles.x / size) * size, Math.floor(tiles.y / size) * size);
+        let offsetCoord = new OffsetCoord(tiles.x, tiles.y);
         let hexCoord = offsetCoord.oddQToAxial();
 
         let chunks = [] as Chunk[];
@@ -247,15 +247,17 @@ export class MapComponent {
         // add new chunks
         for(let s = chunkCountWidth; s > -chunkCountWidth; s--) {
             for(let r = -chunkCountHeight; r < chunkCountHeight; r++) {
-                const s1 = hexCoord.s + s * size;
-                const r1 = hexCoord.r + r * size;
+                //const s1 = hexCoord.s + s * size;
+                //const r1 = hexCoord.r + r * size;
+                const s1 = Math.floor(hexCoord.s / size) * size + s * size;
+                const r1 = Math.floor(hexCoord.r / size) * size + r * size;
 
                 // convert back to axial and check if its within the visible tiles
                 let chunkCoords = new HexCoord(s1, r1);
                 let chunkCoordsOddQ = chunkCoords.axialToOddQ();
-                if(chunkCoordsOddQ.x < tiles.x || chunkCoordsOddQ.x > tiles.x + tiles.width)
+                if(chunkCoordsOddQ.x < tiles.x - chunkCountWidth * size || chunkCoordsOddQ.x > tiles.x + chunkCountWidth * size)
                     continue;
-                if(chunkCoordsOddQ.y < tiles.y || chunkCoordsOddQ.y > tiles.y + tiles.height)
+                if(chunkCoordsOddQ.y < tiles.y - chunkCountHeight * size || chunkCoordsOddQ.y > tiles.y + chunkCountHeight * size)
                     continue;
 
 

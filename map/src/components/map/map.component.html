@@ -6,7 +6,7 @@
 <!-- <ng-template #chunkContainerRef></ng-template> -->
 <div #chunkContainerRef></div>
 
-<h1>map</h1>
+<!-- <h1>map</h1>
 <p>
     center pos: {{ (centerPosition$ | async)?.x }} / {{ (centerPosition$ | async)?.y }}<br />
     boundingBox: width {{ (boundingBox$ | async)?.width }} / height {{ (boundingBox$ | async)?.height }}<br />
@@ -16,7 +16,7 @@
     visible tiles: x {{ visibleTiles.x }} / y {{ visibleTiles.y }}<br />
 
     <button (click)="resetCenterPosition()">reset center pos</button>
-</p>
+</p> -->
 
 <!-- <ul>
     <li>test</li>
@@ -37,25 +37,27 @@
     [style.position]="'absolute'"
     #svgMap
   >
-        <!-- <g *ngFor="let tileRow of chunkTiles"> -->
+    <text>Map is loading ...</text>
+    
+    <!-- <g *ngFor="let tileRow of chunkTiles"> -->
 
-        <!-- chunk should be "keyed" -> `*ngForTrackBy="trackByChunk"`-->
-        <g
-            *ngFor="let chunk of chunks; trackBy: trackByChunk"
-        >
-            <g app-chunk [chunk]="chunk" />
-        </g>
+    <!-- chunk should be "keyed" -> `*ngForTrackBy="trackByChunk"`-->
+    <g
+        *ngFor="let chunk of chunks; trackBy: trackByChunk"
+    >
+        <g app-chunk [chunk]="chunk" />
+    </g>
 
-        <!--<circle r="2000" [attr.cx]="centerPositionX" [attr.cy]="centerPositionY" fill="red" />-->
-        <!-- <circle r="2000" [attr.cx]="(centerPosition$ | async)?.x" [attr.cy]="(centerPosition$ | async)?.y" fill="red" /> -->
+    <!--<circle r="2000" [attr.cx]="centerPositionX" [attr.cy]="centerPositionY" fill="red" />-->
+    <!-- <circle r="2000" [attr.cx]="(centerPosition$ | async)?.x" [attr.cy]="(centerPosition$ | async)?.y" fill="red" /> -->
 
-        <rect width="200" height="100" x="10" y="10" rx="20" ry="20" fill="transparent" style="stroke-width:10;stroke:rgb(0,0,255)"  />
-        <!-- <rect 
-            [attr.width]="(boundingBox$ | async)?.width"
-            [attr.height]="(boundingBox$ | async)?.height"
-            [attr.x]="(boundingBox$ | async)?.x"
-            [attr.y]="(boundingBox$ | async)?.y"
-            rx="20" ry="20" style="stroke-width:10;stroke:rgb(255,0,255);fill:rgba(100,255,100,0.25)" /> -->
+    <!-- <rect width="200" height="100" x="10" y="10" rx="20" ry="20" fill="transparent" style="stroke-width:10;stroke:rgb(0,0,255)"  /> -->
+    <!-- <rect 
+        [attr.width]="(boundingBox$ | async)?.width"
+        [attr.height]="(boundingBox$ | async)?.height"
+        [attr.x]="(boundingBox$ | async)?.x"
+        [attr.y]="(boundingBox$ | async)?.y"
+        rx="20" ry="20" style="stroke-width:10;stroke:rgb(255,0,255);fill:rgba(100,255,100,0.25)" /> -->
 </svg>
 
 
