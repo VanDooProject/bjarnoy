@@ -11,6 +11,7 @@ import { Tile } from '../../models/tile';
 import { Chunk } from '../../models/chunk';
 import { TILE_WIDTH, TILE_HEIGHT } from '../tile/tile.component';
 import { OffsetCoord } from '../../models/offsetCoord';
+import { HexCoord } from '../../models/hexCoord';
 
 import { HostListener } from '@angular/core';
 
@@ -71,8 +72,8 @@ export class MapComponent {
     zone: NgZone = new NgZone({ enableLongStackTrace: false });
 
     ngAfterViewInit() {
-        let minZoom = 0.05;
-        let maxZoom = 0.30;
+        let minZoom = 0.015;
+        let maxZoom = 0.10;
 
         // adopt min and max by DPI; and device resolution
         let dpi = window.devicePixelRatio;
@@ -116,7 +117,7 @@ export class MapComponent {
         });
         console.log("initial.zoom", this.panZoomInstance.getZoom());
         this.panZoomInstance.pan({ x: 0, y: 0 });
-        this.panZoomInstance.zoom(0.10);
+        this.panZoomInstance.zoom(0.025); // TODO save last zoom level in local storage
 
         //this.clickLoadChunks();
         let viewportBoundingBox = this.calculateViewportBoundingBox(this.panZoomInstance.getSizes(), this.panZoomInstance.getPan());
@@ -217,27 +218,92 @@ export class MapComponent {
 
     // x and y are offsets
     loadChunks( tiles: {width: number, height: number, x: number, y: number} ) {
-        let size = 4;
+        let size = 5;
 
-        let chunkCountWidth = Math.ceil(tiles.width / size)+1;
+        let chunkCountWidth  = Math.ceil(tiles.width  / size)+1;
         let chunkCountHeight = Math.ceil(tiles.height / size)+1;
 
-        tiles.x = Math.floor(tiles.x);
-        tiles.y = Math.floor(tiles.y);
+        tiles.x = Math.floor(tiles.x / size) * size;
+        tiles.y = Math.floor(tiles.y / size) * size;
+
         
+        //for(let x = 0; x > -chunkCountWidth; x--) {
+        //    for(let y = 0; y < chunkCountHeight; y++) {
+        //        let offsetCoord = new OffsetCoord(tiles.x + x * size, tiles.y + y * size);
+        //        let hexCoord = offsetCoord.oddQToAxial();
+        //
+        //        let chunk = this.mapService.getChunkHex(hexCoord.s, hexCoord.r, size);
+        //        this.chunks.push(chunk);
+        //    }
+        //}
+        
+        //let offsetCoord = new OffsetCoord(tiles.x, tiles.y);
+        // offsetCoord should have multiple of size for x and y
         let offsetCoord = new OffsetCoord(tiles.x, tiles.y);
         let hexCoord = offsetCoord.oddQToAxial();
 
+        let chunks = [] as Chunk[];
+
         // add new chunks
-        for(let s = 0; s > -chunkCountWidth; s--) {
-            for(let r = 0; r < chunkCountHeight; r++) {
-                let chunk = this.mapService.getChunkHex(hexCoord.s + s * size, hexCoord.r + r * size, size);
-                this.chunks.push(chunk);
+        for(let s = chunkCountWidth; s > -chunkCountWidth; s--) {
+            for(let r = -chunkCountHeight; r < chunkCountHeight; r++) {
+                //const s1 = hexCoord.s + s * size;
+                //const r1 = hexCoord.r + r * size;
+                const s1 = Math.floor(hexCoord.s / size) * size + s * size;
+                const r1 = Math.floor(hexCoord.r / size) * size + r * size;
+
+                // convert back to axial and check if its within the visible tiles
+                let chunkCoords = new HexCoord(s1, r1);
+                let chunkCoordsOddQ = chunkCoords.axialToOddQ();
+                if(chunkCoordsOddQ.x < tiles.x - chunkCountWidth * size || chunkCoordsOddQ.x > tiles.x + chunkCountWidth * size)
+                    continue;
+                if(chunkCoordsOddQ.y < tiles.y - chunkCountHeight * size || chunkCoordsOddQ.y > tiles.y + chunkCountHeight * size)
+                    continue;
+
+
+                // add chunk if not already in list
+                if(this.chunks.findIndex(c => c.s == s1 && c.r == r1) == -1) {
+                    // output searched index and all index in list
+                    //console.log("chunk not found", s1, r1, this.chunks.map(c => "("+c.s + "|" + c.r +")").join(", "));
+
+                    let chunk = this.mapService.getChunkHex(s1, r1, size);
+                    this.chunks.push(chunk);
+
+                    //console.log("chunk list updated", s1, r1, this.chunks.map(c => "("+c.s + "|" + c.r +")").join(", "));
+                }
+                else
+                {
+                    console.log("chunk already loaded sr=", s1, r1);
+                }
             }
         }
+
+        // sort by S and R; S should be descending and R ascending
+        this.chunks.sort((a, b) => {
+            if(a.s == b.s)
+                return a.r - b.r;
+            return b.s - a.s;
+        });
+
+        //this.chunks = chunks;
     }
 
 
+    // ngFor trackBy function `trackByChunk` - https://angular.dev/api/core/TrackByFunction
+    //interface TrackByFunction<T> {  <U extends T>(index: number, item: T & U): any; }
+    trackByChunk(_index: number, chunk: Chunk) {
+        //console.log("trackByChunk", chunk.s, chunk.r);
+        return chunk.s + "," + chunk.r + "," + chunk.size;
+    }
+
+
+
+    //trackByChunk(index: number, chunk: Chunk) {
+    //    console.log("trackByChunk", chunk.s, chunk.r);
+    //    return chunk.s + "," + chunk.r + "," + chunk.tiles.length;
+    //}
+
+    calculatePanInProgress = false;
 
     panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : void | boolean | SvgPanZoom.PointModifier {
     //panHandler(oldPan: SvgPanZoom.Point, newPan: SvgPanZoom.Point) : { x: number, y: number } {
@@ -269,9 +335,22 @@ export class MapComponent {
         // var positionY = -1*svgPanZoom.getPan.y/svgPanZoom.getSizes.realZoom;
 
         this.centerPosition$.next({ x: newPan.x, y: newPan.y });
-        this.boundingBox$.next(this.calculateViewportBoundingBox(sizes, newPan));
+        let viewportBoundingBox = this.calculateViewportBoundingBox(sizes, newPan);
+        this.boundingBox$.next(viewportBoundingBox);
 
         //return { x: newPan.x / zoom, y: newPan.y / zoom };
+
+        // load chunks if needed;
+        if(!this.calculatePanInProgress) {
+            this.calculatePanInProgress = true;
+            let visibleTiles = this.calculateVisibleTiles(viewportBoundingBox);
+            console.log("visibleTiles", visibleTiles);
+            this.loadChunks(visibleTiles);
+            this.calculatePanInProgress = false;
+        }
+        else {
+            console.log("calculatePan already InProgress");
+        }
     }
 
     private calculateViewportBoundingBox(sizes: SvgPanZoom.Sizes, newPan: SvgPanZoom.Point): { width: number; height: number; x: number; y: number; } {

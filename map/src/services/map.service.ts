@@ -121,7 +121,7 @@ export class MapService {
     let bottom = new HexCoord(s - size, r + size).axialToOddQ();
     let left = new HexCoord(s, r + size).axialToOddQ();
 
-    console.log("getChunkHex", top, right, bottom, left);
+    console.log(`getChunkHex sr=(${s}|${r})`, top, right, bottom, left);
 
     for (let i = r; i < r+size; i++) {
       chunk[i-r] = [];
@@ -138,7 +138,7 @@ export class MapService {
     }
 
     //return chunk; // chunk[r][s]
-    return new Chunk(s, r, chunk);
+    return new Chunk(s, r, chunk, size);
   }
 
   /*
