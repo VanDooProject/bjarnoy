@@ -1,0 +1,52 @@
+## .NET Core
+bin/
+obj/
+*.dll
+*.pdb
+
+## Visual Studio
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+
+## Rider
+.idea/
+
+## Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+## SQL Server files
+*.mdf
+*.ldf
+*.ndf
+
+## Environment Settings
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Staging.json
+*.env
+
+## Test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+## Coverage results
+coverage/
+*.coverage
+*.coveragexml
+
+## Logs
+logs/
+*.log
+npm-debug.log*
