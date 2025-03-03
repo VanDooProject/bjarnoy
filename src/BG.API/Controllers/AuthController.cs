@@ -1,5 +1,4 @@
 using BG.API.Models.Auth;
-using User = BG.Core.Models.User;
 using BG.Core.Interfaces.Repositories;
 using BG.Core.Models;
 using BG.Core.Services;
@@ -15,6 +14,7 @@ namespace BG.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IUserRepository _userRepository;
+    private readonly IRefreshTokenRepository _refreshTokenRepository;
     private readonly IEmailVerificationRepository _emailVerificationRepository;
     private readonly IPasswordService _passwordService;
     private readonly ITokenService _tokenService;
@@ -22,12 +22,14 @@ public class AuthController : ControllerBase
 
     public AuthController(
         IUserRepository userRepository,
+        IRefreshTokenRepository refreshTokenRepository,
         IEmailVerificationRepository emailVerificationRepository,
         IPasswordService passwordService,
         ITokenService tokenService,
         IEmailService emailService)
     {
         _userRepository = userRepository;
+        _refreshTokenRepository = refreshTokenRepository;
         _emailVerificationRepository = emailVerificationRepository;
         _passwordService = passwordService;
         _tokenService = tokenService;
@@ -49,7 +51,7 @@ public class AuthController : ControllerBase
             return TypedResults.BadRequest(new ErrorResponse("Username or email already exists"));
         }
 
-        var user = User.Create(
+        var user = BG.Core.Models.User.Create(
             request.Username,
             request.Email,
             _passwordService.HashPassword(request.Password));
@@ -64,10 +66,17 @@ public class AuthController : ControllerBase
         await _emailVerificationRepository.CreateAsync(verification);
         await _emailService.SendVerificationEmailAsync(user, verification);
 
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        await _refreshTokenRepository.CreateAsync(RefreshToken.Create(
+            user.Id,
+            refreshToken,
+            TimeSpan.FromDays(7)));
+
         var tokens = new AuthTokenResponse(
             _tokenService.GenerateAccessToken(user),
-            _tokenService.GenerateRefreshToken());
-
+            refreshToken
+        );
+        
         return TypedResults.Ok(new AuthResponse(
             tokens,
             new MinimalUserResponse(user.Id, user.Username, user.Roles)));
@@ -85,13 +94,20 @@ public class AuthController : ControllerBase
             return TypedResults.Unauthorized();
         }
 
-        user.UpdateLogin();
+        user.UpdateLastOnline();
         await _userRepository.UpdateAsync(user);
+
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        await _refreshTokenRepository.CreateAsync(RefreshToken.Create(
+            user.Id,
+            refreshToken,
+            TimeSpan.FromDays(7)));
 
         var tokens = new AuthTokenResponse(
             _tokenService.GenerateAccessToken(user),
-            _tokenService.GenerateRefreshToken());
-
+            refreshToken
+        );
+        
         return TypedResults.Ok(new AuthResponse(
             tokens,
             new MinimalUserResponse(user.Id, user.Username, user.Roles)));
@@ -125,21 +141,64 @@ public class AuthController : ControllerBase
     public async Task<Results<Ok<AuthTokenResponse>, UnauthorizedHttpResult>> Refresh(
         [FromBody] RefreshTokenRequest request)
     {
-        var result = _tokenService.GetUserInfoFromToken(request.RefreshToken);
-        if (result == null)
+        var refreshToken = await _refreshTokenRepository.GetByTokenAsync(request.RefreshToken);
+        if (refreshToken == null || !refreshToken.IsValid())
         {
             return TypedResults.Unauthorized();
         }
 
-        var userId = EntityId.Parse(result.Value.UserId); // this method is not exisiting yet
-        var user = await _userRepository.GetByIdAsync(userId);
+        var user = await _userRepository.GetByIdAsync(refreshToken.UserId);
         if (user == null)
         {
             return TypedResults.Unauthorized();
         }
 
+        user.UpdateLastOnline();
+        await _userRepository.UpdateAsync(user);
+
+        // Revoke the old token and generate a new one
+        refreshToken.Revoke();
+        await _refreshTokenRepository.UpdateAsync(refreshToken);
+
+        var newRefreshToken = _tokenService.GenerateRefreshToken();
+        await _refreshTokenRepository.CreateAsync(RefreshToken.Create(
+            user.Id,
+            newRefreshToken,
+            TimeSpan.FromDays(7)));
+
         return TypedResults.Ok(new AuthTokenResponse(
             _tokenService.GenerateAccessToken(user),
-            _tokenService.GenerateRefreshToken()));
+            newRefreshToken));
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<Results<Ok, BadRequest<ErrorResponse>>> Logout(
+        [FromBody] RefreshTokenRequest request)
+    {
+        var refreshToken = await _refreshTokenRepository.GetByTokenAsync(request.RefreshToken);
+        if (refreshToken == null)
+        {
+            return TypedResults.BadRequest(new ErrorResponse("Invalid refresh token"));
+        }
+
+        refreshToken.Revoke();
+        await _refreshTokenRepository.UpdateAsync(refreshToken);
+
+        return TypedResults.Ok();
+    }
+
+    [Authorize]
+    [HttpPost("logout-all")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<Ok> LogoutAll()
+    {
+        var userIdString = User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+        if (userIdString != null && EntityId.TryParse(userIdString, out var userId))
+        {
+            await _refreshTokenRepository.RevokeAllForUserAsync(userId);
+        }
+        return TypedResults.Ok();
     }
 }

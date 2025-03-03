@@ -39,7 +39,7 @@ public class UserTests
         var beforeUpdate = DateTime.UtcNow;
 
         // Act
-        user.UpdateLogin();
+        user.UpdateLastOnline();
 
         // Assert
         Assert.That(user.LastLoginAt, Is.Not.Null);

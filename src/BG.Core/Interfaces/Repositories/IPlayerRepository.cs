@@ -9,6 +9,7 @@ public interface IPlayerRepository
     Task<IEnumerable<Player>> GetPlayersByUserIdAsync(EntityId userId);
     Task<IEnumerable<Player>> GetPlayersByWorldIdAsync(EntityId worldId);
     Task<int> GetPlayerCountByWorldIdAsync(EntityId worldId);
+    Task<Player?> GetByUserAndWorldAsync(EntityId userId, EntityId worldId);
     Task CreateAsync(Player player);
     Task UpdateAsync(Player player);
 }

@@ -47,7 +47,7 @@ public class User
         string email,
         string passwordHash) => new(username, email, passwordHash);
 
-    public void UpdateLogin()
+    public void UpdateLastOnline()
     {
         LastLoginAt = DateTime.UtcNow;
     }

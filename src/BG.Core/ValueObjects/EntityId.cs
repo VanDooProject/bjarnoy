@@ -37,6 +37,17 @@ public readonly struct EntityId : IEquatable<EntityId>
         throw new ArgumentException("Invalid GUID format", nameof(value));
     }
 
+    public static bool TryParse(string? value, out EntityId result)
+    {
+        if (value != null && Guid.TryParse(value, out var guid))
+        {
+            result = new EntityId(guid);
+            return true;
+        }
+        result = default;
+        return false;
+    }
+
     public override bool Equals(object? obj) => 
         obj is EntityId id && Equals(id);
 
