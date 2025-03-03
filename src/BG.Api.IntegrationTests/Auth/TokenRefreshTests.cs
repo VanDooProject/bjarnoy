@@ -84,7 +84,7 @@ public class TokenRefreshTests : IntegrationTestBase
         });
         
         // Act - Second refresh with same token
-        var secondResponse = await _client.PostAsJsonAsync("/api/v1/auth/refresh", new
+        var secondResponse = await _client!.PostAsJsonAsync("/api/v1/auth/refresh", new
         {
             RefreshToken = _refreshToken
         });

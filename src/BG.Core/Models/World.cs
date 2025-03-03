@@ -8,6 +8,7 @@ public class World
     public EntityId Id { get; private set; }
     public string Name { get; private set; }
     public int MaxPlayers { get; private set; }
+    public int CurrentPlayerCount { get; private set; } // gets joined in the db
     public WorldStatus Status { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
@@ -22,6 +23,7 @@ public class World
         Name = name;
         MaxPlayers = maxPlayers;
         Status = status;
+        CurrentPlayerCount = 0;
         CreatedAt = createdAt;
     }
 
@@ -35,8 +37,18 @@ public class World
             DateTime.UtcNow);
     }
 
+    public bool IsFull()
+    {
+        return Status == WorldStatus.Full || CurrentPlayerCount >= MaxPlayers;
+    }
+
     public void UpdateStatus(WorldStatus status)
     {
         Status = status;
+    }
+    
+    public bool CanJoin()
+    {
+        return Status == WorldStatus.Active && !IsFull();
     }
 }

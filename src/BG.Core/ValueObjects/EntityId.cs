@@ -28,6 +28,8 @@ public readonly struct EntityId : IEquatable<EntityId>
 
     public static EntityId NewId() => new(Guid.CreateVersion7());
 
+    public static EntityId FromGuid(Guid guid) => new(guid);
+
     public static EntityId Parse(string value)
     {
         if (Guid.TryParse(value, out var guid))
