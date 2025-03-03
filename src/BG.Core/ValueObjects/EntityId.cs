@@ -1,53 +1,58 @@
+// GuidV7 API in .NET 8:
+// var guid = Guid.CreateVersion7();
+// var guidWithTimestamp = Guid.CreateVersion7(DateTimeOffset.UtcNow);
+// var uuid = Guid.CreateVersion7(timeProvider.GetUtcNow());
+
+using System.Text.Json.Serialization;
+
 namespace BG.Core.ValueObjects;
 
-public readonly struct EntityId
+public readonly struct EntityId : IEquatable<EntityId>
 {
-    private readonly byte[] _value;
+    private readonly byte[] _bytes;
 
-    public EntityId(byte[] value)
+    public EntityId(byte[] bytes)
     {
-        if (value == null || value.Length != 16)
-            throw new ArgumentException("Entity ID must be 16 bytes", nameof(value));
-            
-        _value = value;
+        ArgumentNullException.ThrowIfNull(bytes);
+        if (bytes.Length != 16)
+        {
+            throw new ArgumentException("Entity ID must be 16 bytes", nameof(bytes));
+        }
+        _bytes = bytes;
     }
 
-    public byte[] Value => _value;
-
-    public static EntityId NewId()
+    [JsonConstructor]
+    public EntityId(Guid guid) : this(guid.ToByteArray())
     {
-        return new EntityId(Guid.CreateVersion7().ToByteArray());
     }
 
-    public static EntityId FromGuid(Guid guid)
+    public static EntityId NewId() => new(Guid.CreateVersion7());
+
+    public static EntityId Parse(string value)
     {
-        return new EntityId(guid.ToByteArray());
+        if (Guid.TryParse(value, out var guid))
+        {
+            return new EntityId(guid);
+        }
+        throw new ArgumentException("Invalid GUID format", nameof(value));
     }
 
-    public Guid ToGuid()
-    {
-        return new Guid(_value);
-    }
+    public override bool Equals(object? obj) => 
+        obj is EntityId id && Equals(id);
 
-    public override bool Equals(object? obj)
-    {
-        if (obj is EntityId other)
-            return _value.SequenceEqual(other._value);
-        return false;
-    }
+    public bool Equals(EntityId other) => 
+        _bytes.AsSpan().SequenceEqual(other._bytes);
 
-    public override int GetHashCode()
-    {
-        return BitConverter.ToInt32(_value, 0);
-    }
+    public override int GetHashCode() => 
+        BitConverter.ToInt32(_bytes, 0);
 
-    public static bool operator ==(EntityId left, EntityId right)
-    {
-        return left.Equals(right);
-    }
+    public static bool operator ==(EntityId left, EntityId right) => 
+        left.Equals(right);
 
-    public static bool operator !=(EntityId left, EntityId right)
-    {
-        return !left.Equals(right);
-    }
+    public static bool operator !=(EntityId left, EntityId right) => 
+        !left.Equals(right);
+
+    public Guid ToGuid() => new(_bytes);
+
+    public override string ToString() => ToGuid().ToString();
 }
