@@ -1,4 +1,5 @@
 using BG.API.Models.Auth;
+using User = BG.Core.Models.User;
 using BG.Core.Interfaces.Repositories;
 using BG.Core.Models;
 using BG.Core.Services;
