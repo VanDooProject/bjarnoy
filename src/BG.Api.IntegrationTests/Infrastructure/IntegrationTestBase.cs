@@ -1,15 +1,15 @@
 using Microsoft.AspNetCore.Mvc.Testing;
-using System.Net;
+using BG.API;
 
 namespace BG.Api.IntegrationTests.Infrastructure;
 
 public class IntegrationTestBase
 {
-    protected readonly WebApplicationFactory<BG.API.Program> _factory;
+    protected readonly WebApplicationFactory<Program> _factory;
 
     public IntegrationTestBase()
     {
-        _factory = new WebApplicationFactory<BG.API.Program>();
+        _factory = new WebApplicationFactory<Program>();
     }
 
     [OneTimeTearDown]
