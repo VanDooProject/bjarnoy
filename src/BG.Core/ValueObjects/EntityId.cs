@@ -1,4 +1,4 @@
-// GuidV7 API in .NET 8:
+// GuidV7 API in .NET 9:
 // var guid = Guid.CreateVersion7();
 // var guidWithTimestamp = Guid.CreateVersion7(DateTimeOffset.UtcNow);
 // var uuid = Guid.CreateVersion7(timeProvider.GetUtcNow());

@@ -5,7 +5,15 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// TODO add appsettings.*.json files
+// Add configuration files
+builder.Configuration
+    .SetBasePath(builder.Environment.ContentRootPath)
+    .AddJsonFile("appsettings.json", optional: false)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddEnvironmentVariables();
+
+// Add logging configuration
+builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
 
 // Add services to the container.
 builder.Services.AddControllers();

@@ -84,6 +84,48 @@ public class AuthenticationTests : IntegrationTestBase
         });
     }
 
+    [Test]
+    public async Task Login_WithInvalidPassword_ShouldFail()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var user = new
+        {
+            Username = "wrongpass",
+            Email = "wrong@example.com",
+            Password = "Test123!"
+        };
+
+        await client.PostAsJsonAsync("/api/v1/auth/register", user);
+
+        // Act
+        var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            Username = user.Username,
+            Password = "WrongPass123!"
+        });
+
+        // Assert
+        Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+    }
+
+    [Test]
+    public async Task Login_WithNonExistentUser_ShouldFail()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+
+        // Act
+        var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            Username = "nonexistent",
+            Password = "Test123!"
+        });
+
+        // Assert
+        Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+    }
+
     private record RegisterResponse(string AccessToken, string RefreshToken);
     private record LoginResponse(string AccessToken, string RefreshToken);
 }

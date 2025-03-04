@@ -12,7 +12,7 @@ namespace BG.Api.IntegrationTests.World;
 
 public class WorldManagementTests : IntegrationTestBase
 {
-    private HttpClient? _client;
+    private HttpClient _client = null!;
     private string _accessToken = string.Empty;
     private TestUserRepository _userRepository = null!;
 
@@ -33,7 +33,7 @@ public class WorldManagementTests : IntegrationTestBase
     [SetUp]
     public async Task Setup()
     {
-        _client = _factory.CreateClient();
+        _client = _factory?.CreateClient() ?? throw new InvalidOperationException("Test factory is not initialized");
         
         // Register an admin user and get tokens
         await _client.PostAsJsonAsync("/api/v1/auth/register", new
@@ -71,7 +71,7 @@ await _userRepository.SetUserRolesAndActivate("worldadmin", new[] { "admin" });
         var request = new { Name = "Test World", MaxPlayers = 100 };
 
         // Act
-        var response = await _client!.PostAsJsonAsync("/api/v1/worlds", request);
+        var response = await _client.PostAsJsonAsync("/api/v1/worlds", request);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
@@ -89,7 +89,7 @@ await _userRepository.SetUserRolesAndActivate("worldadmin", new[] { "admin" });
     public async Task JoinWorld_WhenWorldExists_ShouldSucceed()
     {
         // Arrange
-        var createResponse = await _client!.PostAsJsonAsync("/api/v1/worlds", new 
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/worlds", new 
         { 
             Name = "Join Test World", 
             MaxPlayers = 100 
@@ -116,7 +116,7 @@ await _userRepository.SetUserRolesAndActivate("worldadmin", new[] { "admin" });
     public async Task JoinWorld_WhenWorldIsFull_ShouldFail()
     {
         // Arrange
-        var createResponse = await _client!.PostAsJsonAsync("/api/v1/worlds", new 
+        var createResponse = await _client.PostAsJsonAsync("/api/v1/worlds", new 
         { 
             Name = "Full World", 
             MaxPlayers = 1 
