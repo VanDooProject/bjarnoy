@@ -1,19 +1,16 @@
 using Npgsql;
+using BG.Infrastructure.Data;
 
 namespace BG.Infrastructure.Repositories.PostgreSQL;
 
 public abstract class BasePostgreSqlRepository
 {
-    protected readonly string _connectionString;
+    protected readonly IUnitOfWork UnitOfWork;
 
-    protected BasePostgreSqlRepository(string connectionString)
+    protected BasePostgreSqlRepository(IUnitOfWork unitOfWork)
     {
-        _connectionString = connectionString;
+        UnitOfWork = unitOfWork;
     }
 
-    protected async Task<NpgsqlConnection> CreateConnectionAsync()
-    {
-        var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        return connection;
-    }
+    protected NpgsqlConnection Connection => (NpgsqlConnection)UnitOfWork.Connection;
+}

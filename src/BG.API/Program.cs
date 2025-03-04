@@ -14,11 +14,16 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 
-// Configure PostgreSQL database
-builder.Services.AddPostgreSql(builder.Configuration);
+// Configure Database and Repositories
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddPostgreSql(builder.Configuration); 
+builder.Services.AddScoped<IUnitOfWork, PostgreSqlUnitOfWork>();
 
 // Register repositories
 builder.Services.AddScoped<IUserRepository, PostgreSqlUserRepository>();
+builder.Services.AddScoped<IWorldRepository, PostgreSqlWorldRepository>();
+builder.Services.AddScoped<IPlayerRepository, PostgreSqlPlayerRepository>();
+
 builder.Services.AddScoped<IWorldRepository, PostgreSqlWorldRepository>();
 builder.Services.AddScoped<IPlayerRepository, PostgreSqlPlayerRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, PostgreSqlRefreshTokenRepository>();

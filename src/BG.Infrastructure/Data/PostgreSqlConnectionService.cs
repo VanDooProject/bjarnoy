@@ -14,7 +14,7 @@ namespace BG.Infrastructure.Data;
 /// - Automatic connection cleanup
 /// - Thread-safe connection handling
 /// </summary>
-public class PostgreSqlConnectionService : IDisposable
+public class PostgreSqlConnectionService
 {
     private readonly string _connectionString;
     private NpgsqlDataSource _dataSource;
@@ -44,13 +44,8 @@ public class PostgreSqlConnectionService : IDisposable
     /// is not reached, creates a new connection. Otherwise waits for a connection
     /// to become available.
     /// </summary>
-    public async Task<IDbConnection> GetConnectionAsync()
+    internal NpgsqlConnection CreateConnection()
     {
-        return await _dataSource.OpenConnectionAsync();
-    }
-
-    public void Dispose()
-    {
-        _dataSource?.Dispose();
+        return _dataSource.CreateConnection();
     }
 }
