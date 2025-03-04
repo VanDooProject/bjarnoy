@@ -11,6 +11,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // Configure PostgreSQL
+        services.Configure<PostgreSqlSettings>(configuration.GetSection("PostgreSQL"));
         services.AddPostgreSql(configuration);
         services.AddScoped<IUnitOfWork, PostgreSqlUnitOfWork>();
 
@@ -18,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, PostgreSqlUserRepository>();
         services.AddScoped<IWorldRepository, PostgreSqlWorldRepository>();
         services.AddScoped<IPlayerRepository, PostgreSqlPlayerRepository>();
+        services.AddScoped<IRefreshTokenRepository, PostgreSqlRefreshTokenRepository>();
 
         return services;
     }

@@ -16,27 +16,23 @@ namespace BG.Infrastructure.Data;
 /// </summary>
 public class PostgreSqlConnectionService
 {
-    private readonly string _connectionString;
-    private NpgsqlDataSource _dataSource;
+    private readonly NpgsqlDataSource _dataSource;
 
     public PostgreSqlConnectionService(IOptions<PostgreSqlSettings> settings)
     {
         var s = settings.Value;
-        var builder = new NpgsqlConnectionStringBuilder(s.ConnectionString)
+        var builder = new NpgsqlConnectionStringBuilder(s.GetConnectionString())
         {
-            Pooling = s.EnablePooling
-,
+            Pooling = s.EnablePooling,
             MinPoolSize = s.MinPoolSize,
             MaxPoolSize = s.MaxPoolSize,
-            
             ConnectionIdleLifetime = s.ConnectionIdleLifetime,
             ConnectionPruningInterval = s.ConnectionPruningInterval,
             CommandTimeout = s.CommandTimeout,
             IncludeErrorDetail = s.IncludeErrorDetail
         };
 
-        _connectionString = builder.ToString();
-        _dataSource = NpgsqlDataSource.Create(_connectionString);
+        _dataSource = NpgsqlDataSource.Create(builder.ToString());
     }
 
     /// <summary>
