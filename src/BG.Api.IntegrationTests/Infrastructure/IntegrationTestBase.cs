@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using BG.API;
 
 namespace BG.Api.IntegrationTests.Infrastructure;
@@ -13,6 +14,12 @@ public class IntegrationTestBase
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
+                builder.ConfigureAppConfiguration((context, config) =>
+                {
+                    config.SetBasePath(Directory.GetCurrentDirectory())
+                          .AddJsonFile("appsettings.Testing.json", optional: false);
+                });
+
                 builder.ConfigureServices(services =>
                 {
                     // Replace services with test implementations
