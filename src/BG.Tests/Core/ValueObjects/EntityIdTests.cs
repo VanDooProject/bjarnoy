@@ -43,7 +43,7 @@ public class EntityIdTests
     public void Constructor_WithNullByteArray_ShouldThrow()
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => new EntityId(null!));
+        Assert.Throws<ArgumentNullException>(() => new EntityId(null!));
     }
 
     [Test]
