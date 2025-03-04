@@ -201,4 +201,70 @@ public class AuthController : ControllerBase
         }
         return TypedResults.Ok();
     }
+
+    [HttpPost("request-password-reset")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<Results<Ok, BadRequest<ErrorResponse>>> RequestPasswordReset(
+        [FromBody] RequestPasswordResetRequest request)
+    {
+        var user = await _userRepository.GetByEmailAsync(request.Email);
+        if (user == null)
+        {
+            // Return OK even if user not found to prevent email enumeration
+            return TypedResults.Ok();
+        }
+
+        var verification = EmailVerification.Create(
+            user.Id,
+            user.Email,
+            TimeSpan.FromHours(1));
+
+        await _emailVerificationRepository.CreateAsync(verification);
+        await _emailService.SendPasswordResetEmailAsync(user, verification.Token);
+
+        return TypedResults.Ok();
+    }
+
+    [HttpPost("reset-password")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<Results<Ok, BadRequest<ErrorResponse>>> ResetPassword(
+        [FromBody] ResetPasswordRequest request)
+    {
+        var verification = await _emailVerificationRepository.GetVerificationByTokenAsync(request.Token);
+        if (verification == null || !verification.IsValid(request.Token))
+        {
+            return TypedResults.BadRequest(new ErrorResponse("Invalid or expired reset token"));
+        }
+
+        var user = await _userRepository.GetByIdAsync(verification.UserId);
+        if (user == null)
+        {
+            return TypedResults.BadRequest(new ErrorResponse("User not found"));
+        }
+
+        // Update password and revoke all refresh tokens for security
+        user.UpdatePassword(_passwordService.HashPassword(request.NewPassword));
+        await _userRepository.UpdateAsync(user);
+        await _refreshTokenRepository.RevokeAllForUserAsync(user.Id);
+        await _emailVerificationRepository.DeleteAsync(verification.Id);
+
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        await _refreshTokenRepository.CreateAsync(RefreshToken.Create(
+            user.Id,
+            refreshToken,
+            TimeSpan.FromDays(7)));
+
+        var tokens = new AuthTokenResponse(
+            _tokenService.GenerateAccessToken(user),
+            refreshToken
+        );
+        
+        return TypedResults.Ok();
+    }
+
+    private void ValidatePassword(string password) {
+        // TODO: Add password validation rules
+    }
 }

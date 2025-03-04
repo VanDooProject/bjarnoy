@@ -14,3 +14,10 @@ public record RefreshTokenRequest(
 
 public record VerifyEmailRequest(
     string Token);
+
+public record RequestPasswordResetRequest(
+    string Email);
+
+public record ResetPasswordRequest(
+    string Token,
+    string NewPassword);

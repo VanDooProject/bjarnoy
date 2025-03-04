@@ -62,5 +62,10 @@ public class User
         Roles = roles;
     }
 
+    public void UpdatePassword(string passwordHash)
+    {
+        PasswordHash = passwordHash;
+    }
+
     public bool HasRole(string role) => Roles.Contains(role);
 }
