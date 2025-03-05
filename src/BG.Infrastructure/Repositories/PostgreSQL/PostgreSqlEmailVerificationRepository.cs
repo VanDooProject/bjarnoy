@@ -15,9 +15,9 @@ public class PostgreSqlEmailVerificationRepository : BasePostgreSqlRepository, I
     public async Task<EmailVerification?> GetVerificationByTokenAsync(string token)
     {
         const string sql = @"
-            SELECT id as Id, user_id as UserId, email as Email, token as Token, expires_at as ExpiresAt, created_at as CreatedAt
+            SELECT ""Id"", ""UserId"", ""Email"", ""Token"", ""ExpiresAt"", ""CreatedAt""
             FROM ""EmailVerifications""
-            WHERE token = @token";
+            WHERE ""Token"" = @token";
 
         return await Connection.QuerySingleOrDefaultAsync<EmailVerification>(sql, new { token });
     }
@@ -25,9 +25,9 @@ public class PostgreSqlEmailVerificationRepository : BasePostgreSqlRepository, I
     public async Task<IEnumerable<EmailVerification>> GetVerificationsByUserIdAsync(EntityId userId)
     {
         const string sql = @"
-            SELECT id as Id, user_id as UserId, email as Email, token as Token, expires_at as ExpiresAt, created_at as CreatedAt
+            SELECT ""Id"", ""UserId"", ""Email"", ""Token"", ""ExpiresAt"", ""CreatedAt""
             FROM ""EmailVerifications""
-            WHERE user_id = @userId";
+            WHERE ""UserId"" = @userId";
 
         return await Connection.QueryAsync<EmailVerification>(sql, new { userId });
     }
@@ -35,15 +35,14 @@ public class PostgreSqlEmailVerificationRepository : BasePostgreSqlRepository, I
     public async Task CreateAsync(EmailVerification verification)
     {
         const string sql = @"
-            INSERT INTO ""EmailVerifications"" (id, user_id, email, token, expires_at, created_at)
+            INSERT INTO ""EmailVerifications"" (""Id"", ""UserId"", ""Email"", ""Token"", ""ExpiresAt"", ""CreatedAt"")
             VALUES (@Id, @UserId, @Email, @Token, @ExpiresAt, @CreatedAt)";
-
         await Connection.ExecuteAsync(sql, verification);
     }
 
     public async Task DeleteAsync(EntityId verificationId)
     {
-        const string sql = @"DELETE FROM ""EmailVerifications"" WHERE id = @id";
+        const string sql = @"DELETE FROM ""EmailVerifications"" WHERE ""Id"" = @id";
         await Connection.ExecuteAsync(sql, new { id = verificationId });
     }
 }
