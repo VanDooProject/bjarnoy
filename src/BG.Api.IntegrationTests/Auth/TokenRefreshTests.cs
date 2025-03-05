@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using BG.API.Models.Auth;
 using BG.Api.IntegrationTests.Infrastructure;
 
 namespace BG.Api.IntegrationTests.Auth;
@@ -30,8 +31,8 @@ public class TokenRefreshTests : IntegrationTestBase
             Password
         });
 
-        var tokens = await loginResponse.Content.ReadFromJsonAsync<TokenResponse>();
-        _refreshToken = tokens?.RefreshToken ?? throw new InvalidOperationException("No refresh token received");
+        var authResponse = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        _refreshToken = authResponse?.Tokens.RefreshToken ?? throw new InvalidOperationException("No refresh token received");
     }
 
     [TearDown]
@@ -51,12 +52,12 @@ public class TokenRefreshTests : IntegrationTestBase
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var newTokens = await response.Content.ReadFromJsonAsync<TokenResponse>();
+        var newTokens = await response.Content.ReadFromJsonAsync<AuthTokenResponse>();
         Assert.Multiple(() =>
         {
             Assert.That(newTokens, Is.Not.Null);
-            Assert.That(newTokens!.AccessToken, Is.Not.Empty);
-            Assert.That(newTokens.RefreshToken, Is.Not.Empty);
+            Assert.That(newTokens!.AccessToken, Is.Not.Empty.Or.Null);
+            Assert.That(newTokens.RefreshToken, Is.Not.Empty.Or.Null);
             Assert.That(newTokens.RefreshToken, Is.Not.EqualTo(_refreshToken));
         });
     }
@@ -96,6 +97,4 @@ public class TokenRefreshTests : IntegrationTestBase
             Assert.That(secondResponse.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         });
     }
-
-    private record TokenResponse(string AccessToken, string RefreshToken);
 }

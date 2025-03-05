@@ -1,7 +1,3 @@
--- Create enum types
-CREATE TYPE user_status AS ENUM ('active', 'inactive', 'banned');
-CREATE TYPE world_status AS ENUM ('active', 'inactive', 'full');
-
 -- Create Users table
 CREATE TABLE "Users" (
     "Id" BYTEA PRIMARY KEY,                    -- 16 byte UUID
@@ -10,7 +6,7 @@ CREATE TABLE "Users" (
     "PasswordHash" VARCHAR(255) NOT NULL,       -- Bcrypt hash
     "CreatedAt" TIMESTAMP NOT NULL,
     "LastLoginAt" TIMESTAMP,
-    "Status" user_status NOT NULL,
+    "Status" INT NOT NULL DEFAULT 0,            -- 0: Active, 1: Inactive, 2: Banned
     "Roles" text[] NOT NULL DEFAULT '{}'       -- Array of role names
 );
 
@@ -18,7 +14,7 @@ CREATE TABLE "Users" (
 CREATE TABLE "Worlds" (
     "Id" BYTEA PRIMARY KEY,                    -- 16 byte UUID
     "Name" VARCHAR(100) NOT NULL,
-    "Status" world_status NOT NULL,
+    "Status" INT NOT NULL DEFAULT 0,           -- 0: Active, 1: Inactive, 2: Full
     "CreatedAt" TIMESTAMP NOT NULL,
     "MaxPlayers" INT NOT NULL
 );

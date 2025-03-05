@@ -38,12 +38,12 @@ public class IntegrationTestBase
         var configuration = services.BuildServiceProvider()
             .GetRequiredService<IConfiguration>();
         
-        // TODO we actually need to create a backing model!!!
-        var useMockServices = configuration.GetValue<bool>("TestSettings:UseMockServices");
-        //var useTestEmailService = configuration.GetValue<bool>("TestSettings:UseTestEmailService"); // TODO we actually need to create a backing model!!!
-        var useTestEmailService = true;
+        services.Configure<TestSettings>(configuration.GetSection(TestSettings.ConfigurationKey));
+        var testSettings = configuration.GetSection(TestSettings.ConfigurationKey).Get<TestSettings>() ?? new TestSettings();
+        
+        var useMockServices = testSettings.UseMockServices;
+        var useTestEmailService = testSettings.UseTestEmailService;
 
-        // Replace repositories with mocks if configured
         if (useMockServices)
         {
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserRepository));

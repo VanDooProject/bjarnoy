@@ -49,12 +49,12 @@ public class TestUserRepository : IUserRepository
         return Task.CompletedTask;
     }
 
-    public Task SetUserRolesAndActivate(string username, string[] roles)
+    public Task SetUserRolesAndActivate(string username, string[] roles, UserStatus status = UserStatus.Active)
     {
         if (_usersByUsername.TryGetValue(username, out var user))
         {
             user.UpdateRoles(roles);
-            user.UpdateStatus(UserStatus.Active);
+            user.UpdateStatus(status);
             var updatedUser = user;
 
             _users[user.Id] = updatedUser;

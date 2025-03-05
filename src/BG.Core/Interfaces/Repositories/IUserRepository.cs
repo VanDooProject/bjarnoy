@@ -1,5 +1,6 @@
 using BG.Core.Models;
 using BG.Core.ValueObjects;
+using BG.Core.Models.Enums;
 
 namespace BG.Core.Interfaces.Repositories;
 
@@ -10,5 +11,5 @@ public interface IUserRepository
     Task<User?> GetByEmailAsync(string email);
     Task CreateAsync(User user);
     Task UpdateAsync(User user);
-    Task SetUserRolesAndActivate(string username, string[] roles);
+    Task SetUserRolesAndActivate(string username, string[] roles, UserStatus status = UserStatus.Active);
 }

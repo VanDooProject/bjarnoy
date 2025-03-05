@@ -15,11 +15,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        // Configure PostgreSQL
-        services.Configure<PostgreSqlSettings>(configuration.GetSection("PostgreSQL"));
-
+        // Configure Dapper type handlers
         SqlMapper.RemoveTypeMap(typeof(EntityId));
         SqlMapper.AddTypeHandler(new EntityIdTypeHandler());
+
         services.AddPostgreSql(configuration);
         services.AddScoped<IUnitOfWork, PostgreSqlUnitOfWork>();
 
