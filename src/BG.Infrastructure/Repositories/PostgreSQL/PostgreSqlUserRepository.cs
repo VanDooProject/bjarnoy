@@ -49,4 +49,14 @@ public class PostgreSqlUserRepository : BasePostgreSqlRepository, IUserRepositor
             WHERE ""Id"" = @Id";
         await Connection.ExecuteAsync(sql, user);
     }
+
+    public async Task SetUserRolesAndActivate(string username, string[] roles)
+    {
+        const string sql = @"
+            UPDATE ""Users"" 
+            SET ""Roles"" = @Roles,
+                ""Status"" = 'active'
+            WHERE ""Username"" = @Username";
+        await Connection.ExecuteAsync(sql, new { Username = username, Roles = roles });
+    }
 }

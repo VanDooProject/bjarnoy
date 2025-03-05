@@ -46,7 +46,11 @@ public class IntegrationTestBase
         {
             var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserRepository));
             if (descriptor != null)
+            {
                 services.Remove(descriptor);
+                var userRepository = new TestUserRepository();
+                services.AddScoped<IUserRepository>(sp => userRepository);
+            }
             
             descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IWorldRepository));
             if (descriptor != null)
