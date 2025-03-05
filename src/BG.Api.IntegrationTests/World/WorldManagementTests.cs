@@ -15,6 +15,7 @@ public class WorldManagementTests : IntegrationTestBase
     private HttpClient _client = null!;
     private string _accessToken = string.Empty;
     private TestUserRepository _userRepository = null!;
+    private TestRefreshTokenRepository _refreshTokenRepository = null!;
 
     // TODO make the tests also runnable as "resource dependent" integration tests so we can also test the actual db sql stuff
     protected override void ConfigureTestServices(IServiceCollection services)
@@ -23,6 +24,9 @@ public class WorldManagementTests : IntegrationTestBase
 
         _userRepository = new TestUserRepository();
         services.AddScoped<IUserRepository>(_ => _userRepository);
+
+        _refreshTokenRepository = new TestRefreshTokenRepository();
+        services.AddScoped<IRefreshTokenRepository>(_ => _refreshTokenRepository);
 
         var sp = services.BuildServiceProvider();
         using var scope = sp.CreateScope();

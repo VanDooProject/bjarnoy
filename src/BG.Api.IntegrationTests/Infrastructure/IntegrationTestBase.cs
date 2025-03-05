@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using BG.API;
 using BG.Core.Services;
+using BG.Core.Interfaces.Repositories;
 using BG.Api.IntegrationTests.Infrastructure.TestServices;
 
 namespace BG.Api.IntegrationTests.Infrastructure;
@@ -34,11 +35,33 @@ public class IntegrationTestBase
 
     protected virtual void ConfigureTestServices(IServiceCollection services)
     {
-        // Override service registrations for testing
-        // Example:
-        var emailService = new TestEmailService();
-        services.AddSingleton(emailService);
-        services.AddScoped<IEmailService>(sp => emailService);
+        var configuration = services.BuildServiceProvider()
+            .GetRequiredService<IConfiguration>();
+        
+        var useMockServices = configuration.GetValue<bool>("TestSettings:UseMockServices");
+        var useTestEmailService = configuration.GetValue<bool>("TestSettings:UseTestEmailService");
+
+        // Replace repositories with mocks if configured
+        if (useMockServices)
+        {
+            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserRepository));
+            if (descriptor != null)
+                services.Remove(descriptor);
+            
+            descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IWorldRepository));
+            if (descriptor != null)
+                services.Remove(descriptor);
+            
+            descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IPlayerRepository));
+            if (descriptor != null)
+                services.Remove(descriptor);
+        }
+
+        if (useTestEmailService)
+        {
+            var emailService = new TestEmailService();
+            services.AddSingleton<IEmailService>(emailService);
+        }
     }
 
     [OneTimeTearDown]
