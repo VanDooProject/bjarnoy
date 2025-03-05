@@ -14,45 +14,52 @@ public class PostgreSqlWorldRepository : BasePostgreSqlRepository, IWorldReposit
 
     public async Task<World?> GetByIdAsync(EntityId id)
     {
-        const string sql = "SELECT id, name, max_players, current_player_count, created_at FROM worlds WHERE id = @Id";
+        const string sql = @"
+            SELECT ""Id"", ""Name"", ""MaxPlayers"", ""CurrentPlayerCount"", ""Status"", ""CreatedAt""
+            FROM ""Worlds"" WHERE ""Id"" = @Id";
         return await Connection.QuerySingleOrDefaultAsync<World>(sql, new { Id = id });
     }
 
     public async Task<IEnumerable<World>> GetAllAsync()
     {
-        const string sql = "SELECT id, name, max_players, current_player_count, created_at FROM worlds";
+        const string sql = @"
+            SELECT ""Id"", ""Name"", ""MaxPlayers"", ""CurrentPlayerCount"", ""Status"", ""CreatedAt""
+            FROM ""Worlds""";
         return await Connection.QueryAsync<World>(sql);
     }
 
     public async Task<IEnumerable<World>> GetActiveWorldsAsync()
     {
-        const string sql = @"SELECT id, name, max_players, current_player_count, created_at 
-                           FROM worlds WHERE current_player_count < max_players";
-        return await Connection.QueryAsync<World>(sql);
+        const string sql = @"
+            SELECT ""Id"", ""Name"", ""MaxPlayers"", ""CurrentPlayerCount"", ""Status"", ""CreatedAt""
+            FROM ""Worlds"" 
+            WHERE ""Status"" = @Status AND ""CurrentPlayerCount"" < ""MaxPlayers""";
+        return await Connection.QueryAsync<World>(sql, new { Status = 0 });  // Active status is 0
     }
 
     public async Task CreateAsync(World world)
     {
         const string sql = @"
-            INSERT INTO worlds (id, name, max_players, current_player_count, created_at)
-            VALUES (@Id, @Name, @MaxPlayers, @CurrentPlayerCount, @CreatedAt)";
+            INSERT INTO ""Worlds"" (""Id"", ""Name"", ""MaxPlayers"", ""CurrentPlayerCount"", ""Status"", ""CreatedAt"")
+            VALUES (@Id, @Name, @MaxPlayers, @CurrentPlayerCount, @Status, @CreatedAt)";
         await Connection.ExecuteAsync(sql, world);
     }
 
     public async Task UpdateAsync(World world)
     {
         const string sql = @"
-            UPDATE worlds 
-            SET name = @Name,
-                max_players = @MaxPlayers,
-                current_player_count = @CurrentPlayerCount
-            WHERE id = @Id";
+            UPDATE ""Worlds"" 
+            SET ""Name"" = @Name,
+                ""MaxPlayers"" = @MaxPlayers,
+                ""CurrentPlayerCount"" = @CurrentPlayerCount,
+                ""Status"" = @Status
+            WHERE ""Id"" = @Id";
         await Connection.ExecuteAsync(sql, world);
     }
 
     public async Task DeleteAsync(EntityId id)
     {
-        const string sql = "DELETE FROM worlds WHERE id = @Id";
+        const string sql = @"DELETE FROM ""Worlds"" WHERE ""Id"" = @Id";
         await Connection.ExecuteAsync(sql, new { Id = id });
     }
 }

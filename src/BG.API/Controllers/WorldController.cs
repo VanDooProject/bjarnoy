@@ -41,7 +41,7 @@ public class WorldController : ControllerBase
     public async Task<Results<Created<World>, BadRequest<ErrorResponse>>> CreateWorld(
         [FromBody] CreateWorldRequest request)
     {
-        var world = World.Create(request.Name, request.MaxPlayers);
+        var world = new World(EntityId.NewId(), request.Name, request.MaxPlayers);
         await _worldRepository.CreateAsync(world);
 
         return TypedResults.Created($"/api/v1/worlds/{world.Id}", world);

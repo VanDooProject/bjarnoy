@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using BG.Api.IntegrationTests.Infrastructure;
+using BG.API.Models.Auth;
 using BG.API.Models;
 using BG.Core.Models;
 using BG.Core.Interfaces.Repositories;
@@ -38,8 +39,8 @@ public class WorldManagementTests : IntegrationTestBase
             Password = "Admin123!"
         });
 
-        var tokens = await loginResponse.Content.ReadFromJsonAsync<TokenResponse>();
-        _accessToken = tokens?.AccessToken ?? throw new InvalidOperationException("No access token received");
+        var authResponse = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        _accessToken = authResponse?.Tokens.AccessToken ?? throw new InvalidOperationException("No access token received");
         
         _client.DefaultRequestHeaders.Authorization = new("Bearer", _accessToken);
     }
@@ -122,6 +123,4 @@ public class WorldManagementTests : IntegrationTestBase
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
-
-    private record TokenResponse(string AccessToken, string RefreshToken);
 }

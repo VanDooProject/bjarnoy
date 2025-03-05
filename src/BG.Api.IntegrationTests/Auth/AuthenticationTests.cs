@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using BG.Api.IntegrationTests.Infrastructure;
+using BG.API.Models.Auth;
 
 namespace BG.Api.IntegrationTests.Auth;
 
@@ -23,12 +24,12 @@ public class AuthenticationTests : IntegrationTestBase
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var content = await response.Content.ReadFromJsonAsync<RegisterResponse>();
+        var content = await response.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.Multiple(() =>
         {
             Assert.That(content, Is.Not.Null);
-            Assert.That(content!.AccessToken, Is.Not.Empty);
-            Assert.That(content.RefreshToken, Is.Not.Empty);
+            Assert.That(content!.Tokens.AccessToken, Is.Not.Empty);
+            Assert.That(content.Tokens.RefreshToken, Is.Not.Empty);
         });
     }
 
@@ -75,12 +76,12 @@ public class AuthenticationTests : IntegrationTestBase
 
         // Assert
         Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var content = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        var content = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.Multiple(() =>
         {
             Assert.That(content, Is.Not.Null);
-            Assert.That(content!.AccessToken, Is.Not.Empty);
-            Assert.That(content.RefreshToken, Is.Not.Empty);
+            Assert.That(content!.Tokens.AccessToken, Is.Not.Empty);
+            Assert.That(content.Tokens.RefreshToken, Is.Not.Empty);
         });
     }
 
@@ -125,7 +126,4 @@ public class AuthenticationTests : IntegrationTestBase
         // Assert
         Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
-
-    private record RegisterResponse(string AccessToken, string RefreshToken);
-    private record LoginResponse(string AccessToken, string RefreshToken);
 }

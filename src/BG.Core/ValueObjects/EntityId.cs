@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace BG.Core.ValueObjects;
 
+[JsonConverter(typeof(EntityIdJsonConverter))]
 public readonly struct EntityId : IEquatable<EntityId>
 {
     private readonly byte[] _bytes;

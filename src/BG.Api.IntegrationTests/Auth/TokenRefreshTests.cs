@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using BG.API.Models.Auth;
 using BG.Api.IntegrationTests.Infrastructure;
+using BG.API.Models.Auth;
 
 namespace BG.Api.IntegrationTests.Auth;
 

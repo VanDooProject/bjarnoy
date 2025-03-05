@@ -1,40 +1,34 @@
 using BG.Core.Models.Enums;
 using BG.Core.ValueObjects;
+using System;
 
 namespace BG.Core.Models;
 
 public class World
 {
-    public EntityId Id { get; private set; }
-    public string Name { get; private set; }
-    public int MaxPlayers { get; private set; }
-    public int CurrentPlayerCount { get; private set; } // gets joined in the db
-    public WorldStatus Status { get; private set; }
-    public DateTime CreatedAt { get; private set; }
+    public EntityId Id { get; set; }
+    public string Name { get; set; }
+    public int MaxPlayers { get; set; }
+    public int CurrentPlayerCount { get; set; } // gets joined in the db
+    public WorldStatus Status { get; set; }
+    public DateTime CreatedAt { get; set; }
 
-    private World(
+    [Obsolete("This constructor is for JSON deserialization only. Use World.Create() for creating new instances.", error: true)]
+    public World() // TODO ignore warning
+    {
+    }
+
+    public World(
         EntityId id,
         string name,
-        int maxPlayers,
-        WorldStatus status,
-        DateTime createdAt)
+        int maxPlayers)
     {
         Id = id;
         Name = name;
         MaxPlayers = maxPlayers;
-        Status = status;
+        Status = WorldStatus.Active;
         CurrentPlayerCount = 0;
-        CreatedAt = createdAt;
-    }
-
-    public static World Create(string name, int maxPlayers)
-    {
-        return new World(
-            EntityId.NewId(),
-            name,
-            maxPlayers,
-            WorldStatus.Active,
-            DateTime.UtcNow);
+        CreatedAt = DateTime.UtcNow;
     }
 
     public bool IsFull()

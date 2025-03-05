@@ -1,0 +1,1 @@
+ALTER TABLE "Worlds" ADD COLUMN "CurrentPlayerCount" INT NOT NULL DEFAULT 0;
