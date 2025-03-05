@@ -1,5 +1,6 @@
 using BG.Core.Models;
 using BG.Core.Models.Enums;
+using BG.Core.ValueObjects;
 
 namespace BG.Tests.Core.Models;
 
@@ -14,7 +15,7 @@ public class WorldTests
         var maxPlayers = 100;
 
         // Act
-        var world = World.Create(name, maxPlayers);
+        var world = new World(EntityId.NewId(), name, maxPlayers);
 
         // Assert
         Assert.Multiple(() =>
@@ -30,7 +31,7 @@ public class WorldTests
     public void UpdateStatus_ShouldChangeWorldStatus()
     {
         // Arrange
-        var world = World.Create("Test", 100);
+        var world = new World(EntityId.NewId(), "Test", 100);
 
         // Act
         world.UpdateStatus(WorldStatus.Full);
@@ -43,7 +44,7 @@ public class WorldTests
     public void CanJoin_WhenActive_ShouldReturnTrue()
     {
         // Arrange
-        var world = World.Create("Test", 100);
+        var world = new World(EntityId.NewId(), "Test", 100);
 
         // Assert
         Assert.That(world.CanJoin(), Is.True);
@@ -55,7 +56,7 @@ public class WorldTests
     public void CanJoin_WhenNotActive_ShouldReturnFalse(WorldStatus status)
     {
         // Arrange
-        var world = World.Create("Test", 100);
+        var world = new World(EntityId.NewId(), "Test", 100);
         world.UpdateStatus(status);
 
         // Assert

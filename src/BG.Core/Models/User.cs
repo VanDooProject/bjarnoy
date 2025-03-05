@@ -17,14 +17,14 @@ public class User
     public DateTime CreatedAt { get; set; }
     
     [JsonConstructor]
-    public User()
+    public User() // TODO how to make sure all properties are set?
     {
         Id = EntityId.NewId();
         Username = string.Empty;
         Email = string.Empty;
         PasswordHash = string.Empty;
         Roles = Array.Empty<string>();
-        Status = UserStatus.Active;
+        Status = UserStatus.Unconfirmed;
         CreatedAt = DateTime.UtcNow;
     }
 
@@ -38,7 +38,7 @@ public class User
         Email = email;
         PasswordHash = passwordHash;
         Roles = Array.Empty<string>();
-        Status = UserStatus.Active;
+        Status = UserStatus.Unconfirmed;
         CreatedAt = DateTime.UtcNow;
     }
 

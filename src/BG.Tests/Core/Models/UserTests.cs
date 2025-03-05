@@ -24,7 +24,7 @@ public class UserTests
             Assert.That(user.Username, Is.EqualTo(username));
             Assert.That(user.Email, Is.EqualTo(email));
             Assert.That(user.PasswordHash, Is.EqualTo(passwordHash));
-            Assert.That(user.Status, Is.EqualTo(UserStatus.Active));
+            Assert.That(user.Status, Is.EqualTo(UserStatus.Unconfirmed));
             Assert.That(user.Roles, Is.Empty);
             Assert.That(user.LastLoginAt, Is.Null);
             Assert.That(user.CreatedAt.Date, Is.EqualTo(DateTime.UtcNow.Date));

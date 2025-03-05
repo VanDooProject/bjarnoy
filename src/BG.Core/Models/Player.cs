@@ -1,17 +1,25 @@
 using BG.Core.ValueObjects;
+using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace BG.Core.Models;
 
 public class Player
 {
-    public EntityId Id { get; private set; }
-    public EntityId UserId { get; private set; }
-    public EntityId WorldId { get; private set; }
-    public string Name { get; private set; }
-    public DateTime JoinedAt { get; private set; }
-    public bool IsActive { get; private set; }
-    public EntityId? DelegatedToUserId { get; private set; } // there should be multiple delegations
-    public DateTime? DelegationExpiresAt { get; private set; }
+    public EntityId Id { get; set; }
+    public EntityId UserId { get; set; }
+    public EntityId WorldId { get; set; }
+    public string Name { get; set; }
+    public DateTime JoinedAt { get; set; }
+    public bool IsActive { get; set; }
+    public EntityId? DelegatedToUserId { get; set; } // there should be multiple delegations
+    public DateTime? DelegationExpiresAt { get; set; }
+
+    [Obsolete("This constructor is for JSON deserialization only. Use Player.Create() for creating new instances.", error: true)]
+    [SuppressMessage("", "CS8618", Justification = "Required for JSON deserialization")]
+    public Player()
+    {
+    }
 
     private Player(
         EntityId id,

@@ -1,6 +1,7 @@
 using BG.API.Models.Auth;
 using BG.Core.Interfaces.Repositories;
 using BG.Core.Models;
+using BG.Core.Models.Enums;
 using BG.Core.Services;
 using BG.Core.ValueObjects;
 using Microsoft.AspNetCore.Authorization;
@@ -130,6 +131,9 @@ public class AuthController : ControllerBase
         {
             return TypedResults.BadRequest(new ErrorResponse("User not found"));
         }
+
+        user.UpdateStatus(UserStatus.Active);
+        await _userRepository.UpdateAsync(user);
 
         await _emailVerificationRepository.DeleteAsync(verification.Id);
         return TypedResults.Ok();

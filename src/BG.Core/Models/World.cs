@@ -1,6 +1,7 @@
 using BG.Core.Models.Enums;
 using BG.Core.ValueObjects;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace BG.Core.Models;
 
@@ -14,7 +15,8 @@ public class World
     public DateTime CreatedAt { get; set; }
 
     [Obsolete("This constructor is for JSON deserialization only. Use World.Create() for creating new instances.", error: true)]
-    public World() // TODO ignore warning
+    [SuppressMessage("", "CS8618", Justification = "Required for JSON deserialization")]
+    public World()
     {
     }
 
