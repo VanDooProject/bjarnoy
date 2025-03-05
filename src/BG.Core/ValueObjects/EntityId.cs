@@ -65,6 +65,11 @@ public readonly struct EntityId : IEquatable<EntityId>
     public static bool operator !=(EntityId left, EntityId right) => 
         !left.Equals(right);
 
+    public byte[] ToByteArray()
+    {
+        return _bytes;
+    }
+
     public Guid ToGuid() => new(_bytes);
 
     public override string ToString() => ToGuid().ToString();

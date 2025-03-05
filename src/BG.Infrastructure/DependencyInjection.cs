@@ -1,5 +1,10 @@
 using BG.Core.Interfaces.Repositories;
 using BG.Infrastructure.Data;
+using BG.Infrastructure.Data.TypeHandlers;
+using BG.Core.ValueObjects;
+using Dapper;
+using BG.Core.Services;
+using BG.Infrastructure.Services;
 using BG.Infrastructure.Repositories.PostgreSQL;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +17,9 @@ public static class DependencyInjection
     {
         // Configure PostgreSQL
         services.Configure<PostgreSqlSettings>(configuration.GetSection("PostgreSQL"));
+
+        SqlMapper.RemoveTypeMap(typeof(EntityId));
+        SqlMapper.AddTypeHandler(new EntityIdTypeHandler());
         services.AddPostgreSql(configuration);
         services.AddScoped<IUnitOfWork, PostgreSqlUnitOfWork>();
 
@@ -20,6 +28,11 @@ public static class DependencyInjection
         services.AddScoped<IWorldRepository, PostgreSqlWorldRepository>();
         services.AddScoped<IPlayerRepository, PostgreSqlPlayerRepository>();
         services.AddScoped<IRefreshTokenRepository, PostgreSqlRefreshTokenRepository>();
+        services.AddScoped<IEmailVerificationRepository, PostgreSqlEmailVerificationRepository>();
+
+        // Register services
+        services.AddScoped<IPasswordService, BCryptPasswordService>();
+        services.AddScoped<ITokenService, JwtTokenService>();
 
         return services;
     }

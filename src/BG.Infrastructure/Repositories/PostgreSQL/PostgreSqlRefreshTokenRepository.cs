@@ -14,13 +14,13 @@ public class PostgreSqlRefreshTokenRepository : BasePostgreSqlRepository, IRefre
 
     public async Task<RefreshToken?> GetByTokenAsync(string token)
     {
-        const string sql = "SELECT id, token, user_id, expires_at, created_at, revoked_at FROM refresh_tokens WHERE token = @Token";
+        const string sql = @"SELECT id, token, user_id, expires_at, created_at, revoked_at FROM ""RefreshTokens"" WHERE token = @Token";
         return await Connection.QuerySingleOrDefaultAsync<RefreshToken>(sql, new { Token = token });
     }
 
     public async Task<RefreshToken?> GetByIdAsync(EntityId id)
     {
-        const string sql = "SELECT id, token, user_id, expires_at, created_at, revoked_at FROM refresh_tokens WHERE id = @Id";
+        const string sql = @"SELECT id, token, user_id, expires_at, created_at, revoked_at FROM ""RefreshTokens"" WHERE id = @Id";
         return await Connection.QuerySingleOrDefaultAsync<RefreshToken>(sql, new { Id = id });
     }
 
@@ -28,7 +28,7 @@ public class PostgreSqlRefreshTokenRepository : BasePostgreSqlRepository, IRefre
     {
         const string sql = @"
             SELECT id, token, user_id, expires_at, created_at, revoked_at 
-            FROM refresh_tokens 
+            FROM ""RefreshTokens ""
             WHERE user_id = @UserId 
             AND revoked_at IS NULL 
             AND expires_at > NOW()";
@@ -38,7 +38,7 @@ public class PostgreSqlRefreshTokenRepository : BasePostgreSqlRepository, IRefre
     public async Task CreateAsync(RefreshToken token)
     {
         const string sql = @"
-            INSERT INTO refresh_tokens (id, token, user_id, expires_at, created_at, revoked_at)
+            INSERT INTO ""RefreshTokens"" (id, token, user_id, expires_at, created_at, revoked_at)
             VALUES (@Id, @Token, @UserId, @ExpiresAt, @CreatedAt, @RevokedAt)";
         await Connection.ExecuteAsync(sql, token);
     }
@@ -46,7 +46,7 @@ public class PostgreSqlRefreshTokenRepository : BasePostgreSqlRepository, IRefre
     public async Task UpdateAsync(RefreshToken token)
     {
         const string sql = @"
-            UPDATE refresh_tokens 
+            UPDATE ""RefreshTokens ""
             SET token = @Token,
                 user_id = @UserId,
                 expires_at = @ExpiresAt,
@@ -57,14 +57,14 @@ public class PostgreSqlRefreshTokenRepository : BasePostgreSqlRepository, IRefre
 
     public async Task DeleteAsync(EntityId id)
     {
-        const string sql = "DELETE FROM refresh_tokens WHERE id = @Id";
+        const string sql = @"DELETE FROM ""RefreshTokens"" WHERE id = @Id";
         await Connection.ExecuteAsync(sql, new { Id = id });
     }
 
     public async Task RevokeAllForUserAsync(EntityId userId)
     {
         const string sql = @"
-            UPDATE refresh_tokens 
+            UPDATE ""RefreshTokens ""
             SET revoked_at = NOW() 
             WHERE user_id = @UserId 
             AND revoked_at IS NULL";

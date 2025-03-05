@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using BG.API;
+using BG.Core.Services;
+using BG.Api.IntegrationTests.Infrastructure.TestServices;
 
 namespace BG.Api.IntegrationTests.Infrastructure;
 
@@ -34,7 +36,9 @@ public class IntegrationTestBase
     {
         // Override service registrations for testing
         // Example:
-        // services.AddScoped<IEmailService, TestEmailService>();
+        var emailService = new TestEmailService();
+        services.AddSingleton(emailService);
+        services.AddScoped<IEmailService>(sp => emailService);
     }
 
     [OneTimeTearDown]

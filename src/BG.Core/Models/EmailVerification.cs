@@ -4,12 +4,21 @@ namespace BG.Core.Models;
 
 public class EmailVerification
 {
-    public EntityId Id { get; private set; }
-    public EntityId UserId { get; private set; }
-    public string Email { get; private set; }
-    public string Token { get; private set; }
-    public DateTime ExpiresAt { get; private set; }
-    public DateTime CreatedAt { get; private set; }
+    public EntityId Id { get; set; }
+    public EntityId UserId { get; set; }
+    public string Email { get; set; }
+    public string Token { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+
+    public EmailVerification()
+    {
+        Id = EntityId.NewId();
+        Email = string.Empty;
+        Token = string.Empty;
+        CreatedAt = DateTime.UtcNow;
+        ExpiresAt = DateTime.UtcNow;
+    }
 
     private EmailVerification(
         EntityId id,
