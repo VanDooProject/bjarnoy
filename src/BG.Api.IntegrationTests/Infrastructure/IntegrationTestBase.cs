@@ -12,8 +12,11 @@ public class IntegrationTestBase
 {
     protected readonly WebApplicationFactory<Program> _factory;
 
+    protected string TestId { get; private set; }
+
     public IntegrationTestBase()
     {
+
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -31,6 +34,12 @@ public class IntegrationTestBase
 
                 builder.UseSetting("Environment", "Testing");
             });
+    }
+
+    [SetUp]
+    public void SetUp()
+    {
+        TestId = Guid.CreateVersion7().ToString("N");
     }
 
     protected virtual void ConfigureTestServices(IServiceCollection services)

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using BG.Api.IntegrationTests.Infrastructure;
-using BG.API.Models.Auth;
 using BG.Api.IntegrationTests.Infrastructure.TestServices;
 using BG.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,13 +28,13 @@ public class EmailVerificationTests : IntegrationTestBase
         var client = _factory.CreateClient();
         var user = new
         {
-            Username = "verifytest",
-            Email = "verify@example.com",
+            Username = $"verify-{TestId}",
+            Email = $"verify-{TestId}@example.com",
             Password = "Test123!"
         };
 
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", user);
-        Assert.That(registerResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK), "Registration failed");
+        Assert.That(registerResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"Registration failed: {registerResponse.ReasonPhrase}");
         var token = _emailService.GetLastVerificationToken(user.Email);
         Assert.That(token, Is.Not.Null, "Verification token not found");
 

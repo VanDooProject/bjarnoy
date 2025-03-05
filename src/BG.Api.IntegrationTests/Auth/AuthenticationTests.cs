@@ -14,8 +14,8 @@ public class AuthenticationTests : IntegrationTestBase
         var client = _factory.CreateClient();
         var request = new
         {
-            Username = "testuser",
-            Email = "test@example.com",
+            Username = $"test-{TestId}",
+            Email = $"test-{TestId}@example.com",
             Password = "Test123!"
         };
 
@@ -40,8 +40,8 @@ public class AuthenticationTests : IntegrationTestBase
         var client = _factory.CreateClient();
         var request = new
         {
-            Username = "testuser2",
-            Email = "test2@example.com",
+            Username = $"test2-{TestId}",
+            Email = $"test2-{TestId}@example.com",
             Password = "Test123!"
         };
 
@@ -60,8 +60,8 @@ public class AuthenticationTests : IntegrationTestBase
         var client = _factory.CreateClient();
         var user = new
         {
-            Username = "logintest",
-            Email = "login@example.com",
+            Username = $"login-{TestId}",
+            Email = $"login-{TestId}@example.com",
             Password = "Test123!"
         };
 
@@ -92,8 +92,8 @@ public class AuthenticationTests : IntegrationTestBase
         var client = _factory.CreateClient();
         var user = new
         {
-            Username = "wrongpass",
-            Email = "wrong@example.com",
+            Username = $"wrong-{TestId}",
+            Email = $"wrong-{TestId}@example.com",
             Password = "Test123!"
         };
 
