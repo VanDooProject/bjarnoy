@@ -1,6 +1,7 @@
 using BG.Core.ValueObjects;
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace BG.Core.Models;
 
@@ -9,15 +10,16 @@ public class Player
     public EntityId Id { get; set; }
     public EntityId UserId { get; set; }
     public EntityId WorldId { get; set; }
-    public string Name { get; set; }
+    public required string Name { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
-    public EntityId? DelegatedToUserId { get; set; } // there should be multiple delegations
+    public EntityId? DelegatedToUserId { get; set; }
     public DateTime? DelegationExpiresAt { get; set; }
 
-    [Obsolete("This constructor is for JSON deserialization only. Use Player.Create() for creating new instances.", error: true)]
-    [SuppressMessage("", "CS8618", Justification = "Required for JSON deserialization")]
-    public Player()
+    //[Obsolete("This constructor is for JSON deserialization only. Use Player.Create() for creating new instances.", error: true)]
+    //[SuppressMessage("", "CS8618", Justification = "Required for JSON deserialization")]
+    [JsonConstructor]
+    private Player()
     {
     }
 
@@ -42,12 +44,15 @@ public class Player
         EntityId worldId,
         string name)
     {
-        return new Player(
-            EntityId.NewId(),
-            userId,
-            worldId,
-            name,
-            DateTime.UtcNow);
+        return new Player
+        {
+            Id = EntityId.NewId(),
+            UserId = userId,
+            WorldId = worldId,
+            Name = name,
+            CreatedAt = DateTime.UtcNow,
+            IsActive = true
+        };
     }
 
     public void DelegateTo(EntityId userId, DateTime expiresAt)

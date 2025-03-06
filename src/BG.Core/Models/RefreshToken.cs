@@ -1,19 +1,21 @@
 using BG.Core.ValueObjects;
 using System;
+using System.Text.Json.Serialization;
 
 namespace BG.Core.Models;
 
 public class RefreshToken
 {
     public EntityId Id { get; set; }
-    public EntityId UserId { get; set; }
-    public string Token { get; set; }
+    public required EntityId UserId { get; set; }
+    public required string Token { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
 
-    [Obsolete("This constructor is for JSON deserialization only. Use RefreshToken.Create() for creating new instances.", error: true)]
-    public RefreshToken()
+    //[Obsolete("This constructor is for JSON deserialization only. Use RefreshToken.Create() for creating new instances.", error: true)]
+    [JsonConstructor]
+    private RefreshToken()
     {
     }
 
@@ -36,12 +38,14 @@ public class RefreshToken
         string token,
         TimeSpan validityPeriod)
     {
-        return new RefreshToken(
-            EntityId.NewId(),
-            userId,
-            token,
-            DateTime.UtcNow.Add(validityPeriod),
-            DateTime.UtcNow);
+        return new RefreshToken()
+        {
+            Id = EntityId.NewId(),
+            UserId = userId,
+            Token = token,
+            ExpiresAt = DateTime.UtcNow.Add(validityPeriod),
+            CreatedAt = DateTime.UtcNow,
+        };
     }
 
     public bool IsExpired() => DateTime.UtcNow > ExpiresAt;

@@ -8,7 +8,7 @@ namespace BG.Core.Models;
 public class World
 {
     public EntityId Id { get; set; }
-    public string Name { get; set; }
+    public required string Name { get; set; }
     public int MaxPlayers { get; set; }
     public int CurrentPlayerCount { get; set; } // gets joined in the db
     public WorldStatus Status { get; set; }
@@ -20,6 +20,7 @@ public class World
     {
     }
 
+    [SetsRequiredMembers]
     public World(
         EntityId id,
         string name,
