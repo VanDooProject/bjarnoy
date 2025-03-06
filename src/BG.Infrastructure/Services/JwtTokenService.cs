@@ -49,6 +49,7 @@ public class JwtTokenService : ITokenService
         var now = DateTime.UtcNow;
 
         claims.Add(new Claim(JwtRegisteredClaimNames.Iat, new DateTimeOffset(now).ToUnixTimeSeconds().ToString())); // Issued At
+        claims.Add(new Claim(JwtRegisteredClaimNames.Nbf, new DateTimeOffset(now).ToUnixTimeSeconds().ToString())); // Not Before
 
         var token = new JwtSecurityToken(
             issuer: _issuer,
