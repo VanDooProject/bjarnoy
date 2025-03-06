@@ -33,7 +33,7 @@ public class PlayerTests
             Assert.That(player.IsActive, Is.True);
             Assert.That(player.DelegatedToUserId, Is.Null);
             Assert.That(player.DelegationExpiresAt, Is.Null);
-            Assert.That(player.JoinedAt.Date, Is.EqualTo(DateTime.UtcNow.Date));
+            Assert.That(player.CreatedAt.Date, Is.EqualTo(DateTime.UtcNow.Date));
         });
     }
 
