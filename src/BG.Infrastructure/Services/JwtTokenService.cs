@@ -19,9 +19,18 @@ public class JwtTokenService : ITokenService
     public JwtTokenService(IConfiguration configuration)
     {
         _secretKey = configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
+        if (_secretKey.Length < 16) // Ensure key is at least 128 bits
+            throw new InvalidOperationException("JWT SecretKey is too short");
+            
         _issuer = configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("JWT Issuer is not configured");
         _audience = configuration["Jwt:Audience"] ?? throw new InvalidOperationException("JWT Audience is not configured");
+        
+        if (_audience.Length == 0)
+            throw new InvalidOperationException("JWT Audience cannot be empty");
+
         _accessTokenExpirationMinutes = configuration.GetValue<int>("Jwt:AccessTokenExpirationMinutes");
+        if (_accessTokenExpirationMinutes <= 0)
+            throw new InvalidOperationException("JWT AccessTokenExpirationMinutes must be positive");
     }
 
     public string GenerateAccessToken(User user)
@@ -37,15 +46,18 @@ public class JwtTokenService : ITokenService
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expires = DateTime.UtcNow.AddMinutes(_accessTokenExpirationMinutes);
+        var now = DateTime.UtcNow;
+
+        claims.Add(new Claim(JwtRegisteredClaimNames.Iat, new DateTimeOffset(now).ToUnixTimeSeconds().ToString())); // Issued At
 
         var token = new JwtSecurityToken(
             issuer: _issuer,
             audience: _audience,
             claims: claims,
-            expires: expires,
+            expires: now.AddMinutes(_accessTokenExpirationMinutes),
             signingCredentials: credentials
         );
+
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }

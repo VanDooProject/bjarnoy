@@ -149,7 +149,7 @@ public class JwtTokenServiceTests
         var userId = EntityId.NewId().ToString();
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, userId),
+            new(JwtRegisteredClaimNames.Sub, userId),
             new(JwtRegisteredClaimNames.Email, "test@example.com")
         };
         var identity = new ClaimsIdentity(claims);
@@ -330,10 +330,12 @@ public class JwtTokenServiceTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(config)
             .Build();
-        var tokenService = new JwtTokenService(configuration);
+        
 
         // Act & Assert
-        Assert.That(() => tokenService.GenerateAccessToken(new User()), Throws.InstanceOf<InvalidOperationException>());
+        JwtTokenService tokenService = null!;
+        Assert.That(() => tokenService = new JwtTokenService(configuration), Throws.InstanceOf<InvalidOperationException>());
+        //Assert.That(() => tokenService.GenerateAccessToken(new User()), Throws.InstanceOf<InvalidOperationException>());
     }
 
     [Test]
