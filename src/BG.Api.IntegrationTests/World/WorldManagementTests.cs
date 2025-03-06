@@ -9,6 +9,7 @@ using BG.Core.Models.Enums;
 using BG.Api.IntegrationTests.Infrastructure.TestServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace BG.Api.IntegrationTests.World;
 
@@ -50,6 +51,12 @@ public class WorldManagementTests : IntegrationTestBase
         _accessToken = authResponse?.Tokens.AccessToken ?? throw new InvalidOperationException("No access token received");
         
         _client.DefaultRequestHeaders.Authorization = new("Bearer", _accessToken);
+
+        // to debug id issue:
+        var handler = new JwtSecurityTokenHandler();
+        var token = handler.ReadJwtToken(_accessToken);
+        var tokenUserId = token.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
+        Assert.That(tokenUserId, Is.Not.Null.Or.Empty);
     }
 
     [TearDown]

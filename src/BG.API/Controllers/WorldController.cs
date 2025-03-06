@@ -71,7 +71,7 @@ public class WorldController : ControllerBase
             return TypedResults.BadRequest(new ErrorResponse("World is full"));
         }
 
-        var userIdString = _tokenService.GetUserIdFromClaims(User);
+        var userIdString = _tokenService.GetUserIdFromClaims(User.Claims);
         if (userIdString == null || !EntityId.TryParse(userIdString, out var userId))
         {
             return TypedResults.BadRequest(new ErrorResponse("Invalid user ID"));

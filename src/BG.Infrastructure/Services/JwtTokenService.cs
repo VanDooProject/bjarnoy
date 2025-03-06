@@ -131,9 +131,9 @@ public class JwtTokenService : ITokenService
         }
     }
 
-    public string? GetUserIdFromClaims(ClaimsPrincipal claimsPrincipal)
+    public string? GetUserIdFromClaims(IEnumerable<System.Security.Claims.Claim> claims)
     {
-        return claimsPrincipal.Claims
-            .FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
+        // asp.net core seems to use ClaimTypes.NameIdentifier for user ID even when sub is coming in
+        return claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub || c.Type == ClaimTypes.NameIdentifier)?.Value;
     }
 }
