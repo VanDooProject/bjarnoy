@@ -14,39 +14,39 @@ public class PostgreSqlPlayerRepository : BasePostgreSqlRepository, IPlayerRepos
 
     public async Task<Player?> GetPlayerByIdAsync(EntityId id)
     {
-        const string sql = "SELECT id, user_id, world_id, name, created_at FROM players WHERE id = @Id";
+        const string sql = @"SELECT ""Id"", ""UserId"", ""WorldId"", ""Name"", ""CreatedAt"" FROM ""Players"" WHERE ""Id"" = @Id";
         return await Connection.QuerySingleOrDefaultAsync<Player>(sql, new { Id = id });
     }
 
     public async Task<IEnumerable<Player>> GetPlayersByUserIdAsync(EntityId userId)
     {
-        const string sql = "SELECT id, user_id, world_id, name, created_at FROM players WHERE user_id = @UserId";
+        const string sql = @"SELECT ""Id"", ""UserId"", ""WorldId"", ""Name"", ""CreatedAt"" FROM ""Players"" WHERE ""UserId"" = @UserId";
         return await Connection.QueryAsync<Player>(sql, new { UserId = userId });
     }
 
     public async Task<IEnumerable<Player>> GetPlayersByWorldIdAsync(EntityId worldId)
     {
-        const string sql = "SELECT id, user_id, world_id, name, created_at FROM players WHERE world_id = @WorldId";
+        const string sql = @"SELECT ""Id"", ""UserId"", ""WorldId"", ""Name"", ""CreatedAt"" FROM ""Players"" WHERE ""WorldId"" = @WorldId";
         return await Connection.QueryAsync<Player>(sql, new { WorldId = worldId });
     }
 
     public async Task<int> GetPlayerCountByWorldIdAsync(EntityId worldId)
     {
-        const string sql = "SELECT COUNT(*) FROM players WHERE world_id = @WorldId";
+        const string sql = @"SELECT COUNT(*) FROM ""Players"" WHERE ""WorldId"" = @WorldId";
         return await Connection.ExecuteScalarAsync<int>(sql, new { WorldId = worldId });
     }
 
     public async Task<Player?> GetByUserAndWorldAsync(EntityId userId, EntityId worldId)
     {
-        const string sql = @"SELECT id, user_id, world_id, name, created_at 
-                           FROM players WHERE user_id = @UserId AND world_id = @WorldId";
+        const string sql = @"SELECT ""Id"", ""UserId"", ""WorldId"", ""Name"", ""CreatedAt""
+                           FROM ""Players"" WHERE ""UserId"" = @UserId AND ""WorldId"" = @WorldId";
         return await Connection.QuerySingleOrDefaultAsync<Player>(sql, new { UserId = userId, WorldId = worldId });
     }
 
     public async Task CreateAsync(Player player)
     {
         const string sql = @"
-            INSERT INTO players (id, user_id, world_id, name, created_at)
+            INSERT INTO ""Players"" (""Id"", ""UserId"", ""WorldId"", ""Name"", ""CreatedAt"")
             VALUES (@Id, @UserId, @WorldId, @Name, @CreatedAt)";
         await Connection.ExecuteAsync(sql, player);
     }
@@ -54,11 +54,11 @@ public class PostgreSqlPlayerRepository : BasePostgreSqlRepository, IPlayerRepos
     public async Task UpdateAsync(Player player)
     {
         const string sql = @"
-            UPDATE players 
-            SET user_id = @UserId,
-                world_id = @WorldId,
-                name = @Name
-            WHERE id = @Id";
+            UPDATE ""Players"" 
+            SET ""UserId"" = @UserId,
+                ""WorldId"" = @WorldId,
+                ""Name"" = @Name
+            WHERE ""Id"" = @Id";
         await Connection.ExecuteAsync(sql, player);
     }
 }
