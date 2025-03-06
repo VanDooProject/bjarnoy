@@ -117,4 +117,10 @@ public class JwtTokenService : ITokenService
             return null;
         }
     }
+
+    public string? GetUserIdFromClaims(ClaimsPrincipal claimsPrincipal)
+    {
+        return claimsPrincipal.Claims
+            .FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value;
+    }
 }

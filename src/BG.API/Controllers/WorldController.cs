@@ -2,6 +2,7 @@ using BG.API.Models.Auth;
 using BG.Core.Interfaces.Repositories;
 using BG.Core.Models;
 using BG.Core.ValueObjects;
+using BG.Core.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -15,15 +16,18 @@ public class WorldController : ControllerBase
     private readonly IWorldRepository _worldRepository;
     private readonly IPlayerRepository _playerRepository;
     private readonly IUserRepository _userRepository;
+    private readonly ITokenService _tokenService;
 
     public WorldController(
         IWorldRepository worldRepository,
         IPlayerRepository playerRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        ITokenService tokenService)
     {
         _worldRepository = worldRepository;
         _playerRepository = playerRepository;
         _userRepository = userRepository;
+        _tokenService = tokenService;
     }
 
     [HttpGet]
@@ -67,7 +71,7 @@ public class WorldController : ControllerBase
             return TypedResults.BadRequest(new ErrorResponse("World is full"));
         }
 
-        var userIdString = User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+        var userIdString = _tokenService.GetUserIdFromClaims(User);
         if (userIdString == null || !EntityId.TryParse(userIdString, out var userId))
         {
             return TypedResults.BadRequest(new ErrorResponse("Invalid user ID"));

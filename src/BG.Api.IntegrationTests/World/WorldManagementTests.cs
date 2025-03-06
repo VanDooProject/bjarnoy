@@ -5,6 +5,7 @@ using BG.API.Models.Auth;
 using BG.API.Models;
 using BG.Core.Models;
 using BG.Core.Interfaces.Repositories;
+using BG.Core.Models.Enums;
 using BG.Api.IntegrationTests.Infrastructure.TestServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +16,7 @@ public class WorldManagementTests : IntegrationTestBase
 {
     private HttpClient _client = null!;
     private string _accessToken = string.Empty;
+    private string _username = string.Empty;
 
     [SetUp]
     public async Task Setup()
@@ -22,20 +24,25 @@ public class WorldManagementTests : IntegrationTestBase
         _client = _factory?.CreateClient() ?? throw new InvalidOperationException("Test factory is not initialized");
         
         // Register an admin user and get tokens
+        _username = $"worldadmin-{TestId}";
         await _client.PostAsJsonAsync("/api/v1/auth/register", new
         {
-            Username = "worldadmin",
-            Email = "worldadmin@example.com",
+            Username = _username,
+            Email = $"worldadmin-{TestId}@example.com",
             Password = "Admin123!"
         });
 
-        
         var userRepository = _factory.Services.GetRequiredService<IUserRepository>();
-        await userRepository.SetUserRolesAndActivate("worldadmin", new[] { "admin" });
+        await userRepository.SetUserRolesAndActivate(_username, new[] { "admin" });
 
-        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        // Activate the user and login
+        var user = await userRepository.GetByUsernameAsync(_username);
+        user!.UpdateStatus(UserStatus.Active);
+        await userRepository.UpdateAsync(user);
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new 
         {
-            Username = "worldadmin",
+            Username = _username,
             Password = "Admin123!"
         });
 
@@ -89,7 +96,7 @@ public class WorldManagementTests : IntegrationTestBase
             new { PlayerName = "TestPlayer" });
 
         // Assert
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"Join failed: {response.ReasonPhrase}");
         var player = await response.Content.ReadFromJsonAsync<Player>();
         Assert.Multiple(() =>
         {
