@@ -156,7 +156,7 @@ public class JwtTokenServiceTests
         var principal = new ClaimsPrincipal(identity);
 
         // Act
-        var result = _tokenService.GetUserIdFromClaims(principal);
+        var result = _tokenService.GetUserIdFromClaims(claims);
 
         // Assert
         Assert.That(result, Is.EqualTo(userId));
@@ -174,7 +174,7 @@ public class JwtTokenServiceTests
         var principal = new ClaimsPrincipal(identity);
 
         // Act
-        var result = _tokenService.GetUserIdFromClaims(principal);
+        var result = _tokenService.GetUserIdFromClaims(claims);
 
         // Assert
         Assert.That(result, Is.Null);
