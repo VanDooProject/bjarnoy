@@ -36,7 +36,7 @@ test:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
 
-integration-test:
+integrationTest:
   #extends: .test-template
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
@@ -68,7 +68,7 @@ integration-test:
     - build
     - atlas-migration
 
-unit-test:
+unit_test:
   #extends: .test-template
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
@@ -93,8 +93,8 @@ package:
   stage: package
   image: gcr.io/kaniko-project/executor:debug
   needs:
-    - unit-test
-    - integration-test
+    - unit_test
+    - integrationTest
   script:
     - /kaniko/executor
       --context .
