@@ -3,12 +3,12 @@
 .test-template:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
-  before_script:
-    - dotnet tool install -g JunitXml.TestLogger
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-nuget
-    paths:
-      - .nuget/packages
+  #before_script:
+  #  - dotnet tool install -g JunitXml.TestLogger
+  #cache:
+  #  key: ${CI_COMMIT_REF_SLUG}-nuget
+  #  paths:
+  #    - .nuget/packages
 
 .integration-test-template:
   extends: .test-template

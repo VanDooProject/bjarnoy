@@ -27,8 +27,11 @@ build:
 test:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
-  #needs:
-  #  - build
+  needs:
+    - build
+
+  before_script:
+    - dotnet tool install -g JunitXml.TestLogger
   script:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
