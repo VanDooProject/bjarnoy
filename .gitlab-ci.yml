@@ -31,7 +31,7 @@ test:
     - build
 
   before_script:
-    - dotnet tool install -g JunitXml.TestLogger
+    - dotnet tool install -g JunitXml.TestLogger --tool-path ./.dotnet/tools
   script:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"

@@ -3,8 +3,8 @@
 .test-template:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
-  #before_script:
-  #  - dotnet tool install -g JunitXml.TestLogger
+  before_script:
+    - dotnet tool install JunitXml.TestLogger --tool-path ./.dotnet/tools
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
     paths:
