@@ -5,14 +5,16 @@
   image: mcr.microsoft.com/dotnet/sdk:9.0
   #before_script:
   #  - dotnet tool install -g JunitXml.TestLogger
-  #cache:
-  #  key: ${CI_COMMIT_REF_SLUG}-nuget
-  #  paths:
-  #    - .nuget/packages
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-nuget
+    paths:
+      - .nuget/packages
 
-.integration-test-template:
-  stage: test
-  image: mcr.microsoft.com/dotnet/sdk:9.0
+integration-test-template:
+  extends: .test-template
+  needs:
+    - build
+    - atlas-migration
   services:
     - name: postgres:16-alpine
       alias: postgres
@@ -36,9 +38,11 @@
     - build
     - atlas-migration
 
-.unit-test-template:
-  stage: test
-  image: mcr.microsoft.com/dotnet/sdk:9.0
+unit-test-template:
+  extends: .test-template
+  needs:
+    - build
+    - atlas-migration
   script:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"

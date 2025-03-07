@@ -36,16 +36,16 @@ test:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
 
-unit-test:
-  extends: .unit-test-template
-  needs:
-    - build
-
-integration-test:
-  extends: .integration-test-template
-  needs:
-    - build
-    - atlas-migration
+# unit-test:
+#   extends: .unit-test-template
+#   needs:
+#     - build
+#
+# integration-test:
+#   extends: .integration-test-template
+#   needs:
+#     - build
+#     - atlas-migration
 
 # Package stage
 package:
