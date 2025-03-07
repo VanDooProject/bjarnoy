@@ -26,10 +26,4 @@
     <ProjectReference Include="..\BG.API\BG.API.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="appsettings.Testing.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>
