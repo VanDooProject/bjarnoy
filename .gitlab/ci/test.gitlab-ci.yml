@@ -3,8 +3,9 @@
 .test-template:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
-  #before_script:
-  #  - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
+  before_script:
+    #  - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
+    - dotnet restore
 
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
@@ -19,7 +20,7 @@
       junit: "**/TestResults/results.xml"
     when: always
 
-integrationTest:
+integration-test:
   extends: .test-template
   needs:
     - build
@@ -34,14 +35,12 @@ integrationTest:
   variables:
     ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
   script:
-    - dotnet restore
     - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/integration-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
 
-unit_test:
+unit-test:
   extends: .test-template
   needs:
     - build
     - atlas-migration
   script:
-    - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
