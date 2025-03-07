@@ -1,5 +1,6 @@
 include:
   - local: ".gitlab/ci/variables.gitlab-ci.yml"
+  - local: ".gitlab/ci/migrations.gitlab-ci.yml"
   - local: ".gitlab/ci/test.gitlab-ci.yml"
 
 stages:
@@ -33,24 +34,6 @@ integration-test:
   needs:
     - build
     - atlas-migration
-
-# Database migration check
-atlas-migration:
-  stage: build
-  image: golang:1.21
-  services:
-    - postgres:14.3-alpine
-  variables:
-    POSTGRES_HOST: "postgres"
-    SERVICE_DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}/${POSTGRES_DB}?sslmode=disable
-  script:
-    - which atlas || (curl -sSf https://atlasgo.sh | sh -s -- --community)
-    - cd sql
-    - atlas migrate hash
-    - atlas migrate validate --env ci
-    - atlas migrate apply --env ci --dry-run
-    - atlas migrate apply --env ci
-    - atlas migrate status --env ci
 
 # Package stage
 package:
