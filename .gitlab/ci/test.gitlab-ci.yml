@@ -1,0 +1,33 @@
+# Common test configuration and templates
+
+.test-template:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+      variables:
+        POSTGRES_DB: $POSTGRES_DB
+        POSTGRES_USER: $POSTGRES_USER
+        POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+  variables:
+    ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-nuget
+    paths:
+      - .nuget/packages
+
+.unit-test-template:
+  extends: .test-template
+  script:
+    - dotnet restore
+    - dotnet test ./tests/BG.Tests/BG.Tests.csproj --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+
+.integration-test-template:
+  extends: .test-template
+  script:
+    - dotnet restore
+    - dotnet test ./tests/BG.Api.IntegrationTests/BG.Api.IntegrationTests.csproj --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+  dependencies:
+    - build
+    - atlas-migration

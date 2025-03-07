@@ -22,9 +22,13 @@ public class EmailVerificationTests : IntegrationTestBase
     protected override void ConfigureTestServices(IServiceCollection services)
     {
         services.AddSingleton<IEmailService>(_emailService);
+        
+        // Remove and replace auth settings
+        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(AuthSettings));
+        if (descriptor != null)
+            services.Remove(descriptor);
         var authSettings = new AuthSettings { SkipEmailVerification = false };
         services.AddSingleton(authSettings);
-        // TODO don't we need to remove the real email service?
     }
 
     [Test]

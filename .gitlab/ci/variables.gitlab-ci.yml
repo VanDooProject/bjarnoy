@@ -1,0 +1,13 @@
+variables:
+  # Docker Registry Configuration
+  DOCKER_REG: gitlab.mynode.space:1443
+  CONTAINER_IMAGE: ${DOCKER_REG}/browsergame/bg-backend
+
+  # Database Configuration
+  POSTGRES_DB: cicd_db
+  POSTGRES_USER: ${DB_USER}
+  POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+  # .NET Configuration
+  DOTNET_CLI_HOME: "/tmp/DOTNET_CLI_HOME"
+  NUGET_PACKAGES: ".nuget/packages"
