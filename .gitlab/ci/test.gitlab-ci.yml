@@ -5,7 +5,8 @@
   image: mcr.microsoft.com/dotnet/sdk:9.0
   before_script:
     #  - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
-    - dotnet restore
+    - dotnet restore --verbosity minimal
+    - dotnet build --no-restore --verbosity minimal
 
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
@@ -35,7 +36,7 @@ integration-test:
   variables:
     ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
   script:
-    - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/integration-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    - dotnet test --filter "Category=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
 
 unit-test:
   extends: .test-template
@@ -43,4 +44,4 @@ unit-test:
     - build
     - atlas-migration
   script:
-    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    - dotnet test --filter "Category!=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"

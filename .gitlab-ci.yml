@@ -24,7 +24,7 @@ build:
       - .nuget/packages
 
 # Test stages
-test:
+.test:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
   needs:
