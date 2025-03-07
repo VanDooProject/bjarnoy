@@ -8,10 +8,24 @@ namespace BG.Api.IntegrationTests.Auth;
 public class AuthenticationTests : IntegrationTestBase
 {
     [Test]
+    public async Task Register_WithMissingProperty_ShouldFail()
+    {
+        // Arrange
+        var client = CreateClientWithStrictJson();
+        var request = new { Username = $"test-{TestId}", Email = $"test-{TestId}@example.com" }; // Missing Password
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", request, StrictJsonOptions);
+
+        // Assert
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
     public async Task Register_WithValidData_ShouldSucceed()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var request = new
         {
             Username = $"test-{TestId}",
@@ -20,11 +34,11 @@ public class AuthenticationTests : IntegrationTestBase
         };
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", request);
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", request, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var content = await response.Content.ReadFromJsonAsync<AuthResponse>();
+        var content = await response.Content.ReadFromJsonAsync<AuthResponse>(StrictJsonOptions);
         Assert.Multiple(() =>
         {
             Assert.That(content, Is.Not.Null);
@@ -37,7 +51,7 @@ public class AuthenticationTests : IntegrationTestBase
     public async Task Register_WithDuplicateUsername_ShouldFail()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var request = new
         {
             Username = $"test2-{TestId}",
@@ -46,8 +60,8 @@ public class AuthenticationTests : IntegrationTestBase
         };
 
         // Act
-        await client.PostAsJsonAsync("/api/v1/auth/register", request);
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", request);
+        await client.PostAsJsonAsync("/api/v1/auth/register", request, StrictJsonOptions);
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", request, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -57,7 +71,7 @@ public class AuthenticationTests : IntegrationTestBase
     public async Task Login_WithValidCredentials_ShouldSucceed()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var user = new
         {
             Username = $"login-{TestId}",
@@ -65,18 +79,18 @@ public class AuthenticationTests : IntegrationTestBase
             Password = "Test123!"
         };
 
-        await client.PostAsJsonAsync("/api/v1/auth/register", user);
+        await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
 
         // Act
         var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = user.Username,
             Password = user.Password
-        });
+        }, StrictJsonOptions);
 
         // Assert
         Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        var content = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        var content = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>(StrictJsonOptions);
         Assert.Multiple(() =>
         {
             Assert.That(content, Is.Not.Null);
@@ -89,7 +103,7 @@ public class AuthenticationTests : IntegrationTestBase
     public async Task Login_WithInvalidPassword_ShouldFail()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var user = new
         {
             Username = $"wrong-{TestId}",
@@ -97,14 +111,14 @@ public class AuthenticationTests : IntegrationTestBase
             Password = "Test123!"
         };
 
-        await client.PostAsJsonAsync("/api/v1/auth/register", user);
+        await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
 
         // Act
         var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = user.Username,
             Password = "WrongPass123!"
-        });
+        }, StrictJsonOptions);
 
         // Assert
         Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
@@ -114,14 +128,14 @@ public class AuthenticationTests : IntegrationTestBase
     public async Task Login_WithNonExistentUser_ShouldFail()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
 
         // Act
         var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "nonexistent",
             Password = "Test123!"
-        });
+        }, StrictJsonOptions);
 
         // Assert
         Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
