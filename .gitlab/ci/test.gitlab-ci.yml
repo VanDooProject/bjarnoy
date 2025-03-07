@@ -4,14 +4,18 @@
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
   before_script:
-    - dotnet tool install JunitXml.TestLogger --tool-path ./.dotnet/tools
+    - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
     paths:
       - .nuget/packages
 
 integration-test:
-  extends: .test-template
+  #extends: .test-template
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  before_script:
+    - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
   needs:
     - build
     - atlas-migration
@@ -39,7 +43,11 @@ integration-test:
     - atlas-migration
 
 unit-test:
-  extends: .test-template
+  #extends: .test-template
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  before_script:
+    - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
   needs:
     - build
     - atlas-migration
