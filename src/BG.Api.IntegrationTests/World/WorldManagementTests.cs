@@ -104,7 +104,7 @@ public class WorldManagementTests : IntegrationTestBase
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"Join failed: {response.ReasonPhrase}");
-        var player = await response.Content.ReadFromJsonAsync<Player>();
+        var player = await response.Content.ReadFromJsonAsync<Player>(StrictJsonOptions);
         Assert.Multiple(() =>
         {
             Assert.That(player, Is.Not.Null);

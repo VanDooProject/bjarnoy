@@ -35,7 +35,7 @@ public class EmailVerificationTests : IntegrationTestBase
     public async Task VerifyEmail_WithValidToken_ShouldSucceed()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var user = new
         {
             Username = $"verify-{TestId}",
@@ -43,13 +43,13 @@ public class EmailVerificationTests : IntegrationTestBase
             Password = "Test123!"
         };
 
-        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", user);
+        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
         Assert.That(registerResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"Registration failed: {registerResponse.ReasonPhrase}");
         var token = _emailService.GetLastVerificationToken(user.Email);
         Assert.That(token, Is.Not.Null, "Verification token not found");
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { Token = token });
+        var response = await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { Token = token }, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -59,10 +59,10 @@ public class EmailVerificationTests : IntegrationTestBase
     public async Task VerifyEmail_WithInvalidToken_ShouldFail()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { Token = "invalid" });
+        var response = await client.PostAsJsonAsync("/api/v1/auth/verify-email", new { Token = "invalid" }, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -72,7 +72,7 @@ public class EmailVerificationTests : IntegrationTestBase
     public async Task Register_WithSkipVerificationEnabled_ShouldCreateActiveUser()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var user = new
         {
             Username = $"active-{TestId}",
@@ -87,7 +87,7 @@ public class EmailVerificationTests : IntegrationTestBase
         }
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user);
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -105,7 +105,7 @@ public class EmailVerificationTests : IntegrationTestBase
     public async Task Register_WithSkipVerificationDisabled_ShouldCreateUnconfirmedUser()
     {
         // Arrange
-        var client = _factory.CreateClient();
+        var client = CreateClientWithStrictJson();
         var user = new
         {
             Username = $"unconfirmed-{TestId}",
@@ -120,7 +120,7 @@ public class EmailVerificationTests : IntegrationTestBase
         }
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user);
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
