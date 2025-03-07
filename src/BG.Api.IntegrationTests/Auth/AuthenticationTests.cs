@@ -12,6 +12,7 @@ public class AuthenticationTests : IntegrationTestBase
     {
         // Arrange
         var client = CreateClientWithStrictJson();
+        // TODO do not allow anonymous objects for (current version) api requests (since we actually have a model for this)
         var request = new { Username = $"test-{TestId}", Email = $"test-{TestId}@example.com" }; // Missing Password
 
         // Act
@@ -26,12 +27,11 @@ public class AuthenticationTests : IntegrationTestBase
     {
         // Arrange
         var client = CreateClientWithStrictJson();
-        var request = new
-        {
-            Username = $"test-{TestId}",
-            Email = $"test-{TestId}@example.com",
-            Password = "Test123!"
-        };
+        var request = new RegisterRequest(
+            $"test-{TestId}",
+            $"test-{TestId}@example.com",
+            "Test123!"
+        );
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", request, StrictJsonOptions);
@@ -42,8 +42,9 @@ public class AuthenticationTests : IntegrationTestBase
         Assert.Multiple(() =>
         {
             Assert.That(content, Is.Not.Null);
-            Assert.That(content!.Tokens.AccessToken, Is.Not.Empty);
-            Assert.That(content.Tokens.RefreshToken, Is.Not.Empty);
+            Assert.That(content!.Tokens, Is.Not.Null);
+            Assert.That(content!.Tokens!.AccessToken, Is.Not.Null.Or.Empty);
+            Assert.That(content.Tokens.RefreshToken, Is.Not.Null.Or.Empty);
         });
     }
 
@@ -82,11 +83,8 @@ public class AuthenticationTests : IntegrationTestBase
         await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
 
         // Act
-        var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new
-        {
-            Username = user.Username,
-            Password = user.Password
-        }, StrictJsonOptions);
+        var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login",
+            new LoginRequest(user.Username, user.Password), StrictJsonOptions);
 
         // Assert
         Assert.That(loginResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -94,8 +92,9 @@ public class AuthenticationTests : IntegrationTestBase
         Assert.Multiple(() =>
         {
             Assert.That(content, Is.Not.Null);
-            Assert.That(content!.Tokens.AccessToken, Is.Not.Empty);
-            Assert.That(content.Tokens.RefreshToken, Is.Not.Empty);
+            Assert.That(content!.Tokens, Is.Not.Null);
+            Assert.That(content!.Tokens.AccessToken, Is.Not.Null.Or.Empty);
+            Assert.That(content.Tokens.RefreshToken, Is.Not.Null.Or.Empty);
         });
     }
 

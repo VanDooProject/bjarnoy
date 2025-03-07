@@ -16,9 +16,11 @@ public class IntegrationTestBase
     protected readonly WebApplicationFactory<Program> _factory;
     protected static JsonSerializerOptions StrictJsonOptions => new()
     {
-        PropertyNameCaseInsensitive = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        ReferenceHandler = ReferenceHandler.IgnoreCycles
+        //PropertyNameCaseInsensitive = false,
+        PropertyNameCaseInsensitive = true,
+        //DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        //ReferenceHandler = ReferenceHandler.IgnoreCycles,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
     protected string TestId { get; private set; }
@@ -73,7 +75,7 @@ public class IntegrationTestBase
 
         if (useMockServices)
         {
-            var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IUserRepository));
+            var descriptor = services.Single(d => d.ServiceType == typeof(IUserRepository));
             if (descriptor != null)
             {
                 services.Remove(descriptor);
@@ -81,14 +83,14 @@ public class IntegrationTestBase
                 services.AddScoped<IUserRepository>(sp => userRepository);
             }
             
-            descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IWorldRepository));
+            descriptor = services.Single(d => d.ServiceType == typeof(IWorldRepository));
             if (descriptor != null)
             {
                 services.Remove(descriptor);
                 services.AddScoped<IWorldRepository>(sp => new TestWorldRepository());
             }
 
-            descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IPlayerRepository));
+            descriptor = services.Single(d => d.ServiceType == typeof(IPlayerRepository));
             if (descriptor != null)
             {
                 services.Remove(descriptor);

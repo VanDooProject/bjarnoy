@@ -21,14 +21,17 @@ public class EmailVerificationTests : IntegrationTestBase
 
     protected override void ConfigureTestServices(IServiceCollection services)
     {
+        base.ConfigureTestServices(services);
+
+        // Configure email service
+        var descriptor = services.Single(d => d.ServiceType == typeof(IEmailService));
+        services.Remove(descriptor);
         services.AddSingleton<IEmailService>(_emailService);
         
-        // Remove and replace auth settings
-        var descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(AuthSettings));
-        if (descriptor != null)
-            services.Remove(descriptor);
-        var authSettings = new AuthSettings { SkipEmailVerification = false };
-        services.AddSingleton(authSettings);
+        // Configure auth settings
+        descriptor = services.Single(d => d.ServiceType == typeof(AuthSettings));
+        services.Remove(descriptor);
+        services.AddSingleton(new AuthSettings { SkipEmailVerification = false });
     }
 
     [Test]
@@ -45,6 +48,8 @@ public class EmailVerificationTests : IntegrationTestBase
 
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
         Assert.That(registerResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"Registration failed: {registerResponse.ReasonPhrase}");
+
+        // TODO add polly retry since we actually could be too fast here; is this really a thing? we use transactions (TODO check if we actually use transactions)
         var token = _emailService.GetLastVerificationToken(user.Email);
         Assert.That(token, Is.Not.Null, "Verification token not found");
 
