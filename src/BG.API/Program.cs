@@ -1,4 +1,5 @@
 using BG.Infrastructure;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -19,6 +20,19 @@ builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
+
+// Add API Versioning
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+});
+builder.Services.AddVersionedApiExplorer(setup =>
+{
+    setup.SubstituteApiVersionInUrl = true;
+});
+
 builder.Services.AddHttpContextAccessor();
 
 // Add infrastructure

@@ -22,7 +22,7 @@ public class WorldManagementTests : IntegrationTestBase
     [SetUp]
     public async Task Setup()
     {
-        _client = _factory?.CreateClient() ?? throw new InvalidOperationException("Test factory is not initialized");
+        _client = CreateClientWithStrictJson();
         
         // Register an admin user and get tokens
         _username = $"worldadmin-{TestId}";
@@ -31,7 +31,7 @@ public class WorldManagementTests : IntegrationTestBase
             Username = _username,
             Email = $"worldadmin-{TestId}@example.com",
             Password = "Admin123!"
-        });
+        }, StrictJsonOptions);
 
         var userRepository = _factory.Services.GetRequiredService<IUserRepository>();
         await userRepository.SetUserRolesAndActivate(_username, new[] { "admin" });
@@ -45,9 +45,9 @@ public class WorldManagementTests : IntegrationTestBase
         {
             Username = _username,
             Password = "Admin123!"
-        });
+        }, StrictJsonOptions);
 
-        var authResponse = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        var authResponse = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>(StrictJsonOptions);
         _accessToken = authResponse?.Tokens.AccessToken ?? throw new InvalidOperationException("No access token received");
         
         _client.DefaultRequestHeaders.Authorization = new("Bearer", _accessToken);
@@ -72,11 +72,11 @@ public class WorldManagementTests : IntegrationTestBase
         var request = new { Name = "Test World", MaxPlayers = 100 };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/worlds", request);
+        var response = await _client.PostAsJsonAsync("/api/v1/worlds", request, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
-        var world = await response.Content.ReadFromJsonAsync<BG.Core.Models.World>();
+        var world = await response.Content.ReadFromJsonAsync<BG.Core.Models.World>(StrictJsonOptions);
         Assert.Multiple(() =>
         {
             Assert.That(world, Is.Not.Null);
@@ -94,13 +94,13 @@ public class WorldManagementTests : IntegrationTestBase
         { 
             Name = "Join Test World", 
             MaxPlayers = 100 
-        });
-        var world = await createResponse.Content.ReadFromJsonAsync<BG.Core.Models.World>();
+        }, StrictJsonOptions);
+        var world = await createResponse.Content.ReadFromJsonAsync<BG.Core.Models.World>(StrictJsonOptions);
         
         // Act
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/worlds/{world!.Id}/join",
-            new { PlayerName = "TestPlayer" });
+            new { PlayerName = "TestPlayer" }, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), $"Join failed: {response.ReasonPhrase}");
@@ -121,18 +121,18 @@ public class WorldManagementTests : IntegrationTestBase
         { 
             Name = "Full World", 
             MaxPlayers = 1 
-        });
-        var world = await createResponse.Content.ReadFromJsonAsync<BG.Core.Models.World>();
+        }, StrictJsonOptions);
+        var world = await createResponse.Content.ReadFromJsonAsync<BG.Core.Models.World>(StrictJsonOptions);
         
         // Join with first player
         await _client.PostAsJsonAsync(
             $"/api/v1/worlds/{world!.Id}/join",
-            new { PlayerName = "Player1" });
+            new { PlayerName = "Player1" }, StrictJsonOptions);
 
         // Act - Try to join with second player
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/worlds/{world.Id}/join",
-            new { PlayerName = "Player2" });
+            new { PlayerName = "Player2" }, StrictJsonOptions);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));

@@ -12,7 +12,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace BG.API.Controllers;
 
 [ApiController]
-[Route("api/v1/auth")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/auth")]
 public class AuthController : ControllerBase
 {
     private readonly IUserRepository _userRepository;

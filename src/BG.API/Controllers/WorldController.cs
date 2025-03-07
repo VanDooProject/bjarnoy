@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace BG.API.Controllers;
 
 [ApiController]
-[Route("api/v1/worlds")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/worlds")]
 public class WorldController : ControllerBase
 {
     private readonly IWorldRepository _worldRepository;

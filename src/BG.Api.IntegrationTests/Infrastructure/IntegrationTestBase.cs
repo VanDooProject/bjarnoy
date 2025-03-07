@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Mvc.Testing;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using BG.API;
 using BG.Core.Services;
@@ -11,8 +14,23 @@ namespace BG.Api.IntegrationTests.Infrastructure;
 public class IntegrationTestBase
 {
     protected readonly WebApplicationFactory<Program> _factory;
+    protected static JsonSerializerOptions StrictJsonOptions => new()
+    {
+        PropertyNameCaseInsensitive = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        ReferenceHandler = ReferenceHandler.IgnoreCycles
+    };
 
     protected string TestId { get; private set; }
+    
+    protected HttpClient CreateClientWithStrictJson()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Accept.Add(
+            new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        return client;
+    }
+
 
     public IntegrationTestBase()
     {
