@@ -9,5 +9,5 @@ variables:
   POSTGRES_PASSWORD: ${DB_PASSWORD}
 
   # .NET Configuration
-  DOTNET_CLI_HOME: "/tmp/DOTNET_CLI_HOME"
-  NUGET_PACKAGES: ".nuget/packages"
+  #DOTNET_CLI_HOME: "/tmp/DOTNET_CLI_HOME"
+  #NUGET_PACKAGES: ".nuget/packages"
