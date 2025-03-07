@@ -29,67 +29,15 @@ test:
   image: mcr.microsoft.com/dotnet/sdk:9.0
   needs:
     - build
-
-  before_script:
-    - dotnet tool install JunitXml.TestLogger --local
   script:
     - dotnet restore
-    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
   artifacts:
     reports:
       #coverage_report:
       #  coverage_format: cobertura
       #  path: "**/coverage.cobertura.xml"
-      junit: "**/TestResults/unit-tests.xml"
-    when: always
-
-integrationTest:
-  #extends: .test-template
-  stage: test
-  image: mcr.microsoft.com/dotnet/sdk:9.0
-  before_script:
-    - dotnet tool install JunitXml.TestLogger --local
-  needs:
-    - build
-    - atlas-migration
-  services:
-    - name: postgres:16-alpine
-      alias: postgres
-      variables:
-        POSTGRES_DB: $POSTGRES_DB
-        POSTGRES_USER: $POSTGRES_USER
-        POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-  variables:
-    ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
-  script:
-    - dotnet restore
-    - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/integration-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
-  artifacts:
-    reports:
-      #coverage_report:
-      #  coverage_format: cobertura
-      #  path: "**/coverage.cobertura.xml"
-      junit: "**/TestResults/integration-tests.xml"
-    when: always
-
-unit_test:
-  #extends: .test-template
-  stage: test
-  image: mcr.microsoft.com/dotnet/sdk:9.0
-  before_script:
-    - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
-  needs:
-    - build
-    - atlas-migration
-  script:
-    - dotnet restore
-    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
-  artifacts:
-    reports:
-      #coverage_report:
-      #  coverage_format: cobertura
-      #  path: "**/coverage.cobertura.xml"
-      junit: "**/TestResults/unit-tests.xml"
+      junit: "**/TestResults/results.xml"
     when: always
 
 # Package stage
@@ -97,8 +45,8 @@ package:
   stage: package
   image: gcr.io/kaniko-project/executor:debug
   needs:
-    - unit_test
-    - integrationTest
+    - unit-test
+    - integration-test
   script:
     - /kaniko/executor
       --context .
