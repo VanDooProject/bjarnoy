@@ -3,6 +3,13 @@
 .test-template:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-nuget
+    paths:
+      - .nuget/packages
+
+.integration-test-template:
+  extends: .test-template
   services:
     - name: postgres:16-alpine
       alias: postgres
@@ -12,22 +19,25 @@
         POSTGRES_PASSWORD: $POSTGRES_PASSWORD
   variables:
     ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-nuget
-    paths:
-      - .nuget/packages
+  script:
+    - dotnet restore
+    - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: "**/coverage.cobertura.xml"
+  dependencies:
+    - build
+    - atlas-migration
 
 .unit-test-template:
   extends: .test-template
   script:
     - dotnet restore
-    - dotnet test ./tests/BG.Tests/BG.Tests.csproj --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
-
-.integration-test-template:
-  extends: .test-template
-  script:
-    - dotnet restore
-    - dotnet test ./tests/BG.Api.IntegrationTests/BG.Api.IntegrationTests.csproj --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
-  dependencies:
-    - build
-    - atlas-migration
+    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: "**/coverage.cobertura.xml"
