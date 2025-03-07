@@ -3,6 +3,8 @@
 .test-template:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
+  before_script:
+    - dotnet tool install -g JunitXml.TestLogger
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
     paths:
@@ -21,12 +23,14 @@
     ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
   script:
     - dotnet restore
-    - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+    - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/integration-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
         path: "**/coverage.cobertura.xml"
+      junit: "**/TestResults/integration-tests.xml"
+    when: always
   dependencies:
     - build
     - atlas-migration
@@ -35,9 +39,11 @@
   extends: .test-template
   script:
     - dotnet restore
-    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
+    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
         path: "**/coverage.cobertura.xml"
+      junit: "**/TestResults/unit-tests.xml"
+    when: always
