@@ -29,7 +29,7 @@ unit-test:
   script:
     #- dotnet test --filter "Category!=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
     # run all non-Integration,non-ResourceDependent tests (see categories from step below)
-    - dotnet test --filter "Category!=Integration|Category!=IntegrationTest|Category!=ResourceDependent|Category!=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    - dotnet test --filter "Category!=Integration & Category!=IntegrationTest & Category!=ResourceDependent & Category!=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
 
 integration-test:
   extends: .test-template
@@ -53,5 +53,5 @@ integration-test:
 
   script:
     # run tests from Integration|IntegrationTest|ResourceDependent|ResourceDependentTest categories
-    - dotnet test --filter "Category=Integration|Category=IntegrationTest|Category=ResourceDependent|Category=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    - dotnet test --filter "Category=Integration | Category=IntegrationTest | Category=ResourceDependent | Category=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
     #- dotnet test --filter "Category=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
