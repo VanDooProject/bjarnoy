@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using BG.Api.IntegrationTests.Infrastructure;
 using BG.Api.IntegrationTests.Infrastructure.TestServices;
 using BG.Core.Services;
+using BG.Core.Settings;
+using BG.Core.Models.Enums;
+using BG.Core.Interfaces.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BG.Api.IntegrationTests.Auth;
@@ -19,6 +22,9 @@ public class EmailVerificationTests : IntegrationTestBase
     protected override void ConfigureTestServices(IServiceCollection services)
     {
         services.AddSingleton<IEmailService>(_emailService);
+        var authSettings = new AuthSettings { SkipEmailVerification = false };
+        services.AddSingleton(authSettings);
+        // TODO don't we need to remove the real email service?
     }
 
     [Test]
@@ -56,6 +62,72 @@ public class EmailVerificationTests : IntegrationTestBase
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+    }
+
+    [Test]
+    public async Task Register_WithSkipVerificationEnabled_ShouldCreateActiveUser()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var user = new
+        {
+            Username = $"active-{TestId}",
+            Email = $"active-{TestId}@example.com",
+            Password = "Test123!"
+        };
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var authSettings = scope.ServiceProvider.GetRequiredService<AuthSettings>();
+            authSettings.SkipEmailVerification = true;
+        }
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user);
+
+        // Assert
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+            var createdUser = await userRepo.GetByEmailAsync(user.Email);
+            Assert.That(createdUser, Is.Not.Null);
+            Assert.That(createdUser!.Status, Is.EqualTo(UserStatus.Active));
+            Assert.That(_emailService.GetLastVerificationToken(user.Email), Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task Register_WithSkipVerificationDisabled_ShouldCreateUnconfirmedUser()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var user = new
+        {
+            Username = $"unconfirmed-{TestId}",
+            Email = $"unconfirmed-{TestId}@example.com",
+            Password = "Test123!"
+        };
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var authSettings = scope.ServiceProvider.GetRequiredService<AuthSettings>();
+            authSettings.SkipEmailVerification = false;
+        }
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user);
+
+        // Assert
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+            var createdUser = await userRepo.GetByEmailAsync(user.Email);
+            Assert.That(createdUser, Is.Not.Null);
+            Assert.That(createdUser!.Status, Is.EqualTo(UserStatus.Unconfirmed));
+            Assert.That(_emailService.GetLastVerificationToken(user.Email), Is.Not.Null);
+        }
     }
 
     [OneTimeTearDown]
