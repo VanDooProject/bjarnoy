@@ -31,10 +31,17 @@ test:
     - build
 
   before_script:
-    - dotnet tool install JunitXml.TestLogger --tool-path ./.dotnet/tools
+    - dotnet tool install JunitXml.TestLogger --local
   script:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: "**/coverage.cobertura.xml"
+      junit: "**/TestResults/unit-tests.xml"
+    when: always
 
 integrationTest:
   #extends: .test-template
@@ -64,9 +71,6 @@ integrationTest:
         path: "**/coverage.cobertura.xml"
       junit: "**/TestResults/integration-tests.xml"
     when: always
-  dependencies:
-    - build
-    - atlas-migration
 
 unit_test:
   #extends: .test-template
