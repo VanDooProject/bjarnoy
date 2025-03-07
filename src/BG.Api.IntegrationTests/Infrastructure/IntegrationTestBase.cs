@@ -11,6 +11,8 @@ using BG.Api.IntegrationTests.Infrastructure.TestServices;
 
 namespace BG.Api.IntegrationTests.Infrastructure;
 
+[Category("IntegrationTests")]
+[Category("ResourceDependent")]
 public class IntegrationTestBase
 {
     protected readonly WebApplicationFactory<Program> _factory;

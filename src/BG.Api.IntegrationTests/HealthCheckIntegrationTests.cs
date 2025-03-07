@@ -3,6 +3,7 @@ using BG.Api.IntegrationTests.Infrastructure;
 
 namespace BG.Api.IntegrationTests;
 
+[Category("IntegrationTests")]
 public class HealthCheckIntegrationTests : IntegrationTestBase
 {
     [Test]
