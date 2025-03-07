@@ -83,11 +83,17 @@ public class IntegrationTestBase
             
             descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IWorldRepository));
             if (descriptor != null)
+            {
                 services.Remove(descriptor);
-            
+                services.AddScoped<IWorldRepository>(sp => new TestWorldRepository());
+            }
+
             descriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IPlayerRepository));
             if (descriptor != null)
+            {
                 services.Remove(descriptor);
+                services.AddScoped<IPlayerRepository>(sp => new TestPlayerRepository());
+            }
         }
 
         if (useTestEmailService)
