@@ -31,7 +31,7 @@ test:
     - build
 
   before_script:
-    - dotnet tool install -g JunitXml.TestLogger --tool-path ./.dotnet/tools
+    - dotnet tool install JunitXml.TestLogger --tool-path ./.dotnet/tools
   script:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
@@ -41,7 +41,7 @@ integration-test:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:9.0
   before_script:
-    - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
+    - dotnet tool install JunitXml.TestLogger --local
   needs:
     - build
     - atlas-migration
