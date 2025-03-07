@@ -27,7 +27,9 @@ unit-test:
     - build
     - atlas-migration
   script:
-    - dotnet test --filter "Category!=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    #- dotnet test --filter "Category!=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    # run all non-Integration,non-ResourceDependent tests (see categories from step below)
+    - dotnet test --filter "Category!=Integration|Category!=IntegrationTest|Category!=ResourceDependent|Category!=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
 
 integration-test:
   extends: .test-template
@@ -45,7 +47,7 @@ integration-test:
     ASPNETCORE_ENVIRONMENT: "gitlab" # this is for selecting the correct appsettings.envname.json
     POSTGRESQL__DB: ${POSTGRES_DB}
     POSTGRESQL__HOST: "postgres"
-    POSTGRESQL__PORT: "1234" # this seems to not be used ;(
+    POSTGRESQL__PORT: "5432"
     POSTGRESQL__USERNAME: ${POSTGRES_USER}
     POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD}
 
