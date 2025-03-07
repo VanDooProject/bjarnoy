@@ -37,9 +37,9 @@ test:
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
   artifacts:
     reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: "**/coverage.cobertura.xml"
+      #coverage_report:
+      #  coverage_format: cobertura
+      #  path: "**/coverage.cobertura.xml"
       junit: "**/TestResults/unit-tests.xml"
     when: always
 
@@ -66,9 +66,9 @@ integrationTest:
     - dotnet test --filter "Category=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/integration-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
   artifacts:
     reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: "**/coverage.cobertura.xml"
+      #coverage_report:
+      #  coverage_format: cobertura
+      #  path: "**/coverage.cobertura.xml"
       junit: "**/TestResults/integration-tests.xml"
     when: always
 
@@ -86,9 +86,9 @@ unit_test:
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
   artifacts:
     reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: "**/coverage.cobertura.xml"
+      #coverage_report:
+      #  coverage_format: cobertura
+      #  path: "**/coverage.cobertura.xml"
       junit: "**/TestResults/unit-tests.xml"
     when: always
 
