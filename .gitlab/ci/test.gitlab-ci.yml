@@ -27,7 +27,7 @@ integration-test:
     - build
     - atlas-migration
   services:
-    - name: postgres:16-alpine
+    - name: postgres:14.3-alpine
       alias: postgres
       variables:
         POSTGRES_DB: $POSTGRES_DB
@@ -37,8 +37,8 @@ integration-test:
     ASPNETCORE_ENVIRONMENT: "gitlab" # this is for selecting the correct appsettings.envname.json
     POSTGRESQL__DB: ${POSTGRES_DB}
     POSTGRESQL__HOST: "postgres"
-    POSTGRESQL__PORT: "5432"
-    POSTGRESQL__USER: ${POSTGRES_USER}
+    POSTGRESQL__PORT: "1234" # this seems to not be used ;(
+    POSTGRESQL__USERNAME: ${POSTGRES_USER}
     POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD}
 
   script:
