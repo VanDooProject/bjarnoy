@@ -10,7 +10,7 @@
     paths:
       - .nuget/packages
 
-integration-test-template:
+integration-test:
   extends: .test-template
   needs:
     - build
@@ -38,7 +38,7 @@ integration-test-template:
     - build
     - atlas-migration
 
-unit-test-template:
+unit-test:
   extends: .test-template
   needs:
     - build
