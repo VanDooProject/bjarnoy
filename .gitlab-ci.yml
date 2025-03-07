@@ -24,6 +24,15 @@ build:
       - .nuget/packages
 
 # Test stages
+test:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  #needs:
+  #  - build
+  script:
+    - dotnet restore
+    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+
 unit-test:
   extends: .unit-test-template
   needs:

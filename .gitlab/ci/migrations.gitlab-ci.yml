@@ -19,8 +19,3 @@ atlas-migration:
     - atlas migrate apply --env ci --dry-run
     - atlas migrate apply --env ci
     - atlas migrate status --env ci
-  artifacts:
-    reports:
-      # Archive migration status for reference
-      junit: "**/migration-status.xml"
-    when: always
