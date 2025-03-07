@@ -40,11 +40,13 @@ public class IntegrationTestBase
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
-                builder.ConfigureAppConfiguration((context, config) =>
-                {
-                    config.SetBasePath(Directory.GetCurrentDirectory())
-                          .AddJsonFile("appsettings.Testing.json", optional: false);
-                });
+                // builder.ConfigureAppConfiguration((context, config) =>
+                // {
+                //     config.SetBasePath(Directory.GetCurrentDirectory())
+                //           .AddJsonFile("appsettings.Testing.json", optional: false)
+                //           .AddEnvironmentVariables() // so testing does not overwrite them
+                //           ;
+                // });
 
                 builder.ConfigureServices(services =>
                 {
