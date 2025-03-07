@@ -11,7 +11,8 @@
   #    - .nuget/packages
 
 .integration-test-template:
-  extends: .test-template
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
   services:
     - name: postgres:16-alpine
       alias: postgres
@@ -36,7 +37,8 @@
     - atlas-migration
 
 .unit-test-template:
-  extends: .test-template
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
   script:
     - dotnet restore
     - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/unit-tests.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
