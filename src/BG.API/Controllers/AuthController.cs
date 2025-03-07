@@ -3,6 +3,7 @@ using BG.Core.Interfaces.Repositories;
 using BG.Core.Models;
 using BG.Core.Models.Enums;
 using BG.Core.Services;
+using BG.Core.Settings;
 using BG.Core.ValueObjects;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -20,6 +21,7 @@ public class AuthController : ControllerBase
     private readonly IPasswordService _passwordService;
     private readonly ITokenService _tokenService;
     private readonly IEmailService _emailService;
+    private readonly AuthSettings _authSettings;
 
     public AuthController(
         IUserRepository userRepository,
@@ -27,7 +29,8 @@ public class AuthController : ControllerBase
         IEmailVerificationRepository emailVerificationRepository,
         IPasswordService passwordService,
         ITokenService tokenService,
-        IEmailService emailService)
+        IEmailService emailService,
+        AuthSettings authSettings)
     {
         _userRepository = userRepository;
         _refreshTokenRepository = refreshTokenRepository;
@@ -35,6 +38,7 @@ public class AuthController : ControllerBase
         _passwordService = passwordService;
         _tokenService = tokenService;
         _emailService = emailService;
+        _authSettings = authSettings;
     }
 
     // TODO think of rate limit so a bad guy can't enumerate usernames or emails
@@ -57,15 +61,23 @@ public class AuthController : ControllerBase
             request.Email,
             _passwordService.HashPassword(request.Password));
 
+        if (_authSettings.SkipEmailVerification)
+        {
+            user.UpdateStatus(UserStatus.Active);
+        }
+
         await _userRepository.CreateAsync(user);
+ 
+        if (!_authSettings.SkipEmailVerification)
+        {
+            var verification = EmailVerification.Create(
+                user.Id, 
+                user.Email, 
+                TimeSpan.FromHours(24));
 
-        var verification = EmailVerification.Create(
-            user.Id, 
-            user.Email, 
-            TimeSpan.FromHours(24));
-
-        await _emailVerificationRepository.CreateAsync(verification);
-        await _emailService.SendVerificationEmailAsync(user, verification);
+            await _emailVerificationRepository.CreateAsync(verification);
+            await _emailService.SendVerificationEmailAsync(user, verification);
+        }
 
         var refreshToken = _tokenService.GenerateRefreshToken();
         await _refreshTokenRepository.CreateAsync(RefreshToken.Create(

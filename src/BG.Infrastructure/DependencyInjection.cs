@@ -8,6 +8,7 @@ using BG.Infrastructure.Services;
 using BG.Infrastructure.Repositories.PostgreSQL;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using BG.Core.Settings;
 
 namespace BG.Infrastructure;
 
@@ -31,6 +32,10 @@ public static class DependencyInjection
 
         // Register services
         services.AddScoped<IPasswordService, BCryptPasswordService>();
+        // Register settings
+        var authSettings = configuration.GetSection(AuthSettings.ConfigurationSection).Get<AuthSettings>() ?? new AuthSettings();
+        services.AddSingleton(authSettings);
+
         services.AddScoped<ITokenService, JwtTokenService>();
 
         return services;
