@@ -2,11 +2,13 @@ include:
   - local: ".gitlab/ci/variables.gitlab-ci.yml"
   - local: ".gitlab/ci/migrations.gitlab-ci.yml"
   - local: ".gitlab/ci/test.gitlab-ci.yml"
+  - local: ".gitlab/ci/schema.gitlab-ci.yml"
 
 stages:
   - "build"
   - "test"
   - "package"
+  - "schema-gen"
 
 # Build stage
 build:

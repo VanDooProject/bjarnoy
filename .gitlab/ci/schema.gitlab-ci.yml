@@ -1,0 +1,25 @@
+.schema-gen-template:
+  stage: schema-gen
+  image: node:22-alpine
+  services:
+    - name: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA
+      alias: api
+  variables:
+    NODE_TLS_REJECT_UNAUTHORIZED: "0"
+
+generate-schema:
+  extends: .schema-gen-template
+  needs:
+    - package
+  before_script:
+    - apk add --no-cache git curl
+    - npm install -g openapi-typescript
+    - chmod +x ./scripts/wait-for-api.sh
+  script:
+    - ./scripts/wait-for-api.sh
+    - openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./shadow/src/api/apiSchema.ts --enum
+    - git config user.email "ci@gitlab.com"
+    - git config user.name "GitLab CI"
+    - git add ./shadow/src/api/apiSchema.ts
+    - 'git commit -m "+chore: auto update API schema" || echo "No changes to commit"'
+    - git push origin HEAD:$CI_COMMIT_REF_NAME || echo "Nothing to push"
