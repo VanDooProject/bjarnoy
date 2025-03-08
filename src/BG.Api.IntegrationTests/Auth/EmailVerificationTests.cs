@@ -31,7 +31,30 @@ public class EmailVerificationTests : IntegrationTestBase
         // Configure auth settings
         descriptor = services.Single(d => d.ServiceType == typeof(AuthSettings));
         services.Remove(descriptor);
-        services.AddSingleton(new AuthSettings { SkipEmailVerification = false });
+        services.AddSingleton(new AuthSettings { SkipEmailVerification = false }); // cause we use TestEmailService anyway
+    }
+
+    [Test]
+    public void VerifyTestEmailServiceInDI()
+    {
+        // Arrange
+        using var scope = _factory.Services.CreateScope();
+        var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+
+        // Assert
+        Assert.That(emailService, Is.InstanceOf<TestEmailService>());
+    }
+    
+    [Test]
+    public void VerifyAuthSettingsInDI()
+    {
+        // Arrange
+        using var scope = _factory.Services.CreateScope();
+        var authSettings = scope.ServiceProvider.GetRequiredService<AuthSettings>();
+
+        // Assert
+        Assert.That(authSettings, Is.Not.Null);
+        Assert.That(authSettings.SkipEmailVerification, Is.False);
     }
 
     [Test]
@@ -85,24 +108,38 @@ public class EmailVerificationTests : IntegrationTestBase
             Password = "Test123!"
         };
 
+        bool originalSkipEmailVerification;
         using (var scope = _factory.Services.CreateScope())
         {
             var authSettings = scope.ServiceProvider.GetRequiredService<AuthSettings>();
+            originalSkipEmailVerification = authSettings.SkipEmailVerification;
             authSettings.SkipEmailVerification = true;
         }
 
-        // Act
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
-
-        // Assert
-        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        using (var scope = _factory.Services.CreateScope())
+        try
         {
-            var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
-            var createdUser = await userRepo.GetByEmailAsync(user.Email);
-            Assert.That(createdUser, Is.Not.Null);
-            Assert.That(createdUser!.Status, Is.EqualTo(UserStatus.Active));
-            Assert.That(_emailService.GetLastVerificationToken(user.Email), Is.Null);
+            // Act
+            var response = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
+
+            // Assert
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var userRepo = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+                var createdUser = await userRepo.GetByEmailAsync(user.Email);
+                Assert.That(createdUser, Is.Not.Null);
+                Assert.That(createdUser!.Status, Is.EqualTo(UserStatus.Active));
+                Assert.That(_emailService.GetLastVerificationToken(user.Email), Is.Null);
+            }
+        }
+        finally
+        {
+            // Restore original setting
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var authSettings = scope.ServiceProvider.GetRequiredService<AuthSettings>();
+                authSettings.SkipEmailVerification = originalSkipEmailVerification;
+            }
         }
     }
 
@@ -117,12 +154,6 @@ public class EmailVerificationTests : IntegrationTestBase
             Email = $"unconfirmed-{TestId}@example.com",
             Password = "Test123!"
         };
-
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var authSettings = scope.ServiceProvider.GetRequiredService<AuthSettings>();
-            authSettings.SkipEmailVerification = false;
-        }
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", user, StrictJsonOptions);
