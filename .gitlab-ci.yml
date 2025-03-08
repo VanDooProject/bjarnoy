@@ -5,21 +5,22 @@ include:
   - local: ".gitlab/ci/schema.gitlab-ci.yml"
 
 stages:
-  - "build"
-  - "test"
-  - "package"
-  - "schema-gen"
+  - build
+  - test
+  - package
+  - schema-gen
 
 # Build stage
 build:
   stage: build
   image: mcr.microsoft.com/dotnet/sdk:9.0
   script:
-    - dotnet restore
-    - dotnet build
+    - dotnet restore "src/BG.API/BG.API.csproj"
+    - dotnet build "src/BG.API/BG.API.csproj" -c Release
+    - dotnet publish "src/BG.API/BG.API.csproj" -c Release
   artifacts:
     paths:
-      - src/BG.API/bin/
+      - src/BG.API/bin/Release/net9.0/publish/
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
     paths:
@@ -47,12 +48,12 @@ package:
   stage: package
   image: gcr.io/kaniko-project/executor:debug
   needs:
-    - unit-test
-    - integration-test
+    - job: build
+      artifacts: true
   script:
     - /kaniko/executor
       --context .
-      --dockerfile deploy/docker/backend.Dockerfile
+      --dockerfile deploy/Docker/backend.Dockerfile
       --destination $CONTAINER_IMAGE:$CI_COMMIT_SHA
       --destination $CONTAINER_IMAGE:latest
   rules:
