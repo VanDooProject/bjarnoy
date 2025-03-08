@@ -27,7 +27,7 @@ generate-schema:
     # get permissions via gitlab-ci-token:${CI_JOB_TOKEN}@
     - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
     #- openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./map/src/api/types/apiSchema.ts --enum
-    - openapi-typescript http://api:8080/swagger/v1/swagger.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
+    - openapi-typescript http://api:8080/openapi/v1.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
     - git config user.email "ci@gitlab.com"
     - git config user.name "GitLab CI"
     - git add ./shadow/src/api/apiSchema.ts
