@@ -1,6 +1,9 @@
 using System.Data;
+using Npgsql;
 using System.Security.Cryptography;
 using System.Text;
+using System.Reflection;
+using Dapper;
 
 namespace BG.Infrastructure.Data;
 
@@ -24,31 +27,46 @@ public class DatabaseMigrator
 
     private async Task EnsureMigrationTableExists()
     {
-        using var cmd = _unitOfWork.Connection.CreateCommand();
-        cmd.CommandText = CreateMigrationTableSql;
-        await cmd.ExecuteNonQueryAsync();
+        await _unitOfWork.Connection.ExecuteAsync(CreateMigrationTableSql);
     }
 
     public async Task<IEnumerable<string>> GetAppliedMigrations()
     {
         await EnsureMigrationTableExists();
-
-        using var cmd = _unitOfWork.Connection.CreateCommand();
-        cmd.CommandText = $@"SELECT ""Name"" FROM ""{MigrationTableName}"" ORDER BY ""Id"";";
-        
-        var migrations = new List<string>();
-        using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            migrations.Add(reader.GetString(0));
-        }
-        return migrations;
+        return await _unitOfWork.Connection.QueryAsync<string>(
+            $@"SELECT ""Name"" FROM ""{MigrationTableName}"" ORDER BY ""Id"";");
     }
 
-    public async Task ExecuteMigrations(string migrationsPath)
+    public async Task ExecuteMigrations(params string[] migrationPaths)
     {
-        var appliedMigrations = await GetAppliedMigrations();
-        var migrationFiles = Directory.GetFiles(migrationsPath, "*.sql").OrderBy(f => Path.GetFileName(f));
+        var appliedMigrations = (await GetAppliedMigrations()).ToHashSet();
+        var validPaths = new List<string>();
+        var executingPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+
+        // Collect valid migration paths
+        foreach (var path in migrationPaths)
+        {
+            var fullPath = Path.IsPathRooted(path) 
+                ? path 
+                : Path.GetFullPath(Path.Combine(executingPath!, path));
+
+            if (Directory.Exists(fullPath))
+            {
+                validPaths.Add(fullPath);
+            }
+        }
+
+        if (!validPaths.Any())
+        {
+            throw new DirectoryNotFoundException(
+                $"None of the specified migration paths exist. Tried: {string.Join(", ", migrationPaths)}");
+        }
+
+        // Collect and sort all migration files
+        var migrationFiles = validPaths
+            .SelectMany(path => Directory.GetFiles(path, "*.sql"))
+            .OrderBy(f => Path.GetFileName(f))
+            .ToList();
 
         foreach (var file in migrationFiles)
         {
@@ -69,38 +87,33 @@ public class DatabaseMigrator
         try
         {
             // Double-check migration wasn't applied (in case of parallel execution)
-            using (var cmd = _unitOfWork.Connection.CreateCommand())
+            var exists = await _unitOfWork.Connection.QuerySingleOrDefaultAsync<int>(
+                $@"SELECT COUNT(*) FROM ""{MigrationTableName}"" WHERE ""Name"" = @name;",
+                new { name },
+                transaction: _unitOfWork.Transaction);
+
+            if (exists > 0)
             {
-                cmd.CommandText = $@"SELECT COUNT(*) FROM ""{MigrationTableName}"" WHERE ""Name"" = @name;";
-                cmd.Parameters.Add(new NpgsqlParameter("@name", name));
-                var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-                if (count > 0)
-                {
-                    _unitOfWork.Rollback();
-                    return;
-                }
+                _unitOfWork.Rollback();
+                return;
             }
 
             // Execute migration
-            using (var cmd = _unitOfWork.Connection.CreateCommand())
-            {
-                cmd.CommandText = migrationScript;
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await _unitOfWork.Connection.ExecuteAsync(
+                migrationScript,
+                transaction: _unitOfWork.Transaction);
 
             // Record migration
-            using (var cmd = _unitOfWork.Connection.CreateCommand())
-            {
-                cmd.CommandText = $@"
-                    INSERT INTO ""{MigrationTableName}"" (""Name"", ""Checksum"", ""Duration"")
-                    VALUES (@name, @checksum, @duration);";
-                
-                cmd.Parameters.Add(new NpgsqlParameter("@name", name));
-                cmd.Parameters.Add(new NpgsqlParameter("@checksum", CalculateChecksum(migrationScript)));
-                cmd.Parameters.Add(new NpgsqlParameter("@duration", (int)sw.ElapsedMilliseconds));
-                
-                await cmd.ExecuteNonQueryAsync();
-            }
+            await _unitOfWork.Connection.ExecuteAsync(
+                $@"INSERT INTO ""{MigrationTableName}"" (""Name"", ""Checksum"", ""Duration"")
+                   VALUES (@name, @checksum, @duration);",
+                new 
+                { 
+                    name,
+                    checksum = CalculateChecksum(migrationScript),
+                    duration = (int)sw.ElapsedMilliseconds
+                },
+                transaction: _unitOfWork.Transaction);
 
             _unitOfWork.Commit();
         }

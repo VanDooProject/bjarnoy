@@ -69,7 +69,7 @@ public class IntegrationTestBase
         using var unitOfWork = Scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         
         var migrator = new DatabaseMigrator(unitOfWork);
-        await migrator.ExecuteMigrations("sql/migrations");
+        await migrator.ExecuteMigrations("./../../../../../sql/migrations", "./sql/migrations");
     }
 
     [SetUp]
