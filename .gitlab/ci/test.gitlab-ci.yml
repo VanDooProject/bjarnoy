@@ -46,7 +46,7 @@ integration-test:
     POSTGRES_PASSWORD: $POSTGRES_PASSWORD
 
     ASPNETCORE_ENVIRONMENT: "gitlab" # this is for selecting the correct appsettings.envname.json
-    POSTGRESQL__DB: ${POSTGRES_DB}
+    POSTGRESQL__DATABASE: ${POSTGRES_DB}
     POSTGRESQL__HOST: "postgres"
     POSTGRESQL__PORT: "5432"
     POSTGRESQL__USERNAME: ${POSTGRES_USER}
