@@ -58,9 +58,14 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "gitlab")
 {
+    app.UseDeveloperExceptionPage();
     app.MapOpenApi();
+
+    app.MapGet("/hello", () => "Hello, World!")
+        .WithSummary("Get a greeting")
+        .WithDescription("This endpoint returns a friendly greeting.");
 }
 
 app.UseHttpsRedirection();

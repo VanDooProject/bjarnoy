@@ -19,3 +19,6 @@ if [ $retries -eq $MAX_RETRIES ]; then
 fi
 
 echo "API is ready!"
+
+
+curl -v -k http://api:8080/openapi/v1.json || true 
