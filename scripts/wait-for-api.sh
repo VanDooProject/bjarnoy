@@ -4,7 +4,7 @@ MAX_RETRIES=30
 RETRY_INTERVAL=2
 
 retries=0
-until curl -s http://api:8080/openapi/v1.jso || [ $retries -eq $MAX_RETRIES ]; do
+until curl -s http://api:8080/openapi/v1.json || [ $retries -eq $MAX_RETRIES ]; do
     echo "Waiting for API (attempt $((retries+1))/$MAX_RETRIES)..."
     retries=$((retries+1))
     sleep $RETRY_INTERVAL
