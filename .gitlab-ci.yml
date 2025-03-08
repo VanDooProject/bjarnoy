@@ -1,7 +1,9 @@
 include:
   - local: ".gitlab/ci/variables.gitlab-ci.yml"
+  - local: ".gitlab/ci/build.gitlab-ci.yml"
   - local: ".gitlab/ci/migrations.gitlab-ci.yml"
   - local: ".gitlab/ci/test.gitlab-ci.yml"
+  - local: ".gitlab/ci/package.gitlab-ci.yml"
   - local: ".gitlab/ci/schema.gitlab-ci.yml"
 
 stages:
@@ -9,58 +11,3 @@ stages:
   - test
   - package
   - schema-gen
-
-# Build stage
-build:
-  stage: build
-  image: mcr.microsoft.com/dotnet/sdk:9.0
-  script:
-    - dotnet restore "src/BG.API/BG.API.csproj"
-    - dotnet build "src/BG.API/BG.API.csproj" -c Release
-    - dotnet publish "src/BG.API/BG.API.csproj" -c Release
-  artifacts:
-    paths:
-      - src/BG.API/bin/Release/net9.0/publish/
-      - src/BG.API/BG.API.json
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-nuget
-    paths:
-      - .nuget/packages
-
-# Test stages
-.test:
-  stage: test
-  image: mcr.microsoft.com/dotnet/sdk:9.0
-  needs:
-    - build
-  script:
-    - dotnet restore
-    - dotnet test --filter "Category!=Integration" --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
-  artifacts:
-    reports:
-      #coverage_report:
-      #  coverage_format: cobertura
-      #  path: "**/coverage.cobertura.xml"
-      junit: "**/TestResults/results.xml"
-    when: always
-
-# Package stage
-package:
-  stage: package
-  image: gcr.io/kaniko-project/executor:debug
-  needs:
-    - job: build
-      artifacts: true
-  script:
-    - /kaniko/executor
-      --context .
-      --dockerfile deploy/Docker/backend.Dockerfile
-      --destination $CONTAINER_IMAGE:$CI_COMMIT_SHA
-      --destination $CONTAINER_IMAGE:latest
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
-
-# Pipeline triggers
-workflow:
-  rules:
-    - if: $CI_COMMIT_BRANCH

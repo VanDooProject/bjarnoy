@@ -8,10 +8,11 @@ until curl -s -f http://api:8080/openapi/v1.json || [ $retries -eq $MAX_RETRIES 
     echo "Waiting for API (attempt $((retries+1))/$MAX_RETRIES)..."
     retries=$((retries+1))
     sleep $RETRY_INTERVAL
-
-    # run curl for debugging output
-    curl -v -k http://api:8080/health || true 
 done
+
+# run curl for debugging output
+curl -v -k http://api:8080/health || true 
+curl -v -k http://api:8080/openapi/v1.json || true 
 
 if [ $retries -eq $MAX_RETRIES ]; then
     echo "API failed to start within ${MAX_RETRIES} retries"
@@ -20,5 +21,3 @@ fi
 
 echo "API is ready!"
 
-
-curl -v -k http://api:8080/openapi/v1.json || true 

@@ -5,6 +5,8 @@
     #- name: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA # this uses the auto env from gitlab
     - name: $CONTAINER_IMAGE:$CI_COMMIT_SHA
       alias: api
+      variables:
+        ASPNETCORE_ENVIRONMENT: "gitlab"
   variables:
     NODE_TLS_REJECT_UNAUTHORIZED: "0"
 
@@ -49,6 +51,7 @@ generate-schema-from-artifact:
   script:
     - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
     - openapi-typescript ./src/BG.API/BG.API.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
+    - cd ./frontend
 
     # show git changes
     - git status

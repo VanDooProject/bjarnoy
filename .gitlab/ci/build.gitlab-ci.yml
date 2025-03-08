@@ -1,0 +1,15 @@
+build:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  script:
+    - dotnet restore "src/BG.API/BG.API.csproj"
+    - dotnet build "src/BG.API/BG.API.csproj" -c Release
+    - dotnet publish "src/BG.API/BG.API.csproj" -c Release
+  artifacts:
+    paths:
+      - src/BG.API/bin/Release/net9.0/publish/
+      - src/BG.API/BG.API.json
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-nuget
+    paths:
+      - .nuget/packages
