@@ -44,7 +44,7 @@ generate-schema-from-artifact:
   needs:
     - build
   before_script:
-    - git --version | apk add --no-cache git
+    - apk add --no-cache git
     - npm install -g openapi-typescript
   script:
     - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
