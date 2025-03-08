@@ -18,9 +18,15 @@ generate-schema:
     - chmod +x ./scripts/wait-for-api.sh
   script:
     - ./scripts/wait-for-api.sh
-    - openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./shadow/src/api/apiSchema.ts --enum
+    # TODO clone frontend repo (its the same group in gitlab but named bg-frontend)
+    - git clone $CI_PROJECT_PATH/../bg-frontend.git ./frontend
+    #- openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./map/src/api/types/apiSchema.ts --enum
+    - openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
     - git config user.email "ci@gitlab.com"
     - git config user.name "GitLab CI"
     - git add ./shadow/src/api/apiSchema.ts
     - 'git commit -m "+chore: auto update API schema" || echo "No changes to commit"'
-    - git push origin HEAD:$CI_COMMIT_REF_NAME || echo "Nothing to push"
+    # create a new branch for the frontend repo
+    - git checkout -b "feature/update-api-schema"
+    #- git push origin HEAD:$CI_COMMIT_REF_NAME || echo "Nothing to push"
+    - git push origin HEAD:feature/update-api-schema || echo "Nothing to push"

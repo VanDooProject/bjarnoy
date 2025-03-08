@@ -4,10 +4,13 @@ MAX_RETRIES=30
 RETRY_INTERVAL=2
 
 retries=0
-until curl -s https://api:21047/health || [ $retries -eq $MAX_RETRIES ]; do
+until curl -s https://api:80/health || [ $retries -eq $MAX_RETRIES ]; do
     echo "Waiting for API (attempt $((retries+1))/$MAX_RETRIES)..."
     retries=$((retries+1))
     sleep $RETRY_INTERVAL
+
+    # run curl for debugging output
+    curl -v -k https://api:80/health || true 
 done
 
 if [ $retries -eq $MAX_RETRIES ]; then
