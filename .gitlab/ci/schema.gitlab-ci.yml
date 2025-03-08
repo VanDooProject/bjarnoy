@@ -36,3 +36,20 @@ generate-schema:
     - git checkout -b "feature/update-api-schema"
     #- git push origin HEAD:$CI_COMMIT_REF_NAME || echo "Nothing to push"
     - git push origin HEAD:feature/update-api-schema || echo "Nothing to push"
+
+# generate schema via artifact from build and `src/BG.API/BG.API.json`
+generate-schema-from-artifact:
+  stage: schema-gen
+  image: node:22-alpine
+  needs:
+    - build
+  before_script:
+    - apk add --no-cache git
+    - npm install -g openapi-typescript
+  script:
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
+    - openapi-typescript $src/BG.API/BG.API.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
+
+  artifacts:
+    paths:
+      - ./frontend/map/src/api/types/apiSchema.ts

@@ -21,6 +21,7 @@ build:
   artifacts:
     paths:
       - src/BG.API/bin/Release/net9.0/publish/
+      - src/BG.API/BG.API.json
   cache:
     key: ${CI_COMMIT_REF_SLUG}-nuget
     paths:
