@@ -130,8 +130,6 @@ builder.Services.AddOpenApi("v1", options =>
             //openApiEnum.AddRange(enumNames.Select(name => new OpenApiString(name)));
             //schema.Enum = openApiEnum;
 
-
-
             enumCache[context.JsonPropertyInfo.PropertyType] = schema;
             
             return;
