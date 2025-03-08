@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,7 +20,16 @@ builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
 
 // Add services to the container.
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_0;
+    options.ShouldInclude = (type) =>
+    {
+        // include if version is v1
+        var vers = type.GetApiVersion();
+        return vers.MajorVersion == 1;
+    };
+});
 builder.Services.AddHealthChecks();
 
 // Add API Versioning
@@ -77,6 +88,18 @@ app.MapHealthChecks("/health");
 
 // Add controller endpoints
 app.MapControllers();
+
+//app.UseRouting();
+//app.UseEndpoints(endpoints =>
+//{
+//    endpoints.MapOpenApi();
+//});
+
+//app.UseEndpoints(endpoints =>
+//{
+//    endpoints.MapControllers();
+//    endpoints.MapRazorPages();
+//});
 
 app.Run();
 
