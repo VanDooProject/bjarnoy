@@ -25,10 +25,8 @@
     <ProjectReference Include="..\BG.Infrastructure\BG.Infrastructure.csproj" />
   </ItemGroup>
 
-  <!--
   <PropertyGroup>
     <OpenApiDocumentsDirectory>.</OpenApiDocumentsDirectory>
   </PropertyGroup>
-  -->
 
 </Project>

@@ -12,7 +12,7 @@ namespace BG.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/worlds")]
-public class WorldController : Controller
+public class WorldController : ControllerBase
 {
     private readonly IWorldRepository _worldRepository;
     private readonly IPlayerRepository _playerRepository;

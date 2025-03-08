@@ -73,10 +73,6 @@ if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "gitla
 {
     app.UseDeveloperExceptionPage();
     app.MapOpenApi();
-
-    app.MapGet("/hello", () => "Hello, World!")
-        .WithSummary("Get a greeting")
-        .WithDescription("This endpoint returns a friendly greeting.");
 }
 
 app.UseHttpsRedirection();
@@ -88,18 +84,6 @@ app.MapHealthChecks("/health");
 
 // Add controller endpoints
 app.MapControllers();
-
-//app.UseRouting();
-//app.UseEndpoints(endpoints =>
-//{
-//    endpoints.MapOpenApi();
-//});
-
-//app.UseEndpoints(endpoints =>
-//{
-//    endpoints.MapControllers();
-//    endpoints.MapRazorPages();
-//});
 
 app.Run();
 
