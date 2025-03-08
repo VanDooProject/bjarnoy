@@ -12,6 +12,8 @@ public readonly struct EntityId : IEquatable<EntityId>
 {
     private readonly byte[] _bytes;
 
+    public string Value => ToString();
+
     public EntityId(byte[] bytes)
     {
         ArgumentNullException.ThrowIfNull(bytes);
