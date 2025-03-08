@@ -57,10 +57,14 @@ generate-schema-from-artifact:
     - git status
     - git diff
 
-    # commit and push changes
+    # add file
     - git config user.email "ci@andesia.org"
     - git config user.name "GitLab CI"
-    - git add ./frontend/map/src/api/types/apiSchema.ts
+    - git add ./map/src/api/types/apiSchema.ts
+    - git status
+    - git diff
+
+    # commit changes and push
     - 'git commit -m "+chore: auto update API schema" || echo "No changes to commit"'
     - git checkout -b "feature/update-api-schema"
     #- git push origin HEAD:feature/update-api-schema || echo "Nothing to push"
