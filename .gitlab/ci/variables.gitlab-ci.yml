@@ -1,7 +1,8 @@
 variables:
   # Docker Registry Configuration
   DOCKER_REG: gitlab.mynode.space:1443
-  CONTAINER_IMAGE: ${DOCKER_REG}/browsergame/bg-backend
+  CONTAINER_IMAGE: ${DOCKER_REG}/browsergame/bg-backend/api
+  CONTAINER_IMAGE_BACKEND: ${DOCKER_REG}/browsergame/bg-backend/api
 
   # Database Configuration
   POSTGRES_DB: cicd_db

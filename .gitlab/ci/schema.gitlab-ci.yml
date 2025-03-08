@@ -2,7 +2,8 @@
   stage: schema-gen
   image: node:22-alpine
   services:
-    - name: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA
+    #- name: $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA # this uses the auto env from gitlab
+    - name: $CONTAINER_IMAGE:$CI_COMMIT_SHA
       alias: api
   variables:
     NODE_TLS_REJECT_UNAUTHORIZED: "0"
