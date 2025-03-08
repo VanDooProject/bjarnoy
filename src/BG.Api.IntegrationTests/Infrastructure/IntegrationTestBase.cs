@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration;
 using BG.API;
 using BG.Core.Services;
 using BG.Core.Interfaces.Repositories;
+using BG.Infrastructure.Data;
+using Microsoft.Extensions.DependencyInjection;
 using BG.Api.IntegrationTests.Infrastructure.TestServices;
 
 namespace BG.Api.IntegrationTests.Infrastructure;
@@ -16,6 +18,7 @@ namespace BG.Api.IntegrationTests.Infrastructure;
 public class IntegrationTestBase
 {
     protected readonly WebApplicationFactory<Program> _factory;
+    protected IServiceScope Scope { get; private set; }
     protected static JsonSerializerOptions StrictJsonOptions => new()
     {
         //PropertyNameCaseInsensitive = false,
@@ -38,7 +41,6 @@ public class IntegrationTestBase
 
     public IntegrationTestBase()
     {
-
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -58,6 +60,16 @@ public class IntegrationTestBase
 
                 builder.UseSetting("Environment", "Testing");
             });
+    }
+
+    [OneTimeSetUp]
+    public async Task OneTimeSetUp()
+    {
+        Scope = _factory.Services.CreateScope();
+        using var unitOfWork = Scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        
+        var migrator = new DatabaseMigrator(unitOfWork);
+        await migrator.ExecuteMigrations("sql/migrations");
     }
 
     [SetUp]
@@ -112,6 +124,7 @@ public class IntegrationTestBase
     [OneTimeTearDown]
     public void TearDown()
     {
+        Scope?.Dispose();
         _factory.Dispose();
     }
 }
