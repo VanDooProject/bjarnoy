@@ -39,11 +39,12 @@ integration-test:
   services:
     - name: postgres:14.3-alpine
       alias: postgres
-      variables:
-        POSTGRES_DB: $POSTGRES_DB
-        POSTGRES_USER: $POSTGRES_USER
-        POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+
   variables:
+    POSTGRES_DB: $POSTGRES_DB
+    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+
     ASPNETCORE_ENVIRONMENT: "gitlab" # this is for selecting the correct appsettings.envname.json
     POSTGRESQL__DB: ${POSTGRES_DB}
     POSTGRESQL__HOST: "postgres"

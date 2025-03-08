@@ -5,8 +5,8 @@ variables:
 
   # Database Configuration
   POSTGRES_DB: cicd_db
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: postgres
+  POSTGRES_USER: random_user
+  POSTGRES_PASSWORD: super_secure_password
 
   # .NET Configuration
   #DOTNET_CLI_HOME: "/tmp/DOTNET_CLI_HOME"
