@@ -49,7 +49,9 @@ generate-schema-from-artifact:
     - apk add --no-cache git
     - npm install -g openapi-typescript
   script:
-    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
+    #- git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend # not allowed to push
+    - git clone https://cicd_backend:${CICD_FRONTEND_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
+    - git checkout -b "feature/update-api-schema" # switch branch so we add all changes in one
     - openapi-typescript ./src/BG.API/BG.API.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
     - cd ./frontend
 
@@ -67,7 +69,7 @@ generate-schema-from-artifact:
     # commit changes and push
     - 'git commit -m "+chore: auto update API schema" || echo "No changes to commit"'
     - git checkout -b "feature/update-api-schema"
-    #- git push origin HEAD:feature/update-api-schema || echo "Nothing to push"
+    - git push origin HEAD:feature/update-api-schema || echo "Nothing to push" # maybe force push
 
   artifacts:
     paths:
