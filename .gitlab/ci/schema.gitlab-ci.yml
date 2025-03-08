@@ -21,7 +21,7 @@ generate-schema:
     # TODO clone frontend repo (its the same group in gitlab but named bg-frontend)
     - git clone $CI_PROJECT_PATH/../bg-frontend.git ./frontend
     #- openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./map/src/api/types/apiSchema.ts --enum
-    - openapi-typescript https://api:21047/swagger/v1/swagger.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
+    - openapi-typescript https://api:8080/swagger/v1/swagger.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
     - git config user.email "ci@gitlab.com"
     - git config user.name "GitLab CI"
     - git add ./shadow/src/api/apiSchema.ts
