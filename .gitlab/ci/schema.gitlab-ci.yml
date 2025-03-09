@@ -70,7 +70,7 @@ generate-schema-from-artifact:
     # commit changes and push
     - 'git commit -m "+chore: auto update API schema" || echo "No changes to commit"'
     - git checkout -b "feature/update-api-schema"
-    - git push origin HEAD:feature/update-api-schema || echo "Nothing to push" # maybe force push
+    - git push -f origin HEAD:feature/update-api-schema || echo "Nothing to push" # force push so we overwrite old version and have no conflicts
 
   artifacts:
     paths:
