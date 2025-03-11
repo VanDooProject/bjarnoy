@@ -52,7 +52,13 @@ generate-schema-from-artifact:
   script:
     #- git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend # not allowed to push
     - git clone https://cicd_browsergame:${CICD_GROUP_TOKEN}@$CI_SERVER_HOST/$CI_PROJECT_NAMESPACE/bg-frontend.git ./frontend
-    - git checkout -b "feature/update-api-schema" # switch branch so we add all changes in one
+    # try to switch to branch if it exists, otherwise create it
+    - cd ./frontend
+    - git fetch origin
+    - git checkout feature/update-api-schema 2>/dev/null || git checkout -b feature/update-api-schema
+    - cd ..
+
+    # generate schema
     - openapi-typescript ./src/BG.API/BG.API.json -o ./frontend/map/src/api/types/apiSchema.ts --enum
     - cd ./frontend
 
@@ -69,8 +75,7 @@ generate-schema-from-artifact:
 
     # commit changes and push
     - 'git commit -m "+chore: auto update API schema" || echo "No changes to commit"'
-    - git checkout -b "feature/update-api-schema"
-    - git push -f origin HEAD:feature/update-api-schema || echo "Nothing to push" # force push so we overwrite old version and have no conflicts
+    - git push origin HEAD:feature/update-api-schema || echo "Nothing to push"
 
   artifacts:
     paths:
