@@ -57,10 +57,9 @@ generate-schema-from-artifact:
     # try to switch to branch if it exists, otherwise create it
     - git fetch origin
     - git checkout feature/update-api-schema 2>/dev/null || git checkout -b feature/update-api-schema
-    - cd ..
 
     # generate schema
-    - openapi-typescript ./src/BG.API/BG.API.json -o ./map/src/api/types/apiSchema.ts --enum
+    - openapi-typescript ./../src/BG.API/BG.API.json -o ./map/src/api/types/apiSchema.ts --enum
 
     # show git changes
     - git status
