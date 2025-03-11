@@ -37,6 +37,7 @@ builder.Services.AddOpenApi("v1", options =>
     };
 
     options.AddSchemaTransformer<EnumSchemaTransformer>();
+    options.AddSchemaTransformer<EntityIdStringSchemaTransformer>();
 });
 builder.Services.AddHealthChecks();
 
