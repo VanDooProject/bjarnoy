@@ -10,6 +10,23 @@ public class EnumSchemaTransformer : Microsoft.AspNetCore.OpenApi.IOpenApiSchema
     {
         if (context?.JsonPropertyInfo?.PropertyType.IsEnum == true)
         {
+            // get all enum names and values via reflection
+            /*
+            var fields = context.JsonPropertyInfo.PropertyType.GetFields(BindingFlags.Public | BindingFlags.Static);
+            var enumDesc = fields.Select(field =>
+            {
+                if (!field.FieldType.IsEnum)
+                    return null;
+
+                return new
+                {
+                    Value = (int)field.GetRawConstantValue(),
+                    field?.Name,
+                    field?.GetCustomAttribute<DescriptionAttribute>()?.Description
+                };
+            });
+            */
+
             var enumType = context.JsonPropertyInfo.PropertyType;
             var enumValues = Enum.GetValues(enumType).Cast<object>();
             var enumDesc = enumValues.Select(value =>
