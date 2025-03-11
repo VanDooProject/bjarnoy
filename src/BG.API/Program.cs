@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.OpenApi;
 using Microsoft.OpenApi.Models;
@@ -42,6 +43,23 @@ builder.Services.AddOpenApi("v1", options =>
 
     //options.MapType<EntityId>(() => new OpenApiSchema { Type = "string", Format = "string" });
     // TODO add transformer for EntityId
+
+    options.AddDocumentTransformer(
+        async delegate(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken ct)
+        {
+            Console.WriteLine($"doc: {document.Info.Title}");
+        });
+
+    options.AddOperationTransformer(
+        async delegate(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken ct)
+        {
+            Console.WriteLine($"op: {operation.OperationId}");
+        });
+
+    options.CreateSchemaReferenceId = delegate(JsonTypeInfo type)
+    {
+        return OpenApiOptions.CreateDefaultSchemaReferenceId(type);
+    };
 
     // cache for enum types
     var enumCache = new Dictionary<Type, OpenApiSchema>();
@@ -82,7 +100,7 @@ builder.Services.AddOpenApi("v1", options =>
                 });
 
 
-            schema.Annotations.Add("x-enumNames", enumNames);
+            //schema.Annotations.Add("x-enumNames", enumNames);
             Console.WriteLine($"prop: {context?.JsonPropertyInfo?.Name}: enumNames:{string.Join(",", enumNames)}");
             //schema.AdditionalProperties = new OpenApiSchema()
             //{
