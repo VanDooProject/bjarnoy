@@ -41,29 +41,9 @@ builder.Services.AddOpenApi("v1", options =>
         return vers.MajorVersion == 1;
     };
 
-    //options.MapType<EntityId>(() => new OpenApiSchema { Type = "string", Format = "string" });
-    // TODO add transformer for EntityId
-
-    options.AddDocumentTransformer(
-        async delegate(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken ct)
-        {
-            Console.WriteLine($"doc: {document.Info.Title}");
-        });
-
-    options.AddOperationTransformer(
-        async delegate(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken ct)
-        {
-            Console.WriteLine($"op: {operation.OperationId}");
-        });
-
-    options.CreateSchemaReferenceId = delegate(JsonTypeInfo type)
-    {
-        return OpenApiOptions.CreateDefaultSchemaReferenceId(type);
-    };
-
     // cache for enum types
     var enumCache = new Dictionary<Type, OpenApiSchema>();
-    options.AddSchemaTransformer(async delegate(
+    options.AddSchemaTransformer(delegate(
         OpenApiSchema schema,
         OpenApiSchemaTransformerContext context,
         CancellationToken ct)
@@ -74,16 +54,13 @@ builder.Services.AddOpenApi("v1", options =>
             {
                 //schema = enumSchema;
                 Console.WriteLine($"prop: {context?.JsonPropertyInfo?.Name}: enumSchema:{enumSchema} - from cache");
-                return;
+                schema = enumSchema;
+                return Task.CompletedTask;
             }
 
             // like NSwag - https://github.com/RicoSuter/NJsonSchema/wiki/Enums
             var enumNames = Enum.GetNames(context.JsonPropertyInfo.PropertyType);
-            // get Enum value and name into dictionary
             var enumValues = Enum.GetValues(context.JsonPropertyInfo.PropertyType);
-
-
-            // TODO get enum via reflection; get description attribute, name and value
             var enumDesc = enumValues.Cast<object>().Select(
                 (value, index) =>
                 {
@@ -99,25 +76,6 @@ builder.Services.AddOpenApi("v1", options =>
                     };
                 });
 
-
-            //schema.Annotations.Add("x-enumNames", enumNames);
-            Console.WriteLine($"prop: {context?.JsonPropertyInfo?.Name}: enumNames:{string.Join(",", enumNames)}");
-            //schema.AdditionalProperties = new OpenApiSchema()
-            //{
-            //    
-            //}
-            var openApiEnumExtension = new OpenApiEnumValuesDescriptionExtension
-            {
-                EnumName = context.JsonPropertyInfo.PropertyType.Name,
-                ValuesDescriptions = enumDesc.Select(e => new EnumDescription
-                {
-                    Value = e.Value.ToString(),
-                    Description = e.Description,
-                    Name = e.Name
-                }).ToList()
-            };
-            //schema.Extensions.Add("x-ms-enum", openApiEnumExtension);
-
             var openApiValueArray = new OpenApiArray();
             var openApiNameArray = new OpenApiArray();
             var openApiDescArray = new OpenApiArray();
@@ -130,40 +88,13 @@ builder.Services.AddOpenApi("v1", options =>
             schema.Extensions.Add("x-enum-varnames", openApiNameArray); // https://openapi-ts.dev/advanced#enum-extensions
             schema.Extensions.Add("x-enum-descriptions", openApiDescArray); // https://openapi-ts.dev/advanced#enum-extensions
             schema.Extensions.Add("enum", openApiValueArray);
-            //schema.Enum = openApiValueArray; // same es extension with "enum"
-            //schema.Extensions.Add("x-enumNames", openApiArray); // https://openapi-ts.dev/advanced#enum-extensions
-
-            // runtime error
-            //var openApiEnum = new List<IOpenApiAny>();
-            //openApiEnum.AddRange(enumDesc.Select(e => new OpenApiAnyEnumDescription
-            //{
-            //    Value = e.Value.ToString(),
-            //    Description = e.Description,
-            //    Name = e.Name
-            //}));
-            //schema.Enum = openApiEnum;
-
-            // this works and creates a string enum representation
-            //var openApiEnum = new List<IOpenApiAny>();
-            //openApiEnum.AddRange(enumNames.Select(name => new OpenApiString(name)));
-            //schema.Enum = openApiEnum;
 
             enumCache[context.JsonPropertyInfo.PropertyType] = schema;
             
-            return;
+            return Task.CompletedTask;
         }
 
-        if (schema.Type != "object" && schema.Type != "string" && schema.Type != "array" && schema.Type != "boolean" &&
-           schema.Type != null &&
-           schema.Format != "int32"
-           )
-        {
-            Console.WriteLine($"prop: {context?.JsonPropertyInfo?.Name}: schema.Type:{schema.Type}");
-            return;
-        }
-
-
-        //return Task.CompletedTask;
+        return Task.CompletedTask;
     });
 });
 builder.Services.AddHealthChecks();
