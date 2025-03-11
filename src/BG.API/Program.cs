@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Reflection;
 using BG.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -8,10 +6,7 @@ using System.Text;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.OpenApi;
-using Microsoft.OpenApi.Models;
 using BG.Core.ValueObjects;
-using Microsoft.AspNetCore.OpenApi;
-using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.MicrosoftExtensions;
 using Scalar.AspNetCore;
 using System.Xml.Linq;
@@ -41,51 +36,6 @@ builder.Services.AddOpenApi("v1", options =>
         return vers.MajorVersion == 1;
     };
 
-    // cache for enum types
-    // Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken cancellationToken);
-    /*
-    options.AddSchemaTransformer(delegate(
-        OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken ct)
-    {
-        if (context?.JsonPropertyInfo?.PropertyType.IsEnum == true)
-        {
-            // like NSwag - https://github.com/RicoSuter/NJsonSchema/wiki/Enums
-            var enumNames = Enum.GetNames(context.JsonPropertyInfo.PropertyType);
-            var enumValues = Enum.GetValues(context.JsonPropertyInfo.PropertyType);
-            var enumDesc = enumValues.Cast<object>().Select(
-                (value, index) =>
-                {
-                    // get description attribute via reflection
-                    var attr = context.JsonPropertyInfo.PropertyType.GetField(value.ToString())?
-                        .GetCustomAttribute<DescriptionAttribute>();
-
-                    return new
-                    {
-                        Value = (int) value,
-                        Name = enumNames[index],
-                        Description = attr?.Description
-                    };
-                });
-
-            var openApiValueArray = new OpenApiArray();
-            var openApiNameArray = new OpenApiArray();
-            var openApiDescArray = new OpenApiArray();
-            foreach (var item in enumDesc)
-            {
-                openApiValueArray.Add(new OpenApiInteger(item.Value));
-                openApiNameArray.Add(new OpenApiString(item.Name));
-                openApiDescArray.Add(new OpenApiString(item.Description));
-            }
-            schema.Extensions.Add("x-enum-varnames", openApiNameArray); // https://openapi-ts.dev/advanced#enum-extensions
-            schema.Extensions.Add("x-enum-descriptions", openApiDescArray); // https://openapi-ts.dev/advanced#enum-extensions
-            schema.Extensions.Add("enum", openApiValueArray);
-            
-            return Task.CompletedTask;
-        }
-
-        return Task.CompletedTask;
-    });
-    */
     options.AddSchemaTransformer<EnumSchemaTransformer>();
 });
 builder.Services.AddHealthChecks();
@@ -146,49 +96,6 @@ app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();
-
-public class EnumSchemaTransformer : Microsoft.AspNetCore.OpenApi.IOpenApiSchemaTransformer
-{
-    public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken cancellationToken)
-    {
-        if (context?.JsonPropertyInfo?.PropertyType.IsEnum == true)
-        {
-            var enumNames = Enum.GetNames(context.JsonPropertyInfo.PropertyType);
-            var enumValues = Enum.GetValues(context.JsonPropertyInfo.PropertyType);
-            var enumDesc = enumValues.Cast<object>().Select(
-                (value, index) =>
-                {
-                    // get description attribute via reflection
-                    var attr = context.JsonPropertyInfo.PropertyType.GetField(value.ToString())?
-                        .GetCustomAttribute<DescriptionAttribute>();
-
-                    return new
-                    {
-                        Value = (int)value,
-                        Name = enumNames[index],
-                        Description = attr?.Description
-                    };
-                });
-
-            var openApiValueArray = new OpenApiArray();
-            var openApiNameArray = new OpenApiArray();
-            var openApiDescArray = new OpenApiArray();
-            foreach (var item in enumDesc)
-            {
-                openApiValueArray.Add(new OpenApiInteger(item.Value));
-                openApiNameArray.Add(new OpenApiString(item.Name));
-                openApiDescArray.Add(new OpenApiString(item.Description));
-            }
-            schema.Extensions.Add("x-enum-varnames", openApiNameArray); // https://openapi-ts.dev/advanced#enum-extensions
-            schema.Extensions.Add("x-enum-descriptions", openApiDescArray); // https://openapi-ts.dev/advanced#enum-extensions
-            schema.Extensions.Add("enum", openApiValueArray);
-
-            return Task.CompletedTask;
-        }
-
-        return Task.CompletedTask;
-    }
-}
 
 namespace BG.API
 {
