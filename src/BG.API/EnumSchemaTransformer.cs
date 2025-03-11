@@ -10,22 +10,19 @@ public class EnumSchemaTransformer : Microsoft.AspNetCore.OpenApi.IOpenApiSchema
     {
         if (context?.JsonPropertyInfo?.PropertyType.IsEnum == true)
         {
-            var enumNames = Enum.GetNames(context.JsonPropertyInfo.PropertyType);
-            var enumValues = Enum.GetValues(context.JsonPropertyInfo.PropertyType);
-            var enumDesc = enumValues.Cast<object>().Select(
-                (value, index) =>
-                {
-                    // get description attribute via reflection
-                    var attr = context.JsonPropertyInfo.PropertyType.GetField(value.ToString())?
-                        .GetCustomAttribute<DescriptionAttribute>();
+            var enumType = context.JsonPropertyInfo.PropertyType;
+            var enumValues = Enum.GetValues(enumType).Cast<object>();
+            var enumDesc = enumValues.Select(value =>
+            {
+                var field = enumType.GetField(value.ToString());
 
-                    return new
-                    {
-                        Value = (int)value,
-                        Name = enumNames[index],
-                        Description = attr?.Description
-                    };
-                });
+                return new
+                {
+                    Value = (int)value,
+                    field?.Name,
+                    field?.GetCustomAttribute<DescriptionAttribute>()?.Description
+                };
+            });
 
             var openApiValueArray = new OpenApiArray();
             var openApiNameArray = new OpenApiArray();
