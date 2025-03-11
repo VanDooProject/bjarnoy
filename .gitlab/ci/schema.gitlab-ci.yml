@@ -59,7 +59,7 @@ generate-schema-from-artifact:
     - git checkout feature/update-api-schema 2>/dev/null || git checkout -b feature/update-api-schema
 
     # generate schema
-    - openapi-typescript ./../src/BG.API/BG.API.json -o ./map/src/api/types/apiSchema.ts --enum
+    - openapi-typescript ./../src/BG.API/BG.API.json -o ./map/src/api/types/apiSchema.ts --enum --make-paths-enum
 
     # show git changes
     - git status
