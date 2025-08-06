@@ -88,7 +88,20 @@ export class MapService {
       for (let j = 0; j < size; j++) {
         let cx = x + j;
         // this.tiles is in [x][y] format
-        chunk[i][j] = this.tiles[cx][cy];
+        if (
+          cx < this.mapStart ||
+          cx > this.mapSize ||
+          cy < this.mapStart ||
+          cy > this.mapSize ||
+          !this.tiles[cx] ||
+          !this.tiles[cx][cy]
+        ) {
+          // Fill with default tile if out-of-bounds
+          chunk[i][j] = new Tile(cx, cy);
+          chunk[i][j].type = "grasstile";
+        } else {
+          chunk[i][j] = this.tiles[cx][cy];
+        }
       }
     }
 
@@ -114,8 +127,6 @@ export class MapService {
   getChunkHex(s: number, r: number, size: number): Chunk {
     let chunk = [] as Tile[][]; // [r][s]
 
-    // this.tiles[x][y]
-
     let top = new HexCoord(s, r).axialToOddQ();
     let right = new HexCoord(s - size, r).axialToOddQ();
     let bottom = new HexCoord(s - size, r + size).axialToOddQ();
@@ -123,21 +134,23 @@ export class MapService {
 
     console.log(`getChunkHex sr=(${s}|${r})`, top, right, bottom, left);
 
-    for (let i = r; i < r+size; i++) {
-      chunk[i-r] = [];
-
-      if(this.tilesHex[i] == undefined || this.tilesHex[i] == null || this.tilesHex[i].length == 0)
-        continue;
+    for (let i = r; i < r + size; i++) {
+      chunk[i - r] = [];
 
       for (let j = s; j > s - size; j--) {
-        if(this.tilesHex[i][j] == undefined || this.tilesHex[i][j] == null)
-          continue;
-        
-        chunk[i-r][-j+s] = this.tilesHex[i][j];
+        if (
+          !this.tilesHex[i] ||
+          !this.tilesHex[i][j]
+        ) {
+          // Fill with default tile if out-of-bounds
+          chunk[i - r][-j + s] = new Tile(j, i);
+          chunk[i - r][-j + s].type = "grasstile";
+        } else {
+          chunk[i - r][-j + s] = this.tilesHex[i][j];
+        }
       }
     }
 
-    //return chunk; // chunk[r][s]
     return new Chunk(s, r, chunk, size);
   }
 
