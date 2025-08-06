@@ -1,10 +1,3 @@
-// karma config for `karma-webdriver-launcher` - https://github.com/karma-runner/karma-webdriver-launcher
-// address/hostname for selenium server/chrome is `browser`
-// locally we want to use default chrome and in CI/CD we want to use selenium server
-
-console.log("process.env.CI: ", process.env.CI);
-
-
 module.exports = function (config) {
   config.set({
     basePath: '',
@@ -18,11 +11,16 @@ module.exports = function (config) {
       require('@angular-devkit/build-angular/plugins/karma')
     ],
     client: {
-      jasmine: {},
-      clearContext: false
+      jasmine: {
+        // you can add configuration options for Jasmine here
+        // the possible options are listed at https://jasmine.github.io/api/edge/Configuration.html
+        // for example, you can disable the random execution with `random: false`
+        // or set a specific seed with `seed: 4321`
+      },
+      clearContext: false // leave Jasmine Spec Runner output visible in browser
     },
     jasmineHtmlReporter: {
-      suppressAll: true
+      suppressAll: true // removes the duplicated traces
     },
     coverageReporter: {
       dir: require('path').join(__dirname, './coverage/'),
@@ -42,7 +40,7 @@ module.exports = function (config) {
     port: 9876,
     colors: true,
     logLevel: config.LOG_INFO,
-    autoWatch: false,
+    autoWatch: true,
     customLaunchers: {
       ChromeHeadlessNoSandbox: {
         base: 'ChromeHeadless',
@@ -50,71 +48,10 @@ module.exports = function (config) {
       }
     },
     browsers: ['ChromeHeadlessNoSandbox'],
-    singleRun: true,
+    singleRun: false,
     restartOnFileChange: true,
     listenAddress: 'localhost',
     hostname: 'localhost'
   });
 };
 
-        // Concurrency level
-        // how many browser should be started simultaneous
-        //concurrency: Infinity,
-        concurrency: isCI ? 1 : Infinity,
-
-
-        
-        // custom launchers for CI
-        customLaunchers: isCI ? {
-            ChromeHeadless: {
-                base: 'WebDriver',
-                config: {
-                    hostname: 'browser',
-                    port: 4444, // 4444=selenium,7900 vnc port
-                    // https://stackoverflow.com/questions/58481584/karma-not-able-to-launch-browser-using-karma-webdriver-launcher
-                    path: '/wd/hub', // https://www.npmjs.com/package/wd#defaults
-                },
-                browserName: 'chrome',
-                //version: 'ANY',
-                //platform: 'ANY',
-                
-                //spec: {
-                //    platform: 'ANY',
-                //    testName: 'Karma test',
-                //    tags: [],
-                //    version: '',
-                //    base: 'WebDriver',
-                //    browserName: 'chrome'
-                //  },
-                testName: '',
-                platform: '',
-            }
-        } : {},
-
-
-        // plugins
-        //plugins: [
-        //    'karma-chrome-launcher',
-        //    'karma-jasmine',
-        //    'karma-jasmine-html-reporter',
-        ////    'karma-webdriver-launcher'
-        //],
-        // use only one launcher plugin depending on CI
-        plugins: isCI ? [
-            'karma-jasmine',
-            'karma-jasmine-html-reporter',
-            'karma-webdriver-launcher',
-        ] : [
-            'karma-jasmine',
-            'karma-jasmine-html-reporter',
-            'karma-chrome-launcher',
-        ],
-
-        // frameworks to use
-        // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
-        //frameworks: ['jasmine', 'webdriver'],
-        frameworks: ['jasmine'],
-        // list of reporters
-        //reporters: ['progress', 'kjhtml'],
-    });
-}
