@@ -6,58 +6,56 @@ console.log("process.env.CI: ", process.env.CI);
 
 
 module.exports = function (config) {
-    const isCI = process.env.CI;
-    
-    config.set({
-        // // list of files / patterns to load in the browser
-        // files: [
-        //     'test/e2e/**/*.js'
-        // ],
-        // files for angular
-        files: [
-            "src/**/*.spec.ts",
-            "src/**/*.d.ts",
-        ],
-        preprocessors: {
-            'src/**/*.ts': ['karma-typescript'],
-            'src/**/*.spec.ts': ['karma-typescript']
-        },
-        frameworks: ['jasmine', 'karma-typescript'],
-        plugins: [
-            'karma-jasmine',
-            'karma-chrome-launcher',
-            'karma-typescript',
-            'karma-webdriver-launcher'
-        ],
-        karmaTypescriptConfig: {
-            tsconfig: './tsconfig.json',
-            compilerOptions: {
-                sourceMap: true,
-                target: "ES6"
-            }
-        },
-        // // list of files to exclude
-        // exclude: [],
-        // // web server port
-        // port: 9876,
-        // enable / disable colors in the output (reporters and logs)
-        colors: true,
-    
-        // enable / disable watching file and executing tests whenever any file changes
-        autoWatch: false,
-        watch: false,
-    
-        // Continuous Integration mode
-        // if true, Karma captures browsers, runs the tests and exits
-        singleRun: true,
-        
-        // level of logging
-        logLevel: config.LOG_INFO,
-
-        // start these browsers
-        //browsers: ['Chrome'],
-        //browsers: ['ChromeHeadlessCI'],
-        browsers: isCI ? ['ChromeHeadless'] : ['Chrome'],
+  config.set({
+    basePath: '',
+    frameworks: ['jasmine', '@angular-devkit/build-angular'],
+    plugins: [
+      require('karma-jasmine'),
+      require('karma-chrome-launcher'),
+      require('karma-jasmine-html-reporter'),
+      require('karma-coverage'),
+      require('karma-junit-reporter'),
+      require('@angular-devkit/build-angular/plugins/karma')
+    ],
+    client: {
+      jasmine: {},
+      clearContext: false
+    },
+    jasmineHtmlReporter: {
+      suppressAll: true
+    },
+    coverageReporter: {
+      dir: require('path').join(__dirname, './coverage/'),
+      subdir: '.',
+      reporters: [
+        { type: 'html' },
+        { type: 'text-summary' },
+        { type: 'lcovonly', subdir: '.', file: 'lcov.info' }
+      ]
+    },
+    junitReporter: {
+      outputDir: 'test-results',
+      outputFile: 'junit.xml',
+      useBrowserName: false
+    },
+    reporters: ['progress', 'kjhtml', 'junit'],
+    port: 9876,
+    colors: true,
+    logLevel: config.LOG_INFO,
+    autoWatch: false,
+    customLaunchers: {
+      ChromeHeadlessNoSandbox: {
+        base: 'ChromeHeadless',
+        flags: ['--no-sandbox']
+      }
+    },
+    browsers: ['ChromeHeadlessNoSandbox'],
+    singleRun: true,
+    restartOnFileChange: true,
+    listenAddress: 'localhost',
+    hostname: 'localhost'
+  });
+};
 
         // Concurrency level
         // how many browser should be started simultaneous

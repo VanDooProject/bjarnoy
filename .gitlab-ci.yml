@@ -23,9 +23,10 @@ build:
     paths:
       - map/dist/
 
-.test:
-  image: node:22
+test_frontend:
+  image: cypress/browsers:22.17.1
   stage: build
+  needs: ["build"]
 
   variables:
     CI: "true"
@@ -34,22 +35,21 @@ build:
     paths:
       - map/node_modules/
 
-  services:
-    - name: selenium/standalone-chrome
-      alias: browser
-
   script:
     - cd ./map
-    - npm install
+    - npm ci
+    - npx ng test --watch=false --browsers=ChromeHeadless --code-coverage
 
-    # maybe we need an image with chrome for these tests to work
-    # Use the --no-browsers command line option to override the value of this setting specified in the configuration file with an empty list.
-    #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false
-    # TODO set remote browser to docker container service
-    #- npm run test --sourceMap=false --no-browsers --browsers=ChromeHeadless --watch=false --single-run --verbose
-    # `test2` has watch disabled
-    - npm run test2 --sourceMap=false --no-browsers --browsers=ChromeHeadless --verbose
-
+  artifacts:
+    when: always
+    paths:
+      - map/coverage/
+      - map/test-results/
+    expire_in: 1 week
+    reports:
+      junit:
+        - map/test-results/junit.xml
+  coverage: '/^Statements\s*:\s*\d+\.\d+\%/'
 # setup infra via terraform on netlify; set branch tf var from gitlab CI
 .terraform-plan:
   image: hashicorp/terraform:light
