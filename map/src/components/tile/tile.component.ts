@@ -57,6 +57,9 @@ export class TileComponent {
     }
 
     get href(): string {
+        if(this.tile?.type == null)
+            console.warn('Tile type is null, returning empty href');
+
         if(this.hrefTopping != null)
             return `./images/tiles/hextiles/base/${this.tile?.type}_${this.tile?.orientation}_base.png`;
 

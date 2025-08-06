@@ -44,7 +44,7 @@ export class ChunkComponent {
   }
 
   ngOnInit() {
-    console.log(`chunk component inited sr=${this.chunk?.s}|${this.chunk?.r}, size: ${this.chunk?.size}`);
+    console.log(`chunk component inited sr=${this.chunk?.s}|${this.chunk?.r}, size: ${this.chunk?.size}`, this.chunk?.tiles);
   }
 
   

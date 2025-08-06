@@ -187,7 +187,6 @@ export class MapComponent {
         
         // set in the end to replace references to trigger change detection only once
         this.tiles = tiles;
-
         
         let size = 4;
 
