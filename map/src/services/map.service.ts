@@ -87,14 +87,7 @@ export class MapService {
       chunk[i] = [];
       for (let j = 0; j < size; j++) {
         let cx = x + j;
-        // Ensure tiles array exists
-        if (!this.tiles[cx]) {
-          this.tiles[cx] = [];
-        }
-        if (!this.tiles[cx][cy]) {
-          this.tiles[cx][cy] = { x: cx, y: cy } as Tile;
-          this.setRandomTileType(cx, cy);
-        }
+        // this.tiles is in [x][y] format
         chunk[i][j] = this.tiles[cx][cy];
       }
     }
@@ -121,7 +114,7 @@ export class MapService {
   getChunkHex(s: number, r: number, size: number): Chunk {
     let chunk = [] as Tile[][]; // [r][s]
 
-    // this.tilesHex[r][s]
+    // this.tiles[x][y]
 
     let top = new HexCoord(s, r).axialToOddQ();
     let right = new HexCoord(s - size, r).axialToOddQ();
@@ -130,36 +123,17 @@ export class MapService {
 
     console.log(`getChunkHex sr=(${s}|${r})`, top, right, bottom, left);
 
-    for (let i = r; i < r + size; i++) {
-      chunk[i - r] = [];
+    for (let i = r; i < r+size; i++) {
+      chunk[i-r] = [];
 
-      if (!this.tilesHex[i]) {
-        this.tilesHex[i] = [];
-      }
+      if(this.tilesHex[i] == undefined || this.tilesHex[i] == null || this.tilesHex[i].length == 0)
+        continue;
 
       for (let j = s; j > s - size; j--) {
-        if (!this.tilesHex[i][j]) {
-          this.tilesHex[i][j] = {
-            x: j,
-            y: i,
-            offsetCoord: new OffsetCoord(j, i),
-            hexCoord: new HexCoord(j, i),
-            type: null,
-            orientation: "",
-            level: null,
-            variant: null,
-            color: null,
-            riverTile: null
-          };
-          if (!this.tiles[j]) {
-            this.tiles[j] = [];
-          }
-          if (!this.tiles[j][i]) {
-            this.tiles[j][i] = this.tilesHex[i][j];
-          }
-          this.setRandomTileType(j, i);
-        }
-        chunk[i - r][-j + s] = this.tilesHex[i][j];
+        if(this.tilesHex[i][j] == undefined || this.tilesHex[i][j] == null)
+          continue;
+        
+        chunk[i-r][-j+s] = this.tilesHex[i][j];
       }
     }
 
