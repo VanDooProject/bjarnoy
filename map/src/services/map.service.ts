@@ -159,17 +159,24 @@ export class MapService {
    *  - vikinghut can be surrounded by grasstile, foresttile
    */
   generateMap(): Tile[][] {
+    // Iterative, chunk-based dynamic map generation (see architecture doc)
+    // Assign tile types in deterministic order, no recursion
 
-    // start in the middle
-    let x = Math.floor(this.tiles.length / 2);
-    let y = Math.floor(this.tiles[x].length / 2);
+    // Optionally, set the center tile to grasstile as a seed
+    let centerX = Math.floor((this.mapStart + this.mapSize) / 2);
+    let centerY = Math.floor((this.mapStart + this.mapSize) / 2);
+    if (this.tiles[centerX] && this.tiles[centerX][centerY]) {
+      this.tiles[centerX][centerY].type = "grasstile";
+    }
 
-    // set the middle tile to grasstile
-    this.tiles[x][y].type = "grasstile";
+    // Iterate over all tiles row-major
+    for (let x = this.mapStart; x <= this.mapSize; x++) {
+      for (let y = this.mapStart; y <= this.mapSize; y++) {
+        this.setRandomTileType(x, y);
+      }
+    }
 
-    // call setRandomTileType for all neighbors
-    this.setRandomIterator(x, y);
-
+    // Clean up map and carve rivers as before
     this.cleanMap();
     this.cleanMap();
 
@@ -648,118 +655,79 @@ export class MapService {
       return;
     }
     
-    // read the type of the neighbors; ignore the ones that are out of bounds
+    // Iterative, chunk-based dynamic map generation (see architecture doc)
+    // This replaces the recursive logic with a scalable, rule-driven loop
+
+    // This function now only assigns a tile type based on neighbors and rules.
+    // The main generation loop is handled in generateMap().
+
     let neighborTileTypes = [] as string[];
-    // let neighborsCoords = this.getNeighborCoords(x, y);
-    // for (let i = 0; i < neighborsCoords.length; i++) {
-    //   let n = neighborsCoords[i];
-    //   if (this.tiles[n[0]] && this.tiles[n[0]][n[1]]) {
-    //     if(this.tiles[n[0]][n[1]].type)
-    //     {
-    //       neighborTileTypes.push(this.tiles[n[0]][n[1]].type as string);
-    //     }
-    //   }
-    // }
     let neighbors = this.getNeighbors(x, y);
     for (let i = 0; i < neighbors.length; i++) {
-      if(neighbors[i].type)
-      {
+      if (neighbors[i].type) {
         neighborTileTypes.push(neighbors[i].type as string);
       }
     }
 
-    // remove buildings from the neighbors and replace them with grasstile
+    // Remove buildings from neighbors and replace with grasstile/coastalwatertile
     for (let i = 0; i < neighborTileTypes.length; i++) {
-      if(
-        neighborTileTypes[i] == "farm_crop"
-        || neighborTileTypes[i] == "farm_pumpkin"
-        || neighborTileTypes[i] == "vikinghut"
+      if (
+        neighborTileTypes[i] == "farm_crop" ||
+        neighborTileTypes[i] == "farm_pumpkin" ||
+        neighborTileTypes[i] == "vikinghut"
       ) {
         neighborTileTypes[i] = "grasstile";
-      }
-      //else if(
-      //  neighborTileTypes[i] == "towerbuilding"
-      //  || neighborTileTypes[i] == "magictower"
-      //) {
-      //  neighborTileTypes[i] = "mountaintile";
-      //}
-      else if(
-        neighborTileTypes[i] == "fishinghutbuilding"
-      ) {
+      } else if (neighborTileTypes[i] == "fishinghutbuilding") {
         neighborTileTypes[i] = "coastalwatertile";
       }
     }
 
-    // get the possible types for this tile
+    // Get possible types for this tile
     let possibleTypes = [] as string[];
-    // iterate over the rules and check if the neighbors match the rules
     for (let rule in this.rules) {
       if (neighborTileTypes.every(r => this.rules[rule].includes(r))) {
         possibleTypes.push(rule);
       }
     }
 
-    //console.log(`(${x}|${y}) possible types: ${possibleTypes}`);
-
-    // TODO we need a fallback for conflicting tiles
+    // Fallback for conflicting tiles
     if (possibleTypes.length == 0) {
-      console.debug(`(${x}|${y}) no possible types found for: ${neighborTileTypes}`);
+      this.tiles[x][y].type = "grasstile"; // default fallback
       return;
     }
 
-    // randomly select a type
+    // Randomly select a type
     let typeIndex = Math.floor(Math.random() * possibleTypes.length);
-    // reroll the type if not grasstile, foresttile or mountaintile
-    if(
-      possibleTypes[typeIndex] != "grasstile"
-      && possibleTypes[typeIndex] != "foresttile"
-      && possibleTypes[typeIndex] != "mountaintile"
+    if (
+      possibleTypes[typeIndex] != "grasstile" &&
+      possibleTypes[typeIndex] != "foresttile" &&
+      possibleTypes[typeIndex] != "mountaintile"
     ) {
       typeIndex = Math.floor(Math.random() * possibleTypes.length);
     }
     this.tiles[x][y].type = possibleTypes[typeIndex];
 
-    //console.log(`(${x}|${y}) set type: ${this.tiles[x][y].type}`);
-    console.debug(`(${x}|${y}) possible types: `, possibleTypes,
-      "neighborTileTypes", neighborTileTypes,
-      "set type: ", this.tiles[x][y].type
-    );
-
-    // switch building and set level
-    if(
-      this.tiles[x][y].type == "farm_crop"
-      || this.tiles[x][y].type == "farm_pumpkin"
+    // Set level/variant as before
+    if (
+      this.tiles[x][y].type == "farm_crop" ||
+      this.tiles[x][y].type == "farm_pumpkin"
     ) {
       let level = Math.floor(Math.random() * 2) + 0;
       this.tiles[x][y].level = level;
-    }
-    else if(
-      this.tiles[x][y].type == "vikinghut"
-    ) {
+    } else if (this.tiles[x][y].type == "vikinghut") {
       let level = Math.floor(Math.random() * 5) + 0;
       this.tiles[x][y].level = level;
-    }
-    else if(
+    } else if (
       this.tiles[x][y].type == "coastalwatertile" ||
       this.tiles[x][y].type == "foresttile"
     ) {
-      //let variant = Math.floor(Math.random() * (1 + 2)) - 1;
-      // fix distribution, for about 80% of the time we do not want a variant
       let variant = Math.floor(Math.random() * 2) + 0;
       this.tiles[x][y].variant = Math.floor(Math.random() * 12) == 0 ? variant : null;
-    }
-    else if(
-      this.tiles[x][y].type == "grasstile"
-    ) {
+    } else if (this.tiles[x][y].type == "grasstile") {
       let variant = Math.floor(Math.random() * 3) + 0;
       this.tiles[x][y].variant = Math.floor(Math.random() * 3) == 0 ? variant : null;
     }
-
-    // recursively call setRandomTileType for all neighbors
-    //let neighbors = this.getNeighbors(x, y);
-    for (let i = 0; i < neighbors.length; i++) {
-      this.setRandomTileType(neighbors[i].x, neighbors[i].y);
-    }
+    // No recursion here!
   }
 
   // get neighboring tiles on a odd-q hex grid - https://www.redblobgames.com/grids/hexagons/#neighbors
