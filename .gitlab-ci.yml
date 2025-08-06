@@ -38,7 +38,7 @@ test_frontend:
   script:
     - cd ./map
     - npm ci
-    - npx ng test --watch=false --browsers=ChromeHeadless --code-coverage
+    - npx ng test --watch=false --browsers=ChromeHeadlessNoSandbox --code-coverage
 
   artifacts:
     when: always
@@ -50,6 +50,7 @@ test_frontend:
       junit:
         - map/test-results/junit.xml
   coverage: '/^Statements\s*:\s*\d+\.\d+\%/'
+
 # setup infra via terraform on netlify; set branch tf var from gitlab CI
 .terraform-plan:
   image: hashicorp/terraform:light
