@@ -166,17 +166,20 @@ export class MapComponent {
             for (let x = 0; x < intermediateArray[row % intermediateArray.length].length; x++) {
                 //let coordY = y * -1 + (chunkSize-1); // invert Y
                 let coordY = y;
-                let tile = rawTiles[x][coordY];
-
-                // skip every second row
-                //if(x % 2 == 1) {
-                if(x % 2 == row % 2) {
-                    //tiles.push({ x: x, y: y, color: tile.color, label: `(${x}|${coordY})`, src: tile.type_src });
-                    tiles.push(tile);
+                // Bounds check: only load tiles within valid map area
+                if (
+                    x >= 0 &&
+                    x < rawTiles.length &&
+                    coordY >= 0 &&
+                    coordY < rawTiles[x].length
+                ) {
+                    let tile = rawTiles[x][coordY];
+                    // skip every second row
+                    if(x % 2 == row % 2) {
+                        tiles.push(tile);
+                    }
                 }
-                else {
-                    continue;
-                }
+                // else: skip out-of-bounds
             }
 
             // increment y only every second row
