@@ -18,6 +18,24 @@ module.exports = function (config) {
             "src/**/*.spec.ts",
             "src/**/*.d.ts",
         ],
+        preprocessors: {
+            'src/**/*.ts': ['karma-typescript'],
+            'src/**/*.spec.ts': ['karma-typescript']
+        },
+        frameworks: ['jasmine', 'karma-typescript'],
+        plugins: [
+            'karma-jasmine',
+            'karma-chrome-launcher',
+            'karma-typescript',
+            'karma-webdriver-launcher'
+        ],
+        karmaTypescriptConfig: {
+            tsconfig: './tsconfig.json',
+            compilerOptions: {
+                sourceMap: true,
+                target: "ES6"
+            }
+        },
         // // list of files to exclude
         // exclude: [],
         // // web server port
