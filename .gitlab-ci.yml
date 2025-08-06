@@ -78,6 +78,7 @@ deploy_netlify:
 
   needs:
     - build
+    - test_frontend
 
   before_script:
     - npm install -g netlify-cli --unsafe-perm=true
