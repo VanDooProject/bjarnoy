@@ -50,7 +50,7 @@ describe('MapService', () => {
         const tile = tiles[x][y];
         if (tile) {
           if (tile.color === null) foundNull = true;
-          if (colors.includes(tile.color)) foundColor = true;
+          if (tile.color && colors.includes(tile.color)) foundColor = true;
         }
       }
     }
