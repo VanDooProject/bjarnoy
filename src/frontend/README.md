@@ -24,13 +24,22 @@ settlement view, flattened."
 ## Tile art
 
 Terrain and building tiles are the isometric hex plates from
-[VanDooProject/bg_assets_hextile](https://github.com/VanDooProject/bg_assets_hextile)
-(vendored — SE rotation only — under `public/hextiles/`), the same asset
-pack described in `prototypes/village_view/README.md`. `src/lib/map/textures.ts`
-maps each `Terrain` / building type to one composited 200×300 PNG; a tile
-with a building on it just swaps in that building's (already ground+prop
-baked) texture instead of the bare terrain one, so there's no separate
-overlay layer to manage.
+[VanDooProject/bg_assets_hextile](https://github.com/VanDooProject/bg_assets_hextile),
+the same asset pack described in `prototypes/village_view/README.md`,
+pulled in as a git submodule at `vendor/bg_assets_hextile` (we only ever
+reference its SE camera rotation — 9 of its ~300 files).
+`src/lib/map/textures.ts` imports each PNG directly (Vite asset imports,
+not a `public/` copy), so the production bundle only picks up those 9
+files rather than the whole ~15MB six-rotation pack, and maps each
+`Terrain` / building type to one composited 200×300 texture; a tile with a
+building on it just swaps in that building's (already ground+prop baked)
+texture instead of the bare terrain one, so there's no separate overlay
+layer to manage.
+
+Since the art lives in a submodule, clone with `git clone --recurse-submodules`
+or run `git submodule update --init` after a plain clone — otherwise
+`npm run dev`/`build` will fail to resolve the tile texture imports. CI
+does this via `actions/checkout`'s `submodules: true`.
 
 ## Running it
 
@@ -103,7 +112,7 @@ src/lib/hex/          axial hex coordinate math + isometric pixel geometry
 src/lib/map/           WorldModel (game state), archipelago terrain
                         generator, camera, textures (tile art manifest),
                         HexMapRenderer (the PixiJS renderer)
-public/hextiles/       vendored tile art (see its own README)
+vendor/bg_assets_hextile/  tile art (git submodule, see above)
 src/composables/       useHexMapRenderer — mounts/resizes/tears down a
                         renderer on a <canvas> from a Vue component
 src/stores/             Pinia stores: player (identity/onboarding), world
