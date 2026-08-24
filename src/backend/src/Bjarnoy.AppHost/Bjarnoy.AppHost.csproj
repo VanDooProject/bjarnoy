@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Version must match AspireVersion in Directory.Packages.props: an Sdk
+       reference cannot read its version from central package management. -->
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.5.2" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsAspireHost>true</IsAspireHost>
+    <UserSecretsId>bjarnoy-apphost</UserSecretsId>
+    <!-- CI builds the AppHost without installing the Aspire CLI bundle; it is
+         only needed to *run* the orchestrator locally. -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    <PackageReference Include="Aspire.Hosting.NodeJs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bjarnoy.Api\Bjarnoy.Api.csproj" />
+  </ItemGroup>
+
+</Project>

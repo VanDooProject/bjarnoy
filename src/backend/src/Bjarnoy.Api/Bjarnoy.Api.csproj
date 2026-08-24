@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>bjarnoy-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Asp.Versioning.Http" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Bjarnoy.Domain\Bjarnoy.Domain.csproj" />
+    <ProjectReference Include="..\Bjarnoy.Infrastructure\Bjarnoy.Infrastructure.csproj" />
+    <ProjectReference Include="..\Bjarnoy.ServiceDefaults\Bjarnoy.ServiceDefaults.csproj" />
+
+    <!--
+      Both migration assemblies ship with the API. They are selected by name at
+      runtime (see DatabaseServiceCollectionExtensions), so they must be present
+      in the output for either provider to migrate — including when the API is
+      run in migrator mode.
+    -->
+    <ProjectReference Include="..\Bjarnoy.Migrations.PostgreSql\Bjarnoy.Migrations.PostgreSql.csproj" />
+    <ProjectReference Include="..\Bjarnoy.Migrations.Sqlite\Bjarnoy.Migrations.Sqlite.csproj" />
+  </ItemGroup>
+
+</Project>
