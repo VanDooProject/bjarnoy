@@ -35,8 +35,14 @@ overlay layer to manage.
 ## Running it
 
 ```bash
-npm install
+npm ci # on first
+# install changed packages (frozen lockfile)
+npm ci --package-lock-only
+
+# actual run
 npm run dev      # http://localhost:5173
+
+# build
 npm run build    # type-checks (vue-tsc) then builds to dist/
 ```
 
