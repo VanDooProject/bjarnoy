@@ -1,0 +1,92 @@
+variables:
+  DOCKER_REG: gitlab.mynode.space:1443
+
+  GIT_SUBMODULE_STRATEGY: recursive # needed for heatmap npm / vue package
+
+stages:
+  - build
+  - deploy
+
+build:
+  image: node:22
+  stage: build
+
+  cache:
+    paths:
+      - map/node_modules/
+
+  script:
+    - cd ./map
+    - npm install
+    - npm run build
+  artifacts:
+    paths:
+      - map/dist/
+
+test_frontend:
+  image: cypress/browsers:22.17.1
+  stage: build
+  needs: ["build"]
+
+  variables:
+    CI: "true"
+
+  cache:
+    paths:
+      - map/node_modules/
+
+  script:
+    - cd ./map
+    - npm ci
+    - npx ng test --watch=false --browsers=ChromeHeadlessNoSandbox --code-coverage
+
+  artifacts:
+    when: always
+    paths:
+      - map/coverage/
+      - map/test-results/
+    expire_in: 1 week
+    reports:
+      junit:
+        - map/test-results/junit.xml
+  coverage: '/^Statements\s*:\s*\d+\.\d+\%/'
+
+# setup infra via terraform on netlify; set branch tf var from gitlab CI
+.terraform-plan:
+  image: hashicorp/terraform:light
+  stage: build
+  script:
+    - terraform init
+    #- terraform apply -auto-approve -var="branch=${CI_COMMIT_REF_NAME}"
+    - terraform plan -var="branch=${CI_COMMIT_REF_NAME}" ./terraform/netlify.tf
+  only:
+    - master
+
+deploy_netlify:
+  image: node:latest
+  stage: deploy
+
+  variables:
+    # do not check out code or submodules; do not use none since its not a clean state
+    GIT_STRATEGY: empty
+
+  only:
+    refs:
+      - master
+      - main
+
+  #when: manual
+
+  needs:
+    - build
+    - test_frontend
+
+  before_script:
+    - npm install -g netlify-cli --unsafe-perm=true
+  script:
+    - ls -ahl map/dist/
+    - ls -ahl map/dist/map/
+    - ls -ahl map/dist/map/browser
+    # https://cli.netlify.com/commands/deploy/
+    #- netlify deploy --dir dist/map/browser/ --prod --message "${CI_COMMIT_REF_NAME}-$CI_COMMIT_SHA"
+    - netlify deploy --dir map/dist/map/browser/ --prod --debug --message "${CI_COMMIT_REF_NAME}-$CI_COMMIT_SHA"

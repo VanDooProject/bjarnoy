@@ -1,0 +1,5 @@
+
+[submodule "map/public/images/tiles"]
+	path = map/public/images/tiles
+	url = ../bg_assets_hextile.git
+	branch = master

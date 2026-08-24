@@ -1,0 +1,92 @@
+<svg:g [attr.transform]="transform" class="tile">
+    <image
+        [attr.width]="width"
+        [attr.height]="height"
+        [attr.href]="href"
+    ></image>
+
+
+    <!-- <text [attr.x]="width / 2" [attr.y]="155" dy=".3em" text-anchor="middle" fill="white">
+        <tspan [attr.x]="width / 2" dy="1.2em">({{ tile?.x }} | {{ tile?.x }})</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.type}} lvl:{{tile?.level}}</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.color}}</tspan>
+    </text> -->
+
+
+    <g transform="translate(0, 186)" class="grid">
+        <!-- <polyline points="50,-46 0,0 50,46 150,46 200,0 150,-46"
+    	fill="none" stroke="orange" stroke-width="1" /> -->
+        <!-- <polyline points="0,0 50,46 150,46 200,0 "
+    	fill="none" stroke="lightgrey" stroke-width="1" /> -->
+        <polygon points="0,0 50,46 150,46 200,0 150,-46 50,-46"
+    	fill="none" stroke="lightgrey" stroke-width="1" />
+        <!-- rgba(255,255,255,0.5) -->
+    </g>
+    
+    <!-- <svg:g transform="translate(0, 184)">
+        <polygon points="
+        1,0
+            52,45
+            148,45
+        199,0
+            148,-45
+            52,-45
+        1,0"
+        fill="none" stroke="red" stroke-width="3" />
+    </g> -->
+
+    <!-- <ng-template *ngIf="color != null"> -->
+    <!-- <ng-template [ngIf]="color != null"> -->
+    <!-- <ng-template [ngIf]="true == true"> -->
+    <!-- <ng-template *ngIf="true == true"> -->
+    <svg:g transform="translate(0, 184)" *ngIf="tile?.color != null">
+        <!-- <polyline points="0,0 50,46 150,46 200,0"
+        fill="none" [attr.stroke]="tile?.color" stroke-width="3" /> -->
+        <polyline points="
+            1,0
+                51,45
+                149,45
+            199,0
+                149,-45
+                51,-45
+            1,0"
+        fill="none" [attr.stroke]="tile?.color" stroke-width="3" />
+    </g>
+    <!-- </ng-template> -->
+    
+    <!-- if `hrefTopping` is not null show topping -->
+    <image
+        [attr.x]="0"
+        [attr.y]="0"
+        [attr.width]="width"
+        [attr.height]="height"
+        [attr.href]="hrefTopping"
+        *ngIf="hrefTopping"></image>
+
+
+
+    <!-- <text [attr.x]="width / 2" [attr.y]="-35" dy=".3em" text-anchor="middle" fill="white"> -->
+    <text [attr.x]="width / 2" [attr.y]="155" dy=".3em" text-anchor="middle" fill="white">
+        <tspan [attr.x]="width / 2" dy="1.2em">({{tile?.x }} | {{ tile?.y }}) - qrs {{ axial }}</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.type}} lvl:{{tile?.level}} var:{{tile?.variant}}</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.color}}</tspan>
+        <tspan [attr.x]="width / 2" dy="1.2em">{{tile?.riverTile?.river?.id}}</tspan>
+    </text>
+
+    
+</g>
+
+<svg:g [attr.transform]="transform" class="tile-text" *ngIf="false">
+
+    <!-- transparent react which triggers hover, should be full with and 100px (-> third) the height -->
+    <rect
+        [attr.x]="0"
+        [attr.y]="(height / 3) * 1.4"
+        [attr.width]="width"
+        [attr.height]="height / 3"
+        fill="rgba(200,0,0,0.2)"
+        />
+
+</g>
+
+    

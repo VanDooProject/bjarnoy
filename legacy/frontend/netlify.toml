@@ -1,0 +1,9 @@
+[[redirects]]
+  from = "/*"
+  to = "/"
+  status = 200
+  force = false
+
+# code is in `dist/map/browser/`
+[context.prod]
+  publish = "map/dist/map/browser/"
