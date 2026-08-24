@@ -31,12 +31,14 @@ var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator")
     .WithReference(gamedb)
     .WaitFor(gamedb)
     .WithEnvironment("Database__Provider", "PostgreSql")
+    .WithEnvironment("Database__ConnectionString", gamedb.Resource.ConnectionStringExpression)
     .WithExplicitStart();
 
 var api = builder.AddProject<Projects.Bjarnoy_Api>("api")
     .WithReference(gamedb)
     .WaitFor(gamedb)
     .WithEnvironment("Database__Provider", "PostgreSql")
+    .WithEnvironment("Database__ConnectionString", gamedb.Resource.ConnectionStringExpression)
     // In a local run there is no separate migration step to wait on, so the API
     // brings the schema forward itself.
     .WithEnvironment("Database__MigrateOnStartup", "true")

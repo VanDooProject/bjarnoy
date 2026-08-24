@@ -81,6 +81,23 @@ public class DatabaseConfigurationTests
     }
 
     [Fact]
+    public void PostgreSql_can_run_from_Database_connection_string_without_the_named_one()
+    {
+        // AppHost also exports Database__ConnectionString explicitly, so the API
+        // still starts even if the named connection string is not present.
+        using var provider = Build(new Dictionary<string, string?>
+        {
+            ["Database:Provider"] = "PostgreSql",
+            ["Database:ConnectionString"] = PostgresConnectionString,
+        });
+
+        var (providerName, connectionString) = ResolvedBy(provider);
+
+        Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", providerName);
+        Assert.Contains("Host=localhost", connectionString, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Sqlite_needs_no_configuration_at_all()
     {
         using var provider = Build([]);
