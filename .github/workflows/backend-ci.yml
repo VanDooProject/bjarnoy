@@ -1,0 +1,81 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+defaults:
+  run:
+    working-directory: src/backend
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: src/backend/global.json
+
+      # NuGet's cache key is the set of lockfile-equivalents. There are none
+      # here (no packages.lock.json), so key on the central package manifest,
+      # which is where every version actually lives.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/backend/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore Bjarnoy.slnx
+
+      - name: Build
+        run: dotnet build Bjarnoy.slnx --configuration Release --no-restore
+
+      - name: Domain tests
+        run: dotnet test --project tests/Bjarnoy.Domain.Tests --configuration Release --no-build
+
+      # Runs the SQLite suite and, because GitHub runners have Docker, the
+      # Testcontainers PostgreSQL suite as well.
+      - name: Integration tests
+        run: dotnet test --project tests/Bjarnoy.Api.IntegrationTests --configuration Release --no-build
+
+  # The migration sets are generated from the model, so they can silently fall
+  # out of step with it. This fails the build when they have.
+  migrations-up-to-date:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: src/backend/global.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/backend/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.11
+
+      - name: Check for model changes with no migration
+        run: |
+          set -euo pipefail
+          for provider in Sqlite PostgreSql; do
+            echo "::group::$provider"
+            # `migrations has-pending-model-changes` exits non-zero when the
+            # model has moved on from the last migration.
+            dotnet ef migrations has-pending-model-changes \
+              --project "src/Bjarnoy.Migrations.$provider" \
+              --startup-project "src/Bjarnoy.Migrations.$provider"
+            echo "::endgroup::"
+          done

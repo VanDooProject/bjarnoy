@@ -84,8 +84,13 @@ app.MapWorldEndpoints(versionSet);
 app.UseDefaultFiles();
 app.MapStaticAssets();
 
-// Anything that is neither an API route nor a real file is a client-side route,
-// and belongs to the SPA router.
+// An unmatched /api route must not be answered with the SPA shell: a caller
+// expecting JSON would get HTML and a parse error instead of a 404. This is a
+// fallback too, but a more specific one, so it outranks the SPA fallback below.
+app.MapFallback("/api/{**segment}", () => Results.NotFound());
+
+// Anything else that is neither a real file nor an endpoint is a client-side
+// route, and belongs to the SPA router (the frontend uses HTML5 history mode).
 app.MapFallbackToFile("index.html");
 
 await app.RunAsync();

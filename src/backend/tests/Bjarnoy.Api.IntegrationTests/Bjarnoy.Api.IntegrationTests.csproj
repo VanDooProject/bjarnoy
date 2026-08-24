@@ -12,6 +12,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Copied beside the test binary so the factory can point the web root at
+         it; see BjarnoyApiFactory.TestWebRootPath. -->
+    <Content Include="TestWebRoot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Bjarnoy.Api\Bjarnoy.Api.csproj" />
   </ItemGroup>
 

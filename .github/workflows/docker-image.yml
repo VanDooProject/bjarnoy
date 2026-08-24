@@ -1,0 +1,138 @@
+name: Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - 'src/frontend/**'
+      - 'deploy/Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/docker-image.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      # Needed to push to GHCR. On a pull request from a fork the token is
+      # read-only, which is why the push step below is conditional.
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # bg_assets_hextile is a separate private repo, so the default
+      # GITHUB_TOKEN (scoped to this repo only) can't clone it — a bare
+      # `git submodule update` hits "Repository not found". Route that one
+      # URL through a PAT with read access to it instead. Same approach as
+      # frontend-ci.yml.
+      - run: git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+
+      # The image bakes the built frontend into the API's wwwroot, so the tile
+      # art has to be in the build context.
+      - run: git submodule update --init --depth 1 -- src/frontend/vendor/bg_assets_hextile
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          # A pull request builds the image to prove it still builds, but does
+          # not publish it. `load` puts it in the local daemon so the smoke
+          # test below can run either way.
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Building is not the same as working. Prove the one image both migrates
+      # a database and then serves the frontend and the API from it.
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          image=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          data=$(mktemp -d)
+          chmod 777 "$data"
+
+          echo "::group::migrate"
+          docker run --rm -v "$data:/data" "$image" --migrate
+          echo "::endgroup::"
+
+          echo "::group::migrating again is a no-op"
+          docker run --rm -v "$data:/data" "$image" --migrate
+          docker run --rm -v "$data:/data" "$image" --migrate-status
+          echo "::endgroup::"
+
+          docker run -d --name bjarnoy-smoke -p 8080:8080 -v "$data:/data" "$image"
+          trap 'docker logs bjarnoy-smoke; docker rm -f bjarnoy-smoke' EXIT
+
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          echo "::group::health"
+          curl -fsS http://localhost:8080/health
+          echo
+          echo "::endgroup::"
+
+          echo "::group::the frontend is served by the backend"
+          # The SPA shell, and a client-side route falling back to it.
+          curl -fsS http://localhost:8080/ | grep -q '<div id="app">'
+          curl -fsS http://localhost:8080/settlement | grep -q '<div id="app">'
+          # A hashed asset referenced by index.html must actually resolve, which
+          # is what proves wwwroot made it into the publish manifest rather than
+          # being copied in after it.
+          asset=$(curl -fsS http://localhost:8080/ | grep -o '/assets/[^"]*\.js' | head -n 1)
+          test -n "$asset"
+          curl -fsS -o /dev/null "http://localhost:8080$asset"
+          echo "served $asset"
+          echo "::endgroup::"
+
+          echo "::group::the API works against the migrated database"
+          curl -fsS -X POST http://localhost:8080/api/v1/worlds \
+            -H 'content-type: application/json' \
+            -d '{"name":"smoke-test-world","seed":7,"radius":30,"maxPlayers":10}' \
+            -o /tmp/world.json
+          cat /tmp/world.json
+          echo
+          # No islands would mean generation silently produced an empty sea.
+          python3 -c 'import json,sys; sys.exit(0 if json.load(open("/tmp/world.json"))["islandCount"] > 0 else 1)'
+          curl -fsS 'http://localhost:8080/api/v1/worlds' | grep -q 'smoke-test-world'
+          echo "::endgroup::"

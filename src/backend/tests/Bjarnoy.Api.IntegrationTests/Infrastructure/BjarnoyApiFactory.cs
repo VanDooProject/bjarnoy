@@ -60,6 +60,13 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
     public DatabaseProvider Provider => _provider;
 
+    /// <summary>Directory used as the application's web root during tests.</summary>
+    public static string TestWebRootPath { get; } =
+        Path.Combine(AppContext.BaseDirectory, "TestWebRoot");
+
+    /// <summary>The marker in the stub <c>index.html</c>, asserted by the fallback tests.</summary>
+    public const string SpaStubMarker = "bjarnoy-spa-stub";
+
     /// <summary>Applies migrations, exactly as a deployment's migrator step would.</summary>
     public async Task MigrateAsync(CancellationToken cancellationToken = default)
     {
@@ -87,6 +94,11 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
         // Health endpoints are opt-in outside development; the tests assert on them.
         builder.UseSetting("ExposeHealthChecks", "true");
+
+        // Stand in for the built frontend the Docker image bakes into wwwroot,
+        // so the SPA-fallback tests do not depend on whether anyone has run a
+        // frontend build.
+        builder.UseWebRoot(TestWebRootPath);
 
         builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
     }

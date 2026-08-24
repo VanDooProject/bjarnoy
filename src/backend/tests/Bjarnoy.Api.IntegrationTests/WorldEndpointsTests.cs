@@ -239,16 +239,38 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/alive", Ct)).StatusCode);
     }
 
-    [Fact]
-    public async Task Unknown_paths_fall_through_to_the_spa()
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/settlement")]
+    [InlineData("/some/deep/client/side/route")]
+    public async Task Client_side_routes_are_served_the_spa_shell(string path)
     {
         using var client = _fixture.CreateClient();
 
-        // No frontend is built into wwwroot in a test run, so the fallback finds
-        // no index.html and 404s. What matters is that it is the *fallback*
-        // answering — a client-side route must not be swallowed by the API.
-        var response = await client.GetAsync("/some/client/side/route", Ct);
+        // The frontend routes in HTML5 history mode, so the server must answer
+        // a URL it has no endpoint for with the app shell and let the client
+        // router take it from there.
+        var response = await client.GetAsync(path, Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains(
+            BjarnoyApiFactory.SpaStubMarker,
+            await response.Content.ReadAsStringAsync(Ct),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_unmatched_api_route_is_a_404_and_never_the_spa_shell()
+    {
+        using var client = _fixture.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/does-not-exist", Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        // The SPA fallback would answer with text/html; a JSON client must not
+        // have to parse an HTML page to discover it mistyped a route.
+        Assert.NotEqual("text/html", response.Content.Headers.ContentType?.MediaType);
     }
 }

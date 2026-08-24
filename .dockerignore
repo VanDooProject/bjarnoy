@@ -1,0 +1,16 @@
+# The build context is the repository root (see deploy/Dockerfile), so keep out
+# everything the image does not need — most of the weight here is legacy code
+# and node_modules.
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/.git/
+**/TestResults/
+**/artifacts/
+legacy/
+prototypes/
+docs/
+*.db
+*.db-shm
+*.db-wal
