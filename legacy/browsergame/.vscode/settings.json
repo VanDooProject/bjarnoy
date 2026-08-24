@@ -1,0 +1,21 @@
+{
+    // ***********************
+    // editor format settings
+    
+    // The number of spaces a tab is equal to. This setting is overridden based on the file contents when `editor.detectIndentation` is on.
+    "editor.tabSize": 4,
+    // Insert spaces when pressing `Tab`. This setting is overridden based on the file contents when `editor.detectIndentation` is on.
+    "editor.insertSpaces": true,
+
+    
+    // ***********************
+    // MD pasteImage settings
+    "pasteImage.path": "${currentFileDir}/img",
+    "pasteImage.forceUnixStyleSeparator": true,
+
+
+    // ***********************
+    // gitlab settings
+    "gitlab.instanceUrl": "https://gitlab.mynode.space",
+    "gitlab.ignoreCertificateErrors": true // since Let's Encrypt is ussed this should not be needed
+}

@@ -1,0 +1,85 @@
+using System;
+using System.Linq;
+using System.Numerics;
+using CoreClassLibrary.Controller;
+using CoreClassLibrary.Models.Buildings;
+using CoreClassLibrary.Models.Generic;
+using CoreClassLibrary.Models.Map.Coordinates;
+using CoreClassLibrary.Models.Player;
+using CoreClassLibrary.Serializer;
+using MongoDB.Bson.Serialization.Attributes;
+using MongoDB.Driver;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+
+namespace CoreClassLibrary.Models.Map.Tiles
+{
+    public class Tile : MongoEntity
+    {
+        [JsonIgnore]
+        public MongoDBRef IslandId { get; set; }
+
+        [BsonIgnore]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string IdOfIsland => IslandId?.Id?.ToString();
+
+        // https://jira.mongodb.org/browse/CSHARP-1759
+        //[BsonSerializer(typeof(Vector3Serializer))]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public HexCoordinates3D Position;
+
+        public enum eOrientation
+        {
+            NorthEast,
+            East,
+            SouthEast,
+            SouthWest,
+            West,
+            NorthWest,
+        }
+
+        [JsonConverter(typeof(StringEnumConverter))]
+        public eOrientation Orientation;
+
+        /// <summary>
+        /// building on this tile
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public Building Building;
+
+        /// <summary>
+        /// building on this tile
+        /// </summary>
+        [BsonIgnoreIfNull]
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public MinimalPlayer Owner;
+
+        public string type
+        {
+            get { return this.GetType().ToString().Split('.').Last(); }
+        }
+
+        public Tile()
+        {
+        }
+
+        public Tile(HexCoordinates3D position)
+        {
+            this.Position = position;
+        }
+
+
+        public bool CheckIfSameTile(HexCoordinates3D pos)
+        {
+            return (HexCoordinates3D.Distance(this.Position, pos) <= SettingsController.Instance.GetSettings().V1.Vector3EqualsAllowedDistanceDisturbance);
+        }
+
+
+
+        public override string ToString()
+        {
+            return $"{this.GetType().ToString().Split('.').Last()}: {this.Position.ToString()}";
+        }
+    }
+}

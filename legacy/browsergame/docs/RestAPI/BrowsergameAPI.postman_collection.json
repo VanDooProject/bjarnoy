@@ -1,0 +1,1239 @@
+{
+	"info": {
+		"_postman_id": "bde83344-a8be-4dea-8351-e7364d6a18cc",
+		"name": "BrowsergameAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Installer",
+			"item": [
+				{
+					"name": "delete all island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/islands/",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"islands",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete all tiles (not islands)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/map/",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"map",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/islands/3/2",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"islands",
+								"3",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create tower for player on first island",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/tower",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"tower"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "fill map with water",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "2fc6d7c4-1c34-498c-a59f-1da53d37b0c7",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/install/water",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"install",
+								"water"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "auth sign-up - No Mail",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"Mail\"); ",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-up - password not equal",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"PasswordConfirm\"); ",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret123\", \"Mail\": \"manfred.browsergame@andesia.org\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-up",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () { ",
+									"    pm.response.to.not.be.error; ",
+									"    pm.response.to.have.jsonBody(\"token\"); ",
+									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"",
+									"    var data = pm.response.json();",
+									"    pm.environment.set(\"token\", data.token);",
+									"});",
+									"",
+									"//console.log(pm.response);",
+									"console.log(pm.response.text());"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\", \"PasswordConfirm\": \"secret\", \"Mail\": \"mario.browsergame@andesia.org\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-up",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-up"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-in - without password",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () {",
+									"    pm.response.to.have.jsonBody(\"Password\"); ",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"manfred\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-in",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-in"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "auth sign-in",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b7a29820-3f67-4091-8f5b-28b477e109f6",
+								"exec": [
+									"",
+									"",
+									"",
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"",
+									"// example using response assertions",
+									"pm.test(\"response should be okay to process\", function () { ",
+									"    pm.response.to.not.be.error; ",
+									"    pm.response.to.have.jsonBody(\"token\"); ",
+									"    pm.response.to.not.have.jsonBody(\"error\"); ",
+									"    ",
+									"    var data = pm.response.json();",
+									"    pm.environment.set(\"token\", data.token);",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"Username\": \"manfred\", \"Password\": \"secret\"}"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/sign-in",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"sign-in"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (without token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "97e0fe95-30be-41ca-86ef-6f0ba8ff8698",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"",
+									"pm.test(\"response is denied\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token) for admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "2098f59f-4015-418b-bcc7-804f1bd7974c",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest/admin",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest",
+								"admin"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "test auth (with token) with session",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "1afa5b9f-952f-420f-a1b7-b0c798464f73",
+								"type": "text/javascript",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/selftest/session",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"selftest",
+								"session"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "refresh token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/refresh",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "General",
+			"item": [
+				{
+					"name": "get ServerTime",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "67ddb54e-8f3f-462b-950d-14fccbfcb23d",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"})"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/ServerTime",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ServerTime"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Map",
+			"item": [
+				{
+					"name": "get islands",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/map/islands",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"map",
+								"islands"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get tile",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"// pm.test(\"response is ok\", function () {",
+									"//     //pm.response.to.have.status(200);",
+									"//     pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"// });"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/map/tile/10/2/1",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"map",
+								"tile",
+								"10",
+								"2",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get range of tiles",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"pm.test(\"response is ok\", function () {",
+									"    //pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/map/tiles/0/0/10/10",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"map",
+								"tiles",
+								"0",
+								"0",
+								"10",
+								"10"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Buildings",
+			"item": [
+				{
+					"name": "get build tech",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/tech/buildings",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"tech",
+								"buildings"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get resources of user",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/resource/user",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"resource",
+								"user"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "build building",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "f25d5983-b338-469f-a430-494357127021",
+								"exec": [
+									"//pm.test(\"response is ok\", function () {",
+									"//    //pm.response.to.have.status(200);",
+									"//    pm.expect(pm.response.code).to.be.oneOf([200,204]); // found (200 OK) or not found ( 204 No Content )",
+									"//});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"Tile\": {\r\n    \"position\": {\r\n      \"x\": 9,\r\n      \"y\": 3,\r\n      \"z\": 1\r\n    }\r\n  },\r\n  \"BuildingName\": \"Lumberjack\",\r\n  \"Level\": 1\r\n}\r\n"
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/building/build",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"building",
+								"build"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "get queues",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/queue/my",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"queue",
+								"my"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Profile",
+			"item": [
+				{
+					"name": "profile - get self",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "67ddb54e-8f3f-462b-950d-14fccbfcb23d",
+								"exec": [
+									"//pm.test(\"response is ok\", function () {",
+									"//    pm.response.to.have.status(200);",
+									"//});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/profile/self",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"profile",
+								"self"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "test-teardown",
+			"item": [
+				{
+					"name": "test auth remove self",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d7c1abb2-9c5f-4943-99f9-2d2c29e872d9",
+								"exec": [
+									"",
+									"pm.test(\"response is ok\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{url}}/api/v1/auth/delete",
+							"host": [
+								"{{url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"delete"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "41b8360a-82b0-4a68-816f-6dc4f6d78538",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "4073e711-bb22-4a67-9632-d8afab2eef49",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}
