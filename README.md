@@ -8,3 +8,14 @@ Bjarnoy / fjordhold
 - legacy/backend (old backend from 2025, needs to be updated to newest dotnet and aspire, this is sadly primarily a skeleton)
 - legacy/frontend (old angular frontend from 2025, just preserved history)
 ```
+
+# game
+ there are 2 game types:
+ - a quick round based game which should run from about 3 to 20 minutes
+ - a real time browsergame like travian which should run about 6months to 2 years
+
+## setting
+
+# database
+the round based one should be able to be run with sqllite or litedb but also postgres if hosted for multiple players/worlds/tenants; sqllite should also support multiple worlds for sure but should be able to be a single docker container for everything
+the realtime browsergame variant is focused on postgres but should maybe also work with the local file dbs for dev (performance) reasons (when not using aspire)
