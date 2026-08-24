@@ -19,14 +19,14 @@
 // so a border or hover highlight sits on the ground and tucks *under* a
 // tile's trees/building rather than being sliced across their canopy.
 // Terrains the pack doesn't split (sand, mountain, sea) and the one
-// building it doesn't split (watchtower) fall back to their single
+// building it doesn't split (tower) fall back to their single
 // composited image as the base layer, with no top layer.
 import { Assets, Texture } from 'pixi.js';
 import type { Terrain, Tile } from './types';
 
 import seaUrl from '../../../vendor/bg_assets_hextile/hextiles/watertile_SE.png';
 import sandUrl from '../../../vendor/bg_assets_hextile/hextiles/sandtile_SE.png';
-import watchtowerUrl from '../../../vendor/bg_assets_hextile/hextiles/towerbuilding_SE_level000.png';
+import towerUrl from '../../../vendor/bg_assets_hextile/hextiles/towerbuilding_SE_level000.png';
 import mountainUrl from '../../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
 
 import grassBaseUrl from '../../../vendor/bg_assets_hextile/hextiles/base/grasstile_SE_base.png';
@@ -64,7 +64,7 @@ const BASE_SOURCES: Record<TextureKey, string> = {
   hut: hutBaseUrl,
   longhouse: hutBaseUrl,
   farm: farmBaseUrl,
-  watchtower: watchtowerUrl,
+  tower: towerUrl,
 };
 
 // Only keys the asset pack actually splits get a top layer; the rest render

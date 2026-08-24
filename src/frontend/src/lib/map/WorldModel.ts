@@ -145,7 +145,7 @@ export class WorldModel {
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
 
-    const RENDERABLE_TYPES = new Set(['longhouse', 'farm', 'watchtower']);
+    const RENDERABLE_TYPES = new Set(['longhouse', 'farm', 'tower']);
     for (const building of snapshot.buildings) {
       if (!RENDERABLE_TYPES.has(building.type)) continue;
       const tile = this.getTile(building.q, building.r);

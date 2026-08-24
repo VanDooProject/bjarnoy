@@ -18,7 +18,7 @@ public static class BuildingCatalogue
     /// <summary>Highest level any building can currently reach.</summary>
     public const int MaxLevel = 10;
 
-    /// <summary>What a settlement can store before it builds a warehouse.</summary>
+    /// <summary>What a settlement can store before it builds a storage house.</summary>
     public static ResourceAmounts BaseStorageCapacity { get; } = ResourceAmounts.Uniform(500);
 
     /// <summary>
@@ -27,7 +27,7 @@ public static class BuildingCatalogue
     /// interaction is a real move, not a countdown).
     /// </summary>
     public static ResourceAmounts FoundingStock { get; } =
-        new(Wood: 300, Stone: 300, Grain: 200, Silver: 0);
+        new(Wood: 300, Stone: 300, Food: 200, Iron: 0);
 
     public static IReadOnlyList<BuildingType> AllTypes { get; } =
         Enum.GetValues<BuildingType>();
@@ -43,11 +43,11 @@ public static class BuildingCatalogue
         return type switch
         {
             BuildingType.Longhouse => Longhouse(level),
-            BuildingType.LumberCamp => Producer(type, level, Forest, new ResourceAmounts(Wood: 30, 0, 0, 0)),
+            BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 30, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 24, 0, 0)),
-            BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Grain: 36, 0)),
-            BuildingType.Warehouse => Warehouse(level),
-            BuildingType.Watchtower => Watchtower(level),
+            BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
+            BuildingType.StorageHouse => StorageHouse(level),
+            BuildingType.Tower => Tower(level),
             _ => null,
         };
     }
@@ -111,7 +111,7 @@ public static class BuildingCatalogue
         {
             Type = type,
             Level = level,
-            Cost = new ResourceAmounts(Wood: 100, Stone: 80, Grain: 0, Silver: 0) * CostFactor(level),
+            Cost = new ResourceAmounts(Wood: 100, Stone: 80, Food: 0, Iron: 0) * CostFactor(level),
             BuildDuration = Duration(4, level),
             // Linear in level: level 3 produces three times level 1.
             ProductionPerHour = perHourAtLevelOne * level,
@@ -123,30 +123,30 @@ public static class BuildingCatalogue
     {
         Type = BuildingType.Longhouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 200, Stone: 150, Grain: 100, Silver: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 200, Stone: 150, Food: 100, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(10, level),
         // The anchor feeds its own settlement a little, so a new holding is
         // never completely stalled.
-        ProductionPerHour = new ResourceAmounts(Wood: 10, Stone: 8, Grain: 10, Silver: 2) * level,
+        ProductionPerHour = new ResourceAmounts(Wood: 10, Stone: 8, Food: 10, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
         RequiredLonghouseLevel = 1,
     };
 
-    private static BuildingDefinition Warehouse(int level) => new()
+    private static BuildingDefinition StorageHouse(int level) => new()
     {
-        Type = BuildingType.Warehouse,
+        Type = BuildingType.StorageHouse,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 150, Stone: 120, Grain: 0, Silver: 0) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 150, Stone: 120, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(6, level),
         StorageCapacity = ResourceAmounts.Uniform(1000) * level,
         RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 
-    private static BuildingDefinition Watchtower(int level) => new()
+    private static BuildingDefinition Tower(int level) => new()
     {
-        Type = BuildingType.Watchtower,
+        Type = BuildingType.Tower,
         Level = level,
-        Cost = new ResourceAmounts(Wood: 120, Stone: 200, Grain: 0, Silver: 10) * CostFactor(level),
+        Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 10) * CostFactor(level),
         BuildDuration = Duration(8, level),
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
     };

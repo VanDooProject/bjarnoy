@@ -3,8 +3,8 @@ using System.Globalization;
 namespace Bjarnoy.Domain.Economy;
 
 /// <summary>
-/// The four stocks from <c>prototypes/MECHANICS.md</c>: wood, stone, grain and
-/// silver. Used both as a quantity (what a settlement holds) and as a rate
+/// The four stocks from <c>prototypes/MECHANICS.md</c>: wood, stone, food and
+/// iron. Used both as a quantity (what a settlement holds) and as a rate
 /// (what it produces per hour).
 /// </summary>
 /// <remarks>
@@ -19,20 +19,20 @@ namespace Bjarnoy.Domain.Economy;
 /// value. Display rounds down; the stored value keeps the fraction.
 /// </para>
 /// </remarks>
-public readonly record struct ResourceAmounts(double Wood, double Stone, double Grain, double Silver)
+public readonly record struct ResourceAmounts(double Wood, double Stone, double Food, double Iron)
 {
     public static ResourceAmounts Zero => default;
 
     public static ResourceAmounts Uniform(double value) => new(value, value, value, value);
 
     public static ResourceAmounts operator +(ResourceAmounts a, ResourceAmounts b) =>
-        new(a.Wood + b.Wood, a.Stone + b.Stone, a.Grain + b.Grain, a.Silver + b.Silver);
+        new(a.Wood + b.Wood, a.Stone + b.Stone, a.Food + b.Food, a.Iron + b.Iron);
 
     public static ResourceAmounts operator -(ResourceAmounts a, ResourceAmounts b) =>
-        new(a.Wood - b.Wood, a.Stone - b.Stone, a.Grain - b.Grain, a.Silver - b.Silver);
+        new(a.Wood - b.Wood, a.Stone - b.Stone, a.Food - b.Food, a.Iron - b.Iron);
 
     public static ResourceAmounts operator *(ResourceAmounts a, double factor) =>
-        new(a.Wood * factor, a.Stone * factor, a.Grain * factor, a.Silver * factor);
+        new(a.Wood * factor, a.Stone * factor, a.Food * factor, a.Iron * factor);
 
     public static ResourceAmounts operator *(double factor, ResourceAmounts a) => a * factor;
 
@@ -49,14 +49,14 @@ public readonly record struct ResourceAmounts(double Wood, double Stone, double 
     /// having plenty of wood and no stone passed the check.
     /// </remarks>
     public bool Covers(ResourceAmounts cost) =>
-        Wood >= cost.Wood && Stone >= cost.Stone && Grain >= cost.Grain && Silver >= cost.Silver;
+        Wood >= cost.Wood && Stone >= cost.Stone && Food >= cost.Food && Iron >= cost.Iron;
 
     /// <summary>Component-wise minimum — used to clamp a stock to its storage capacity.</summary>
     public ResourceAmounts ClampTo(ResourceAmounts capacity) => new(
         Math.Min(Wood, capacity.Wood),
         Math.Min(Stone, capacity.Stone),
-        Math.Min(Grain, capacity.Grain),
-        Math.Min(Silver, capacity.Silver));
+        Math.Min(Food, capacity.Food),
+        Math.Min(Iron, capacity.Iron));
 
     /// <summary>Floors every component at zero.</summary>
     /// <remarks>
@@ -64,18 +64,18 @@ public readonly record struct ResourceAmounts(double Wood, double Stone, double 
     /// values get negative?" and simply let them go negative.
     /// </remarks>
     public ResourceAmounts ClampToZero() => new(
-        Math.Max(Wood, 0), Math.Max(Stone, 0), Math.Max(Grain, 0), Math.Max(Silver, 0));
+        Math.Max(Wood, 0), Math.Max(Stone, 0), Math.Max(Food, 0), Math.Max(Iron, 0));
 
-    public bool IsZero => Wood == 0 && Stone == 0 && Grain == 0 && Silver == 0;
+    public bool IsZero => Wood == 0 && Stone == 0 && Food == 0 && Iron == 0;
 
     /// <summary>True when no component is negative.</summary>
-    public bool IsNonNegative => Wood >= 0 && Stone >= 0 && Grain >= 0 && Silver >= 0;
+    public bool IsNonNegative => Wood >= 0 && Stone >= 0 && Food >= 0 && Iron >= 0;
 
     /// <summary>Whole units, as a player sees them. Always rounds down.</summary>
     public ResourceAmounts Floor() => new(
-        Math.Floor(Wood), Math.Floor(Stone), Math.Floor(Grain), Math.Floor(Silver));
+        Math.Floor(Wood), Math.Floor(Stone), Math.Floor(Food), Math.Floor(Iron));
 
     public override string ToString() => string.Create(
         CultureInfo.InvariantCulture,
-        $"wood {Wood:0.##}, stone {Stone:0.##}, grain {Grain:0.##}, silver {Silver:0.##}");
+        $"wood {Wood:0.##}, stone {Stone:0.##}, food {Food:0.##}, iron {Iron:0.##}");
 }

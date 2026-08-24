@@ -114,15 +114,15 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         using var client = Client();
         var (_, settlement) = await FoundAsync(client);
-        var before = settlement.Resources.Stock.Grain;
-        var rate = settlement.Resources.RatePerHour.Grain;
+        var before = settlement.Resources.Stock.Food;
+        var rate = settlement.Resources.RatePerHour.Food;
 
         _factory.Time.Advance(TimeSpan.FromHours(5));
         var later = await GetAsync(client, settlement.Id);
 
         // No worker ran, no tick fired: five hours of production is simply what
         // the timestamp implies.
-        Assert.Equal(before + (rate * 5), later!.Resources.Stock.Grain, 0);
+        Assert.Equal(before + (rate * 5), later!.Resources.Stock.Food, 0);
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         Assert.Empty(afterBuild!.Queue);
         Assert.Contains(afterBuild.Buildings, b => b.Type == "farm" && b.Level == 1);
-        Assert.True(afterBuild.Resources.RatePerHour.Grain > settlement.Resources.RatePerHour.Grain);
+        Assert.True(afterBuild.Resources.RatePerHour.Food > settlement.Resources.RatePerHour.Food);
     }
 
     [Fact]
@@ -225,7 +225,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             "/api/v1/buildings?level=1", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(catalogue);
-        var lumber = catalogue.Single(d => d.Type == "lumbercamp");
+        var lumber = catalogue.Single(d => d.Type == "lumberjack");
 
         Assert.Equal(["forest"], lumber.AllowedTerrain);
         Assert.True(lumber.Cost.Wood > 0);
@@ -248,7 +248,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var afterPause = await GetAsync(client, settlement.Id);
 
         Assert.False(afterPause!.World.Running);
-        Assert.Equal(atPause!.Resources.Stock.Grain, afterPause.Resources.Stock.Grain, 0);
+        Assert.Equal(atPause!.Resources.Stock.Food, afterPause.Resources.Stock.Food, 0);
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var (worldId, settlement) = await FoundAsync(client);
 
         var beforePause = await GetAsync(client, settlement.Id);
-        var rate = beforePause!.Resources.RatePerHour.Grain;
+        var rate = beforePause!.Resources.RatePerHour.Food;
 
         await PauseAsync(client, worldId, "paused");
         _factory.Time.Advance(TimeSpan.FromDays(3));
@@ -285,8 +285,8 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         // Three days paused count for nothing; the two hours after count fully.
         Assert.Equal(
-            beforePause.Resources.Stock.Grain + (rate * 2),
-            afterResume!.Resources.Stock.Grain,
+            beforePause.Resources.Stock.Food + (rate * 2),
+            afterResume!.Resources.Stock.Food,
             0);
     }
 
@@ -333,7 +333,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var refused = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("warehouse", settlement.Q, settlement.R + 1),
+            new QueueBuildRequest("storagehouse", settlement.Q, settlement.R + 1),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
@@ -346,7 +346,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var (worldId, settlement) = await FoundAsync(client);
 
         var before = await GetAsync(client, settlement.Id);
-        var rate = before!.Resources.RatePerHour.Grain;
+        var rate = before!.Resources.RatePerHour.Food;
 
         await PauseAsync(client, worldId, "maintenance");
         _factory.Time.Advance(TimeSpan.FromHours(1));
@@ -365,17 +365,17 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // Grace delays what is still to come; it never claws back what was
         // already banked. Resources sit at the last settled figure rather than
         // going backwards.
-        Assert.Equal(before.Resources.Stock.Grain, afterResume!.Resources.Stock.Grain, 0);
+        Assert.Equal(before.Resources.Stock.Food, afterResume!.Resources.Stock.Food, 0);
 
         // The two credited hours have to be served before anything accrues again.
         _factory.Time.Advance(TimeSpan.FromHours(2));
         var graceServed = await GetAsync(client, settlement.Id);
-        Assert.Equal(before.Resources.Stock.Grain, graceServed!.Resources.Stock.Grain, 0);
+        Assert.Equal(before.Resources.Stock.Food, graceServed!.Resources.Stock.Food, 0);
 
         // And after that, production resumes at the normal rate.
         _factory.Time.Advance(TimeSpan.FromHours(3));
         var running = await GetAsync(client, settlement.Id);
-        Assert.Equal(before.Resources.Stock.Grain + (rate * 3), running!.Resources.Stock.Grain, 0);
+        Assert.Equal(before.Resources.Stock.Food + (rate * 3), running!.Resources.Stock.Food, 0);
     }
 
     [Fact]

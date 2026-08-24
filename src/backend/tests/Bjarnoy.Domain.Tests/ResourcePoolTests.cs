@@ -7,8 +7,8 @@ public class ResourceAmountsTests
     [Fact]
     public void Covers_requires_every_resource_to_be_sufficient()
     {
-        var stock = new ResourceAmounts(Wood: 1000, Stone: 0, Grain: 500, Silver: 0);
-        var cost = new ResourceAmounts(Wood: 100, Stone: 100, Grain: 0, Silver: 0);
+        var stock = new ResourceAmounts(Wood: 1000, Stone: 0, Food: 500, Iron: 0);
+        var cost = new ResourceAmounts(Wood: 100, Stone: 100, Food: 0, Iron: 0);
 
         // The legacy Resources.operator< was "every component compares true",
         // so BuildHelper only rejected a build when the player was short on
@@ -178,7 +178,7 @@ public class ResourcePoolTests
     public void Spending_is_rejected_when_short_on_only_one_resource()
     {
         var pool = ResourcePool.Create(
-            new ResourceAmounts(Wood: 1000, Stone: 10, Grain: 1000, Silver: 1000),
+            new ResourceAmounts(Wood: 1000, Stone: 10, Food: 1000, Iron: 1000),
             ResourceAmounts.Zero,
             ResourceAmounts.Uniform(10_000),
             T0);
@@ -265,7 +265,7 @@ public class ResourcePoolTests
     {
         var pool = ResourcePool.Create(
             ResourceAmounts.Zero,
-            new ResourceAmounts(Wood: 100, Stone: 10, Grain: 100, Silver: 100),
+            new ResourceAmounts(Wood: 100, Stone: 10, Food: 100, Iron: 100),
             ResourceAmounts.Uniform(10_000),
             T0);
 
@@ -280,7 +280,7 @@ public class ResourcePoolTests
     {
         var pool = ResourcePool.Create(
             ResourceAmounts.Zero,
-            new ResourceAmounts(Wood: 100, Stone: 0, Grain: 0, Silver: 0),
+            new ResourceAmounts(Wood: 100, Stone: 0, Food: 0, Iron: 0),
             ResourceAmounts.Uniform(10_000),
             T0);
 

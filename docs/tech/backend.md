@@ -188,7 +188,7 @@ every page view into a database write.
 ### Ordering matters when the rate changes
 
 `WithRate` settles *before* applying the new rate, so the hours already elapsed
-accrue at the old one. Skipping that would let a finished lumber camp
+accrue at the old one. Skipping that would let a finished lumberjack
 retroactively produce for the hours before it existed. Likewise `TrySpend`
 settles before deducting — the legacy version read its clock twice while doing
 this and silently dropped whatever accrued in between.

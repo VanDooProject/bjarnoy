@@ -36,8 +36,8 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.LumberCamp, Terrain.Forest, true)]
-    [InlineData(BuildingType.LumberCamp, Terrain.Grass, false)]
+    [InlineData(BuildingType.Lumberjack, Terrain.Forest, true)]
+    [InlineData(BuildingType.Lumberjack, Terrain.Grass, false)]
     [InlineData(BuildingType.Quarry, Terrain.Mountain, true)]
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
@@ -52,12 +52,12 @@ public class BuildingCatalogueTests
     [Fact]
     public void Unrestricted_buildings_go_on_any_land_but_never_on_water()
     {
-        var warehouse = BuildingCatalogue.Get(BuildingType.Warehouse, 1);
+        var storageHouse = BuildingCatalogue.Get(BuildingType.StorageHouse, 1);
 
-        Assert.True(warehouse.AllowsTerrain(Terrain.Grass));
-        Assert.True(warehouse.AllowsTerrain(Terrain.Sand));
-        Assert.True(warehouse.AllowsTerrain(Terrain.Mountain));
-        Assert.False(warehouse.AllowsTerrain(Terrain.Sea));
+        Assert.True(storageHouse.AllowsTerrain(Terrain.Grass));
+        Assert.True(storageHouse.AllowsTerrain(Terrain.Sand));
+        Assert.True(storageHouse.AllowsTerrain(Terrain.Mountain));
+        Assert.False(storageHouse.AllowsTerrain(Terrain.Sea));
     }
 
     [Fact]
@@ -85,8 +85,8 @@ public class BuildingCatalogueTests
     [Fact]
     public void Production_grows_with_level()
     {
-        var one = BuildingCatalogue.Get(BuildingType.LumberCamp, 1);
-        var three = BuildingCatalogue.Get(BuildingType.LumberCamp, 3);
+        var one = BuildingCatalogue.Get(BuildingType.Lumberjack, 1);
+        var three = BuildingCatalogue.Get(BuildingType.Lumberjack, 3);
 
         Assert.Equal(one.ProductionPerHour.Wood * 3, three.ProductionPerHour.Wood, 6);
     }
@@ -106,13 +106,13 @@ public class BuildingCatalogueTests
         var (production, capacity) = BuildingCatalogue.Totals(
         [
             (BuildingType.Longhouse, 1),
-            (BuildingType.LumberCamp, 2),
-            (BuildingType.Warehouse, 1),
+            (BuildingType.Lumberjack, 2),
+            (BuildingType.StorageHouse, 1),
         ]);
 
         var expectedWood =
             BuildingCatalogue.Get(BuildingType.Longhouse, 1).ProductionPerHour.Wood
-            + BuildingCatalogue.Get(BuildingType.LumberCamp, 2).ProductionPerHour.Wood;
+            + BuildingCatalogue.Get(BuildingType.Lumberjack, 2).ProductionPerHour.Wood;
 
         Assert.Equal(expectedWood, production.Wood, 6);
         Assert.True(capacity.Wood > BuildingCatalogue.BaseStorageCapacity.Wood);
@@ -192,7 +192,7 @@ public class SettlementTests
         var settlement = Found();
 
         var decision = settlement.PlanBuild(
-            BuildingType.LumberCamp, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }
@@ -214,7 +214,7 @@ public class SettlementTests
         var settlement = Found() with
         {
             Resources = ResourcePool.Create(
-                new ResourceAmounts(Wood: 100_000, Stone: 0, Grain: 0, Silver: 0),
+                new ResourceAmounts(Wood: 100_000, Stone: 0, Food: 0, Iron: 0),
                 ResourceAmounts.Zero,
                 ResourceAmounts.Uniform(100_000),
                 T0),
@@ -297,16 +297,16 @@ public class SettlementTests
         var readLate = order.CompletesAt.AddHours(5);
         var settled = queued.SettleTo(readLate).Settlement;
 
-        var grainAtCompletion = settled.Resources.Stock.Grain;
-        var rate = settled.Resources.RatePerHour.Grain;
+        var foodAtCompletion = settled.Resources.Stock.Food;
+        var rate = settled.Resources.RatePerHour.Food;
 
         // Five hours of output at the post-completion rate must be there even
         // though nobody looked during them, and the farm has to be part of that
         // rate rather than the longhouse alone.
         Assert.Equal(
-            grainAtCompletion + (rate * 5), settled.Resources.At(readLate).Grain, 6);
-        Assert.True(rate > BuildingCatalogue.Get(BuildingType.Longhouse, 1).ProductionPerHour.Grain);
-        Assert.True(settled.Resources.At(readLate).Grain < settled.Resources.Capacity.Grain);
+            foodAtCompletion + (rate * 5), settled.Resources.At(readLate).Food, 6);
+        Assert.True(rate > BuildingCatalogue.Get(BuildingType.Longhouse, 1).ProductionPerHour.Food);
+        Assert.True(settled.Resources.At(readLate).Food < settled.Resources.Capacity.Food);
     }
 
     [Fact]
@@ -315,7 +315,7 @@ public class SettlementTests
         var settlement = Found();
         var first = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
         var withFirst = settlement.Enqueue(first, T0);
-        var second = Plan(withFirst, BuildingType.LumberCamp, new HexCoord(0, 1), Terrain.Forest, T0);
+        var second = Plan(withFirst, BuildingType.Lumberjack, new HexCoord(0, 1), Terrain.Forest, T0);
         var queued = withFirst.Enqueue(second, T0);
 
         var result = queued.SettleTo(T0.AddDays(1));
@@ -369,7 +369,7 @@ public class SettlementTests
         var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
 
         var decision = built.PlanBuild(
-            BuildingType.Warehouse, coord, Terrain.Grass, order.CompletesAt, Guid.CreateVersion7());
+            BuildingType.StorageHouse, coord, Terrain.Grass, order.CompletesAt, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.HexOccupied, decision.Rejection);
     }
@@ -394,9 +394,9 @@ public class SettlementTests
     {
         var settlement = Found();
 
-        // Watchtower level 1 needs a level-2 longhouse; a new settlement has 1.
+        // Tower level 1 needs a level-2 longhouse; a new settlement has 1.
         var decision = settlement.PlanBuild(
-            BuildingType.Watchtower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.Tower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.LonghouseTooLow, decision.Rejection);
     }

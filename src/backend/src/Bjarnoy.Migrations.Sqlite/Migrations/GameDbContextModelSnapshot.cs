@@ -125,10 +125,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("CapacityGrain")
+                    b.Property<double>("CapacityFood")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("CapacitySilver")
+                    b.Property<double>("CapacityIron")
                         .HasColumnType("REAL");
 
                     b.Property<double>("CapacityStone")
@@ -159,10 +159,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("RateGrain")
+                    b.Property<double>("RateFood")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("RateSilver")
+                    b.Property<double>("RateIron")
                         .HasColumnType("REAL");
 
                     b.Property<double>("RateStone")
@@ -174,10 +174,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("SettledAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("StockGrain")
+                    b.Property<double>("StockFood")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("StockSilver")
+                    b.Property<double>("StockIron")
                         .HasColumnType("REAL");
 
                     b.Property<double>("StockStone")
