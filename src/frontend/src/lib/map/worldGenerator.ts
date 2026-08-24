@@ -1,7 +1,9 @@
-// Deterministic, dependency-free procedural terrain. Tiles are generated
-// on demand from (q, r) and a seed — nothing needs to be precomputed or
-// stored for the whole map, which is what lets the renderer stream an
-// effectively unbounded world through a small viewport-sized cache.
+// Deterministic, dependency-free procedural terrain: a scattered archipelago
+// of distinct islands (matching the docs/design/zip-brainstorms.md world-map
+// mockup) rather than one continuous landmass. Tiles are generated on demand
+// from (q, r) and a seed, so nothing needs to be precomputed or stored for
+// the whole map — memory is bounded by hexes actually visited.
+import { axialToOddQ } from '../hex/coords';
 import type { Terrain, Tile } from './types';
 
 function hash2(x: number, y: number, seed: number): number {
@@ -19,8 +21,8 @@ function smooth(t: number): number {
 function valueNoise(x: number, y: number, seed: number, cell: number): number {
   const x0 = Math.floor(x / cell);
   const y0 = Math.floor(y / cell);
-  const tx = smooth((x / cell) - x0);
-  const ty = smooth((y / cell) - y0);
+  const tx = smooth(x / cell - x0);
+  const ty = smooth(y / cell - y0);
   const v00 = hash2(x0, y0, seed);
   const v10 = hash2(x0 + 1, y0, seed);
   const v01 = hash2(x0, y0 + 1, seed);
@@ -34,16 +36,47 @@ export interface WorldSeed {
   seed: number;
 }
 
+// Islands are seeded on a coarse grid of cells (in odd-q offset space, which
+// is roughly square so islands read as evenly, not axially, spread out).
+// Each cell independently rolls whether it holds an island, where its
+// (jittered) centre sits, and how big it is — all as O(1) hashes of the
+// cell's own coordinates, so a hex's terrain never depends on generating
+// its neighbours.
+const ISLAND_CELL = 9;
+const ISLAND_CHANCE = 0.45;
+const ISLAND_MIN_RADIUS = 2.4;
+const ISLAND_MAX_RADIUS = 5.6;
+
+function closestIsland(col: number, row: number, seed: number): { t: number } | null {
+  let best: { t: number } | null = null;
+  for (let dcx = -1; dcx <= 1; dcx++) {
+    for (let dcy = -1; dcy <= 1; dcy++) {
+      const cellCol = Math.floor(col / ISLAND_CELL) + dcx;
+      const cellRow = Math.floor(row / ISLAND_CELL) + dcy;
+      if (hash2(cellCol, cellRow, seed) > ISLAND_CHANCE) continue;
+      const jitter = ISLAND_CELL * 0.55;
+      const centerCol =
+        cellCol * ISLAND_CELL + ISLAND_CELL / 2 + (hash2(cellCol, cellRow, seed + 11) - 0.5) * jitter;
+      const centerRow =
+        cellRow * ISLAND_CELL + ISLAND_CELL / 2 + (hash2(cellCol, cellRow, seed + 13) - 0.5) * jitter;
+      const radius =
+        ISLAND_MIN_RADIUS + hash2(cellCol, cellRow, seed + 17) * (ISLAND_MAX_RADIUS - ISLAND_MIN_RADIUS);
+      const dist = Math.hypot(col - centerCol, row - centerRow);
+      const t = dist / radius;
+      if (t <= 1 && (!best || t < best.t)) best = { t };
+    }
+  }
+  return best;
+}
+
 export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
-  const x = q;
-  const y = r + q / 2;
-  const elevation =
-    valueNoise(x, y, world.seed, 7) * 0.65 + valueNoise(x, y, world.seed + 1, 16) * 0.35;
-  if (elevation < 0.52) return 'sea';
-  if (elevation < 0.55) return 'sand';
-  const rockiness = valueNoise(x, y, world.seed + 2, 3);
-  if (elevation > 0.74 && rockiness > 0.8) return 'mountain';
-  return rockiness > 0.5 ? 'forest' : 'grass';
+  const { col, row } = axialToOddQ({ q, r });
+  const island = closestIsland(col, row, world.seed);
+  if (!island) return 'sea';
+  if (island.t > 0.82) return 'sand';
+  const rockiness = valueNoise(q, r, world.seed + 2, 2.5);
+  if (island.t < 0.4 && rockiness > 0.72) return 'mountain';
+  return rockiness > 0.52 ? 'forest' : 'grass';
 }
 
 export function generateTile(q: number, r: number, world: WorldSeed): Tile {

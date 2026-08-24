@@ -5,8 +5,8 @@ Vue 3 + TypeScript + Vite frontend for the browsergame described in
 first playable merge of the three design brainstorms summarised in
 `../../docs/design/zip-brainstorms.md`:
 
-- **Zip 7 (world map):** hex world map, no tile art yet, territory shown as
-  coloured outlines, fleet tracks with ETAs, settlement markers.
+- **Zip 7 (world map):** hex world map, territory shown as coloured
+  outlines, fleet tracks with ETAs, settlement markers.
 - **Zip 4 (landing page):** the world map is already on screen and panning
   when the page loads; the first interaction is a real game move (clicking
   an island founds your starter settlement there and then); no registration
@@ -16,10 +16,21 @@ first playable merge of the three design brainstorms summarised in
   visible hexes are greyed out, buildings render as sprites on their hex,
   and the realm border reads as a gold/rival outline+wash.
 
-Both views share one axial hex lattice (`src/lib/hex/coords.ts`) at
-different zoom and projection — flat 2D for the world map, isometric plates
-for the settlement — exactly as `prototypes/village_view/README.md`
-describes.
+Both views share one axial hex lattice (`src/lib/hex/coords.ts`) and one
+isometric projection (`src/lib/hex/geometry.ts`), rendered at different zoom
+— exactly what the zip 7 world-map mockup means by "same hex lattice as the
+settlement view, flattened."
+
+## Tile art
+
+Terrain and building tiles are the isometric hex plates from
+[VanDooProject/bg_assets_hextile](https://github.com/VanDooProject/bg_assets_hextile)
+(vendored — SE rotation only — under `public/hextiles/`), the same asset
+pack described in `prototypes/village_view/README.md`. `src/lib/map/textures.ts`
+maps each `Terrain` / building type to one composited 200×300 PNG; a tile
+with a building on it just swaps in that building's (already ground+prop
+baked) texture instead of the bare terrain one, so there's no separate
+overlay layer to manage.
 
 ## Running it
 
@@ -28,6 +39,9 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-checks (vue-tsc) then builds to dist/
 ```
+
+`.github/workflows/frontend-ci.yml` runs `npm ci && npm run build` on every
+push/PR touching `src/frontend/**` (there's no other CI in this repo yet).
 
 There is no backend yet: `WorldModel` procedurally generates terrain on
 demand from a seed and everything (settlements, resources, fog of war) lives
@@ -42,17 +56,21 @@ detection walking all of them on every `svg-pan-zoom` event. This rewrite
 avoids that shape entirely:
 
 - **One WebGL canvas, not one DOM node per hex.** `HexMapRenderer`
-  (`src/lib/map/HexMapRenderer.ts`) draws the whole visible map into a
-  handful of `PIXI.Graphics` layers (terrain, borders, fog, markers).
-  PixiJS batches all the shapes in a layer into very few WebGL draw calls,
-  regardless of how many hexes are on screen.
-- **Redraw only when the visible set actually changes.** Panning/zooming
-  updates a plain camera object; a rebuild is scheduled via
-  `requestAnimationFrame` and only actually rebuilds the layers once the
+  (`src/lib/map/HexMapRenderer.ts`) draws every visible hex as a
+  `PIXI.Sprite` sharing one of ~9 tile textures, plus a couple of `Graphics`
+  layers for borders and fog. Pixi batches sprites that share a texture into
+  very few WebGL draw calls, regardless of how many hexes are on screen.
+- **Sprites are pooled, not recreated.** Panning doesn't destroy and
+  reallocate tiles: a hex leaving the viewport returns its `Sprite` to a
+  free list instead of being destroyed, and a hex entering the viewport
+  reuses one from that list before allocating a new one.
+- **The camera transform and the tile set update on different schedules.**
+  Every frame just writes one container's `position`/`scale` from the
+  camera (cheap), so panning/zooming feels immediate. Recomputing *which*
+  hexes exist — walking the visible range and updating the sprite pool — is
+  throttled via `requestAnimationFrame` and only actually runs once the
   camera has moved more than ~half a hex or zoom has changed noticeably
-  (`cameraMovedEnough`). The render loop itself (`app.ticker`) only advances
-  resource ticks and fleet-ETA labels every frame — geometry stays untouched
-  most frames.
+  (`cameraMovedEnough`).
 - **Viewport culling via closed-form pixel↔hex conversion.** No spatial
   index is needed: the visible axial range is computed directly from the
   camera and canvas size (`visibleCoords`), so only the hexes actually on
@@ -75,9 +93,11 @@ avoids that shape entirely:
 ## Layout
 
 ```
-src/lib/hex/          axial hex coordinate math + pixel/iso geometry
-src/lib/map/           WorldModel (game state), terrain generator, camera,
+src/lib/hex/          axial hex coordinate math + isometric pixel geometry
+src/lib/map/           WorldModel (game state), archipelago terrain
+                        generator, camera, textures (tile art manifest),
                         HexMapRenderer (the PixiJS renderer)
+public/hextiles/       vendored tile art (see its own README)
 src/composables/       useHexMapRenderer — mounts/resizes/tears down a
                         renderer on a <canvas> from a Vue component
 src/stores/             Pinia stores: player (identity/onboarding), world

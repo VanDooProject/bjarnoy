@@ -30,7 +30,10 @@ useHexMapRenderer(canvas, container, {
 .map-container {
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 120% at 50% 30%, #16222a 0%, #070c0f 75%);
+  /* Unexplored hexes simply aren't drawn (true fog) — a soft grey backdrop
+     reads as mist beyond the scouted realm, per
+     docs/design/img/fog_of_war_and_settlement_view.png. */
+  background: radial-gradient(120% 120% at 50% 35%, #c7ced2 0%, #9aa4aa 55%, #5c666c 100%);
 }
 canvas {
   display: block;

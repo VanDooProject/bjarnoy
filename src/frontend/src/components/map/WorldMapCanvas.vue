@@ -29,7 +29,18 @@ useHexMapRenderer(canvas, container, {
 .map-container {
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 120% at 50% 0%, #0e1a22 0%, #060b0e 70%);
+  /* Open sea: islands carry their own tile art, so the water itself is a
+     flat painted backdrop rather than hex-tiled — matches the world-map
+     mockup in docs/design/img/worldmap.png. */
+  background:
+    repeating-radial-gradient(
+      circle at 20% 15%,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 46px
+    ),
+    radial-gradient(140% 120% at 50% 0%, #1f5c78 0%, #123c50 55%, #0b2735 100%);
 }
 canvas {
   display: block;
