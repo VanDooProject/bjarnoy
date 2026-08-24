@@ -21,12 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # `actions/checkout` only sets its auth token as repo-local git config,
-      # which a bare `git submodule update` doesn't inherit (it clones the
-      # submodule as a fresh repo). bg_assets_hextile is private, so without
-      # this the clone fails with "could not read Username". Promoting the
-      # same header to global config makes it apply there too.
-      - run: git config --global "http.https://github.com/.extraheader" "$(git config --local --get http.https://github.com/.extraheader)"
+      # bg_assets_hextile is a separate private repo, so the default
+      # GITHUB_TOKEN (scoped to this repo only) can't clone it — a bare
+      # `git submodule update` hits "Repository not found". Route that one
+      # URL through a PAT with read access to it instead.
+      - run: git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
 
       # Scoped to just the submodule this build needs, rather than
       # `actions/checkout`'s `submodules: true` (which recurses over every
