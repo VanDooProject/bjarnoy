@@ -1,6 +1,5 @@
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 
 namespace Bjarnoy.Api.Hosting;
 
@@ -72,15 +71,15 @@ public static class MigrationCommand
     /// returns the process exit code.
     /// </summary>
     public static async Task<int> RunAsync(
-        IHost host,
+        IServiceProvider services,
         MigrationCommandKind kind,
         TextWriter output,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(output);
 
-        await using var scope = host.Services.CreateAsyncScope();
+        await using var scope = services.CreateAsyncScope();
         var migrator = scope.ServiceProvider.GetRequiredService<DatabaseMigrator>();
 
         try

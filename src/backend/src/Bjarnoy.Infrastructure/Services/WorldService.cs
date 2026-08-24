@@ -92,10 +92,17 @@ public sealed class WorldService(
         return world;
     }
 
+    /// <summary>Worlds in creation order.</summary>
+    /// <remarks>
+    /// Ordered by id, not by <see cref="WorldEntity.CreatedAt"/>: ids are
+    /// UUIDv7, so they already sort by creation time in both providers' storage
+    /// forms, whereas SQLite cannot order by a <see cref="DateTimeOffset"/> at
+    /// all (it has no native type for one).
+    /// </remarks>
     public Task<List<WorldEntity>> GetWorldsAsync(CancellationToken cancellationToken = default) =>
         _dbContext.Worlds
             .AsNoTracking()
-            .OrderBy(w => w.CreatedAt)
+            .OrderBy(w => w.Id)
             .ToListAsync(cancellationToken);
 
     public Task<WorldEntity?> GetWorldAsync(Guid id, CancellationToken cancellationToken = default) =>

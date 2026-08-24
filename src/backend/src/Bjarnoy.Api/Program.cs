@@ -30,6 +30,11 @@ builder.Services.AddScoped<WorldService>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
+// Validates the DataAnnotations on request records before a handler runs, so a
+// malformed request is a 400 with per-field detail rather than an exception from
+// a guard clause deeper in.
+builder.Services.AddValidation();
+
 // Versions are literal path segments (/api/v1/...) rather than a
 // {version:apiVersion} route parameter. Both are supported by Asp.Versioning,
 // but only the literal form produces concrete paths in the OpenAPI document —
@@ -46,7 +51,7 @@ var app = builder.Build();
 
 if (migrationCommand != MigrationCommandKind.None)
 {
-    return await MigrationCommand.RunAsync(app, migrationCommand, Console.Out);
+    return await MigrationCommand.RunAsync(app.Services, migrationCommand, Console.Out);
 }
 
 var databaseOptions = app.Services.GetRequiredService<IOptions<DatabaseOptions>>().Value;
