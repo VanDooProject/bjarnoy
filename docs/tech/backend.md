@@ -14,6 +14,9 @@ src/backend/
   Directory.Packages.props        every package version, centrally
   src/
     Bjarnoy.Domain                game rules. No package references at all.
+      World/                      hex maths, terrain, world generation
+      Economy/                    resource pool, game clock (pause/grace)
+      Buildings/                  catalogue, build queue, settlement rules
     Bjarnoy.Infrastructure        EF Core model, migrator, world service
     Bjarnoy.Migrations.PostgreSql generated migrations, PostgreSQL dialect
     Bjarnoy.Migrations.Sqlite     generated migrations, SQLite dialect
@@ -142,6 +145,103 @@ Generation is pure and takes its seed as a parameter, so two worlds can be
 generated at once. The legacy generator could not: it set a static
 `Noise.Seed`, which two concurrent calls would corrupt.
 
+## Everything is lazy
+
+Nothing in this backend ticks. There is no background worker advancing
+resources, no job completing builds, no scheduler the world depends on. Every
+piece of time-dependent state is stored as a value plus the instant that value
+was last true, and the current answer is computed when someone asks.
+
+A settlement's resources are a stock, an hourly rate and a timestamp
+(`ResourcePool`). Its current wood is `stock + rate x hours-since-settled`,
+clamped to storage capacity. A build order is a completion instant; it is done
+when that instant has passed. Terrain is a pure function of the world seed
+(`TerrainSampler`), so it is not stored at all.
+
+This is the one design idea worth keeping wholesale from `legacy/browsergame` —
+its `EntityResources` did exactly this — and it buys three things:
+
+- **Downtime is harmless.** A process that was dead for six hours comes back to
+  a world exactly as far along as the clock says. There are no missed ticks to
+  reconcile because there were never any ticks.
+- **An idle world costs nothing.** Ten thousand settlements nobody is looking at
+  do no work. Cost scales with reads, not with world size.
+- **Offline players are not special-cased.** Someone returning after two days is
+  one subtraction away from the right answer.
+
+### The stock is only written when it changes
+
+Reading is not settling. `ResourcePool.At(now)` is pure — it returns an amount
+and leaves the pool untouched — so a request that merely displays a settlement
+produces no new pool and therefore nothing for the database to save. The type
+is immutable, which makes this structural rather than a convention: only
+`TrySpend`, `Deposit` and `WithRate` return a changed pool, and each of those is
+a real state change that has to be persisted anyway.
+
+`Settlement.SettleTo(now)` follows the same rule for the queue. It returns
+`Changed = false` when no order was due, and the caller skips the write.
+
+The consequence to keep in mind when adding to this: **do not settle on a read
+path**. If a new endpoint calls `SettledTo` just to get a number, it has turned
+every page view into a database write.
+
+### Ordering matters when the rate changes
+
+`WithRate` settles *before* applying the new rate, so the hours already elapsed
+accrue at the old one. Skipping that would let a finished lumber camp
+retroactively produce for the hours before it existed. Likewise `TrySpend`
+settles before deducting — the legacy version read its clock twice while doing
+this and silently dropped whatever accrued in between.
+
+## Pausing a lazy world
+
+Because nothing ticks, a pause cannot be implemented by stopping a worker —
+there is no worker to stop. Worse, to a stored timestamp, six hours of
+deliberate pause and six hours of unplanned outage are indistinguishable.
+
+So a pause is a change of **clock**, not of rules. Every timestamp the domain
+stores is a *game* instant, and `GameClock` is the only thing that knows about
+wall time:
+
+```
+gameTime(wall) = wall - accumulatedOffset      // running
+gameTime(wall) = frozenAt - accumulatedOffset  // frozen (constant)
+```
+
+Freezing makes every lazy computation downstream measure zero elapsed hours,
+without any of them knowing pauses exist. Nothing in `ResourcePool` or the build
+queue has a special case for it. Game time stays monotonic and continuous across
+a freeze, so a build with eight minutes left when the world stops has exactly
+eight minutes left when it comes back, however long the stop lasted.
+
+Two things can be suspended independently — the passage of time, and the
+acceptance of new commands — which gives four states:
+
+| State | Time advances | New commands | For |
+|---|---|---|---|
+| `Running` | yes | yes | normal play |
+| `Paused` | no | no | holding a round between sessions |
+| `Locked` | yes | no | winding a round down; migrating underneath a live world |
+| `Maintenance` | no | no | operational work, surfaced to players as maintenance |
+
+`Locked` is the interesting one: queued work still completes and resources still
+accrue, but nothing new can be started. `Maintenance` is mechanically the same
+freeze as `Paused`, kept distinct so it can be shown differently and because
+resuming from it normally credits grace.
+
+### Grace
+
+`Resume(now, grace)` credits extra time on top of the freeze, pushing every
+deadline further out — for maintenance that ran long.
+
+`AddGrace(span)` does the same without a state change, which is the fix for the
+*opposite* problem: an outage nobody paused for, where the world kept accruing
+while players could not act. Handing the time back undoes the progress they
+never got to use.
+
+Grace can only ever give time back; a negative value is rejected rather than
+silently stealing progress.
+
 ## API
 
 `/api/v1/…`, with an OpenAPI document and a Scalar UI at `/scalar` in
@@ -202,8 +302,12 @@ that pattern would earn real immutable caching.
 
 ## Not in here yet
 
-Auth (the legacy JWT + rotating refresh token design is worth porting as
-designed), settlements, resources and the build queue. The resource model to
-carry forward is the legacy one: store a stock, a rate and a timestamp, and
-compute the current value on read, so the world keeps running while a player is
-offline and nothing has to tick.
+Auth — the legacy JWT + rotating refresh token design is worth porting as
+designed. Until it lands, a settlement has no real owner.
+
+Settlements, resources and the build queue exist as domain rules
+(`Bjarnoy.Domain.Economy`, `Bjarnoy.Domain.Buildings`) but are not yet
+persisted or exposed over the API. Combat, fleets and caravans are untouched.
+
+The building catalogue's numbers are a starting point for balancing, not a
+finished economy.
