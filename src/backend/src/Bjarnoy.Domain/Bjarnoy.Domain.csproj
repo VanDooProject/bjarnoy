@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The domain deliberately has no package references: world generation, hex
+    maths and game rules must be testable without a host, a database or a
+    clock. Anything ambient (time, randomness, configuration) is passed in.
+  -->
+
+</Project>
