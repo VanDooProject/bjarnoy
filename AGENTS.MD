@@ -1,6 +1,6 @@
 
 # git / commits
-- commit after each task/enclosed change
+- commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 
 

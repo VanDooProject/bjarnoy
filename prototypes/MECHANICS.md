@@ -63,8 +63,8 @@ Four stocks, each with a stock value and an hourly rate.
 | --- | --- | --- |
 | Wood | Forest | `#c98b4b` |
 | Stone | Ridge | `#9aa7ad` |
-| Grain | Crop / pumpkin | `#8fc35a` |
-| Silver | Trade, raids | `#6f8fa8` |
+| Food | Crop / pumpkin | `#8fc35a` |
+| Iron | Mountains | `#6f8fa8` |
 
 Grain also feeds population; a settlement that runs its grain to zero stops growing and its garrison starts to desert.
 
