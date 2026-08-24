@@ -162,9 +162,30 @@ well as a primary key) is the good idea in there and it is all we keep.
 
 `browsergame` models each terrain as a C# subclass (`GrassTile`, `ForestTile`,
 `WaterTile`, …) and asks `tile is WaterTile` everywhere, with the type name
-leaking to the client via `GetType().ToString().Split('.').Last()`. With ~14
-subclasses this makes the wire format a function of the class hierarchy and
-persistence awkward. A `Terrain` enum on a flat tile record replaces it.
+leaking to the client via `GetType().ToString().Split('.').Last()`.
+
+The subclassing is not decorative: it is how the game answers "which
+buildings can go on this tile." Each `ITreeInitializer` (e.g.
+`BuildingLumberjackInitializer`) builds a `BuildTechnology.AllowedTiles`
+list containing a throwaway instance of the terrain(s) it's legal on —
+`AllowedTiles = new List<Tile> { new ForestTile() }` — and
+`BuildHelper.checkBuildingRequirements` allows the build only if
+`AllowedTiles.All(t => t.type != tile.type)` is false, i.e. some entry's
+type-name string matches the target tile's. So a `ForestTile` and a
+`GrassTile` are, at the point they matter, nothing but a boxed string
+compared by reflection: `new ForestTile()` never carries a position, an
+owner, or any state — it exists only so its `.type` getter has something
+to return.
+
+That per-terrain buildability is worth keeping; the class-per-terrain
+mechanism for expressing it is not. With ~14 subclasses the wire format
+becomes a function of the class hierarchy and persistence is awkward, for
+a rule that is really just "given this terrain, which building types are
+legal here." A `Terrain` enum on a flat tile record replaces the
+hierarchy; when the build system lands, a building's tech definition keys
+its allowed terrain off that enum (`Terrain[]` or a
+`Dictionary<Terrain, …>`) instead of instantiating a tile per allowed
+type.
 
 ### Everything ambient and static
 
