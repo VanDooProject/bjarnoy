@@ -10,7 +10,7 @@ export interface Tile {
   terrain: Terrain;
   /** Settlement id that currently claims this hex, if any (Settlers II style borders). */
   ownerId?: string;
-  buildingType?: 'longhouse' | 'hut' | 'farm' | 'watchtower';
+  buildingType?: 'longhouse' | 'hut' | 'farm' | 'tower';
   buildingLevel?: number;
 }
 

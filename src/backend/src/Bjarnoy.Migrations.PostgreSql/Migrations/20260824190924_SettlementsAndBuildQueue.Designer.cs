@@ -133,10 +133,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<double>("CapacityGrain")
+                    b.Property<double>("CapacityFood")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("CapacitySilver")
+                    b.Property<double>("CapacityIron")
                         .HasColumnType("double precision");
 
                     b.Property<double>("CapacityStone")
@@ -167,10 +167,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<double>("RateGrain")
+                    b.Property<double>("RateFood")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("RateSilver")
+                    b.Property<double>("RateIron")
                         .HasColumnType("double precision");
 
                     b.Property<double>("RateStone")
@@ -182,10 +182,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("SettledAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<double>("StockGrain")
+                    b.Property<double>("StockFood")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("StockSilver")
+                    b.Property<double>("StockIron")
                         .HasColumnType("double precision");
 
                     b.Property<double>("StockStone")

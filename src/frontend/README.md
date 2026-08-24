@@ -42,7 +42,7 @@ README: "so realm borders, or mouse hover effects can be placed between
 top-ing and base tile") — a border or hover highlight sits on the ground
 and tucks under a tile's trees/building instead of being drawn as a flat
 overlay that slices across their canopy. Terrain the pack doesn't split
-(sand, mountain, sea) and the one building it doesn't split (watchtower)
+(sand, mountain, sea) and the one building it doesn't split (tower)
 fall back to their single composited image with no top layer.
 
 Since the art lives in a submodule, clone with `git clone --recurse-submodules`

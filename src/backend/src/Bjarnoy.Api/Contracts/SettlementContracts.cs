@@ -33,9 +33,9 @@ public sealed record ResourcesResponse(
         new(ResourceLine.From(stock.Floor()), ResourceLine.From(rate), ResourceLine.From(capacity));
 }
 
-public sealed record ResourceLine(double Wood, double Stone, double Grain, double Silver)
+public sealed record ResourceLine(double Wood, double Stone, double Food, double Iron)
 {
-    public static ResourceLine From(ResourceAmounts a) => new(a.Wood, a.Stone, a.Grain, a.Silver);
+    public static ResourceLine From(ResourceAmounts a) => new(a.Wood, a.Stone, a.Food, a.Iron);
 }
 
 public sealed record PlacedBuildingResponse(int Q, int R, string Type, int Level);

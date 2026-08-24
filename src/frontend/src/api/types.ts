@@ -32,8 +32,8 @@ export interface IslandResponse {
 export interface ResourceLine {
   wood: number;
   stone: number;
-  grain: number;
-  silver: number;
+  food: number;
+  iron: number;
 }
 
 export interface ResourcesResponse {

@@ -1,19 +1,12 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 import { api } from '../api/client';
-import type { IslandResponse, ResourceLine } from '../api/types';
+import type { IslandResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
 import type { Resources } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
-
-// The backend's four resources (wood/stone/grain/silver — see
-// docs/tech/backend.md §6) predate and don't quite match the frontend's
-// wood/stone/food/iron; this is the one place that reconciles them.
-function toFrontendResources(line: ResourceLine): Resources {
-  return { wood: line.wood, stone: line.stone, food: line.grain, iron: line.silver };
-}
 
 // How often live mode re-polls a settlement to pick up build-queue
 // completions and rate changes it didn't cause itself (see
@@ -117,8 +110,8 @@ export const useWorldStore = defineStore('world', {
         q: response.q,
         r: response.r,
         level: response.longhouseLevel,
-        resources: toFrontendResources(response.resources.stock),
-        rates: toFrontendResources(response.resources.ratePerHour),
+        resources: { ...response.resources.stock },
+        rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
       });
       this.selectedSettlementId = settlement.id;
@@ -145,8 +138,8 @@ export const useWorldStore = defineStore('world', {
       const response = await api.getSettlement(this.selectedSettlementId);
       this.model.applyServerSnapshot(response.id, {
         level: response.longhouseLevel,
-        resources: toFrontendResources(response.resources.stock),
-        rates: toFrontendResources(response.resources.ratePerHour),
+        resources: { ...response.resources.stock },
+        rates: { ...response.resources.ratePerHour },
         buildings: response.buildings,
       });
       this.syncHud();
