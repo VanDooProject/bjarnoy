@@ -9,6 +9,9 @@ Bjarnoy / fjordhold
 - legacy/frontend (old angular frontend from 2025, just preserved history)
 
 - src/frontend (current Vue 3 + TS + Vite frontend, see src/frontend/README.md)
+- src/backend (current .NET 10 + Aspire backend, see docs/tech/backend.md)
+
+- deploy (Dockerfile: builds the frontend into the backend, one image)
 
 - prototypes (ideas from e.g claude design)
 
@@ -27,3 +30,15 @@ see game mechanics in  ./prototypes/MECHANICS.md
 # database
 the round based one should be able to be run with sqllite or litedb but also postgres if hosted for multiple players/worlds/tenants; sqllite should also support multiple worlds for sure but should be able to be a single docker container for everything
 the realtime browsergame variant is focused on postgres but should maybe also work with the local file dbs for dev (performance) reasons (when not using aspire)
+
+# running it
+
+```bash
+git submodule update --init      # tile art for the frontend
+
+# everything at once - postgres, api, vite dev server, one dashboard
+cd src/backend && dotnet run --project src/Bjarnoy.AppHost
+```
+
+See [docs/tech/backend.md](docs/tech/backend.md) for the backend on its own, the
+migrator, and the container image.
