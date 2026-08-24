@@ -9,3 +9,10 @@
 - implement
 - run build and tests
 - evaluate if ci ran green
+
+# bugs
+- when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
+
+# tests
+- tests need to be meaningful and not test third party stuff
+- for e2e tests increasing timeouts is usually not the fix for an issue, most of the time its wrong/broken selectors
