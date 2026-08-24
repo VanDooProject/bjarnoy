@@ -56,7 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: git submodule update --init --depth 1 -- src/frontend/vendor/bg_assets_hextile
+      # See the build job's identical steps for why: bg_assets_hextile is a
+      # private repo needing a PAT, and the submodule pathspec is relative
+      # to the repo root, not this job's working-directory default.
+      - run: git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+
+      - run: git submodule update --init --depth 1 -- vendor/bg_assets_hextile
 
       - uses: actions/setup-node@v4
         with:
