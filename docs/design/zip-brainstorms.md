@@ -19,7 +19,7 @@ Key design concepts extracted:
 - Smooth zoom transition from world map → island view (same renderer, different zoom level)
 - Settlement indicators (icons/markers) on each island showing player presence
 
-Suggested prototype file: `prototypes/worldmap-view.html`
+can be found in: `prototypes\worldmap`
 
 ---
 
@@ -35,7 +35,7 @@ Key design concepts extracted:
 - Account creation is deferred until the player has something worth naming
 - Multiple distinct page layouts / onboarding flows are included
 
-Suggested prototype file: `prototypes/landing-page.html`
+Suggested prototype file: `prototypes\landing_pages`
 
 ---
 
@@ -52,7 +52,7 @@ Key design concepts extracted:
 - Raid inbound warning overlaid on the map (`Raid inbound 04:12`)
 - Garrison and wall placement on specific border hexes
 
-Suggested prototype file: `prototypes/settlement-fog-of-war.html`
+can be found in: `prototypes\village_view`
 
 ---
 
@@ -64,18 +64,4 @@ The mechanics described in the README files inside the zips are consolidated in:
 
 That document covers: territory/borders (Settlers II style), settlements, colonisation, the unified map+village view, real-time resource rates, buildings, conflict, and onboarding philosophy.
 
----
 
-## Named entities used across the mockups
-
-These names appear in the mockups and should be reused for consistency in future design work:
-
-| Name | Role |
-|---|---|
-| **Bjornstad** | The player's realm; Jarl: you; Lv 4 |
-| **Grimhold** | Rival realm; Jarl: Ulf; Lv 6 |
-| **Havnsted** | Abandoned village; jarl gone three days |
-| **Sea-Wolf** | Longship carrying a settler crew; landfall 00:38:20 |
-| **Kettil Sea** | The world/sea the mockups are set in |
-| **Nordvik** | Neighbouring holding |
-| **fjordhold.game** | Product domain used in mockup browser chrome |

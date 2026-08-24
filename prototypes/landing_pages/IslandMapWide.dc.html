@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="{{ frame }}">
+  <div style="{{ canvas }}">
+    <sc-for list="{{ cells }}" as="c" hint-placeholder-count="60">
+      <div style="{{ c.pos }}">
+        <sc-if value="{{ c.solid }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ c.skirt }}"></div>
+          <div style="{{ c.face }}"></div>
+        </sc-if>
+        <sc-if value="{{ c.plot }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:76px;top:168px;width:48px;height:34px;display:flex;align-items:center;justify-content:center;border:1.5px dashed rgba(255,255,255,.75);border-radius:8px;background:rgba(255,255,255,.14);font:600 18px Outfit,system-ui,sans-serif;color:#fff">+</div>
+        </sc-if>
+        <sc-if value="{{ c.art }}" hint-placeholder-val="{{ false }}">
+          <img src="{{ c.art }}" style="{{ c.artStyle }}" />
+        </sc-if>
+      </div>
+    </sc-for>
+    <svg viewBox="0 0 2400 900" width="2400" height="900" style="position:absolute;left:0;top:0;z-index:9500;pointer-events:none;overflow:visible">
+      <path d="{{ border }}" fill="none" stroke="rgba(255,197,92,.95)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="{{ borderRival }}" fill="none" stroke="rgba(226,112,95,.95)" stroke-width="5" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="{{ track }}" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="4" stroke-dasharray="3 14" stroke-linecap="round"></path>
+      <g transform="translate(1272 428)">
+        <ellipse cx="0" cy="26" rx="52" ry="13" fill="rgba(0,0,0,.22)"></ellipse>
+        <path d="M-46 8 q46 26 92 0 q-14 20-46 20 q-32 0-46-20Z" fill="#8a5a2b" stroke="#3c2412" stroke-width="3"></path>
+        <path d="M-2 8 L-2 -52" stroke="#3c2412" stroke-width="5" stroke-linecap="round"></path>
+        <path d="M2 -50 L40 -22 L2 -6 Z" fill="#ffc55c" stroke="#3c2412" stroke-width="3"></path>
+      </g>
+    </svg>
+    <sc-for list="{{ mist }}" as="m" hint-placeholder-count="8">
+      <div style="{{ m }}"></div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:784},&quot;zoom&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.46,&quot;min&quot;:0.2,&quot;max&quot;:1,&quot;step&quot;:0.02,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const TONE = { grass: ['#5b9128', '#ae7330'], sand: ['#ddc37e', '#c7a35c'], sea: ['#1e5473', '#17415a'] };
+    const ART = {
+      forest: 'tiles/forest.png', crop: 'tiles/farm-crop.png', pumpkin: 'tiles/farm-pumpkin.png',
+      hut2: 'tiles/hut-l2.png', hut4: 'tiles/hut-l4.png',
+      boat: 'tiles/sea-boat.png', rock: 'tiles/sea-rock.png',
+    };
+    // face: 200 x 92, top at y=139 inside a 200 x 300 cell box (matches the tile art)
+    const HEX = 'polygon(0px 46px, 50px 0px, 150px 0px, 200px 46px, 150px 92px, 50px 92px)';
+    const SKIRT = 'polygon(0px 0px, 50px 46px, 150px 46px, 200px 0px, 200px 28px, 150px 74px, 50px 74px, 0px 28px)';
+
+    // [col, row, terrain, art, owner]  owner: 1 = you, 2 = rival
+    const data = [
+      [1,1,'sand'], [1,2,'sand'], [1,3,'sand'], [1,4,'sand'],
+      [2,0,'sand'], [2,1,'grass','forest'], [2,2,'grass','forest',1], [2,3,'grass',null,1], [2,4,'grass','forest'], [2,5,'sand'],
+      [3,0,'grass','forest'], [3,1,'grass','hut4',1], [3,2,'grass','hut2',1], [3,3,'grass',null,1], [3,4,'grass','forest'], [3,5,'sand'],
+      [4,0,'sand'], [4,1,'grass','forest',1], [4,2,'grass','hut4',1], [4,3,'grass','crop',1], [4,4,'grass','forest',1], [4,5,'sand'],
+      [5,0,'sand'], [5,1,'grass','forest'], [5,2,'grass','forest',1], [5,3,'grass','forest'], [5,4,'sand'],
+      [6,1,'sand'], [6,2,'sand'], [6,3,'sand'], [6,4,'sand'],
+      [9,1,'sand'], [9,2,'sand'],
+      [10,1,'grass','forest'], [10,2,'grass',null,2], [10,3,'grass','forest',2], [10,4,'sand'],
+      [11,0,'grass','forest'], [11,1,'grass','crop',2], [11,2,'grass','hut2',2], [11,3,'grass','forest',2], [11,4,'sand'],
+      [12,0,'sand'], [12,1,'grass','forest',2], [12,2,'grass','hut4',2], [12,3,'grass','hut4',2], [12,4,'sand'],
+      [13,1,'sand'], [13,2,'sand'], [13,3,'sand'],
+    ];
+
+    const cells = data.map(([q, r, terrain, art, owner]) => {
+      const x = q * 150, y = r * 92 + (q % 2 ? 46 : 0);
+      const [top, sideL] = TONE[terrain];
+      const water = art === 'boat' || art === 'rock';
+      return {
+        pos: { position: 'absolute', left: x, top: y, width: 200, height: 300, zIndex: Math.round(y * 10 + q) },
+        solid: true,
+        skirt: { position: 'absolute', left: 0, top: 185, width: 200, height: 74, background: sideL, clipPath: SKIRT },
+        face: { position: 'absolute', left: 0, top: 139, width: 200, height: 92, background: top, clipPath: HEX },
+        art: art ? ART[art] : null,
+        artStyle: { position: 'absolute', left: 0, top: water ? -11 : 0, width: 200, height: 300 },
+        plot: owner === 1 && !art,
+      };
+    });
+
+    const NB = q => q % 2
+      ? { n: [0, -1], ne: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], nw: [-1, 0] }
+      : { n: [0, -1], ne: [1, -1], se: [1, 0], s: [0, 1], sw: [-1, 0], nw: [-1, -1] };
+    const EDGE = {
+      n: [[50, 0], [150, 0]], ne: [[150, 0], [200, 46]], se: [[200, 46], [150, 92]],
+      s: [[150, 92], [50, 92]], sw: [[50, 92], [0, 46]], nw: [[0, 46], [50, 0]],
+    };
+    const outline = who => {
+      const owned = new Set(data.filter(d => d[4] === who).map(d => d[0] + ',' + d[1]));
+      let p = '';
+      owned.forEach(key => {
+        const [q, r] = key.split(',').map(Number);
+        const ox = q * 150, oy = r * 92 + (q % 2 ? 46 : 0) + 139;
+        const nb = NB(q);
+        Object.keys(EDGE).forEach(dir => {
+          if (owned.has((q + nb[dir][0]) + ',' + (r + nb[dir][1]))) return;
+          const [a, b] = EDGE[dir];
+          p += `M${ox + a[0]} ${oy + a[1]}L${ox + b[0]} ${oy + b[1]}`;
+        });
+      });
+      return p;
+    };
+
+    const track = 'M1060 386 C1140 350, 1200 402, 1272 428 S1420 452, 1500 402';
+
+    const blob = (l, t, w, h, o) => ({
+      position: 'absolute', left: l - w / 2, top: t - h / 2, width: w, height: h, zIndex: 9000, pointerEvents: 'none',
+      opacity: o, filter: 'blur(30px)',
+      background: 'radial-gradient(closest-side, rgba(238,247,251,.98) 0%, rgba(238,247,251,.86) 45%, rgba(238,247,251,0) 100%)',
+    });
+    const mist = [];
+    const ring = (rx, ry, op) => {
+      for (let a = 0; a < 360; a += 14) {
+        const t = a * Math.PI / 180;
+        mist.push(blob(1080 + Math.cos(t) * rx, 450 + Math.sin(t) * ry, 560, 500, op));
+      }
+    };
+    ring(1180, 560, .95);
+    ring(1520, 800, 1);
+
+    const zoom = +this.props.zoom || 0.46;
+    const frame = {
+      position: 'relative', width: +this.props.w || '100%', height: +this.props.h || 784,
+      background: 'radial-gradient(120% 100% at 45% 45%, #1f5877 0%, #123a52 60%, #0d2a3c 100%)',
+      overflow: 'hidden',
+    };
+    const canvas = {
+      position: 'absolute', left: '50%', top: '50%', width: 2400, height: 900,
+      transformOrigin: '0 0',
+      transform: `scale(${zoom}) translate(${-(+this.props.cx || 1100)}px, ${-(+this.props.cy || 450)}px)`,
+    };
+    return { cells, mist, border: outline(1), borderRival: outline(2), track, canvas, frame };
+  }
+}
+</script>
+</body>
+</html>
