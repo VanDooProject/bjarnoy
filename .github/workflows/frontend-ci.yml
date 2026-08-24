@@ -24,8 +24,10 @@ jobs:
       # Scoped to just the submodule this build needs, rather than
       # `actions/checkout`'s `submodules: true` (which recurses over every
       # submodule in the whole monorepo, including unrelated ones under
-      # legacy/).
-      - run: git submodule update --init --depth 1 -- src/frontend/vendor/bg_assets_hextile
+      # legacy/). Path is relative to the repo root (not this job's
+      # `working-directory: src/frontend` default) since git resolves
+      # submodule pathspecs from the top of the working tree.
+      - run: git submodule update --init --depth 1 -- vendor/bg_assets_hextile
 
       - uses: actions/setup-node@v4
         with:
