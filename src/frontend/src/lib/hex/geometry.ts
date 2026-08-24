@@ -44,8 +44,28 @@ export function isoPixelToAxial(world: Point, w: number, h: number): AxialCoord 
   return { q, r };
 }
 
-/** Draw-order key so overlapping isometric plates stack correctly. */
+/**
+ * Draw-order key so overlapping isometric plates stack correctly: primarily
+ * by actual screen depth (a tile further down-screen must draw after — on
+ * top of — one further up), column only breaking ties within the same
+ * depth. Two considerations that are easy to get wrong here, both of which
+ * previously produced tiles bleeding through each other at the wrong depth:
+ *
+ * - Odd columns sit half a row lower on screen than even ones
+ *   (isoGridPosition's `col & 1 ? h / 2 : 0`), so two hexes with the same
+ *   `row` are *not* at the same visual depth — sorting on `row` alone (as
+ *   this did before) put the wrong one in front at every odd/even column
+ *   boundary. Doubling the row and adding the column's parity back in
+ *   recovers the true half-row interleaving.
+ * - The column term's multiplier has to comfortably exceed the widest
+ *   column range the map can ever show at once, or a tile many columns
+ *   over from an earlier row can outrank one directly below it — which is
+ *   exactly what a small multiplier like the legacy prototypes used
+ *   (`round(y * 10 + q)`, fine for their single fixed-size board, wrong for
+ *   an arbitrarily panned world map) gets wrong.
+ */
 export function isoDepthKey(c: AxialCoord): number {
   const { col, row } = axialToOddQ(c);
-  return Math.round(row * 10 + col);
+  const effectiveRow = row * 2 + (col & 1 ? 1 : 0);
+  return effectiveRow * 100000 + col;
 }

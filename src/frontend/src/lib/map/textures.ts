@@ -25,8 +25,15 @@ import watchtowerUrl from '../../../vendor/bg_assets_hextile/hextiles/towerbuild
 
 export const TILE_ART_NATIVE_W = 200;
 export const TILE_ART_NATIVE_H = 300;
-/** Fraction of the canvas height down to where the flat top face begins. */
-export const TILE_ART_TOPFACE_Y_FRAC = 140 / 300;
+// Sprites are scaled uniformly from a *width* reference (sprite.width is set
+// to the display tile width; height follows the native H/W aspect ratio),
+// so every pixel measurement taken off the native art — including this
+// vertical offset — has to be expressed as a fraction of the native WIDTH
+// (200), not the native height, or it scales by the wrong factor and the
+// art ends up misaligned with the (width-scaled) hex-top polygons used for
+// borders/fog.
+/** Fraction of the tile width down to where the flat top face begins (140 / 200). */
+export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
 export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
 
