@@ -220,3 +220,16 @@ different balance) needs this as data.
 thresholds. `BiomFactory.GetRndBiomType` also news up a `Random` per call, which
 on the old .NET Framework time-seeded RNG returns correlated values in a tight
 loop. The biome layer was superseded by the noise generator and left behind.
+
+### `MapCreatorHelper.createIslands` can loop forever, and draws from ten seeds
+
+Islands are placed by generating one, then `while (checkCollisions(...))
+MoveIsland(...)` until it stops overlapping — with a `// TODO: add abort
+condition` where the bail-out should be. On a crowded map that loop does not
+terminate. `MoveIsland` also shifts by at most half the island's own size per
+step, so an island wedged between two others can shuffle back and forth
+indefinitely.
+
+The per-island seed is `_rnd.Next(0, 10)`, so a world of twenty islands draws
+from ten distinct shapes; with `size` from `_rnd.Next(15, 35)` the visible
+variety is lower still.
