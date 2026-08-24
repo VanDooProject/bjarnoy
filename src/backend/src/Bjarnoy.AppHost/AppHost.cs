@@ -6,7 +6,17 @@
 // API's wwwroot and the two ship as a single image (see deploy/Dockerfile).
 var builder = DistributedApplication.CreateBuilder(args);
 
-var postgres = builder.AddPostgres("postgres")
+// A fixed password rather than Aspire's default random one. Postgres only sets
+// its password at first initdb, but a random parameter is regenerated on every
+// apphost run — so a later run hands the container a password that no longer
+// matches the data volume from the previous run, and every connection fails
+// with "password authentication failed for user postgres". Pinning it keeps
+// the volume and the container in agreement across restarts. Local dev only;
+// nothing outside this container network can reach it, and a real deployment
+// connects with real credentials via Database:ConnectionString.
+var postgresPassword = builder.AddParameter("postgres-password", "bjarnoy-dev-only", secret: true);
+
+var postgres = builder.AddPostgres("postgres", password: postgresPassword)
     .WithDataVolume()
     // Keeps a restart from wiping the world you were testing against.
     .WithLifetime(ContainerLifetime.Persistent)
