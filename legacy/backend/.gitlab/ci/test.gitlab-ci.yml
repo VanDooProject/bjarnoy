@@ -1,0 +1,58 @@
+# Common test configuration and templates
+
+.test-template:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:9.0
+  before_script:
+    #  - dotnet tool install JunitXml.TestLogger --tool-path $CI_PROJECT_DIR/.dotnet/tools
+    - dotnet restore --verbosity minimal
+    - dotnet build --no-restore --verbosity minimal
+
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-nuget
+    paths:
+      - .nuget/packages
+
+  artifacts:
+    reports:
+      #coverage_report:
+      #  coverage_format: cobertura
+      #  path: "**/coverage.cobertura.xml"
+      junit: "**/TestResults/results.xml"
+    when: always
+
+unit-test:
+  extends: .test-template
+  needs:
+    - build
+    - atlas-migration
+  script:
+    #- dotnet test --filter "Category!=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    # run all non-Integration,non-ResourceDependent tests (see categories from step below)
+    - dotnet test --filter "Category!=Integration & Category!=IntegrationTest & Category!=ResourceDependent & Category!=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+
+integration-test:
+  extends: .test-template
+  needs:
+    - build
+    - atlas-migration
+  services:
+    - name: postgres:14.3-alpine
+      alias: postgres
+
+  variables:
+    POSTGRES_DB: $POSTGRES_DB
+    POSTGRES_USER: $POSTGRES_USER
+    POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+
+    ASPNETCORE_ENVIRONMENT: "gitlab" # this is for selecting the correct appsettings.envname.json
+    POSTGRESQL__DATABASE: ${POSTGRES_DB}
+    POSTGRESQL__HOST: "postgres"
+    POSTGRESQL__PORT: "5432"
+    POSTGRESQL__USERNAME: ${POSTGRES_USER}
+    POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD}
+
+  script:
+    # run tests from Integration|IntegrationTest|ResourceDependent|ResourceDependentTest categories
+    - dotnet test --filter "Category=Integration | Category=IntegrationTest | Category=ResourceDependent | Category=ResourceDependentTest" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"
+    #- dotnet test --filter "Category=Integration" --no-build --verbosity normal /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger "junit;LogFilePath=./TestResults/results.xml;MethodFormat=Class;FailureBodyFormat=Verbose"

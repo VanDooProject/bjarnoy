@@ -1,0 +1,19 @@
+package:
+  stage: package
+  image: gcr.io/kaniko-project/executor:debug
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - /kaniko/executor
+      --context .
+      --dockerfile deploy/Docker/backend.Dockerfile
+      --destination $CONTAINER_IMAGE:$CI_COMMIT_SHA
+      --destination $CONTAINER_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+# Pipeline triggers
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH
