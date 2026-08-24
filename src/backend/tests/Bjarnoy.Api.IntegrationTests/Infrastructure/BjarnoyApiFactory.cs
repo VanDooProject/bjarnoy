@@ -2,6 +2,7 @@ using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -60,6 +61,13 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
     public DatabaseProvider Provider => _provider;
 
+    /// <summary>
+    /// The clock the application sees. Tests advance it to ask what the world
+    /// looks like later, rather than waiting.
+    /// </summary>
+    public TestTimeProvider Time { get; } =
+        new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+
     /// <summary>Directory used as the application's web root during tests.</summary>
     public static string TestWebRootPath { get; } =
         Path.Combine(AppContext.BaseDirectory, "TestWebRoot");
@@ -101,6 +109,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         builder.UseWebRoot(TestWebRootPath);
 
         builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(Time);
+        });
     }
 
     protected override void Dispose(bool disposing)

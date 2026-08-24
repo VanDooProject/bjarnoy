@@ -22,6 +22,41 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BuildOrderEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CompletesAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Q")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("R")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TargetLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId", "Q", "R")
+                        .IsUnique();
+
+                    b.ToTable("build_orders", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.IslandEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -60,6 +95,115 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("islands", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Q")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("R")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId", "Q", "R")
+                        .IsUnique();
+
+                    b.ToTable("placed_buildings", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("CapacityGrain")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("CapacitySilver")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("CapacityStone")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("CapacityWood")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("CentreQ")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CentreR")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FoundedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("IslandId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OwnerName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<double>("RateGrain")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("RateSilver")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("RateStone")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("RateWood")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset>("SettledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("StockGrain")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("StockSilver")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("StockStone")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("StockWood")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IslandId");
+
+                    b.HasIndex("WorldId", "CentreQ", "CentreR")
+                        .IsUnique();
+
+                    b.ToTable("settlements", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -68,6 +212,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<double>("BeachThreshold")
                         .HasColumnType("double precision");
+
+                    b.Property<long>("ClockOffsetTicks")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -107,6 +254,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("Radius")
                         .HasColumnType("integer");
 
+                    b.Property<int>("RunState")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("RunStateSince")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Seed")
                         .HasColumnType("integer");
 
@@ -121,6 +274,17 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("worlds", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BuildOrderEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany("Queue")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.IslandEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
@@ -132,9 +296,48 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("World");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany("Buildings")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.IslandEntity", "Island")
+                        .WithMany()
+                        .HasForeignKey("IslandId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
+                        .WithMany("Settlements")
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Island");
+
+                    b.Navigation("World");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
+                {
+                    b.Navigation("Buildings");
+
+                    b.Navigation("Queue");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
                 {
                     b.Navigation("Islands");
+
+                    b.Navigation("Settlements");
                 });
 #pragma warning restore 612, 618
         }

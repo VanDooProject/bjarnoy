@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Infrastructure.Entities;
@@ -53,7 +54,36 @@ public class WorldEntity
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>What the world is doing: running, paused, locked, maintenance.</summary>
+    public WorldRunState RunState { get; set; } = WorldRunState.Running;
+
+    /// <summary>
+    /// Wall-clock instant the world entered <see cref="RunState"/>. One of the
+    /// only wall-clock timestamps in the schema — everything else is game time.
+    /// </summary>
+    public DateTimeOffset RunStateSince { get; set; }
+
+    /// <summary>
+    /// Total time subtracted from the game timeline: every completed freeze
+    /// plus any grace credited. Stored as ticks because a TimeSpan column maps
+    /// differently on each provider, and this has to compare equal on both.
+    /// </summary>
+    public long ClockOffsetTicks { get; set; }
+
     public List<IslandEntity> Islands { get; set; } = [];
+
+    public List<SettlementEntity> Settlements { get; set; } = [];
+
+    /// <summary>The world's clock, which converts wall time to game time.</summary>
+    public GameClock ToClock() =>
+        new(RunState, RunStateSince, TimeSpan.FromTicks(ClockOffsetTicks));
+
+    public void ApplyClock(GameClock clock)
+    {
+        RunState = clock.State;
+        RunStateSince = clock.StateSince;
+        ClockOffsetTicks = clock.AccumulatedOffset.Ticks;
+    }
 
     /// <summary>Rebuilds the generation options this world was created from.</summary>
     public WorldGenerationOptions ToGenerationOptions() => new()

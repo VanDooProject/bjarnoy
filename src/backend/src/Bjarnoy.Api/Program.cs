@@ -26,6 +26,7 @@ builder.AddServiceDefaults();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
+builder.Services.AddScoped<SettlementService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -77,6 +78,7 @@ var versionSet = app.NewApiVersionSet()
 
 app.MapDefaultEndpoints();
 app.MapWorldEndpoints(versionSet);
+app.MapSettlementEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot

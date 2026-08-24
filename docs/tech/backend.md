@@ -242,6 +242,13 @@ never got to use.
 Grace can only ever give time back; a negative value is rejected rather than
 silently stealing progress.
 
+Note what grace does and does not do. It moves game time backwards, which
+delays everything still to come — a queued build takes that much longer in wall
+terms, and production resumes only once the credited time is served. It does
+**not** claw back what a settlement already banked: `ResourcePool.At` floors at
+the last settled stock when asked for an earlier instant, so a player never
+watches resources disappear. Grace is a delay, not a confiscation.
+
 ## API
 
 `/api/v1/…`, with an OpenAPI document and a Scalar UI at `/scalar` in
@@ -254,6 +261,12 @@ development.
 | `GET /api/v1/worlds/{id}` | one world |
 | `GET /api/v1/worlds/{id}/islands` | its islands and their start positions |
 | `GET /api/v1/worlds/{id}/tiles?qMin=&qMax=&rMin=&rMax=` | terrain for a window |
+| `POST /api/v1/worlds/{id}/settlements` | found a settlement on a start position |
+| `GET /api/v1/worlds/{id}/settlements` | settlements in a world |
+| `POST /api/v1/worlds/{id}/state` | pause, lock, maintain or resume a world |
+| `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed |
+| `POST /api/v1/settlements/{id}/builds` | queue a building |
+| `GET /api/v1/buildings` | the catalogue: costs, durations, allowed terrain |
 | `GET /health`, `GET /alive` | readiness and liveness |
 
 Versions are literal path segments rather than a `{version:apiVersion}` route
@@ -305,9 +318,8 @@ that pattern would earn real immutable caching.
 Auth — the legacy JWT + rotating refresh token design is worth porting as
 designed. Until it lands, a settlement has no real owner.
 
-Settlements, resources and the build queue exist as domain rules
-(`Bjarnoy.Domain.Economy`, `Bjarnoy.Domain.Buildings`) but are not yet
-persisted or exposed over the API. Combat, fleets and caravans are untouched.
+Combat, fleets and caravans. Razing and capturing a settlement — the border
+rules assume a settlement's buildings only ever appear, never disappear.
 
 The building catalogue's numbers are a starting point for balancing, not a
 finished economy.

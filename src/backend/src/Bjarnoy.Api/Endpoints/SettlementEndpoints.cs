@@ -1,0 +1,286 @@
+using Asp.Versioning.Builder;
+using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Services;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Bjarnoy.Api.Endpoints;
+
+public static class SettlementEndpoints
+{
+    public static IEndpointRouteBuilder MapSettlementEndpoints(
+        this IEndpointRouteBuilder app,
+        ApiVersionSet versionSet)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+
+        var worlds = app.MapGroup("/api/v1/worlds")
+            .WithApiVersionSet(versionSet)
+            .WithTags("Settlements");
+
+        worlds.MapPost("/{worldId:guid}/settlements", Found)
+            .WithName("FoundSettlement")
+            .WithSummary("Founds a settlement on one of an island's start positions.");
+
+        worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
+            .WithName("ListWorldSettlements")
+            .WithSummary("Lists the settlements in a world.");
+
+        worlds.MapPost("/{worldId:guid}/state", SetState)
+            .WithName("SetWorldRunState")
+            .WithSummary("Pauses, locks, puts into maintenance, or resumes a world.");
+
+        var settlements = app.MapGroup("/api/v1/settlements")
+            .WithApiVersionSet(versionSet)
+            .WithTags("Settlements");
+
+        settlements.MapGet("/{settlementId:guid}", Get)
+            .WithName("GetSettlement")
+            .WithSummary("Fetches a settlement as of now, completing anything its queue owed.");
+
+        settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
+            .WithName("QueueBuild")
+            .WithSummary("Queues a building, charging its cost immediately.");
+
+        app.MapGet("/api/v1/buildings", Catalogue)
+            .WithApiVersionSet(versionSet)
+            .WithTags("Settlements")
+            .WithName("GetBuildingCatalogue")
+            .WithSummary("The build options: costs, durations, and the terrain each may stand on.");
+
+        return app;
+    }
+
+    private static async Task<Results<Created<SettlementResponse>, NotFound<ProblemDetails>,
+        Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> Found(
+        Guid worldId,
+        FoundSettlementRequest request,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await settlements.FoundAsync(
+            worldId,
+            request.IslandId,
+            new HexCoord(request.Q, request.R),
+            request.Name,
+            request.OwnerName,
+            cancellationToken);
+
+        if (result.Accepted)
+        {
+            var found = await settlements.GetAsync(result.Settlement!.Id, cancellationToken);
+            var (entity, clock) = found!.Value;
+
+            return TypedResults.Created(
+                $"/api/v1/settlements/{entity.Id}",
+                SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+        }
+
+        var problem = Problem(result.Rejection);
+        return result.Rejection switch
+        {
+            FoundingRejection.WorldNotFound or FoundingRejection.IslandNotFound =>
+                TypedResults.NotFound(problem),
+            FoundingRejection.PlotTaken or FoundingRejection.TooCloseToNeighbour
+                or FoundingRejection.WorldFull or FoundingRejection.WorldPaused
+                or FoundingRejection.NotAStartPosition =>
+                TypedResults.Conflict(problem),
+            _ => TypedResults.BadRequest(problem),
+        };
+    }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound>> Get(
+        Guid settlementId,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var found = await settlements.GetAsync(settlementId, cancellationToken);
+        if (found is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var (entity, clock) = found.Value;
+        return TypedResults.Ok(
+            SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
+        Guid worldId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
+
+        IReadOnlyList<SettlementSummary> response =
+        [
+            .. entities.Select(s => new SettlementSummary(
+                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0)),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Accepted<BuildOrderResponse>, NotFound,
+        Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> QueueBuild(
+        Guid settlementId,
+        QueueBuildRequest request,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!TryParseBuilding(request.Building, out var type))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Unknown building.",
+                Detail = $"'{request.Building}' is not a building. "
+                    + $"Valid: {string.Join(", ", BuildingCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        var result = await settlements.QueueBuildAsync(
+            settlementId, type, new HexCoord(request.Q, request.R), cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world is not accepting commands.",
+                Detail = "It is paused, locked or under maintenance.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        if (result.Accepted)
+        {
+            var order = result.Order!;
+            return TypedResults.Accepted(
+                $"/api/v1/settlements/{settlementId}",
+                new BuildOrderResponse(
+                    order.Id, order.Coord.Q, order.Coord.R, order.Type.ToWireName(),
+                    order.TargetLevel, order.CompletesAt,
+                    (order.CompletesAt - order.StartedAt).TotalSeconds));
+        }
+
+        var problem = new ProblemDetails
+        {
+            Title = "The build was refused.",
+            Detail = Describe(result.Rejection),
+            Status = StatusCodes.Status409Conflict,
+        };
+
+        return result.Rejection == BuildRejection.UnknownBuildingLevel
+            ? TypedResults.NotFound()
+            : TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<Ok<WorldClockResponse>, NotFound, BadRequest<ProblemDetails>>> SetState(
+        Guid worldId,
+        SetWorldStateRequest request,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!Enum.TryParse<WorldRunState>(request.State, ignoreCase: true, out var state))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Unknown world state.",
+                Detail = $"Valid: {string.Join(", ", Enum.GetNames<WorldRunState>()).ToLowerInvariant()}.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        var world = await settlements.SetRunStateAsync(
+            worldId, state, TimeSpan.FromSeconds(request.GraceSeconds), cancellationToken);
+
+        if (world is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var clock = world.ToClock();
+        return TypedResults.Ok(
+            WorldClockResponse.From(clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static Ok<IReadOnlyList<BuildingDefinitionResponse>> Catalogue(int? level)
+    {
+        var levels = level is { } requested
+            ? [requested]
+            : Enumerable.Range(1, BuildingCatalogue.MaxLevel).ToArray();
+
+        IReadOnlyList<BuildingDefinitionResponse> response =
+        [
+            .. from type in BuildingCatalogue.AllTypes
+               from l in levels
+               let definition = BuildingCatalogue.TryGet(type, l)
+               where definition is not null
+               select BuildingDefinitionResponse.From(definition),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    private static bool TryParseBuilding(string value, out BuildingType type)
+    {
+        foreach (var candidate in BuildingCatalogue.AllTypes)
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                type = candidate;
+                return true;
+            }
+        }
+
+        type = default;
+        return false;
+    }
+
+    private static ProblemDetails Problem(FoundingRejection rejection) => new()
+    {
+        Title = "The settlement could not be founded.",
+        Detail = rejection switch
+        {
+            FoundingRejection.WorldNotFound => "No such world.",
+            FoundingRejection.IslandNotFound => "No such island in this world.",
+            FoundingRejection.WorldPaused => "The world is not accepting commands.",
+            FoundingRejection.NotAStartPosition =>
+                "That hex is not one of the island's start positions.",
+            FoundingRejection.PlotTaken => "Someone already founded there.",
+            FoundingRejection.TooCloseToNeighbour =>
+                $"Settlements must be at least {SettlementService.MinimumSpacing} hexes apart.",
+            FoundingRejection.WorldFull => "The world is full.",
+            _ => "Refused.",
+        },
+        Status = StatusCodes.Status409Conflict,
+    };
+
+    private static string Describe(BuildRejection rejection) => rejection switch
+    {
+        BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
+        BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
+        BuildRejection.HexOccupied => "Another building already stands there.",
+        BuildRejection.NotEnoughResources => "Not enough resources.",
+        BuildRejection.LonghouseTooLow => "The longhouse is not high enough level yet.",
+        BuildRejection.QueueFull => $"The build queue is full (max {Settlement.MaxQueueLength}).",
+        BuildRejection.AlreadyQueuedOnHex => "Something is already queued on that hex.",
+        BuildRejection.MaxLevelReached => "That building is already at its maximum level.",
+        BuildRejection.LevelSkipped => "Levels must be built in order.",
+        _ => "Refused.",
+    };
+}
