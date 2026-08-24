@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#0a1418}a{color:#d8a94a;text-decoration:none}a:hover{color:#f0c66d}input{font-family:inherit}body{user-select:none;-webkit-user-select:none}img{-webkit-user-drag:none;user-select:none;pointer-events:none}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:4px}@keyframes pulseAlert{0%,100%{opacity:1}50%{opacity:.55}}</style></helmet>
+<div style="position:relative;width:100%;height:100vh;overflow:hidden;background:#08121a;color:#e8eef0;font-family:Barlow,system-ui,sans-serif;font-size:14px">
+
+<sc-if value="{{ isLanding }}">
+<div style="position:absolute;inset:0;overflow:hidden;background:radial-gradient(120% 90% at 60% 15%,#16323f 0%,#0a1a24 55%,#060e14 100%)">
+  <div style="{{ landingPanStyle }}">
+    <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="0">
+      <div style="{{ t.box }}">
+        <img src="{{ t.base }}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" alt="">
+        <img src="{{ t.top }}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" alt="">
+      </div>
+    </sc-for>
+  </div>
+  <div style="position:absolute;inset:0;background:linear-gradient(90deg,rgba(6,14,20,.97) 0%,rgba(6,14,20,.86) 34%,rgba(6,14,20,.2) 64%,rgba(6,14,20,.5) 100%)"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,14,20,.6) 0%,rgba(6,14,20,0) 32%,rgba(6,14,20,.8) 100%)"></div>
+
+  <div style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:22px 40px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:26px;height:26px;background:#d8a94a;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></div>
+      <div style="font-family:Barlow Condensed;font-weight:700;font-size:21px;letter-spacing:.14em;text-transform:uppercase">Vinland Saga Online</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:26px;font-size:13px;white-space:nowrap;color:rgba(232,238,240,.62)">
+      <span>World map</span><span>Rankings</span><span>Rules</span>
+      <span style="padding:7px 16px;border:1px solid rgba(255,255,255,.16);border-radius:6px;color:#e8eef0">Log in</span>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:40px;top:106px;width:520px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border:1px solid rgba(216,169,74,.4);border-radius:100px;font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#d8a94a">
+      <span style="width:6px;height:6px;border-radius:50%;background:#6fbf7a;animation:pulseAlert 2s infinite"></span>World 14 · Jotunheim · day 23
+    </div>
+    <h1 style="font-family:Barlow Condensed;font-weight:700;font-size:68px;line-height:.96;margin:20px 0 0;letter-spacing:-.01em">Claim an island.<br>Hold the shore.</h1>
+    <p style="margin:18px 0 0;font-size:17px;line-height:1.5;color:rgba(232,238,240,.7);max-width:430px;text-wrap:pretty">A real-time strategy world of hexes and longships. Your borders grow as your settlement grows — and your neighbours' borders grow too.</p>
+    <div style="margin:30px 0 0;display:flex;gap:10px;max-width:460px">
+      <input value="Ragnvald" style="flex:1;padding:0 16px;height:54px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:8px;color:#e8eef0;font-size:16px;outline:none">
+      <button onClick="{{ goSettlement }}" style="height:54px;padding:0 26px;background:#d8a94a;border:0;border-radius:8px;color:#12222a;font-family:Barlow Condensed;font-weight:700;font-size:19px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Sail out</button>
+    </div>
+    <div style="margin:12px 0 0;font-size:13px;color:rgba(232,238,240,.45)">No account needed. Pick a name, get an island, build for a while — register when you want to keep it.</div>
+    <div style="margin:34px 0 0;display:flex;gap:34px;font-family:Barlow Condensed">
+      <div><div style="font-size:26px;font-weight:700">3 128</div><div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(232,238,240,.45)">Jarls online</div></div>
+      <div><div style="font-size:26px;font-weight:700">417</div><div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(232,238,240,.45)">Islands settled</div></div>
+      <div><div style="font-size:26px;font-weight:700">61</div><div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:rgba(232,238,240,.45)">Free island slots</div></div>
+    </div>
+  </div>
+
+  <div style="position:absolute;right:40px;bottom:40px;width:280px;padding:16px 18px;background:rgba(10,20,26,.78);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+    <div style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5);margin-bottom:10px">Happening right now</div>
+    <sc-for list="{{ feed }}" as="f" hint-placeholder-count="3">
+      <div style="display:flex;gap:9px;align-items:baseline;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)">
+        <span style="width:5px;height:5px;border-radius:50%;flex:none;background:{{ f.color }};transform:translateY(-2px)"></span>
+        <span style="font-size:13px;color:rgba(232,238,240,.78);line-height:1.35">{{ f.text }}</span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSettlement }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 40%,#123040 0%,#0a1a24 60%,#07121a 100%)">
+
+  <div onMouseDown="{{ startPan }}" style="{{ dragStyle }}">
+    <div style="{{ panStyle }}">
+      <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="0">
+        <div style="{{ t.box }}">
+          <img src="{{ t.base }}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" alt="">
+          <div style="{{ t.wash }}"></div>
+          <svg viewBox="0 0 200 92" style="{{ t.glow }}"><path d="{{ t.d }}" fill="none" stroke="{{ t.color }}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <img src="{{ t.top }}" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none" alt="">
+          <div style="{{ t.pole }}"><div style="{{ t.flag }}"></div></div>
+          <div style="{{ t.hot }}" onMouseEnter="{{ t.enter }}" onMouseLeave="{{ leave }}" onClick="{{ t.click }}"></div>
+        </div>
+      </sc-for>
+      <sc-for list="{{ fogs }}" as="f" hint-placeholder-count="0"><div style="{{ f.style }}"></div></sc-for>
+      <sc-for list="{{ labels }}" as="l" hint-placeholder-count="0">
+        <div style="{{ l.style }}"><span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(8,18,24,.8);border:1px solid {{ l.color }};border-radius:100px;font-family:Barlow Condensed;font-size:13px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:{{ l.color }}"></span>{{ l.name }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+
+  <sc-if value="{{ hover }}">
+    <div style="{{ hoverStyle }}">
+      <div style="font-family:Barlow Condensed;font-size:17px;font-weight:600;letter-spacing:.04em">{{ hover.name }}</div>
+      <div style="font-size:12px;color:rgba(232,238,240,.55);margin-bottom:8px">{{ hover.sub }}</div>
+      <div style="display:flex;gap:14px;font-family:Barlow Condensed;font-size:15px">
+        <span style="color:{{ hover.color }}">{{ hover.out }}</span>
+        <span style="color:rgba(232,238,240,.45)">{{ hover.hint }}</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="position:absolute;top:0;left:0;right:0;height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:linear-gradient(180deg,rgba(7,15,20,.92) 0%,rgba(7,15,20,.6) 70%,rgba(7,15,20,0) 100%)">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:20px;height:20px;background:#d8a94a;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px">
+        <span style="font-family:Barlow Condensed;font-size:16px;font-weight:600;letter-spacing:.05em">HAFRSVIK</span>
+        <span style="font-size:12px;color:rgba(232,238,240,.45)">2 / 3 settlements</span>
+        <span style="color:rgba(232,238,240,.45)">▾</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <sc-for list="{{ res }}" as="r" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:9px;padding:8px 14px;background:rgba(12,24,30,.72);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:8px;min-width:112px">
+          <div style="width:12px;height:12px;flex:none;background:{{ r.color }};clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)"></div>
+          <div style="line-height:1.05">
+            <div style="font-family:Barlow Condensed;font-size:17px;font-weight:600;letter-spacing:.02em">{{ r.value }}</div>
+            <div style="font-size:11px;color:rgba(232,238,240,.42)">{{ r.label }} · {{ r.rate }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;font-size:13px;white-space:nowrap;color:rgba(232,238,240,.6)">
+      <span style="padding:7px 12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:7px">Clan · Havsulv</span>
+      <span style="padding:7px 12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:7px">Messages <span style="color:#d8a94a">3</span></span>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:20px;top:76px;width:264px;display:flex;flex-direction:column;gap:10px">
+    <div style="padding:14px 15px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px">
+        <span style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5)">Build queue</span>
+        <span style="font-size:12px;color:rgba(232,238,240,.4)">2 / 2</span>
+      </div>
+      <sc-for list="{{ queue }}" as="q" hint-placeholder-count="2">
+        <div style="margin-bottom:11px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+            <span style="font-size:13px">{{ q.name }} <span style="color:rgba(232,238,240,.42)">→ {{ q.lvl }}</span></span>
+            <span style="font-family:Barlow Condensed;font-size:15px;color:#d8a94a">{{ q.time }}</span>
+          </div>
+          <div style="height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden"><div style="{{ q.bar }}"></div></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding:13px 15px;background:rgba(58,18,16,.72);backdrop-filter:blur(14px);border:1px solid rgba(210,96,63,.45);border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#e8956f;animation:pulseAlert 1.6s infinite">Incoming raid</span>
+        <span style="font-family:Barlow Condensed;font-size:19px;color:#f0a882">{{ attackTime }}</span>
+      </div>
+      <div style="font-size:13px;color:rgba(232,238,240,.75)">Steinarr of Draugrey · 2 longships<br><span style="color:rgba(232,238,240,.45)">Landing on the east shore of Hafrsey</span></div>
+    </div>
+
+    <div style="padding:13px 15px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5)">Settler voyage</span>
+        <span style="font-family:Barlow Condensed;font-size:19px;color:#7fc4e0">{{ shipTime }}</span>
+      </div>
+      <div style="font-size:13px;color:rgba(232,238,240,.75)">Hafrsey → Vestrey · 3rd settlement</div>
+    </div>
+  </div>
+
+  <div style="position:absolute;right:20px;top:76px;width:212px;padding:14px 15px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+    <div style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5);margin-bottom:10px">Realm</div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:rgba(232,238,240,.6)">Border hexes</span><span>19</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:rgba(232,238,240,.6)">Free to build</span><span style="color:#6fbf7a">4</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:rgba(232,238,240,.6)">Contested</span><span style="color:#d2603f">3</span></div>
+    <div style="margin-top:11px;padding-top:11px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;line-height:1.45;color:rgba(232,238,240,.5)">Raise the longhouse to push the border one ring further east.</div>
+  </div>
+
+  <div style="position:absolute;left:50%;top:70px;transform:translateX(-50%);padding:5px 12px;background:rgba(12,24,30,.7);border:1px solid rgba(255,255,255,.08);border-radius:100px;font-size:12px;letter-spacing:.06em;color:rgba(232,238,240,.45);pointer-events:none">drag to sail across the archipelago</div>
+
+  <div style="position:absolute;right:20px;bottom:20px;width:212px;padding:12px 14px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+    <div style="font-family:Barlow Condensed;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.4);margin-bottom:9px">Border style · mockup control</div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <sc-for list="{{ borderOpts }}" as="b" hint-placeholder-count="4">
+        <div onClick="{{ b.pick }}" style="{{ b.style }}">{{ b.label }}</div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWorld }}">
+<div style="position:absolute;inset:0;background:radial-gradient(120% 100% at 50% 45%,#0f2734 0%,#091822 55%,#060f16 100%)">
+  <div onMouseDown="{{ startWorldPan }}" style="{{ worldDragStyle }}">
+    <div style="{{ wpanStyle }}">
+      <sc-for list="{{ wcells }}" as="w" hint-placeholder-count="0">
+        <div style="{{ w.outer }}"><div style="{{ w.inner }}"></div></div>
+      </sc-for>
+      <svg viewBox="0 0 4000 3000" style="position:absolute;left:0;top:0;width:4000px;height:3000px;overflow:visible;pointer-events:none">
+        <sc-for list="{{ wroutes }}" as="r" hint-placeholder-count="0">
+          <path d="{{ r.d }}" fill="none" stroke="{{ r.color }}" stroke-width="2" stroke-dasharray="7 7" opacity="0.75"></path>
+        </sc-for>
+        <sc-for list="{{ wmovers }}" as="m" hint-placeholder-count="0">
+          <circle cx="{{ m.x }}" cy="{{ m.y }}" r="5" fill="{{ m.color }}" stroke="#08121a" stroke-width="2"></circle>
+        </sc-for>
+      </svg>
+      <sc-for list="{{ wpins }}" as="p" hint-placeholder-count="0">
+        <div style="{{ p.style }}"><span style="{{ p.dot }}"></span><span style="{{ p.label }}">{{ p.name }}</span></div>
+      </sc-for>
+      <sc-for list="{{ wfogs }}" as="f" hint-placeholder-count="0"><div style="{{ f.style }}"></div></sc-for>
+    </div>
+  </div>
+  <div style="position:absolute;left:50%;top:70px;transform:translateX(-50%);padding:5px 12px;background:rgba(12,24,30,.7);border:1px solid rgba(255,255,255,.08);border-radius:100px;font-size:12px;letter-spacing:.06em;color:rgba(232,238,240,.45);pointer-events:none">drag to scan the archipelago · mist hides unscouted waters</div>
+
+  <div style="position:absolute;top:0;left:0;right:0;height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:linear-gradient(180deg,rgba(7,15,20,.92) 0%,rgba(7,15,20,0) 100%)">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div onClick="{{ goSettlement }}" style="display:flex;align-items:center;gap:8px;padding:7px 13px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:7px;cursor:pointer;font-family:Barlow Condensed;font-size:15px;letter-spacing:.06em;white-space:nowrap">← BACK TO HAFRSVIK</div>
+      <div style="font-family:Barlow Condensed;font-size:16px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5);white-space:nowrap">Jotunheim · sector 7</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <sc-for list="{{ res }}" as="r" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:rgba(12,24,30,.72);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:8px">
+          <div style="width:10px;height:10px;flex:none;background:{{ r.color }};clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)"></div>
+          <span style="font-family:Barlow Condensed;font-size:16px">{{ r.value }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:20px;top:76px;width:250px;padding:14px 15px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+    <div style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5);margin-bottom:11px">Vestrey · island 41:18</div>
+    <div style="font-size:13px;line-height:1.5;color:rgba(232,238,240,.7);margin-bottom:12px">14 hexes · 2 settlements · 4 free shore hexes</div>
+    <sc-for list="{{ islandOwners }}" as="o" hint-placeholder-count="3">
+      <div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid rgba(255,255,255,.07)">
+        <span style="width:9px;height:9px;flex:none;background:{{ o.color }};clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></span>
+        <span style="font-size:13px;flex:1">{{ o.name }}</span>
+        <span style="font-size:12px;color:rgba(232,238,240,.45)">{{ o.pop }}</span>
+      </div>
+    </sc-for>
+    <div style="margin-top:12px;padding:10px;text-align:center;background:#d8a94a;color:#12222a;border-radius:7px;font-family:Barlow Condensed;font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Send settlers · 5h 12m</div>
+  </div>
+
+  <div style="position:absolute;right:20px;top:76px;width:236px;padding:14px 15px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px">
+    <div style="font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5);margin-bottom:10px">Movements</div>
+    <sc-for list="{{ movements }}" as="m" hint-placeholder-count="3">
+      <div style="display:flex;gap:9px;padding:7px 0;border-top:1px solid rgba(255,255,255,.07)">
+        <span style="width:5px;height:5px;border-radius:50%;flex:none;background:{{ m.color }};transform:translateY(5px)"></span>
+        <div style="flex:1">
+          <div style="font-size:13px;color:rgba(232,238,240,.82)">{{ m.text }}</div>
+          <div style="font-size:12px;color:rgba(232,238,240,.42)">{{ m.sub }}</div>
+        </div>
+        <span style="font-family:Barlow Condensed;font-size:15px;color:{{ m.color }}">{{ m.time }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="position:absolute;left:20px;bottom:20px;display:flex;gap:8px;align-items:center;padding:9px 13px;background:rgba(12,24,30,.8);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.09);border-radius:10px;font-size:12px;color:rgba(232,238,240,.6)">
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;background:#4f9fd8;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></span>You</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;background:#6fbf7a;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></span>Clan</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;background:#d2603f;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></span>Hostile</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;background:#5d7684;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)"></span>Free island</span>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sel }}">
+<div style="position:absolute;inset:0;background:rgba(6,12,17,.86);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:40">
+  <div style="width:880px;max-width:94vw;background:rgba(13,26,33,.96);border:1px solid rgba(255,255,255,.1);border-radius:14px;overflow:hidden;display:flex">
+    <div style="width:340px;flex:none;background:radial-gradient(90% 70% at 50% 45%,#1a3d4d 0%,#0d1f29 100%);display:flex;align-items:center;justify-content:center;position:relative">
+      <img src="{{ sel.src }}" style="width:300px;height:450px;object-fit:contain;transform:translateY(14px)" alt="">
+      <div style="position:absolute;left:18px;top:18px;font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.5)">Hex {{ sel.coord }}</div>
+    </div>
+    <div style="flex:1;padding:26px 28px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-family:Barlow Condensed;font-size:30px;font-weight:700;letter-spacing:.02em;line-height:1">{{ sel.name }}</div>
+          <div style="font-size:13px;color:rgba(232,238,240,.5);margin-top:4px">Level {{ sel.lvl }} · {{ sel.sub }}</div>
+        </div>
+        <div onClick="{{ close }}" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.14);border-radius:7px;cursor:pointer;color:rgba(232,238,240,.6)">✕</div>
+      </div>
+      <p style="font-size:14px;line-height:1.55;color:rgba(232,238,240,.68);margin:16px 0 0;max-width:440px;text-wrap:pretty">{{ sel.desc }}</p>
+      <div style="display:flex;gap:26px;margin:22px 0 0;padding:16px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)">
+        <div><div style="font-family:Barlow Condensed;font-size:22px;color:#6fbf7a">{{ sel.now }}</div><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(232,238,240,.42)">Now</div></div>
+        <div style="align-self:center;color:rgba(232,238,240,.3)">→</div>
+        <div><div style="font-family:Barlow Condensed;font-size:22px;color:#d8a94a">{{ sel.next }}</div><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(232,238,240,.42)">Level {{ sel.nextLvl }}</div></div>
+      </div>
+      <div style="margin:18px 0 0;font-family:Barlow Condensed;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:rgba(232,238,240,.45)">Upgrade cost</div>
+      <div style="display:flex;gap:8px;margin:9px 0 0">
+        <sc-for list="{{ sel.cost }}" as="c" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:7px">
+            <div style="width:10px;height:10px;background:{{ c.color }};clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)"></div>
+            <span style="font-family:Barlow Condensed;font-size:16px;color:{{ c.text }}">{{ c.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin:22px 0 0">
+        <div style="padding:12px 24px;background:#d8a94a;color:#12222a;border-radius:8px;font-family:Barlow Condensed;font-weight:700;font-size:17px;letter-spacing:.07em;text-transform:uppercase;cursor:pointer">Upgrade · {{ sel.buildTime }}</div>
+        <div style="padding:12px 20px;border:1px solid rgba(255,255,255,.14);border-radius:8px;font-family:Barlow Condensed;font-size:17px;letter-spacing:.07em;text-transform:uppercase;color:rgba(232,238,240,.7);cursor:pointer">Demolish</div>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<div style="position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:4px;padding:5px;background:rgba(12,24,30,.85);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.1);border-radius:100px;z-index:50">
+  <sc-for list="{{ nav }}" as="n" hint-placeholder-count="3">
+    <div onClick="{{ n.go }}" style="{{ n.style }}">{{ n.label }}</div>
+  </sc-for>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { view: 'settlement', border: 'outline', tick: 0, hover: null, sel: null, pan: null, wpan: null, vw: 1440, vh: 900, dragging: false };
+
+  componentDidMount() {
+    this._iv = setInterval(() => this.setState(s => ({ tick: s.tick + 1 })), 1000);
+    this._move = (e) => {
+      if (!this._drag) return;
+      const d = this._drag, v = { x: d.px + e.clientX - d.x, y: d.py + e.clientY - d.y };
+      this.setState(d.key === 'wpan' ? { wpan: v } : { pan: v });
+    };
+    this._up = () => { if (this._drag) { this._drag = null; this.setState({ dragging: false }); } };
+    window.addEventListener('mousemove', this._move);
+    window.addEventListener('mouseup', this._up);
+    this._resize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    window.addEventListener('resize', this._resize);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+  }
+  componentWillUnmount() {
+    clearInterval(this._iv);
+    window.removeEventListener('mousemove', this._move);
+    window.removeEventListener('mouseup', this._up);
+    window.removeEventListener('resize', this._resize);
+  }
+
+  P() { return 'uploads/hextiles/'; }
+  BLANK() { return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; }
+
+  nb(c, r) { const e = c % 2 === 0; return { N: [c, r - 1], S: [c, r + 1], NE: [c + 1, e ? r - 1 : r], SE: [c + 1, e ? r : r + 1], NW: [c - 1, e ? r - 1 : r], SW: [c - 1, e ? r : r + 1] }; }
+  cube(c, r) { const x = c, z = r - ((c - (c & 1)) / 2); return [x, -x - z, z]; }
+  dist(c1, r1, c2, r2) { const a = this.cube(c1, r1), b = this.cube(c2, r2); return (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 2; }
+
+  geom() { const S = 0.55; return { S, W: 200 * S, H: 300 * S, COLX: 150 * S, ROWY: 92 * S, HALF: 46 * S, TOP: 140 * S, FACE: 92 * S }; }
+  pos(c, r) { const g = this.geom(); return { left: c * g.COLX, top: r * g.ROWY + (c & 1) * g.HALF }; }
+
+  vision() {
+    return [{ c: 10, r: 10, rad: 3 }, { c: 10, r: 11, rad: 2.2 }, { c: 6, r: 19, rad: 2.4 }, { c: 21, r: 4, rad: 2 }];
+  }
+  fogAt(c, r) {
+    let best = 99;
+    for (const v of this.vision()) best = Math.min(best, this.dist(c, r, v.c, v.r) - v.rad);
+    const n = ((Math.sin(c * 45.164 + r * 21.379) * 24634.633) % 1 + 1) % 1;
+    best += (n - 0.5) * 1.5;
+    if (best <= 0) return 0;
+    return Math.min(1, best / 2.8);
+  }
+
+  home() { return { c: 10, r: 10 }; }
+  rival() { return { c: 14, r: 9 }; }
+
+  buildings() {
+    return {
+      '10,10': { t: 'hut', lvl: 4, name: 'Longhouse', sub: 'Main building · Hafrsvik', out: 'Border radius 2', hint: 'click to upgrade', desc: 'The seat of the jarl. Every level widens the realm border and unlocks the next tier of buildings across the settlement.', now: 'Radius 2 · 19 hexes', next: 'Radius 3 · 31 hexes', color: '#d8a94a' },
+      '11,9': { t: 'hut', lvl: 2, name: 'Warrior Hall', sub: 'Trains raiders and shieldmaidens', out: '+2 troop slots', hint: 'click to upgrade', desc: 'Housing for the war band. Higher levels train faster and allow heavier troop types.', now: '2 units / 14 min', next: '3 units / 11 min', color: '#d2603f' },
+      '9,10': { t: 'hut', lvl: 1, name: 'Storehouse', sub: 'Resource capacity', out: 'Cap 12 000', hint: 'click to upgrade', desc: 'Everything above the cap is lost on the tick. Raiders can only steal what sits in the storehouse.', now: 'Cap 12 000', next: 'Cap 19 000', color: '#d8a94a' },
+      '10,9': { t: 'crop', lvl: 1, name: 'Crop Field', sub: 'Food production', out: '+340 food/h', hint: 'click to upgrade', desc: 'Grain grown on the hex. Food feeds the population and the war band; run out and troops desert.', now: '340 food/h', next: '505 food/h', color: '#6fbf7a' },
+      '9,9': { t: 'pumpkin', lvl: 1, name: 'Pumpkin Patch', sub: 'Food production', out: '+210 food/h', hint: 'click to upgrade', desc: 'Slower than grain but keeps through winter, so it protects against food raids.', now: '210 food/h', next: '315 food/h', color: '#6fbf7a' },
+      '10,11': { t: 'tower', lvl: 1, name: 'Watchtower', sub: 'Border anchor · vision', out: 'Anchors 3 hexes', hint: 'click to upgrade', desc: 'Pushes the realm border outward on its own and reveals incoming ships one ring earlier.', now: '3 hexes · 1 ring vision', next: '5 hexes · 2 rings', color: '#4f9fd8' },
+      '11,11': { t: 'fish', lvl: 1, name: 'Fishing Hut', sub: 'Coastal food', out: '+180 food/h', hint: 'click to upgrade', desc: 'Only buildable on a shore hex. Cannot be raided while your longships hold the water.', now: '180 food/h', next: '270 food/h', color: '#6fbf7a' },
+      '14,9': { t: 'hut', lvl: 3, name: "Steinarr's Longhouse", sub: 'Rival settlement · Draugrey clan', out: 'Hostile', hint: 'not yours', desc: 'A rival settlement sharing your island. Its border presses against yours on the three contested hexes to the east.', now: 'Border radius 2', next: '—', color: '#d2603f' },
+      '15,10': { t: 'crop', lvl: 0, name: 'Rival Crop Field', sub: 'Draugrey clan', out: 'Hostile', hint: 'not yours', desc: 'Food for the rival war band. A raid here slows their troop training.', now: '120 food/h', next: '—', color: '#d2603f' },
+      '15,8': { t: 'tower', lvl: 0, name: 'Rival Watchtower', sub: 'Draugrey clan', out: 'Hostile', hint: 'not yours', desc: 'Their border anchor. Take it down and the contested hexes fall to you.', now: 'Anchors 2 hexes', next: '—', color: '#d2603f' }
+    };
+  }
+
+  layers(cell) {
+    const P = this.P(), v = ((cell.c * 7 + cell.r * 3) % 3), B = this.BLANK();
+    const varName = (base, n) => n === 0 ? base + '.png' : base + '_variant00' + (n - 1) + '.png';
+    switch (cell.type) {
+      case 'sea': return { base: P + 'watertile_SE.png', top: B, full: P + 'watertile_SE.png' };
+      case 'coast': return { base: P + varName('coastalwatertile_SE', v), top: B, full: P + 'coastalwatertile_SE.png' };
+      case 'sand': return { base: P + 'sandtile_SE.png', top: B, full: P + 'sandtile_SE.png' };
+      case 'mountain': return { base: P + 'mountaintile_SE.png', top: B, full: P + 'mountaintile_SE.png' };
+      case 'forest': return { base: P + 'base/foresttile_SE_base.png', top: P + varName('top/foresttile_SE', v), full: P + 'foresttile_SE.png' };
+      case 'building': {
+        const b = cell.b;
+        if (b.t === 'hut') return { base: P + 'base/vikinghut_SE_base.png', top: P + 'top/vikinghut_SE_level00' + b.lvl + '.png', full: P + 'vikinghut_SE_level00' + b.lvl + '.png' };
+        if (b.t === 'crop') return { base: P + 'base/farm_crop_SE_base.png', top: P + 'top/farm_crop_SE_level00' + b.lvl + '.png', full: P + 'farm_crop_SE_level00' + b.lvl + '.png' };
+        if (b.t === 'pumpkin') return { base: P + 'base/farm_pumpkin_SE_base.png', top: P + 'top/farm_pumpkin_SE_level00' + b.lvl + '.png', full: P + 'farm_pumpkin_SE_level00' + b.lvl + '.png' };
+        if (b.t === 'tower') return { base: P + 'towerbuilding_SE_level00' + b.lvl + '.png', top: B, full: P + 'towerbuilding_SE_level00' + b.lvl + '.png' };
+        return { base: P + 'fishinghutbuilding_SE.png', top: B, full: P + 'fishinghutbuilding_SE.png' };
+      }
+      default: return { base: P + 'base/grasstile_SE_base.png', top: P + varName('top/grasstile_SE', v), full: P + 'grasstile_SE.png' };
+    }
+  }
+
+  map() {
+    if (this._map) return this._map;
+    const COLS = 34, ROWS = 28;
+    let seed = 918273;
+    const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const isles = [
+      { c: 11, r: 10, rad: 4 }, { c: 14, r: 9, rad: 2.6 },
+      { c: 4, r: 4, rad: 2.4 }, { c: 21, r: 4, rad: 3.4 }, { c: 27, r: 13, rad: 2.6 },
+      { c: 6, r: 19, rad: 3.4 }, { c: 17, r: 21, rad: 2.6 }, { c: 26, r: 23, rad: 1.8 },
+      { c: 2, r: 12, rad: 1.8 }, { c: 20, r: 15, rad: 2.2 }, { c: 31, r: 6, rad: 2 }, { c: 12, r: 25, rad: 1.8 }
+    ];
+    const B = this.buildings(), land = {}, cells = [], byKey = {};
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+      let score = 99;
+      for (const is of isles) score = Math.min(score, this.dist(c, r, is.c, is.r) - is.rad);
+      const isLand = score <= 0 || (score < 1.2 && rng() > 0.55);
+      land[c + ',' + r] = isLand;
+      const cell = { c, r, isLand };
+      cells.push(cell); byKey[c + ',' + r] = cell;
+    }
+    for (const cell of cells) {
+      const k = cell.c + ',' + cell.r, n = this.nb(cell.c, cell.r);
+      const keys = Object.keys(n).map(d => n[d][0] + ',' + n[d][1]);
+      if (!cell.isLand) { cell.type = keys.some(kk => land[kk]) ? 'coast' : 'sea'; continue; }
+      if (B[k]) { cell.type = 'building'; cell.b = B[k]; continue; }
+      const shore = keys.some(kk => !land[kk]);
+      if (shore && rng() > 0.4) { cell.type = 'sand'; continue; }
+      const v = rng();
+      cell.type = v < 0.26 ? 'forest' : v < 0.36 ? 'mountain' : 'grass';
+    }
+    const H = this.home(), R = this.rival();
+    for (const cell of cells) {
+      cell.owner = null;
+      if (!cell.isLand) continue;
+      const da = this.dist(cell.c, cell.r, H.c, H.r), db = this.dist(cell.c, cell.r, R.c, R.r);
+      if (da <= 2 && da <= db) cell.owner = 'a'; else if (db <= 2) cell.owner = 'b';
+    }
+    for (const cell of cells) Object.assign(cell, this.layers(cell));
+    this._map = { cells, byKey, COLS, ROWS };
+    return this._map;
+  }
+
+  defaultPan() {
+    const g = this.geom(), p = this.pos(this.home().c, this.home().r);
+    return { x: this.state.vw / 2 - p.left - g.W / 2, y: this.state.vh / 2 + 10 - p.top - g.TOP - g.FACE / 2 };
+  }
+
+  fmt(s) {
+    if (s < 0) s = 0;
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const p = n => (n < 10 ? '0' + n : '' + n);
+    return h > 0 ? h + ':' + p(m) + ':' + p(sec) : m + ':' + p(sec);
+  }
+  num(n) { return Math.floor(n).toLocaleString('en-US').replace(/,/g, ' '); }
+  ownerColor(o) { return o === 'a' ? '#4f9fd8' : '#d2603f'; }
+
+  renderVals() {
+    const g = this.geom(), t = this.state.tick, m = this.map(), B = this.state.border;
+    const pan = this.state.pan || this.defaultPan();
+    const hidden = { display: 'none' };
+    const showWash = B === 'wash' || B === 'banner' || B === 'combo';
+    const showGlow = B === 'outline' || B === 'combo';
+
+    const vis = m.cells.filter(cell => {
+      const p = this.pos(cell.c, cell.r), x = p.left + pan.x, y = p.top + pan.y;
+      return x > -g.W - 60 && x < this.state.vw + 60 && y > -g.H - 40 && y < this.state.vh + 60;
+    }).sort((x, y) => {
+      const px = this.pos(x.c, x.r), py = this.pos(y.c, y.r);
+      return px.top - py.top || px.left - py.left;
+    });
+
+    const tiles = vis.map(cell => {
+      const p = this.pos(cell.c, cell.r), col = cell.owner ? this.ownerColor(cell.owner) : '#000';
+      const fogV = this.fogAt(cell.c, cell.r);
+      const jf = ((Math.sin(cell.c * 12.9898 + cell.r * 78.233) * 43758.5453) % 1 + 1) % 1;
+      const fogA = fogV > 0.02 ? Math.min(0.96, fogV * (0.82 + jf * 0.34)) : 0;
+      const o = { key: cell.c + '_' + cell.r, base: cell.base, top: cell.top, d: '', color: col,
+        box: { position: 'absolute', left: p.left + 'px', top: p.top + 'px', width: g.W + 'px', height: g.H + 'px', filter: fogV > 0.02 ? 'grayscale(' + Math.min(0.9, fogV * 1.2) + ') brightness(' + (1 + fogV * 0.14) + ')' : 'none' },
+        wash: hidden, glow: hidden, hot: hidden, pole: hidden, flag: hidden, enter: null, click: null };
+      const face = { position: 'absolute', left: '0', top: g.TOP + 'px', width: g.W + 'px', height: g.FACE + 'px', pointerEvents: 'none' };
+      if (cell.owner) {
+        if (showWash) o.wash = Object.assign({}, face, { background: col, opacity: B === 'wash' ? 0.34 : 0.22, mixBlendMode: 'color', clipPath: 'polygon(0 50%,24.5% 0,75.5% 0,100% 50%,75.5% 100%,24.5% 100%)' });
+        const n = this.nb(cell.c, cell.r);
+        const own = k => { const c2 = m.byKey[k[0] + ',' + k[1]]; return c2 && c2.owner === cell.owner; };
+        const e = [];
+        if (!own(n.N)) e.push('M49 3 L151 3');
+        if (!own(n.NE)) e.push('M151 3 L197 46');
+        if (!own(n.SE)) e.push('M197 46 L151 89');
+        if (!own(n.S)) e.push('M151 89 L49 89');
+        if (!own(n.SW)) e.push('M49 89 L3 46');
+        if (!own(n.NW)) e.push('M3 46 L49 3');
+        if (e.length) {
+          o.d = e.join(' ');
+          if (showGlow) o.glow = Object.assign({}, face, { overflow: 'visible', filter: 'drop-shadow(0 0 5px ' + col + ')' });
+          if (B === 'banner') {
+            o.pole = { position: 'absolute', left: (g.W / 2 - 1) + 'px', top: (g.TOP + g.FACE / 2 - 34) + 'px', width: '2px', height: '34px', background: 'rgba(40,30,22,.9)', pointerEvents: 'none' };
+            o.flag = { position: 'absolute', left: '2px', top: '2px', width: '15px', height: '11px', background: col, clipPath: 'polygon(0 0,100% 0,72% 50%,100% 100%,0 100%)' };
+          }
+        }
+      }
+      if (fogV > 0.55) { o.wash = hidden; o.glow = hidden; o.pole = hidden; return o; }
+      if (cell.b) {
+        const hovered = this.state.hover && this.state.hover.k === cell.c + ',' + cell.r;
+        o.hot = Object.assign({}, face, { pointerEvents: 'auto', cursor: 'pointer', clipPath: 'polygon(0 50%,24.5% 0,75.5% 0,100% 50%,75.5% 100%,24.5% 100%)', background: hovered ? 'rgba(255,255,255,.16)' : 'transparent' });
+        o.enter = () => this.setState({ hover: { k: cell.c + ',' + cell.r, name: cell.b.name, sub: cell.b.sub + ' · level ' + cell.b.lvl, out: cell.b.out, hint: cell.b.hint, color: cell.b.color, x: p.left + g.W / 2, y: p.top + g.TOP } });
+        o.click = () => this.setState({ sel: { name: cell.b.name, sub: cell.b.sub, lvl: cell.b.lvl, nextLvl: cell.b.lvl + 1, desc: cell.b.desc, now: cell.b.now, next: cell.b.next, src: cell.full, coord: '41:18 · ' + cell.c + '/' + cell.r, buildTime: '2:14:00', cost: [{ v: '1 240', color: '#b98a55', text: '#e8eef0' }, { v: '860', color: '#8fa3ad', text: '#e8eef0' }, { v: '400', color: '#6fbf7a', text: '#e8eef0' }, { v: '220', color: '#d2603f', text: '#f0a882' }] } });
+      }
+      return o;
+    });
+
+    const fogs = [];
+    for (const cell of vis) {
+      const fv = this.fogAt(cell.c, cell.r);
+      if (fv <= 0.02) continue;
+      const jf = ((Math.sin(cell.c * 12.9898 + cell.r * 78.233) * 43758.5453) % 1 + 1) % 1;
+      const a = Math.min(0.95, fv * (0.8 + jf * 0.32));
+      const p = this.pos(cell.c, cell.r);
+      fogs.push({ key: 'f' + cell.c + '_' + cell.r, style: { position: 'absolute', left: (p.left - g.W * 0.34 + jf * 14) + 'px', top: (p.top + g.TOP - g.FACE * 0.85 - jf * 12) + 'px', width: g.W * 1.68 + 'px', height: g.FACE * 2.7 + 'px', background: 'radial-gradient(closest-side at ' + (44 + jf * 14) + '% ' + (48 + jf * 10) + '%, rgba(233,240,244,' + a + ') 0%, rgba(222,232,238,' + a * 0.88 + ') 44%, rgba(212,224,231,' + a * 0.42 + ') 70%, rgba(208,221,229,0) 100%)', filter: 'blur(' + (8 + jf * 6) + 'px)', pointerEvents: 'none' } });
+    }
+
+    const labels = [{ c: this.home().c, r: this.home().r, name: 'Hafrsvik', o: 'a' }, { c: this.rival().c, r: this.rival().r, name: 'Draugrvik', o: 'b' }].map(spec => {
+      const p = this.pos(spec.c, spec.r);
+      return { key: 'l' + spec.c, name: spec.name, color: this.ownerColor(spec.o), style: { position: 'absolute', left: (p.left + g.W / 2) + 'px', top: (p.top + g.TOP - 26) + 'px', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 6 } };
+    });
+
+    const hv = this.state.hover;
+    const res = [
+      { key: 'wood', label: 'Wood', color: '#b98a55', value: this.num(4820 + t * 1.31), rate: '4 720/h' },
+      { key: 'stone', label: 'Stone', color: '#8fa3ad', value: this.num(3110 + t * 0.94), rate: '3 380/h' },
+      { key: 'food', label: 'Food', color: '#6fbf7a', value: this.num(7640 + t * 0.42), rate: '1 510/h' },
+      { key: 'iron', label: 'Iron', color: '#d2603f', value: this.num(1290 + t * 0.36), rate: '1 300/h' }
+    ];
+
+    const queue = [{ name: 'Longhouse', lvl: 5, end: 2214, total: 8040 }, { name: 'Watchtower', lvl: 2, end: 486, total: 1800 }].map((q, i) => {
+      const left = Math.max(0, q.end - t), pct = Math.round(100 * (1 - left / q.total));
+      return { key: 'q' + i, name: q.name, lvl: q.lvl, time: this.fmt(left), bar: { width: pct + '%', height: '100%', background: i === 0 ? '#d8a94a' : '#4f9fd8', borderRadius: '2px' } };
+    });
+
+    const borderOpts = [['outline', 'Hex-edge glow'], ['banner', 'Banner poles + tint'], ['wash', 'Soft colour wash'], ['combo', 'Glow + wash']].map(k => ({
+      key: k[0], label: k[1], pick: () => this.setState({ border: k[0] }),
+      style: { padding: '7px 10px', borderRadius: '6px', fontSize: '13px', cursor: 'pointer', background: B === k[0] ? 'rgba(216,169,74,.16)' : 'rgba(255,255,255,.04)', border: '1px solid ' + (B === k[0] ? 'rgba(216,169,74,.5)' : 'rgba(255,255,255,.07)'), color: B === k[0] ? '#f0c66d' : 'rgba(232,238,240,.65)' }
+    }));
+
+    const nav = [{ k: 'landing', l: 'Landing' }, { k: 'settlement', l: 'Settlement' }, { k: 'world', l: 'World map' }].map(n => ({
+      key: n.k, label: n.l, go: () => this.setState({ view: n.k, sel: null }),
+      style: { padding: '8px 20px', borderRadius: '100px', fontFamily: 'Barlow Condensed', fontSize: '15px', letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer', background: this.state.view === n.k ? '#d8a94a' : 'transparent', color: this.state.view === n.k ? '#12222a' : 'rgba(232,238,240,.62)' }
+    }));
+
+    return Object.assign({
+      isLanding: this.state.view === 'landing', isSettlement: this.state.view === 'settlement', isWorld: this.state.view === 'world',
+      tiles, fogs, labels, res, queue, borderOpts, nav,
+      panStyle: { position: 'absolute', left: '0', top: '0', transform: 'translate3d(' + Math.round(pan.x) + 'px,' + Math.round(pan.y) + 'px,0)' },
+      landingPanStyle: { position: 'absolute', left: '0', top: '0', opacity: 0.72, transform: 'translate3d(' + Math.round(pan.x + 120) + 'px,' + Math.round(pan.y) + 'px,0) scale(.94)' },
+      dragStyle: { position: 'absolute', inset: '0', overflow: 'hidden', cursor: this.state.dragging ? 'grabbing' : 'grab' },
+      startPan: (e) => { this._drag = { key: 'pan', x: e.clientX, y: e.clientY, px: pan.x, py: pan.y }; this.setState({ dragging: true, hover: null }); },
+      hover: hv, leave: () => this.setState({ hover: null }),
+      hoverStyle: hv ? { position: 'absolute', left: (pan.x + hv.x) + 'px', top: (pan.y + hv.y - 88) + 'px', transform: 'translateX(-50%)', padding: '10px 14px', background: 'rgba(10,20,26,.94)', border: '1px solid rgba(255,255,255,.12)', borderRadius: '9px', pointerEvents: 'none', zIndex: 30, minWidth: '190px' } : {},
+      sel: this.state.sel, close: () => this.setState({ sel: null }),
+      goSettlement: () => this.setState({ view: 'settlement' }),
+      attackTime: this.fmt(754 - t), shipTime: this.fmt(18742 - t),
+      feed: [{ text: 'Steinarr raided Kaldvik and took 4 200 wood', color: '#d2603f' }, { text: 'Clan Havsulv claimed the last free hex on Vestrey', color: '#6fbf7a' }, { text: 'Two longships left Nordsker heading south', color: '#4f9fd8' }]
+    }, this.world());
+  }
+
+  wgeom() { return { W: 64, H: 56, COLX: 48, ROWY: 56, HALF: 28, OX: 30, OY: 20 }; }
+  wcenter(c, r) { const g = this.wgeom(); return { x: g.OX + c * g.COLX + g.W / 2, y: g.OY + r * g.ROWY + (c & 1) * g.HALF + g.H / 2 }; }
+  hash(a, b) { const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return n - Math.floor(n); }
+
+  worldIslands() {
+    if (this._wi) return this._wi;
+    const names = ['Hafrsey', 'Vestrey', 'Draugrey', 'Skarn', 'Nordsker', 'Ulfsker', 'Bjarney', 'Eysker', 'Kaldvik', 'Myrsker', 'Grimsey', 'Fjallsey', 'Raudey', 'Svartsker', 'Hvalsey', 'Lundey', 'Storsker', 'Thorsey', 'Vargsey', 'Isbjorney', 'Selsker', 'Kolsey'];
+    const owns = ['free', 'foe', 'free', 'clan', 'free', 'foe', 'free', 'free', 'clan', 'free'];
+    const list = [{ c: 8, r: 7, rad: 2, name: 'Hafrsey', own: 'you' }, { c: 12, r: 10, rad: 2, name: 'Vestrey', own: 'clan' }, { c: 15, r: 5, rad: 2, name: 'Draugrey', own: 'foe' }];
+    let n = 0;
+    for (let i = 0; i < 9; i++) for (let j = 0; j < 7; j++) {
+      const k = this.hash(i * 3 + 1, j * 5 + 2);
+      if (k < 0.42) continue;
+      const c = Math.round(3 + i * 5 + this.hash(i + 9, j) * 3), r = Math.round(3 + j * 4 + this.hash(i, j + 7) * 3);
+      if (list.some(o => this.dist(c, r, o.c, o.r) < 4)) continue;
+      list.push({ c, r, rad: 1 + Math.round(this.hash(i + 3, j + 3) * 2) * 0.6, name: names[(3 + n) % names.length] + (3 + n >= names.length ? ' II' : ''), own: owns[n % owns.length] });
+      n++;
+    }
+    this._wi = list;
+    return list;
+  }
+
+  wfogAt(c, r) {
+    const vis = this.worldIslands().filter(i => i.own === 'you' || i.own === 'clan');
+    let best = 99;
+    for (const v of vis) best = Math.min(best, this.dist(c, r, v.c, v.r) - (v.rad + 2.6));
+    best += (this.hash(c * 5.3, r * 7.1) - 0.5) * 1.6;
+    if (best <= 0) return 0;
+    return Math.min(1, best / 3);
+  }
+
+  wdefaultPan() {
+    const p = this.wcenter(8, 7);
+    return { x: this.state.vw / 2 - p.x, y: this.state.vh / 2 + 10 - p.y };
+  }
+
+  world() {
+    const t = this.state.tick, g = this.wgeom();
+    const islands = this.worldIslands();
+    const pan = this.state.wpan || this.wdefaultPan();
+    const colors = { you: '#4f9fd8', clan: '#6fbf7a', foe: '#d2603f', free: '#5d7684' };
+    const center = (c, r) => this.wcenter(c, r);
+    const jitter = (c, r) => this.hash(c * 12.9 + 1, r * 7.8 + 3);
+    const hex = 'polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)';
+    const wcells = [], wpins = [], wfogs = [];
+    const c0 = Math.max(0, Math.floor((-pan.x - g.OX) / g.COLX) - 2), c1 = Math.floor((-pan.x + this.state.vw - g.OX) / g.COLX) + 2;
+    const r0 = Math.max(0, Math.floor((-pan.y - g.OY) / g.ROWY) - 2), r1 = Math.floor((-pan.y + this.state.vh - g.OY) / g.ROWY) + 2;
+    for (let c = c0; c <= c1; c++) for (let r = r0; r <= r1; r++) {
+      let host = null;
+      for (const is of islands) {
+        const d = this.dist(c, r, is.c, is.r);
+        if (d <= is.rad - 0.4) { host = is; break; }
+        if (d <= is.rad + 0.9 && jitter(c + is.c * 31, r + is.r * 17) > 0.44) { host = is; break; }
+      }
+      const left = g.OX + c * g.COLX, top = g.OY + r * g.ROWY + (c & 1) * g.HALF;
+      const sea = 'rgba(120,180,205,' + (0.05 + (((c % 4) + 4) % 4) * 0.012 + (((r % 3) + 3) % 3) * 0.008) + ')';
+      const fv = this.wfogAt(c, r);
+      wcells.push({
+        key: c + '_' + r,
+        outer: { position: 'absolute', left: left + 'px', top: top + 'px', width: g.W + 'px', height: g.H + 'px', clipPath: hex, background: host ? colors[host.own] : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: fv > 0.02 ? 'grayscale(' + Math.min(0.9, fv * 1.2) + ')' : 'none' },
+        inner: { width: (g.W - 5) + 'px', height: (g.H - 5) + 'px', clipPath: hex, background: host ? (host.own === 'free' ? '#3f5a4a' : '#38553f') : sea, opacity: host ? (0.86 + jitter(c * 3, r * 5) * 0.14) : 1 }
+      });
+      if (fv > 0.02) {
+        const jf = jitter(c * 4 + 5, r * 9 + 2), a = Math.min(0.95, fv * (0.8 + jf * 0.32));
+        wfogs.push({ key: 'wf' + c + '_' + r, style: { position: 'absolute', left: (left - g.W * 0.45 + jf * 12) + 'px', top: (top - g.H * 0.45 - jf * 10) + 'px', width: g.W * 1.9 + 'px', height: g.H * 1.9 + 'px', background: 'radial-gradient(closest-side at ' + (44 + jf * 14) + '% ' + (48 + jf * 10) + '%, rgba(233,240,244,' + a + ') 0%, rgba(222,232,238,' + a * 0.88 + ') 44%, rgba(212,224,231,' + a * 0.42 + ') 70%, rgba(208,221,229,0) 100%)', filter: 'blur(' + (8 + jf * 6) + 'px)', pointerEvents: 'none' } });
+      }
+    }
+    for (const is of islands) {
+      if (is.c < c0 - 3 || is.c > c1 + 3 || is.r < r0 - 3 || is.r > r1 + 3) continue;
+      if (this.wfogAt(is.c, is.r) > 0.5) continue;
+      const p = center(is.c, is.r);
+      wpins.push({
+        key: is.name + is.c, name: is.name,
+        style: { position: 'absolute', left: p.x + 'px', top: p.y + 'px', transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', pointerEvents: 'none' },
+        dot: { width: '10px', height: '10px', borderRadius: '50%', background: colors[is.own], boxShadow: '0 0 0 3px rgba(8,18,24,.85)' },
+        label: { fontFamily: 'Barlow Condensed', fontSize: '12px', letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(232,238,240,.8)', textShadow: '0 1px 3px #061018' }
+      });
+    }
+    const routes = [[islands[0], islands[1], '#4f9fd8'], [islands[2], islands[0], '#d2603f'], [islands[1], islands[2], '#6fbf7a']];
+    const wroutes = routes.map((rt, i) => { const a = center(rt[0].c, rt[0].r), b = center(rt[1].c, rt[1].r); return { key: 'r' + i, color: rt[2], d: 'M' + a.x + ' ' + a.y + ' Q' + ((a.x + b.x) / 2 + 30) + ' ' + ((a.y + b.y) / 2 - 50) + ' ' + b.x + ' ' + b.y }; });
+    const wmovers = routes.map((rt, i) => {
+      const a = center(rt[0].c, rt[0].r), b = center(rt[1].c, rt[1].r);
+      const u = ((t + i * 23) % 60) / 60, mx = (a.x + b.x) / 2 + 30, my = (a.y + b.y) / 2 - 50, k = 1 - u;
+      return { key: 'm' + i, color: rt[2], x: k * k * a.x + 2 * k * u * mx + u * u * b.x, y: k * k * a.y + 2 * k * u * my + u * u * b.y };
+    });
+    return {
+      wcells, wpins, wroutes, wmovers, wfogs,
+      wpanStyle: { position: 'absolute', left: '0', top: '0', transform: 'translate3d(' + Math.round(pan.x) + 'px,' + Math.round(pan.y) + 'px,0)' },
+      worldDragStyle: { position: 'absolute', inset: '0', overflow: 'hidden', cursor: this.state.dragging ? 'grabbing' : 'grab' },
+      startWorldPan: (e) => { this._drag = { key: 'wpan', x: e.clientX, y: e.clientY, px: pan.x, py: pan.y }; this.setState({ dragging: true }); },
+      islandOwners: [{ name: 'Ragnvald (you)', color: '#4f9fd8', pop: '412' }, { name: 'Hilda Vargsdottir', color: '#6fbf7a', pop: '288' }, { name: '4 free hexes', color: '#5d7684', pop: 'open' }],
+      movements: [
+        { text: 'Settlers → Vestrey', sub: '3rd settlement', color: '#4f9fd8', time: this.fmt(18742 - t) },
+        { text: 'Raid → Hafrsvik', sub: 'Steinarr · 2 ships', color: '#d2603f', time: this.fmt(754 - t) },
+        { text: 'Support → Nordsker', sub: 'Hilda · 40 raiders', color: '#6fbf7a', time: this.fmt(4210 - t) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

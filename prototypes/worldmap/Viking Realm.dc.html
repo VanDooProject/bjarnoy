@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans+SC:wght@500;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"><style>
+html,body{margin:0;padding:0;background:#080d13;overflow:hidden}
+a{color:#d9a441;text-decoration:none}a:hover{color:#f0c473}
+@keyframes vr-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes vr-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes vr-blink{0%,100%{box-shadow:0 0 0 0 rgba(192,72,63,.55)}50%{box-shadow:0 0 0 10px rgba(192,72,63,0)}}
+@keyframes vr-slot{0%,100%{transform:translateY(0);opacity:.75}50%{transform:translateY(-6px);opacity:1}}
+@keyframes vr-dash{to{stroke-dashoffset:-40}}
+@keyframes vr-pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+@keyframes vr-fade{from{opacity:0}to{opacity:1}}
+@keyframes vr-flyu{from{opacity:0;transform:translateY(30px) scale(.6)}to{opacity:1;transform:none}}
+@keyframes vr-flyd{from{opacity:0;transform:translateY(-30px) scale(.6)}to{opacity:1;transform:none}}
+@keyframes vr-flyl{from{opacity:0;transform:translateX(34px) scale(.6)}to{opacity:1;transform:none}}
+@keyframes vr-flyr{from{opacity:0;transform:translateX(-34px) scale(.6)}to{opacity:1;transform:none}}
+@keyframes vr-swirl{from{opacity:0;transform:rotate(-38deg) scale(.5)}to{opacity:1;transform:rotate(0) scale(1)}}
+@keyframes vr-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes vr-swell{0%,100%{transform:translate(0,0)}50%{transform:translate(7px,-3px)}}
+@keyframes vr-foam{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.035);opacity:.9}}
+@keyframes vr-twinkle{0%,100%{opacity:0;transform:scale(.5)}50%{opacity:1;transform:scale(1)}}
+</style></helmet>
+
+<div style="position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 40%,#16283a 0%,#0a121b 55%,#070b11 100%);font-family:Barlow,system-ui,sans-serif;color:#e9e5dc;overflow:hidden;user-select:none">
+
+  <div style="position:absolute;inset:0;overflow:hidden" onMouseDown="{{ onDragStart }}">
+    <div style="position:absolute;left:50%;top:50%;width:1700px;height:990px;margin-left:-850px;margin-top:-495px;transform:scale({{ scale }}) translate({{ panX }}px, {{ panY }}px);transition:transform .5s cubic-bezier(.2,.7,.2,1)">
+      <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="24">
+        <div style="position:absolute;width:200px;height:300px;left:{{ t.x }}px;top:{{ t.y }}px;z-index:{{ t.z }};pointer-events:none">
+          <div style="position:absolute;left:0;top:140px;width:200px;height:92px;clip-path:polygon(0% 50%,25% 0%,75% 0%,100% 50%,75% 100%,25% 100%);pointer-events:auto;cursor:pointer" onMouseEnter="{{ t.onEnter }}" onMouseLeave="{{ t.onLeave }}" onClick="{{ t.onClick }}"></div>
+          <img src="{{ t.baseSrc }}" style="position:absolute;left:0;top:0;width:200px;height:300px;pointer-events:none">
+          <sc-if value="{{ t.hot }}" hint-placeholder-val="{{ false }}">
+            <svg width="200" height="300" viewBox="0 0 200 300" style="position:absolute;left:0;top:0;pointer-events:none;overflow:visible"><polygon points="0,186 50,140 150,140 200,186 150,232 50,232" fill="rgba(255,255,255,.14)" stroke="rgba(255,255,255,.8)" stroke-width="2"></polygon></svg>
+          </sc-if>
+          <sc-if value="{{ t.ov }}" hint-placeholder-val="{{ false }}">
+            <svg width="200" height="300" viewBox="0 0 200 300" style="position:absolute;left:0;top:0;pointer-events:none;overflow:visible;filter:drop-shadow(0 1px 3px rgba(0,0,0,.55))">
+              <polygon points="0,186 50,140 150,140 200,186 150,232 50,232" fill="{{ t.ovFill }}"></polygon>
+              <sc-for list="{{ t.edges }}" as="e" hint-placeholder-count="0"><g><line x1="{{ e.x1 }}" y1="{{ e.y1 }}" x2="{{ e.x2 }}" y2="{{ e.y2 }}" stroke="{{ t.ovStroke }}" stroke-width="{{ t.ovW }}" stroke-linecap="round" stroke-dasharray="{{ t.ovDash }}"></line></g></sc-for>
+              <sc-for list="{{ t.poles }}" as="p" hint-placeholder-count="0"><g><rect x="{{ p.x }}" y="{{ p.y }}" width="3" height="30" rx="1.5" fill="#5a4028"></rect><polygon points="{{ p.flag }}" fill="{{ t.ovStroke }}"></polygon></g></sc-for>
+            </svg>
+          </sc-if>
+          <sc-if value="{{ t.topSrc }}" hint-placeholder-val="{{ false }}">
+            <img src="{{ t.topSrc }}" style="position:absolute;left:0;top:0;width:200px;height:300px;pointer-events:none">
+          </sc-if>
+          <sc-if value="{{ t.slot }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:76px;top:150px;width:48px;height:48px;border-radius:50%;border:2px dashed rgba(217,164,65,.85);background:rgba(217,164,65,.14);display:flex;align-items:center;justify-content:center;font:700 26px Barlow,sans-serif;color:#f0c473;animation:vr-slot 2.6s ease-in-out infinite;pointer-events:none">+</div>
+          </sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{ wheel.show }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:{{ wheel.x }}px;top:{{ wheel.y }}px;width:200px;height:300px;z-index:900">
+          <sc-if value="{{ wheel.bd }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:{{ wheel.bdLeft }}px;top:{{ wheel.bdTop }}px;width:{{ wheel.bdW }}px;height:{{ wheel.bdH }}px;border-radius:{{ wheel.bdRadius }};background:{{ wheel.bdBg }};backdrop-filter:{{ wheel.bdFilter }};-webkit-mask-image:{{ wheel.bdMask }};mask-image:{{ wheel.bdMask }};box-shadow:{{ wheel.bdShadow }};pointer-events:none;animation:vr-fade .2s ease both"></div>
+          </sc-if>
+          <sc-if value="{{ wheel.hasRing }}" hint-placeholder-val="{{ false }}">
+            <svg width="620" height="620" viewBox="0 0 620 620" style="position:absolute;left:-210px;top:-124px;pointer-events:none;overflow:visible">
+              <ellipse cx="310" cy="310" rx="{{ wheel.ringRx }}" ry="{{ wheel.ringRy }}" fill="{{ wheel.ringFill }}" stroke="{{ wheel.ringCol }}" stroke-width="{{ wheel.ringW }}" stroke-dasharray="{{ wheel.ringDash }}"></ellipse>
+            </svg>
+          </sc-if>
+          <sc-for list="{{ wheel.items }}" as="w" hint-placeholder-count="0">
+            <button onClick="{{ w.onClick }}" style="position:absolute;left:{{ w.left }}px;top:{{ w.top }}px;width:{{ w.w }}px;height:{{ w.h }}px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:{{ w.gap }}px;background:{{ w.bg }};border:0;border-radius:{{ w.radius }};clip-path:{{ w.clip }};box-shadow:{{ w.shadow }};cursor:pointer;animation:{{ w.anim }};transition:transform .12s ease" style-hover="transform:scale(1.06)">
+              <sc-if value="{{ w.big }}" hint-placeholder-val="{{ false }}">
+                <span style="font:700 {{ w.bigSize }}px 'Alegreya Sans SC',sans-serif;letter-spacing:.02em;color:{{ w.bigCol }};line-height:1">{{ w.big }}</span>
+              </sc-if>
+              <span style="font:{{ w.labelWeight }} {{ w.labelSize }}px {{ w.labelFont }};letter-spacing:{{ w.labelTrack }};text-transform:{{ w.labelCase }};color:{{ w.labelCol }};white-space:nowrap;line-height:1.1">{{ w.label }}</span>
+            </button>
+          </sc-for>
+          <button onClick="{{ closeWheel }}" style="position:absolute;left:{{ wheel.closeLeft }}px;top:{{ wheel.closeTop }}px;width:{{ wheel.closeSize }}px;height:{{ wheel.closeSize }}px;font:400 20px Barlow,sans-serif;color:#9fb0bf;background:rgba(8,13,19,.72);border:1px solid rgba(255,255,255,.14);border-radius:50%;cursor:pointer">✕</button>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;inset:0;background:linear-gradient(96deg,rgba(6,10,15,.96) 0%,rgba(6,10,15,.88) 38%,rgba(6,10,15,.25) 70%,rgba(6,10,15,.6) 100%)"></div>
+  </sc-if>
+  <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;inset:0;display:grid;grid-template-columns:minmax(520px,46%) 1fr;align-items:center">
+      <div style="padding:0 0 0 clamp(48px,7vw,132px);display:flex;flex-direction:column;gap:26px;max-width:640px">
+        <div style="display:flex;align-items:center;gap:12px;font:600 12px Barlow,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#8fa3b5">
+          <span style="width:8px;height:8px;border-radius:50%;background:#5fbf8a;box-shadow:0 0 10px #5fbf8a"></span>
+          <span>Shard Vestrland · day 12 · live</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <h1 style="margin:0;font:800 clamp(64px,8.4vw,124px)/0.92 'Alegreya Sans SC',serif;letter-spacing:.02em;color:#f4efe5;text-shadow:0 6px 40px rgba(0,0,0,.6)">Jarlheim</h1>
+          <p style="margin:0;font:500 21px/1.5 Barlow,sans-serif;color:#c3cdd6;max-width:34ch;text-wrap:pretty">An archipelago that never pauses. Claim hexes, push your borders into your neighbour's, and sail settlers to the next island.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;gap:10px;align-items:stretch">
+            <input value="{{ nick }}" onChange="{{ onNick }}" placeholder="Pick a name" style="flex:1;min-width:0;height:60px;padding:0 20px;font:500 19px Barlow,sans-serif;color:#f4efe5;background:rgba(14,22,31,.9);border:1px solid rgba(255,255,255,.14);border-radius:8px;outline:none">
+            <button onClick="{{ toVillage }}" style="height:60px;padding:0 32px;font:700 17px 'Alegreya Sans SC',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#1a1206;background:linear-gradient(180deg,#eec372,#d9a441);border:none;border-radius:8px;cursor:pointer;box-shadow:0 8px 30px rgba(217,164,65,.28)" style-hover="filter:brightness(1.07)">Take the oath</button>
+          </div>
+          <div style="font:500 14px Barlow,sans-serif;color:#7f909f">No registration. You get an island and a level-1 longhouse in about four seconds — set a password once you have something worth defending.</div>
+        </div>
+        <div style="display:flex;gap:34px;padding-top:8px;border-top:1px solid rgba(255,255,255,.09)">
+          <div style="display:flex;flex-direction:column;gap:3px"><span style="font:700 26px 'Alegreya Sans SC',sans-serif;color:#f4efe5">4 318</span><span style="font:500 12px Barlow,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7f909f">jarls online</span></div>
+          <div style="display:flex;flex-direction:column;gap:3px"><span style="font:700 26px 'Alegreya Sans SC',sans-serif;color:#f4efe5">211</span><span style="font:500 12px Barlow,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7f909f">islands</span></div>
+          <div style="display:flex;flex-direction:column;gap:3px"><span style="font:700 26px 'Alegreya Sans SC',sans-serif;color:#f4efe5">{{ landingShips }}</span><span style="font:500 12px Barlow,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7f909f">ships at sea now</span></div>
+        </div>
+      </div>
+      <div></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isWorld }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:{{ sea.bg }};transition:background .4s ease">
+      <div style="position:absolute;inset:64px 372px 24px 24px;display:flex;align-items:center;justify-content:center">
+        <div style="position:relative;width:100%;aspect-ratio:1330 / 670;max-height:100%">
+        <svg viewBox="-30 -20 1330 670" style="position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible">
+          <sc-for list="{{ sea.waves }}" as="w" hint-placeholder-count="0">
+            <g style="animation:{{ w.anim }};transform-origin:{{ w.org }}"><path d="{{ w.d }}" fill="none" stroke="{{ w.col }}" stroke-width="{{ w.sw }}" stroke-linecap="round"></path></g>
+          </sc-for>
+          <sc-for list="{{ sea.sparks }}" as="p" hint-placeholder-count="0">
+            <g><circle cx="{{ p.x }}" cy="{{ p.y }}" r="{{ p.r }}" fill="{{ p.col }}" style="animation:{{ p.anim }};transform-origin:{{ p.org }}"></circle></g>
+          </sc-for>
+          <sc-for list="{{ sea.foam }}" as="f" hint-placeholder-count="0">
+            <g style="animation:{{ f.anim }};transform-origin:{{ f.org }}"><ellipse cx="{{ f.x }}" cy="{{ f.y }}" rx="{{ f.rx }}" ry="{{ f.ry }}" fill="{{ f.fill }}" stroke="{{ f.col }}" stroke-width="{{ f.sw }}" stroke-dasharray="{{ f.dash }}"></ellipse></g>
+          </sc-for>
+          <g><circle cx="{{ world.me.x }}" cy="{{ world.me.y }}" r="{{ world.me.r }}" fill="rgba(217,164,65,.05)" stroke="rgba(217,164,65,.35)" stroke-width="1.4" stroke-dasharray="6 7"></circle></g>
+          <sc-for list="{{ world.hexes }}" as="h" hint-placeholder-count="60">
+            <g transform="translate({{ h.x }},{{ h.y }})" onClick="{{ h.onClick }}"><polygon points="0,9.2 10,0 30,0 40,9.2 30,18.4 10,18.4" fill="{{ h.fill }}" stroke="rgba(0,0,0,.18)" stroke-width="0.4"></polygon></g>
+          </sc-for>
+          <sc-for list="{{ world.borders }}" as="b" hint-placeholder-count="0">
+            <g><line x1="{{ b.x1 }}" y1="{{ b.y1 }}" x2="{{ b.x2 }}" y2="{{ b.y2 }}" stroke="{{ b.col }}" stroke-width="1.6" stroke-linecap="round"></line></g>
+          </sc-for>
+          <g><path d="{{ world.shipPath }}" fill="none" stroke="rgba(217,164,65,.5)" stroke-width="1.2" stroke-dasharray="5 5" style="animation:vr-dash 2s linear infinite"></path></g>
+          <g><circle r="3.4" fill="#f0c473"><animateMotion dur="16s" repeatCount="indefinite" path="{{ world.shipPath }}"></animateMotion></circle></g>
+          <sc-for list="{{ world.marks }}" as="m" hint-placeholder-count="6">
+            <g transform="translate({{ m.x }},{{ m.y }})" onClick="{{ m.onClick }}">
+              <polygon points="0,-8 8,0 0,8 -8,0" fill="{{ m.col }}" stroke="#0a1017" stroke-width="1.6"></polygon>
+            </g>
+          </sc-for>
+        </svg>
+        <div style="position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:3">
+          <sc-for list="{{ world.labels }}" as="l" hint-placeholder-count="8">
+            <div style="position:absolute;left:{{ l.lx }}%;top:{{ l.ly }}%;transform:translate(-50%,-50%);font-family:'Alegreya Sans SC',serif;font-size:{{ l.size }}px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:{{ l.col }};white-space:nowrap;text-shadow:0 2px 8px rgba(0,0,0,.8)">{{ l.n }}</div>
+          </sc-for>
+          <sc-for list="{{ world.owners }}" as="o" hint-placeholder-count="8">
+            <div style="position:absolute;left:{{ o.lx }}%;top:{{ o.ly }}%;font:600 12.5px Barlow,sans-serif;color:{{ o.col }};white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.85)">{{ o.n }}</div>
+          </sc-for>
+        </div>
+        </div>
+      </div>
+
+      <div style="position:absolute;right:24px;top:64px;bottom:24px;width:332px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;min-height:0;scrollbar-width:thin">
+        <div style="background:rgba(13,20,28,.86);border:1px solid rgba(255,255,255,.09);border-radius:10px;backdrop-filter:blur(10px);padding:18px 18px 20px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+            <div style="font:700 24px 'Alegreya Sans SC',serif;letter-spacing:.04em;color:#f4efe5">{{ isl.n }}</div>
+            <div style="font:600 11px Barlow,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7f909f">{{ isl.coord }}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:10px 12px"><div style="font:700 22px Barlow,sans-serif;color:#f4efe5">{{ isl.free }}</div><div style="font:500 11px Barlow,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#7f909f">free hexes</div></div>
+            <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:10px 12px"><div style="font:700 22px Barlow,sans-serif;color:#f4efe5">{{ isl.count }}</div><div style="font:500 11px Barlow,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#7f909f">settlements</div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ isl.own }}" as="o" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:rgba(255,255,255,.03);border-left:2px solid {{ o.col }};border-radius:4px">
+                <span style="flex:1;font:600 14px Barlow,sans-serif;color:#dfe6ec">{{ o.who }}</span>
+                <span style="font:500 12px Barlow,sans-serif;color:#8fa3b5">{{ o.n }} hexes</span>
+              </div>
+            </sc-for>
+            <sc-if value="{{ isl.empty }}" hint-placeholder-val="{{ false }}">
+              <div style="font:500 13px/1.5 Barlow,sans-serif;color:#8fa3b5">Unclaimed. First longhouse on the island sets the border everyone else has to push against.</div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ isl.mine }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ enterHome }}" style="height:44px;width:100%;font:700 14px 'Alegreya Sans SC',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#1a1206;background:linear-gradient(180deg,#eec372,#d9a441);border:none;border-radius:7px;cursor:pointer" style-hover="filter:brightness(1.07)">Zoom into Bjarnheim</button>
+          </sc-if>
+          <sc-if value="{{ isl.other }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ noop }}" style="height:44px;width:100%;font:700 14px 'Alegreya Sans SC',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#1a1206;background:linear-gradient(180deg,#eec372,#d9a441);border:none;border-radius:7px;cursor:pointer" style-hover="filter:brightness(1.07)">Send settlers · 6 h 40 m</button>
+          </sc-if>
+        </div>
+
+        <div style="background:rgba(13,20,28,.86);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+          <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">Sea style</div>
+          <div style="display:flex;gap:6px">
+            <button onClick="{{ setSeaDeep }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ sDeepCol }};background:{{ sDeepBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Deep</button>
+            <button onClick="{{ setSeaPlay }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ sPlayCol }};background:{{ sPlayBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Playful</button>
+            <button onClick="{{ setSeaCur }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ sCurCol }};background:{{ sCurBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Currents</button>
+            <button onClick="{{ setSeaChart }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ sChartCol }};background:{{ sChartBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Charted</button>
+          </div>
+          <div style="height:1px;background:rgba(255,255,255,.08)"></div>
+          <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">At sea</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="width:9px;height:9px;border-radius:2px;transform:rotate(45deg);background:#f0c473"></span>
+            <span style="flex:1;font:600 14px Barlow,sans-serif;color:#dfe6ec">Settlers → Hafrsey</span>
+            <span style="font:700 14px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#f0c473">{{ shipLeft }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="width:9px;height:9px;border-radius:2px;transform:rotate(45deg);background:#c0483f"></span>
+            <span style="flex:1;font:600 14px Barlow,sans-serif;color:#dfe6ec">Ragnvald → Bjarnheim</span>
+            <span style="font:700 14px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#e2726a">{{ atkLeft }}</span>
+          </div>
+        </div>
+
+        <div style="margin-top:auto;font:500 12px/1.6 Barlow,sans-serif;color:#5f7183">Same hex lattice as the settlement view, flattened. Zooming out of a settlement lands you here on its island.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showHud }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:0;right:0;top:0;height:56px;display:flex;align-items:center;gap:18px;padding:0 18px;background:linear-gradient(180deg,rgba(8,13,19,.94),rgba(8,13,19,.72));border-bottom:1px solid rgba(255,255,255,.07);backdrop-filter:blur(12px);z-index:60">
+      <div style="display:flex;align-items:center;gap:10px;min-width:210px">
+        <span style="width:26px;height:26px;border-radius:5px;background:linear-gradient(180deg,#eec372,#c9922f);display:flex;align-items:center;justify-content:center;font:800 14px 'Alegreya Sans SC',serif;color:#1a1206">B</span>
+        <span style="display:flex;flex-direction:column;line-height:1.1"><span style="font:700 15px 'Alegreya Sans SC',serif;letter-spacing:.05em;color:#f4efe5">Bjarnheim</span><span style="font:500 11px Barlow,sans-serif;color:#7f909f">Steinsey · 12 hexes</span></span>
+      </div>
+      <div style="display:flex;gap:8px;flex:1">
+        <sc-for list="{{ res }}" as="r" hint-placeholder-count="4">
+          <div style="flex:0 0 158px;display:flex;align-items:center;gap:9px;padding:6px 11px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.06);border-radius:7px">
+            <span style="width:22px;height:22px;border-radius:4px;background:{{ r.col }};display:flex;align-items:center;justify-content:center;font:700 11px Barlow,sans-serif;color:#10161d">{{ r.tag }}</span>
+            <span style="display:flex;flex-direction:column;flex:1;gap:3px">
+              <span style="display:flex;align-items:baseline;gap:4px"><span style="font:700 14px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#f4efe5">{{ r.amt }}</span><span style="font:500 11px Barlow,sans-serif;color:#7f909f">/ {{ r.cap }}</span></span>
+              <span style="height:3px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;display:block"><span style="display:block;height:3px;width:{{ r.pct }}%;background:{{ r.col }}"></span></span>
+            </span>
+            <span style="font:600 11px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#8fa3b5">+{{ r.rate }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px;background:rgba(255,255,255,.05);border-radius:8px">
+        <button onClick="{{ toVillage }}" style="height:32px;padding:0 15px;font:600 13px Barlow,sans-serif;color:{{ tabVillageCol }};background:{{ tabVillageBg }};border:none;border-radius:6px;cursor:pointer">Settlement</button>
+        <button onClick="{{ toWorld }}" style="height:32px;padding:0 15px;font:600 13px Barlow,sans-serif;color:{{ tabWorldCol }};background:{{ tabWorldBg }};border:none;border-radius:6px;cursor:pointer">World map</button>
+      </div>
+      <button onClick="{{ toLanding }}" style="height:32px;padding:0 13px;font:600 12px Barlow,sans-serif;color:#7f909f;background:none;border:1px solid rgba(255,255,255,.12);border-radius:6px;cursor:pointer" style-hover="color:#dfe6ec">Landing</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isVillage }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;right:18px;top:70px;bottom:18px;width:300px;display:flex;flex-direction:column;gap:10px;z-index:50;overflow-y:auto;min-height:0;scrollbar-width:thin">
+      <div style="background:rgba(13,20,28,.86);border:1px solid rgba(192,72,63,.5);border-radius:10px;padding:14px 16px;backdrop-filter:blur(10px);animation:vr-blink 2s ease-out infinite">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#e2726a">Raid incoming</span>
+          <span style="font:700 19px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#f4efe5">{{ atkLeft }}</span>
+        </div>
+        <div style="margin-top:6px;font:500 13px Barlow,sans-serif;color:#a9b6c2">Ragnvald · 24 raiders · from the crags</div>
+      </div>
+
+      <div style="background:rgba(13,20,28,.86);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:14px 16px;backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:12px">
+        <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">Build queue</div>
+        <sc-for list="{{ queue }}" as="q" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font:600 14px Barlow,sans-serif;color:#dfe6ec">{{ q.name }}</span><span style="font:700 13px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#f0c473">{{ q.left }}</span></div>
+            <span style="height:4px;border-radius:2px;background:rgba(255,255,255,.09);display:block;overflow:hidden"><span style="display:block;height:4px;width:{{ q.pct }}%;background:linear-gradient(90deg,#c9922f,#eec372)"></span></span>
+          </div>
+        </sc-for>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:2px;border-top:1px solid rgba(255,255,255,.07)">
+          <span style="width:9px;height:9px;border-radius:2px;transform:rotate(45deg);background:#f0c473"></span>
+          <span style="flex:1;font:600 14px Barlow,sans-serif;color:#dfe6ec">Settlers → Hafrsey</span>
+          <span style="font:700 13px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#f0c473">{{ shipLeft }}</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ hasHover }}" hint-placeholder-val="{{ false }}">
+        <div style="background:rgba(13,20,28,.92);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 15px;backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font:700 17px 'Alegreya Sans SC',serif;letter-spacing:.04em;color:#f4efe5">{{ hover.name }}</span><span style="font:600 11px Barlow,sans-serif;color:#7f909f">{{ hover.coord }}</span></div>
+          <div style="font:500 13px Barlow,sans-serif;color:#a9b6c2">{{ hover.info }}</div>
+          <div style="margin-top:4px;padding-top:6px;border-top:1px solid rgba(255,255,255,.09);font:600 12px Barlow,sans-serif;color:#cbbda3">{{ hover.owner }}</div>
+        </div>
+      </sc-if>
+      <div style="background:rgba(13,20,28,.86);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:14px 16px;backdrop-filter:blur(10px);display:flex;flex-direction:column;gap:10px">
+        <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">Border style</div>
+        <div style="display:flex;gap:6px">
+          <button onClick="{{ setOutline }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ bOutCol }};background:{{ bOutBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Outline</button>
+          <button onClick="{{ setPoles }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ bPolCol }};background:{{ bPolBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Poles</button>
+          <button onClick="{{ setWash }}" style="flex:1;height:30px;font:600 12px Barlow,sans-serif;color:{{ bWashCol }};background:{{ bWashBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Wash</button>
+        </div>
+        <div style="height:1px;background:rgba(255,255,255,.08)"></div>
+        <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">Action wheel</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button onClick="{{ setWRunes }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ wRunesCol }};background:{{ wRunesBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Orbs</button>
+          <button onClick="{{ setWShields }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ wShieldsCol }};background:{{ wShieldsBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Bone</button>
+          <button onClick="{{ setWBanner }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ wBannerCol }};background:{{ wBannerBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Pills</button>
+          <button onClick="{{ setWDial }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ wDialCol }};background:{{ wDialBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Coins</button>
+          <button onClick="{{ setWCrest }}" style="grid-column:1 / -1;height:30px;font:600 12px Barlow,sans-serif;color:{{ wCrestCol }};background:{{ wCrestBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Crest plaques</button>
+        </div>
+        <div style="height:1px;background:rgba(255,255,255,.08)"></div>
+        <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">Wheel backdrop</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button onClick="{{ setBdNone }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdNoneCol }};background:{{ bdNoneBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">None</button>
+          <button onClick="{{ setBdDisc }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdDiscCol }};background:{{ bdDiscBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Dark disc</button>
+          <button onClick="{{ setBdVig }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdVigCol }};background:{{ bdVigBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Vignette</button>
+          <button onClick="{{ setBdFrost }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdFrostCol }};background:{{ bdFrostBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Frosted</button>
+          <button onClick="{{ setBdScrim }}" style="grid-column:1 / -1;height:30px;font:600 12px Barlow,sans-serif;color:{{ bdScrimCol }};background:{{ bdScrimBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Full scrim (spotlight)</button>
+          <button onClick="{{ setBdHard }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdHardCol }};background:{{ bdHardBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Hard circle</button>
+          <button onClick="{{ setBdRing }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdRingCol }};background:{{ bdRingBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Gold ring</button>
+          <button onClick="{{ setBdBands }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdBandsCol }};background:{{ bdBandsBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Double ring</button>
+          <button onClick="{{ setBdPlate }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdPlateCol }};background:{{ bdPlateBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Solid plate</button>
+          <button onClick="{{ setBdHair }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdHairCol }};background:{{ bdHairBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Gold hairline</button>
+          <button onClick="{{ setBdHair2 }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ bdHair2Col }};background:{{ bdHair2Bg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Pale hairline</button>
+          <button onClick="{{ setBdTight }}" style="grid-column:1 / -1;height:30px;font:600 12px Barlow,sans-serif;color:{{ bdTightCol }};background:{{ bdTightBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Tight glow ring</button>
+        </div>
+        <div style="height:1px;background:rgba(255,255,255,.08)"></div>
+        <div style="font:600 11px Barlow,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7f909f">Wheel animation</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <button onClick="{{ setAnPop }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ anPopCol }};background:{{ anPopBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Pop (all)</button>
+          <button onClick="{{ setAnClock }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ anClockCol }};background:{{ anClockBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Clockwise</button>
+          <button onClick="{{ setAnFly }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ anFlyCol }};background:{{ anFlyBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Fly outward</button>
+          <button onClick="{{ setAnSwirl }}" style="height:30px;font:600 12px Barlow,sans-serif;color:{{ anSwirlCol }};background:{{ anSwirlBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Swirl in</button>
+          <button onClick="{{ setAnRise }}" style="grid-column:1 / -1;height:30px;font:600 12px Barlow,sans-serif;color:{{ anRiseCol }};background:{{ anRiseBg }};border:1px solid rgba(255,255,255,.1);border-radius:6px;cursor:pointer">Rise, one by one</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;font:500 12px Barlow,sans-serif;color:#8fa3b5">
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#d9a441"></span>You</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#c0483f"></span>Ragnvald</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#8b7f6b"></span>Contested</span>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:18px;top:70px;width:320px;background:rgba(13,20,28,.92);border:1px solid rgba(255,255,255,.1);border-radius:10px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.55);z-index:55;display:flex;flex-direction:column">
+        <div style="position:relative;height:122px;background:radial-gradient(80% 80% at 50% 62%,#1b3348,#0c1520);overflow:hidden">
+          <img src="{{ sel.art }}" style="position:absolute;left:50%;top:50%;width:210px;height:315px;margin:-146px 0 0 -105px;object-fit:contain">
+          <sc-if value="{{ sel.hasArt2 }}" hint-placeholder-val="{{ false }}"><img src="{{ sel.art2 }}" style="position:absolute;left:50%;top:50%;width:210px;height:315px;margin:-146px 0 0 -105px;object-fit:contain"></sc-if>
+          <button onClick="{{ closeSel }}" style="position:absolute;right:8px;top:8px;width:28px;height:28px;font:400 16px Barlow,sans-serif;color:#c3cdd6;background:rgba(8,13,19,.7);border:none;border-radius:6px;cursor:pointer">×</button>
+        </div>
+        <div style="padding:13px 15px 15px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span style="font:700 22px 'Alegreya Sans SC',serif;letter-spacing:.03em;color:#f4efe5">{{ sel.name }}</span>
+            <span style="font:500 12px Barlow,sans-serif;color:#8fa3b5">{{ sel.coord }} · {{ sel.info }}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <sc-for list="{{ sel.pips }}" as="p" hint-placeholder-count="5"><span style="width:22px;height:5px;border-radius:3px;background:{{ p.col }}"></span></sc-for>
+            <span style="margin-left:6px;font:600 12px Barlow,sans-serif;color:#a9b6c2">{{ sel.lvlLabel }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+            <sc-for list="{{ sel.cost }}" as="c" hint-placeholder-count="4">
+              <div style="background:rgba(255,255,255,.04);border-radius:6px;padding:7px 8px;display:flex;flex-direction:column;gap:1px"><span style="font:700 14px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:{{ c.col }}">{{ c.v }}</span><span style="font:500 10px Barlow,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#7f909f">{{ c.k }}</span></div>
+            </sc-for>
+          </div>
+          <div style="font:500 13px/1.5 Barlow,sans-serif;color:#a9b6c2;text-wrap:pretty">{{ sel.body }}</div>
+          <button onClick="{{ closeSel }}" style="height:42px;font:700 13px 'Alegreya Sans SC',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#1a1206;background:linear-gradient(180deg,#eec372,#d9a441);border:none;border-radius:7px;cursor:pointer" style-hover="filter:brightness(1.07)">{{ sel.cta }} · {{ sel.dur }}</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="position:absolute;left:18px;bottom:18px;display:flex;align-items:center;gap:10px;z-index:50">
+      <div style="display:flex;align-items:center;gap:2px;background:rgba(13,20,28,.86);border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:6px;backdrop-filter:blur(10px)">
+        <button onClick="{{ zoomOut }}" style="width:34px;height:34px;font:600 18px Barlow,sans-serif;color:#dfe6ec;background:rgba(255,255,255,.05);border:none;border-radius:6px;cursor:pointer">−</button>
+        <span style="width:52px;text-align:center;font:600 13px Barlow,sans-serif;font-variant-numeric:tabular-nums;color:#8fa3b5">{{ zoomPct }}%</span>
+        <button onClick="{{ zoomIn }}" style="width:34px;height:34px;font:600 18px Barlow,sans-serif;color:#dfe6ec;background:rgba(255,255,255,.05);border:none;border-radius:6px;cursor:pointer">+</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;background:rgba(13,20,28,.86);border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:8px 12px;backdrop-filter:blur(10px);font:500 12px Barlow,sans-serif;color:#8fa3b5">Drag to pan · scroll list of settlements
+        <span style="display:flex;gap:4px">
+          <span style="padding:3px 9px;border-radius:5px;background:rgba(217,164,65,.18);color:#f0c473;font-weight:600">Bjarnheim</span>
+          <span style="padding:3px 9px;border-radius:5px;background:rgba(255,255,255,.05);color:#a9b6c2;font-weight:600">Fiskvík</span>
+          <span style="padding:3px 9px;border-radius:5px;background:rgba(255,255,255,.05);color:#7f909f">+ found</span>
+        </span>
+      </div>
+    </div>
+  </sc-if>
+
+
+
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;borderStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;outline&quot;,&quot;poles&quot;,&quot;wash&quot;],&quot;default&quot;:&quot;outline&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Realm borders&quot;},&quot;showRival&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Realm borders&quot;},&quot;seaStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;deep&quot;,&quot;playful&quot;,&quot;currents&quot;,&quot;charted&quot;],&quot;default&quot;:&quot;playful&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;World map&quot;},&quot;wheelStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;orbs&quot;,&quot;bone&quot;,&quot;pills&quot;,&quot;coins&quot;,&quot;crest&quot;],&quot;default&quot;:&quot;orbs&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Action wheel&quot;},&quot;wheelBackdrop&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;disc&quot;,&quot;vignette&quot;,&quot;frost&quot;,&quot;scrim&quot;,&quot;hard&quot;,&quot;ring&quot;,&quot;bands&quot;,&quot;plate&quot;,&quot;hairline&quot;,&quot;hairline2&quot;,&quot;tight&quot;],&quot;default&quot;:&quot;disc&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Action wheel&quot;},&quot;wheelAnim&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;pop&quot;,&quot;clockwise&quot;,&quot;fly&quot;,&quot;swirl&quot;,&quot;rise&quot;],&quot;default&quot;:&quot;clockwise&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Action wheel&quot;}}">
+const MAP = [
+  "...........",
+  "...~~~~~...",
+  "..~sssss~..",
+  ".~sgffgms~.",
+  ".~sggggms~.",
+  "..~sgggs~..",
+  "...~~~~~...",
+  "..........."
+];
+const TERR = {
+  '.': { img: 'water', name: 'Open sea', info: 'Longships only' },
+  '~': { img: 'coast', name: 'Shallows', info: 'Fishing grounds · harbour' },
+  's': { img: 'sand', name: 'Beach', info: 'Buildable · landing site' },
+  'g': { img: 'grass', base: 'grass_base', name: 'Meadow', info: 'Buildable' },
+  'f': { img: 'forest', base: 'forest_base', top: 'forest_top0', name: 'Woods', info: 'Wood +180/h if cleared' },
+  'm': { img: 'mountain', name: 'Crags', info: 'Stone · iron vein' }
+};
+const BLD = {
+  '5,4': { base: 'hut_base', top: 'hut4_top', name: 'Longhouse', lvl: 4, max: 5, info: 'Main building', body: 'The longhouse sets how far your realm reaches. Every level pushes the border one ring further and raises the settler limit.', cta: 'Upgrade to 5', dur: '2 h 41 m', cost: ['1 400', '900', '600', '120'] },
+  '6,4': { base: 'farm_crop_base', top: 'farm_crop_top', name: 'Grain field', lvl: 2, max: 5, info: 'Food +140/h', body: 'Grain keeps settlers and troops fed. Fields only work on meadow hexes inside your border.', cta: 'Upgrade to 3', dur: '41 m', cost: ['320', '80', '0', '0'] },
+  '5,5': { base: 'farm_pumpkin_base', top: 'farm_pumpkin_top', name: 'Root field', lvl: 1, max: 5, info: 'Food +90/h', body: 'Slower than grain but survives raids: root crops cannot be burned by a raiding party.', cta: 'Upgrade to 2', dur: '18 m', cost: ['180', '40', '0', '0'] },
+  '3,4': { img: 'tower', name: 'Watchtower', lvl: 1, max: 3, info: 'Border anchor', body: 'A watchtower anchors the border away from the longhouse and reveals troop movements on the island one ring earlier.', cta: 'Upgrade to 2', dur: '1 h 06 m', cost: ['600', '850', '0', '60'] },
+  '3,5': { img: 'fishinghut', name: 'Fishing hut', lvl: 1, max: 3, info: 'Food +110/h', body: 'Built on a beach hex facing the shallows. Output does not depend on the hexes you control, so it survives a border push.', cta: 'Upgrade to 2', dur: '52 m', cost: ['260', '120', '0', '0'] },
+  '4,3': { base: 'forest_base', top: 'forest_top0', name: 'Woodcutter', lvl: 3, max: 5, info: 'Wood +260/h', body: 'Clears the woods hex by hex. At level 5 the trees are gone and the hex turns to meadow.', cta: 'Upgrade to 4', dur: '1 h 22 m', cost: ['480', '260', '0', '0'] }
+};
+const SLOTS = { '4,4': 1, '6,3': 1, '6,5': 1 };
+const MINE = ['3,3', '3,4', '3,5', '4,3', '4,4', '4,5', '5,3', '5,4', '5,5', '6,3', '6,4', '6,5'];
+const RIVAL = ['7,3', '7,4', '8,3'];
+const CONTESTED = ['8,4'];
+const FACE = [[0, 186], [50, 140], [150, 140], [200, 186], [150, 232], [50, 232]];
+const EDGES = { N: [1, 2], NE: [2, 3], SE: [3, 4], S: [4, 5], SW: [5, 0], NW: [0, 1] };
+const GOLD = '#d9a441', RED = '#c0483f', GREY = '#a2937b';
+
+function nb(c, r, d) {
+  const even = c % 2 === 0;
+  if (d === 'N') return [c, r - 1];
+  if (d === 'S') return [c, r + 1];
+  if (d === 'NE') return [c + 1, even ? r - 1 : r];
+  if (d === 'SE') return [c + 1, even ? r : r + 1];
+  if (d === 'NW') return [c - 1, even ? r - 1 : r];
+  return [c - 1, even ? r : r + 1];
+}
+function outer(set, c, r) {
+  const out = [];
+  Object.keys(EDGES).forEach(d => {
+    const n = nb(c, r, d);
+    if (!set[n[0] + ',' + n[1]]) out.push(d);
+  });
+  return out;
+}
+function toSet(arr) { const o = {}; arr.forEach(k => o[k] = 1); return o; }
+function mul(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function cube(c, r) { const x = c, z = r - ((c - (c & 1)) / 2); return [x, -x - z, z]; }
+function hdist(a, b) { const A = cube(a[0], a[1]), B = cube(b[0], b[1]); return Math.max(Math.abs(A[0] - B[0]), Math.abs(A[1] - B[1]), Math.abs(A[2] - B[2])); }
+function hms(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), q = s % 60; const p = n => (n < 10 ? '0' : '') + n; return (h > 0 ? p(h) + ':' : '') + p(m) + ':' + p(q); }
+function grp(n) { return Math.floor(n).toLocaleString('en-US').replace(/,/g, ' '); }
+
+const ISL = [
+  { n: 'Steinsey', c: [9, 11], r: 4, mine: true, free: 4, own: [{ who: 'You · Bjarnheim', col: GOLD, n: 12 }, { who: 'Ragnvald', col: RED, n: 9 }] },
+  { n: 'Hafrsey', c: [20, 6], r: 3, free: 14, own: [] },
+  { n: 'Brimhólm', c: [31, 13], r: 4, free: 3, own: [{ who: 'Sigrún', col: '#4f8fd0', n: 16 }, { who: 'Hrolf', col: '#7f6ac0', n: 11 }, { who: 'Ragnvald', col: RED, n: 7 }] },
+  { n: 'Kaldøy', c: [14, 24], r: 3, free: 9, own: [{ who: 'Torvald', col: '#4f8fd0', n: 8 }] },
+  { n: 'Fárnes', c: [27, 26], r: 4, free: 11, own: [{ who: 'Gudrun', col: '#3f9c7a', n: 14 }] },
+  { n: 'Ulfrsey', c: [37, 22], r: 3, free: 12, own: [{ who: 'Hrolf', col: '#7f6ac0', n: 6 }] },
+  { n: 'Draugrsker', c: [4, 26], r: 3, free: 15, own: [] },
+  { n: 'Hvalsker', c: [22, 18], r: 2, free: 2, own: [{ who: 'Ase', col: '#3f9c7a', n: 4 }] }
+];
+const WW = 40, WH = 18.4;
+
+class Component extends DCLogic {
+  state = { screen: 'landing', t: 0, hover: null, sel: null, scale: 0.54, panX: -160, panY: 0, border: null, nick: '', isl: 1, drag: null, wheel: null };
+
+  componentDidMount() {
+    this.iv = setInterval(() => this.setState(s => ({ t: s.t + 1 })), 1000);
+    this._up = () => this.setState({ drag: null });
+    this._mv = e => {
+      const d = this.state.drag;
+      if (!d) return;
+      this.setState({ panX: d.px + (e.clientX - d.x) / this.state.scale, panY: d.py + (e.clientY - d.y) / this.state.scale });
+    };
+    window.addEventListener('mouseup', this._up);
+    window.addEventListener('mousemove', this._mv);
+  }
+  componentWillUnmount() { clearInterval(this.iv); window.removeEventListener('mouseup', this._up); window.removeEventListener('mousemove', this._mv); }
+
+  bstyle() { return this.state.border || this.props.borderStyle || 'outline'; }
+
+  tiles() {
+    const showRival = this.props.showRival !== false;
+    const mine = toSet(MINE), rival = toSet(showRival ? RIVAL : []), cont = toSet(showRival ? CONTESTED : []);
+    const bs = this.bstyle();
+    const hov = this.state.hover;
+    const out = [];
+    for (let r = 0; r < MAP.length; r++) {
+      for (let c = 0; c < MAP[r].length; c++) {
+        const ch = MAP[r][c], key = c + ',' + r, terr = TERR[ch] || TERR['.'];
+        const b = BLD[key];
+        const x = c * 150, y = r * 92 + (c % 2) * 46;
+        const t = {
+          key: key, coord: '(' + (110 + c) + ' | ' + (46 + r) + ')', x: x, y: y, z: Math.round(y / 20) + 4,
+          baseSrc: 'assets/' + ((b && (b.base || b.img)) || terr.base || terr.img) + '.png',
+          topSrc: b ? (b.top ? 'assets/' + b.top + '.png' : null) : (terr.top ? 'assets/' + terr.top + '.png' : null),
+          name: b ? b.name + ' · lvl ' + b.lvl : terr.name,
+          info: b ? b.info : terr.info,
+          slot: !!SLOTS[key],
+          hot: !!((hov && hov.key === key) || this.state.wheel === key),
+          ov: false, edges: [], poles: [], ovFill: 'none', ovStroke: GOLD, ovW: 3, ovDash: 'none'
+        };
+        const own = mine[key] ? 'mine' : rival[key] ? 'rival' : cont[key] ? 'cont' : null;
+        t.owner = own === 'mine' ? 'Your realm' : own === 'rival' ? "Ragnvald's realm" : own === 'cont' ? 'Contested — nearest anchor wins' : ch === '.' || ch === '~' ? 'Open water' : 'Outside every border';
+        t.ownerCol = own === 'mine' ? GOLD : own === 'rival' ? '#e2726a' : own === 'cont' ? '#cbbda3' : '#7f909f';
+        if (own) {
+          const set = own === 'rival' ? rival : own === 'cont' ? Object.assign({}, mine, rival, cont) : mine;
+          const col = own === 'mine' ? GOLD : own === 'rival' ? RED : GREY;
+          t.ov = true; t.ovStroke = col;
+          const dirs = outer(own === 'cont' ? cont : set, c, r);
+          if (bs === 'outline') {
+            t.ovW = own === 'cont' ? 2 : 3;
+            t.ovDash = own === 'cont' ? '7 6' : 'none';
+            t.ovFill = own === 'cont' ? 'rgba(162,147,123,.14)' : 'none';
+            t.edges = dirs.map(d => { const e = EDGES[d]; return { x1: FACE[e[0]][0], y1: FACE[e[0]][1], x2: FACE[e[1]][0], y2: FACE[e[1]][1] }; });
+          } else if (bs === 'poles') {
+            t.ovFill = own === 'mine' ? 'rgba(217,164,65,.2)' : own === 'rival' ? 'rgba(192,72,63,.2)' : 'rgba(162,147,123,.16)';
+            t.poles = dirs.map(d => {
+              const e = EDGES[d], mx = (FACE[e[0]][0] + FACE[e[1]][0]) / 2, my = (FACE[e[0]][1] + FACE[e[1]][1]) / 2;
+              return { x: mx - 1.5, y: my - 30, flag: (mx + 1.5) + ',' + (my - 30) + ' ' + (mx + 22) + ',' + (my - 24) + ' ' + (mx + 1.5) + ',' + (my - 16) };
+            });
+          } else {
+            t.ovFill = own === 'mine' ? 'rgba(217,164,65,.3)' : own === 'rival' ? 'rgba(192,72,63,.3)' : 'rgba(162,147,123,.22)';
+            t.ovW = 1.5; t.ovDash = 'none';
+            t.edges = dirs.map(d => { const e = EDGES[d]; return { x1: FACE[e[0]][0], y1: FACE[e[0]][1], x2: FACE[e[1]][0], y2: FACE[e[1]][1] }; });
+            t.ovStroke = own === 'mine' ? 'rgba(238,195,114,.45)' : own === 'rival' ? 'rgba(226,114,106,.45)' : 'rgba(203,189,163,.4)';
+          }
+        }
+        const self = this;
+        t.onEnter = e => { if (self.state.screen !== 'village') return; self.setState({ hover: Object.assign({}, t, { mx: e.clientX, my: e.clientY }) }); };
+        t.onLeave = () => { if (self.state.screen !== 'village') return; self.setState({ hover: null }); };
+        t.onClick = () => {
+          if (self.state.screen !== 'village') return;
+          if (!BLD[key] && !SLOTS[key]) { self.setState({ wheel: null }); return; }
+          self.setState(p => ({ hover: null, sel: null, wheel: p.wheel === key ? null : key }));
+        };
+        t.oldClick = () => {
+          if (self.state.screen !== 'village') return;
+          const bb = BLD[key];
+          if (bb) {
+            self.setState({ hover: null, sel: {
+              name: bb.name, coord: t.coord, info: bb.info, body: bb.body, cta: bb.cta, dur: bb.dur,
+              art: 'assets/' + (bb.base || bb.img) + '.png', art2: bb.top ? 'assets/' + bb.top + '.png' : null, hasArt2: !!bb.top,
+              lvlLabel: 'Level ' + bb.lvl + ' of ' + bb.max,
+              pips: Array.from({ length: bb.max }, (_, i) => ({ col: i < bb.lvl ? GOLD : 'rgba(255,255,255,.12)' })),
+              cost: ['Wood', 'Stone', 'Food', 'Iron'].map((k, i) => ({ k: k, v: bb.cost[i], col: bb.cost[i] === '0' ? '#5f7183' : '#f4efe5' }))
+            } });
+          } else if (SLOTS[key]) {
+            self.setState({ hover: null, sel: {
+              name: 'Free hex', coord: t.coord, info: 'inside your border', body: 'Nothing built here yet. Meadow hexes take fields, barracks, a storehouse or a second watchtower to stretch the border further east.',
+              cta: 'Choose a building', dur: 'no queue', art: 'assets/grass_base.png', art2: null, hasArt2: false, lvlLabel: 'Empty',
+              pips: [{ col: 'rgba(255,255,255,.12)' }, { col: 'rgba(255,255,255,.12)' }, { col: 'rgba(255,255,255,.12)' }],
+              cost: [{ k: 'Wood', v: '—', col: '#5f7183' }, { k: 'Stone', v: '—', col: '#5f7183' }, { k: 'Food', v: '—', col: '#5f7183' }, { k: 'Iron', v: '—', col: '#5f7183' }]
+            } });
+          }
+        };
+        out.push(t);
+      }
+    }
+    return out;
+  }
+
+  animKind() { return this.state.anim || this.props.wheelAnim || 'clockwise'; }
+
+  bdKind() { return this.state.bdk || this.props.wheelBackdrop || 'disc'; }
+
+  wheelKind() { return this.state.wkind || this.props.wheelStyle || 'orbs'; }
+
+  wheel(tiles) {
+    const k = this.state.screen === 'village' ? this.state.wheel : null;
+    const t = k && tiles.filter(x => x.key === k)[0];
+    const blank = { show: false, x: 0, y: 0, items: [], hasRing: false, ringRx: 0, ringRy: 0, ringW: 1.4, ringFill: 'none', ringCol: 'none', ringDash: 'none', closeLeft: 82, closeTop: 168, closeSize: 36, bd: false, bdW: 0, bdH: 0, bdLeft: 0, bdTop: 0, bdRadius: '50%', bdBg: 'none', bdFilter: 'none', bdShadow: 'none', bdMask: 'none' };
+    if (!t) return blank;
+    const b = BLD[k];
+    const acts = b ? [
+      { label: 'upgrade', big: 'Lv ' + b.lvl, prim: true, run: t.oldClick },
+      { label: 'Details', run: t.oldClick },
+      { label: 'Troops', run: () => {} },
+      { label: 'Move', run: () => {} },
+      { label: 'Raze', run: () => {} },
+    ] : [
+      { label: 'build', big: 'Free', prim: true, run: t.oldClick },
+      { label: 'Details', run: t.oldClick },
+      { label: 'Claim', run: () => {} },
+    ];
+    const self = this, kind = this.wheelKind();
+    const pick = a => e => { e.stopPropagation(); self.setState({ wheel: null }); a.run(); };
+    const n = acts.length;
+    const out = Object.assign({}, blank, { show: true, x: t.x, y: t.y });
+    const B = {
+      disc: { w: 460, h: 320, radius: '50%', bg: 'radial-gradient(closest-side,rgba(5,9,14,.82) 0%,rgba(5,9,14,.66) 62%,rgba(5,9,14,0) 100%)', filter: 'none', shadow: 'none' },
+      vignette: { w: 820, h: 560, radius: '50%', bg: 'radial-gradient(closest-side,rgba(4,8,12,.7) 0%,rgba(4,8,12,.42) 45%,rgba(4,8,12,0) 100%)', filter: 'none', shadow: 'none' },
+      frost: { w: 460, h: 320, radius: '50%', bg: 'rgba(8,13,19,.26)', filter: 'blur(5px) saturate(.65) brightness(.6)', shadow: 'none', mask: 'radial-gradient(closest-side,#000 58%,rgba(0,0,0,.45) 82%,transparent 100%)' },
+      hard: { w: 452, h: 314, radius: '50%', bg: 'rgba(6,10,15,.85)', filter: 'none', shadow: 'inset 0 0 0 2px rgba(255,255,255,.18)' },
+      ring: { w: 452, h: 314, radius: '50%', bg: 'rgba(6,10,15,.32)', filter: 'none', shadow: 'inset 0 0 0 2.5px rgba(217,164,65,.85)' },
+      bands: { w: 430, h: 300, radius: '50%', bg: 'rgba(6,10,15,.8)', filter: 'none', shadow: 'inset 0 0 0 2px rgba(217,164,65,.6), 0 0 0 14px rgba(6,10,15,.4), 0 0 0 16px rgba(217,164,65,.32)' },
+      plate: { w: 470, h: 326, radius: '50%', bg: 'linear-gradient(180deg,rgba(16,24,33,.95),rgba(6,10,15,.95))', filter: 'none', shadow: 'inset 0 0 0 2px rgba(203,189,163,.32), inset 0 3px 0 rgba(255,255,255,.08), 0 20px 44px rgba(0,0,0,.6)' },
+      hairline: { w: 372, h: 258, radius: '50%', bg: 'none', filter: 'none', shadow: 'inset 0 0 0 1.5px rgba(217,164,65,.9)' },
+      hairline2: { w: 336, h: 232, radius: '50%', bg: 'none', filter: 'none', shadow: 'inset 0 0 0 1.5px rgba(255,255,255,.55), 0 0 0 5px rgba(255,255,255,.1)' },
+      tight: { w: 300, h: 208, radius: '50%', bg: 'none', filter: 'none', shadow: 'inset 0 0 0 2.5px rgba(217,164,65,.75), 0 0 22px 2px rgba(217,164,65,.2)' },
+      scrim: { w: 3600, h: 2400, radius: '0', bg: 'radial-gradient(closest-side,rgba(4,8,12,0) 7%,rgba(4,8,12,.5) 13%,rgba(4,8,12,.74) 24%,rgba(4,8,12,.8) 100%)', filter: 'none', shadow: 'none' },
+    }[this.bdKind()];
+    if (B) {
+      out.bd = true; out.bdW = B.w; out.bdH = B.h; out.bdRadius = B.radius;
+      out.bdBg = B.bg; out.bdFilter = B.filter; out.bdShadow = B.shadow; out.bdMask = B.mask || 'none';
+      out.bdLeft = Math.round(100 - B.w / 2); out.bdTop = Math.round(186 - B.h / 2);
+    }
+
+    const V = {
+      orbs: {
+        rx: 162, ry: 126, w: 96, h: 96, pw: 110, ph: 110, radius: '50%', clip: 'none', gap: 2,
+        bg: 'radial-gradient(circle at 50% 22%,rgba(26,36,47,.96),rgba(9,14,20,.96))',
+        shadow: '0 10px 24px rgba(0,0,0,.5)',
+        primBg: 'radial-gradient(circle at 50% 24%,#f2cd7d,#d9a441)', primShadow: '0 12px 26px rgba(0,0,0,.45)',
+        label: 15, labelCol: '#eef3f7', primLabelCol: 'rgba(26,18,6,.82)', big: 26, bigCol: '#1a1206',
+        font: "Barlow,sans-serif", weight: 600, track: '.01em', cse: 'none',
+        ring: { rx: 162, ry: 126, w: 1.4, col: 'rgba(255,255,255,.34)', fill: 'none', dash: 'none' },
+      },
+      bone: {
+        rx: 158, ry: 122, w: 98, h: 98, pw: 112, ph: 112, radius: '50%', clip: 'none', gap: 2,
+        bg: 'radial-gradient(circle at 50% 24%,#f6efe0,#ddd0b8)',
+        shadow: '0 10px 22px rgba(0,0,0,.45), inset 0 -3px 0 rgba(120,100,70,.18)',
+        primBg: 'radial-gradient(circle at 50% 24%,#c0483f,#8d2f28)', primShadow: '0 12px 24px rgba(0,0,0,.45)',
+        label: 15, labelCol: '#3a2f22', primLabelCol: 'rgba(255,240,220,.86)', big: 26, bigCol: '#fff3e2',
+        font: "Barlow,sans-serif", weight: 600, track: '.01em', cse: 'none',
+        ring: null,
+      },
+      pills: {
+        rx: 178, ry: 124, w: 138, h: 50, pw: 148, ph: 58, radius: '25px', clip: 'none', gap: 1,
+        bg: 'rgba(11,17,24,.9)', shadow: '0 8px 18px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.14)',
+        primBg: 'linear-gradient(180deg,#f0c473,#d19a35)', primShadow: '0 10px 20px rgba(0,0,0,.45)',
+        label: 14, labelCol: '#e9eff4', primLabelCol: 'rgba(26,18,6,.8)', big: 22, bigCol: '#1a1206',
+        font: "Barlow,sans-serif", weight: 600, track: '.1em', cse: 'uppercase',
+        ring: null,
+      },
+      coins: {
+        rx: 156, ry: 120, w: 92, h: 92, pw: 106, ph: 106, radius: '50%', clip: 'none', gap: 2,
+        bg: 'radial-gradient(circle at 50% 26%,#26313d,#0d141c)',
+        shadow: '0 9px 20px rgba(0,0,0,.55), inset 0 0 0 2px rgba(217,164,65,.85), inset 0 0 0 6px rgba(217,164,65,.22)',
+        primBg: 'radial-gradient(circle at 50% 26%,#f4d489,#c9922f)',
+        primShadow: '0 11px 22px rgba(0,0,0,.5), inset 0 0 0 3px rgba(70,48,14,.5)',
+        label: 13, labelCol: '#e4d9c2', primLabelCol: 'rgba(35,24,6,.8)', big: 24, bigCol: '#231806',
+        font: "Barlow,sans-serif", weight: 700, track: '.12em', cse: 'uppercase',
+        ring: { rx: 156, ry: 120, w: 1.2, col: 'rgba(217,164,65,.3)', fill: 'none', dash: 'none' },
+      },
+      crest: {
+        rx: 168, ry: 126, w: 112, h: 92, pw: 128, ph: 104, radius: '20px', clip: 'none', gap: 3,
+        bg: 'linear-gradient(180deg,rgba(30,41,54,.94),rgba(11,17,24,.94))',
+        shadow: '0 10px 22px rgba(0,0,0,.55), inset 0 0 0 1.5px rgba(203,189,163,.35)',
+        primBg: 'linear-gradient(180deg,#efc372,#cf9631)', primShadow: '0 12px 24px rgba(0,0,0,.48)',
+        label: 15, labelCol: '#e9eff4', primLabelCol: 'rgba(26,18,6,.8)', big: 26, bigCol: '#1a1206',
+        font: "'Alegreya Sans SC',sans-serif", weight: 700, track: '.06em', cse: 'none',
+        ring: null,
+      },
+    }[kind] || {};
+
+    if (V.ring) {
+      out.hasRing = true; out.ringRx = V.ring.rx; out.ringRy = V.ring.ry;
+      out.ringW = V.ring.w; out.ringCol = V.ring.col; out.ringFill = V.ring.fill; out.ringDash = V.ring.dash;
+    }
+    const A = this.animKind();
+    const step = { pop: 0.015, clockwise: 0.08, fly: 0.065, swirl: 0.075, rise: 0.06 }[A] || 0.05;
+    const animFor = (ang, i) => {
+      const d = (i * step).toFixed(3) + 's';
+      if (A === 'fly') {
+        const dx = Math.cos(ang), dy = Math.sin(ang);
+        const nm = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'vr-flyr' : 'vr-flyl') : (dy > 0 ? 'vr-flyd' : 'vr-flyu');
+        return nm + ' .3s cubic-bezier(.2,.9,.3,1) ' + d + ' both';
+      }
+      if (A === 'swirl') return 'vr-swirl .34s cubic-bezier(.2,1.2,.35,1) ' + d + ' both';
+      if (A === 'rise') return 'vr-rise .3s cubic-bezier(.2,.9,.3,1) ' + d + ' both';
+      return 'vr-pop .24s cubic-bezier(.2,1.4,.4,1) ' + d + ' both';
+    };
+    out.items = acts.map((a, i) => {
+      const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+      const w = a.prim ? V.pw : V.w, h = a.prim ? V.ph : V.h;
+      return {
+        onClick: pick(a), label: a.label, big: a.big || false,
+        left: Math.round(100 + Math.cos(ang) * V.rx - w / 2),
+        top: Math.round(186 + Math.sin(ang) * V.ry - h / 2),
+        w: w, h: h, radius: V.radius, clip: V.clip, gap: V.gap,
+        bg: a.prim ? V.primBg : V.bg, shadow: a.prim ? V.primShadow : V.shadow,
+        bigSize: V.big, bigCol: V.bigCol,
+        labelSize: a.prim ? V.label - 1 : V.label, labelCol: a.prim ? V.primLabelCol : V.labelCol,
+        labelFont: V.font, labelWeight: V.weight, labelTrack: V.track, labelCase: a.prim ? 'uppercase' : V.cse,
+        delay: (i * 0.045).toFixed(3) + 's', anim: animFor(ang, i),
+      };
+    });
+    return out;
+  }
+
+  seaKey() { return this.state.sea || this.props.seaStyle || 'playful'; }
+
+  sea() {
+    const key = this.seaKey();
+    const P = {
+      deep: { bg: 'radial-gradient(120% 100% at 50% 45%,#0e1c2a 0%,#080f17 70%,#060a0f 100%)', wave: 'rgba(150,190,220,.16)', sw: 1, spark: null, foam: 'rgba(150,200,220,.22)', foamFill: 'rgba(120,180,210,.05)', dash: '0', dens: 0.3 },
+      playful: { bg: 'radial-gradient(115% 100% at 45% 40%,#2a92ae 0%,#14657f 48%,#0b3c50 100%)', wave: 'rgba(255,255,255,.42)', sw: 2, spark: 'rgba(255,255,255,.85)', foam: 'rgba(255,255,255,.7)', foamFill: 'rgba(255,255,255,.12)', dash: '0', dens: 0.62 },
+      currents: { bg: 'radial-gradient(120% 100% at 50% 45%,#12384f 0%,#0a2233 60%,#07141e 100%)', wave: 'rgba(126,206,224,.3)', sw: 1.3, spark: 'rgba(160,220,235,.5)', foam: 'rgba(126,206,224,.35)', foamFill: 'rgba(126,206,224,.05)', dash: '7 6', dens: 0.45 },
+      charted: { bg: 'radial-gradient(120% 100% at 50% 45%,#efe0c0 0%,#e3d0aa 60%,#d6c096 100%)', wave: 'rgba(94,68,38,.34)', sw: 1.1, spark: null, foam: 'rgba(94,68,38,.4)', foamFill: 'rgba(94,68,38,.04)', dash: '0', dens: 0.72 },
+    }[key] || {};
+    const centers = ISL.map(i => ({
+      x: i.c[0] * (WW * 0.75) + WW / 2,
+      y: i.c[1] * WH + (i.c[0] % 2) * WH / 2 + WH / 2,
+      r: (i.r + 1.1) * WW * 0.75,
+    }));
+    const near = (x, y, pad) => centers.some(c => Math.hypot(x - c.x, y - c.y) < c.r + pad);
+    const rnd = mul(4711);
+    const waves = [], sparks = [];
+    const stepX = key === 'currents' ? 78 : 46, stepY = key === 'currents' ? 34 : 26;
+    for (let y = -10; y < 660; y += stepY) {
+      for (let x = -20; x < 1300; x += stepX) {
+        const jx = x + rnd() * 16 - 8, jy = y + rnd() * 12 - 6;
+        if (rnd() > P.dens) continue;
+        if (near(jx, jy, 8)) continue;
+        const w = key === 'currents' ? 46 : key === 'charted' ? 20 : 26;
+        const d = key === 'currents'
+          ? 'M' + jx + ' ' + jy + 'q' + (w / 2) + ' -8 ' + w + ' 0t' + w + ' 0'
+          : 'M' + jx + ' ' + jy + 'q' + (w / 4) + ' -4.5 ' + (w / 2) + ' 0t' + (w / 2) + ' 0';
+        waves.push({
+          d: d, col: P.wave, sw: P.sw,
+          org: jx.toFixed(1) + 'px ' + jy.toFixed(1) + 'px',
+          anim: key === 'charted' ? 'none' : 'vr-swell ' + (3.4 + rnd() * 3.2).toFixed(2) + 's ease-in-out ' + (-rnd() * 5).toFixed(2) + 's infinite',
+        });
+        if (P.spark && rnd() < 0.14) {
+          const sx = jx + 14, sy = jy - 9;
+          sparks.push({
+            x: sx.toFixed(1), y: sy.toFixed(1), r: (1 + rnd() * 1.6).toFixed(2), col: P.spark,
+            org: sx.toFixed(1) + 'px ' + sy.toFixed(1) + 'px',
+            anim: 'vr-twinkle ' + (2.6 + rnd() * 3).toFixed(2) + 's ease-in-out ' + (-rnd() * 6).toFixed(2) + 's infinite',
+          });
+        }
+      }
+    }
+    const foam = [];
+    centers.forEach((c, i) => {
+      const rings = key === 'playful' ? 2 : 1;
+      for (let k = 0; k < rings; k++) {
+        const rr = c.r * (0.82 + k * 0.13);
+        foam.push({
+          x: c.x.toFixed(1), y: c.y.toFixed(1), rx: rr.toFixed(1), ry: (rr * 0.52).toFixed(1),
+          fill: k === 0 ? P.foamFill : 'none', col: P.foam, sw: k === 0 ? 2.4 : 1.2, dash: P.dash,
+          org: c.x.toFixed(1) + 'px ' + c.y.toFixed(1) + 'px',
+          anim: key === 'charted' ? 'none' : 'vr-foam ' + (4.5 + i * 0.6 + k).toFixed(1) + 's ease-in-out infinite',
+        });
+      }
+    });
+    return { bg: P.bg, waves: waves, sparks: sparks, foam: foam, key: key };
+  }
+
+  world() {
+    const rnd = mul(9);
+    const hexes = [], borders = [], marks = [], names = [];
+    const self = this;
+    ISL.forEach((isl, ii) => {
+      const blob = [];
+      for (let c = isl.c[0] - isl.r - 1; c <= isl.c[0] + isl.r + 1; c++) {
+        for (let r = isl.c[1] - isl.r - 1; r <= isl.c[1] + isl.r + 1; r++) {
+          const d = hdist([c, r], isl.c);
+          if (d > isl.r) continue;
+          if (d === isl.r && rnd() < 0.4) continue;
+          blob.push([c, r, d]);
+        }
+      }
+      const seeds = isl.own.map((o, i) => blob[Math.floor((i + 1) * blob.length / (isl.own.length + 1)) % blob.length]);
+      const set = toSet(blob.map(b => b[0] + ',' + b[1]));
+      const ownerOf = {};
+      blob.forEach(b => {
+        let best = -1, bd = 99;
+        seeds.forEach((s, i) => { const d = hdist([b[0], b[1]], [s[0], s[1]]); if (d < bd) { bd = d; best = i; } });
+        if (best >= 0 && bd <= 1) ownerOf[b[0] + ',' + b[1]] = best;
+      });
+      blob.forEach(b => {
+        const c = b[0], r = b[1], d = b[2];
+        const oi = ownerOf[c + ',' + r];
+        let fill = d === isl.r ? '#9c8a5c' : d === 0 ? '#5f6b6d' : rnd() < 0.32 ? '#365e2f' : '#4e7a3a';
+        hexes.push({ x: c * (WW * 0.75), y: r * WH + (c % 2) * (WH / 2), fill: fill, onClick: () => self.setState({ isl: ii, sel: null }) });
+        const oset = oi === undefined ? null : toSet(Object.keys(ownerOf).filter(k => ownerOf[k] === oi));
+        if (oset) {
+          outer(oset, c, r).forEach(dd => {
+            const e = EDGES[dd];
+            const ox = c * (WW * 0.75), oy = r * WH + (c % 2) * (WH / 2);
+            const f = i => [FACE[i][0] / 200 * WW + ox, (FACE[i][1] - 140) / 92 * WH + oy];
+            const a = f(e[0]), z = f(e[1]);
+            borders.push({ x1: a[0], y1: a[1], x2: z[0], y2: z[1], col: isl.own[oi].col });
+          });
+        }
+      });
+      seeds.forEach((s, i) => marks.push({
+        x: s[0] * (WW * 0.75) + WW / 2, y: s[1] * WH + (s[0] % 2) * (WH / 2) + WH / 2,
+        col: isl.own[i].col, who: isl.own[i].who, label: isl.own[i].col === GOLD ? '#f0c473' : '#b9c4ce', stack: i % 3, quiet: isl.own.length > 2,
+        onClick: () => self.setState({ isl: ii, sel: null })
+      }));
+      names.push({ x: isl.c[0] * (WW * 0.75) + WW / 2, y: (isl.c[1] + isl.r + 2.4) * WH, n: isl.n, size: isl.r > 2 ? 18 : 16, col: isl.mine ? '#f0c473' : '#93a6b8' });
+    });
+    const a = ISL[0], b = ISL[1];
+    const ax = a.c[0] * WW * 0.75 + WW / 2, ay = a.c[1] * WH, bx = b.c[0] * WW * 0.75 + WW / 2, by = b.c[1] * WH;
+    const pc = (x, y) => ({ lx: ((x + 30) / 1330 * 100).toFixed(2), ly: ((y + 20) / 670 * 100).toFixed(2) });
+    const labels = names.map(n => Object.assign({ n: n.n, col: n.col, size: n.size, weight: 700, track: '.18em' }, pc(n.x, n.y)));
+    const owners = marks.filter(m => !m.quiet).map((m, i) => {
+      const stack = m.stack || 0;
+      const dy = stack === 0 ? -22 : stack === 1 ? -8 : 8;
+      const dx = stack === 1 ? 12 : 10;
+      return Object.assign({ n: m.who, col: m.label, size: 12.5, weight: 600, track: '0' }, pc(m.x + dx, m.y + dy));
+    });
+    const m0 = ISL[0];
+    const me = { x: m0.c[0] * WW * 0.75 + WW / 2, y: m0.c[1] * WH + (m0.c[0] % 2) * WH / 2 + WH / 2, r: (m0.r + 1.6) * WW * 0.75 };
+    return { me: me, labels: labels, owners: owners, hexes: hexes, borders: borders, marks: marks, names: names, shipPath: 'M' + ax + ' ' + ay + ' Q' + ((ax + bx) / 2) + ' ' + (Math.min(ay, by) - 60) + ' ' + bx + ' ' + by };
+  }
+
+  renderVals() {
+    const s = this.state, t = s.t, screen = s.screen;
+    const isV = screen === 'village', isW = screen === 'world', isL = screen === 'landing';
+    const RES = [
+      { tag: 'W', k: 'Wood', base: 1240, rate: 680, cap: 3000, col: '#c9a06a' },
+      { tag: 'S', k: 'Stone', base: 890, rate: 410, cap: 3000, col: '#9aa7b0' },
+      { tag: 'F', k: 'Food', base: 2010, rate: 520, cap: 4000, col: '#8fbf6a' },
+      { tag: 'I', k: 'Iron', base: 145, rate: 90, cap: 1500, col: '#b58d9c' }
+    ];
+    const bs = this.bstyle();
+    const on = 'rgba(217,164,65,.2)', onc = '#f0c473', off = 'transparent', offc = '#a9b6c2';
+    const q = [{ name: 'Longhouse → 5', total: 12600, l0: 9669 }, { name: 'Watchtower → 2', total: 3960, l0: 1102 }];
+    const isl = ISL[s.isl];
+    const tls = this.tiles(), wh = this.wheel(tls), wk = this.wheelKind(), bk = this.bdKind(), ak = this.animKind();
+    const seaData = this.sea(), sk = seaData.key, w = this.world();
+    if (sk === 'charted') {
+      w.labels = w.labels.map(l => Object.assign({}, l, { col: '#4a3418' }));
+      w.owners = w.owners.map(o => Object.assign({}, o, { col: o.col === '#f0c473' ? '#7a4a12' : '#3d3126' }));
+    }
+    return {
+      isLanding: isL, isVillage: isV, isWorld: isW, showHud: !isL,
+      scale: isL ? 0.42 : isV ? s.scale : 0.42,
+      panX: isL ? 480 : isV ? s.panX : 0, panY: isL ? 120 : isV ? s.panY : 0,
+      tiles: tls, wheel: wh, closeWheel: () => this.setState({ wheel: null }),
+      setWRunes: () => this.setState({ wkind: 'orbs' }), setWShields: () => this.setState({ wkind: 'bone' }),
+      setWBanner: () => this.setState({ wkind: 'pills' }), setWDial: () => this.setState({ wkind: 'coins' }),
+      setWCrest: () => this.setState({ wkind: 'crest' }),
+      wRunesBg: wk === 'orbs' ? on : off, wRunesCol: wk === 'orbs' ? onc : offc,
+      wShieldsBg: wk === 'bone' ? on : off, wShieldsCol: wk === 'bone' ? onc : offc,
+      wBannerBg: wk === 'pills' ? on : off, wBannerCol: wk === 'pills' ? onc : offc,
+      wDialBg: wk === 'coins' ? on : off, wDialCol: wk === 'coins' ? onc : offc,
+      wCrestBg: wk === 'crest' ? on : off, wCrestCol: wk === 'crest' ? onc : offc,
+      setBdNone: () => this.setState({ bdk: 'none' }), setBdDisc: () => this.setState({ bdk: 'disc' }),
+      setBdVig: () => this.setState({ bdk: 'vignette' }), setBdFrost: () => this.setState({ bdk: 'frost' }),
+      setBdScrim: () => this.setState({ bdk: 'scrim' }),
+      bdNoneBg: bk === 'none' ? on : off, bdNoneCol: bk === 'none' ? onc : offc,
+      bdDiscBg: bk === 'disc' ? on : off, bdDiscCol: bk === 'disc' ? onc : offc,
+      bdVigBg: bk === 'vignette' ? on : off, bdVigCol: bk === 'vignette' ? onc : offc,
+      bdFrostBg: bk === 'frost' ? on : off, bdFrostCol: bk === 'frost' ? onc : offc,
+      bdScrimBg: bk === 'scrim' ? on : off, bdScrimCol: bk === 'scrim' ? onc : offc,
+      setBdHard: () => this.setState({ bdk: 'hard' }), setBdRing: () => this.setState({ bdk: 'ring' }),
+      setBdBands: () => this.setState({ bdk: 'bands' }), setBdPlate: () => this.setState({ bdk: 'plate' }),
+      bdHardBg: bk === 'hard' ? on : off, bdHardCol: bk === 'hard' ? onc : offc,
+      bdRingBg: bk === 'ring' ? on : off, bdRingCol: bk === 'ring' ? onc : offc,
+      bdBandsBg: bk === 'bands' ? on : off, bdBandsCol: bk === 'bands' ? onc : offc,
+      bdPlateBg: bk === 'plate' ? on : off, bdPlateCol: bk === 'plate' ? onc : offc,
+      setBdHair: () => this.setState({ bdk: 'hairline' }), setBdHair2: () => this.setState({ bdk: 'hairline2' }),
+      setBdTight: () => this.setState({ bdk: 'tight' }),
+      bdHairBg: bk === 'hairline' ? on : off, bdHairCol: bk === 'hairline' ? onc : offc,
+      bdHair2Bg: bk === 'hairline2' ? on : off, bdHair2Col: bk === 'hairline2' ? onc : offc,
+      bdTightBg: bk === 'tight' ? on : off, bdTightCol: bk === 'tight' ? onc : offc,
+      setAnPop: () => this.setState({ anim: 'pop' }), setAnClock: () => this.setState({ anim: 'clockwise' }),
+      setAnFly: () => this.setState({ anim: 'fly' }), setAnSwirl: () => this.setState({ anim: 'swirl' }),
+      setAnRise: () => this.setState({ anim: 'rise' }),
+      anPopBg: ak === 'pop' ? on : off, anPopCol: ak === 'pop' ? onc : offc,
+      anClockBg: ak === 'clockwise' ? on : off, anClockCol: ak === 'clockwise' ? onc : offc,
+      anFlyBg: ak === 'fly' ? on : off, anFlyCol: ak === 'fly' ? onc : offc,
+      anSwirlBg: ak === 'swirl' ? on : off, anSwirlCol: ak === 'swirl' ? onc : offc,
+      anRiseBg: ak === 'rise' ? on : off, anRiseCol: ak === 'rise' ? onc : offc,
+      hover: isV && !s.wheel ? s.hover : null, hasHover: !!(isV && !s.wheel && s.hover), sel: s.sel, hasSel: !!s.sel,
+      nick: s.nick, onNick: e => this.setState({ nick: e.target.value }),
+      landingShips: grp(126 + (t % 7)),
+      res: RES.map(r => ({ tag: r.tag, col: r.col, amt: grp(Math.min(r.cap, r.base + r.rate * t / 3600)), cap: grp(r.cap), rate: grp(r.rate), pct: Math.min(100, (r.base + r.rate * t / 3600) / r.cap * 100).toFixed(1) })),
+      queue: q.map(x => ({ name: x.name, left: hms(x.l0 - t), pct: Math.min(100, (x.total - Math.max(0, x.l0 - t)) / x.total * 100).toFixed(1) })),
+      atkLeft: hms(297 - t), shipLeft: hms(4360 - t),
+      zoomPct: Math.round(s.scale * 100),
+      toVillage: () => this.setState({ screen: 'village', sel: null }),
+      toWorld: () => this.setState({ screen: 'world', hover: null, sel: null, wheel: null }),
+      toLanding: () => this.setState({ screen: 'landing', hover: null, sel: null, wheel: null }),
+      zoomIn: () => this.setState(p => ({ scale: Math.min(1.1, p.scale + 0.12) })),
+      zoomOut: () => this.setState(p => ({ scale: Math.max(0.28, p.scale - 0.12) })),
+      onDragStart: e => { if (this.state.screen !== 'village') return; this.setState({ drag: { x: e.clientX, y: e.clientY, px: this.state.panX, py: this.state.panY } }); },
+      setOutline: () => this.setState({ border: 'outline' }), setPoles: () => this.setState({ border: 'poles' }), setWash: () => this.setState({ border: 'wash' }),
+      bOutBg: bs === 'outline' ? on : off, bOutCol: bs === 'outline' ? onc : offc,
+      bPolBg: bs === 'poles' ? on : off, bPolCol: bs === 'poles' ? onc : offc,
+      bWashBg: bs === 'wash' ? on : off, bWashCol: bs === 'wash' ? onc : offc,
+      tabVillageBg: isV ? on : off, tabVillageCol: isV ? onc : offc,
+      tabWorldBg: isW ? on : off, tabWorldCol: isW ? onc : offc,
+      closeSel: () => this.setState({ sel: null }), stop: e => e.stopPropagation(), noop: () => {},
+      world: w,
+      sea: seaData,
+      setSeaDeep: () => this.setState({ sea: 'deep' }), setSeaPlay: () => this.setState({ sea: 'playful' }),
+      setSeaCur: () => this.setState({ sea: 'currents' }), setSeaChart: () => this.setState({ sea: 'charted' }),
+      sDeepBg: sk === 'deep' ? on : off, sDeepCol: sk === 'deep' ? onc : offc,
+      sPlayBg: sk === 'playful' ? on : off, sPlayCol: sk === 'playful' ? onc : offc,
+      sCurBg: sk === 'currents' ? on : off, sCurCol: sk === 'currents' ? onc : offc,
+      sChartBg: sk === 'charted' ? on : off, sChartCol: sk === 'charted' ? onc : offc,
+      enterHome: () => this.setState({ screen: 'village', sel: null }),
+      isl: { mine: !!isl.mine, other: !isl.mine, n: isl.n, coord: '(' + (100 + isl.c[0] * 3) + ' | ' + (30 + isl.c[1] * 3) + ')', free: isl.free, count: isl.own.length, own: isl.own, empty: isl.own.length === 0 }
+    };
+  }
+}
+</script>
+</body>
+</html>
