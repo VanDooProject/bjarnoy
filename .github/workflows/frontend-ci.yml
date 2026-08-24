@@ -1,0 +1,91 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    paths:
+      - 'src/frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+
+defaults:
+  run:
+    working-directory: src/frontend
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # bg_assets_hextile is a separate private repo, so the default
+      # GITHUB_TOKEN (scoped to this repo only) can't clone it — a bare
+      # `git submodule update` hits "Repository not found". Route that one
+      # URL through a PAT with read access to it instead.
+      - run: git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+
+      # Scoped to just the submodule this build needs, rather than
+      # `actions/checkout`'s `submodules: true` (which recurses over every
+      # submodule in the whole monorepo, including unrelated ones under
+      # legacy/). Path is relative to the repo root (not this job's
+      # `working-directory: src/frontend` default) since git resolves
+      # submodule pathspecs from the top of the working tree.
+      - run: git submodule update --init --depth 1 -- vendor/bg_assets_hextile
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Typecheck & build
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # See the build job's identical steps for why: bg_assets_hextile is a
+      # private repo needing a PAT, and the submodule pathspec is relative
+      # to the repo root, not this job's working-directory default.
+      - run: git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+
+      - run: git submodule update --init --depth 1 -- vendor/bg_assets_hextile
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Install Playwright's browser
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run build
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            src/frontend/playwright-report/
+            src/frontend/test-results/
+          retention-days: 7

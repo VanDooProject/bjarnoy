@@ -8,6 +8,8 @@ Bjarnoy / fjordhold
 - legacy/backend (old backend from 2025, needs to be updated to newest dotnet and aspire, this is sadly primarily a skeleton)
 - legacy/frontend (old angular frontend from 2025, just preserved history)
 
+- src/frontend (current Vue 3 + TS + Vite frontend, see src/frontend/README.md)
+
 - prototypes (ideas from e.g claude design)
 
 - docs (general docs for game related stuff)

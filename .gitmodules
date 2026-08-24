@@ -1,0 +1,6 @@
+[submodule "src/frontend/vendor/bg_assets_hextile"]
+	path = src/frontend/vendor/bg_assets_hextile
+	url = https://github.com/VanDooProject/bg_assets_hextile
+[submodule "legacy/frontend/map/public/images/tiles"]
+	path = legacy/frontend/map/public/images/tiles
+	url = https://github.com/VanDooProject/bg_assets_hextile
