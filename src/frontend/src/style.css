@@ -1,0 +1,53 @@
+/* Palette & type scale lifted from prototypes/landing_pages/README.md
+   ("Visual language") so the real app matches the design brainstorms. */
+:root {
+  --gold: #ffc55c;
+  --rival: #e2705f;
+  --shell: #0b1116;
+  --panel-bg: rgba(10, 20, 27, 0.92);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #e8f0f5;
+  --muted: #8fa3af;
+  --muted-2: #7d909c;
+
+  --wood: #c98b4b;
+  --stone: #9aa7ad;
+  --food: #8fc35a;
+  --iron: #6f8fa8;
+
+  --sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--shell);
+  color: var(--text);
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+}
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+
+.pill {
+  border-radius: 999px;
+}
