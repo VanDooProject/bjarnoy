@@ -1,0 +1,132 @@
+using Bjarnoy.Infrastructure.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace Bjarnoy.Infrastructure.Persistence;
+
+/// <summary>
+/// The game database. One model, two providers: PostgreSQL for hosted
+/// multi-world play and SQLite for a single-container deployment or local dev,
+/// as the root README requires.
+/// </summary>
+/// <remarks>
+/// Provider-specific migrations live in <c>Bjarnoy.Migrations.PostgreSql</c> and
+/// <c>Bjarnoy.Migrations.Sqlite</c>, selected in
+/// <see cref="DatabaseServiceCollectionExtensions"/>. Nothing here may use a
+/// provider-only construct, or the other provider's migrations stop building.
+/// </remarks>
+public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(options)
+{
+    public DbSet<WorldEntity> Worlds => Set<WorldEntity>();
+
+    public DbSet<IslandEntity> Islands => Set<IslandEntity>();
+
+    public DbSet<SettlementEntity> Settlements => Set<SettlementEntity>();
+
+    public DbSet<PlacedBuildingEntity> PlacedBuildings => Set<PlacedBuildingEntity>();
+
+    public DbSet<BuildOrderEntity> BuildOrders => Set<BuildOrderEntity>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+        base.OnModelCreating(modelBuilder);
+
+        // Every key is a UUIDv7 this application mints, so each is declared
+        // ValueGeneratedNever. Two reasons, both load-bearing:
+        //
+        //  - EF's default for a Guid key is ValueGeneratedOnAdd, and it then
+        //    reads "key already set" as "row already exists" when it discovers
+        //    an entity through a navigation property. A newly queued build
+        //    order would be marked Modified instead of Added, and SaveChanges
+        //    would UPDATE a row that was never inserted — which surfaces as
+        //    DbUpdateConcurrencyException, not as anything resembling the
+        //    actual mistake.
+        //  - It guarantees the stored key is our time-ordered v7 rather than a
+        //    provider-generated v4, which is what lets "ORDER BY id" mean
+        //    "in creation order" (see WorldService.GetWorldsAsync).
+
+        modelBuilder.Entity<WorldEntity>(world =>
+        {
+            world.ToTable("worlds");
+            world.HasKey(w => w.Id);
+            world.Property(w => w.Id).ValueGeneratedNever();
+            world.Property(w => w.Name).HasMaxLength(100).IsRequired();
+            world.HasIndex(w => w.Name).IsUnique();
+            world.Property(w => w.Status).HasConversion<int>();
+            world.Property(w => w.RunState).HasConversion<int>();
+            world.HasMany(w => w.Islands)
+                .WithOne(i => i.World!)
+                .HasForeignKey(i => i.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IslandEntity>(island =>
+        {
+            island.ToTable("islands");
+            island.HasKey(i => i.Id);
+            island.Property(i => i.Id).ValueGeneratedNever();
+            island.Property(i => i.Name).HasMaxLength(100).IsRequired();
+            island.HasIndex(i => new { i.WorldId, i.Index }).IsUnique();
+
+            island.Property(i => i.StartPositions)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+        });
+
+        modelBuilder.Entity<SettlementEntity>(settlement =>
+        {
+            settlement.ToTable("settlements");
+            settlement.HasKey(s => s.Id);
+            settlement.Property(s => s.Id).ValueGeneratedNever();
+            settlement.Property(s => s.Name).HasMaxLength(100).IsRequired();
+            settlement.Property(s => s.OwnerName).HasMaxLength(100).IsRequired();
+
+            // One settlement per hex per world: two players cannot found on the
+            // same plot, and the database is what makes that a race-proof rule
+            // rather than a check-then-act.
+            settlement.HasIndex(s => new { s.WorldId, s.CentreQ, s.CentreR }).IsUnique();
+
+            settlement.HasOne(s => s.World)
+                .WithMany(w => w.Settlements)
+                .HasForeignKey(s => s.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            settlement.HasOne(s => s.Island)
+                .WithMany()
+                .HasForeignKey(s => s.IslandId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            settlement.HasMany(s => s.Buildings)
+                .WithOne(b => b.Settlement!)
+                .HasForeignKey(b => b.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            settlement.HasMany(s => s.Queue)
+                .WithOne(o => o.Settlement!)
+                .HasForeignKey(o => o.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlacedBuildingEntity>(building =>
+        {
+            building.ToTable("placed_buildings");
+            building.HasKey(b => b.Id);
+            building.Property(b => b.Id).ValueGeneratedNever();
+            building.Property(b => b.Type).HasConversion<int>();
+
+            // A hex holds one building.
+            building.HasIndex(b => new { b.SettlementId, b.Q, b.R }).IsUnique();
+        });
+
+        modelBuilder.Entity<BuildOrderEntity>(order =>
+        {
+            order.ToTable("build_orders");
+            order.HasKey(o => o.Id);
+            order.Property(o => o.Id).ValueGeneratedNever();
+            order.Property(o => o.Type).HasConversion<int>();
+
+            // One order per hex at a time.
+            order.HasIndex(o => new { o.SettlementId, o.Q, o.R }).IsUnique();
+        });
+    }
+}

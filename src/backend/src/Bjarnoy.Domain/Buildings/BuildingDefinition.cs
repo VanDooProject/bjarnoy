@@ -1,0 +1,64 @@
+using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.World;
+
+namespace Bjarnoy.Domain.Buildings;
+
+/// <summary>
+/// What one building at one level costs, takes, and gives.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="AllowedTerrain"/> is the replacement for the legacy
+/// <c>BuildTechnology.AllowedTiles</c>. That held a <c>List&lt;Tile&gt;</c> of
+/// throwaway instances — <c>new ForestTile()</c> with no position and no owner —
+/// purely so <c>BuildHelper</c> could compare <c>.type</c>, a string derived
+/// from the class name by reflection. The rule it encoded is worth keeping;
+/// expressing it as a class per terrain was not. Here it is a set of
+/// <see cref="Terrain"/> values, checked by value.
+/// </para>
+/// <para>
+/// This is data, not code. The legacy tech tree was one C# class per building
+/// (<c>BuildingLumberjackInitializer</c> and friends), so adding a building
+/// meant a new type and rebalancing meant a deploy.
+/// </para>
+/// </remarks>
+public sealed record BuildingDefinition
+{
+    public required BuildingType Type { get; init; }
+
+    /// <summary>The level this definition produces, counting from 1.</summary>
+    public required int Level { get; init; }
+
+    public required ResourceAmounts Cost { get; init; }
+
+    public required TimeSpan BuildDuration { get; init; }
+
+    /// <summary>Added to the settlement's hourly production when this level completes.</summary>
+    public ResourceAmounts ProductionPerHour { get; init; } = ResourceAmounts.Zero;
+
+    /// <summary>Added to the settlement's storage ceiling when this level completes.</summary>
+    public ResourceAmounts StorageCapacity { get; init; } = ResourceAmounts.Zero;
+
+    /// <summary>
+    /// Terrain this building may stand on. Empty means anywhere buildable —
+    /// which is any land hex; nothing is built on open sea.
+    /// </summary>
+    public IReadOnlySet<Terrain> AllowedTerrain { get; init; } = new HashSet<Terrain>();
+
+    /// <summary>
+    /// Longhouse level required before this may be built, so the anchor gates
+    /// the settlement's growth (MECHANICS.md §2).
+    /// </summary>
+    public int RequiredLonghouseLevel { get; init; } = 1;
+
+    /// <summary>Whether this building may stand on <paramref name="terrain"/>.</summary>
+    public bool AllowsTerrain(Terrain terrain)
+    {
+        if (!terrain.IsLand())
+        {
+            return false;
+        }
+
+        return AllowedTerrain.Count == 0 || AllowedTerrain.Contains(terrain);
+    }
+}

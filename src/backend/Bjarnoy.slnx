@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Bjarnoy.Api/Bjarnoy.Api.csproj" />
+    <Project Path="src/Bjarnoy.AppHost/Bjarnoy.AppHost.csproj" />
+    <Project Path="src/Bjarnoy.Domain/Bjarnoy.Domain.csproj" />
+    <Project Path="src/Bjarnoy.Infrastructure/Bjarnoy.Infrastructure.csproj" />
+    <Project Path="src/Bjarnoy.Migrations.PostgreSql/Bjarnoy.Migrations.PostgreSql.csproj" />
+    <Project Path="src/Bjarnoy.Migrations.Sqlite/Bjarnoy.Migrations.Sqlite.csproj" />
+    <Project Path="src/Bjarnoy.ServiceDefaults/Bjarnoy.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Bjarnoy.Api.IntegrationTests/Bjarnoy.Api.IntegrationTests.csproj" />
+    <Project Path="tests/Bjarnoy.Domain.Tests/Bjarnoy.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

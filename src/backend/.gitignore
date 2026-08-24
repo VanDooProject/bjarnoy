@@ -1,0 +1,9 @@
+bin/
+obj/
+artifacts/
+*.user
+TestResults/
+
+# The built frontend is copied in by the Docker build (see deploy/), never
+# committed.
+src/Bjarnoy.Api/wwwroot/
