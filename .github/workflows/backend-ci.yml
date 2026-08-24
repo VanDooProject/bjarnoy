@@ -64,6 +64,10 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('src/backend/Directory.Packages.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
+      # `dotnet ef` builds the project it is pointed at, so it needs the same
+      # restore the build job does.
+      - run: dotnet restore Bjarnoy.slnx
+
       - name: Install dotnet-ef
         run: dotnet tool install --global dotnet-ef --version 10.0.11
 
