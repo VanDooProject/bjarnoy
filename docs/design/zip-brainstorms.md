@@ -36,8 +36,9 @@ Focus: **landing page / onboarding** — multiple pages and brainstorms for how 
 ![6a: but building on map](./img/but_building_on_map.png)
 
 Key design concepts extracted:
-- World view is already on screen and moving when the page loads
-- First interaction is a real game move (place a building, pick a plot, drop a wall)
+- a fixed village view is already on the screen, it should have at least 2 wood and 1 water visible so the user has a chance to get all needed starting res
+- there is text describing what to do (see screenshot or example html)
+- First interaction is a real game move (place townhall, then build a lumberjack, ...)
 - Account creation is deferred until the player has something worth naming or needs to interact with other players (so no attacks, messages, trades, etc. until they have an account)
 - Multiple distinct page layouts / onboarding flows are included
 
