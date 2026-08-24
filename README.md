@@ -7,6 +7,11 @@ Bjarnoy / fjordhold
 - legacy/browsergame (c# from 2019, not even on net7, but this backend has already a few features)
 - legacy/backend (old backend from 2025, needs to be updated to newest dotnet and aspire, this is sadly primarily a skeleton)
 - legacy/frontend (old angular frontend from 2025, just preserved history)
+
+- prototypes (ideas from e.g claude design)
+
+- docs (general docs for game related stuff)
+- docs/tech (docs for e.g deployment, dev, ...)
 ```
 
 # game
@@ -15,6 +20,7 @@ Bjarnoy / fjordhold
  - a real time browsergame like travian which should run about 6months to 2 years
 
 ## setting
+see game mechanics in  ./prototypes/MECHANICS.md
 
 # database
 the round based one should be able to be run with sqllite or litedb but also postgres if hosted for multiple players/worlds/tenants; sqllite should also support multiple worlds for sure but should be able to be a single docker container for everything
