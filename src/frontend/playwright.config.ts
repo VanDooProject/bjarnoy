@@ -23,9 +23,17 @@ export default defineConfig({
   webServer: {
     // Against the production build, not the dev server — closer to what
     // ships, and avoids HMR/dev-only behaviour leaking into the tests.
-    command: 'npm run preview -- --port 4173 --strictPort',
+    // Explicit `--host` rather than Vite's default: without it, which
+    // loopback address it binds can vary by environment, and the CI
+    // failure this is fixing was a silent hang with zero webServer output
+    // to explain it — bypassing the `npm run` wrapper (`npx vite preview`
+    // directly) and piping stdout/stderr means a real failure next time
+    // shows up in the CI log instead of just "Timed out".
+    command: 'npx vite preview --port 4173 --strictPort --host 127.0.0.1',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });
