@@ -6,7 +6,7 @@
 // an arbitrary tile width `w` via src/lib/map/textures.ts's fractions.
 
 import type { AxialCoord } from './coords';
-import { axialToOddQ } from './coords';
+import { axialToOddQ, neighbors, oddQToAxial } from './coords';
 
 export interface Point {
   x: number;
@@ -34,14 +34,46 @@ export function isoGridPosition(c: AxialCoord, w: number, h: number): Point {
   return { x, y };
 }
 
-/** Inverse of isoGridPosition: which hex contains this world point. */
+function pointInPolygon(pt: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    const crosses = a.y > pt.y !== b.y > pt.y;
+    if (crosses && pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Inverse of isoGridPosition: which hex contains this world point.
+ *
+ * isoGridPosition places a hex by the top-left of its bounding box, not by
+ * its centre — so naively rounding `world.x / colPitch` (as if hex centres
+ * sat at multiples of colPitch) is off by half a hex's worth of pixels; the
+ * true centre of column C sits at `C * colPitch + w / 2`, not `C * colPitch`.
+ * That's what actually caused the hover highlight (and, less visibly,
+ * click/tap hit-testing) to land on the wrong hex.
+ *
+ * Correcting for that gets the right answer almost always, but rather than
+ * trust a second hand-derived formula, this tiling's own isoTopPoints
+ * hexagon — which abuts its neighbours with no gaps or overlaps by
+ * construction — is used to verify it: check the estimate and its six
+ * neighbours with a real point-in-polygon test and return whichever one
+ * actually contains the point.
+ */
 export function isoPixelToAxial(world: Point, w: number, h: number): AxialCoord {
   const colPitch = w * 0.75;
-  const col = Math.round(world.x / colPitch);
-  const row = Math.round((world.y - (col & 1 ? h / 2 : 0)) / h);
-  const q = col;
-  const r = row - (col - (col & 1)) / 2;
-  return { q, r };
+  const col = Math.round((world.x - w / 2) / colPitch);
+  const row = Math.round((world.y - h / 2 - (col & 1 ? h / 2 : 0)) / h);
+  const estimate = oddQToAxial({ col, row });
+
+  for (const c of [estimate, ...neighbors(estimate)]) {
+    const grid = isoGridPosition(c, w, h);
+    const poly = isoTopPoints(w, h).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+    if (pointInPolygon(world, poly)) return c;
+  }
+  return estimate;
 }
 
 /**

@@ -62,10 +62,21 @@ npm run dev      # http://localhost:5173
 
 # build
 npm run build    # type-checks (vue-tsc) then builds to dist/
+
+# tests
+npm run test:unit   # vitest — pure hex-geometry math, no browser
+npm run test:e2e    # playwright — real browser flows, against the built app
 ```
 
-`.github/workflows/frontend-ci.yml` runs `npm ci && npm run build` on every
-push/PR touching `src/frontend/**` (there's no other CI in this repo yet).
+`npm run test:e2e` builds nothing itself; it drives `npm run preview` (the
+production build), so run `npm run build` first if `dist/` is stale.
+Playwright needs its browser installed once: `npx playwright install
+--with-deps chromium`.
+
+`.github/workflows/frontend-ci.yml` has two jobs on every push/PR touching
+`src/frontend/**` (there's no other CI in this repo yet): `build` runs unit
+tests then typechecks/builds; `e2e` builds and runs the Playwright suite,
+uploading the HTML report and traces if anything fails.
 
 There is no backend yet: `WorldModel` procedurally generates terrain on
 demand from a seed and everything (settlements, resources, fog of war) lives
@@ -130,4 +141,6 @@ src/components/map/     WorldMapCanvas.vue, SettlementCanvas.vue
 src/components/hud/     TopBar, ResourceBar, RealmPanel
 src/components/onboarding/  NicknamePrompt (shown only after landfall)
 src/views/              LandingView (world map), SettlementView (village)
+src/lib/hex/*.test.ts   Vitest unit tests (hex geometry math)
+e2e/                    Playwright end-to-end tests (real browser flows)
 ```
