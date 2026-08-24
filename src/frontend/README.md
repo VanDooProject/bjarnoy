@@ -14,7 +14,8 @@ first playable merge of the three design brainstorms summarised in
 - **Zip 9 (fog of war / settlement view):** the zoomed-in isometric village
   board, unexplored hexes are simply not drawn, scouted-but-currently-not-
   visible hexes are greyed out, buildings render as sprites on their hex,
-  and the realm border reads as a gold/rival outline+wash.
+  the realm border reads as a gold/rival outline+wash, and hovering a hex
+  highlights it.
 
 Both views share one axial hex lattice (`src/lib/hex/coords.ts`) and one
 isometric projection (`src/lib/hex/geometry.ts`), rendered at different zoom
@@ -27,14 +28,22 @@ Terrain and building tiles are the isometric hex plates from
 [VanDooProject/bg_assets_hextile](https://github.com/VanDooProject/bg_assets_hextile),
 the same asset pack described in `prototypes/village_view/README.md`,
 pulled in as a git submodule at `vendor/bg_assets_hextile` (we only ever
-reference its SE camera rotation — 9 of its ~300 files).
+reference its SE camera rotation — a handful of its ~300 files).
 `src/lib/map/textures.ts` imports each PNG directly (Vite asset imports,
-not a `public/` copy), so the production bundle only picks up those 9
-files rather than the whole ~15MB six-rotation pack, and maps each
-`Terrain` / building type to one composited 200×300 texture; a tile with a
-building on it just swaps in that building's (already ground+prop baked)
-texture instead of the bare terrain one, so there's no separate overlay
-layer to manage.
+not a `public/` copy), so the production bundle only picks up the files we
+actually reference rather than the whole ~15MB six-rotation pack.
+
+Where the pack splits a tile into `base` (ground only) and `top`
+(props/building only) — grass, forest, farm, and huts — `textures.ts` loads
+both instead of the single composited image, and `HexMapRenderer` renders
+them as two stacked sprites with the realm-border and hover-highlight
+layers sandwiched in between. That's the pack's own intended use (its
+README: "so realm borders, or mouse hover effects can be placed between
+top-ing and base tile") — a border or hover highlight sits on the ground
+and tucks under a tile's trees/building instead of being drawn as a flat
+overlay that slices across their canopy. Terrain the pack doesn't split
+(sand, mountain, sea) and the one building it doesn't split (watchtower)
+fall back to their single composited image with no top layer.
 
 Since the art lives in a submodule, clone with `git clone --recurse-submodules`
 or run `git submodule update --init` after a plain clone — otherwise

@@ -7,9 +7,10 @@
 // across a few hundred hexes meant a few hundred live DOM nodes plus Angular
 // change detection over all of them. Here:
 //  - the map is one PixiJS scene graph with a *pool* of reused Sprites (one
-//    per visible hex) plus a couple of Graphics layers (borders, fog) —
-//    Pixi batches sprites sharing a texture into very few WebGL draw calls,
-//    and every one of our ~9 tile textures is reused across the whole map;
+//    or two per visible hex — see the base/top split below) plus a few
+//    Graphics layers (borders, hover, fog) — Pixi batches sprites sharing a
+//    texture into very few WebGL draw calls, and every one of our tile
+//    textures is reused across the whole map;
 //  - the camera transform is applied to a single container every frame
 //    (cheap: one position/scale write), but the *set of hexes that exist*
 //    is only recomputed when the camera has moved far enough to change it
@@ -23,7 +24,15 @@
 // captions itself "Same hex lattice as the settlement view, flattened") —
 // they differ only in default zoom, whether fog-of-war gates what's drawn,
 // and whether open sea gets a tile sprite at all.
-import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
+//
+// Each hex draws as up to two stacked sprites, base (ground) and top
+// (props/building) — see textures.ts — with the border and hover
+// highlight layers sandwiched in between, so a realm border or a hover
+// highlight sits on the ground and tucks under a tile's trees or building
+// instead of slicing across their canopy. Fog-of-war dimming sits above
+// everything, since a scouted-but-not-currently-visible hex needs to dim
+// its whole tile, props included.
+import { Application, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -38,7 +47,7 @@ import {
   TILE_ART_TOPFACE_Y_FRAC,
   loadTileTextures,
   textureKeyFor,
-  type TextureKey,
+  type TileTextures,
 } from './textures';
 
 export type RenderMode = 'world' | 'settlement';
@@ -46,6 +55,20 @@ export type RenderMode = 'world' | 'settlement';
 const GOLD = 0xffc55c;
 const RIVAL = 0xe2705f;
 const FOG_SCOUTED = 0x0b1116;
+const HOVER_FILL = 0xffffff;
+const HOVER_STROKE = 0xffe9c2;
+
+interface SpriteLayer {
+  pool: Sprite[];
+  active: Map<string, Sprite>;
+  container: Container;
+}
+
+function createSpriteLayer(): SpriteLayer {
+  const container = new Container();
+  container.sortableChildren = true;
+  return { pool: [], active: new Map(), container };
+}
 
 export interface HexMapRendererOptions {
   mode: RenderMode;
@@ -69,16 +92,16 @@ const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 export class HexMapRenderer {
   private app: Application | null = null;
   private world = new Container();
-  private terrainContainer = new Container();
+  private terrainBase = createSpriteLayer();
+  private terrainTop = createSpriteLayer();
   private borderLayer = new Graphics();
+  private hoverLayer = new Graphics();
   private fogLayer = new Graphics();
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
 
-  private textures: Record<TextureKey, import('pixi.js').Texture> | null = null;
-  private spritePool: Sprite[] = [];
-  private activeSprites = new Map<string, Sprite>();
+  private textures: TileTextures | null = null;
 
   private camera: Camera;
   private viewport = { width: 0, height: 0 };
@@ -89,6 +112,7 @@ export class HexMapRenderer {
   private dragging = false;
   private dragMoved = 0;
   private lastPointer = { x: 0, y: 0 };
+  private hoveredKey: string | null = null;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -98,7 +122,6 @@ export class HexMapRenderer {
   constructor(options: HexMapRendererOptions) {
     this.options = options;
     this.idleDrift = options.mode === 'world';
-    this.terrainContainer.sortableChildren = true;
     this.camera =
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
@@ -133,12 +156,19 @@ export class HexMapRenderer {
     this.textures = await loadTileTextures();
     if (this.destroyed) return;
 
-    this.world.addChild(this.terrainContainer, this.borderLayer, this.fogLayer);
+    this.world.addChild(
+      this.terrainBase.container,
+      this.borderLayer,
+      this.hoverLayer,
+      this.terrainTop.container,
+      this.fogLayer,
+    );
     app.stage.addChild(this.world, this.markerLayer);
 
     canvas.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointerleave', this.onPointerLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
 
     app.ticker.add(this.onTick);
@@ -181,7 +211,10 @@ export class HexMapRenderer {
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    if (!this.dragging) return;
+    if (!this.dragging) {
+      this.updateHover(e);
+      return;
+    }
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
     this.dragMoved += Math.abs(dx) + Math.abs(dy);
@@ -201,6 +234,43 @@ export class HexMapRenderer {
     }
     this.dragging = false;
   };
+
+  private onPointerLeave = () => {
+    this.setHoveredCoord(null);
+  };
+
+  private updateHover(e: PointerEvent) {
+    const canvas = this.app?.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      this.setHoveredCoord(null);
+      return;
+    }
+    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const world = screenToWorld(this.camera, screen, this.viewport);
+    this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
+  }
+
+  private setHoveredCoord(coord: AxialCoord | null) {
+    const key = coord ? coordKey(coord) : null;
+    if (key === this.hoveredKey) return;
+    this.hoveredKey = key;
+    this.hoverLayer.clear();
+    if (!coord) return;
+
+    const { worldModel, mode } = this.options;
+    if (mode === 'settlement' && !worldModel.isExplored(coord.q, coord.r)) return;
+    const tile = worldModel.getTile(coord.q, coord.r);
+    if (mode === 'world' && tile.terrain === 'sea') return;
+
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+    this.hoverLayer
+      .poly(flat)
+      .fill({ color: HOVER_FILL, alpha: 0.28 })
+      .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+  }
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -279,14 +349,11 @@ export class HexMapRenderer {
     this.rebuildMarkers();
   }
 
-  private acquireSprite(): Sprite {
-    return this.spritePool.pop() ?? new Sprite();
-  }
-
   private rebuildTerrain(coords: AxialCoord[]) {
     const { worldModel, mode } = this.options;
     const textures = this.textures!;
-    const desired = new Set<string>();
+    const baseEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
+    const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
 
     for (const c of coords) {
       if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) continue; // true fog: not drawn
@@ -294,29 +361,43 @@ export class HexMapRenderer {
       if (mode === 'world' && tile.terrain === 'sea') continue; // open sea is just the background
 
       const key = coordKey(c);
-      desired.add(key);
-      let sprite = this.activeSprites.get(key);
-      const isNew = !sprite;
-      if (!sprite) {
-        sprite = this.acquireSprite();
-        this.activeSprites.set(key, sprite);
-      }
-      sprite.texture = textures[textureKeyFor(tile)];
-      sprite.width = TILE_W;
-      sprite.height = TILE_CANVAS_H;
-      const grid = isoGridPosition(c, TILE_W, TILE_H);
-      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET);
-      sprite.zIndex = isoDepthKey(c);
-      if (isNew) this.terrainContainer.addChild(sprite);
+      const textureKey = textureKeyFor(tile);
+      baseEntries.set(key, { texture: textures.base[textureKey], coord: c });
+      const topTexture = textures.top[textureKey];
+      if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
     }
 
-    for (const [key, sprite] of this.activeSprites) {
-      if (desired.has(key)) continue;
-      this.terrainContainer.removeChild(sprite);
-      this.spritePool.push(sprite);
-      this.activeSprites.delete(key);
+    this.syncSpriteLayer(this.terrainBase, baseEntries);
+    this.syncSpriteLayer(this.terrainTop, topEntries);
+  }
+
+  private syncSpriteLayer(
+    layer: SpriteLayer,
+    entries: Map<string, { texture: Texture; coord: AxialCoord }>,
+  ) {
+    for (const [key, { texture, coord }] of entries) {
+      let sprite = layer.active.get(key);
+      const isNew = !sprite;
+      if (!sprite) {
+        sprite = layer.pool.pop() ?? new Sprite();
+        layer.active.set(key, sprite);
+      }
+      sprite.texture = texture;
+      sprite.width = TILE_W;
+      sprite.height = TILE_CANVAS_H;
+      const grid = isoGridPosition(coord, TILE_W, TILE_H);
+      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET);
+      sprite.zIndex = isoDepthKey(coord);
+      if (isNew) layer.container.addChild(sprite);
     }
-    this.terrainContainer.sortChildren();
+
+    for (const [key, sprite] of layer.active) {
+      if (entries.has(key)) continue;
+      layer.container.removeChild(sprite);
+      layer.pool.push(sprite);
+      layer.active.delete(key);
+    }
+    layer.container.sortChildren();
   }
 
   private rebuildBordersAndFog(coords: AxialCoord[]) {
@@ -417,6 +498,7 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     this.app?.ticker.remove(this.onTick);
     this.app?.destroy(false, { children: true });
