@@ -78,9 +78,28 @@ Playwright needs its browser installed once: `npx playwright install
 tests then typechecks/builds; `e2e` builds and runs the Playwright suite,
 uploading the HTML report and traces if anything fails.
 
-There is no backend yet: `WorldModel` procedurally generates terrain on
-demand from a seed and everything (settlements, resources, fog of war) lives
-in memory for the session. Refreshing the page starts a new game.
+## Demo mode vs. the real backend
+
+By default (`VITE_DEMO_MODE` unset, or `npm run dev`/`preview` with no flag)
+the app runs in **demo mode**: `WorldModel` procedurally generates terrain on
+demand from a hard-coded seed and everything (settlements, resources, fog of
+war) lives in memory for the session. Refreshing the page starts a new game.
+This is what the Playwright suite exercises, since it has no backend behind
+it.
+
+Set `VITE_DEMO_MODE=false` at build time to link the app to the real backend
+(`src/backend`, see `docs/tech/backend.md`) instead: on load the landing page
+joins a running world or creates one (`src/api/client.ts`), reseeds the local
+`WorldModel` from that world's seed so the client renders the exact terrain
+the server generated, and founding a settlement is a real
+`POST /api/v1/worlds/{id}/settlements` call rather than a local mutation. Set
+`VITE_API_BASE_URL` too if the API isn't reachable at `/api/v1` on the same
+origin (it is by default in the single container `deploy/Dockerfile` builds).
+`src/config.ts` holds both flags.
+
+Live mode only wires up world/settlement founding so far — the settlement
+view's build queue is still local-only (`WorldModel.placeBuilding`); wiring
+`POST /api/v1/settlements/{id}/builds` is tracked separately.
 
 ## Map performance
 

@@ -58,7 +58,7 @@ export class WorldModel {
 
   foundSettlement(ownerId: string, name: string, at: AxialCoord): Settlement {
     const id = `stl_${ownerId}_${Date.now().toString(36)}`;
-    const settlement: Settlement = {
+    return this.registerSettlement({
       id,
       ownerId,
       name,
@@ -68,15 +68,25 @@ export class WorldModel {
       resources: { wood: 400, stone: 300, food: 500, iron: 100 },
       rates: { wood: 60, stone: 45, food: 90, iron: 20 },
       foundedAt: Date.now(),
-    };
-    this.settlements.set(id, settlement);
+    });
+  }
+
+  /**
+   * Registers a fully-formed settlement — used when the backend (not this
+   * client) is the source of truth for identity and starting stock (live
+   * mode; see `stores/world.ts`). Claims its border hexes exactly like
+   * `foundSettlement`, which delegates here for the demo-mode case.
+   */
+  registerSettlement(settlement: Settlement): Settlement {
+    this.settlements.set(settlement.id, settlement);
+    const at = { q: settlement.q, r: settlement.r };
     const home = this.getTile(at.q, at.r);
-    home.ownerId = id;
+    home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
     home.buildingLevel = 1;
     for (const c of hexesInRadius(at, this.borderRadius(settlement))) {
       const tile = this.getTile(c.q, c.r);
-      if (!tile.ownerId) tile.ownerId = id;
+      if (!tile.ownerId) tile.ownerId = settlement.id;
       this.explored.add(coordKey(c));
     }
     return settlement;

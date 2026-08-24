@@ -14,6 +14,15 @@ export const usePlayerStore = defineStore('player', {
     hasFoundedSettlement: false,
     settlementId: null as string | null,
   }),
+  getters: {
+    // Live mode needs an owner name (2-100 chars) at the moment a settlement
+    // is founded, before the nickname prompt zip 4 defers to afterwards ever
+    // runs. Falls back to a name derived from the stable local id so
+    // founding never blocks on a form.
+    ownerName(state): string {
+      return state.nickname ?? `Jarl-${state.id.slice(-4)}`;
+    },
+  },
   actions: {
     persistId() {
       localStorage.setItem('bjarnoy.playerId', this.id);

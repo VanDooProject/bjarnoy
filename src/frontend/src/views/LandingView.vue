@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import WorldMapCanvas from '../components/map/WorldMapCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
+import { DEMO_MODE } from '../config';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
 
@@ -14,20 +15,41 @@ const player = usePlayerStore();
 const router = useRouter();
 
 const showPrompt = ref(false);
+const founding = ref(false);
+
+onMounted(() => {
+  void world.bootstrapLiveWorld();
+});
 
 // zip 4: first interaction is a real game move (place a building / drop
 // a wall), not a form. Clicking a hex before an account exists founds the
 // player's starter settlement right there — the nickname prompt (if it
 // appears at all) comes *after*, never as a wall in front of the map.
-function onHexClick(coord: AxialCoord, tile: Tile) {
+async function onHexClick(coord: AxialCoord, tile: Tile) {
   if (player.hasFoundedSettlement) {
     router.push('/settlement');
     return;
   }
-  if (tile.terrain === 'sea') return;
-  const settlement = world.foundStartingSettlement(player.id, player.nickname ?? 'Unnamed realm', coord);
-  player.foundSettlement(settlement.id);
-  showPrompt.value = true;
+  if (tile.terrain === 'sea' || founding.value) return;
+
+  if (DEMO_MODE) {
+    const settlement = world.foundStartingSettlement(player.id, player.nickname ?? 'Unnamed realm', coord);
+    player.foundSettlement(settlement.id);
+    showPrompt.value = true;
+    return;
+  }
+
+  founding.value = true;
+  try {
+    const realmName = player.nickname ? `${player.nickname}'s realm` : 'Unnamed realm';
+    const settlement = await world.foundStartingSettlementLive(player.ownerName, realmName, coord);
+    player.foundSettlement(settlement.id);
+    showPrompt.value = true;
+  } catch (err) {
+    console.error('Failed to found settlement against the backend', err);
+  } finally {
+    founding.value = false;
+  }
 }
 
 function closePrompt() {
@@ -41,7 +63,8 @@ function closePrompt() {
     <WorldMapCanvas :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
     <TopBar />
     <div v-if="!player.hasFoundedSettlement" class="hint panel">
-      <p>The world is already moving. <strong>Click any green island</strong> to make landfall — no sign-up needed yet.</p>
+      <p v-if="founding">Making landfall…</p>
+      <p v-else>The world is already moving. <strong>Click any green island</strong> to make landfall — no sign-up needed yet.</p>
     </div>
     <NicknamePrompt v-if="showPrompt" @close="closePrompt" />
   </div>
