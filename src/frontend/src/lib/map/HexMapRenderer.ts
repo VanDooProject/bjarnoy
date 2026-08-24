@@ -39,7 +39,7 @@ import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
-import type { Settlement, Tile } from './types';
+import type { Settlement, Terrain, Tile } from './types';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -57,6 +57,18 @@ const RIVAL = 0xe2705f;
 const FOG_SCOUTED = 0x0b1116;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
+
+// zip 7: islands on the world map are "small hexes (no images (yet))" —
+// unlike the settlement view, which renders full tile-art sprites, the
+// world map draws flat coloured hex faces. Tones lifted from the design
+// doc's IslandMap terrain-tone table (prototypes/landing_pages/README.md).
+const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
+  sea: 0x215a7a, // unused (open sea has no tile at all in world mode)
+  sand: 0xe0c882,
+  grass: 0x7ba844,
+  forest: 0x4e6f2b,
+  mountain: 0x8d8f92,
+};
 
 interface SpriteLayer {
   pool: Sprite[];
@@ -94,6 +106,7 @@ export class HexMapRenderer {
   private world = new Container();
   private terrainBase = createSpriteLayer();
   private terrainTop = createSpriteLayer();
+  private terrainFlat = new Graphics();
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
   private fogLayer = new Graphics();
@@ -153,11 +166,15 @@ export class HexMapRenderer {
     });
     this.app = app;
     this.viewport = { width, height };
-    this.textures = await loadTileTextures();
+    // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
+    // above), so it has no need for the (large, submodule-backed) texture
+    // pack at all — only settlement mode loads it.
+    this.textures = this.options.mode === 'settlement' ? await loadTileTextures() : null;
     if (this.destroyed) return;
 
     this.world.addChild(
       this.terrainBase.container,
+      this.terrainFlat,
       this.borderLayer,
       this.hoverLayer,
       this.terrainTop.container,
@@ -341,7 +358,8 @@ export class HexMapRenderer {
   }
 
   private rebuildAll() {
-    if (!this.app || !this.textures) return;
+    if (!this.app) return;
+    if (this.options.mode === 'settlement' && !this.textures) return;
     this.lastBuiltCamera = { ...this.camera };
     const coords = this.visibleCoords();
     this.rebuildTerrain(coords);
@@ -350,15 +368,19 @@ export class HexMapRenderer {
   }
 
   private rebuildTerrain(coords: AxialCoord[]) {
-    const { worldModel, mode } = this.options;
+    if (this.options.mode === 'world') {
+      this.rebuildTerrainFlat(coords);
+      return;
+    }
+
+    const { worldModel } = this.options;
     const textures = this.textures!;
     const baseEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
     const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
 
     for (const c of coords) {
-      if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) continue; // true fog: not drawn
+      if (!worldModel.isExplored(c.q, c.r)) continue; // true fog: not drawn
       const tile = worldModel.getTile(c.q, c.r);
-      if (mode === 'world' && tile.terrain === 'sea') continue; // open sea is just the background
 
       const key = coordKey(c);
       const textureKey = textureKeyFor(tile);
@@ -369,6 +391,25 @@ export class HexMapRenderer {
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
     this.syncSpriteLayer(this.terrainTop, topEntries);
+  }
+
+  // zip 7: world-map islands are flat coloured hexes, not tile art — see
+  // WORLD_TERRAIN_FILL. Drawn straight into one Graphics layer rather than
+  // pooled sprites since there's no texture (and thus no batching benefit)
+  // to share.
+  private rebuildTerrainFlat(coords: AxialCoord[]) {
+    const { worldModel } = this.options;
+    this.terrainFlat.clear();
+    const top = isoTopPoints(TILE_W, TILE_H);
+
+    for (const c of coords) {
+      const tile = worldModel.getTile(c.q, c.r);
+      if (tile.terrain === 'sea') continue; // open sea is just the background
+
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      const flat = top.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
+    }
   }
 
   private syncSpriteLayer(
