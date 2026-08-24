@@ -6,6 +6,7 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
+import { DEMO_MODE } from '../config';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
 
@@ -16,12 +17,22 @@ onMounted(() => world.startHudSync());
 onUnmounted(() => world.stopHudSync());
 
 // zip 9: hover = stats tooltip, click = build. Kept minimal here — clicking
-// an empty owned hex drops the cheapest building (a hut) as a stand-in for
-// the full build menu described in prototypes/village_view/README.md.
+// an empty owned hex drops the cheapest building as a stand-in for the full
+// build menu described in prototypes/village_view/README.md. Demo mode
+// places a hut instantly; live mode queues a real farm against the backend
+// (there is no "hut" in the backend's catalogue — see BuildingType.cs) and
+// waits for the build order to complete.
 function onHexClick(coord: AxialCoord, tile: Tile) {
   if (!world.selectedSettlementId) return;
   if (tile.ownerId !== world.selectedSettlementId || tile.buildingType) return;
-  world.model.placeBuilding(world.selectedSettlementId, coord, 'hut');
+
+  if (DEMO_MODE) {
+    world.model.placeBuilding(world.selectedSettlementId, coord, 'hut');
+    return;
+  }
+  world.queueBuildLive('farm', coord).catch((err) => {
+    console.error('Failed to queue building against the backend', err);
+  });
 }
 </script>
 

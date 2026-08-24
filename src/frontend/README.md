@@ -97,9 +97,18 @@ the server generated, and founding a settlement is a real
 origin (it is by default in the single container `deploy/Dockerfile` builds).
 `src/config.ts` holds both flags.
 
-Live mode only wires up world/settlement founding so far — the settlement
-view's build queue is still local-only (`WorldModel.placeBuilding`); wiring
-`POST /api/v1/settlements/{id}/builds` is tracked separately.
+The settlement view's build queue is wired up too: clicking an empty owned
+hex queues a real build order (`POST /api/v1/settlements/{id}/builds`) rather
+than placing a building instantly, and the view polls
+`GET /api/v1/settlements/{id}` every few seconds to pick up completions, rate
+changes and longhouse-level border growth the player didn't cause locally
+(`WorldModel.applyServerSnapshot`). Demo mode's `placeBuilding` (an instant,
+free "hut") is unchanged and still what `npm run dev`/e2e see.
+
+Not wired up yet: territory/settlements belonging to other players, fleets,
+and the world map's abstraction of a live multi-settlement island — those
+still come entirely from the local, single-player `WorldModel` simulation
+even in live mode.
 
 ## Map performance
 

@@ -1,12 +1,24 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 import { api } from '../api/client';
-import type { IslandResponse } from '../api/types';
+import type { IslandResponse, ResourceLine } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
 import type { Resources } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
+
+// The backend's four resources (wood/stone/grain/silver — see
+// docs/tech/backend.md §6) predate and don't quite match the frontend's
+// wood/stone/food/iron; this is the one place that reconciles them.
+function toFrontendResources(line: ResourceLine): Resources {
+  return { wood: line.wood, stone: line.stone, food: line.grain, iron: line.silver };
+}
+
+// How often live mode re-polls a settlement to pick up build-queue
+// completions and rate changes it didn't cause itself (see
+// `applyServerSnapshot`). Kept well below build/production timescales.
+const LIVE_POLL_MS = 4000;
 
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's
@@ -23,6 +35,7 @@ export const useWorldStore = defineStore('world', {
       level: 1,
     },
     syncHandle: null as ReturnType<typeof setInterval> | null,
+    livePollHandle: null as ReturnType<typeof setInterval> | null,
     // Live-mode state: which backend world this session is playing in, and
     // the start positions a settlement may be founded on. Unused in demo
     // mode, where `WorldModel` is the entire source of truth.
@@ -104,23 +117,39 @@ export const useWorldStore = defineStore('world', {
         q: response.q,
         r: response.r,
         level: response.longhouseLevel,
-        resources: {
-          wood: response.resources.stock.wood,
-          stone: response.resources.stock.stone,
-          food: response.resources.stock.grain,
-          iron: response.resources.stock.silver,
-        },
-        rates: {
-          wood: response.resources.ratePerHour.wood,
-          stone: response.resources.ratePerHour.stone,
-          food: response.resources.ratePerHour.grain,
-          iron: response.resources.ratePerHour.silver,
-        },
+        resources: toFrontendResources(response.resources.stock),
+        rates: toFrontendResources(response.resources.ratePerHour),
         foundedAt: Date.now(),
       });
       this.selectedSettlementId = settlement.id;
       this.syncHud();
       return settlement;
+    },
+    /**
+     * Live mode: queues a building against the backend rather than placing
+     * it locally and instantly (`WorldModel.placeBuilding`). The building
+     * only appears once its build order completes and the next poll
+     * (`refreshLiveSettlement`) picks it up — matching how the backend's
+     * build queue actually works (docs/tech/backend.md, "Everything is
+     * lazy"). Throws `ApiError` on rejection (e.g. not enough resources);
+     * callers decide how to surface that.
+     */
+    async queueBuildLive(building: string, at: AxialCoord) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.queueBuild(this.selectedSettlementId, { building, q: at.q, r: at.r });
+      await this.refreshLiveSettlement();
+    },
+    /** Pulls the settlement's current resources/level/buildings from the backend. No-op in demo mode. */
+    async refreshLiveSettlement() {
+      if (DEMO_MODE || !this.selectedSettlementId) return;
+      const response = await api.getSettlement(this.selectedSettlementId);
+      this.model.applyServerSnapshot(response.id, {
+        level: response.longhouseLevel,
+        resources: toFrontendResources(response.resources.stock),
+        rates: toFrontendResources(response.resources.ratePerHour),
+        buildings: response.buildings,
+      });
+      this.syncHud();
     },
     syncHud() {
       const settlement = this.selectedSettlementId
@@ -136,10 +165,16 @@ export const useWorldStore = defineStore('world', {
       this.stopHudSync();
       this.syncHud();
       this.syncHandle = setInterval(() => this.syncHud(), 1000);
+      if (!DEMO_MODE) {
+        void this.refreshLiveSettlement();
+        this.livePollHandle = setInterval(() => void this.refreshLiveSettlement(), LIVE_POLL_MS);
+      }
     },
     stopHudSync() {
       if (this.syncHandle) clearInterval(this.syncHandle);
       this.syncHandle = null;
+      if (this.livePollHandle) clearInterval(this.livePollHandle);
+      this.livePollHandle = null;
     },
   },
 });

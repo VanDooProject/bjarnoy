@@ -6,7 +6,7 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
-import type { Fleet, Settlement, Tile } from './types';
+import type { Fleet, Resources, Settlement, Tile } from './types';
 
 const BASE_BORDER_RADIUS = 2;
 
@@ -113,6 +113,46 @@ export class WorldModel {
   /** Hexes ever scouted — greyed out (not live) once out of sight. */
   isExplored(q: number, r: number): boolean {
     return this.explored.has(coordKey({ q, r }));
+  }
+
+  /**
+   * Applies a settlement snapshot fetched from the backend (live mode; see
+   * `stores/world.ts`) — resources/rate/level and any buildings the queue has
+   * completed since the last poll. Only building types the frontend has art
+   * for are placed on their hex; the rest are silently skipped rather than
+   * risking a texture lookup failure (see `lib/map/textures.ts`).
+   */
+  applyServerSnapshot(
+    settlementId: string,
+    snapshot: {
+      level: number;
+      resources: Resources;
+      rates: Resources;
+      buildings: { q: number; r: number; type: string; level: number }[];
+    },
+  ) {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return;
+
+    if (snapshot.level > settlement.level) {
+      settlement.level = snapshot.level;
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.borderRadius(settlement))) {
+        const tile = this.getTile(c.q, c.r);
+        if (!tile.ownerId) tile.ownerId = settlementId;
+        this.explored.add(coordKey(c));
+      }
+    }
+    settlement.resources = snapshot.resources;
+    settlement.rates = snapshot.rates;
+
+    const RENDERABLE_TYPES = new Set(['longhouse', 'farm', 'watchtower']);
+    for (const building of snapshot.buildings) {
+      if (!RENDERABLE_TYPES.has(building.type)) continue;
+      const tile = this.getTile(building.q, building.r);
+      tile.ownerId = settlementId;
+      tile.buildingType = building.type as Tile['buildingType'];
+      tile.buildingLevel = building.level;
+    }
   }
 
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
