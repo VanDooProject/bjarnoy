@@ -21,6 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `actions/checkout` only sets its auth token as repo-local git config,
+      # which a bare `git submodule update` doesn't inherit (it clones the
+      # submodule as a fresh repo). bg_assets_hextile is private, so without
+      # this the clone fails with "could not read Username". Promoting the
+      # same header to global config makes it apply there too.
+      - run: git config --global "http.https://github.com/.extraheader" "$(git config --local --get http.https://github.com/.extraheader)"
+
       # Scoped to just the submodule this build needs, rather than
       # `actions/checkout`'s `submodules: true` (which recurses over every
       # submodule in the whole monorepo, including unrelated ones under
