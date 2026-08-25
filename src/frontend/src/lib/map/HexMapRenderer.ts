@@ -883,21 +883,26 @@ export class HexMapRenderer {
       const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
       const mine = settlement.ownerId === playerId;
       const color = mine ? GOLD : RIVAL;
-      const zoom = this.camera.zoom;
 
+      // markerLayer is a sibling of the camera-scaled `world` container (see
+      // mount()), so it already draws in fixed screen pixels — `top` above
+      // is a screen-space point via toScreen(). Scaling the pill's own
+      // geometry by camera.zoom on top of that shrank it as you zoomed out,
+      // squeezing the label against its padding; the badge should read as a
+      // constant on-screen size regardless of zoom, like the HUD chrome.
       const label = this.acquireLabel();
       label.text = settlement.name.toUpperCase();
       label.style.fill = 0xe8f0f5;
-      label.style.fontSize = Math.max(9, 12 * zoom);
+      label.style.fontSize = 12;
       label.anchor.set(0, 0.5);
 
-      const dotR = 3.5 * zoom;
-      const padX = 10 * zoom;
-      const gap = 6 * zoom;
-      const pillH = 22 * zoom;
+      const dotR = 3.5;
+      const padX = 10;
+      const gap = 6;
+      const pillH = 22;
       const pillW = padX * 2 + dotR * 2 + gap + label.width;
       const pillX = top.x - pillW / 2;
-      const pillY = top.y - 30 * zoom - pillH;
+      const pillY = top.y - 30 - pillH;
 
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
