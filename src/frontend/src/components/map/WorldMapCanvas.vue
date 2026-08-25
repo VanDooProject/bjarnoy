@@ -32,16 +32,9 @@ useHexMapRenderer(canvas, container, {
   overflow: hidden;
   /* Open sea: islands carry their own tile art, so the water itself is a
      flat painted backdrop rather than hex-tiled — matches the world-map
-     mockup in docs/design/img/worldmap.png. */
-  background:
-    repeating-radial-gradient(
-      circle at 20% 15%,
-      rgba(255, 255, 255, 0.05) 0px,
-      rgba(255, 255, 255, 0.05) 1px,
-      transparent 1px,
-      transparent 46px
-    ),
-    radial-gradient(140% 120% at 50% 0%, #1f5c78 0%, #123c50 55%, #0b2735 100%);
+     mockup in docs/design/img/worldmap.png. No repeating rings here: the
+     brainstorm is explicit that circles-around-islands are not wanted. */
+  background: radial-gradient(140% 120% at 50% 0%, #1f5c78 0%, #123c50 55%, #0b2735 100%);
 }
 /* zip 7: "waves move" — a screen-space wavy-line pattern drifting slowly
    across the sea backdrop, independent of the camera (the sea itself has

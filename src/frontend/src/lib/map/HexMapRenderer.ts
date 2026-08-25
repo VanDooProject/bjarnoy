@@ -401,13 +401,27 @@ export class HexMapRenderer {
     const { worldModel } = this.options;
     this.terrainFlat.clear();
     const top = isoTopPoints(TILE_W, TILE_H);
+    // Each hex is its own fill, so float rounding at shared edges between
+    // adjacent land hexes can leave a hairline gap that the CSS wave
+    // backdrop shows through — read as "waves crossing the islands".
+    // Nudging every vertex outward from the hex centre by a hair makes
+    // neighbouring fills overlap instead of abutting exactly.
+    const cx = top.reduce((s, p) => s + p.x, 0) / top.length;
+    const cy = top.reduce((s, p) => s + p.y, 0) / top.length;
+    const inflated = top.map((p) => {
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      const pad = 0.75;
+      return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
+    });
 
     for (const c of coords) {
       const tile = worldModel.getTile(c.q, c.r);
       if (tile.terrain === 'sea') continue; // open sea is just the background
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
-      const flat = top.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+      const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
       this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
     }
   }
