@@ -16,6 +16,14 @@ const BASE_BORDER_RADIUS = 2;
 // scouted terrain between the clear realm and the hidden unknown, instead of
 // unexplored starting immediately at the border.
 const FOG_SCOUT_RING = 3;
+// Border-anchoring (docs/design decision: "Border radius grows with
+// longhouse level and with border-anchoring buildings (watchtower)"). A
+// tower can only be placed inside the settlement's existing border (see the
+// hexDistance guard in placeBuilding), so claiming a ring around it only
+// ever pushes the border outward in whichever direction the tower faces —
+// the settlement's owned-tile silhouette stops being a pure hex and gains a
+// bump wherever a tower sits near the edge.
+const TOWER_CLAIM_RADIUS = 1;
 
 export class WorldModel {
   readonly seed: number;
@@ -217,6 +225,12 @@ export class WorldModel {
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
+    if (type === 'tower') {
+      for (const c of hexesInRadius(at, TOWER_CLAIM_RADIUS)) {
+        const claimed = this.getTile(c.q, c.r);
+        if (!claimed.ownerId) claimed.ownerId = settlementId;
+      }
+    }
     return true;
   }
 

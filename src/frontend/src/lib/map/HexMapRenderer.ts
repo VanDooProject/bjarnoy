@@ -43,7 +43,7 @@ import {
   Texture,
 } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexesInRadius } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -114,6 +114,16 @@ function hash01(x: number, y: number, salt: number): number {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   h ^= h >>> 16;
   return ((h >>> 0) % 100000) / 100000;
+}
+
+// Jitters a raw hex-distance by up to ±FOG_DIST_JITTER_HEXES before any fog
+// tier boundary is compared against it — see FOG_DIST_JITTER_HEXES for why.
+// Applied with one shared salt so rebuildTerrain's cull check and
+// rebuildBordersAndFog's fog-tier checks agree on the exact same jittered
+// distance for a given hex, keeping the two aligned (no reintroduced seam).
+function jitterDistance(q: number, r: number, raw: number, salt: number): number {
+  if (!Number.isFinite(raw)) return raw;
+  return raw + (hash01(q, r, salt) - 0.5) * 2 * FOG_DIST_JITTER_HEXES;
 }
 
 interface WavePoint {
@@ -216,6 +226,33 @@ const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
 // opacity with no blur at all, and that contrast is exactly the hex-stepped
 // seam a screenshot exposed at the blob/flat boundary.
 const FOG_BLOB_OVERLAP_HEXES = 6;
+
+// The mockup's own fogAt() (Viking Realm.dc.html) adds noise directly onto
+// the *distance* value before comparing it against any threshold — roughly
+// ±0.75 hex on its own ~2.8-hex margin (~27%) — rather than only jittering
+// the final alpha the way our ramp used to. Hex-distance rings are perfect
+// hexagons, so any threshold compared against the raw distance produces a
+// dead-straight ring facet; jittering the distance itself (once per hex,
+// before the comparison) is what breaks that facet up, the same way the
+// mockup's own rings never read as hex-straight even on a long pan far from
+// the settlement. FOG_DIST_JITTER_HEXES mirrors the mockup's ratio against
+// our own margin (FOG_MARGIN_HEXES).
+const FOG_DIST_JITTER_HEXES = 2.5;
+// hash01 salt for the distance jitter above; a separate salt (30) so it
+// doesn't correlate with the alpha jitter (salt 9) or blob position/size
+// jitter (salts 20-22) — otherwise a hex that gets nudged toward one tier
+// boundary would always get nudged the same way in every other jittered
+// term too, which would just move the visible artifact rather than break it up.
+const FOG_DIST_JITTER_SALT = 30;
+// Separate salt for the visible→scouted ramp's own distance jitter — kept
+// independent of FOG_DIST_JITTER_SALT for the same decorrelation reason.
+const FOG_VISIBLE_JITTER_SALT = 31;
+// How many hexes past the visible (line-of-sight) ring the dark "scouted"
+// tint fades in over, instead of jumping straight from 0 to FOG_SCOUTED_ALPHA
+// in one hex step at a hex-perfect ring — the same ramp treatment as the
+// unexplored mist, just narrower since this inner ring should still read as
+// a tighter edge than the outer fog.
+const FOG_VISIBLE_MARGIN_HEXES = 2;
 
 // prototypes/village_view/Viking Realm.dc.html's fogAt()/`fogs` never fills a
 // hex-shaped polygon at all — every fogged hex gets one large soft circular
@@ -627,7 +664,8 @@ export class HexMapRenderer {
       // that far out.
       if (
         !worldModel.isExplored(c.q, c.r) &&
-        worldModel.distanceBeyondExplored(c.q, c.r) > FOG_TERRAIN_CULL_HEXES
+        jitterDistance(c.q, c.r, worldModel.distanceBeyondExplored(c.q, c.r), FOG_DIST_JITTER_SALT) >
+          FOG_TERRAIN_CULL_HEXES
       ) {
         continue;
       }
@@ -838,10 +876,25 @@ export class HexMapRenderer {
     this.borderLayer.clear();
     this.fogLayer.clear();
 
-    let visible: Set<string> | null = null;
+    // Distance (jittered, see FOG_VISIBLE_MARGIN_HEXES) past the settlement's
+    // own visible (line-of-sight) ring, mirroring WorldModel.visibleHexes's
+    // own radius formula so the two stay in agreement — replaces that Set's
+    // boolean membership test entirely for rendering, so the scouted tint
+    // fades in symmetrically around the jittered boundary instead of jumping
+    // from 0 to FOG_SCOUTED_ALPHA in one hex step at a hex-perfect ring.
+    let visibleEdgeDist: ((c: AxialCoord) => number) | null = null;
     if (mode === 'settlement') {
       const settlement = this.settlement();
-      if (settlement) visible = worldModel.visibleHexes(settlement);
+      if (settlement) {
+        const visRadius = worldModel.borderRadius(settlement) + 1;
+        visibleEdgeDist = (c) =>
+          jitterDistance(
+            c.q,
+            c.r,
+            hexDistance({ q: settlement.q, r: settlement.r }, c) - visRadius,
+            FOG_VISIBLE_JITTER_SALT,
+          );
+      }
     }
 
     const inflatedTop = this.inflatedTop();
@@ -884,7 +937,12 @@ export class HexMapRenderer {
         // instead of a hard white wall right past the scouted ring, the
         // mist fades in over FOG_MARGIN_HEXES hexes.
         const beyondRaw = worldModel.distanceBeyondExplored(c.q, c.r);
-        if (beyondRaw > FOG_TERRAIN_CULL_HEXES) {
+        // Jittered before any threshold check — see FOG_DIST_JITTER_HEXES.
+        // Hex-distance rings are perfect hexagons; without this, both the
+        // ramp below and the cutoff here produce dead-straight ring facets
+        // instead of an organic mist edge.
+        const beyond = jitterDistance(c.q, c.r, beyondRaw, FOG_DIST_JITTER_SALT);
+        if (beyond > FOG_TERRAIN_CULL_HEXES) {
           // Guaranteed saturated (see FOG_TERRAIN_CULL_HEXES) — paint flat
           // solid white at a literal alpha:1 instead of a blob. This is the
           // only thing that actually *guarantees* full opacity: blobs alone
@@ -898,13 +956,13 @@ export class HexMapRenderer {
           // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
           // blend the outermost blobs into and they visibly fade right
           // where the flat fill starts at full strength.
-          if (beyondRaw <= FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES) {
+          if (beyond <= FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES) {
             addBlob(c, FOG_UNEXPLORED, 1);
           }
           continue;
         }
         const jitter = hash01(c.q, c.r, 9);
-        const t = Math.min(1, Math.max(0, beyondRaw / FOG_MARGIN_HEXES));
+        const t = Math.min(1, Math.max(0, beyond / FOG_MARGIN_HEXES));
         const alpha = 0.1 + t * 0.8 + jitter * 0.08;
         addBlob(c, FOG_UNEXPLORED, alpha);
         continue;
@@ -946,8 +1004,9 @@ export class HexMapRenderer {
         }
       }
 
-      if (visible && !visible.has(coordKey(c))) {
-        addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
+      if (visibleEdgeDist) {
+        const t = Math.min(1, Math.max(0, visibleEdgeDist(c) / FOG_VISIBLE_MARGIN_HEXES));
+        if (t > 0) addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
       }
     }
 
