@@ -12,7 +12,7 @@ const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile]; hover: 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useHexMapRenderer(canvas, container, {
+const { renderer } = useHexMapRenderer(canvas, container, {
   mode: 'settlement',
   worldModel: props.worldModel,
   playerId: props.playerId,
@@ -20,6 +20,11 @@ useHexMapRenderer(canvas, container, {
   onHexClick: (coord, tile) => emit('hex-click', coord, tile),
   onHoverChange: (info) => emit('hover', info),
 });
+
+// FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild
+// after flipping a fogDebugFlags toggle — nothing else would make the
+// change visible until the next real camera pan/zoom.
+defineExpose({ renderer });
 </script>
 
 <template>

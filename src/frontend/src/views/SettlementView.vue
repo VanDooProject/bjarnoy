@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -8,6 +9,7 @@ import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
@@ -17,6 +19,16 @@ import type { HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const route = useRoute();
+
+// ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
+// but clickable, and not gated to demo mode: these are pure client-side
+// rendering toggles, nothing about game state.
+const showFogDebug = computed(() => route.query.debug === '1');
+const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
+function onFogDebugChange() {
+  canvasRef.value?.renderer?.forceRebuild();
+}
 
 onMounted(async () => {
   // A direct load of /settlement (reload, deep link) arrives here before
@@ -110,12 +122,14 @@ async function upgrade() {
   <div class="settlement">
     <SettlementCanvas
       v-if="world.selectedSettlementId"
+      ref="canvasRef"
       :world-model="world.model"
       :player-id="player.id"
       :settlement-id="world.selectedSettlementId"
       @hex-click="onHexClick"
       @hover="onHover"
     />
+    <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
          much lighter than the old backdrop this HUD chrome was designed
          against, and can sit right behind the top bar depending on where

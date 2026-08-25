@@ -1198,6 +1198,18 @@ export class HexMapRenderer {
     this.rebuildAll();
   }
 
+  /**
+   * Forces an immediate rebuild without moving the camera — rebuildAll is
+   * otherwise only ever triggered by cameraMovedEnough() past a real pan/zoom
+   * threshold (see scheduleCull), so something that changes rendering
+   * without moving the camera (e.g. FogDebugPanel flipping a fogDebugFlags
+   * toggle) has no other way to make the change visible immediately.
+   */
+  forceRebuild() {
+    if (!this.app) return;
+    this.rebuildAll();
+  }
+
   destroy() {
     this.destroyed = true;
     const canvas = this.app?.canvas;
