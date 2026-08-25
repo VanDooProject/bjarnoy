@@ -21,6 +21,6 @@ test('clicking an island founds a settlement and opens the village view', async 
     expect(text).toMatch(/^\+\d+\/h$/);
   }
 
-  await page.getByRole('button', { name: /World map/ }).click();
+  await page.getByRole('button', { name: 'World map', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
 });
