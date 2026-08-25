@@ -55,6 +55,13 @@ export type RenderMode = 'world' | 'settlement';
 const GOLD = 0xffc55c;
 const RIVAL = 0xe2705f;
 const FOG_SCOUTED = 0x0b1116;
+// zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
+// the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
+// Drawn as a per-hex fill rather than a fixed CSS backdrop so it keeps
+// covering new hexes as the camera pans past the settlement's explored
+// radius, instead of a static gradient behind the terrain that peters out
+// and makes the map read as a bounded box.
+const FOG_UNEXPLORED = 0xe9f0f4;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
 
@@ -620,6 +627,22 @@ export class HexMapRenderer {
     layer.container.sortChildren();
   }
 
+  // isoTopPoints()'s 6 corners, nudged outward from the hex centre by a
+  // hair so adjacent hex fills overlap instead of exactly abutting — closes
+  // the hairline seams float rounding would otherwise leave between
+  // neighbouring fog tiles (same trick as rebuildTerrainFlat's `inflated`).
+  private inflatedTop(): { x: number; y: number }[] {
+    const top = isoTopPoints(TILE_W, TILE_H);
+    const cx = top.reduce((s, p) => s + p.x, 0) / top.length;
+    const cy = top.reduce((s, p) => s + p.y, 0) / top.length;
+    return top.map((p) => {
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      return { x: p.x + (dx / len) * 0.75, y: p.y + (dy / len) * 0.75 };
+    });
+  }
+
   private rebuildBordersAndFog(coords: AxialCoord[]) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
@@ -631,8 +654,22 @@ export class HexMapRenderer {
       if (settlement) visible = worldModel.visibleHexes(settlement);
     }
 
+    const inflatedTop = this.inflatedTop();
+
     for (const c of coords) {
-      if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) continue;
+      if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) {
+        // A dense white mist over ground the settlement has never scouted —
+        // covers every hex the camera can currently see, however far it's
+        // panned, so the world reads as continuing forever under fog rather
+        // than ending at a hard edge. Slight per-hex alpha jitter (same
+        // hash01 noise the wave layer uses) keeps it from reading as one
+        // flat, obviously-tiled sheet.
+        const grid = isoGridPosition(c, TILE_W, TILE_H);
+        const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+        const jitter = hash01(c.q, c.r, 9);
+        this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha: 0.9 + jitter * 0.08 });
+        continue;
+      }
       const tile = worldModel.getTile(c.q, c.r);
       if (mode === 'world' && tile.terrain === 'sea') continue;
 

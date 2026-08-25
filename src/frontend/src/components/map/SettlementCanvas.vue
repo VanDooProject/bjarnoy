@@ -32,10 +32,13 @@ useHexMapRenderer(canvas, container, {
 .map-container {
   position: absolute;
   inset: 0;
-  /* Unexplored hexes simply aren't drawn (true fog) — a soft grey backdrop
-     reads as mist beyond the scouted realm, per
-     docs/design/img/fog_of_war_and_settlement_view.png. */
-  background: radial-gradient(120% 120% at 50% 35%, #c7ced2 0%, #9aa4aa 55%, #5c666c 100%);
+  /* Unexplored hexes are covered by a per-hex white mist fill (see
+     HexMapRenderer's FOG_UNEXPLORED), which pans with the camera and keeps
+     the map feeling endless — this flat backdrop is only the fallback for
+     the sliver outside that fill's cull margin, so it's toned to match
+     rather than the old grey-to-slate gradient that made the map read as a
+     bounded box once you panned far enough to see its edge. */
+  background: #e9f0f4;
 }
 canvas {
   display: block;
