@@ -68,7 +68,6 @@ export const useWorldStore = defineStore('world', {
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
       this.liveReady = true;
-      await this.refreshWorldSettlements();
     },
     /** Nearest island start position to `near`, for founding via the API. */
     nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {

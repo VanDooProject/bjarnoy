@@ -20,11 +20,18 @@ const router = useRouter();
 const showPrompt = ref(false);
 const founding = ref(false);
 
-onMounted(() => {
-  void world.bootstrapLiveWorld();
+onMounted(async () => {
+  // Sequenced (not fire-and-forget in parallel): `restoreLiveSettlement`
+  // also calls `bootstrapLiveWorld()` internally, and `refreshWorldSettlements`
+  // needs `selectedSettlementId` already set so it doesn't briefly register
+  // this player's own settlement as a rival (wrong `ownerId`) before
+  // `restoreLiveSettlement` corrects it.
+  await world.bootstrapLiveWorld();
   if (player.hasFoundedSettlement && player.settlementId) {
-    void world.restoreLiveSettlement(player.id, player.settlementId).then(() => world.startHudSync());
+    await world.restoreLiveSettlement(player.id, player.settlementId);
+    world.startHudSync();
   }
+  void world.refreshWorldSettlements();
 });
 onUnmounted(() => world.stopHudSync());
 
