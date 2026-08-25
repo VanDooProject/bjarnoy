@@ -116,13 +116,45 @@ function hash01(x: number, y: number, salt: number): number {
   return ((h >>> 0) % 100000) / 100000;
 }
 
+// Debug-only switches for the individual fog mechanisms, so each can be
+// disabled independently to inspect what it's actually responsible for
+// (e.g. "is this hex-ring edge from the distance jitter or the blob
+// jitter?"). Mutated directly (no setter) — see main.ts's window.__fogDebug,
+// exposed only in demo mode. Flipping a flag takes effect on the *next*
+// rebuild (a camera pan/zoom, or HexMapRenderer.refreshFog()); it doesn't
+// itself trigger one, since these are read at rebuild time, not cached.
+export interface FogDebugFlags {
+  /** Distance jitter on the outer unexplored ramp/terrain-cull boundary (FOG_DIST_JITTER_HEXES). Off = the old dead-straight hex-ring cutoff, but no more tile popping near it. */
+  distJitter: boolean;
+  /** Distance jitter + fade on the visible→scouted edge (FOG_VISIBLE_MARGIN_HEXES). Off = the original hard binary jump. */
+  visibleRamp: boolean;
+  /** Per-hex position/size jitter on fog blobs (FOG_BLOB_JITTER_X/Y, FOG_BLOB_SIZE_JITTER). Off = blobs sit dead-centre on their hex, same size. */
+  blobJitter: boolean;
+  /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
+  terrainCull: boolean;
+  /** Skip the overlap blobs placed past the flat-fill cutoff (FOG_BLOB_OVERLAP_HEXES) — reproduces the blur/flat-fill seam this was added to fix. */
+  flatFillOnly: boolean;
+  /** Never switch to the flat, guaranteed-alpha:1 fill past FOG_TERRAIN_CULL_HEXES — mist stays blob-only forever, reproducing the original "fog never reaches full opacity" bug. */
+  blobsOnly: boolean;
+}
+export const fogDebugFlags: FogDebugFlags = {
+  distJitter: true,
+  visibleRamp: true,
+  blobJitter: true,
+  terrainCull: true,
+  flatFillOnly: false,
+  blobsOnly: false,
+};
+
 // Jitters a raw hex-distance by up to ±FOG_DIST_JITTER_HEXES before any fog
 // tier boundary is compared against it — see FOG_DIST_JITTER_HEXES for why.
 // Applied with one shared salt so rebuildTerrain's cull check and
 // rebuildBordersAndFog's fog-tier checks agree on the exact same jittered
 // distance for a given hex, keeping the two aligned (no reintroduced seam).
-function jitterDistance(q: number, r: number, raw: number, salt: number): number {
-  if (!Number.isFinite(raw)) return raw;
+// `enabled` lets each call site opt out via fogDebugFlags without every
+// caller re-deriving the same "should I jitter" condition itself.
+function jitterDistance(q: number, r: number, raw: number, salt: number, enabled: boolean): number {
+  if (!enabled || !Number.isFinite(raw)) return raw;
   return raw + (hash01(q, r, salt) - 0.5) * 2 * FOG_DIST_JITTER_HEXES;
 }
 
@@ -663,9 +695,15 @@ export class HexMapRenderer {
       // flat solid fill there), so there's nothing to gain by drawing it
       // that far out.
       if (
+        fogDebugFlags.terrainCull &&
         !worldModel.isExplored(c.q, c.r) &&
-        jitterDistance(c.q, c.r, worldModel.distanceBeyondExplored(c.q, c.r), FOG_DIST_JITTER_SALT) >
-          FOG_TERRAIN_CULL_HEXES
+        jitterDistance(
+          c.q,
+          c.r,
+          worldModel.distanceBeyondExplored(c.q, c.r),
+          FOG_DIST_JITTER_SALT,
+          fogDebugFlags.distJitter,
+        ) > FOG_TERRAIN_CULL_HEXES
       ) {
         continue;
       }
@@ -893,6 +931,7 @@ export class HexMapRenderer {
             c.r,
             hexDistance({ q: settlement.q, r: settlement.r }, c) - visRadius,
             FOG_VISIBLE_JITTER_SALT,
+            fogDebugFlags.visibleRamp,
           );
       }
     }
@@ -914,9 +953,9 @@ export class HexMapRenderer {
     // polygon fills entirely for both fog tiers.
     const addBlob = (c: AxialCoord, tint: number, alpha: number) => {
       const grid = isoGridPosition(c, TILE_W, TILE_H);
-      const jx = (hash01(c.q, c.r, 20) - 0.5) * 2;
-      const jy = (hash01(c.q, c.r, 21) - 0.5) * 2;
-      const sizeJ = 1 + (hash01(c.q, c.r, 22) - 0.5) * 2 * FOG_BLOB_SIZE_JITTER;
+      const jx = fogDebugFlags.blobJitter ? (hash01(c.q, c.r, 20) - 0.5) * 2 : 0;
+      const jy = fogDebugFlags.blobJitter ? (hash01(c.q, c.r, 21) - 0.5) * 2 : 0;
+      const sizeJ = fogDebugFlags.blobJitter ? 1 + (hash01(c.q, c.r, 22) - 0.5) * 2 * FOG_BLOB_SIZE_JITTER : 1;
       blobEntries.set(coordKey(c), {
         x: grid.x + topCentroid.x + jx * TILE_W * FOG_BLOB_JITTER_X,
         y: grid.y + topCentroid.y + jy * TILE_H * FOG_BLOB_JITTER_Y,
@@ -941,8 +980,8 @@ export class HexMapRenderer {
         // Hex-distance rings are perfect hexagons; without this, both the
         // ramp below and the cutoff here produce dead-straight ring facets
         // instead of an organic mist edge.
-        const beyond = jitterDistance(c.q, c.r, beyondRaw, FOG_DIST_JITTER_SALT);
-        if (beyond > FOG_TERRAIN_CULL_HEXES) {
+        const beyond = jitterDistance(c.q, c.r, beyondRaw, FOG_DIST_JITTER_SALT, fogDebugFlags.distJitter);
+        if (beyond > FOG_TERRAIN_CULL_HEXES && !fogDebugFlags.blobsOnly) {
           // Guaranteed saturated (see FOG_TERRAIN_CULL_HEXES) — paint flat
           // solid white at a literal alpha:1 instead of a blob. This is the
           // only thing that actually *guarantees* full opacity: blobs alone
@@ -956,7 +995,7 @@ export class HexMapRenderer {
           // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
           // blend the outermost blobs into and they visibly fade right
           // where the flat fill starts at full strength.
-          if (beyond <= FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES) {
+          if (!fogDebugFlags.flatFillOnly && beyond <= FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES) {
             addBlob(c, FOG_UNEXPLORED, 1);
           }
           continue;
@@ -1005,8 +1044,14 @@ export class HexMapRenderer {
       }
 
       if (visibleEdgeDist) {
-        const t = Math.min(1, Math.max(0, visibleEdgeDist(c) / FOG_VISIBLE_MARGIN_HEXES));
-        if (t > 0) addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
+        if (fogDebugFlags.visibleRamp) {
+          const t = Math.min(1, Math.max(0, visibleEdgeDist(c) / FOG_VISIBLE_MARGIN_HEXES));
+          if (t > 0) addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
+        } else if (visibleEdgeDist(c) > 0) {
+          // Original hard binary: full tint the instant a hex is past the
+          // (unjittered) visible radius, nothing at all inside it.
+          addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
+        }
       }
     }
 
