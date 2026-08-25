@@ -306,6 +306,18 @@ const FOG_BLOB_JITTER_Y = 0.18;
 // irregularity so the mist doesn't read as a grid of identical stamps.
 const FOG_BLOB_SIZE_JITTER = 0.15;
 const FOG_SCOUTED_ALPHA = 0.6;
+// The blob layer's BlurFilter is a full-container GPU post-pass, re-run
+// every time rebuildAll() re-syncs the blob sprites — which, during a drag,
+// is on nearly every pointermove (cameraMovedEnough's threshold is well
+// under a tile-width). Paying that cost every drag frame is what stalled
+// CI's software-rendered Chromium badly enough that even mouse.move
+// commands timed out. Dropping the filter for the drag's duration and
+// fading it back in on release cuts that cost to a single pass per drag
+// instead of one per frame, and — since the mist is already a dense,
+// atmospheric white cloud — reads as the fog being brushed aside while
+// panning and rolling back in once you stop, not a glitch.
+const FOG_DRAG_FADE_MS = 350;
+const FOG_DRAG_FADE_FROM_ALPHA = 0.25;
 
 export class HexMapRenderer {
   private app: Application | null = null;
@@ -324,6 +336,10 @@ export class HexMapRenderer {
   // texture, tinted/sized/jittered per hex — see FOG_BLOB_* above.
   private fogBlobLayer = createSpriteLayer();
   private fogBlobTexture: Texture | null = null;
+  private fogBlobFilter: BlurFilter | null = null;
+  // Set while the drag-end fade (see FOG_DRAG_FADE_MS) is running; null once
+  // it completes or a new drag starts.
+  private fogFadeStartedAt: number | null = null;
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
@@ -429,7 +445,8 @@ export class HexMapRenderer {
     // Only the organic blob layer needs this; fogLayer's flat fill is
     // already a uniform solid colour, so blurring it would cost GPU time for
     // no visible change.
-    this.fogBlobLayer.container.filters = [new BlurFilter({ strength: 10, quality: 3 })];
+    this.fogBlobFilter = new BlurFilter({ strength: 10, quality: 3 });
+    this.fogBlobLayer.container.filters = [this.fogBlobFilter];
 
     this.world.addChild(
       this.terrainBase.container,
@@ -480,7 +497,17 @@ export class HexMapRenderer {
       this.applyCameraTransform();
       this.scheduleCull();
     }
+    this.tickFogFade();
   };
+
+  // Eases the fog blob layer's alpha back up after onPointerUp reattaches
+  // its BlurFilter — see FOG_DRAG_FADE_MS.
+  private tickFogFade() {
+    if (this.fogFadeStartedAt === null) return;
+    const t = Math.min(1, (performance.now() - this.fogFadeStartedAt) / FOG_DRAG_FADE_MS);
+    this.fogBlobLayer.container.alpha = FOG_DRAG_FADE_FROM_ALPHA + (1 - FOG_DRAG_FADE_FROM_ALPHA) * t;
+    if (t >= 1) this.fogFadeStartedAt = null;
+  }
 
   private onPointerDown = (e: PointerEvent) => {
     this.idleDrift = false;
@@ -492,6 +519,12 @@ export class HexMapRenderer {
     // skips updateHover entirely while dragging, so nothing would clear it
     // on its own until the drag ends over a different hex.
     this.setHoveredCoord(null);
+    // Drop the blob layer's blur for the drag's duration — see
+    // FOG_DRAG_FADE_MS — and cut short any fade still running from a
+    // previous drag so it doesn't fight this one.
+    this.fogFadeStartedAt = null;
+    this.fogBlobLayer.container.filters = [];
+    this.fogBlobLayer.container.alpha = 1;
   };
 
   private onPointerMove = (e: PointerEvent) => {
@@ -515,6 +548,11 @@ export class HexMapRenderer {
   private onPointerUp = (e: PointerEvent) => {
     if (this.dragging && this.dragMoved < 6) {
       this.handleClick(e);
+    }
+    if (this.dragging && this.fogBlobFilter) {
+      this.fogBlobLayer.container.filters = [this.fogBlobFilter];
+      this.fogBlobLayer.container.alpha = FOG_DRAG_FADE_FROM_ALPHA;
+      this.fogFadeStartedAt = performance.now();
     }
     this.dragging = false;
   };
