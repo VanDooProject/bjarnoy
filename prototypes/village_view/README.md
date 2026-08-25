@@ -78,11 +78,19 @@ named tiers, matching the decision table's own wording more literally:
 | Scouted, not visible | out to `borderRadius + 3` | Terrain still drawn, dark tint over it | `FOG_SCOUTED` (`0x0b1116`, ~55% alpha) |
 | Unexplored | everything past that | Terrain is *still drawn* underneath; white mist fades in over it | `FOG_UNEXPLORED` (`0xe9f0f4`, 10–90% alpha) |
 
-Both tiers are drawn as one hex-fill per hex on the same PixiJS `Graphics` layer
-(`HexMapRenderer.rebuildBordersAndFog`), which carries a `BlurFilter` so the hard hex edges read
-as soft mist rather than a tiled grid — closer to the mockup's blurred-cloud look. Per-hex alpha
-jitter (reusing the wave layer's hash noise) keeps large fogged areas from reading as one flat
-sheet.
+**Rendering.** The mockup's own `fogAt()`/`fogs` (Viking Realm.dc.html) never fills a hex-shaped
+polygon at all — every fogged hex gets one large soft circular blob (a blurred radial gradient,
+oversized relative to the hex, jittered off-centre) that spills into its neighbours; overlapping
+blobs is what makes the mist read as continuous cloud instead of tiled hexes. An earlier version of
+this implementation drew fog as one flat-colour polygon fill per hex on a blurred `Graphics` layer,
+which (no matter how much blur was layered on) still had a visible hex-tiled edge, since the
+underlying shape was still the hex boundary. `HexMapRenderer.rebuildBordersAndFog` now matches the
+mockup's own approach: one pre-rendered soft-circle texture (a `FillGradient` baked to a
+`RenderTexture` once at startup) reused as a pooled `Sprite` per fogged hex (`fogBlobLayer`),
+tinted/sized/alpha'd/jittered per hex and blurred as a group (`BlurFilter`) — both the dark scouted
+tint and the white unexplored mist use this same blob mechanism, just with different tint/alpha.
+Sprites sharing one texture batch into very few WebGL draw calls, so this reads as at least as cheap
+as the old per-hex `Graphics.poly().fill()` approach it replaced.
 
 Unlike the scouted tier, the unexplored tier is **not** a hard cutoff. Terrain sprites are drawn
 for every hex the camera can see regardless of exploration state (`rebuildTerrain` no longer skips
@@ -93,22 +101,28 @@ mist, not a wall of white with nothing behind it — closer to the mockup's own 
 gradient than a binary hidden/visible split, while still keeping the two named tiers the decision
 table calls for.
 
-Past `FOG_TERRAIN_CULL_HEXES` (`FOG_MARGIN_HEXES` + `FOG_EDGE_NOISE_HEXES`, i.e. the ramp's
-worst-case saturation point once edge noise is factored in) both the terrain and the fog switch to
-a cheap flat path: `rebuildTerrain` stops drawing sprites there (nothing would show through fully
-opaque mist anyway) and `rebuildBordersAndFog` paints a plain, unjittered, unblurred solid-white
-fill instead of computing the alpha ramp — this is also what keeps a fully-zoomed-out view cheap,
-since most of the visible area at that zoom sits past the saturation point. Deriving the cull
-distance from the ramp's own saturation point (rather than an independent constant) is what keeps
-terrain sprites and fully-opaque fog aligned — previously they used unrelated distances, so terrain
-vanished before the fog above it was actually fully opaque, leaving a visible seam on a far pan.
+Past `FOG_TERRAIN_CULL_HEXES` (`FOG_MARGIN_HEXES` + `FOG_CULL_HEADROOM_HEXES`, a safety margin past
+the ramp's own saturation point) both the terrain and the fog switch to a cheap flat path:
+`rebuildTerrain` stops drawing sprites there (nothing would show through fully opaque mist anyway)
+and `rebuildBordersAndFog` paints a plain, unblurred solid-white fill at a literal `alpha: 1` instead
+of a blob — this is the only thing that actually *guarantees* full opacity (blobs alone are
+individually capped below 1 and rely on overlap to read as solid, which can leave faint gaps right
+at the edge of what's rendered) — and it's also what keeps a fully-zoomed-out view cheap, since most
+of the visible area at that zoom sits past this distance. Blobs keep being placed (at flat, fully
+opaque alpha) `FOG_BLOB_OVERLAP_HEXES` past this hand-off point too, overlapping the flat fill's own
+territory, so the blob layer's `BlurFilter` always has real neighbouring content to blend the
+outermost blobs into instead of fading at the edge of its own content right next to the flat fill's
+hard, unblurred edge — without that overlap the two zones met at a visible (if fainter) hex-stepped
+seam of their own. Deriving the cull distance from the ramp's own saturation point (rather than an
+independent constant) is what keeps terrain sprites and fully-opaque fog aligned — previously they
+used unrelated distances, so terrain vanished before the fog above it was actually fully opaque,
+leaving a visible seam on a far pan.
 
-`distanceBeyondExplored` is a hex-distance to the settlement, which is a perfect hexagon ring — used
-bare, the mist's inner edge would read as a crisp hex-shaped cutout (very visible if
-`FOG_MARGIN_HEXES` is set low). `rebuildBordersAndFog` roughens it with a per-hex random offset
-(`FOG_EDGE_NOISE_HEXES`, ±3 hexes) before it's fed into the alpha ramp; combined with the fog
-layer's `BlurFilter`, the ring's edge comes out irregular and cloud-like instead of tracing the hex
-grid.
+`distanceBeyondExplored` is a hex-distance to the settlement, which is a perfect hexagon ring — with
+the old polygon-fill approach this made the mist's inner edge read as a crisp hex-shaped cutout
+unless deliberately roughened with per-hex noise. The blob approach doesn't need that: since each
+hex's mist is a jittered, oversized, blurred circle rather than a hex-aligned fill, the aggregate
+boundary is irregular and cloud-like by construction, matching the mockup's own non-hex-aligned look.
 
 The unexplored tier is recomputed for whatever the camera can currently see (`visibleCoords()`'s
 cull, not a fixed world boundary), so it keeps covering new ground as far as the camera pans in
