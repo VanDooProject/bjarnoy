@@ -70,6 +70,7 @@ public static class SettlementEndpoints
             new HexCoord(request.Q, request.R),
             request.Name,
             request.OwnerName,
+            request.OwnerId,
             cancellationToken);
 
         if (result.Accepted)
@@ -89,7 +90,7 @@ public static class SettlementEndpoints
                 TypedResults.NotFound(problem),
             FoundingRejection.PlotTaken or FoundingRejection.TooCloseToNeighbour
                 or FoundingRejection.WorldFull or FoundingRejection.WorldPaused
-                or FoundingRejection.NotAStartPosition =>
+                or FoundingRejection.NotAStartPosition or FoundingRejection.AlreadyFounded =>
                 TypedResults.Conflict(problem),
             _ => TypedResults.BadRequest(problem),
         };
@@ -265,6 +266,8 @@ public static class SettlementEndpoints
             FoundingRejection.TooCloseToNeighbour =>
                 $"Settlements must be at least {SettlementService.MinimumSpacing} hexes apart.",
             FoundingRejection.WorldFull => "The world is full.",
+            FoundingRejection.AlreadyFounded =>
+                "You already have a settlement in this world. Ships and carts will let you found another one later.",
             _ => "Refused.",
         },
         Status = StatusCodes.Status409Conflict,

@@ -24,15 +24,24 @@ public static class IslandNames
         "havn", "skar", "oy", "dal",
     ];
 
+    /// <summary>The number of distinct stem/ending combinations available for one <paramref name="index"/>.</summary>
+    public static int CombinationsPerIsland => Stems.Length * Endings.Length;
+
     /// <summary>
     /// Names the island at <paramref name="index"/> in the world seeded with
-    /// <paramref name="seed"/>. Names may repeat in a large world; the index is
-    /// the identity, the name is decoration.
+    /// <paramref name="seed"/>. Deterministic for a given seed/index/attempt, so
+    /// a world always names its islands the same way.
     /// </summary>
-    public static string For(int seed, int index)
+    /// <param name="attempt">
+    /// Which candidate to try for this island. <see cref="WorldGenerator"/> tries
+    /// 0, 1, 2, ... until it finds a name no earlier island in the same world has
+    /// already taken, so two islands never share a display name.
+    /// </param>
+    public static string For(int seed, int index, int attempt = 0)
     {
-        var stem = Stems[(int)(ValueNoise.Hash2(index, 0, seed + 101) * Stems.Length) % Stems.Length];
-        var ending = Endings[(int)(ValueNoise.Hash2(index, 1, seed + 103) * Endings.Length) % Endings.Length];
+        var salt = seed + (attempt * 92_821);
+        var stem = Stems[(int)(ValueNoise.Hash2(index, 0, salt + 101) * Stems.Length) % Stems.Length];
+        var ending = Endings[(int)(ValueNoise.Hash2(index, 1, salt + 103) * Endings.Length) % Endings.Length];
         return stem + ending;
     }
 }

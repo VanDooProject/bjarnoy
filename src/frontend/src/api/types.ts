@@ -104,6 +104,8 @@ export interface FoundSettlementRequest {
   r: number;
   name: string;
   ownerName: string;
+  /** Stable local player id (see `stores/player.ts`); one settlement per id per world. */
+  ownerId: string;
 }
 
 export interface QueueBuildRequest {

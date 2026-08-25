@@ -574,10 +574,34 @@ export class HexMapRenderer {
       const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
       const flat = top.flatMap((p) => [p.x, p.y]);
 
-      if (tile.ownerId && isEdgeOfClaim(worldModel, c, tile.ownerId)) {
+      if (tile.ownerId) {
         const owner = worldModel.getSettlement(tile.ownerId);
         const mine = owner?.ownerId === playerId;
-        this.borderLayer.poly(flat).stroke({ width: 3, color: mine ? GOLD : RIVAL, alpha: 0.9 });
+        const color = mine ? GOLD : RIVAL;
+
+        // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
+        // translucent fill across every owned hex ("wash"), with a
+        // brighter, thicker stroke reserved for the realm's *outer* edges
+        // only ("glow") — drawn as two overlapping strokes (a wide, faint
+        // one under a thin, solid one) to fake a soft glow without a
+        // dedicated blur filter. Previously this stroked the *entire*
+        // outline of every claimed hex, including edges shared with
+        // another owned hex, which drew a solid mesh over the whole realm
+        // instead of a border around it.
+        this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
+
+        for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
+          const a = top[edge[0]];
+          const b = top[edge[1]];
+          this.borderLayer
+            .moveTo(a.x, a.y)
+            .lineTo(b.x, b.y)
+            .stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
+          this.borderLayer
+            .moveTo(a.x, a.y)
+            .lineTo(b.x, b.y)
+            .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+        }
       }
 
       if (visible && !visible.has(coordKey(c))) {
@@ -603,6 +627,26 @@ export class HexMapRenderer {
         .circle(center.x, center.y, 5 * this.camera.zoom + 3)
         .fill({ color: mine ? GOLD : RIVAL })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
+
+      // Settlers-II-style owner label under the marker (see
+      // prototypes/worldmap, `world()`'s `owners`/`labels` rendering).
+      const ownerLabel = this.acquireLabel();
+      ownerLabel.text = settlement.ownerName;
+      ownerLabel.style.fill = mine ? GOLD : RIVAL;
+      ownerLabel.anchor.set(0.5, 0);
+      ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
+      ownerLabel.visible = true;
+    }
+
+    for (const island of worldModel.listIslands()) {
+      const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
+      const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      const label = this.acquireLabel();
+      label.text = island.name;
+      label.style.fill = 0xe8f0f5;
+      label.anchor.set(0.5, 1);
+      label.position.set(center.x, center.y - 6 * this.camera.zoom - 4);
+      label.visible = true;
     }
 
     const now = Date.now();
@@ -618,6 +662,8 @@ export class HexMapRenderer {
       const remainingMs = Math.max(0, fleet.etaAt - now);
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
+      label.style.fill = 0xe8f0f5;
+      label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
     }
@@ -669,8 +715,24 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
   { q: 0, r: 1 },
 ];
 
-function isEdgeOfClaim(worldModel: WorldModel, c: AxialCoord, ownerId: string): boolean {
-  return NEIGHBOR_DIRS.some((d) => worldModel.getTile(c.q + d.q, c.r + d.r).ownerId !== ownerId);
+// isoTopPoints()'s 6 corners (P0..P5) form edges [P0,P1],[P1,P2],...,[P5,P0];
+// this maps each NEIGHBOR_DIRS index to the corner-index pair of the one
+// edge that actually faces that neighbour (derived by comparing each
+// direction's screen-space offset to each edge's outward normal — see the
+// worked-out mapping in this file's history/PR description). Used so only
+// the realm's true outer edges get a border stroke, not every claimed
+// hex's full hexagon outline.
+const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
+
+/** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
+function outerEdgesOf(worldModel: WorldModel, c: AxialCoord, ownerId: string): [number, number][] {
+  const edges: [number, number][] = [];
+  NEIGHBOR_DIRS.forEach((d, i) => {
+    if (worldModel.getTile(c.q + d.q, c.r + d.r).ownerId === ownerId) return;
+    const edge = EDGE_FOR_DIR[i];
+    edges.push([edge, (edge + 1) % 6]);
+  });
+  return edges;
 }
 
 function formatEta(ms: number): string {

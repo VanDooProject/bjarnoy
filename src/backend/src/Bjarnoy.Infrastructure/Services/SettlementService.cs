@@ -19,6 +19,7 @@ public enum FoundingRejection
     PlotTaken,
     TooCloseToNeighbour,
     WorldFull,
+    AlreadyFounded,
 }
 
 public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntity? Settlement = null)
@@ -61,10 +62,12 @@ public sealed class SettlementService(
         HexCoord coord,
         string name,
         string ownerName,
+        string ownerId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
 
         var world = await _dbContext.Worlds
             .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken)
@@ -96,6 +99,14 @@ public sealed class SettlementService(
         if (!island.StartPositions.Any(p => p.Q == coord.Q && p.R == coord.R))
         {
             return new FoundingResult(FoundingRejection.NotAStartPosition);
+        }
+
+        // One settlement per player per world — for now. Ships and carts will
+        // one day let a player found a second one; until then this is a hard
+        // rule, not just an unlikely-to-be-hit default.
+        if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+        {
+            return new FoundingResult(FoundingRejection.AlreadyFounded);
         }
 
         var settlementCount = await _dbContext.Settlements
@@ -136,6 +147,7 @@ public sealed class SettlementService(
             IslandId = islandId,
             Name = name,
             OwnerName = ownerName,
+            OwnerId = ownerId,
             FoundedAt = now,
         };
 
@@ -157,14 +169,19 @@ public sealed class SettlementService(
         }
         catch (DbUpdateException)
         {
-            // Two players clicked the same plot at once. The unique index is
-            // what actually decided it, so re-read to see whether that is what
-            // happened before reporting it as such.
+            // Two requests raced (same plot, or the same player founding
+            // twice). The unique indexes are what actually decided it, so
+            // re-read to see which one before reporting it as such.
             _dbContext.Entry(settlement).State = EntityState.Detached;
 
             if (await PlotTakenAsync(worldId, coord, cancellationToken).ConfigureAwait(false))
             {
                 return new FoundingResult(FoundingRejection.PlotTaken);
+            }
+
+            if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+            {
+                return new FoundingResult(FoundingRejection.AlreadyFounded);
             }
 
             throw;
@@ -323,5 +340,10 @@ public sealed class SettlementService(
     private Task<bool> PlotTakenAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken) =>
         _dbContext.Settlements.AnyAsync(
             s => s.WorldId == worldId && s.CentreQ == coord.Q && s.CentreR == coord.R,
+            cancellationToken);
+
+    private Task<bool> AlreadyFoundedAsync(Guid worldId, string ownerId, CancellationToken cancellationToken) =>
+        _dbContext.Settlements.AnyAsync(
+            s => s.WorldId == worldId && s.OwnerId == ownerId,
             cancellationToken);
 }

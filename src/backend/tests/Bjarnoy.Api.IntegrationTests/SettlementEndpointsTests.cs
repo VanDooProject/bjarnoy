@@ -45,7 +45,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf"),
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", "ulf-player"),
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -85,7 +85,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, 9999, 9999, "Nowhere", "Ulf"),
+            new FoundSettlementRequest(island.Id, 9999, 9999, "Nowhere", "Ulf", "ulf-player"),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
@@ -103,10 +103,58 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var again = await client.PostJsonAsync(
             $"/api/v1/worlds/{worldId}/settlements",
-            new FoundSettlementRequest(island.Id, settlement.Q, settlement.R, "Grimhold", "Sigrid"),
+            new FoundSettlementRequest(island.Id, settlement.Q, settlement.R, "Grimhold", "Sigrid", "sigrid-player"),
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_player_cannot_found_a_second_settlement_in_the_same_world()
+    {
+        using var client = Client();
+        var (worldId, settlement) = await FoundAsync(client);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        // A different island's start position: still a legal plot on its own,
+        // so only the per-player rule (checked ahead of spacing) can refuse it.
+        var island = islands!.First(i => i.Id != settlement.IslandId && i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        // Same OwnerId as the settlement FoundAsync already created ("ulf-player"),
+        // a different name and a different, otherwise-perfectly-legal plot.
+        var again = await client.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Second realm", "Ulf", "ulf-player"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+
+        var list = await client.GetFromJsonAsync<List<SettlementSummary>>(
+            $"/api/v1/worlds/{worldId}/settlements", SqliteApiFixture.StrictJson, Ct);
+        Assert.Single(list!);
+    }
+
+    [Fact]
+    public async Task A_different_player_can_found_alongside_an_existing_settlement()
+    {
+        using var client = Client();
+        var (worldId, settlement) = await FoundAsync(client);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        // A different island entirely, so this can never collide with the
+        // spacing rule — only the per-player uniqueness this test targets.
+        var island = islands!.First(i => i.Id != settlement.IslandId && i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        var again = await client.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Second realm", "Sigrid", "sigrid-player"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Created, again.StatusCode);
     }
 
     [Fact]

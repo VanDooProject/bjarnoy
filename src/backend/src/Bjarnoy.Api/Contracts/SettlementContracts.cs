@@ -6,12 +6,21 @@ using Bjarnoy.Infrastructure.Entities;
 
 namespace Bjarnoy.Api.Contracts;
 
+/// <param name="OwnerId">
+/// A stable id for the player founding this settlement (a client-generated
+/// local id today; a real account id once auth exists). Used to refuse a
+/// second settlement for the same player in the same world — see
+/// <see cref="Bjarnoy.Infrastructure.Services.FoundingRejection.AlreadyFounded"/>.
+/// Unrelated to <c>OwnerName</c>, which is just the display name shown on
+/// the map and can collide between players.
+/// </param>
 public sealed record FoundSettlementRequest(
     [property: Required] Guid IslandId,
     int Q,
     int R,
     [property: Required, MinLength(2), MaxLength(100)] string Name,
-    [property: Required, MinLength(2), MaxLength(100)] string OwnerName);
+    [property: Required, MinLength(2), MaxLength(100)] string OwnerName,
+    [property: Required, MinLength(1), MaxLength(200)] string OwnerId);
 
 public sealed record QueueBuildRequest(
     [property: Required] string Building,
