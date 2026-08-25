@@ -756,9 +756,18 @@ export class HexMapRenderer {
         // one flat, obviously-tiled sheet.
         const grid = isoGridPosition(c, TILE_W, TILE_H);
         const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+        const beyondRaw = worldModel.distanceBeyondExplored(c.q, c.r);
+        if (beyondRaw > FOG_TERRAIN_CULL_HEXES) {
+          // Guaranteed saturated (see FOG_TERRAIN_CULL_HEXES) — paint flat
+          // solid white instead of computing jitter/edge noise for a result
+          // that would round to the same fully-opaque fill anyway, and skip
+          // drawing the (now-culled) terrain sprite underneath.
+          this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha: 1 });
+          continue;
+        }
         const jitter = hash01(c.q, c.r, 9);
         const edgeNoise = (hash01(c.q, c.r, 13) - 0.5) * 2 * FOG_EDGE_NOISE_HEXES;
-        const beyond = worldModel.distanceBeyondExplored(c.q, c.r) + edgeNoise;
+        const beyond = beyondRaw + edgeNoise;
         const t = Math.min(1, Math.max(0, beyond / FOG_MARGIN_HEXES));
         const alpha = 0.1 + t * 0.8 + jitter * 0.08;
         this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha });
@@ -894,21 +903,25 @@ export class HexMapRenderer {
       // mount()), so it already draws in fixed screen pixels — `top` above
       // is a screen-space point via toScreen(). Scaling the pill's own
       // geometry by camera.zoom on top of that shrank it as you zoomed out,
-      // squeezing the label against its padding; the badge should read as a
-      // constant on-screen size regardless of zoom, like the HUD chrome.
+      // squeezing the label against its padding; the badge stays a constant
+      // on-screen size at and below the settlement's default zoom, like the
+      // HUD chrome. Past that zoom level it grows again — a fixed-size badge
+      // reads as undersized once you've zoomed in close to the (now much
+      // larger) hex art around it.
       const label = this.acquireLabel();
       label.text = settlement.name.toUpperCase();
       label.style.fill = 0xe8f0f5;
-      label.style.fontSize = 12;
+      const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
+      label.style.fontSize = 13 * zoomScale;
       label.anchor.set(0, 0.5);
 
-      const dotR = 3.5;
-      const padX = 10;
-      const gap = 6;
-      const pillH = 22;
+      const dotR = 4 * zoomScale;
+      const padX = 12 * zoomScale;
+      const gap = 8 * zoomScale;
+      const pillH = 26 * zoomScale;
       const pillW = padX * 2 + dotR * 2 + gap + label.width;
       const pillX = top.x - pillW / 2;
-      const pillY = top.y - 30 - pillH;
+      const pillY = top.y - 30 * zoomScale - pillH;
 
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
