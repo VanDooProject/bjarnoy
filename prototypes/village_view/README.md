@@ -86,13 +86,22 @@ sheet.
 
 Unlike the scouted tier, the unexplored tier is **not** a hard cutoff. Terrain sprites are drawn
 for every hex the camera can see regardless of exploration state (`rebuildTerrain` no longer skips
-unexplored hexes — it only stops past `FOG_TERRAIN_CULL_HEXES` (20), purely to save draw calls once
-the fog above is already opaque and nothing would show through anyway), and the mist's alpha ramps
-from ~10% right past the scouted ring up to ~90% over the next `FOG_MARGIN_HEXES` (10) hexes
-(`WorldModel.distanceBeyondExplored` + the same constant the initial-zoom calc below uses), then
-stays there. So the fringe of unexplored ground reads as terrain rolling into mist, not a wall of
-white with nothing behind it — closer to the mockup's own continuous `fogAt()` gradient than a
-binary hidden/visible split, while still keeping the two named tiers the decision table calls for.
+unexplored hexes), and the mist's alpha ramps from ~10% right past the scouted ring up to ~90% over
+the next `FOG_MARGIN_HEXES` (10) hexes (`WorldModel.distanceBeyondExplored` + the same constant the
+initial-zoom calc below uses). So the fringe of unexplored ground reads as terrain rolling into
+mist, not a wall of white with nothing behind it — closer to the mockup's own continuous `fogAt()`
+gradient than a binary hidden/visible split, while still keeping the two named tiers the decision
+table calls for.
+
+Past `FOG_TERRAIN_CULL_HEXES` (`FOG_MARGIN_HEXES` + `FOG_EDGE_NOISE_HEXES`, i.e. the ramp's
+worst-case saturation point once edge noise is factored in) both the terrain and the fog switch to
+a cheap flat path: `rebuildTerrain` stops drawing sprites there (nothing would show through fully
+opaque mist anyway) and `rebuildBordersAndFog` paints a plain, unjittered, unblurred solid-white
+fill instead of computing the alpha ramp — this is also what keeps a fully-zoomed-out view cheap,
+since most of the visible area at that zoom sits past the saturation point. Deriving the cull
+distance from the ramp's own saturation point (rather than an independent constant) is what keeps
+terrain sprites and fully-opaque fog aligned — previously they used unrelated distances, so terrain
+vanished before the fog above it was actually fully opaque, leaving a visible seam on a far pan.
 
 `distanceBeyondExplored` is a hex-distance to the settlement, which is a perfect hexagon ring — used
 bare, the mist's inner edge would read as a crisp hex-shaped cutout (very visible if
