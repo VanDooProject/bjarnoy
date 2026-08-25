@@ -350,6 +350,11 @@ export class HexMapRenderer {
     this.dragging = true;
     this.dragMoved = 0;
     this.lastPointer = { x: e.clientX, y: e.clientY };
+    // The hover tooltip otherwise stays pinned to whatever hex was last
+    // hovered while the player drags the camera underneath it — onPointerMove
+    // skips updateHover entirely while dragging, so nothing would clear it
+    // on its own until the drag ends over a different hex.
+    this.setHoveredCoord(null);
   };
 
   private onPointerMove = (e: PointerEvent) => {
