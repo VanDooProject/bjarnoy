@@ -32,7 +32,16 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { Application, BlurFilter, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
+import {
+  Application,
+  BlurFilter,
+  Container,
+  FillGradient,
+  Graphics,
+  Sprite,
+  Text,
+  Texture,
+} from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexesInRadius } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -182,23 +191,52 @@ const FOG_MARGIN_HEXES = 10;
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
-// Per-hex random offset (in hexes) applied to the explored-ring distance
-// before it's used for the fog alpha ramp. Hex distance to the settlement is
-// a perfect hexagon ring, so without this the mist's inner edge reads as a
-// crisp hex-shaped cutout; the offset roughens that boundary hex-by-hex, and
-// the fog layer's BlurFilter smooths the result into an irregular, cloud-like
-// edge instead.
-const FOG_EDGE_NOISE_HEXES = 3;
-// Past this many hexes beyond the explored ring, the alpha ramp has
-// saturated even at the noisiest edge (FOG_MARGIN_HEXES plus the worst-case
-// FOG_EDGE_NOISE_HEXES offset) — so both rebuildBordersAndFog and
-// rebuildTerrain treat it as fully opaque: fog is painted flat solid white
-// (skipping the jitter/edge-noise math) and terrain sprites stop being drawn
-// underneath it, since nothing could show through either way. Keeping this
-// one distance shared between the two is what closes the seam where terrain
-// used to disappear before the fog above it had actually reached full
-// opacity.
-const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_EDGE_NOISE_HEXES;
+// Extra headroom (in hexes) added past where the alpha ramp itself
+// saturates (FOG_MARGIN_HEXES) before switching to the flat, guaranteed-
+// opaque fill — see FOG_TERRAIN_CULL_HEXES. The mist's inner edge no longer
+// needs its own noise term to avoid a hex-shaped cutout (the blob geometry
+// in rebuildBordersAndFog handles that on its own — see FOG_BLOB_* below),
+// but blobs are still individually semi-transparent right up to the
+// saturation point, so this margin keeps them visually dense before the
+// hand-off to the flat fill instead of switching right at their weakest edge.
+const FOG_CULL_HEADROOM_HEXES = 3;
+// Past this many hexes beyond the explored ring, both rebuildBordersAndFog
+// and rebuildTerrain treat the hex as fully opaque: fog is painted flat
+// solid white (no blob) and terrain sprites stop being drawn underneath it,
+// since nothing could show through either way. Keeping this one distance
+// shared between the two is what closes the seam where terrain used to
+// disappear before the fog above it had actually reached full opacity.
+const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
+// Blobs keep being placed (at a flat, fully-opaque alpha) this many hexes
+// *past* FOG_TERRAIN_CULL_HEXES, overlapping the flat fill's own territory,
+// so the blob layer's BlurFilter always has real neighbouring content right
+// up to (and past) the hand-off point. Without this the blur has nothing to
+// blend the outermost blobs into — they fade toward the edge of their own
+// content — while the flat fill right next to them starts at full solid
+// opacity with no blur at all, and that contrast is exactly the hex-stepped
+// seam a screenshot exposed at the blob/flat boundary.
+const FOG_BLOB_OVERLAP_HEXES = 6;
+
+// prototypes/village_view/Viking Realm.dc.html's fogAt()/`fogs` never fills a
+// hex-shaped polygon at all — every fogged hex gets one large soft circular
+// blob (a blurred radial gradient, ~1.68x hex width / 2.7x hex face height,
+// jittered off-centre) that spills into its neighbours. Overlapping blobs is
+// what makes the mist read as continuous cloud instead of tiled hexes; a
+// single hex-aligned polygon can never look like that no matter how much
+// blur is layered on top, since its edge is still exactly the hex boundary.
+// FOG_BLOB_W_SCALE/H_SCALE mirror the prototype's own ratios (relative to
+// its equivalents of our TILE_W/TILE_H).
+const FOG_BLOB_W_SCALE = 1.68;
+const FOG_BLOB_H_SCALE = 2.7;
+// How far a blob's centre is nudged from its hex's own centre, as a fraction
+// of hex width/height — matches the prototype's per-hex jitter on blob
+// position, so no two neighbouring blobs stack in perfect alignment.
+const FOG_BLOB_JITTER_X = 0.12;
+const FOG_BLOB_JITTER_Y = 0.18;
+// Per-blob size variance (1 ± this fraction) — another source of
+// irregularity so the mist doesn't read as a grid of identical stamps.
+const FOG_BLOB_SIZE_JITTER = 0.15;
+const FOG_SCOUTED_ALPHA = 0.6;
 
 export class HexMapRenderer {
   private app: Application | null = null;
@@ -210,7 +248,13 @@ export class HexMapRenderer {
   private wavePoints: WavePoint[] = [];
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
+  // Flat, unblurred, guaranteed alpha:1 white fill — the "definitely fully
+  // opaque, no reliance on blob overlap" backstop past FOG_TERRAIN_CULL_HEXES.
   private fogLayer = new Graphics();
+  // Organic mist: pooled Sprites sharing one pre-rendered soft-circle
+  // texture, tinted/sized/jittered per hex — see FOG_BLOB_* above.
+  private fogBlobLayer = createSpriteLayer();
+  private fogBlobTexture: Texture | null = null;
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
@@ -306,11 +350,17 @@ export class HexMapRenderer {
     this.textures = this.options.mode === 'settlement' ? await loadTileTextures() : null;
     if (this.destroyed) return;
 
-    // Softens the fog layer's hard hex edges into the mockup's blurred
-    // mist-cloud look (Viking Realm.dc.html's `fogs`: a blurred radial
-    // gradient per hex) instead of a flat tiled sheet — cheap since it's one
-    // filter over one Graphics layer, not per-hex.
-    this.fogLayer.filters = [new BlurFilter({ strength: 10, quality: 3 })];
+    // One soft-circle texture, generated once and reused (tinted, resized,
+    // alpha'd) for every fog blob — see FOG_BLOB_* above. Sprites sharing a
+    // texture batch into very few WebGL draw calls, same reasoning as the
+    // tile-art sprite pools.
+    this.fogBlobTexture = this.createFogBlobTexture(app);
+    // Blurred on top of the gradient's own soft falloff — matches the
+    // mockup's per-blob `filter: blur(...)` (Viking Realm.dc.html's `fogs`).
+    // Only the organic blob layer needs this; fogLayer's flat fill is
+    // already a uniform solid colour, so blurring it would cost GPU time for
+    // no visible change.
+    this.fogBlobLayer.container.filters = [new BlurFilter({ strength: 10, quality: 3 })];
 
     this.world.addChild(
       this.terrainBase.container,
@@ -320,6 +370,7 @@ export class HexMapRenderer {
       this.hoverLayer,
       this.terrainTop.container,
       this.fogLayer,
+      this.fogBlobLayer.container,
     );
     app.stage.addChild(this.world, this.markerLayer);
 
@@ -683,6 +734,60 @@ export class HexMapRenderer {
     }
   }
 
+  // A single soft white circle (opaque centre fading to transparent at the
+  // rim), rasterized once. Every fog blob is a Sprite of this same texture —
+  // tint gives it its colour, Sprite.alpha its per-hex intensity, width/height
+  // its per-hex size — so the GPU only ever uploads one small texture no
+  // matter how much fog is on screen.
+  private createFogBlobTexture(app: Application): Texture {
+    const radius = 128;
+    const gradient = new FillGradient({
+      type: 'radial',
+      colorStops: [
+        { offset: 0, color: 'rgba(255,255,255,1)' },
+        { offset: 0.44, color: 'rgba(255,255,255,0.88)' },
+        { offset: 0.7, color: 'rgba(255,255,255,0.42)' },
+        { offset: 1, color: 'rgba(255,255,255,0)' },
+      ],
+    });
+    const g = new Graphics().circle(radius, radius, radius).fill(gradient);
+    const texture = app.renderer.generateTexture(g);
+    g.destroy();
+    return texture;
+  }
+
+  // Pooled equivalent of syncSpriteLayer, for the fog blob layer: each entry
+  // is a soft circle positioned/sized/tinted/alpha'd per hex rather than a
+  // fixed-size tile sprite, so it takes its own geometry fields instead of
+  // reusing that method's tile-shaped one.
+  private syncFogBlobs(
+    entries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number }>,
+  ) {
+    const layer = this.fogBlobLayer;
+    for (const [key, e] of entries) {
+      let sprite = layer.active.get(key);
+      const isNew = !sprite;
+      if (!sprite) {
+        sprite = layer.pool.pop() ?? new Sprite();
+        sprite.anchor.set(0.5);
+        layer.active.set(key, sprite);
+      }
+      sprite.texture = this.fogBlobTexture ?? Texture.EMPTY;
+      sprite.position.set(e.x, e.y);
+      sprite.width = e.w;
+      sprite.height = e.h;
+      sprite.tint = e.tint;
+      sprite.alpha = e.alpha;
+      if (isNew) layer.container.addChild(sprite);
+    }
+    for (const [key, sprite] of layer.active) {
+      if (entries.has(key)) continue;
+      layer.container.removeChild(sprite);
+      layer.pool.push(sprite);
+      layer.active.delete(key);
+    }
+  }
+
   private syncSpriteLayer(
     layer: SpriteLayer,
     entries: Map<string, { texture: Texture; coord: AxialCoord }>,
@@ -740,37 +845,68 @@ export class HexMapRenderer {
     }
 
     const inflatedTop = this.inflatedTop();
+    const topPoints = isoTopPoints(TILE_W, TILE_H);
+    const topCentroid = {
+      x: topPoints.reduce((s, p) => s + p.x, 0) / topPoints.length,
+      y: topPoints.reduce((s, p) => s + p.y, 0) / topPoints.length,
+    };
+    const blobEntries = new Map<
+      string,
+      { x: number; y: number; w: number; h: number; tint: number; alpha: number }
+    >();
+
+    // A blob per fogged hex, oversized and jittered in position/size so
+    // neighbours overlap heavily instead of abutting at their hex edges —
+    // see the FOG_BLOB_* comment above for why this replaces per-hex
+    // polygon fills entirely for both fog tiers.
+    const addBlob = (c: AxialCoord, tint: number, alpha: number) => {
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      const jx = (hash01(c.q, c.r, 20) - 0.5) * 2;
+      const jy = (hash01(c.q, c.r, 21) - 0.5) * 2;
+      const sizeJ = 1 + (hash01(c.q, c.r, 22) - 0.5) * 2 * FOG_BLOB_SIZE_JITTER;
+      blobEntries.set(coordKey(c), {
+        x: grid.x + topCentroid.x + jx * TILE_W * FOG_BLOB_JITTER_X,
+        y: grid.y + topCentroid.y + jy * TILE_H * FOG_BLOB_JITTER_Y,
+        w: TILE_W * FOG_BLOB_W_SCALE * sizeJ,
+        h: TILE_H * FOG_BLOB_H_SCALE * sizeJ,
+        tint,
+        alpha,
+      });
+    };
 
     for (const c of coords) {
       if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) {
-        // A white mist over ground the settlement has never scouted — covers
-        // every hex the camera can currently see, however far it's panned,
-        // so the world reads as continuing forever under fog rather than
-        // ending at a hard edge. Terrain is still drawn underneath
-        // (rebuildTerrain no longer skips unexplored hexes), so instead of a
-        // hard white wall right past the scouted ring, the mist fades in
-        // over FOG_MARGIN_HEXES hexes — thin enough at the ring's edge to
-        // let ground show through, thickening to near-opaque by the time the
-        // camera's default fog margin ends. Slight per-hex alpha jitter
-        // (same hash01 noise the wave layer uses) keeps it from reading as
-        // one flat, obviously-tiled sheet.
-        const grid = isoGridPosition(c, TILE_W, TILE_H);
-        const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+        // Mist over ground the settlement has never scouted — covers every
+        // hex the camera can currently see, however far it's panned, so the
+        // world reads as continuing forever under fog rather than ending at
+        // a hard edge. Terrain is still drawn underneath (rebuildTerrain no
+        // longer skips unexplored hexes) below FOG_TERRAIN_CULL_HEXES, so
+        // instead of a hard white wall right past the scouted ring, the
+        // mist fades in over FOG_MARGIN_HEXES hexes.
         const beyondRaw = worldModel.distanceBeyondExplored(c.q, c.r);
         if (beyondRaw > FOG_TERRAIN_CULL_HEXES) {
           // Guaranteed saturated (see FOG_TERRAIN_CULL_HEXES) — paint flat
-          // solid white instead of computing jitter/edge noise for a result
-          // that would round to the same fully-opaque fill anyway, and skip
-          // drawing the (now-culled) terrain sprite underneath.
+          // solid white at a literal alpha:1 instead of a blob. This is the
+          // only thing that actually *guarantees* full opacity: blobs alone
+          // (individually capped below 1, relying on overlap to read as
+          // solid) can leave faint gaps right at the edge of what's
+          // rendered, which is exactly the seam a hard flat fill closes.
+          const grid = isoGridPosition(c, TILE_W, TILE_H);
+          const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
           this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha: 1 });
+          // Keep placing solid blobs a bit past the hand-off too (see
+          // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
+          // blend the outermost blobs into and they visibly fade right
+          // where the flat fill starts at full strength.
+          if (beyondRaw <= FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES) {
+            addBlob(c, FOG_UNEXPLORED, 1);
+          }
           continue;
         }
         const jitter = hash01(c.q, c.r, 9);
-        const edgeNoise = (hash01(c.q, c.r, 13) - 0.5) * 2 * FOG_EDGE_NOISE_HEXES;
-        const beyond = beyondRaw + edgeNoise;
-        const t = Math.min(1, Math.max(0, beyond / FOG_MARGIN_HEXES));
+        const t = Math.min(1, Math.max(0, beyondRaw / FOG_MARGIN_HEXES));
         const alpha = 0.1 + t * 0.8 + jitter * 0.08;
-        this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha });
+        addBlob(c, FOG_UNEXPLORED, alpha);
         continue;
       }
       const tile = worldModel.getTile(c.q, c.r);
@@ -811,9 +947,11 @@ export class HexMapRenderer {
       }
 
       if (visible && !visible.has(coordKey(c))) {
-        this.fogLayer.poly(flat).fill({ color: FOG_SCOUTED, alpha: 0.55 });
+        addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
       }
     }
+
+    this.syncFogBlobs(blobEntries);
   }
 
   private rebuildMarkers() {
@@ -965,6 +1103,11 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     this.app?.ticker.remove(this.onTick);
+    // app.destroy({ children: true }) destroys the Sprites but not a texture
+    // we generated ourselves (generateTexture() output isn't owned by any
+    // one Sprite), so it needs its own explicit destroy.
+    this.fogBlobTexture?.destroy(true);
+    this.fogBlobTexture = null;
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
