@@ -29,7 +29,7 @@ function fmt(n: number): string {
 <style scoped>
 .resource-bar {
   position: absolute;
-  top: 16px;
+  top: 66px;
   right: 16px;
   z-index: 10;
   display: flex;

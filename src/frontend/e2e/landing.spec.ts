@@ -1,24 +1,22 @@
 import { expect, test } from '@playwright/test';
 
-test('landing shows the world map already moving, no sign-up wall', async ({ page }) => {
+test('landing page is real marketing copy, not the game canvas', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByText('Fjørdhold')).toBeVisible();
-  await expect(page.getByText(/already moving/)).toBeVisible();
-  await expect(page.getByText(/Click any green island/)).toBeVisible();
-  await expect(page.getByText(/no sign-up needed yet/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /raise a realm/i })).toBeVisible();
+  await expect(page.locator('canvas')).toHaveCount(0);
 
-  // the PixiJS canvas mounted and has a real size, not a 0x0 placeholder
-  const canvas = page.locator('canvas');
-  await expect(canvas).toBeVisible();
-  const box = await canvas.boundingBox();
-  expect(box?.width).toBeGreaterThan(100);
-  expect(box?.height).toBeGreaterThan(100);
+  await expect(page.getByRole('link', { name: 'Impressum' })).toHaveAttribute('href', '/impressum');
 
-  // zip 4: the camera drifts on its own before any interaction — confirm
-  // the canvas is actually being redrawn, not a static frame.
-  const before = await canvas.screenshot();
-  await page.waitForTimeout(1200);
-  const after = await canvas.screenshot();
-  expect(Buffer.compare(before, after)).not.toBe(0);
+  await page.getByRole('button', { name: /enter the world/i }).click();
+  await page.waitForURL('**/world');
+  await expect(page.locator('canvas')).toBeVisible();
+});
+
+test('impressum page is reachable and links back', async ({ page }) => {
+  await page.goto('/impressum');
+  await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();
+  await page.getByRole('button', { name: /back/i }).click();
+  await page.waitForURL('**/');
 });

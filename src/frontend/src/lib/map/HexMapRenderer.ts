@@ -60,25 +60,37 @@ const HOVER_STROKE = 0xffe9c2;
 
 // zip 7: islands on the world map are "small hexes (no images (yet))" —
 // unlike the settlement view, which renders full tile-art sprites, the
-// world map draws flat coloured hex faces. Tones lifted from the design
-// doc's IslandMap terrain-tone table (prototypes/landing_pages/README.md).
+// world map draws flat coloured hex faces. The design doc's IslandMap
+// terrain-tone table (prototypes/landing_pages/README.md) gives raw CSS
+// values, but the rendered mockup (docs/design/img/worldmap.png) shows a
+// visibly more muted palette on top of it — these are colour-picked
+// straight from that screenshot so the app actually matches what's shown.
 const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   sea: 0x215a7a, // unused (open sea has no tile at all in world mode)
-  sand: 0xe0c882,
-  grass: 0x7ba844,
-  forest: 0x4e6f2b,
-  mountain: 0x8d8f92,
+  sand: 0x9c8a5c,
+  grass: 0x4e7a3a,
+  forest: 0x365e2f,
+  mountain: 0x5f6b6d,
 };
 
 // zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
 // method, "playful" style — the one shown in docs/design/img/worldmap.png)
 // is the source of truth for the sea: short scattered wave squiggles, never
 // touching land, each gently swelling in place rather than drifting.
+// The prototype's own numbers (stepX/stepY 46/26, wave width 26, ...) are
+// sized against its own hex, which is only WW=40px wide there. Our hex is
+// TILE_W=168px wide, so every wave measurement below is scaled up by the
+// same ratio (168/40 = 4.2) to read at the same size relative to the hex.
+const WORLD_PROTOTYPE_HEX_W = 40;
+const WAVE_SCALE = 168 / WORLD_PROTOTYPE_HEX_W;
 const WAVE_COLOR = 0xffffff;
 const WAVE_ALPHA = 0.42;
-const WAVE_STEP_X = 40;
-const WAVE_STEP_Y = 22;
-const WAVE_WIDTH = 22;
+const WAVE_STEP_X = 46 * WAVE_SCALE;
+const WAVE_STEP_Y = 26 * WAVE_SCALE;
+const WAVE_WIDTH = 26 * WAVE_SCALE;
+const WAVE_STROKE = 2 * WAVE_SCALE;
+const WAVE_JITTER_X = 16 * WAVE_SCALE;
+const WAVE_JITTER_Y = 12 * WAVE_SCALE;
 const WAVE_DENSITY = 0.62; // fraction of grid points that get a wave, per the prototype's `dens`
 
 function hash01(x: number, y: number, salt: number): number {
@@ -477,8 +489,8 @@ export class HexMapRenderer {
     for (let y = yStart; y < rect.maxY; y += WAVE_STEP_Y) {
       for (let x = xStart; x < rect.maxX; x += WAVE_STEP_X) {
         if (hash01(x, y, 1) > WAVE_DENSITY) continue;
-        const jx = x + (hash01(x, y, 2) - 0.5) * 16;
-        const jy = y + (hash01(x, y, 3) - 0.5) * 12;
+        const jx = x + (hash01(x, y, 2) - 0.5) * WAVE_JITTER_X;
+        const jy = y + (hash01(x, y, 3) - 0.5) * WAVE_JITTER_Y;
         if (this.isNearLand(isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H))) continue;
         points.push({
           x: jx,
@@ -502,13 +514,14 @@ export class HexMapRenderer {
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
       const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
-      const x = p.x + s * 7;
-      const y = p.y - s * 3;
+      const x = p.x + s * 7 * WAVE_SCALE;
+      const y = p.y - s * 3 * WAVE_SCALE;
+      const bump = 4.5 * WAVE_SCALE;
       this.waveLayer
         .moveTo(x, y)
-        .quadraticCurveTo(x + WAVE_WIDTH / 4, y - 4.5, x + WAVE_WIDTH / 2, y)
-        .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + 4.5, x + WAVE_WIDTH, y)
-        .stroke({ width: 2, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
+        .quadraticCurveTo(x + WAVE_WIDTH / 4, y - bump, x + WAVE_WIDTH / 2, y)
+        .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + bump, x + WAVE_WIDTH, y)
+        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
     }
   }
 

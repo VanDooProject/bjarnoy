@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from 'vue';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
+import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import { useWorldStore } from '../stores/world';
@@ -46,6 +47,7 @@ function onHexClick(coord: AxialCoord, tile: Tile) {
       @hex-click="onHexClick"
     />
     <TopBar />
+    <HudNav />
     <ResourceBar />
     <RealmPanel />
   </div>
