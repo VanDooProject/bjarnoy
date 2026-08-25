@@ -9,6 +9,13 @@ import { generateTile } from './worldGenerator';
 import type { Fleet, Resources, Settlement, Tile } from './types';
 
 const BASE_BORDER_RADIUS = 2;
+// zip 9: "unexplored hexes are hidden; scouted but not currently-visible
+// hexes are greyed out" — three distinct rings, not two. Ownership only ever
+// reaches borderRadius, visibleHexes (line-of-sight) reaches one hex further,
+// and explored reaches further still so there's an actual ring of greyed-out
+// scouted terrain between the clear realm and the hidden unknown, instead of
+// unexplored starting immediately at the border.
+const FOG_SCOUT_RING = 3;
 
 export class WorldModel {
   readonly seed: number;
@@ -87,6 +94,8 @@ export class WorldModel {
     for (const c of hexesInRadius(at, this.borderRadius(settlement))) {
       const tile = this.getTile(c.q, c.r);
       if (!tile.ownerId) tile.ownerId = settlement.id;
+    }
+    for (const c of hexesInRadius(at, this.exploredRadius(settlement))) {
       this.explored.add(coordKey(c));
     }
     return settlement;
@@ -108,6 +117,11 @@ export class WorldModel {
   visibleHexes(settlement: Settlement): Set<string> {
     const radius = this.borderRadius(settlement) + 1;
     return new Set(hexesInRadius({ q: settlement.q, r: settlement.r }, radius).map(coordKey));
+  }
+
+  /** Hexes that get marked "ever scouted" once claimed/leveled — wider than visibleHexes so a ring of greyed-out fog actually renders beyond it. */
+  private exploredRadius(settlement: Settlement): number {
+    return this.borderRadius(settlement) + FOG_SCOUT_RING;
   }
 
   /** Hexes ever scouted — greyed out (not live) once out of sight. */
@@ -139,6 +153,8 @@ export class WorldModel {
       for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.borderRadius(settlement))) {
         const tile = this.getTile(c.q, c.r);
         if (!tile.ownerId) tile.ownerId = settlementId;
+      }
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.exploredRadius(settlement))) {
         this.explored.add(coordKey(c));
       }
     }

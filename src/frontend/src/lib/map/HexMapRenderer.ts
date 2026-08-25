@@ -574,10 +574,24 @@ export class HexMapRenderer {
       const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
       const flat = top.flatMap((p) => [p.x, p.y]);
 
-      if (tile.ownerId && isEdgeOfClaim(worldModel, c, tile.ownerId)) {
+      if (tile.ownerId) {
         const owner = worldModel.getSettlement(tile.ownerId);
         const mine = owner?.ownerId === playerId;
-        this.borderLayer.poly(flat).stroke({ width: 3, color: mine ? GOLD : RIVAL, alpha: 0.9 });
+        const color = mine ? GOLD : RIVAL;
+        // Prototype's edge-walk (see prototypes/landing_pages/README.md's
+        // "Ownership outlines"): stroke only the edges that actually face a
+        // differently-owned neighbour, not the whole hex outline — otherwise
+        // every interior border tile draws its full hexagon and the realm
+        // reads as a hatched grid instead of one clean outline.
+        for (let i = 0; i < NEIGHBOR_DIRS.length; i++) {
+          const d = NEIGHBOR_DIRS[i];
+          const neighborOwner = worldModel.getTile(c.q + d.q, c.r + d.r).ownerId;
+          if (neighborOwner === tile.ownerId) continue;
+          const edge = BORDER_EDGE_FOR_NEIGHBOR[i];
+          const a = top[edge];
+          const b = top[(edge + 1) % 6];
+          this.borderLayer.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 3, color, alpha: 0.9 });
+        }
       }
 
       if (visible && !visible.has(coordKey(c))) {
@@ -669,9 +683,13 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
   { q: 0, r: 1 },
 ];
 
-function isEdgeOfClaim(worldModel: WorldModel, c: AxialCoord, ownerId: string): boolean {
-  return NEIGHBOR_DIRS.some((d) => worldModel.getTile(c.q + d.q, c.r + d.r).ownerId !== ownerId);
-}
+// isoTopPoints() winds its 6 vertices left, top-left, top-right, right,
+// bottom-right, bottom-left. Edge i runs from vertex i to vertex i+1. This
+// maps each NEIGHBOR_DIRS index to the top-face edge that actually borders
+// that neighbour on screen, derived from isoGridPosition's odd-q offset
+// (verified by comparing each neighbour's screen-space centre delta against
+// each edge's midpoint direction).
+const BORDER_EDGE_FOR_NEIGHBOR = [3, 2, 1, 0, 5, 4];
 
 function formatEta(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
