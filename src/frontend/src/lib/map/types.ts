@@ -10,13 +10,15 @@ export interface Tile {
   terrain: Terrain;
   /** Settlement id that currently claims this hex, if any (Settlers II style borders). */
   ownerId?: string;
-  buildingType?: 'longhouse' | 'hut' | 'farm' | 'watchtower';
+  buildingType?: 'longhouse' | 'hut' | 'farm' | 'tower';
   buildingLevel?: number;
 }
 
 export interface Settlement {
   id: string;
   ownerId: string;
+  /** Display name of the player who holds it (Settlers-II-style label on the world map). */
+  ownerName: string;
   name: string;
   q: number;
   r: number;
@@ -35,6 +37,14 @@ export interface Fleet {
   toR: number;
   departedAt: number;
   etaAt: number;
+}
+
+/** An island's name and centre, as known from the backend (live mode) — for world-map labels. */
+export interface IslandLabel {
+  id: string;
+  name: string;
+  q: number;
+  r: number;
 }
 
 export function emptyResources(): Resources {

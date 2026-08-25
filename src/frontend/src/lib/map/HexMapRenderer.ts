@@ -39,7 +39,7 @@ import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
-import type { Settlement, Tile } from './types';
+import type { Settlement, Terrain, Tile } from './types';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -57,6 +57,55 @@ const RIVAL = 0xe2705f;
 const FOG_SCOUTED = 0x0b1116;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
+
+// zip 7: islands on the world map are "small hexes (no images (yet))" —
+// unlike the settlement view, which renders full tile-art sprites, the
+// world map draws flat coloured hex faces. The design doc's IslandMap
+// terrain-tone table (prototypes/landing_pages/README.md) gives raw CSS
+// values, but the rendered mockup (docs/design/img/worldmap.png) shows a
+// visibly more muted palette on top of it — these are colour-picked
+// straight from that screenshot so the app actually matches what's shown.
+const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
+  sea: 0x215a7a, // unused (open sea has no tile at all in world mode)
+  sand: 0x9c8a5c,
+  grass: 0x4e7a3a,
+  forest: 0x365e2f,
+  mountain: 0x5f6b6d,
+};
+
+// zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
+// method, "playful" style — the one shown in docs/design/img/worldmap.png)
+// is the source of truth for the sea: short scattered wave squiggles, never
+// touching land, each gently swelling in place rather than drifting.
+// The prototype's own numbers (stepX/stepY 46/26, wave width 26, ...) are
+// sized against its own hex, which is only WW=40px wide there. Our hex is
+// TILE_W=168px wide, so every wave measurement below is scaled up by the
+// same ratio (168/40 = 4.2) to read at the same size relative to the hex.
+const WORLD_PROTOTYPE_HEX_W = 40;
+const WAVE_SCALE = 168 / WORLD_PROTOTYPE_HEX_W;
+const WAVE_COLOR = 0xffffff;
+const WAVE_ALPHA = 0.42;
+const WAVE_STEP_X = 46 * WAVE_SCALE;
+const WAVE_STEP_Y = 26 * WAVE_SCALE;
+const WAVE_WIDTH = 26 * WAVE_SCALE;
+const WAVE_STROKE = 2 * WAVE_SCALE;
+const WAVE_JITTER_X = 16 * WAVE_SCALE;
+const WAVE_JITTER_Y = 12 * WAVE_SCALE;
+const WAVE_DENSITY = 0.62; // fraction of grid points that get a wave, per the prototype's `dens`
+
+function hash01(x: number, y: number, salt: number): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(salt | 0, 2654435761);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return ((h >>> 0) % 100000) / 100000;
+}
+
+interface WavePoint {
+  x: number;
+  y: number;
+  phase: number;
+  periodMs: number;
+}
 
 interface SpriteLayer {
   pool: Sprite[];
@@ -94,6 +143,9 @@ export class HexMapRenderer {
   private world = new Container();
   private terrainBase = createSpriteLayer();
   private terrainTop = createSpriteLayer();
+  private terrainFlat = new Graphics();
+  private waveLayer = new Graphics();
+  private wavePoints: WavePoint[] = [];
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
   private fogLayer = new Graphics();
@@ -153,11 +205,16 @@ export class HexMapRenderer {
     });
     this.app = app;
     this.viewport = { width, height };
-    this.textures = await loadTileTextures();
+    // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
+    // above), so it has no need for the (large, submodule-backed) texture
+    // pack at all — only settlement mode loads it.
+    this.textures = this.options.mode === 'settlement' ? await loadTileTextures() : null;
     if (this.destroyed) return;
 
     this.world.addChild(
       this.terrainBase.container,
+      this.waveLayer,
+      this.terrainFlat,
       this.borderLayer,
       this.hoverLayer,
       this.terrainTop.container,
@@ -196,6 +253,7 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.rebuildMarkers();
+    if (this.options.mode === 'world') this.drawWaves();
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -341,24 +399,30 @@ export class HexMapRenderer {
   }
 
   private rebuildAll() {
-    if (!this.app || !this.textures) return;
+    if (!this.app) return;
+    if (this.options.mode === 'settlement' && !this.textures) return;
     this.lastBuiltCamera = { ...this.camera };
     const coords = this.visibleCoords();
     this.rebuildTerrain(coords);
     this.rebuildBordersAndFog(coords);
     this.rebuildMarkers();
+    if (this.options.mode === 'world') this.rebuildWaves();
   }
 
   private rebuildTerrain(coords: AxialCoord[]) {
-    const { worldModel, mode } = this.options;
+    if (this.options.mode === 'world') {
+      this.rebuildTerrainFlat(coords);
+      return;
+    }
+
+    const { worldModel } = this.options;
     const textures = this.textures!;
     const baseEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
     const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
 
     for (const c of coords) {
-      if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) continue; // true fog: not drawn
+      if (!worldModel.isExplored(c.q, c.r)) continue; // true fog: not drawn
       const tile = worldModel.getTile(c.q, c.r);
-      if (mode === 'world' && tile.terrain === 'sea') continue; // open sea is just the background
 
       const key = coordKey(c);
       const textureKey = textureKeyFor(tile);
@@ -369,6 +433,96 @@ export class HexMapRenderer {
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
     this.syncSpriteLayer(this.terrainTop, topEntries);
+  }
+
+  // zip 7: world-map islands are flat coloured hexes, not tile art — see
+  // WORLD_TERRAIN_FILL. Drawn straight into one Graphics layer rather than
+  // pooled sprites since there's no texture (and thus no batching benefit)
+  // to share.
+  private rebuildTerrainFlat(coords: AxialCoord[]) {
+    const { worldModel } = this.options;
+    this.terrainFlat.clear();
+    const top = isoTopPoints(TILE_W, TILE_H);
+    // Each hex is its own fill, so float rounding at shared edges between
+    // adjacent land hexes can leave a hairline gap the sea shows through.
+    // Nudging every vertex outward from the hex centre by a hair makes
+    // neighbouring fills overlap instead of abutting exactly.
+    const cx = top.reduce((s, p) => s + p.x, 0) / top.length;
+    const cy = top.reduce((s, p) => s + p.y, 0) / top.length;
+    const inflated = top.map((p) => {
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      const pad = 0.75;
+      return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
+    });
+
+    for (const c of coords) {
+      const tile = worldModel.getTile(c.q, c.r);
+      if (tile.terrain === 'sea') continue; // open sea is just the background
+
+      const grid = isoGridPosition(c, TILE_W, TILE_H);
+      const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
+    }
+  }
+
+  /** True if the given coord or any of its neighbours is land — waves never sit this close to shore. */
+  private isNearLand(coord: AxialCoord): boolean {
+    const { worldModel } = this.options;
+    if (worldModel.getTile(coord.q, coord.r).terrain !== 'sea') return true;
+    return NEIGHBOR_DIRS.some(
+      (d) => worldModel.getTile(coord.q + d.q, coord.r + d.r).terrain !== 'sea',
+    );
+  }
+
+  // Recomputes which open-water grid points get a wave squiggle for the
+  // current viewport — same cadence as terrain (only on a cull rebuild).
+  // Animating them (drawWaves, every tick) is a separate, much cheaper step.
+  private rebuildWaves() {
+    const margin = TILE_W;
+    const rect = visibleWorldRect(this.camera, this.viewport, margin);
+    const points: WavePoint[] = [];
+
+    const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
+    const xStart = Math.floor(rect.minX / WAVE_STEP_X) * WAVE_STEP_X;
+    for (let y = yStart; y < rect.maxY; y += WAVE_STEP_Y) {
+      for (let x = xStart; x < rect.maxX; x += WAVE_STEP_X) {
+        if (hash01(x, y, 1) > WAVE_DENSITY) continue;
+        const jx = x + (hash01(x, y, 2) - 0.5) * WAVE_JITTER_X;
+        const jy = y + (hash01(x, y, 3) - 0.5) * WAVE_JITTER_Y;
+        if (this.isNearLand(isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H))) continue;
+        points.push({
+          x: jx,
+          y: jy,
+          phase: hash01(x, y, 4) * Math.PI * 2,
+          periodMs: (3.4 + hash01(x, y, 5) * 3.2) * 1000,
+        });
+      }
+    }
+    this.wavePoints = points;
+  }
+
+  // zip 7 prototype's `vr-swell`: each wave nudges up-and-right and back,
+  // independently timed — not a scrolling/drifting pattern.
+  private drawWaves() {
+    if (this.wavePoints.length === 0) {
+      this.waveLayer.clear();
+      return;
+    }
+    const now = Date.now();
+    this.waveLayer.clear();
+    for (const p of this.wavePoints) {
+      const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
+      const x = p.x + s * 7 * WAVE_SCALE;
+      const y = p.y - s * 3 * WAVE_SCALE;
+      const bump = 4.5 * WAVE_SCALE;
+      this.waveLayer
+        .moveTo(x, y)
+        .quadraticCurveTo(x + WAVE_WIDTH / 4, y - bump, x + WAVE_WIDTH / 2, y)
+        .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + bump, x + WAVE_WIDTH, y)
+        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
+    }
   }
 
   private syncSpriteLayer(
@@ -420,10 +574,34 @@ export class HexMapRenderer {
       const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
       const flat = top.flatMap((p) => [p.x, p.y]);
 
-      if (tile.ownerId && isEdgeOfClaim(worldModel, c, tile.ownerId)) {
+      if (tile.ownerId) {
         const owner = worldModel.getSettlement(tile.ownerId);
         const mine = owner?.ownerId === playerId;
-        this.borderLayer.poly(flat).stroke({ width: 3, color: mine ? GOLD : RIVAL, alpha: 0.9 });
+        const color = mine ? GOLD : RIVAL;
+
+        // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
+        // translucent fill across every owned hex ("wash"), with a
+        // brighter, thicker stroke reserved for the realm's *outer* edges
+        // only ("glow") — drawn as two overlapping strokes (a wide, faint
+        // one under a thin, solid one) to fake a soft glow without a
+        // dedicated blur filter. Previously this stroked the *entire*
+        // outline of every claimed hex, including edges shared with
+        // another owned hex, which drew a solid mesh over the whole realm
+        // instead of a border around it.
+        this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
+
+        for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
+          const a = top[edge[0]];
+          const b = top[edge[1]];
+          this.borderLayer
+            .moveTo(a.x, a.y)
+            .lineTo(b.x, b.y)
+            .stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
+          this.borderLayer
+            .moveTo(a.x, a.y)
+            .lineTo(b.x, b.y)
+            .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
+        }
       }
 
       if (visible && !visible.has(coordKey(c))) {
@@ -449,6 +627,26 @@ export class HexMapRenderer {
         .circle(center.x, center.y, 5 * this.camera.zoom + 3)
         .fill({ color: mine ? GOLD : RIVAL })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
+
+      // Settlers-II-style owner label under the marker (see
+      // prototypes/worldmap, `world()`'s `owners`/`labels` rendering).
+      const ownerLabel = this.acquireLabel();
+      ownerLabel.text = settlement.ownerName;
+      ownerLabel.style.fill = mine ? GOLD : RIVAL;
+      ownerLabel.anchor.set(0.5, 0);
+      ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
+      ownerLabel.visible = true;
+    }
+
+    for (const island of worldModel.listIslands()) {
+      const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
+      const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      const label = this.acquireLabel();
+      label.text = island.name;
+      label.style.fill = 0xe8f0f5;
+      label.anchor.set(0.5, 1);
+      label.position.set(center.x, center.y - 6 * this.camera.zoom - 4);
+      label.visible = true;
     }
 
     const now = Date.now();
@@ -464,6 +662,8 @@ export class HexMapRenderer {
       const remainingMs = Math.max(0, fleet.etaAt - now);
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
+      label.style.fill = 0xe8f0f5;
+      label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
     }
@@ -515,8 +715,24 @@ const NEIGHBOR_DIRS: AxialCoord[] = [
   { q: 0, r: 1 },
 ];
 
-function isEdgeOfClaim(worldModel: WorldModel, c: AxialCoord, ownerId: string): boolean {
-  return NEIGHBOR_DIRS.some((d) => worldModel.getTile(c.q + d.q, c.r + d.r).ownerId !== ownerId);
+// isoTopPoints()'s 6 corners (P0..P5) form edges [P0,P1],[P1,P2],...,[P5,P0];
+// this maps each NEIGHBOR_DIRS index to the corner-index pair of the one
+// edge that actually faces that neighbour (derived by comparing each
+// direction's screen-space offset to each edge's outward normal — see the
+// worked-out mapping in this file's history/PR description). Used so only
+// the realm's true outer edges get a border stroke, not every claimed
+// hex's full hexagon outline.
+const EDGE_FOR_DIR = [3, 2, 1, 0, 5, 4];
+
+/** Corner-index pairs (into isoTopPoints()) of a claimed hex's edges that face an unclaimed/rival neighbour. */
+function outerEdgesOf(worldModel: WorldModel, c: AxialCoord, ownerId: string): [number, number][] {
+  const edges: [number, number][] = [];
+  NEIGHBOR_DIRS.forEach((d, i) => {
+    if (worldModel.getTile(c.q + d.q, c.r + d.r).ownerId === ownerId) return;
+    const edge = EDGE_FOR_DIR[i];
+    edges.push([edge, (edge + 1) % 6]);
+  });
+  return edges;
 }
 
 function formatEta(ms: number): string {

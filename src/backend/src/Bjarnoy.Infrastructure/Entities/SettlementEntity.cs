@@ -41,6 +41,15 @@ public class SettlementEntity
     /// </summary>
     public required string OwnerName { get; set; }
 
+    /// <summary>
+    /// Stable identity of the founding player (a client-generated local id
+    /// today, a real account id once auth exists). Distinct from
+    /// <see cref="OwnerName"/>, which is decoration and may collide between
+    /// players; this is what <c>SettlementService.FoundAsync</c> checks to
+    /// refuse a second settlement for the same player in a world.
+    /// </summary>
+    public required string OwnerId { get; set; }
+
     /// <summary>Hex the longhouse stands on.</summary>
     public int CentreQ { get; set; }
 
@@ -50,25 +59,25 @@ public class SettlementEntity
 
     public double StockStone { get; set; }
 
-    public double StockGrain { get; set; }
+    public double StockFood { get; set; }
 
-    public double StockSilver { get; set; }
+    public double StockIron { get; set; }
 
     public double RateWood { get; set; }
 
     public double RateStone { get; set; }
 
-    public double RateGrain { get; set; }
+    public double RateFood { get; set; }
 
-    public double RateSilver { get; set; }
+    public double RateIron { get; set; }
 
     public double CapacityWood { get; set; }
 
     public double CapacityStone { get; set; }
 
-    public double CapacityGrain { get; set; }
+    public double CapacityFood { get; set; }
 
-    public double CapacitySilver { get; set; }
+    public double CapacityIron { get; set; }
 
     /// <summary>Game instant the stock above was last true.</summary>
     public DateTimeOffset SettledAt { get; set; }
@@ -79,12 +88,12 @@ public class SettlementEntity
 
     public List<BuildOrderEntity> Queue { get; set; } = [];
 
-    public ResourceAmounts Stock => new(StockWood, StockStone, StockGrain, StockSilver);
+    public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
-    public ResourceAmounts Rate => new(RateWood, RateStone, RateGrain, RateSilver);
+    public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
 
     public ResourceAmounts Capacity =>
-        new(CapacityWood, CapacityStone, CapacityGrain, CapacitySilver);
+        new(CapacityWood, CapacityStone, CapacityFood, CapacityIron);
 
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Settlement ToDomain() => new()
@@ -128,16 +137,16 @@ public class SettlementEntity
         var pool = settlement.Resources;
         StockWood = pool.Stock.Wood;
         StockStone = pool.Stock.Stone;
-        StockGrain = pool.Stock.Grain;
-        StockSilver = pool.Stock.Silver;
+        StockFood = pool.Stock.Food;
+        StockIron = pool.Stock.Iron;
         RateWood = pool.RatePerHour.Wood;
         RateStone = pool.RatePerHour.Stone;
-        RateGrain = pool.RatePerHour.Grain;
-        RateSilver = pool.RatePerHour.Silver;
+        RateFood = pool.RatePerHour.Food;
+        RateIron = pool.RatePerHour.Iron;
         CapacityWood = pool.Capacity.Wood;
         CapacityStone = pool.Capacity.Stone;
-        CapacityGrain = pool.Capacity.Grain;
-        CapacitySilver = pool.Capacity.Silver;
+        CapacityFood = pool.Capacity.Food;
+        CapacityIron = pool.Capacity.Iron;
         SettledAt = pool.SettledAt;
 
         SyncBuildings(settlement);

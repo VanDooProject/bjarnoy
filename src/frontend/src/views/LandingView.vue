@@ -1,49 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import WorldMapCanvas from '../components/map/WorldMapCanvas.vue';
-import TopBar from '../components/hud/TopBar.vue';
-import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
-import { useWorldStore } from '../stores/world';
-import { usePlayerStore } from '../stores/player';
-import type { AxialCoord } from '../lib/hex/coords';
-import type { Tile } from '../lib/map/types';
 
-const world = useWorldStore();
-const player = usePlayerStore();
 const router = useRouter();
-
-const showPrompt = ref(false);
-
-// zip 4: first interaction is a real game move (place a building / drop
-// a wall), not a form. Clicking a hex before an account exists founds the
-// player's starter settlement right there — the nickname prompt (if it
-// appears at all) comes *after*, never as a wall in front of the map.
-function onHexClick(coord: AxialCoord, tile: Tile) {
-  if (player.hasFoundedSettlement) {
-    router.push('/settlement');
-    return;
-  }
-  if (tile.terrain === 'sea') return;
-  const settlement = world.foundStartingSettlement(player.id, player.nickname ?? 'Unnamed realm', coord);
-  player.foundSettlement(settlement.id);
-  showPrompt.value = true;
-}
-
-function closePrompt() {
-  showPrompt.value = false;
-  router.push('/settlement');
-}
 </script>
 
 <template>
   <div class="landing">
-    <WorldMapCanvas :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
-    <TopBar />
-    <div v-if="!player.hasFoundedSettlement" class="hint panel">
-      <p>The world is already moving. <strong>Click any green island</strong> to make landfall — no sign-up needed yet.</p>
-    </div>
-    <NicknamePrompt v-if="showPrompt" @close="closePrompt" />
+    <header class="topbar">
+      <span class="brand">Fjørdhold</span>
+    </header>
+
+    <main class="hero">
+      <h1>Raise a realm from the sea.</h1>
+      <p class="lede">
+        Fjørdhold is a browser-based Viking settlement game. Sail into a living world map, drop your
+        longhouse on an island, and grow it hex by hex — no account, no sign-up wall, no waiting.
+      </p>
+      <button class="cta" @click="router.push('/world')">Enter the world</button>
+      <p class="fine">
+        Your first move is a real one: found a settlement straight away. A name for your realm — and an
+        account, if you ever want one — comes later, once you have something worth naming.
+      </p>
+    </main>
+
+    <footer class="foot">
+      <span>&copy; {{ new Date().getFullYear() }} Fjørdhold</span>
+      <router-link to="/impressum">Impressum</router-link>
+    </footer>
   </div>
 </template>
 
@@ -52,23 +35,75 @@ function closePrompt() {
   position: relative;
   width: 100vw;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(120% 100% at 50% 0%, #16414f 0%, #0d2530 55%, #0b1116 100%);
+  overflow: auto;
 }
-.hint {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  padding: 10px 20px;
-  max-width: min(520px, 90vw);
+.topbar {
+  padding: 20px 28px;
 }
-.hint p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--muted);
+.brand {
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  gap: 18px;
+  padding: 24px;
 }
-.hint strong {
+.hero h1 {
+  margin: 0;
+  font-size: clamp(32px, 5vw, 56px);
+  color: var(--text);
+  max-width: 18ch;
+}
+.lede {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.cta {
+  margin-top: 6px;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--gold);
+  color: #20160a;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.cta:hover {
+  filter: brightness(1.08);
+}
+.fine {
+  margin: 4px 0 0;
+  max-width: 44ch;
+  font-size: 13px;
+  color: var(--muted-2);
+}
+.foot {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  padding: 18px;
+  font-size: 13px;
+  color: var(--muted-2);
+}
+.foot a {
+  color: var(--muted-2);
+}
+.foot a:hover {
   color: var(--gold);
 }
 </style>

@@ -18,8 +18,10 @@ Focus: the **world map** — the high-level sea view showing islands, territorie
 Key design concepts extracted:
 - Islands rendered as small hexes (no images (yet)) on a sea background
 - Territory shown as coloured outlines (per player/clan) (just the hex shapes, the circles around the islands should not be implemented)
+- The pale oval ring drawn around each island in the mockup (the prototype's `sea().foam`, an ellipse traced around the island's bounding radius) is **not wanted** — do not implement it, on any sea style
 - Fleet tracks visible on the map with ETAs
 - Settlement indicators (icons/markers) on each island showing player presence
+- A grey hex is just the `mountain` terrain type like any other tile — it is not tied to the island/settlement centre and can appear anywhere a mountain hex is generated
 - waves move
 
 can be found in: `prototypes\worldmap`
@@ -36,8 +38,9 @@ Focus: **landing page / onboarding** — multiple pages and brainstorms for how 
 ![6a: but building on map](./img/but_building_on_map.png)
 
 Key design concepts extracted:
-- World view is already on screen and moving when the page loads
-- First interaction is a real game move (place a building, pick a plot, drop a wall)
+- a fixed village view is already on the screen, it should have at least 2 wood and 1 water visible so the user has a chance to get all needed starting res
+- there is text describing what to do (see screenshot or example html)
+- First interaction is a real game move (place townhall, then build a lumberjack, ...)
 - Account creation is deferred until the player has something worth naming or needs to interact with other players (so no attacks, messages, trades, etc. until they have an account)
 - Multiple distinct page layouts / onboarding flows are included
 

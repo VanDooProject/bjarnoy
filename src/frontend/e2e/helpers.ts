@@ -19,7 +19,7 @@ function landfallGrid(): Array<[number, number]> {
 
 /** Clicks around until landfall is made, confirms the nickname prompt, and waits for /settlement. */
 export async function foundSettlement(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/world');
   await page.waitForTimeout(500);
 
   const prompt = page.getByText('Landfall made.');

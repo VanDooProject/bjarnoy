@@ -25,7 +25,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BuildOrderEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CompletesAt")
@@ -60,7 +59,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.IslandEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<int>("CentreQ")
@@ -98,7 +96,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<int>("Level")
@@ -127,13 +124,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<double>("CapacityGrain")
+                    b.Property<double>("CapacityFood")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("CapacitySilver")
+                    b.Property<double>("CapacityIron")
                         .HasColumnType("double precision");
 
                     b.Property<double>("CapacityStone")
@@ -159,15 +155,20 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("OwnerName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<double>("RateGrain")
+                    b.Property<double>("RateFood")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("RateSilver")
+                    b.Property<double>("RateIron")
                         .HasColumnType("double precision");
 
                     b.Property<double>("RateStone")
@@ -179,10 +180,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("SettledAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<double>("StockGrain")
+                    b.Property<double>("StockFood")
                         .HasColumnType("double precision");
 
-                    b.Property<double>("StockSilver")
+                    b.Property<double>("StockIron")
                         .HasColumnType("double precision");
 
                     b.Property<double>("StockStone")
@@ -198,6 +199,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasIndex("IslandId");
 
+                    b.HasIndex("WorldId", "OwnerId")
+                        .IsUnique();
+
                     b.HasIndex("WorldId", "CentreQ", "CentreR")
                         .IsUnique();
 
@@ -207,7 +211,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<double>("BeachThreshold")

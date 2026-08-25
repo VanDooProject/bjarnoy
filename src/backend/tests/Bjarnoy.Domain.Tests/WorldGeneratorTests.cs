@@ -110,6 +110,18 @@ public class WorldGeneratorTests
     }
 
     [Fact]
+    public void Island_names_are_unique_within_a_world()
+    {
+        // Radius 120 packs enough islands into one world to exhaust the raw
+        // stem/ending combination space, exercising the collision-probing (and,
+        // if that space really is exhausted, the numbered-fallback) path.
+        var world = Generate(9, radius: 120);
+
+        var names = world.Islands.Select(i => i.Name).ToList();
+        Assert.Equal(names.Count, names.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
     public void Start_positions_satisfy_the_founding_rules()
     {
         var world = Generate(21, radius: 60);

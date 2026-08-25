@@ -42,7 +42,7 @@ README: "so realm borders, or mouse hover effects can be placed between
 top-ing and base tile") — a border or hover highlight sits on the ground
 and tucks under a tile's trees/building instead of being drawn as a flat
 overlay that slices across their canopy. Terrain the pack doesn't split
-(sand, mountain, sea) and the one building it doesn't split (watchtower)
+(sand, mountain, sea) and the one building it doesn't split (tower)
 fall back to their single composited image with no top layer.
 
 Since the art lives in a submodule, clone with `git clone --recurse-submodules`
@@ -78,9 +78,37 @@ Playwright needs its browser installed once: `npx playwright install
 tests then typechecks/builds; `e2e` builds and runs the Playwright suite,
 uploading the HTML report and traces if anything fails.
 
-There is no backend yet: `WorldModel` procedurally generates terrain on
-demand from a seed and everything (settlements, resources, fog of war) lives
-in memory for the session. Refreshing the page starts a new game.
+## Demo mode vs. the real backend
+
+By default (`VITE_DEMO_MODE` unset, or `npm run dev`/`preview` with no flag)
+the app runs in **demo mode**: `WorldModel` procedurally generates terrain on
+demand from a hard-coded seed and everything (settlements, resources, fog of
+war) lives in memory for the session. Refreshing the page starts a new game.
+This is what the Playwright suite exercises, since it has no backend behind
+it.
+
+Set `VITE_DEMO_MODE=false` at build time to link the app to the real backend
+(`src/backend`, see `docs/tech/backend.md`) instead: on load the landing page
+joins a running world or creates one (`src/api/client.ts`), reseeds the local
+`WorldModel` from that world's seed so the client renders the exact terrain
+the server generated, and founding a settlement is a real
+`POST /api/v1/worlds/{id}/settlements` call rather than a local mutation. Set
+`VITE_API_BASE_URL` too if the API isn't reachable at `/api/v1` on the same
+origin (it is by default in the single container `deploy/Dockerfile` builds).
+`src/config.ts` holds both flags.
+
+The settlement view's build queue is wired up too: clicking an empty owned
+hex queues a real build order (`POST /api/v1/settlements/{id}/builds`) rather
+than placing a building instantly, and the view polls
+`GET /api/v1/settlements/{id}` every few seconds to pick up completions, rate
+changes and longhouse-level border growth the player didn't cause locally
+(`WorldModel.applyServerSnapshot`). Demo mode's `placeBuilding` (an instant,
+free "hut") is unchanged and still what `npm run dev`/e2e see.
+
+Not wired up yet: territory/settlements belonging to other players, fleets,
+and the world map's abstraction of a live multi-settlement island — those
+still come entirely from the local, single-player `WorldModel` simulation
+even in live mode.
 
 ## Map performance
 

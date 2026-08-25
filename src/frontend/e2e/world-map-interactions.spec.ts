@@ -6,8 +6,29 @@ import { expect, test } from '@playwright/test';
 // "same hex lattice as the settlement view, flattened"), so both views need
 // the same regression coverage.
 test.describe('world map interactions', () => {
+  test('world map shows the hint overlay and drifts on its own before any input', async ({ page }) => {
+    await page.goto('/world');
+
+    await expect(page.getByText(/already moving/)).toBeVisible();
+    await expect(page.getByText(/Click any green island/)).toBeVisible();
+    await expect(page.getByText(/no sign-up needed yet/)).toBeVisible();
+
+    const canvas = page.locator('canvas');
+    await expect(canvas).toBeVisible();
+    const box = await canvas.boundingBox();
+    expect(box?.width).toBeGreaterThan(100);
+    expect(box?.height).toBeGreaterThan(100);
+
+    // zip 4: the camera drifts on its own before any interaction — confirm
+    // the canvas is actually being redrawn, not a static frame.
+    const before = await canvas.screenshot();
+    await page.waitForTimeout(1200);
+    const after = await canvas.screenshot();
+    expect(Buffer.compare(before, after)).not.toBe(0);
+  });
+
   test('hovering an island renders a highlight that follows the cursor', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/world');
     await page.waitForTimeout(800);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -36,7 +57,7 @@ test.describe('world map interactions', () => {
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
-    await page.goto('/');
+    await page.goto('/world');
     await page.waitForTimeout(800);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -63,7 +84,7 @@ test.describe('world map interactions', () => {
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
-    await page.goto('/');
+    await page.goto('/world');
     await page.waitForTimeout(800);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;

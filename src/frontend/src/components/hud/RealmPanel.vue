@@ -21,7 +21,7 @@ const claimedHexes = computed(() =>
       <span class="level pill">Lv {{ settlement.level }}</span>
     </div>
     <p class="sub">Longhouse claims a border-{{ claimedHexes }} realm</p>
-    <button class="back" @click="router.push('/')">← World map</button>
+    <button class="back" @click="router.push('/world')">← World map</button>
   </div>
 </template>
 

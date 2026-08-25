@@ -6,9 +6,16 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
-import type { Fleet, Settlement, Tile } from './types';
+import type { Fleet, IslandLabel, Resources, Settlement, Tile } from './types';
 
 const BASE_BORDER_RADIUS = 2;
+// zip 9: "unexplored hexes are hidden; scouted but not currently-visible
+// hexes are greyed out" — three distinct rings, not two. Ownership only ever
+// reaches borderRadius, visibleHexes (line-of-sight) reaches one hex further,
+// and explored reaches further still so there's an actual ring of greyed-out
+// scouted terrain between the clear realm and the hidden unknown, instead of
+// unexplored starting immediately at the border.
+const FOG_SCOUT_RING = 3;
 
 export class WorldModel {
   readonly seed: number;
@@ -17,9 +24,20 @@ export class WorldModel {
   private fleets = new Map<string, Fleet>();
   private explored = new Set<string>();
   private lastTick = performance.now();
+  /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
+  private islands: IslandLabel[] = [];
 
   constructor(seed = 1) {
     this.seed = seed;
+  }
+
+  /** Live mode: island names/centres fetched from the backend (see `stores/world.ts`). */
+  setIslands(islands: IslandLabel[]) {
+    this.islands = islands;
+  }
+
+  listIslands(): IslandLabel[] {
+    return this.islands;
   }
 
   getTile(q: number, r: number): Tile {
@@ -56,11 +74,12 @@ export class WorldModel {
     return null;
   }
 
-  foundSettlement(ownerId: string, name: string, at: AxialCoord): Settlement {
+  foundSettlement(ownerId: string, ownerName: string, name: string, at: AxialCoord): Settlement {
     const id = `stl_${ownerId}_${Date.now().toString(36)}`;
-    const settlement: Settlement = {
+    return this.registerSettlement({
       id,
       ownerId,
+      ownerName,
       name,
       q: at.q,
       r: at.r,
@@ -68,15 +87,27 @@ export class WorldModel {
       resources: { wood: 400, stone: 300, food: 500, iron: 100 },
       rates: { wood: 60, stone: 45, food: 90, iron: 20 },
       foundedAt: Date.now(),
-    };
-    this.settlements.set(id, settlement);
+    });
+  }
+
+  /**
+   * Registers a fully-formed settlement — used when the backend (not this
+   * client) is the source of truth for identity and starting stock (live
+   * mode; see `stores/world.ts`). Claims its border hexes exactly like
+   * `foundSettlement`, which delegates here for the demo-mode case.
+   */
+  registerSettlement(settlement: Settlement): Settlement {
+    this.settlements.set(settlement.id, settlement);
+    const at = { q: settlement.q, r: settlement.r };
     const home = this.getTile(at.q, at.r);
-    home.ownerId = id;
+    home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
     home.buildingLevel = 1;
     for (const c of hexesInRadius(at, this.borderRadius(settlement))) {
       const tile = this.getTile(c.q, c.r);
-      if (!tile.ownerId) tile.ownerId = id;
+      if (!tile.ownerId) tile.ownerId = settlement.id;
+    }
+    for (const c of hexesInRadius(at, this.exploredRadius(settlement))) {
       this.explored.add(coordKey(c));
     }
     return settlement;
@@ -100,9 +131,56 @@ export class WorldModel {
     return new Set(hexesInRadius({ q: settlement.q, r: settlement.r }, radius).map(coordKey));
   }
 
+  /** Hexes that get marked "ever scouted" once claimed/leveled — wider than visibleHexes so a ring of greyed-out fog actually renders beyond it. */
+  private exploredRadius(settlement: Settlement): number {
+    return this.borderRadius(settlement) + FOG_SCOUT_RING;
+  }
+
   /** Hexes ever scouted — greyed out (not live) once out of sight. */
   isExplored(q: number, r: number): boolean {
     return this.explored.has(coordKey({ q, r }));
+  }
+
+  /**
+   * Applies a settlement snapshot fetched from the backend (live mode; see
+   * `stores/world.ts`) — resources/rate/level and any buildings the queue has
+   * completed since the last poll. Only building types the frontend has art
+   * for are placed on their hex; the rest are silently skipped rather than
+   * risking a texture lookup failure (see `lib/map/textures.ts`).
+   */
+  applyServerSnapshot(
+    settlementId: string,
+    snapshot: {
+      level: number;
+      resources: Resources;
+      rates: Resources;
+      buildings: { q: number; r: number; type: string; level: number }[];
+    },
+  ) {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return;
+
+    if (snapshot.level > settlement.level) {
+      settlement.level = snapshot.level;
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.borderRadius(settlement))) {
+        const tile = this.getTile(c.q, c.r);
+        if (!tile.ownerId) tile.ownerId = settlementId;
+      }
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.exploredRadius(settlement))) {
+        this.explored.add(coordKey(c));
+      }
+    }
+    settlement.resources = snapshot.resources;
+    settlement.rates = snapshot.rates;
+
+    const RENDERABLE_TYPES = new Set(['longhouse', 'farm', 'tower']);
+    for (const building of snapshot.buildings) {
+      if (!RENDERABLE_TYPES.has(building.type)) continue;
+      const tile = this.getTile(building.q, building.r);
+      tile.ownerId = settlementId;
+      tile.buildingType = building.type as Tile['buildingType'];
+      tile.buildingLevel = building.level;
+    }
   }
 
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {

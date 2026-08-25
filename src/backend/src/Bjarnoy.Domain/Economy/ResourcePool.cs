@@ -200,8 +200,8 @@ public readonly record struct ResourcePool
         {
             (current.Wood, cost.Wood, RatePerHour.Wood),
             (current.Stone, cost.Stone, RatePerHour.Stone),
-            (current.Grain, cost.Grain, RatePerHour.Grain),
-            (current.Silver, cost.Silver, RatePerHour.Silver),
+            (current.Food, cost.Food, RatePerHour.Food),
+            (current.Iron, cost.Iron, RatePerHour.Iron),
         })
         {
             var shortfall = need - have;
