@@ -16,3 +16,12 @@
 # tests
 - tests need to be meaningful and not test third party stuff
 - for e2e tests increasing timeouts is usually not the fix for an issue, most of the time its wrong/broken selectors
+
+# interaction between u (AI) and user (me)
+
+## github cloud agent
+- add screenshots to PR comments
+
+## CLAUDE
+- ask questions if anything is unclear or you need more context
+- if u take screenshots always show the in chat to me too
