@@ -6,7 +6,7 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
-import type { Fleet, Resources, Settlement, Tile } from './types';
+import type { Fleet, IslandLabel, Resources, Settlement, Tile } from './types';
 
 const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
@@ -24,9 +24,20 @@ export class WorldModel {
   private fleets = new Map<string, Fleet>();
   private explored = new Set<string>();
   private lastTick = performance.now();
+  /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
+  private islands: IslandLabel[] = [];
 
   constructor(seed = 1) {
     this.seed = seed;
+  }
+
+  /** Live mode: island names/centres fetched from the backend (see `stores/world.ts`). */
+  setIslands(islands: IslandLabel[]) {
+    this.islands = islands;
+  }
+
+  listIslands(): IslandLabel[] {
+    return this.islands;
   }
 
   getTile(q: number, r: number): Tile {
@@ -63,11 +74,12 @@ export class WorldModel {
     return null;
   }
 
-  foundSettlement(ownerId: string, name: string, at: AxialCoord): Settlement {
+  foundSettlement(ownerId: string, ownerName: string, name: string, at: AxialCoord): Settlement {
     const id = `stl_${ownerId}_${Date.now().toString(36)}`;
     return this.registerSettlement({
       id,
       ownerId,
+      ownerName,
       name,
       q: at.q,
       r: at.r,

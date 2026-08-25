@@ -14,7 +14,15 @@ import type { Tile } from '../lib/map/types';
 const world = useWorldStore();
 const player = usePlayerStore();
 
-onMounted(() => world.startHudSync());
+onMounted(async () => {
+  // A direct load of /settlement (reload, deep link) arrives here before
+  // WorldMapView ever mounts, so this view needs its own bootstrap/restore
+  // instead of assuming `world.selectedSettlementId` is already set.
+  if (!DEMO_MODE && player.hasFoundedSettlement && player.settlementId) {
+    await world.restoreLiveSettlement(player.id, player.settlementId);
+  }
+  world.startHudSync();
+});
 onUnmounted(() => world.stopHudSync());
 
 // zip 9: hover = stats tooltip, click = build. Kept minimal here — clicking

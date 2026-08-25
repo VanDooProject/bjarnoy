@@ -9,6 +9,7 @@ import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
+import { ApiError } from '../api/client';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
 
@@ -19,9 +20,18 @@ const router = useRouter();
 const showPrompt = ref(false);
 const founding = ref(false);
 
-onMounted(() => {
-  void world.bootstrapLiveWorld();
-  if (player.hasFoundedSettlement) world.startHudSync();
+onMounted(async () => {
+  // Sequenced (not fire-and-forget in parallel): `restoreLiveSettlement`
+  // also calls `bootstrapLiveWorld()` internally, and `refreshWorldSettlements`
+  // needs `selectedSettlementId` already set so it doesn't briefly register
+  // this player's own settlement as a rival (wrong `ownerId`) before
+  // `restoreLiveSettlement` corrects it.
+  await world.bootstrapLiveWorld();
+  if (player.hasFoundedSettlement && player.settlementId) {
+    await world.restoreLiveSettlement(player.id, player.settlementId);
+    world.startHudSync();
+  }
+  void world.refreshWorldSettlements();
 });
 onUnmounted(() => world.stopHudSync());
 
@@ -37,7 +47,8 @@ async function onHexClick(coord: AxialCoord, tile: Tile) {
   if (tile.terrain === 'sea' || founding.value) return;
 
   if (DEMO_MODE) {
-    const settlement = world.foundStartingSettlement(player.id, player.nickname ?? 'Unnamed realm', coord);
+    const realmName = player.nickname ? `${player.nickname}'s realm` : 'Unnamed realm';
+    const settlement = world.foundStartingSettlement(player.id, player.ownerName, realmName, coord);
     player.foundSettlement(settlement.id);
     world.startHudSync();
     showPrompt.value = true;
@@ -47,12 +58,19 @@ async function onHexClick(coord: AxialCoord, tile: Tile) {
   founding.value = true;
   try {
     const realmName = player.nickname ? `${player.nickname}'s realm` : 'Unnamed realm';
-    const settlement = await world.foundStartingSettlementLive(player.ownerName, realmName, coord);
+    const settlement = await world.foundStartingSettlementLive(player.id, player.ownerName, realmName, coord);
     player.foundSettlement(settlement.id);
     world.startHudSync();
     showPrompt.value = true;
   } catch (err) {
-    console.error('Failed to found settlement against the backend', err);
+    if (err instanceof ApiError && err.status === 409) {
+      // This player already has a settlement in this world (rejected by
+      // `FoundingRejection.AlreadyFounded`) — most likely another tab/reload
+      // raced ahead of this one. Route to it instead of leaving a dead end.
+      router.push('/settlement');
+    } else {
+      console.error('Failed to found settlement against the backend', err);
+    }
   } finally {
     founding.value = false;
   }

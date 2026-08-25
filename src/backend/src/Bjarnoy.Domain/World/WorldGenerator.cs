@@ -41,6 +41,7 @@ public sealed class WorldGenerator
         var land = ClassifyLand(cancellationToken);
         var islands = new List<GeneratedIsland>();
         var visited = new HashSet<HexCoord>();
+        var usedNames = new HashSet<string>(StringComparer.Ordinal);
 
         // Scanning in sorted order (rather than in hash-set order) is what makes
         // island indices stable for a given seed.
@@ -63,7 +64,7 @@ public sealed class WorldGenerator
             islands.Add(new GeneratedIsland
             {
                 Index = index,
-                Name = IslandNames.For(_options.Seed, index),
+                Name = NextUniqueName(index, usedNames),
                 Tiles = tiles,
                 Centre = CentreOf(tiles),
                 StartPositions = FindStartPositions(tiles, land),
@@ -124,6 +125,37 @@ public sealed class WorldGenerator
         }
 
         return tiles;
+    }
+
+    /// <summary>
+    /// Picks a name for the island at <paramref name="index"/> that no earlier
+    /// island in this world already has, trying successive candidates from
+    /// <see cref="IslandNames"/> until one is free.
+    /// </summary>
+    private string NextUniqueName(int index, HashSet<string> usedNames)
+    {
+        for (var attempt = 0; attempt < IslandNames.CombinationsPerIsland; attempt++)
+        {
+            var candidate = IslandNames.For(_options.Seed, index, attempt);
+            if (usedNames.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        // Every stem/ending combination is already spoken for (a world with more
+        // islands than the name list has room for): fall back to a numbered
+        // variant of the first candidate rather than looping forever.
+        var fallback = IslandNames.For(_options.Seed, index);
+        var suffix = 2;
+        string numbered;
+        do
+        {
+            numbered = $"{fallback} {suffix++}";
+        }
+        while (!usedNames.Add(numbered));
+
+        return numbered;
     }
 
     /// <summary>

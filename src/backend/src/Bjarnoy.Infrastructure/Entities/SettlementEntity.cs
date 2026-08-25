@@ -41,6 +41,15 @@ public class SettlementEntity
     /// </summary>
     public required string OwnerName { get; set; }
 
+    /// <summary>
+    /// Stable identity of the founding player (a client-generated local id
+    /// today, a real account id once auth exists). Distinct from
+    /// <see cref="OwnerName"/>, which is decoration and may collide between
+    /// players; this is what <c>SettlementService.FoundAsync</c> checks to
+    /// refuse a second settlement for the same player in a world.
+    /// </summary>
+    public required string OwnerId { get; set; }
+
     /// <summary>Hex the longhouse stands on.</summary>
     public int CentreQ { get; set; }
 

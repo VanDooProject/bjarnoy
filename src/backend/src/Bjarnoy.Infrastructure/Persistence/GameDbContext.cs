@@ -80,11 +80,17 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             settlement.Property(s => s.Id).ValueGeneratedNever();
             settlement.Property(s => s.Name).HasMaxLength(100).IsRequired();
             settlement.Property(s => s.OwnerName).HasMaxLength(100).IsRequired();
+            settlement.Property(s => s.OwnerId).HasMaxLength(200).IsRequired();
 
             // One settlement per hex per world: two players cannot found on the
             // same plot, and the database is what makes that a race-proof rule
             // rather than a check-then-act.
             settlement.HasIndex(s => new { s.WorldId, s.CentreQ, s.CentreR }).IsUnique();
+
+            // One settlement per player per world, for the same reason — this is
+            // the "no second village (yet)" rule from MECHANICS.md, enforced at
+            // the database rather than only checked in the service.
+            settlement.HasIndex(s => new { s.WorldId, s.OwnerId }).IsUnique();
 
             settlement.HasOne(s => s.World)
                 .WithMany(w => w.Settlements)
