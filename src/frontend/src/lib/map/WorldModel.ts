@@ -131,8 +131,14 @@ export class WorldModel {
     return new Set(hexesInRadius({ q: settlement.q, r: settlement.r }, radius).map(coordKey));
   }
 
-  /** Hexes that get marked "ever scouted" once claimed/leveled — wider than visibleHexes so a ring of greyed-out fog actually renders beyond it. */
-  private exploredRadius(settlement: Settlement): number {
+  /**
+   * Hexes that get marked "ever scouted" once claimed/leveled — wider than
+   * visibleHexes so a ring of greyed-out fog actually renders beyond it.
+   * Public so HexMapRenderer can frame the initial camera wide enough to
+   * show a real margin of white (unexplored) fog past this ring, rather
+   * than a zoom level tight enough to hide it entirely.
+   */
+  exploredRadius(settlement: Settlement): number {
     return this.borderRadius(settlement) + FOG_SCOUT_RING;
   }
 

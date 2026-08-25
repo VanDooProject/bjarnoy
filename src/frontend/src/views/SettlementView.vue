@@ -116,6 +116,13 @@ async function upgrade() {
       @hex-click="onHexClick"
       @hover="onHover"
     />
+    <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
+         much lighter than the old backdrop this HUD chrome was designed
+         against, and can sit right behind the top bar depending on where
+         the camera starts — this scrim (matching Viking Realm.dc.html's own
+         top-bar gradient) keeps the logo/resources/nav readable regardless
+         of what's under them. -->
+    <div class="hud-scrim" />
     <TopBar />
     <HudNav />
     <ResourceBar />
@@ -140,5 +147,15 @@ async function upgrade() {
   position: relative;
   width: 100vw;
   height: 100vh;
+}
+.hud-scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 110px;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
 }
 </style>

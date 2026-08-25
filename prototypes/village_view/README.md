@@ -62,3 +62,32 @@ first result is worth saving (or before the first attack can reach them).
 its top edge starts at y=140 in the image. Neighbour offsets are therefore
 `dx=±150, dy=∓46` (diagonals), `dy=±92` (up/down) — an odd-q offset grid. The world map uses
 the same lattice with flat 2D hexes, so both views read as the same space at different zoom.
+
+## 4. Fog of war, as implemented
+
+The decision table above says "unexplored hexes are hidden; scouted but not currently-visible
+hexes are greyed out." The mockup itself (`fogAt()` in `Viking Realm.dc.html`) renders this as
+one continuous white-mist gradient whose opacity grows with distance from your line of sight —
+there's no hard line between "hidden" and "greyed out" in the prototype's own math. The live
+implementation (`src/frontend/src/lib/map/HexMapRenderer.ts`) instead draws it as two distinct,
+named tiers, matching the decision table's own wording more literally:
+
+| Tier | Radius (from settlement centre) | Look | Constant |
+|---|---|---|---|
+| Visible | `borderRadius + 1` | Clear — full tile art, no overlay | — |
+| Scouted, not visible | out to `borderRadius + 3` | Terrain still drawn, dark tint over it | `FOG_SCOUTED` (`0x0b1116`, ~55% alpha) |
+| Unexplored | everything past that | **True fog** — no terrain sprite is drawn at all, just a dense near-opaque white fill | `FOG_UNEXPLORED` (`0xe9f0f4`, ~90–98% alpha) |
+
+Both tiers are drawn as one hex-fill per hex on the same PixiJS `Graphics` layer
+(`HexMapRenderer.rebuildBordersAndFog`), which carries a `BlurFilter` so the hard hex edges read
+as soft mist rather than a tiled grid — closer to the mockup's blurred-cloud look. Per-hex alpha
+jitter (reusing the wave layer's hash noise) keeps large fogged areas from reading as one flat
+sheet.
+
+The unexplored tier is recomputed for whatever the camera can currently see (`visibleCoords()`'s
+cull, not a fixed world boundary), so it keeps covering new ground as far as the camera pans in
+any direction — the map has no edge. The initial camera zoom (`zoomForFogMargin`) is chosen so at
+least 10 hexes of unexplored fog are visible past the settlement's scouted ring on every side
+*without panning first*, so a new settlement reads as a clearing in a foggy, unbounded world from
+the first frame rather than a bounded island that only turns out to be foggy once you go looking
+for the edge.

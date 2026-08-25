@@ -32,9 +32,9 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { Application, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
+import { Application, BlurFilter, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey } from '../hex/coords';
+import { coordKey, hexesInRadius } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -169,7 +169,19 @@ const TILE_CANVAS_H = TILE_W * (TILE_ART_NATIVE_H / TILE_ART_NATIVE_W);
 const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
+// Ceiling for the settlement camera's initial zoom — settlement level 1's
+// explored radius is ~5 hexes, which at 0.85 filled almost the entire
+// default viewport on its own, hiding the fog entirely until the player
+// panned. zoomForFogMargin picks the real initial zoom (usually well below
+// this) so FOG_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
+// How many hexes of white (unexplored) fog zoomForFogMargin guarantees
+// visible past the settlement's explored ring, on every side, at rest.
+const FOG_MARGIN_HEXES = 10;
+// Floor for zoomForFogMargin — a very high-level settlement's explored ring
+// is already large, and without a floor the margin target would zoom out
+// far enough to make individual hexes too small to read or click precisely.
+const FOG_MARGIN_MIN_ZOOM = 0.22;
 
 export class HexMapRenderer {
   private app: Application | null = null;
@@ -217,7 +229,35 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     if (!settlement) return { x: 0, y: 0, zoom: SETTLEMENT_DEFAULT_ZOOM };
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
-    return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom: SETTLEMENT_DEFAULT_ZOOM };
+    const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+    return { ...center, zoom: this.zoomForFogMargin(settlement, center) };
+  }
+
+  /**
+   * Picks the initial settlement zoom so at least FOG_MARGIN_HEXES of white
+   * (unexplored) fog is visible past the settlement's explored ring on
+   * every side, without the camera ever having to pan first — the map
+   * should read as continuing under fog from the very first frame, not
+   * just after the player happens to drag far enough to find the edge.
+   * Falls back to SETTLEMENT_DEFAULT_ZOOM before the viewport size is known
+   * (constructor time) or if a wider margin would need to zoom in past it
+   * (a high-level settlement's own explored ring is already generous).
+   */
+  private zoomForFogMargin(settlement: Settlement, center: { x: number; y: number }): number {
+    if (this.viewport.width === 0 || this.viewport.height === 0) return SETTLEMENT_DEFAULT_ZOOM;
+
+    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_MARGIN_HEXES;
+    let maxDx = 0;
+    let maxDy = 0;
+    for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, targetRadius)) {
+      const g = isoGridPosition(c, TILE_W, TILE_H);
+      maxDx = Math.max(maxDx, Math.abs(g.x + TILE_W / 2 - center.x));
+      maxDy = Math.max(maxDy, Math.abs(g.y + TILE_H / 2 - center.y));
+    }
+    if (maxDx === 0 || maxDy === 0) return SETTLEMENT_DEFAULT_ZOOM;
+
+    const zoom = Math.min((this.viewport.width / 2) / maxDx, (this.viewport.height / 2) / maxDy);
+    return Math.min(SETTLEMENT_DEFAULT_ZOOM, Math.max(FOG_MARGIN_MIN_ZOOM, zoom));
   }
 
   private settlement(): Settlement | undefined {
@@ -238,11 +278,22 @@ export class HexMapRenderer {
     });
     this.app = app;
     this.viewport = { width, height };
+    // zoomForFogMargin needs the real viewport size to pick a zoom — the
+    // constructor ran before it, with viewport still {0,0}, so the camera
+    // it produced there fell back to SETTLEMENT_DEFAULT_ZOOM. Redo it now
+    // that the viewport is actually known.
+    if (this.options.mode === 'settlement') this.camera = this.settlementCameraOrigin();
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large, submodule-backed) texture
     // pack at all — only settlement mode loads it.
     this.textures = this.options.mode === 'settlement' ? await loadTileTextures() : null;
     if (this.destroyed) return;
+
+    // Softens the fog layer's hard hex edges into the mockup's blurred
+    // mist-cloud look (Viking Realm.dc.html's `fogs`: a blurred radial
+    // gradient per hex) instead of a flat tiled sheet — cheap since it's one
+    // filter over one Graphics layer, not per-hex.
+    this.fogLayer.filters = [new BlurFilter({ strength: 10, quality: 3 })];
 
     this.world.addChild(
       this.terrainBase.container,
