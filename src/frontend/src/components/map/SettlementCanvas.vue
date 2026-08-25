@@ -4,9 +4,10 @@ import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
+import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 
 const props = defineProps<{ worldModel: WorldModel; playerId: string; settlementId: string }>();
-const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile] }>();
+const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile]; hover: [info: HoverInfo | null] }>();
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -17,6 +18,7 @@ useHexMapRenderer(canvas, container, {
   playerId: props.playerId,
   settlementId: props.settlementId,
   onHexClick: (coord, tile) => emit('hex-click', coord, tile),
+  onHoverChange: (info) => emit('hover', info),
 });
 </script>
 

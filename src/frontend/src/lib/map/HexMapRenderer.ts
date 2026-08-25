@@ -127,7 +127,33 @@ export interface HexMapRendererOptions {
   /** Only relevant in 'settlement' mode: the settlement being viewed. */
   settlementId?: string;
   onHexClick?: (coord: AxialCoord, tile: Tile) => void;
+  /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
+  onHoverChange?: (info: HoverInfo | null) => void;
 }
+
+/** What the settlement view's hover tooltip needs, plus screen position to anchor it. */
+export interface HoverInfo {
+  screenX: number;
+  screenY: number;
+  title: string;
+  subtitle: string;
+  stat: string;
+}
+
+const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
+  longhouse: 'Longhouse',
+  hut: 'Hut',
+  farm: 'Farm',
+  tower: 'Watchtower',
+};
+
+const TERRAIN_LABELS: Record<Terrain, string> = {
+  sea: 'Open water',
+  sand: 'Shore',
+  grass: 'Grassland',
+  forest: 'Forest',
+  mountain: 'Mountain',
+};
 
 // One tile-art size for both views — see the module comment above.
 const TILE_W = 168;
@@ -315,12 +341,21 @@ export class HexMapRenderer {
     if (key === this.hoveredKey) return;
     this.hoveredKey = key;
     this.hoverLayer.clear();
-    if (!coord) return;
+    if (!coord) {
+      this.options.onHoverChange?.(null);
+      return;
+    }
 
     const { worldModel, mode } = this.options;
-    if (mode === 'settlement' && !worldModel.isExplored(coord.q, coord.r)) return;
+    if (mode === 'settlement' && !worldModel.isExplored(coord.q, coord.r)) {
+      this.options.onHoverChange?.(null);
+      return;
+    }
     const tile = worldModel.getTile(coord.q, coord.r);
-    if (mode === 'world' && tile.terrain === 'sea') return;
+    if (mode === 'world' && tile.terrain === 'sea') {
+      this.options.onHoverChange?.(null);
+      return;
+    }
 
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
@@ -328,6 +363,37 @@ export class HexMapRenderer {
       .poly(flat)
       .fill({ color: HOVER_FILL, alpha: 0.28 })
       .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+
+    if (mode === 'settlement') this.options.onHoverChange?.(this.hoverInfoFor(tile, grid));
+  }
+
+  private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
+    const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+    const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
+    const mine = owner?.ownerId === this.options.playerId;
+
+    if (tile.buildingType) {
+      const title = BUILDING_LABELS[tile.buildingType];
+      const subtitle = owner ? (mine ? owner.name : `${owner.ownerName}'s ${owner.name}`) : title;
+      return { screenX: screen.x, screenY: screen.y, title, subtitle, stat: `Level ${tile.buildingLevel ?? 1}` };
+    }
+    if (owner) {
+      const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
+      return {
+        screenX: screen.x,
+        screenY: screen.y,
+        title: TERRAIN_LABELS[tile.terrain],
+        subtitle,
+        stat: mine ? 'Click to build here' : 'Claimed ground',
+      };
+    }
+    return {
+      screenX: screen.x,
+      screenY: screen.y,
+      title: TERRAIN_LABELS[tile.terrain],
+      subtitle: 'Unclaimed',
+      stat: '',
+    };
   }
 
   private onWheel = (e: WheelEvent) => {

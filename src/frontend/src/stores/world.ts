@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 import { api } from '../api/client';
-import type { IslandResponse } from '../api/types';
+import type { BuildOrderResponse, IslandResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
@@ -26,6 +26,15 @@ export const useWorldStore = defineStore('world', {
       rates: emptyResources() as Resources,
       settlementName: '',
       level: 1,
+      // zip 9: "real-time elements: build queue countdowns" — a snapshot of
+      // the backend's queue plus when it was fetched, so BuildQueuePanel can
+      // count each order down locally between polls instead of only
+      // updating every LIVE_POLL_MS. Always empty in demo mode: the local
+      // WorldModel places buildings instantly and has no queue to show.
+      queue: [] as BuildOrderResponse[],
+      queueFetchedAt: 0,
+      /** Increments every syncHud tick (1s) — a cheap reactive dependency for countdown displays. */
+      tick: 0,
     },
     syncHandle: null as ReturnType<typeof setInterval> | null,
     livePollHandle: null as ReturnType<typeof setInterval> | null,
@@ -156,6 +165,8 @@ export const useWorldStore = defineStore('world', {
         rates: { ...response.resources.ratePerHour },
         buildings: response.buildings,
       });
+      this.hud.queue = response.queue;
+      this.hud.queueFetchedAt = Date.now();
       this.syncHud();
     },
     /**
@@ -221,6 +232,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.rates = { ...settlement.rates };
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
+      this.hud.tick += 1;
     },
     startHudSync() {
       this.stopHudSync();
