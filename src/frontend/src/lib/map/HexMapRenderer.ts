@@ -550,7 +550,12 @@ export class HexMapRenderer {
     const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
 
     for (const c of coords) {
-      if (!worldModel.isExplored(c.q, c.r)) continue; // true fog: not drawn
+      // Terrain is drawn everywhere the camera can see, explored or not —
+      // the unexplored fog (rebuildBordersAndFog) now fades in gradually
+      // over FOG_MARGIN_HEXES rather than snapping straight to opaque, so
+      // ground needs to actually be there to show through the thin part of
+      // the mist instead of the tile popping into existence once the fog
+      // fully clears.
       const tile = worldModel.getTile(c.q, c.r);
 
       const key = coordKey(c);
@@ -714,16 +719,24 @@ export class HexMapRenderer {
 
     for (const c of coords) {
       if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) {
-        // A dense white mist over ground the settlement has never scouted —
-        // covers every hex the camera can currently see, however far it's
-        // panned, so the world reads as continuing forever under fog rather
-        // than ending at a hard edge. Slight per-hex alpha jitter (same
-        // hash01 noise the wave layer uses) keeps it from reading as one
-        // flat, obviously-tiled sheet.
+        // A white mist over ground the settlement has never scouted — covers
+        // every hex the camera can currently see, however far it's panned,
+        // so the world reads as continuing forever under fog rather than
+        // ending at a hard edge. Terrain is still drawn underneath
+        // (rebuildTerrain no longer skips unexplored hexes), so instead of a
+        // hard white wall right past the scouted ring, the mist fades in
+        // over FOG_MARGIN_HEXES hexes — thin enough at the ring's edge to
+        // let ground show through, thickening to near-opaque by the time the
+        // camera's default fog margin ends. Slight per-hex alpha jitter
+        // (same hash01 noise the wave layer uses) keeps it from reading as
+        // one flat, obviously-tiled sheet.
         const grid = isoGridPosition(c, TILE_W, TILE_H);
         const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
         const jitter = hash01(c.q, c.r, 9);
-        this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha: 0.9 + jitter * 0.08 });
+        const beyond = worldModel.distanceBeyondExplored(c.q, c.r);
+        const t = Math.min(1, beyond / FOG_MARGIN_HEXES);
+        const alpha = 0.1 + t * 0.8 + jitter * 0.08;
+        this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha });
         continue;
       }
       const tile = worldModel.getTile(c.q, c.r);

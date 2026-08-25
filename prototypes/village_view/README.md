@@ -76,13 +76,22 @@ named tiers, matching the decision table's own wording more literally:
 |---|---|---|---|
 | Visible | `borderRadius + 1` | Clear — full tile art, no overlay | — |
 | Scouted, not visible | out to `borderRadius + 3` | Terrain still drawn, dark tint over it | `FOG_SCOUTED` (`0x0b1116`, ~55% alpha) |
-| Unexplored | everything past that | **True fog** — no terrain sprite is drawn at all, just a dense near-opaque white fill | `FOG_UNEXPLORED` (`0xe9f0f4`, ~90–98% alpha) |
+| Unexplored | everything past that | Terrain is *still drawn* underneath; white mist fades in over it | `FOG_UNEXPLORED` (`0xe9f0f4`, 10–90% alpha) |
 
 Both tiers are drawn as one hex-fill per hex on the same PixiJS `Graphics` layer
 (`HexMapRenderer.rebuildBordersAndFog`), which carries a `BlurFilter` so the hard hex edges read
 as soft mist rather than a tiled grid — closer to the mockup's blurred-cloud look. Per-hex alpha
 jitter (reusing the wave layer's hash noise) keeps large fogged areas from reading as one flat
 sheet.
+
+Unlike the scouted tier, the unexplored tier is **not** a hard cutoff. Terrain sprites are drawn
+for every hex the camera can see regardless of exploration state (`rebuildTerrain` no longer skips
+unexplored hexes), and the mist's alpha ramps from ~10% right past the scouted ring up to ~90% over
+the next `FOG_MARGIN_HEXES` (10) hexes (`WorldModel.distanceBeyondExplored` + the same constant the
+initial-zoom calc below uses), then stays there. So the fringe of unexplored ground reads as
+terrain rolling into mist, not a wall of white with nothing behind it — closer to the mockup's own
+continuous `fogAt()` gradient than a binary hidden/visible split, while still keeping the two named
+tiers the decision table calls for.
 
 The unexplored tier is recomputed for whatever the camera can currently see (`visibleCoords()`'s
 cull, not a fixed world boundary), so it keeps covering new ground as far as the camera pans in

@@ -148,6 +148,23 @@ export class WorldModel {
   }
 
   /**
+   * For an unexplored hex, how many hex-steps past the nearest settlement's
+   * scouted ring (`exploredRadius`) it sits. Used by the renderer to fade
+   * the unexplored fog in gradually from the ring's edge instead of a hard
+   * white wall, so terrain drawn underneath (still true, just never
+   * scouted) reads as a mist rolling in rather than a sudden cutoff.
+   * 0 right past the ring, growing outward; Infinity with no settlements.
+   */
+  distanceBeyondExplored(q: number, r: number): number {
+    let min = Infinity;
+    for (const settlement of this.settlements.values()) {
+      const d = hexDistance({ q: settlement.q, r: settlement.r }, { q, r }) - this.exploredRadius(settlement);
+      if (d < min) min = d;
+    }
+    return min === Infinity ? Infinity : Math.max(0, min);
+  }
+
+  /**
    * Applies a settlement snapshot fetched from the backend (live mode; see
    * `stores/world.ts`) — resources/rate/level and any buildings the queue has
    * completed since the last poll. Only building types the frontend has art
