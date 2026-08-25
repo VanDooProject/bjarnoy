@@ -751,8 +751,9 @@ export class HexMapRenderer {
         const grid = isoGridPosition(c, TILE_W, TILE_H);
         const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
         const jitter = hash01(c.q, c.r, 9);
-        const beyond = worldModel.distanceBeyondExplored(c.q, c.r);
-        const t = Math.min(1, beyond / FOG_MARGIN_HEXES);
+        const edgeNoise = (hash01(c.q, c.r, 13) - 0.5) * 2 * FOG_EDGE_NOISE_HEXES;
+        const beyond = worldModel.distanceBeyondExplored(c.q, c.r) + edgeNoise;
+        const t = Math.min(1, Math.max(0, beyond / FOG_MARGIN_HEXES));
         const alpha = 0.1 + t * 0.8 + jitter * 0.08;
         this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha });
         continue;

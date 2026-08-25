@@ -86,12 +86,20 @@ sheet.
 
 Unlike the scouted tier, the unexplored tier is **not** a hard cutoff. Terrain sprites are drawn
 for every hex the camera can see regardless of exploration state (`rebuildTerrain` no longer skips
-unexplored hexes), and the mist's alpha ramps from ~10% right past the scouted ring up to ~90% over
-the next `FOG_MARGIN_HEXES` (10) hexes (`WorldModel.distanceBeyondExplored` + the same constant the
-initial-zoom calc below uses), then stays there. So the fringe of unexplored ground reads as
-terrain rolling into mist, not a wall of white with nothing behind it — closer to the mockup's own
-continuous `fogAt()` gradient than a binary hidden/visible split, while still keeping the two named
-tiers the decision table calls for.
+unexplored hexes — it only stops past `FOG_TERRAIN_CULL_HEXES` (20), purely to save draw calls once
+the fog above is already opaque and nothing would show through anyway), and the mist's alpha ramps
+from ~10% right past the scouted ring up to ~90% over the next `FOG_MARGIN_HEXES` (10) hexes
+(`WorldModel.distanceBeyondExplored` + the same constant the initial-zoom calc below uses), then
+stays there. So the fringe of unexplored ground reads as terrain rolling into mist, not a wall of
+white with nothing behind it — closer to the mockup's own continuous `fogAt()` gradient than a
+binary hidden/visible split, while still keeping the two named tiers the decision table calls for.
+
+`distanceBeyondExplored` is a hex-distance to the settlement, which is a perfect hexagon ring — used
+bare, the mist's inner edge would read as a crisp hex-shaped cutout (very visible if
+`FOG_MARGIN_HEXES` is set low). `rebuildBordersAndFog` roughens it with a per-hex random offset
+(`FOG_EDGE_NOISE_HEXES`, ±3 hexes) before it's fed into the alpha ramp; combined with the fog
+layer's `BlurFilter`, the ring's edge comes out irregular and cloud-like instead of tracing the hex
+grid.
 
 The unexplored tier is recomputed for whatever the camera can currently see (`visibleCoords()`'s
 cull, not a fixed world boundary), so it keeps covering new ground as far as the camera pans in
