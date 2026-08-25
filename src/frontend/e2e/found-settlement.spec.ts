@@ -21,6 +21,8 @@ test('clicking an island founds a settlement and opens the village view', async 
     expect(text).toMatch(/^\+\d+\/h$/);
   }
 
-  await page.getByRole('button', { name: /World map/ }).click();
-  await expect(page).toHaveURL(/\/$/);
+  // the realm panel's own back button, not HudNav's identically-labelled
+  // debug pill — both go to /world, but this is the in-context control
+  await page.getByRole('button', { name: '← World map' }).click();
+  await expect(page).toHaveURL(/\/world$/);
 });

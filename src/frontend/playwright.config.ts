@@ -4,8 +4,10 @@ export default defineConfig({
   testDir: './e2e',
   // Generous: each test waits out real camera drift/animation and takes a
   // handful of screenshots — 20-27s observed even on a well-resourced
-  // machine, so the 30s default leaves too little margin on a loaded CI box.
-  timeout: 60_000,
+  // machine, so the 30s default leaves too little margin on a loaded CI
+  // box. 60s itself has been observed running to the wire (58s) on a
+  // loaded runner, so give more headroom still.
+  timeout: 90_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
