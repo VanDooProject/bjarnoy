@@ -70,6 +70,31 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
   mountain: 0x8d8f92,
 };
 
+// zip 7's own prototype (prototypes/worldmap/Viking Realm.dc.html, sea()
+// method, "playful" style — the one shown in docs/design/img/worldmap.png)
+// is the source of truth for the sea: short scattered wave squiggles, never
+// touching land, each gently swelling in place rather than drifting.
+const WAVE_COLOR = 0xffffff;
+const WAVE_ALPHA = 0.42;
+const WAVE_STEP_X = 40;
+const WAVE_STEP_Y = 22;
+const WAVE_WIDTH = 22;
+const WAVE_DENSITY = 0.62; // fraction of grid points that get a wave, per the prototype's `dens`
+
+function hash01(x: number, y: number, salt: number): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(salt | 0, 2654435761);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return ((h >>> 0) % 100000) / 100000;
+}
+
+interface WavePoint {
+  x: number;
+  y: number;
+  phase: number;
+  periodMs: number;
+}
+
 interface SpriteLayer {
   pool: Sprite[];
   active: Map<string, Sprite>;
@@ -107,6 +132,8 @@ export class HexMapRenderer {
   private terrainBase = createSpriteLayer();
   private terrainTop = createSpriteLayer();
   private terrainFlat = new Graphics();
+  private waveLayer = new Graphics();
+  private wavePoints: WavePoint[] = [];
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
   private fogLayer = new Graphics();
@@ -174,6 +201,7 @@ export class HexMapRenderer {
 
     this.world.addChild(
       this.terrainBase.container,
+      this.waveLayer,
       this.terrainFlat,
       this.borderLayer,
       this.hoverLayer,
@@ -213,6 +241,7 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.rebuildMarkers();
+    if (this.options.mode === 'world') this.drawWaves();
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -365,6 +394,7 @@ export class HexMapRenderer {
     this.rebuildTerrain(coords);
     this.rebuildBordersAndFog(coords);
     this.rebuildMarkers();
+    if (this.options.mode === 'world') this.rebuildWaves();
   }
 
   private rebuildTerrain(coords: AxialCoord[]) {
@@ -402,8 +432,7 @@ export class HexMapRenderer {
     this.terrainFlat.clear();
     const top = isoTopPoints(TILE_W, TILE_H);
     // Each hex is its own fill, so float rounding at shared edges between
-    // adjacent land hexes can leave a hairline gap that the CSS wave
-    // backdrop shows through — read as "waves crossing the islands".
+    // adjacent land hexes can leave a hairline gap the sea shows through.
     // Nudging every vertex outward from the hex centre by a hair makes
     // neighbouring fills overlap instead of abutting exactly.
     const cx = top.reduce((s, p) => s + p.x, 0) / top.length;
@@ -423,6 +452,63 @@ export class HexMapRenderer {
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
       this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
+    }
+  }
+
+  /** True if the given coord or any of its neighbours is land — waves never sit this close to shore. */
+  private isNearLand(coord: AxialCoord): boolean {
+    const { worldModel } = this.options;
+    if (worldModel.getTile(coord.q, coord.r).terrain !== 'sea') return true;
+    return NEIGHBOR_DIRS.some(
+      (d) => worldModel.getTile(coord.q + d.q, coord.r + d.r).terrain !== 'sea',
+    );
+  }
+
+  // Recomputes which open-water grid points get a wave squiggle for the
+  // current viewport — same cadence as terrain (only on a cull rebuild).
+  // Animating them (drawWaves, every tick) is a separate, much cheaper step.
+  private rebuildWaves() {
+    const margin = TILE_W;
+    const rect = visibleWorldRect(this.camera, this.viewport, margin);
+    const points: WavePoint[] = [];
+
+    const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
+    const xStart = Math.floor(rect.minX / WAVE_STEP_X) * WAVE_STEP_X;
+    for (let y = yStart; y < rect.maxY; y += WAVE_STEP_Y) {
+      for (let x = xStart; x < rect.maxX; x += WAVE_STEP_X) {
+        if (hash01(x, y, 1) > WAVE_DENSITY) continue;
+        const jx = x + (hash01(x, y, 2) - 0.5) * 16;
+        const jy = y + (hash01(x, y, 3) - 0.5) * 12;
+        if (this.isNearLand(isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H))) continue;
+        points.push({
+          x: jx,
+          y: jy,
+          phase: hash01(x, y, 4) * Math.PI * 2,
+          periodMs: (3.4 + hash01(x, y, 5) * 3.2) * 1000,
+        });
+      }
+    }
+    this.wavePoints = points;
+  }
+
+  // zip 7 prototype's `vr-swell`: each wave nudges up-and-right and back,
+  // independently timed — not a scrolling/drifting pattern.
+  private drawWaves() {
+    if (this.wavePoints.length === 0) {
+      this.waveLayer.clear();
+      return;
+    }
+    const now = Date.now();
+    this.waveLayer.clear();
+    for (const p of this.wavePoints) {
+      const s = (Math.sin((now / p.periodMs) * Math.PI * 2 + p.phase) + 1) / 2;
+      const x = p.x + s * 7;
+      const y = p.y - s * 3;
+      this.waveLayer
+        .moveTo(x, y)
+        .quadraticCurveTo(x + WAVE_WIDTH / 4, y - 4.5, x + WAVE_WIDTH / 2, y)
+        .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + 4.5, x + WAVE_WIDTH, y)
+        .stroke({ width: 2, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
     }
   }
 

@@ -30,37 +30,14 @@ useHexMapRenderer(canvas, container, {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  /* Open sea: islands carry their own tile art, so the water itself is a
-     flat painted backdrop rather than hex-tiled — matches the world-map
-     mockup in docs/design/img/worldmap.png. No repeating rings here: the
-     brainstorm is explicit that circles-around-islands are not wanted. */
-  background: radial-gradient(140% 120% at 50% 0%, #1f5c78 0%, #123c50 55%, #0b2735 100%);
-}
-/* zip 7: "waves move" — a screen-space wavy-line pattern drifting slowly
-   across the sea backdrop, independent of the camera (the sea itself has
-   no world-space tiles to animate, per the comment above). */
-.map-container::before {
-  content: '';
-  position: absolute;
-  inset: -60px;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='60'%3E%3Cpath d='M0 30 Q 55 10 110 30 T 220 30' stroke='rgba(255,255,255,0.09)' stroke-width='2' fill='none'/%3E%3Cpath d='M0 46 Q 55 26 110 46 T 220 46' stroke='rgba(255,255,255,0.05)' stroke-width='2' fill='none'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 220px 60px;
-  animation: wave-drift 16s linear infinite;
-}
-@keyframes wave-drift {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 220px 60px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .map-container::before {
-    animation: none;
-  }
+  /* Open sea: islands carry their own flat hex fill (see
+     HexMapRenderer's WORLD_TERRAIN_FILL), so the water itself is a plain
+     painted backdrop underneath — matches the "playful" sea style in
+     prototypes/worldmap/Viking Realm.dc.html's sea() method, the style
+     shown in docs/design/img/worldmap.png. Wave squiggles are drawn in
+     the canvas itself (HexMapRenderer's waveLayer/drawWaves), not here —
+     they need to know which patches of sea are actually open water. */
+  background: radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, #14657f 48%, #0b3c50 100%);
 }
 canvas {
   display: block;
