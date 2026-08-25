@@ -182,6 +182,19 @@ const FOG_MARGIN_HEXES = 10;
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
+// Past this many hexes beyond the explored ring, the unexplored fog is
+// already at/near its opacity cap (see the alpha ramp in
+// rebuildBordersAndFog), so terrain sprites underneath it are invisible —
+// rebuildTerrain stops drawing them past here purely to save work on a far
+// pan, not for any visual reason.
+const FOG_TERRAIN_CULL_HEXES = 20;
+// Per-hex random offset (in hexes) applied to the explored-ring distance
+// before it's used for the fog alpha ramp. Hex distance to the settlement is
+// a perfect hexagon ring, so without this the mist's inner edge reads as a
+// crisp hex-shaped cutout; the offset roughens that boundary hex-by-hex, and
+// the fog layer's BlurFilter smooths the result into an irregular, cloud-like
+// edge instead.
+const FOG_EDGE_NOISE_HEXES = 3;
 
 export class HexMapRenderer {
   private app: Application | null = null;
@@ -550,12 +563,17 @@ export class HexMapRenderer {
     const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
 
     for (const c of coords) {
-      // Terrain is drawn everywhere the camera can see, explored or not —
-      // the unexplored fog (rebuildBordersAndFog) now fades in gradually
-      // over FOG_MARGIN_HEXES rather than snapping straight to opaque, so
-      // ground needs to actually be there to show through the thin part of
-      // the mist instead of the tile popping into existence once the fog
-      // fully clears.
+      // Terrain is drawn under the fog (not just on explored ground) so it
+      // can show through the thin part of the unexplored mist near the
+      // scouted ring, instead of the tile popping into existence only once
+      // the fog fully clears — but past FOG_TERRAIN_CULL_HEXES the mist is
+      // already opaque, so there's nothing to gain by drawing it that far out.
+      if (
+        !worldModel.isExplored(c.q, c.r) &&
+        worldModel.distanceBeyondExplored(c.q, c.r) > FOG_TERRAIN_CULL_HEXES
+      ) {
+        continue;
+      }
       const tile = worldModel.getTile(c.q, c.r);
 
       const key = coordKey(c);
