@@ -182,12 +182,6 @@ const FOG_MARGIN_HEXES = 10;
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
-// Past this many hexes beyond the explored ring, the unexplored fog is
-// already at/near its opacity cap (see the alpha ramp in
-// rebuildBordersAndFog), so terrain sprites underneath it are invisible —
-// rebuildTerrain stops drawing them past here purely to save work on a far
-// pan, not for any visual reason.
-const FOG_TERRAIN_CULL_HEXES = 20;
 // Per-hex random offset (in hexes) applied to the explored-ring distance
 // before it's used for the fog alpha ramp. Hex distance to the settlement is
 // a perfect hexagon ring, so without this the mist's inner edge reads as a
@@ -195,6 +189,16 @@ const FOG_TERRAIN_CULL_HEXES = 20;
 // the fog layer's BlurFilter smooths the result into an irregular, cloud-like
 // edge instead.
 const FOG_EDGE_NOISE_HEXES = 3;
+// Past this many hexes beyond the explored ring, the alpha ramp has
+// saturated even at the noisiest edge (FOG_MARGIN_HEXES plus the worst-case
+// FOG_EDGE_NOISE_HEXES offset) — so both rebuildBordersAndFog and
+// rebuildTerrain treat it as fully opaque: fog is painted flat solid white
+// (skipping the jitter/edge-noise math) and terrain sprites stop being drawn
+// underneath it, since nothing could show through either way. Keeping this
+// one distance shared between the two is what closes the seam where terrain
+// used to disappear before the fog above it had actually reached full
+// opacity.
+const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_EDGE_NOISE_HEXES;
 
 export class HexMapRenderer {
   private app: Application | null = null;
@@ -566,8 +570,10 @@ export class HexMapRenderer {
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
-      // the fog fully clears — but past FOG_TERRAIN_CULL_HEXES the mist is
-      // already opaque, so there's nothing to gain by drawing it that far out.
+      // the fog fully clears — but past FOG_TERRAIN_CULL_HEXES the mist above
+      // it is guaranteed fully opaque (rebuildBordersAndFog switches to a
+      // flat solid fill there), so there's nothing to gain by drawing it
+      // that far out.
       if (
         !worldModel.isExplored(c.q, c.r) &&
         worldModel.distanceBeyondExplored(c.q, c.r) > FOG_TERRAIN_CULL_HEXES
