@@ -771,6 +771,10 @@ export class HexMapRenderer {
 
   private rebuildMarkers() {
     this.markerLayer.clear();
+    if (this.options.mode === 'settlement') {
+      this.rebuildSettlementLabels();
+      return;
+    }
     if (this.options.mode !== 'world') {
       this.labelPool.forEach((l) => (l.visible = false));
       return;
@@ -824,6 +828,51 @@ export class HexMapRenderer {
       label.style.fill = 0xe8f0f5;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
+      label.visible = true;
+    }
+    for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
+  }
+
+  // zip 9's settlement view floats a name badge over the longhouse hex
+  // itself — a dot + settlement name in a dark rounded pill, bordered in
+  // the owner's colour (Viking Realm.dc.html's `labels`: "HAFRSVIK" over
+  // yours, "DRAUGRVIK" over a rival's) — distinct from the HUD's top-bar
+  // chip. Recomputed every tick (via the same rebuildMarkers() call world
+  // mode uses for its own labels), not just on cull rebuilds, so it stays
+  // glued to the hex while the camera pans.
+  private rebuildSettlementLabels() {
+    const { worldModel, playerId } = this.options;
+    this.labelsUsed = 0;
+
+    for (const settlement of worldModel.listSettlements()) {
+      // Don't reveal a rival's name over ground you haven't scouted.
+      if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
+      const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
+      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+      const mine = settlement.ownerId === playerId;
+      const color = mine ? GOLD : RIVAL;
+      const zoom = this.camera.zoom;
+
+      const label = this.acquireLabel();
+      label.text = settlement.name.toUpperCase();
+      label.style.fill = 0xe8f0f5;
+      label.style.fontSize = Math.max(9, 12 * zoom);
+      label.anchor.set(0, 0.5);
+
+      const dotR = 3.5 * zoom;
+      const padX = 10 * zoom;
+      const gap = 6 * zoom;
+      const pillH = 22 * zoom;
+      const pillW = padX * 2 + dotR * 2 + gap + label.width;
+      const pillX = top.x - pillW / 2;
+      const pillY = top.y - 30 * zoom - pillH;
+
+      this.markerLayer
+        .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
+        .fill({ color: 0x08121a, alpha: 0.8 })
+        .stroke({ width: 1, color, alpha: 0.9 });
+      this.markerLayer.circle(pillX + padX + dotR, pillY + pillH / 2, dotR).fill({ color });
+      label.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
       label.visible = true;
     }
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
