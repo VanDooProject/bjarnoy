@@ -101,11 +101,18 @@ test.describe('settlement view interactions', () => {
     // and rendering cost (confirmed by profiling: an isolated 10-step
     // mouse-move loop on a blank page takes ~300ms, so it isn't CDP/network
     // overhead). The global 45s default is deliberately tight to catch
-    // regressions fast elsewhere; this test and the hover one above are the
-    // two that both found a settlement AND drive real interaction through
-    // it, so they get more room rather than the whole suite's budget
-    // loosened to cover them.
-    test.setTimeout(90_000);
+    // regressions fast elsewhere; this test and the hover one above are two
+    // of the tests that both found a settlement AND drive real interaction
+    // through it, so they get more room rather than the whole suite's
+    // budget loosened to cover them.
+    //
+    // This one specifically failed to finish inside 90s on two consecutive
+    // real CI runs (once as a bare mouse.move timeout, once as "Element is
+    // not attached to the DOM" after a WebGL "GPU stall" warning) despite
+    // completing locally in 72-78s both times — CI's run-to-run variance
+    // is evidently wider than 90s leaves room for. 120s rather than
+    // shrugging this off as a repeat flake.
+    test.setTimeout(120_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
