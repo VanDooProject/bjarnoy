@@ -16,6 +16,12 @@ const props = defineProps<{
   settlementId?: string;
   previewCenter?: AxialCoord;
   highlightCoord?: AxialCoord;
+  screenBiasX?: number;
+  // Overrides the container's default fog-matching backdrop — the landing
+  // page's preview (water not drawn at all, see HexMapRenderer) needs its
+  // own themed backdrop instead, not the light shade tuned to blend with
+  // in-game fog.
+  background?: string;
 }>();
 const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile]; hover: [info: HoverInfo | null] }>();
 
@@ -29,6 +35,7 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   settlementId: props.settlementId,
   previewCenter: props.previewCenter,
   highlightCoord: props.highlightCoord,
+  screenBiasX: props.screenBiasX,
   onHexClick: (coord, tile) => emit('hex-click', coord, tile),
   onHoverChange: (info) => emit('hover', info),
 });
@@ -40,7 +47,7 @@ defineExpose({ renderer });
 </script>
 
 <template>
-  <div ref="container" class="map-container">
+  <div ref="container" class="map-container" :style="background ? { background } : undefined">
     <canvas ref="canvas" />
   </div>
 </template>

@@ -17,11 +17,13 @@ export async function foundSettlement(page: Page): Promise<void> {
 
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-
   // The starter plot is deterministic and camera-centred (HexMapRenderer's
-  // previewCenter) — the highlighted hex sits at/near the viewport centre.
+  // previewCenter), but shifted right of true screen centre by
+  // LandingView's `screenBiasX` (0.16 of the viewport width) so the island
+  // composes next to the hero text rather than behind it — see
+  // HexMapRenderer's biasedCenterX.
+  const cx = box.x + box.width * (0.5 + 0.16);
+  const cy = box.y + box.height / 2;
   await page.mouse.click(cx, cy);
 
   const prompt = page.getByText('Landfall made.');
