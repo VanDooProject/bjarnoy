@@ -185,6 +185,26 @@ export interface HexMapRendererOptions {
   playerId: string;
   /** Only relevant in 'settlement' mode: the settlement being viewed. */
   settlementId?: string;
+  /**
+   * 'settlement' mode, no `settlementId` yet (zip 6a: the landing page shows
+   * a real plot of village-view terrain before anything has been founded
+   * there) — where to centre the camera in lieu of a settlement's own
+   * position. Ignored once `settlementId` is set.
+   */
+  previewCenter?: AxialCoord;
+  /**
+   * A single hex to keep highlighted every frame, independent of hover —
+   * zip 6a's "click to place" glow on the one buildable plot before the
+   * player has founded anything.
+   */
+  highlightCoord?: AxialCoord;
+  /**
+   * Fraction of the viewport width to shift the camera's subject to the
+   * right of screen centre (0 = centred) — the landing page composes the
+   * village against hero text on the left, so the island itself needs to
+   * sit right of centre rather than directly behind the copy.
+   */
+  screenBiasX?: number;
   onHexClick?: (coord: AxialCoord, tile: Tile) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -227,6 +247,24 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 // panned. zoomForFogMargin picks the real initial zoom (usually well below
 // this) so FOG_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
+// zip 6a: the landing page's pre-founding preview is a bit wider than the
+// settlement view's own default, so the single starter island reads as a
+// place, not a crop — and how many hexes around `previewCenter` it shows at
+// all (the world isn't fogged yet in preview, so without a hard cutoff any
+// other island generated nearby would show too — zip 6a is one island, not
+// a slice of the world map).
+const PREVIEW_ZOOM = 0.6;
+const PREVIEW_ISLAND_RADIUS = 7;
+// How long the camera takes to ease from one position/zoom to another (see
+// animateCameraTo) — used for the founding transition (zip 6a: fog should
+// roll in as the camera settles, not cut instantly) rather than an abrupt
+// jump.
+const CAMERA_TRANSITION_MS = 1400;
+// Matches CAMERA_TRANSITION_MS so the mist finishes fading in right as the
+// camera settles on its post-founding position — see FOG_DRAG_FADE_MS for
+// the (much quicker) drag-release version of the same fade mechanism.
+const FOG_REVEAL_FADE_MS = 1400;
+const FOG_REVEAL_FROM_ALPHA = 0;
 // How many hexes of white (unexplored) fog zoomForFogMargin guarantees
 // visible past the settlement's explored ring, on every side, at rest.
 const FOG_MARGIN_HEXES = 10;
@@ -350,6 +388,11 @@ export class HexMapRenderer {
   private wavePoints: WavePoint[] = [];
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
+  // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
+  // on `options.highlightCoord`, redrawn every tick since the pulse itself
+  // is time-based, unlike everything else here which only redraws on a
+  // cull rebuild (camera pan/zoom).
+  private highlightLayer = new Graphics();
   // Flat, unblurred, guaranteed alpha:1 white fill — the "definitely fully
   // opaque, no reliance on blob overlap" backstop past FOG_TERRAIN_CULL_HEXES.
   private fogLayer = new Graphics();
@@ -365,9 +408,25 @@ export class HexMapRenderer {
   private fogBlobCacheTexture: RenderTexture | null = null;
   private fogBlobCacheSize = { width: 0, height: 0 };
   private fogBlobCacheSprite = new Sprite();
-  // Set while the drag-end fade (see FOG_DRAG_FADE_MS) is running; null once
-  // it completes or a new drag starts.
+  // Set while a fog fade is running (either the drag-release fade, see
+  // FOG_DRAG_FADE_MS, or the founding reveal, see FOG_REVEAL_FADE_MS); null
+  // once it completes or a new drag starts. duration/fromAlpha are set
+  // alongside it by whichever triggered the fade, since only one of the two
+  // can ever be running at once.
   private fogFadeStartedAt: number | null = null;
+  private fogFadeDurationMs = FOG_DRAG_FADE_MS;
+  private fogFadeFromAlpha = FOG_DRAG_FADE_FROM_ALPHA;
+  // The drag-release fade deliberately never dips the flat, guaranteed-
+  // opaque backstop (fogLayer) — only the blurred blob cache, which is what
+  // gets detached for the drag's duration in the first place. The founding
+  // reveal fade is different: fog wasn't showing *at all* a moment ago (no
+  // settlement existed yet), so fading both in together is exactly the
+  // "mist rolling in" effect zip 6a wants, with nothing to protect.
+  private fogFadeAffectsFlatLayer = false;
+  // Eases `camera` from one position/zoom to another over time (see
+  // animateCameraTo) instead of snapping — used for the founding transition
+  // so the view doesn't jump.
+  private cameraAnim: { from: Camera; to: Camera; startedAt: number; durationMs: number } | null = null;
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
@@ -400,12 +459,29 @@ export class HexMapRenderer {
         : { x: 0, y: 0, zoom: WORLD_DEFAULT_ZOOM };
   }
 
+  // Shifts the world-space centre left by `biasX` of the viewport (in world
+  // units, at the given zoom) so the subject renders that much right of
+  // screen centre — screenToWorld/worldToScreen (camera.ts) stay untouched
+  // (still symmetric around viewport/2), this just changes *what* sits there.
+  private biasedCenterX(worldX: number, zoom: number): number {
+    const biasX = this.options.screenBiasX ?? 0;
+    if (biasX === 0 || this.viewport.width === 0) return worldX;
+    return worldX - (biasX * this.viewport.width) / zoom;
+  }
+
   private settlementCameraOrigin(): Camera {
     const settlement = this.settlement();
-    if (!settlement) return { x: 0, y: 0, zoom: SETTLEMENT_DEFAULT_ZOOM };
+    if (!settlement) {
+      const at = this.options.previewCenter ?? { q: 0, r: 0 };
+      const grid = isoGridPosition(at, TILE_W, TILE_H);
+      const centerX = grid.x + TILE_W / 2;
+      const centerY = grid.y + TILE_H / 2;
+      return { x: this.biasedCenterX(centerX, PREVIEW_ZOOM), y: centerY, zoom: PREVIEW_ZOOM };
+    }
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
     const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
-    return { ...center, zoom: this.zoomForFogMargin(settlement, center) };
+    const zoom = this.zoomForFogMargin(settlement, center);
+    return { x: this.biasedCenterX(center.x, zoom), y: center.y, zoom };
   }
 
   /**
@@ -441,21 +517,24 @@ export class HexMapRenderer {
   }
 
   /**
-   * Whether fog-of-war should gate what's drawn right now. Always true in
-   * settlement mode. In world mode, only once the local player has founded
-   * at least one settlement — before that, `WorldModel.isExplored` is
-   * trivially false everywhere (nothing has ever been scouted), and hiding
-   * the whole map would break the onboarding flow ("click any green island
-   * to make landfall": the player needs to see the world to pick a spot).
-   * Once the player has a settlement of their own, the world map fogs the
-   * same way the settlement view does — reusing `WorldModel`'s single
-   * shared `explored`/visibility bookkeeping, so "known world" means
+   * Whether fog-of-war should gate what's drawn right now. True in
+   * settlement mode once a settlement actually exists — zip 6a's
+   * pre-founding landing-page preview has no settlement yet, and
+   * `WorldModel.isExplored` would be trivially false everywhere, so fog
+   * would otherwise blanket the whole preview plot (see rebuildTerrain's
+   * and rebuildBordersAndFog's matching bypass). In world mode, only once
+   * the local player has founded at least one settlement — before that,
+   * hiding the whole map would break the onboarding flow ("click any green
+   * island to make landfall": the player needs to see the world to pick a
+   * spot). Once the player has a settlement of their own, the world map
+   * fogs the same way the settlement view does — reusing `WorldModel`'s
+   * single shared `explored`/visibility bookkeeping, so "known world" means
    * anything scouted by any settlement (this player's or a rival's), not
    * just this player's own.
    */
   private isFogActive(): boolean {
     const { mode, worldModel, playerId } = this.options;
-    if (mode === 'settlement') return true;
+    if (mode === 'settlement') return !!this.settlement();
     return worldModel.listSettlements().some((s) => s.ownerId === playerId);
   }
 
@@ -507,6 +586,7 @@ export class HexMapRenderer {
       this.terrainTop.container,
       this.fogLayer,
       this.fogBlobCacheSprite,
+      this.highlightLayer,
     );
     app.stage.addChild(this.world, this.markerLayer);
 
@@ -547,15 +627,71 @@ export class HexMapRenderer {
       this.applyCameraTransform();
       this.scheduleCull();
     }
+    this.tickCameraAnim();
     this.tickFogFade();
+    this.drawHighlight();
   };
 
-  // Eases fogBlobCacheSprite's alpha back up after onPointerUp's forced
-  // rebuild re-bakes the blur into the cache texture — see FOG_DRAG_FADE_MS.
+  /**
+   * Eases from the founding transition's start camera to its target (see
+   * animateCameraTo) — zip 6a: the landing page's founding moment should
+   * read as the camera settling into place while the fog rolls in
+   * (tickFogFade, started alongside this one), not an instant jump.
+   */
+  private tickCameraAnim() {
+    const anim = this.cameraAnim;
+    if (!anim) return;
+    const t = Math.min(1, (performance.now() - anim.startedAt) / anim.durationMs);
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // easeInOutCubic
+    this.camera = {
+      x: anim.from.x + (anim.to.x - anim.from.x) * eased,
+      y: anim.from.y + (anim.to.y - anim.from.y) * eased,
+      zoom: anim.from.zoom + (anim.to.zoom - anim.from.zoom) * eased,
+    };
+    this.applyCameraTransform();
+    if (t >= 1) {
+      this.cameraAnim = null;
+      this.forceRebuild();
+    } else {
+      this.scheduleCull();
+    }
+  }
+
+  /**
+   * Eases the camera from its current position/zoom to `target` instead of
+   * snapping — used when a settlement is first founded (see updateOptions),
+   * so the preview-to-settlement transition reads as one continuous motion.
+   */
+  private animateCameraTo(target: Camera, durationMs: number) {
+    this.cameraAnim = { from: { ...this.camera }, to: target, startedAt: performance.now(), durationMs };
+  }
+
+  private drawHighlight() {
+    this.highlightLayer.clear();
+    const at = this.options.highlightCoord;
+    if (!at) return;
+    const grid = isoGridPosition(at, TILE_W, TILE_H);
+    const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+    const flat = top.flatMap((p) => [p.x, p.y]);
+    const pulse = (Math.sin(performance.now() / 420) + 1) / 2; // 0..1
+    this.highlightLayer
+      .poly(flat)
+      .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
+      .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+  }
+
+  // Eases fogBlobCacheSprite's (and, for the founding reveal, fogLayer's)
+  // alpha back up — either after onPointerUp's forced rebuild re-bakes the
+  // blur into the cache texture (see FOG_DRAG_FADE_MS), or after founding a
+  // settlement reveals fog for the first time (see FOG_REVEAL_FADE_MS,
+  // triggered from updateOptions). Only one of the two can be running at
+  // once, so one pair of fields (set by whichever triggered it) covers both.
   private tickFogFade() {
     if (this.fogFadeStartedAt === null) return;
-    const t = Math.min(1, (performance.now() - this.fogFadeStartedAt) / FOG_DRAG_FADE_MS);
-    this.fogBlobCacheSprite.alpha = FOG_DRAG_FADE_FROM_ALPHA + (1 - FOG_DRAG_FADE_FROM_ALPHA) * t;
+    const t = Math.min(1, (performance.now() - this.fogFadeStartedAt) / this.fogFadeDurationMs);
+    const alpha = this.fogFadeFromAlpha + (1 - this.fogFadeFromAlpha) * t;
+    this.fogBlobCacheSprite.alpha = alpha;
+    if (this.fogFadeAffectsFlatLayer) this.fogLayer.alpha = alpha;
     if (t >= 1) this.fogFadeStartedAt = null;
   }
 
@@ -574,6 +710,7 @@ export class HexMapRenderer {
     // the next rebuild, so there's nothing else to toggle here.
     this.fogFadeStartedAt = null;
     this.fogBlobCacheSprite.alpha = 1;
+    this.fogLayer.alpha = 1;
   };
 
   private onPointerMove = (e: PointerEvent) => {
@@ -608,6 +745,9 @@ export class HexMapRenderer {
       // gets baked back in before the fade below reveals it.
       this.rebuildAll();
       this.fogBlobCacheSprite.alpha = FOG_DRAG_FADE_FROM_ALPHA;
+      this.fogFadeDurationMs = FOG_DRAG_FADE_MS;
+      this.fogFadeFromAlpha = FOG_DRAG_FADE_FROM_ALPHA;
+      this.fogFadeAffectsFlatLayer = false;
       this.fogFadeStartedAt = performance.now();
     }
   };
@@ -727,18 +867,26 @@ export class HexMapRenderer {
     requestAnimationFrame(() => {
       this.cullQueued = false;
       if (this.destroyed) return;
-      // A drag can cross cameraMovedEnough's distance threshold on almost
-      // every rAF (each pointermove nudges the camera further), and a
-      // rebuild re-syncs every visible terrain/border/fog sprite — not just
-      // the fog blur (see refreshFogBlobCache's own drag skip above), so
-      // that's real per-rebuild cost under software rendering, paid several
-      // times over across one drag gesture. visibleCoords already renders
-      // a TILE_W*2 margin past the viewport edge, so there's slack to
-      // spend: throttle rebuilds to once per DRAG_REBUILD_THROTTLE_MS while
-      // dragging instead of firing on every threshold-crossing frame.
-      // onPointerUp's forced rebuildAll() still guarantees one fully
-      // up-to-date rebuild the instant the drag actually ends.
-      if (this.dragging && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) return;
+      // A drag (or, since the founding transition, an animated camera —
+      // see tickCameraAnim) can cross cameraMovedEnough's distance threshold
+      // on almost every rAF (each pointermove/animation step nudges the
+      // camera further), and a rebuild re-syncs every visible terrain/
+      // border/fog sprite — not just the fog blur (see refreshFogBlobCache's
+      // own drag skip above), so that's real per-rebuild cost under software
+      // rendering, paid several times over across one drag gesture or camera
+      // animation. visibleCoords already renders a TILE_W*2 margin past the
+      // viewport edge, so there's slack to spend: throttle rebuilds to once
+      // per DRAG_REBUILD_THROTTLE_MS instead of firing on every threshold-
+      // crossing frame. onPointerUp's forced rebuildAll() still guarantees
+      // one fully up-to-date rebuild the instant a drag ends, and
+      // tickCameraAnim's own forceRebuild() does the same the instant the
+      // animation completes.
+      if (
+        (this.dragging || this.cameraAnim) &&
+        performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS
+      ) {
+        return;
+      }
       if (this.cameraMovedEnough()) this.rebuildAll();
     });
   }
@@ -792,8 +940,21 @@ export class HexMapRenderer {
     const textures = this.textures!;
     const baseEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
     const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
+    const settlement = this.settlement();
+    const preview = !settlement;
+    const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
 
     for (const c of coords) {
+      // zip 6a: before a settlement exists, this is the landing page's
+      // preview — one island, not a slice of the whole (unfogged) world.
+      // Water isn't drawn at all (matching how world mode treats sea — see
+      // rebuildTerrainFlat), and anything past a plausible single-island
+      // radius is cut off so a neighbouring generated island can't show up
+      // uninvited in the background.
+      if (preview) {
+        if (worldModel.getTile(c.q, c.r).terrain === 'sea') continue;
+        if (hexDistance(c, previewCenter) > PREVIEW_ISLAND_RADIUS) continue;
+      }
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
@@ -1455,6 +1616,38 @@ export class HexMapRenderer {
    */
   forceRebuild() {
     if (!this.app) return;
+    this.rebuildAll();
+  }
+
+  /**
+   * zip 6a: the landing page mounts one renderer in preview mode (no
+   * `settlementId`) and, the instant the player founds their settlement,
+   * needs it to become a real settlement view — same canvas, no
+   * remount/flash. Rather than snap the camera and fog on straight away
+   * (the reported "view jumps on every tutorial interaction"), this eases
+   * the camera to its new position/zoom and fades fog in over the same
+   * span (see CAMERA_TRANSITION_MS/FOG_REVEAL_FADE_MS) — the fog reads as
+   * rolling in as the camera settles, rather than a cut.
+   */
+  updateOptions(patch: Partial<HexMapRendererOptions>) {
+    const wasFounded = !!this.settlement();
+    this.options = { ...this.options, ...patch };
+    if (!this.app) return;
+    if (this.options.mode === 'settlement' && this.options.settlementId) {
+      const target = this.settlementCameraOrigin();
+      if (wasFounded) {
+        this.camera = target;
+        this.applyCameraTransform();
+      } else {
+        this.animateCameraTo(target, CAMERA_TRANSITION_MS);
+        this.fogBlobCacheSprite.alpha = FOG_REVEAL_FROM_ALPHA;
+        this.fogLayer.alpha = FOG_REVEAL_FROM_ALPHA;
+        this.fogFadeDurationMs = FOG_REVEAL_FADE_MS;
+        this.fogFadeFromAlpha = FOG_REVEAL_FROM_ALPHA;
+        this.fogFadeAffectsFlatLayer = true;
+        this.fogFadeStartedAt = performance.now();
+      }
+    }
     this.rebuildAll();
   }
 

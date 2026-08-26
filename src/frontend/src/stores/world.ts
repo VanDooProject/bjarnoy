@@ -26,6 +26,11 @@ export const useWorldStore = defineStore('world', {
       rates: emptyResources() as Resources,
       settlementName: '',
       level: 1,
+      // zip 6a: landing-page onboarding needs "how many buildings has the
+      // player actually placed" — derived from the model itself (the
+      // longhouse counts as the first) rather than a separately tracked
+      // counter that could drift from what's really on the ground.
+      buildingsPlaced: 0,
       // zip 9: "real-time elements: build queue countdowns" — a snapshot of
       // the backend's queue plus when it was fetched, so BuildQueuePanel can
       // count each order down locally between polls instead of only
@@ -232,6 +237,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.rates = { ...settlement.rates };
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
+      this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
       this.hud.tick += 1;
     },
     startHudSync() {

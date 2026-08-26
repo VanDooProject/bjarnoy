@@ -125,6 +125,23 @@ export class WorldModel {
     return this.settlements.get(id);
   }
 
+  /**
+   * How many buildings a settlement has standing (the longhouse itself
+   * counts as one, placed by `registerSettlement`/`foundSettlement`) — used
+   * by the landing page's guided onboarding (zip 6a: place 2 more buildings
+   * before onboarding is considered complete) instead of tracking a
+   * separate counter that could drift from what's actually on the ground.
+   */
+  countBuildings(settlementId: string): number {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return 0;
+    let count = 0;
+    for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.borderRadius(settlement))) {
+      if (this.getTile(c.q, c.r).ownerId === settlementId && this.getTile(c.q, c.r).buildingType) count++;
+    }
+    return count;
+  }
+
   listSettlements(): Settlement[] {
     return [...this.settlements.values()];
   }
