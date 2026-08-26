@@ -29,7 +29,7 @@ public class PersistenceE2ETests
     [Fact]
     public async Task FoundingASettlementThroughTheRealFrontendPersistsToTheDatabase()
     {
-        var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(5)).Token;
+        var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
         appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
@@ -75,6 +75,13 @@ public class PersistenceE2ETests
         // the click rather than guessing one fixed extra delay.
         var trayStatus = page.Locator(".tray-item .sub").First;
         var canvas = page.Locator("canvas");
+        // The canvas mounts only once PixiJS has a WebGL context and its
+        // first frame ready — on a cold, unbundled Vite dev server under
+        // headless Chromium with no real GPU, that first frame has taken
+        // close to Playwright's 30s default actionability timeout on its
+        // own (BoundingBoxAsync's implicit wait), independent of the click
+        // retries below. Wait for it explicitly, once, with real headroom.
+        await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
         var founded = false;
         for (var attempt = 0; attempt < 10 && !founded; attempt++)
         {
