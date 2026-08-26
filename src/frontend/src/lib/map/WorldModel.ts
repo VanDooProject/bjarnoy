@@ -16,6 +16,14 @@ const BASE_BORDER_RADIUS = 2;
 // scouted terrain between the clear realm and the hidden unknown, instead of
 // unexplored starting immediately at the border.
 const FOG_SCOUT_RING = 3;
+// Border-anchoring (docs/design decision: "Border radius grows with
+// longhouse level and with border-anchoring buildings (watchtower)"). A
+// tower can only be placed inside the settlement's existing border (see the
+// hexDistance guard in placeBuilding), so claiming a ring around it only
+// ever pushes the border outward in whichever direction the tower faces —
+// the settlement's owned-tile silhouette stops being a pure hex and gains a
+// bump wherever a tower sits near the edge.
+const TOWER_CLAIM_RADIUS = 1;
 
 export class WorldModel {
   readonly seed: number;
@@ -131,14 +139,37 @@ export class WorldModel {
     return new Set(hexesInRadius({ q: settlement.q, r: settlement.r }, radius).map(coordKey));
   }
 
-  /** Hexes that get marked "ever scouted" once claimed/leveled — wider than visibleHexes so a ring of greyed-out fog actually renders beyond it. */
-  private exploredRadius(settlement: Settlement): number {
+  /**
+   * Hexes that get marked "ever scouted" once claimed/leveled — wider than
+   * visibleHexes so a ring of greyed-out fog actually renders beyond it.
+   * Public so HexMapRenderer can frame the initial camera wide enough to
+   * show a real margin of white (unexplored) fog past this ring, rather
+   * than a zoom level tight enough to hide it entirely.
+   */
+  exploredRadius(settlement: Settlement): number {
     return this.borderRadius(settlement) + FOG_SCOUT_RING;
   }
 
   /** Hexes ever scouted — greyed out (not live) once out of sight. */
   isExplored(q: number, r: number): boolean {
     return this.explored.has(coordKey({ q, r }));
+  }
+
+  /**
+   * For an unexplored hex, how many hex-steps past the nearest settlement's
+   * scouted ring (`exploredRadius`) it sits. Used by the renderer to fade
+   * the unexplored fog in gradually from the ring's edge instead of a hard
+   * white wall, so terrain drawn underneath (still true, just never
+   * scouted) reads as a mist rolling in rather than a sudden cutoff.
+   * 0 right past the ring, growing outward; Infinity with no settlements.
+   */
+  distanceBeyondExplored(q: number, r: number): number {
+    let min = Infinity;
+    for (const settlement of this.settlements.values()) {
+      const d = hexDistance({ q: settlement.q, r: settlement.r }, { q, r }) - this.exploredRadius(settlement);
+      if (d < min) min = d;
+    }
+    return min === Infinity ? Infinity : Math.max(0, min);
   }
 
   /**
@@ -194,6 +225,12 @@ export class WorldModel {
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
+    if (type === 'tower') {
+      for (const c of hexesInRadius(at, TOWER_CLAIM_RADIUS)) {
+        const claimed = this.getTile(c.q, c.r);
+        if (!claimed.ownerId) claimed.ownerId = settlementId;
+      }
+    }
     return true;
   }
 

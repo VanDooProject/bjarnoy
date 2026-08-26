@@ -25,3 +25,11 @@
 ## CLAUDE
 - ask questions if anything is unclear or you need more context
 - if u take screenshots always show the in chat to me too
+
+# screenshot helpers
+- `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path
+  (landing → world map → landfall → settlement view, plus a panned/hover
+  settlement shot) in one Playwright run and screenshots every stop — use
+  this instead of re-deriving the click path from scratch each time a UI
+  change needs visual verification. See `scripts/screenshot-helpers/README.md`
+  for setup and usage.

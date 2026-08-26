@@ -2,6 +2,13 @@ import { expect, test } from '@playwright/test';
 import { foundSettlement } from './helpers';
 
 test('clicking an island founds a settlement and opens the village view', async ({ page }) => {
+  // foundSettlement() alone — page load plus a real PixiJS/texture mount —
+  // has been observed crossing the global 45s default on a loaded CI
+  // runner (43.7s one run, 46.0s the next, same code): CI's own run-to-run
+  // variance is wider than the margin 45s leaves for this test, even before
+  // its own assertions run. See settlement-interactions.spec.ts's matching
+  // comments for the other tests that share this same root cause.
+  test.setTimeout(90_000);
   await foundSettlement(page);
   await expect(page).toHaveURL(/\/settlement$/);
 
@@ -21,6 +28,8 @@ test('clicking an island founds a settlement and opens the village view', async 
     expect(text).toMatch(/^\+\d+\/h$/);
   }
 
-  await page.getByRole('button', { name: /World map/ }).click();
-  await expect(page).toHaveURL(/\/$/);
+  // the realm panel's own back button, not HudNav's identically-labelled
+  // debug pill — both go to /world, but this is the in-context control
+  await page.getByRole('button', { name: '← World map' }).click();
+  await expect(page).toHaveURL(/\/world$/);
 });
