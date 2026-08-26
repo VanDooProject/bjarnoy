@@ -941,6 +941,21 @@ export class HexMapRenderer {
       this.fogBlobCacheSprite.visible = false;
       return;
     }
+    if (this.dragging) {
+      // A drag can trigger a rebuild on nearly every rAF (scheduleCull fires
+      // whenever the camera has moved enough), and the visible unexplored
+      // area's bounding box shifts on almost every one of those — which,
+      // below, would mean destroying and recreating a GPU texture on
+      // (near-)every drag frame, on top of a whole extra render() pass. On
+      // CI's software-rendered headless Chromium that alone was enough to
+      // stall the main thread badly enough for page.mouse.move (a CDP
+      // command) to time out, even with the blur filter already dropped for
+      // the drag. So: leave the existing cache sprite exactly as it was —
+      // stale during the drag, same tradeoff the blur-drop/fade already
+      // makes — and let onPointerUp's forced rebuildAll() bake a fresh,
+      // correctly-blurred one once the drag ends.
+      return;
+    }
 
     // Padded past the blob geometry so the blur (which bleeds a few pixels
     // past what it's applied to) doesn't get clipped at the texture's edge.
@@ -961,8 +976,9 @@ export class HexMapRenderer {
     const width = Math.ceil(maxX - minX);
     const height = Math.ceil(maxY - minY);
 
-    this.fogBlobLayer.container.filters =
-      !this.dragging && this.fogBlobFilter ? [this.fogBlobFilter] : [];
+    // Never reached while dragging (see the early return above), so the
+    // blur is always attached here.
+    this.fogBlobLayer.container.filters = this.fogBlobFilter ? [this.fogBlobFilter] : [];
     // The container's children are positioned in world coordinates (which
     // can be arbitrarily far from the origin) — offset the container itself
     // so the region we want (minX..maxX, minY..maxY) lands on (0,0)..(w,h)
