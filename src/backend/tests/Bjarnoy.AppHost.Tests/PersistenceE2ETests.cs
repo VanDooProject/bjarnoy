@@ -29,7 +29,7 @@ public class PersistenceE2ETests
     [Fact]
     public async Task FoundingASettlementThroughTheRealFrontendPersistsToTheDatabase()
     {
-        var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(3)).Token;
+        var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(5)).Token;
 
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
         appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
@@ -48,7 +48,13 @@ public class PersistenceE2ETests
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
 
-        await page.GotoAsync(frontendUrl);
+        // The frontend resource has no health check (unlike "api"), so
+        // WaitForResourceHealthyAsync above only confirms the npm process
+        // started — not that Vite has finished cold-starting (npm install,
+        // then esbuild pre-bundling a Pixi.js-heavy dependency graph), which
+        // routinely outlasts Playwright's 30s default navigation timeout in
+        // a loaded CI container.
+        await page.GotoAsync(frontendUrl, new PageGotoOptions { Timeout = 120_000 });
 
         // This is the bug itself: DemoModeBadge.vue only renders while
         // config.ts's DEMO_MODE is true, which it wrongly defaults to
