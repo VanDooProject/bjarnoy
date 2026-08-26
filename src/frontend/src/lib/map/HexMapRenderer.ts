@@ -843,18 +843,26 @@ export class HexMapRenderer {
     requestAnimationFrame(() => {
       this.cullQueued = false;
       if (this.destroyed) return;
-      // A drag can cross cameraMovedEnough's distance threshold on almost
-      // every rAF (each pointermove nudges the camera further), and a
-      // rebuild re-syncs every visible terrain/border/fog sprite — not just
-      // the fog blur (see refreshFogBlobCache's own drag skip above), so
-      // that's real per-rebuild cost under software rendering, paid several
-      // times over across one drag gesture. visibleCoords already renders
-      // a TILE_W*2 margin past the viewport edge, so there's slack to
-      // spend: throttle rebuilds to once per DRAG_REBUILD_THROTTLE_MS while
-      // dragging instead of firing on every threshold-crossing frame.
-      // onPointerUp's forced rebuildAll() still guarantees one fully
-      // up-to-date rebuild the instant the drag actually ends.
-      if (this.dragging && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) return;
+      // A drag (or, since the founding transition, an animated camera —
+      // see tickCameraAnim) can cross cameraMovedEnough's distance threshold
+      // on almost every rAF (each pointermove/animation step nudges the
+      // camera further), and a rebuild re-syncs every visible terrain/
+      // border/fog sprite — not just the fog blur (see refreshFogBlobCache's
+      // own drag skip above), so that's real per-rebuild cost under software
+      // rendering, paid several times over across one drag gesture or camera
+      // animation. visibleCoords already renders a TILE_W*2 margin past the
+      // viewport edge, so there's slack to spend: throttle rebuilds to once
+      // per DRAG_REBUILD_THROTTLE_MS instead of firing on every threshold-
+      // crossing frame. onPointerUp's forced rebuildAll() still guarantees
+      // one fully up-to-date rebuild the instant a drag ends, and
+      // tickCameraAnim's own forceRebuild() does the same the instant the
+      // animation completes.
+      if (
+        (this.dragging || this.cameraAnim) &&
+        performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS
+      ) {
+        return;
+      }
       if (this.cameraMovedEnough()) this.rebuildAll();
     });
   }

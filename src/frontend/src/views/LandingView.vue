@@ -46,7 +46,6 @@ onUnmounted(() => world.stopHudSync());
 
 const buildingsPlaced = computed(() => world.hud.buildingsPlaced);
 const onboardingComplete = computed(() => buildingsPlaced.value >= ONBOARDING_TARGET_BUILDINGS);
-const buildingsToGo = computed(() => Math.max(0, ONBOARDING_TARGET_BUILDINGS - buildingsPlaced.value));
 
 // Covers both "just crossed the threshold" and "arrived here mid-onboarding,
 // already past it" (a reload right as the last build order completed).
@@ -89,11 +88,18 @@ async function foundHere(coord: AxialCoord) {
     player.foundSettlement(settlement.id);
     world.startHudSync();
     // The canvas was mounted in preview mode (no settlementId yet) — flip it
-    // into a real settlement view in place, same camera, no remount.
+    // into a real settlement view in place, same camera, no remount. Also
+    // drops screenBiasX back to 0: the hero text (the only reason to bias
+    // the village off-centre) is hidden the moment a settlement exists, so
+    // the fogged view goes back to exactly SettlementView's own centred
+    // zoomForFogMargin camera — otherwise the bias pushes one edge of the
+    // viewport past the margin that guarantees full opaque fog, letting a
+    // neighbouring island show through unfogged on that side.
     canvasRef.value?.renderer?.updateOptions({
       settlementId: settlement.id,
       previewCenter: undefined,
       highlightCoord: undefined,
+      screenBiasX: 0,
     });
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
@@ -173,21 +179,19 @@ function closePrompt() {
     <TopBar />
     <HudNav />
 
-    <div class="hero">
-      <template v-if="!player.hasFoundedSettlement">
-        <div class="eyebrow">Empty plot · Bjarnøy</div>
-        <h1>Put your longhouse somewhere.</h1>
-        <p class="lede">
-          That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting.
-          Nobody asks your name until you have something worth naming.
-        </p>
-        <p v-if="founding" class="status">Making landfall…</p>
-      </template>
-      <template v-else-if="!onboardingComplete">
-        <div class="eyebrow">{{ buildingsToGo }} building{{ buildingsToGo === 1 ? '' : 's' }} to go</div>
-        <h1>Raise a little more before you're in.</h1>
-        <p class="lede">Click any empty hex inside your border and build. Two more and you're properly onboarded.</p>
-      </template>
+    <!-- Once a settlement exists, fog is on screen and the camera is
+         mid-transition — the hero copy would either sit unreadably over
+         moving mist or (once centred, no more screenBiasX) right behind
+         the village itself. The progress tray below already carries
+         onboarding status, so it's the only thing left on screen. -->
+    <div v-if="!player.hasFoundedSettlement" class="hero">
+      <div class="eyebrow">Empty plot · Bjarnøy</div>
+      <h1>Put your longhouse somewhere.</h1>
+      <p class="lede">
+        That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting.
+        Nobody asks your name until you have something worth naming.
+      </p>
+      <p v-if="founding" class="status">Making landfall…</p>
     </div>
 
     <div class="tray panel">
