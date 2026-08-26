@@ -105,8 +105,13 @@ starts this frontend itself via `AddNpmApp("frontend", ..., "dev")`, already
 wired to the real backend: `AppHost.cs` sets `VITE_DEMO_MODE=false` for it,
 and `vite.config.ts` proxies `/api` to whatever endpoint Aspire resolved for
 the API resource (`services__api__http__0`), so `API_BASE_URL` never needs
-overriding there. Opening the frontend's own URL from the Aspire dashboard —
-not routed through anything else — is exactly what this is for.
+overriding there. `vite.config.ts` also binds the dev server to `PORT` when
+it's set — Vite has no built-in convention for that env var and otherwise
+keeps listening on its own default (5173) regardless of which port Aspire
+told every other resource (and the dashboard) to use for this one, which
+looks like the frontend started fine right up until something actually
+tries to open that link. Opening the frontend's own URL from the Aspire
+dashboard — not routed through anything else — is exactly what this is for.
 
 The settlement view's build queue is wired up too: clicking an empty owned
 hex queues a real build order (`POST /api/v1/settlements/{id}/builds`) rather

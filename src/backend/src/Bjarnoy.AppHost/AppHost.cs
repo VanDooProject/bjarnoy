@@ -47,6 +47,10 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api")
 builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithReference(api)
     .WaitFor(api)
+    // Vite has no built-in convention for PORT and binds its own default
+    // (5173) regardless — vite.config.ts reads it explicitly, which is what
+    // makes this endpoint (the one every other resource's WithReference and
+    // the dashboard actually point at) the port Vite is really listening on.
     .WithHttpEndpoint(env: "PORT")
     .WithEnvironment("BROWSER", "none")
     // Without this the frontend defaults to VITE_DEMO_MODE's own default
