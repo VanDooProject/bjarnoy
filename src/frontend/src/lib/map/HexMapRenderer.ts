@@ -434,6 +434,25 @@ export class HexMapRenderer {
     return this.options.worldModel.getSettlement(this.options.settlementId);
   }
 
+  /**
+   * Whether fog-of-war should gate what's drawn right now. Always true in
+   * settlement mode. In world mode, only once the local player has founded
+   * at least one settlement — before that, `WorldModel.isExplored` is
+   * trivially false everywhere (nothing has ever been scouted), and hiding
+   * the whole map would break the onboarding flow ("click any green island
+   * to make landfall": the player needs to see the world to pick a spot).
+   * Once the player has a settlement of their own, the world map fogs the
+   * same way the settlement view does — reusing `WorldModel`'s single
+   * shared `explored`/visibility bookkeeping, so "known world" means
+   * anything scouted by any settlement (this player's or a rival's), not
+   * just this player's own.
+   */
+  private isFogActive(): boolean {
+    const { mode, worldModel, playerId } = this.options;
+    if (mode === 'settlement') return true;
+    return worldModel.listSettlements().some((s) => s.ownerId === playerId);
+  }
+
   async mount(canvas: HTMLCanvasElement, width: number, height: number): Promise<void> {
     const app = new Application();
     await app.init({
@@ -615,7 +634,7 @@ export class HexMapRenderer {
     }
 
     const { worldModel, mode } = this.options;
-    if (mode === 'settlement' && !worldModel.isExplored(coord.q, coord.r)) {
+    if (this.isFogActive() && !worldModel.isExplored(coord.q, coord.r)) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -749,16 +768,17 @@ export class HexMapRenderer {
     if (this.options.mode === 'settlement' && !this.textures) return;
     this.lastBuiltCamera = { ...this.camera };
     this.lastRebuildAtMs = performance.now();
+    const fogActive = this.isFogActive();
     const coords = this.visibleCoords();
-    this.rebuildTerrain(coords);
-    this.rebuildBordersAndFog(coords);
+    this.rebuildTerrain(coords, fogActive);
+    this.rebuildBordersAndFog(coords, fogActive);
     this.rebuildMarkers();
     if (this.options.mode === 'world') this.rebuildWaves();
   }
 
-  private rebuildTerrain(coords: AxialCoord[]) {
+  private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
     if (this.options.mode === 'world') {
-      this.rebuildTerrainFlat(coords);
+      this.rebuildTerrainFlat(coords, fogActive);
       return;
     }
 
@@ -776,6 +796,7 @@ export class HexMapRenderer {
       // flat solid fill there), so there's nothing to gain by drawing it
       // that far out.
       if (
+        fogActive &&
         fogDebugFlags.terrainCull &&
         !worldModel.isExplored(c.q, c.r) &&
         jitterDistance(
@@ -805,7 +826,7 @@ export class HexMapRenderer {
   // WORLD_TERRAIN_FILL. Drawn straight into one Graphics layer rather than
   // pooled sprites since there's no texture (and thus no batching benefit)
   // to share.
-  private rebuildTerrainFlat(coords: AxialCoord[]) {
+  private rebuildTerrainFlat(coords: AxialCoord[], fogActive: boolean) {
     const { worldModel } = this.options;
     this.terrainFlat.clear();
     const top = isoTopPoints(TILE_W, TILE_H);
@@ -826,6 +847,26 @@ export class HexMapRenderer {
     for (const c of coords) {
       const tile = worldModel.getTile(c.q, c.r);
       if (tile.terrain === 'sea') continue; // open sea is just the background
+
+      // Same cull as the settlement view's rebuildTerrain: draw the island
+      // under the thin part of the unexplored mist near the scouted ring
+      // (so it isn't a hard pop-in once the fog clears), but stop drawing
+      // it at all once past FOG_TERRAIN_CULL_HEXES, where the mist above it
+      // is guaranteed fully opaque anyway (see rebuildBordersAndFog).
+      if (
+        fogActive &&
+        fogDebugFlags.terrainCull &&
+        !worldModel.isExplored(c.q, c.r) &&
+        jitterDistance(
+          c.q,
+          c.r,
+          worldModel.distanceBeyondExplored(c.q, c.r),
+          FOG_DIST_JITTER_SALT,
+          fogDebugFlags.distJitter,
+        ) > FOG_TERRAIN_CULL_HEXES
+      ) {
+        continue;
+      }
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
@@ -1064,17 +1105,20 @@ export class HexMapRenderer {
     });
   }
 
-  private rebuildBordersAndFog(coords: AxialCoord[]) {
+  private rebuildBordersAndFog(coords: AxialCoord[], fogActive: boolean) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
     this.fogLayer.clear();
 
-    // Distance (jittered, see FOG_VISIBLE_MARGIN_HEXES) past the settlement's
-    // own visible (line-of-sight) ring, mirroring WorldModel.visibleHexes's
-    // own radius formula so the two stay in agreement — replaces that Set's
+    // Distance (jittered, see FOG_VISIBLE_MARGIN_HEXES) past the currently
+    // visible (line-of-sight) ring, mirroring WorldModel.visibleHexes's own
+    // radius formula so the two stay in agreement — replaces that Set's
     // boolean membership test entirely for rendering, so the scouted tint
     // fades in symmetrically around the jittered boundary instead of jumping
     // from 0 to FOG_SCOUTED_ALPHA in one hex step at a hex-perfect ring.
+    // Settlement mode has exactly one settlement to be in sight of; world
+    // mode is in sight of every settlement the local player owns (there's
+    // normally just one, but nothing stops a player from having several).
     let visibleEdgeDist: ((c: AxialCoord) => number) | null = null;
     if (mode === 'settlement') {
       const settlement = this.settlement();
@@ -1088,6 +1132,25 @@ export class HexMapRenderer {
             FOG_VISIBLE_JITTER_SALT,
             fogDebugFlags.visibleRamp,
           );
+      }
+    } else if (fogActive) {
+      const own = worldModel.listSettlements().filter((s) => s.ownerId === playerId);
+      if (own.length > 0) {
+        visibleEdgeDist = (c) => {
+          let min = Infinity;
+          for (const s of own) {
+            const visRadius = worldModel.borderRadius(s) + 1;
+            const d = jitterDistance(
+              c.q,
+              c.r,
+              hexDistance({ q: s.q, r: s.r }, c) - visRadius,
+              FOG_VISIBLE_JITTER_SALT,
+              fogDebugFlags.visibleRamp,
+            );
+            if (d < min) min = d;
+          }
+          return min;
+        };
       }
     }
 
@@ -1122,7 +1185,7 @@ export class HexMapRenderer {
     };
 
     for (const c of coords) {
-      if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) {
+      if (fogActive && !worldModel.isExplored(c.q, c.r)) {
         // Mist over ground the settlement has never scouted — covers every
         // hex the camera can currently see, however far it's panned, so the
         // world reads as continuing forever under fog rather than ending at
@@ -1224,9 +1287,13 @@ export class HexMapRenderer {
       return;
     }
     const { worldModel, playerId } = this.options;
+    const fogActive = this.isFogActive();
     this.labelsUsed = 0;
 
     for (const settlement of worldModel.listSettlements()) {
+      // Don't reveal a settlement (yours or a rival's) over ground nobody
+      // has scouted — same "hidden until explored" rule as its hex.
+      if (fogActive && !worldModel.isExplored(settlement.q, settlement.r)) continue;
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const mine = settlement.ownerId === playerId;
@@ -1246,6 +1313,7 @@ export class HexMapRenderer {
     }
 
     for (const island of worldModel.listIslands()) {
+      if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const label = this.acquireLabel();
@@ -1265,6 +1333,13 @@ export class HexMapRenderer {
         x: fromGrid.x + (toGrid.x - fromGrid.x) * t,
         y: fromGrid.y + (toGrid.y - fromGrid.y) * t,
       };
+      // A fleet's current position is only worth showing an ETA for once
+      // it's sailed into scouted waters — same rule as everything else fog
+      // gates, checked against its *current* (interpolated) hex rather than
+      // its endpoints so it fades into view exactly when it crosses the
+      // scouted ring, not at departure or arrival.
+      const fleetCoord = isoPixelToAxial(world, TILE_W, TILE_H);
+      if (fogActive && !worldModel.isExplored(fleetCoord.q, fleetCoord.r)) continue;
       const screen = this.toScreen(world);
       const remainingMs = Math.max(0, fleet.etaAt - now);
       const label = this.acquireLabel();
