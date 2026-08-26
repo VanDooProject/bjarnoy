@@ -53,6 +53,10 @@ test.describe('settlement view interactions', () => {
   });
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
+    // Same reasoning as the hover/panning tests above: foundSettlement()
+    // plus up to 8 candidate click-and-screenshot rounds runs close to (and
+    // on CI, over) the global 45s budget.
+    test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
