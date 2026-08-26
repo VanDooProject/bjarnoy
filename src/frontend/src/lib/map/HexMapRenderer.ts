@@ -38,6 +38,7 @@ import {
   Container,
   FillGradient,
   Graphics,
+  RenderTexture,
   Sprite,
   Text,
   Texture,
@@ -306,16 +307,27 @@ const FOG_BLOB_JITTER_Y = 0.18;
 // irregularity so the mist doesn't read as a grid of identical stamps.
 const FOG_BLOB_SIZE_JITTER = 0.15;
 const FOG_SCOUTED_ALPHA = 0.6;
-// The blob layer's BlurFilter is a full-container GPU post-pass, re-run
-// every time rebuildAll() re-syncs the blob sprites — which, during a drag,
-// is on nearly every pointermove (cameraMovedEnough's threshold is well
-// under a tile-width). Paying that cost every drag frame is what stalled
-// CI's software-rendered Chromium badly enough that even mouse.move
-// commands timed out. Dropping the filter for the drag's duration and
-// fading it back in on release cuts that cost to a single pass per drag
-// instead of one per frame, and — since the mist is already a dense,
-// atmospheric white cloud — reads as the fog being brushed aside while
+// The blob layer's BlurFilter is a full-container GPU post-pass. Naively
+// left attached to a container that sits directly in the scene graph, Pixi
+// re-runs it on literally every ticker frame regardless of whether the fog
+// actually changed — there's no automatic dirty-tracking. On CI's
+// software-rendered headless Chromium (no GPU), that standing per-frame
+// cost alone was enough to stall the renderer's main thread badly enough
+// that even page.mouse.move (a CDP command) timed out — reproducing even
+// on a hover test that never drags at all. fogBlobLayer.container is kept
+// offscreen (never added to `world`) for exactly this reason: it's only
+// ever rendered on demand, into fogBlobCacheTexture (see
+// refreshFogBlobCache), and fogBlobCacheSprite displays that cached result
+// like any other plain, unfiltered sprite the rest of the time — a single
+// blur pass per real rebuild instead of one every frame forever.
+//
+// The blur is additionally dropped for an active drag's duration (redraws
+// stay crisp/cheap, so fog geometry still keeps up with the pan — no
+// missing-terrain pop-in at the edges) and faded back in over
+// FOG_DRAG_FADE_MS once released. Since the mist is already a dense,
+// atmospheric white cloud, this reads as fog being brushed aside while
 // panning and rolling back in once you stop, not a glitch.
+const FOG_BLOB_CACHE_PADDING = 48;
 const FOG_DRAG_FADE_MS = 350;
 const FOG_DRAG_FADE_FROM_ALPHA = 0.25;
 
@@ -334,9 +346,16 @@ export class HexMapRenderer {
   private fogLayer = new Graphics();
   // Organic mist: pooled Sprites sharing one pre-rendered soft-circle
   // texture, tinted/sized/jittered per hex — see FOG_BLOB_* above.
+  // Offscreen only — see the FOG_BLOB_CACHE_PADDING comment above for why
+  // this is never added to `world` directly.
   private fogBlobLayer = createSpriteLayer();
   private fogBlobTexture: Texture | null = null;
   private fogBlobFilter: BlurFilter | null = null;
+  // The on-demand render of fogBlobLayer.container (see refreshFogBlobCache)
+  // and the plain sprite that displays it every frame in `world`'s place.
+  private fogBlobCacheTexture: RenderTexture | null = null;
+  private fogBlobCacheSize = { width: 0, height: 0 };
+  private fogBlobCacheSprite = new Sprite();
   // Set while the drag-end fade (see FOG_DRAG_FADE_MS) is running; null once
   // it completes or a new drag starts.
   private fogFadeStartedAt: number | null = null;
@@ -444,9 +463,11 @@ export class HexMapRenderer {
     // mockup's per-blob `filter: blur(...)` (Viking Realm.dc.html's `fogs`).
     // Only the organic blob layer needs this; fogLayer's flat fill is
     // already a uniform solid colour, so blurring it would cost GPU time for
-    // no visible change.
+    // no visible change. Applied only inside refreshFogBlobCache's on-demand
+    // render, never left attached in the live scene graph — see
+    // FOG_BLOB_CACHE_PADDING above.
     this.fogBlobFilter = new BlurFilter({ strength: 10, quality: 3 });
-    this.fogBlobLayer.container.filters = [this.fogBlobFilter];
+    this.fogBlobCacheSprite.visible = false;
 
     this.world.addChild(
       this.terrainBase.container,
@@ -456,7 +477,7 @@ export class HexMapRenderer {
       this.hoverLayer,
       this.terrainTop.container,
       this.fogLayer,
-      this.fogBlobLayer.container,
+      this.fogBlobCacheSprite,
     );
     app.stage.addChild(this.world, this.markerLayer);
 
@@ -500,12 +521,12 @@ export class HexMapRenderer {
     this.tickFogFade();
   };
 
-  // Eases the fog blob layer's alpha back up after onPointerUp reattaches
-  // its BlurFilter — see FOG_DRAG_FADE_MS.
+  // Eases fogBlobCacheSprite's alpha back up after onPointerUp's forced
+  // rebuild re-bakes the blur into the cache texture — see FOG_DRAG_FADE_MS.
   private tickFogFade() {
     if (this.fogFadeStartedAt === null) return;
     const t = Math.min(1, (performance.now() - this.fogFadeStartedAt) / FOG_DRAG_FADE_MS);
-    this.fogBlobLayer.container.alpha = FOG_DRAG_FADE_FROM_ALPHA + (1 - FOG_DRAG_FADE_FROM_ALPHA) * t;
+    this.fogBlobCacheSprite.alpha = FOG_DRAG_FADE_FROM_ALPHA + (1 - FOG_DRAG_FADE_FROM_ALPHA) * t;
     if (t >= 1) this.fogFadeStartedAt = null;
   }
 
@@ -519,12 +540,11 @@ export class HexMapRenderer {
     // skips updateHover entirely while dragging, so nothing would clear it
     // on its own until the drag ends over a different hex.
     this.setHoveredCoord(null);
-    // Drop the blob layer's blur for the drag's duration — see
-    // FOG_DRAG_FADE_MS — and cut short any fade still running from a
-    // previous drag so it doesn't fight this one.
+    // Cut short any fade still running from a previous drag so it doesn't
+    // fight this one — refreshFogBlobCache reads `this.dragging` itself on
+    // the next rebuild, so there's nothing else to toggle here.
     this.fogFadeStartedAt = null;
-    this.fogBlobLayer.container.filters = [];
-    this.fogBlobLayer.container.alpha = 1;
+    this.fogBlobCacheSprite.alpha = 1;
   };
 
   private onPointerMove = (e: PointerEvent) => {
@@ -549,12 +569,18 @@ export class HexMapRenderer {
     if (this.dragging && this.dragMoved < 6) {
       this.handleClick(e);
     }
-    if (this.dragging && this.fogBlobFilter) {
-      this.fogBlobLayer.container.filters = [this.fogBlobFilter];
-      this.fogBlobLayer.container.alpha = FOG_DRAG_FADE_FROM_ALPHA;
+    const wasDragging = this.dragging;
+    this.dragging = false;
+    if (wasDragging) {
+      // The drag's last queued rebuild (scheduleCull's rAF, from the final
+      // pointermove) may already have fired while dragging was still true —
+      // rendering the crisp/unblurred cache — so force one more, synchronous
+      // rebuild now that dragging is false to guarantee the blur actually
+      // gets baked back in before the fade below reveals it.
+      this.rebuildAll();
+      this.fogBlobCacheSprite.alpha = FOG_DRAG_FADE_FROM_ALPHA;
       this.fogFadeStartedAt = performance.now();
     }
-    this.dragging = false;
   };
 
   private onPointerLeave = () => {
@@ -902,6 +928,64 @@ export class HexMapRenderer {
     }
   }
 
+  // Syncs the offscreen blob sprites, then renders them (blurred, unless a
+  // drag is in progress — see FOG_DRAG_FADE_MS) into fogBlobCacheTexture and
+  // points fogBlobCacheSprite at the result. This is the only place the
+  // blur filter actually runs — see the FOG_BLOB_CACHE_PADDING comment
+  // above for why it's never left attached in the live scene graph.
+  private refreshFogBlobCache(
+    blobEntries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number }>,
+  ) {
+    this.syncFogBlobs(blobEntries);
+    if (!this.app || blobEntries.size === 0) {
+      this.fogBlobCacheSprite.visible = false;
+      return;
+    }
+
+    // Padded past the blob geometry so the blur (which bleeds a few pixels
+    // past what it's applied to) doesn't get clipped at the texture's edge.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const e of blobEntries.values()) {
+      minX = Math.min(minX, e.x - e.w / 2);
+      maxX = Math.max(maxX, e.x + e.w / 2);
+      minY = Math.min(minY, e.y - e.h / 2);
+      maxY = Math.max(maxY, e.y + e.h / 2);
+    }
+    minX -= FOG_BLOB_CACHE_PADDING;
+    minY -= FOG_BLOB_CACHE_PADDING;
+    maxX += FOG_BLOB_CACHE_PADDING;
+    maxY += FOG_BLOB_CACHE_PADDING;
+    const width = Math.ceil(maxX - minX);
+    const height = Math.ceil(maxY - minY);
+
+    this.fogBlobLayer.container.filters =
+      !this.dragging && this.fogBlobFilter ? [this.fogBlobFilter] : [];
+    // The container's children are positioned in world coordinates (which
+    // can be arbitrarily far from the origin) — offset the container itself
+    // so the region we want (minX..maxX, minY..maxY) lands on (0,0)..(w,h)
+    // in the texture. Harmless since this container is never rendered any
+    // other way.
+    this.fogBlobLayer.container.position.set(-minX, -minY);
+
+    if (this.fogBlobCacheSize.width !== width || this.fogBlobCacheSize.height !== height) {
+      this.fogBlobCacheTexture?.destroy(true);
+      this.fogBlobCacheTexture = RenderTexture.create({ width, height });
+      this.fogBlobCacheSize = { width, height };
+    }
+    this.app.renderer.render({
+      container: this.fogBlobLayer.container,
+      target: this.fogBlobCacheTexture!,
+      clear: true,
+    });
+
+    this.fogBlobCacheSprite.texture = this.fogBlobCacheTexture!;
+    this.fogBlobCacheSprite.position.set(minX, minY);
+    this.fogBlobCacheSprite.visible = true;
+  }
+
   private syncSpriteLayer(
     layer: SpriteLayer,
     entries: Map<string, { texture: Texture; coord: AxialCoord }>,
@@ -1093,7 +1177,7 @@ export class HexMapRenderer {
       }
     }
 
-    this.syncFogBlobs(blobEntries);
+    this.refreshFogBlobCache(blobEntries);
   }
 
   private rebuildMarkers() {
@@ -1262,6 +1346,12 @@ export class HexMapRenderer {
     // one Sprite), so it needs its own explicit destroy.
     this.fogBlobTexture?.destroy(true);
     this.fogBlobTexture = null;
+    // fogBlobLayer.container is deliberately never added to app.stage (see
+    // FOG_BLOB_CACHE_PADDING above), so app.destroy's children:true won't
+    // reach it or fogBlobCacheTexture — both need their own explicit destroy.
+    this.fogBlobLayer.container.destroy({ children: true });
+    this.fogBlobCacheTexture?.destroy(true);
+    this.fogBlobCacheTexture = null;
     this.app?.destroy(false, { children: true });
     this.app = null;
   }
