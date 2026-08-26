@@ -3,6 +3,11 @@ import { foundSettlement } from './helpers';
 
 test.describe('settlement view interactions', () => {
   test('hovering a hex renders a highlight that follows the cursor', async ({ page }) => {
+    // foundSettlement() alone (page load + a real PixiJS/texture mount) can
+    // already run close to the global 45s budget under software-rendered
+    // headless Chromium, before this test's own interaction — see the
+    // panning test's comment below for the same reasoning.
+    test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -85,6 +90,18 @@ test.describe('settlement view interactions', () => {
   });
 
   test('panning the settlement view does not error', async ({ page }) => {
+    // This test's own footprint is small (a 10-step drag plus two full
+    // canvas screenshots), but foundSettlement() plus a real drag through
+    // the live PixiJS scene has been observed taking 70-90s under
+    // software-rendered headless Chromium — most of it genuine page-load
+    // and rendering cost (confirmed by profiling: an isolated 10-step
+    // mouse-move loop on a blank page takes ~300ms, so it isn't CDP/network
+    // overhead). The global 45s default is deliberately tight to catch
+    // regressions fast elsewhere; this test and the hover one above are the
+    // two that both found a settlement AND drive real interaction through
+    // it, so they get more room rather than the whole suite's budget
+    // loosened to cover them.
+    test.setTimeout(90_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 

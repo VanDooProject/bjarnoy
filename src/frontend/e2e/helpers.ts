@@ -6,11 +6,15 @@ import type { Page } from '@playwright/test';
 // grid covering most of the viewport: with islands covering a meaningful
 // fraction of the screen (see docs/design/img/worldmap.png), a few dozen
 // candidates spread across it is overwhelmingly likely to include a hit
-// regardless of where the drift left the camera.
+// regardless of where the drift left the camera. Kept close to that "a few
+// dozen" figure (40 points) rather than the much denser 126-point grid this
+// used to be — each point costs a real Playwright/CDP round trip, so the
+// extra density bought hit-probability nobody needed at multiple seconds
+// of wall-clock cost.
 function landfallGrid(): Array<[number, number]> {
   const spots: Array<[number, number]> = [];
-  for (let x = 120; x <= 1160; x += 80) {
-    for (let y = 100; y <= 700; y += 75) {
+  for (let x = 120; x <= 1160; x += 140) {
+    for (let y = 100; y <= 700; y += 130) {
       spots.push([x, y]);
     }
   }
@@ -37,8 +41,15 @@ export async function foundSettlement(page: Page): Promise<void> {
       await page.mouse.up();
       await page.waitForTimeout(150);
     }
-    for (const [x, y] of grid) {
-      if (await prompt.isVisible().catch(() => false)) break;
+    // Checking prompt.isVisible() is itself a Playwright/CDP round trip —
+    // doing it after every single click (as this used to) roughly doubled
+    // the number of round trips for no benefit, since landfall being made
+    // one click sooner or later is immaterial. Check every few clicks
+    // instead; worst case a handful of harmless extra clicks land after
+    // the prompt is already up.
+    for (let i = 0; i < grid.length; i++) {
+      if (i % 5 === 0 && (await prompt.isVisible().catch(() => false))) break;
+      const [x, y] = grid[i];
       await page.mouse.click(x, y);
     }
     if (await prompt.isVisible().catch(() => false)) break;
