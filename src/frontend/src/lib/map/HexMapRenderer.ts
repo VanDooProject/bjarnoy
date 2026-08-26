@@ -328,6 +328,12 @@ const FOG_SCOUTED_ALPHA = 0.6;
 // atmospheric white cloud, this reads as fog being brushed aside while
 // panning and rolling back in once you stop, not a glitch.
 const FOG_BLOB_CACHE_PADDING = 48;
+// Fraction of true size the blob layer is actually rendered/blurred at — see
+// refreshFogBlobCache's own comment. 0.4 keeps the softened result visually
+// indistinguishable from a full-resolution blur (already-soft blob edges
+// upscale cleanly) while cutting the filter's pixel-cost to well under a
+// sixth.
+const FOG_BLOB_CACHE_SCALE = 0.4;
 const FOG_DRAG_FADE_MS = 350;
 const FOG_DRAG_FADE_FROM_ALPHA = 0.25;
 // See scheduleCull's own comment for why this exists: throttles how often a
@@ -1034,20 +1040,31 @@ export class HexMapRenderer {
     const width = Math.ceil(maxX - minX);
     const height = Math.ceil(maxY - minY);
 
-    // Never reached while dragging (see the early return above), so the
-    // blur is always attached here.
+    // Render at a fraction of the true size, then display the result scaled
+    // back up — a gaussian blur's whole visual job is to erase high-frequency
+    // detail, so blurring a downsampled copy and upscaling it is visually
+    // indistinguishable from blurring at full resolution, while the filter
+    // pass itself (whose cost scales with pixel count) runs on a fraction of
+    // the pixels. `world`'s own scale doesn't enter into this — the container
+    // is rendered into an offscreen RenderTexture at this fixed factor
+    // regardless of camera zoom.
+    const scale = FOG_BLOB_CACHE_SCALE;
+    const texWidth = Math.max(1, Math.ceil(width * scale));
+    const texHeight = Math.max(1, Math.ceil(height * scale));
+
     this.fogBlobLayer.container.filters = this.fogBlobFilter ? [this.fogBlobFilter] : [];
     // The container's children are positioned in world coordinates (which
-    // can be arbitrarily far from the origin) — offset the container itself
-    // so the region we want (minX..maxX, minY..maxY) lands on (0,0)..(w,h)
-    // in the texture. Harmless since this container is never rendered any
-    // other way.
-    this.fogBlobLayer.container.position.set(-minX, -minY);
+    // can be arbitrarily far from the origin) — offset (to land the region
+    // we want on the texture's origin) and scale (for the downsample above)
+    // the container itself. Harmless since this container is never rendered
+    // any other way.
+    this.fogBlobLayer.container.scale.set(scale);
+    this.fogBlobLayer.container.position.set(-minX * scale, -minY * scale);
 
-    if (this.fogBlobCacheSize.width !== width || this.fogBlobCacheSize.height !== height) {
+    if (this.fogBlobCacheSize.width !== texWidth || this.fogBlobCacheSize.height !== texHeight) {
       this.fogBlobCacheTexture?.destroy(true);
-      this.fogBlobCacheTexture = RenderTexture.create({ width, height });
-      this.fogBlobCacheSize = { width, height };
+      this.fogBlobCacheTexture = RenderTexture.create({ width: texWidth, height: texHeight });
+      this.fogBlobCacheSize = { width: texWidth, height: texHeight };
     }
     this.app.renderer.render({
       container: this.fogBlobLayer.container,
@@ -1057,6 +1074,7 @@ export class HexMapRenderer {
 
     this.fogBlobCacheSprite.texture = this.fogBlobCacheTexture!;
     this.fogBlobCacheSprite.position.set(minX, minY);
+    this.fogBlobCacheSprite.scale.set(1 / scale);
     this.fogBlobCacheSprite.visible = true;
   }
 
