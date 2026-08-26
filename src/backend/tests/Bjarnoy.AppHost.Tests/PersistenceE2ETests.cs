@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
+using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
@@ -61,7 +62,7 @@ public class PersistenceE2ETests
         var canvas = page.Locator("canvas");
         var box = await canvas.BoundingBoxAsync()
             ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
-        await page.Mouse.ClickAsync(box.X + box.Width * (0.5 + 0.16), box.Y + box.Height / 2);
+        await page.Mouse.ClickAsync(box.X + box.Width * 0.66f, box.Y + box.Height / 2);
 
         // The first tray item flips from the click prompt to "Placed" only
         // once `player.hasFoundedSettlement` is true, which live mode only
