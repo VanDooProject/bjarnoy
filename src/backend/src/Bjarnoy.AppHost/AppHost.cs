@@ -49,6 +49,14 @@ builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WaitFor(api)
     .WithHttpEndpoint(env: "PORT")
     .WithEnvironment("BROWSER", "none")
+    // Without this the frontend defaults to VITE_DEMO_MODE's own default
+    // (true, see config.ts) and never talks to the API this apphost just
+    // wired up for it — every "aspire run" would silently fall back to the
+    // in-memory demo simulation instead of the real backend. The dev server
+    // still reaches the API same-origin (API_BASE_URL stays '/api/v1'):
+    // vite.config.ts proxies it to whatever endpoint WithReference(api)
+    // exposed as services__api__*__0.
+    .WithEnvironment("VITE_DEMO_MODE", "false")
     .WithExternalHttpEndpoints()
     .PublishAsDockerFile();
 
