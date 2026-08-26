@@ -8,25 +8,41 @@ test.describe('settlement view interactions', () => {
     const box = (await canvas.boundingBox())!;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    // the settlement camera always centres on the longhouse, so hexes at
+    // The settlement camera always centres on the longhouse, so hexes at
     // these offsets are reliably on screen regardless of where in the
-    // (randomly seeded) world the settlement actually landed
+    // (randomly seeded) world the settlement actually landed — but the
+    // zoom picked for a level-1 realm (zoomForFogMargin) is small enough
+    // that a much larger offset here used to land right on (or past) the
+    // explored ring's edge, which the hex-offset grid's stagger can push
+    // either side of depending on the settlement's own axial parity. These
+    // offsets are well inside the guaranteed border+explored radius.
     const clip = { x: cx - 130, y: cy - 230, width: 260, height: 220 };
+
+    const tooltip = page.locator('.hex-tooltip');
 
     // top-left corner of the canvas is well outside the level-1 border-2
     // realm — a reliable "nothing hovered" baseline (unexplored hexes
     // aren't drawn at all, hover included)
     await page.mouse.move(box.x + 5, box.y + 5);
-    await page.waitForTimeout(150);
+    await expect(tooltip).toBeHidden();
     const idle = await page.screenshot({ clip });
 
-    await page.mouse.move(cx, cy - 140, { steps: 6 });
-    await page.waitForTimeout(150);
+    // A fixed waitForTimeout here raced the renderer's own frame cadence
+    // (CI's software-rendered Chromium doesn't paint on a predictable
+    // schedule) — the tooltip mounting is the actual signal the hover took
+    // effect, so wait on that instead of guessing how long a frame takes.
+    await page.mouse.move(cx, cy - 60, { steps: 6 });
+    await expect(tooltip).toBeVisible();
     const hoverA = await page.screenshot({ clip });
     expect(Buffer.compare(idle, hoverA)).not.toBe(0);
 
-    await page.mouse.move(cx - 90, cy - 20, { steps: 6 });
-    await page.waitForTimeout(150);
+    // Position (not text) is what reliably distinguishes the two hovers:
+    // two different hexes can share the same terrain label ("Grassland" /
+    // "Unclaimed"), but the tooltip is anchored to the hovered hex's own
+    // screen coordinates, so a real hex change always moves it.
+    const hoverALeft = await tooltip.evaluate((el) => (el as HTMLElement).style.left);
+    await page.mouse.move(cx - 45, cy - 15, { steps: 6 });
+    await expect(tooltip).not.toHaveCSS('left', hoverALeft);
     const hoverB = await page.screenshot({ clip });
     expect(Buffer.compare(hoverA, hoverB)).not.toBe(0);
   });
