@@ -9,10 +9,15 @@ import { foundSettlement } from './helpers';
 //
 // zip 6a: founding now only ever happens on the landing page — /world
 // requires an already-founded settlement (see router/index.ts's guard), so
-// every test here founds one first via the shared helper.
+// every test here founds one first via the shared helper, then still has to
+// pan/zoom/hover through a second real render. 120s (not the 90s these used
+// before founding was added to them) matches settlement-interactions.spec's
+// own panning test — the same "found a settlement, then drive real
+// interaction through a render" shape that's been observed needing the
+// extra headroom under this suite's software-rendered headless Chromium.
 test.describe('world map interactions', () => {
   test('world map drifts on its own before any input', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(500);
@@ -32,7 +37,7 @@ test.describe('world map interactions', () => {
   });
 
   test('hovering an island renders a highlight that follows the cursor', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(800);
@@ -60,7 +65,7 @@ test.describe('world map interactions', () => {
   });
 
   test('panning the world map does not error and moves the camera', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
@@ -89,7 +94,7 @@ test.describe('world map interactions', () => {
   });
 
   test('zooming with the wheel does not error', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
