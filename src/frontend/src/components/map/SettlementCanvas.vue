@@ -6,7 +6,17 @@ import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 
-const props = defineProps<{ worldModel: WorldModel; playerId: string; settlementId: string }>();
+const props = defineProps<{
+  worldModel: WorldModel;
+  playerId: string;
+  // Unset before the player has founded anything yet (zip 6a: the landing
+  // page previews a real plot of village-view terrain first) — see
+  // `previewCenter`/`highlightCoord` below and HexMapRenderer's matching
+  // no-settlement fog bypass.
+  settlementId?: string;
+  previewCenter?: AxialCoord;
+  highlightCoord?: AxialCoord;
+}>();
 const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile]; hover: [info: HoverInfo | null] }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -17,6 +27,8 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   worldModel: props.worldModel,
   playerId: props.playerId,
   settlementId: props.settlementId,
+  previewCenter: props.previewCenter,
+  highlightCoord: props.highlightCoord,
   onHexClick: (coord, tile) => emit('hex-click', coord, tile),
   onHoverChange: (info) => emit('hover', info),
 });

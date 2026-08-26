@@ -1,17 +1,21 @@
 import { expect, test } from '@playwright/test';
+import { foundSettlement } from './helpers';
 
 // Mirrors settlement-interactions.spec.ts but for the world map: hover
 // highlighting and panning both go through the same HexMapRenderer code
 // paths (one renderer, one isometric lattice, per the zip 7 mockup's own
 // "same hex lattice as the settlement view, flattened"), so both views need
 // the same regression coverage.
+//
+// zip 6a: founding now only ever happens on the landing page — /world
+// requires an already-founded settlement (see router/index.ts's guard), so
+// every test here founds one first via the shared helper.
 test.describe('world map interactions', () => {
-  test('world map shows the hint overlay and drifts on its own before any input', async ({ page }) => {
+  test('world map drifts on its own before any input', async ({ page }) => {
+    test.setTimeout(90_000);
+    await foundSettlement(page);
     await page.goto('/world');
-
-    await expect(page.getByText(/already moving/)).toBeVisible();
-    await expect(page.getByText(/Click any green island/)).toBeVisible();
-    await expect(page.getByText(/no sign-up needed yet/)).toBeVisible();
+    await page.waitForTimeout(500);
 
     const canvas = page.locator('canvas');
     await expect(canvas).toBeVisible();
@@ -28,6 +32,8 @@ test.describe('world map interactions', () => {
   });
 
   test('hovering an island renders a highlight that follows the cursor', async ({ page }) => {
+    test.setTimeout(90_000);
+    await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(800);
     const canvas = page.locator('canvas');
@@ -54,9 +60,11 @@ test.describe('world map interactions', () => {
   });
 
   test('panning the world map does not error and moves the camera', async ({ page }) => {
+    test.setTimeout(90_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
+    await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(800);
     const canvas = page.locator('canvas');
@@ -81,9 +89,11 @@ test.describe('world map interactions', () => {
   });
 
   test('zooming with the wheel does not error', async ({ page }) => {
+    test.setTimeout(90_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 
+    await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(800);
     const canvas = page.locator('canvas');

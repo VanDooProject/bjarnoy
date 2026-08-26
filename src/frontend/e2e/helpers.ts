@@ -1,59 +1,69 @@
 import type { Page } from '@playwright/test';
 
-// The world map drifts on its own (zip 4's "already moving" hook) right up
-// until the first click, so the exact camera offset at click-time isn't
-// predictable — a handful of fixed points isn't reliable. Instead sweep a
-// grid covering most of the viewport: with islands covering a meaningful
-// fraction of the screen (see docs/design/img/worldmap.png), a few dozen
-// candidates spread across it is overwhelmingly likely to include a hit
-// regardless of where the drift left the camera. Kept close to that "a few
-// dozen" figure (40 points) rather than the much denser 126-point grid this
-// used to be — each point costs a real Playwright/CDP round trip, so the
-// extra density bought hit-probability nobody needed at multiple seconds
-// of wall-clock cost.
-function landfallGrid(): Array<[number, number]> {
-  const spots: Array<[number, number]> = [];
-  for (let x = 120; x <= 1160; x += 140) {
-    for (let y = 100; y <= 700; y += 130) {
-      spots.push([x, y]);
-    }
-  }
-  return spots;
-}
-
-/** Clicks around until landfall is made, confirms the nickname prompt, and waits for /settlement. */
+/**
+ * Founds a settlement on the landing page (zip 6a: the landing page is the
+ * village view — the starter plot is deterministic, so there's exactly one
+ * hex to click, not a grid sweep across a world map), places the 2 guided
+ * onboarding buildings, confirms the nickname prompt, and waits for
+ * /settlement.
+ */
 export async function foundSettlement(page: Page): Promise<void> {
-  await page.goto('/world');
+  // foundSettlement() alone — page load plus a real PixiJS/texture mount —
+  // has been observed crossing the global 45s default on a loaded CI
+  // runner. See settlement-interactions.spec.ts's matching comments for the
+  // other tests that share this same root cause.
+  await page.goto('/');
   await page.waitForTimeout(500);
 
-  const prompt = page.getByText('Landfall made.');
-  const grid = landfallGrid();
+  const canvas = page.locator('canvas');
+  const box = (await canvas.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
 
-  // The map's own default zoom is small enough that a single grid sweep
-  // should always land on an island, but drag-and-resweep a couple of times
-  // as a fallback in case the (unpredictable, drift-dependent) frozen
-  // camera position genuinely put no land in view at all.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) {
-      await page.mouse.move(640, 400);
-      await page.mouse.down();
-      await page.mouse.move(640 + 500, 400 + 300, { steps: 8 });
-      await page.mouse.up();
-      await page.waitForTimeout(150);
+  // The starter plot is deterministic and camera-centred (HexMapRenderer's
+  // previewCenter) — the highlighted hex sits at/near the viewport centre.
+  await page.mouse.click(cx, cy);
+
+  const prompt = page.getByText('Landfall made.');
+  // Founding is async (even in demo mode, it's a Vue reactive update away) —
+  // wait for the store to actually have a selected settlement before poking
+  // it directly, rather than racing the click above.
+  await page.waitForFunction(
+    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
+      ?.selectedSettlementId,
+    undefined,
+    { timeout: 15_000 },
+  );
+
+  // Places the 2 guided onboarding buildings directly against the model —
+  // real click-to-build UI is settlement-interactions.spec's job to cover;
+  // this helper only needs the onboarding *gate* (hud.buildingsPlaced,
+  // NicknamePrompt) to fire reliably, and the settlement's own zoom (picked
+  // by zoomForFogMargin to keep a wide fog margin on screen) makes clicking
+  // a specific nearby hex by pixel offset unreliable. __demoWorld is the
+  // same test/debug hook main.ts documents for exactly this kind of
+  // "drive WorldModel directly" case.
+  await page.evaluate(() => {
+    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
+    const settlement = world.model.getSettlement(world.selectedSettlementId);
+    const dirs: Array<[number, number]> = [
+      [1, 0],
+      [1, -1],
+      [0, -1],
+      [-1, 0],
+      [-1, 1],
+      [0, 1],
+    ];
+    let placed = 0;
+    for (let radius = 1; radius <= 2 && placed < 2; radius++) {
+      for (const [dq, dr] of dirs) {
+        if (placed >= 2) break;
+        const at = { q: settlement.q + dq * radius, r: settlement.r + dr * radius };
+        if (world.model.placeBuilding(world.selectedSettlementId, at, 'hut')) placed++;
+      }
     }
-    // Checking prompt.isVisible() is itself a Playwright/CDP round trip —
-    // doing it after every single click (as this used to) roughly doubled
-    // the number of round trips for no benefit, since landfall being made
-    // one click sooner or later is immaterial. Check every few clicks
-    // instead; worst case a handful of harmless extra clicks land after
-    // the prompt is already up.
-    for (let i = 0; i < grid.length; i++) {
-      if (i % 5 === 0 && (await prompt.isVisible().catch(() => false))) break;
-      const [x, y] = grid[i];
-      await page.mouse.click(x, y);
-    }
-    if (await prompt.isVisible().catch(() => false)) break;
-  }
+    world.syncHud();
+  });
 
   await prompt.waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('button.confirm').click();

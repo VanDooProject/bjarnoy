@@ -185,6 +185,19 @@ export interface HexMapRendererOptions {
   playerId: string;
   /** Only relevant in 'settlement' mode: the settlement being viewed. */
   settlementId?: string;
+  /**
+   * 'settlement' mode, no `settlementId` yet (zip 6a: the landing page shows
+   * a real plot of village-view terrain before anything has been founded
+   * there) — where to centre the camera in lieu of a settlement's own
+   * position. Ignored once `settlementId` is set.
+   */
+  previewCenter?: AxialCoord;
+  /**
+   * A single hex to keep highlighted every frame, independent of hover —
+   * zip 6a's "click to place" glow on the one buildable plot before the
+   * player has founded anything.
+   */
+  highlightCoord?: AxialCoord;
   onHexClick?: (coord: AxialCoord, tile: Tile) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -344,6 +357,11 @@ export class HexMapRenderer {
   private wavePoints: WavePoint[] = [];
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
+  // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
+  // on `options.highlightCoord`, redrawn every tick since the pulse itself
+  // is time-based, unlike everything else here which only redraws on a
+  // cull rebuild (camera pan/zoom).
+  private highlightLayer = new Graphics();
   // Flat, unblurred, guaranteed alpha:1 white fill — the "definitely fully
   // opaque, no reliance on blob overlap" backstop past FOG_TERRAIN_CULL_HEXES.
   private fogLayer = new Graphics();
@@ -396,7 +414,11 @@ export class HexMapRenderer {
 
   private settlementCameraOrigin(): Camera {
     const settlement = this.settlement();
-    if (!settlement) return { x: 0, y: 0, zoom: SETTLEMENT_DEFAULT_ZOOM };
+    if (!settlement) {
+      const at = this.options.previewCenter ?? { q: 0, r: 0 };
+      const grid = isoGridPosition(at, TILE_W, TILE_H);
+      return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2, zoom: SETTLEMENT_DEFAULT_ZOOM };
+    }
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
     const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
     return { ...center, zoom: this.zoomForFogMargin(settlement, center) };
@@ -482,6 +504,7 @@ export class HexMapRenderer {
       this.terrainTop.container,
       this.fogLayer,
       this.fogBlobCacheSprite,
+      this.highlightLayer,
     );
     app.stage.addChild(this.world, this.markerLayer);
 
@@ -523,7 +546,22 @@ export class HexMapRenderer {
       this.scheduleCull();
     }
     this.tickFogFade();
+    this.drawHighlight();
   };
+
+  private drawHighlight() {
+    this.highlightLayer.clear();
+    const at = this.options.highlightCoord;
+    if (!at) return;
+    const grid = isoGridPosition(at, TILE_W, TILE_H);
+    const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+    const flat = top.flatMap((p) => [p.x, p.y]);
+    const pulse = (Math.sin(performance.now() / 420) + 1) / 2; // 0..1
+    this.highlightLayer
+      .poly(flat)
+      .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
+      .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+  }
 
   // Eases fogBlobCacheSprite's alpha back up after onPointerUp's forced
   // rebuild re-bakes the blur into the cache texture — see FOG_DRAG_FADE_MS.
@@ -615,7 +653,11 @@ export class HexMapRenderer {
     }
 
     const { worldModel, mode } = this.options;
-    if (mode === 'settlement' && !worldModel.isExplored(coord.q, coord.r)) {
+    // zip 6a: before a settlement exists yet, there is nothing to hide — the
+    // whole preview plot is meant to be visible and hoverable, not gated by
+    // fog that (with no settlement in the model) would otherwise cover it
+    // everywhere (see rebuildBordersAndFog's matching bypass).
+    if (mode === 'settlement' && this.settlement() && !worldModel.isExplored(coord.q, coord.r)) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -777,6 +819,7 @@ export class HexMapRenderer {
       // that far out.
       if (
         fogDebugFlags.terrainCull &&
+        this.settlement() &&
         !worldModel.isExplored(c.q, c.r) &&
         jitterDistance(
           c.q,
@@ -1121,8 +1164,17 @@ export class HexMapRenderer {
       });
     };
 
+    // zip 6a: no settlement exists yet (landing-page preview) — nothing has
+    // ever been founded, so `isExplored` would be false everywhere and this
+    // loop would otherwise blanket the whole preview plot in unexplored
+    // mist. Skip the fog branch entirely rather than treat "nothing founded
+    // yet" as "nothing visible"; plain terrain (no owner border, no
+    // visible-edge tint either — both already no-op with no settlement) is
+    // what 6a's own mockup shows.
+    const previewingUnfounded = mode === 'settlement' && !this.settlement();
+
     for (const c of coords) {
-      if (mode === 'settlement' && !worldModel.isExplored(c.q, c.r)) {
+      if (mode === 'settlement' && !previewingUnfounded && !worldModel.isExplored(c.q, c.r)) {
         // Mist over ground the settlement has never scouted — covers every
         // hex the camera can currently see, however far it's panned, so the
         // world reads as continuing forever under fog rather than ending at
@@ -1362,6 +1414,24 @@ export class HexMapRenderer {
    */
   forceRebuild() {
     if (!this.app) return;
+    this.rebuildAll();
+  }
+
+  /**
+   * zip 6a: the landing page mounts one renderer in preview mode (no
+   * `settlementId`) and, the instant the player founds their settlement,
+   * needs it to become a real settlement view — same canvas, same camera
+   * continuity, no remount/flash. Recentres on the new settlement (in place
+   * of `previewCenter`) and forces a rebuild so fog/borders/markers all
+   * switch on immediately.
+   */
+  updateOptions(patch: Partial<HexMapRendererOptions>) {
+    this.options = { ...this.options, ...patch };
+    if (!this.app) return;
+    if (this.options.mode === 'settlement' && this.options.settlementId) {
+      this.camera = this.settlementCameraOrigin();
+      this.applyCameraTransform();
+    }
     this.rebuildAll();
   }
 
