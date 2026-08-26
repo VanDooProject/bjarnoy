@@ -61,20 +61,42 @@ public class PersistenceE2ETests
         // whenever the frontend doesn't know about a real backend.
         await Assertions.Expect(page.GetByText("Demo mode")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
 
-        // Matches e2e/helpers.ts's foundSettlement: the starter plot is
-        // deterministic and camera-centred, shifted right by LandingView's
-        // screenBiasX (0.16 of the viewport width).
-        await page.WaitForTimeoutAsync(500);
+        // The click point matches e2e/helpers.ts's foundSettlement: the
+        // camera re-centres on LandingView's previewCoord (the real world's
+        // own starter plot, via WorldModel.findLandfall against the seed
+        // this run's backend actually generated — see bootstrapLiveWorld),
+        // shifted right by screenBiasX (0.16 of the viewport width). But
+        // unlike helpers.ts's demo-mode canvas (a pre-built `vite preview`
+        // bundle), this is a cold Vite *dev* server transpiling everything
+        // on first request, so the camera can still be mid-transition the
+        // instant the canvas first appears — a click landing before it
+        // settles hits whatever was under the old camera position instead
+        // of the starter plot, and onHexClick silently no-ops on sea. Retry
+        // the click rather than guessing one fixed extra delay.
+        var trayStatus = page.Locator(".tray-item .sub").First;
         var canvas = page.Locator("canvas");
-        var box = await canvas.BoundingBoxAsync()
-            ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
-        await page.Mouse.ClickAsync(box.X + box.Width * 0.66f, box.Y + box.Height / 2);
-
-        // The first tray item flips from the click prompt to "Placed" only
-        // once `player.hasFoundedSettlement` is true, which live mode only
-        // sets after `foundStartingSettlementLive`'s POST to the API
-        // succeeds (see LandingView.vue's foundHere).
-        await Assertions.Expect(page.Locator(".tray-item .sub").First).ToHaveTextAsync("Placed", new() { Timeout = 15_000 });
+        var founded = false;
+        for (var attempt = 0; attempt < 10 && !founded; attempt++)
+        {
+            var box = await canvas.BoundingBoxAsync()
+                ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
+            await page.Mouse.ClickAsync(box.X + box.Width * 0.66f, box.Y + box.Height / 2);
+            try
+            {
+                // The first tray item flips from the click prompt to
+                // "Placed" only once `player.hasFoundedSettlement` is true,
+                // which live mode only sets after
+                // `foundStartingSettlementLive`'s POST to the API succeeds
+                // (see LandingView.vue's foundHere).
+                await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 2_000 });
+                founded = true;
+            }
+            catch (PlaywrightException)
+            {
+                await page.WaitForTimeoutAsync(1_000);
+            }
+        }
+        Assert.True(founded, "Clicking the starter plot never founded a settlement.");
 
         var worlds = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
         var world = Assert.Single(worlds!, w => w.Status == "running");
