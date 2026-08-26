@@ -98,8 +98,14 @@ public class PersistenceE2ETests
         }
         Assert.True(founded, "Clicking the starter plot never founded a settlement.");
 
+        // This test's Postgres is a fresh container of its own, so exactly
+        // one world exists at this point — bootstrapLiveWorld() created it,
+        // since there was nothing for it to join. No status filter: a
+        // freshly created world's WorldStatus is "active" (WorldEntity's
+        // default), not "running" — that name belongs to the separate
+        // WorldRunState field, which WorldResponse doesn't even expose.
         var worlds = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
-        var world = Assert.Single(worlds!, w => w.Status == "running");
+        var world = Assert.Single(worlds!);
 
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
