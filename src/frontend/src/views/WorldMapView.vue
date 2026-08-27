@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import WorldMapCanvas from '../components/map/WorldMapCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
+import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
+import { useFogDebug } from '../composables/useFogDebug';
 
 // zip 6a: founding happens on the landing page now, never here — the
 // router guard (router/index.ts) guarantees a settlement already exists by
@@ -16,6 +18,16 @@ import { usePlayerStore } from '../stores/player';
 const world = useWorldStore();
 const player = usePlayerStore();
 const router = useRouter();
+
+// ?debug=1 surfaces FogDebugPanel — see useFogDebug and issue #20: this used
+// to be wired into SettlementView only, so there was no way to inspect fog
+// rendering (fogDebugFlags) while actually looking at the world map, even
+// though every flag it controls also gates world-mode rendering.
+const showFogDebug = useFogDebug();
+const canvasRef = ref<InstanceType<typeof WorldMapCanvas> | null>(null);
+function onFogDebugChange() {
+  canvasRef.value?.renderer?.forceRebuild();
+}
 
 onMounted(async () => {
   // Sequenced (not fire-and-forget in parallel): `restoreLiveSettlement`
@@ -39,7 +51,8 @@ function onHexClick() {
 
 <template>
   <div class="world-view">
-    <WorldMapCanvas :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
+    <WorldMapCanvas ref="canvasRef" :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
+    <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
     <TopBar />
     <HudNav />
     <ResourceBar />
