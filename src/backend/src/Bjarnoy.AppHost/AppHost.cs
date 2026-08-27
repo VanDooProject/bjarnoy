@@ -16,11 +16,18 @@ var builder = DistributedApplication.CreateBuilder(args);
 // connects with real credentials via Database:ConnectionString.
 var postgresPassword = builder.AddParameter("postgres-password", "bjarnoy-dev-only", secret: true);
 
+var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
+           Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+
 var postgres = builder.AddPostgres("postgres", password: postgresPassword)
     .WithDataVolume()
     // Keeps a restart from wiping the world you were testing against.
-    .WithLifetime(ContainerLifetime.Persistent)
-    .WithPgAdmin();
+    .WithLifetime(ContainerLifetime.Persistent);
+
+if (!isCI)
+{
+    postgres.WithPgAdmin();
+}
 
 var gamedb = postgres.AddDatabase("gamedb");
 
