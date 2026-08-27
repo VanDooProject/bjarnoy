@@ -21,8 +21,8 @@ Bjarnoy / fjordhold
 
 # game
  there are 2 game types:
- - a quick round based game which should run from about 3 to 20 minutes
- - a real time browsergame like travian which should run about 6months to 2 years
+ - Fjørdhold: a quick round based game which should run from about 3 to 20 minutes
+ - Bjarnoy: a real time browsergame like travian which should run about 6months to 2 years
 
 ## setting
 see game mechanics in  ./prototypes/MECHANICS.md

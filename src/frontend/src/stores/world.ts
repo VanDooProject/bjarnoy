@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { api } from '../api/client';
+import { ApiError, api } from '../api/client';
 import type { BuildOrderResponse, IslandResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
@@ -12,6 +12,12 @@ import { emptyResources } from '../lib/map/types';
 // completions and rate changes it didn't cause itself (see
 // `applyServerSnapshot`). Kept well below build/production timescales.
 const LIVE_POLL_MS = 4000;
+
+// Mirrors the backend's SettlementService.MinimumSpacing: the minimum hex
+// distance the API enforces between two settlements' centres. Kept in sync
+// here so nearestStartPosition can skip a plot the backend would reject
+// instead of finding out only after the founding request fails.
+const MINIMUM_SETTLEMENT_SPACING = 3;
 
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's
@@ -63,12 +69,28 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || this.liveReady) return;
 
       let world = this.worldId ? await api.getWorld(this.worldId).catch(() => null) : null;
+      // Worlds are shared and meant to be created by an admin, not by
+      // whichever browser tab happens to land here first — so join
+      // whatever exists rather than filtering by status. (There used to be
+      // a `status === 'running'` filter here, but WorldResponse's `status`
+      // never actually takes that value — see WorldEntity's WorldStatus —
+      // so it silently matched nothing and fell through to createWorld()
+      // below on every visit, racing every other tab that did the same and
+      // 409-ing on the shared 'Kettil Sea' name.)
       if (!world) {
-        const worlds = await api.listWorlds();
-        world = worlds.find((w) => w.status === 'running') ?? null;
+        world = await this.newestWorld();
       }
       if (!world) {
-        world = await api.createWorld({ name: 'Kettil Sea' });
+        // Nobody has created a world yet (e.g. a fresh dev database) — seed
+        // one so there's something to join. If another tab won that race,
+        // join what it created instead of failing on the name conflict.
+        try {
+          world = await api.createWorld({ name: 'Kettil Sea' });
+        } catch (err) {
+          if (!(err instanceof ApiError) || err.status !== 409) throw err;
+          world = await this.newestWorld();
+          if (!world) throw err;
+        }
       }
 
       this.worldId = world.id;
@@ -82,12 +104,38 @@ export const useWorldStore = defineStore('world', {
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
       this.liveReady = true;
+      // Every other player already in this shared world needs to be known
+      // before the landing page picks a starting plot (nearestStartPosition
+      // must avoid their homes) and drawn on screen (rival realms are part
+      // of the world too, not just something the world map reveals later).
+      await this.refreshWorldSettlements();
     },
-    /** Nearest island start position to `near`, for founding via the API. */
+    /** The most recently created world, or null if none exist yet. */
+    async newestWorld() {
+      const worlds = await api.listWorlds();
+      // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
+      return worlds.length > 0 ? worlds[worlds.length - 1] : null;
+    },
+    /**
+     * Nearest island start position to `near` that nobody has founded on (or
+     * too close to) yet, for founding via the API.
+     *
+     * Start positions are precomputed once at world generation and never
+     * shrink as players settle, so without this check every new player on a
+     * shared world converges on the exact same nearest plot — which the
+     * backend then refuses with `PlotTaken` (an exact match) or
+     * `TooCloseToNeighbour` (see `SettlementService.MinimumSpacing`) once
+     * it's taken, rather than the client ever finding out until it tries.
+     */
     nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {
+      const settlements = this.model.listSettlements();
       let best: { islandId: string; at: AxialCoord; distance: number } | null = null;
       for (const island of this.islands) {
         for (const pos of island.startPositions) {
+          const tooCloseToExisting = settlements.some(
+            (s) => hexDistance(pos, { q: s.q, r: s.r }) < MINIMUM_SETTLEMENT_SPACING,
+          );
+          if (tooCloseToExisting) continue;
           const distance = hexDistance(near, pos);
           if (!best || distance < best.distance) {
             best = { islandId: island.id, at: pos, distance };
@@ -118,8 +166,13 @@ export const useWorldStore = defineStore('world', {
      */
     async foundStartingSettlementLive(ownerId: string, ownerName: string, realmName: string, near: AxialCoord) {
       if (!this.worldId) throw new Error('bootstrapLiveWorld() must run before founding a settlement');
+      // Bootstrap's own snapshot can be stale by the time the player
+      // actually clicks — re-sync who else has founded here first so
+      // nearestStartPosition doesn't send this request at a plot someone
+      // else claimed in the meantime.
+      await this.refreshWorldSettlements();
       const start = this.nearestStartPosition(near);
-      if (!start) throw new Error('No known start positions in this world yet');
+      if (!start) throw new Error('No unclaimed start positions in this world yet');
 
       const response = await api.foundSettlement(this.worldId, {
         islandId: start.islandId,

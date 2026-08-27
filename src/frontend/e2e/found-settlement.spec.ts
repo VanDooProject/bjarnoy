@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 
 test('clicking an island founds a settlement and opens the village view', async ({ page }) => {

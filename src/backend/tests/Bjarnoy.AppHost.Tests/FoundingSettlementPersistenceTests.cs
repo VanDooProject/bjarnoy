@@ -48,6 +48,8 @@ public class FoundingSettlementPersistenceTests
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
 
+        var consoleErrors = page.CollectConsoleErrors();
+
         // The frontend resource has no health check (unlike "api"), so
         // WaitForResourceHealthyAsync above only confirms the npm process
         // started — not that Vite has finished cold-starting (npm install,
@@ -107,15 +109,59 @@ public class FoundingSettlementPersistenceTests
 
         // This test's Postgres is a fresh container of its own, so exactly
         // one world exists at this point — bootstrapLiveWorld() created it,
-        // since there was nothing for it to join. No status filter: a
-        // freshly created world's WorldStatus is "active" (WorldEntity's
-        // default), not "running" — that name belongs to the separate
-        // WorldRunState field, which WorldResponse doesn't even expose.
+        // since there was nothing for it to join.
         var worlds = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
         var world = Assert.Single(worlds!);
 
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         Assert.Single(settlements!);
+
+        // Regression coverage for bootstrapLiveWorld() joining the wrong
+        // (or no) world for a second player: a fresh browser context, like
+        // a second person opening the site in another window, with its own
+        // empty localStorage — it must join the world the first page's
+        // client already created rather than trying (and 409-ing) to create
+        // a second "Kettil Sea".
+        await using var secondContext = await browser.NewContextAsync();
+        var secondPage = await secondContext.NewPageAsync();
+        var secondPageConsoleErrors = secondPage.CollectConsoleErrors();
+
+        await secondPage.GotoAsync(frontendUrl, new PageGotoOptions { Timeout = 120_000 });
+        await Assertions.Expect(secondPage.GetByText("Demo mode")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
+
+        var secondTrayStatus = secondPage.Locator(".tray-item .sub").First;
+        var secondCanvas = secondPage.Locator("canvas");
+        await secondCanvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
+
+        var secondFounded = false;
+        for (var attempt = 0; attempt < 10 && !secondFounded; attempt++)
+        {
+            var box = await secondCanvas.BoundingBoxAsync()
+                ?? throw new InvalidOperationException("Second window's map canvas never rendered a bounding box.");
+            await secondPage.Mouse.ClickAsync(box.X + box.Width * 0.66f, box.Y + box.Height / 2);
+            try
+            {
+                await Assertions.Expect(secondTrayStatus).ToHaveTextAsync("Placed", new() { Timeout = 2_000 });
+                secondFounded = true;
+            }
+            catch (PlaywrightException)
+            {
+                await secondPage.WaitForTimeoutAsync(1_000);
+            }
+        }
+        Assert.True(secondFounded, "A second, independent browser session never founded a settlement in the shared world.");
+
+        var worldsAfterSecondPlayer = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
+        // Still exactly one world: the second session joined it rather than
+        // racing to create another "Kettil Sea" and 409-ing.
+        Assert.Single(worldsAfterSecondPlayer!);
+
+        var settlementsAfterSecondPlayer = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
+            $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
+        Assert.Equal(2, settlementsAfterSecondPlayer!.Length);
+
+        Assert.Empty(consoleErrors);
+        Assert.Empty(secondPageConsoleErrors);
     }
 }

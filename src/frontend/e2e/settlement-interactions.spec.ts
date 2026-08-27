@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 
 test.describe('settlement view interactions', () => {
@@ -113,9 +113,6 @@ test.describe('settlement view interactions', () => {
     // is evidently wider than 90s leaves room for. 120s rather than
     // shrugging this off as a repeat flake.
     test.setTimeout(120_000);
-    const errors: string[] = [];
-    page.on('pageerror', (err) => errors.push(err.message));
-
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -135,6 +132,5 @@ test.describe('settlement view interactions', () => {
 
     const after = await canvas.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);
-    expect(errors).toEqual([]);
   });
 });

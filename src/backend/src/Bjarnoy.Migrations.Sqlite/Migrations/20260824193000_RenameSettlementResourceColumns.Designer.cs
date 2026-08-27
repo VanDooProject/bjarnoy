@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20260824190919_SettlementsAndBuildQueue")]
-    partial class SettlementsAndBuildQueue
+    [Migration("20260824193000_RenameSettlementResourceColumns")]
+    partial class RenameSettlementResourceColumns
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -23,7 +23,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BuildOrderEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CompletesAt")
@@ -58,7 +57,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.IslandEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("CentreQ")
@@ -96,7 +94,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Level")
@@ -125,13 +122,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("CapacityGrain")
+                    b.Property<double>("CapacityFood")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("CapacitySilver")
+                    b.Property<double>("CapacityIron")
                         .HasColumnType("REAL");
 
                     b.Property<double>("CapacityStone")
@@ -162,10 +158,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("RateGrain")
+                    b.Property<double>("RateFood")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("RateSilver")
+                    b.Property<double>("RateIron")
                         .HasColumnType("REAL");
 
                     b.Property<double>("RateStone")
@@ -177,10 +173,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("SettledAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<double>("StockGrain")
+                    b.Property<double>("StockFood")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("StockSilver")
+                    b.Property<double>("StockIron")
                         .HasColumnType("REAL");
 
                     b.Property<double>("StockStone")
@@ -205,7 +201,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<double>("BeachThreshold")

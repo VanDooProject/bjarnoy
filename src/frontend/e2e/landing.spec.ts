@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 
 test('landing page is the village view, not a marketing page in front of it', async ({ page }) => {
