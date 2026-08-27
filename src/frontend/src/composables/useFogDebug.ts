@@ -16,17 +16,33 @@
 // inspection aid, not a setting worth remembering across visits) fixes both:
 // any view can check the same flag, and it survives navigating between them
 // without threading `?debug=1` through every router.push() call in the app.
-import { ref } from 'vue';
+import { ref, watchEffect } from 'vue';
 import { useRoute } from 'vue-router';
 
 const STORAGE_KEY = 'fjordhold:fogDebug';
 
 export function useFogDebug() {
   const route = useRoute();
-  if (route.query.debug === '1') sessionStorage.setItem(STORAGE_KEY, '1');
-  // Explicit ?debug=0 is the escape hatch back out, since there's no UI
-  // control to turn the panel off once it's showing.
-  else if (route.query.debug === '0') sessionStorage.removeItem(STORAGE_KEY);
+  const active = ref(sessionStorage.getItem(STORAGE_KEY) === '1');
 
-  return ref(sessionStorage.getItem(STORAGE_KEY) === '1');
+  // Vue Router reuses the current view's component instance (no
+  // remount/setup() re-run) when only the query string changes on the same
+  // route — the screenshot scripts under scripts/screenshot-helpers/ do
+  // exactly this (history.replaceState + a popstate dispatch) to flip debug
+  // mode on without a full reload. A one-shot check at setup() time would
+  // miss that case entirely, so this has to stay a live watch, not a value
+  // read once.
+  watchEffect(() => {
+    if (route.query.debug === '1') {
+      sessionStorage.setItem(STORAGE_KEY, '1');
+      active.value = true;
+    } else if (route.query.debug === '0') {
+      // Explicit ?debug=0 is the escape hatch back out, since there's no UI
+      // control to turn the panel off once it's showing.
+      sessionStorage.removeItem(STORAGE_KEY);
+      active.value = false;
+    }
+  });
+
+  return active;
 }
