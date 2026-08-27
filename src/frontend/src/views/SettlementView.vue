@@ -9,13 +9,14 @@ import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
-import type { HoverInfo } from '../lib/map/HexMapRenderer';
+import { BUILDING_LABELS, TERRAIN_LABELS, type HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -65,16 +66,91 @@ const modalOwnerLabel = computed(() => {
   return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
 });
 
-function onHexClick(coord: AxialCoord, tile: Tile) {
-  hoverInfo.value = null;
-  selectedCoord.value = coord;
-  selectedTile.value = tile;
-}
-
 function closeModal() {
   selectedCoord.value = null;
   selectedTile.value = null;
   modalBusy.value = false;
+}
+
+// issue #16 "ring menu on click of tile": clicking a hex now opens a
+// contextual radial menu (RingMenu.vue) instead of jumping straight to
+// BuildingModal — the action set below matches the issue's four tile
+// categories (empty tile in the realm / placed building / enemy realm tile
+// / unclaimed hex). Actions the game has no mechanic for yet (tear down,
+// train, research, attack/raid, send settlers) are shown disabled with a
+// reason rather than left out, so the menu's shape matches the design even
+// before those systems exist.
+const ringMenu = ref<{ coord: AxialCoord; tile: Tile; x: number; y: number } | null>(null);
+
+function ringTitle(tile: Tile): string {
+  return tile.buildingType ? BUILDING_LABELS[tile.buildingType] : TERRAIN_LABELS[tile.terrain];
+}
+
+function actionsFor(tile: Tile): RingAction[] {
+  const owner = tile.ownerId ? world.model.getSettlement(tile.ownerId) : undefined;
+  const mine = owner?.id === world.selectedSettlementId;
+
+  if (tile.buildingType) {
+    if (mine) {
+      return [
+        { key: 'upgrade', label: 'Upgrade' },
+        { key: 'details', label: 'Details' },
+        { key: 'teardown', label: 'Tear down', disabled: true, reason: 'Not implemented yet' },
+        { key: 'train', label: 'Train', disabled: true, reason: 'Troops/ships not implemented yet' },
+        { key: 'research', label: 'Research', disabled: true, reason: 'Not implemented yet' },
+      ];
+    }
+    return [
+      { key: 'details', label: 'Info' },
+      { key: 'attack', label: 'Attack / raid', disabled: true, reason: 'Combat not implemented yet' },
+    ];
+  }
+  if (tile.terrain === 'sea') return [{ key: 'details', label: 'Info' }];
+  if (owner) {
+    if (mine) {
+      return [
+        { key: 'details', label: 'Info' },
+        { key: 'build', label: 'Build' },
+      ];
+    }
+    return [
+      { key: 'details', label: 'Info' },
+      { key: 'attack', label: 'Attack / raid', disabled: true, reason: 'Combat not implemented yet' },
+    ];
+  }
+  const coastal = tile.terrain === 'sand';
+  return [
+    { key: 'details', label: 'Info' },
+    {
+      key: coastal ? 'land' : 'settlers',
+      label: coastal ? 'Land here' : 'Send settlers',
+      disabled: true,
+      reason: 'No settlers available',
+    },
+  ];
+}
+
+const ringActions = computed(() => (ringMenu.value ? actionsFor(ringMenu.value.tile) : []));
+
+function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+  hoverInfo.value = null;
+  ringMenu.value = { coord, tile, x: screen.x, y: screen.y };
+}
+
+function closeRingMenu() {
+  ringMenu.value = null;
+}
+
+function onRingSelect(key: string) {
+  const menu = ringMenu.value;
+  if (!menu) return;
+  closeRingMenu();
+  selectedCoord.value = menu.coord;
+  selectedTile.value = menu.tile;
+  // 'details' and 'build' both open BuildingModal (set above) — its own
+  // button does the actual build. 'upgrade' is a one-click quick action
+  // instead, no modal detour.
+  if (key === 'upgrade') void upgrade();
 }
 
 // Demo mode places a hut instantly; live mode queues a real farm against the
@@ -143,6 +219,15 @@ async function upgrade() {
     <RealmPanel />
     <BuildQueuePanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
+    <RingMenu
+      v-if="ringMenu"
+      :x="ringMenu.x"
+      :y="ringMenu.y"
+      :title="ringTitle(ringMenu.tile)"
+      :actions="ringActions"
+      @select="onRingSelect"
+      @close="closeRingMenu"
+    />
     <BuildingModal
       v-if="selectedTile"
       :tile="selectedTile"

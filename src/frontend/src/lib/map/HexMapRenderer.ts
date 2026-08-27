@@ -205,7 +205,7 @@ export interface HexMapRendererOptions {
    * sit right of centre rather than directly behind the copy.
    */
   screenBiasX?: number;
-  onHexClick?: (coord: AxialCoord, tile: Tile) => void;
+  onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
 }
@@ -219,14 +219,14 @@ export interface HoverInfo {
   stat: string;
 }
 
-const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
+export const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   longhouse: 'Longhouse',
   hut: 'Hut',
   farm: 'Farm',
   tower: 'Watchtower',
 };
 
-const TERRAIN_LABELS: Record<Terrain, string> = {
+export const TERRAIN_LABELS: Record<Terrain, string> = {
   sea: 'Open water',
   sand: 'Shore',
   grass: 'Grassland',
@@ -858,7 +858,13 @@ export class HexMapRenderer {
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
-    this.options.onHexClick?.(coord, tile);
+    // issue #16 "ring menu on click of tile": the menu anchors on the hex's
+    // own top-face centre (same point hoverInfoFor uses for the tooltip),
+    // not the raw click position — so it lands the same place regardless of
+    // where on the hex you clicked.
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+    this.options.onHexClick?.(coord, tile, anchor);
   }
 
   private scheduleCull() {
