@@ -6,8 +6,14 @@
 // doesn't render then.
 import { computed } from 'vue';
 import { useWorldStore } from '../../stores/world';
+import type { AxialCoord } from '../../lib/hex/coords';
 
 const world = useWorldStore();
+// issue #16 status box: "clicking a building in queue should center and
+// highlight (some flashes) the tile" — the panel only knows q/r from the
+// backend queue snapshot, so it hands that up rather than owning any
+// renderer/camera concern itself.
+const emit = defineEmits<{ select: [coord: AxialCoord] }>();
 
 const BUILDING_LABELS: Record<string, string> = {
   longhouse: 'Longhouse',
@@ -35,6 +41,7 @@ const orders = computed(() => {
     name: BUILDING_LABELS[q.building] ?? q.building,
     lvl: q.targetLevel,
     remaining: q.completesInSeconds === null ? null : fmt(q.completesInSeconds - elapsed),
+    coord: { q: q.q, r: q.r } as AxialCoord,
   }));
 });
 </script>
@@ -45,19 +52,16 @@ const orders = computed(() => {
       <span class="label">Build queue</span>
       <span class="count">{{ orders.length }}</span>
     </div>
-    <div v-for="o in orders" :key="o.key" class="order">
+    <button v-for="o in orders" :key="o.key" type="button" class="order" @click="emit('select', o.coord)">
       <span class="name">{{ o.name }} <span class="lvl">→ {{ o.lvl }}</span></span>
       <span class="time">{{ o.remaining ?? '—' }}</span>
-    </div>
+    </button>
   </div>
 </template>
 
 <style scoped>
 .build-queue {
-  position: absolute;
-  left: 16px;
-  top: 76px;
-  z-index: 10;
+  pointer-events: auto;
   width: 232px;
   padding: 14px 15px;
 }
@@ -79,14 +83,26 @@ const orders = computed(() => {
 }
 .order {
   display: flex;
+  width: 100%;
   justify-content: space-between;
   align-items: baseline;
   padding: 6px 0;
   border-top: 1px solid var(--panel-border);
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   font-size: 13px;
+  cursor: pointer;
+  text-align: left;
 }
 .order:first-of-type {
   border-top: none;
+}
+.order:hover .name {
+  color: var(--gold);
 }
 .lvl {
   color: var(--muted);

@@ -452,6 +452,7 @@ export class HexMapRenderer {
   private dragMoved = 0;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
+  private highlightClearHandle: ReturnType<typeof setTimeout> | null = null;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -1684,6 +1685,26 @@ export class HexMapRenderer {
   }
 
   /**
+   * issue #16 "status box": "clicking a building in queue should center and
+   * highlight (some flashes) the tile" — pans to it (panTo) and turns on
+   * the existing pulsing highlightCoord overlay (drawHighlight, otherwise
+   * only used for the landing page's "click here" nudge) for a few beats,
+   * then switches it back off. Sets options.highlightCoord directly rather
+   * than going through updateOptions(), which — for an already-founded
+   * settlement — snaps the camera back to settlementCameraOrigin() on every
+   * call and would fight the panTo() above.
+   */
+  flashHighlight(coord: AxialCoord, durationMs = 1600) {
+    this.panTo(coord);
+    this.options.highlightCoord = coord;
+    if (this.highlightClearHandle) clearTimeout(this.highlightClearHandle);
+    this.highlightClearHandle = setTimeout(() => {
+      if (this.options.highlightCoord === coord) this.options.highlightCoord = undefined;
+      this.highlightClearHandle = null;
+    }, durationMs);
+  }
+
+  /**
    * Forces an immediate rebuild without moving the camera — rebuildAll is
    * otherwise only ever triggered by cameraMovedEnough() past a real pan/zoom
    * threshold (see scheduleCull), so something that changes rendering
@@ -1729,6 +1750,7 @@ export class HexMapRenderer {
 
   destroy() {
     this.destroyed = true;
+    if (this.highlightClearHandle) clearTimeout(this.highlightClearHandle);
     const canvas = this.app?.canvas;
     canvas?.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);

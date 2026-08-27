@@ -7,6 +7,7 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import ActivityPanel from '../components/hud/ActivityPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
@@ -45,6 +46,12 @@ onUnmounted(() => world.stopHudSync());
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
   hoverInfo.value = info;
+}
+
+// issue #16 status box: "clicking a building in queue should center and
+// highlight (some flashes) the tile".
+function onQueueSelect(coord: AxialCoord) {
+  canvasRef.value?.renderer?.flashHighlight(coord);
 }
 
 // zip 9: "Hex interaction | Hover = stats tooltip · Click = full-screen
@@ -217,7 +224,10 @@ async function upgrade() {
     <HudNav />
     <ResourceBar />
     <RealmPanel />
-    <BuildQueuePanel />
+    <div class="status-stack">
+      <BuildQueuePanel @select="onQueueSelect" />
+      <ActivityPanel />
+    </div>
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <RingMenu
       v-if="ringMenu"
@@ -256,5 +266,17 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+/* issue #16 "status box, on left side": build queue + activity panels
+   stacked as one column instead of each guessing the other's height with a
+   hardcoded offset. */
+.status-stack {
+  position: absolute;
+  left: 16px;
+  top: 76px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>
