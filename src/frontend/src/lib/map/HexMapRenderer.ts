@@ -374,6 +374,20 @@ const FOG_BLOB_CACHE_PADDING = 48;
 const FOG_BLOB_CACHE_SCALE = 0.4;
 const FOG_DRAG_FADE_MS = 350;
 const FOG_DRAG_FADE_FROM_ALPHA = 0.25;
+// Stacking order for fog blob sprites (see syncFogBlobs's zIndex/sortChildren
+// below). Without an explicit order, two neighbouring blobs of different fog
+// tiers (a hex's own oversized blob spills into its neighbours — see
+// FOG_BLOB_W_SCALE/H_SCALE) stacked in whatever order rebuildBordersAndFog's
+// `coords` loop happened to visit them in, i.e. raster scan order, unrelated
+// to fog tier. That let a lightly-tinted unexplored (white) blob draw on top
+// of a neighbouring scouted (dark) blob depending on which side of the
+// viewport the camera panned in from — the dark "you've been here, it's just
+// out of sight" tint would flicker in and out depending on pan direction
+// instead of reading as sitting underneath the pale "never scouted" mist.
+// Unexplored always wins the stack: it represents the outer, denser unknown,
+// so scouted's dim tint belongs underneath it wherever the two overlap.
+const FOG_BLOB_Z_SCOUTED = 0;
+const FOG_BLOB_Z_UNEXPLORED = 1;
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
@@ -1126,7 +1140,7 @@ export class HexMapRenderer {
   // fixed-size tile sprite, so it takes its own geometry fields instead of
   // reusing that method's tile-shaped one.
   private syncFogBlobs(
-    entries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number }>,
+    entries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }>,
   ) {
     const layer = this.fogBlobLayer;
     for (const [key, e] of entries) {
@@ -1143,6 +1157,13 @@ export class HexMapRenderer {
       sprite.height = e.h;
       sprite.tint = e.tint;
       sprite.alpha = e.alpha;
+      // See FOG_BLOB_Z_SCOUTED/FOG_BLOB_Z_UNEXPLORED: without this, two
+      // overlapping neighbouring blobs of different fog tiers stack in
+      // whatever order `entries` was populated in (raster scan order from
+      // rebuildBordersAndFog's `coords` loop), not by tier — sortChildren()
+      // (container.sortableChildren is set in createSpriteLayer) is what
+      // actually applies `zIndex` instead of leaving it inert.
+      sprite.zIndex = e.z;
       if (isNew) layer.container.addChild(sprite);
     }
     for (const [key, sprite] of layer.active) {
@@ -1151,6 +1172,7 @@ export class HexMapRenderer {
       layer.pool.push(sprite);
       layer.active.delete(key);
     }
+    layer.container.sortChildren();
   }
 
   // Syncs the offscreen blob sprites, then renders them (blurred, unless a
@@ -1159,7 +1181,7 @@ export class HexMapRenderer {
   // blur filter actually runs — see the FOG_BLOB_CACHE_PADDING comment
   // above for why it's never left attached in the live scene graph.
   private refreshFogBlobCache(
-    blobEntries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number }>,
+    blobEntries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }>,
   ) {
     this.syncFogBlobs(blobEntries);
     if (!this.app || blobEntries.size === 0) {
@@ -1341,13 +1363,16 @@ export class HexMapRenderer {
     };
     const blobEntries = new Map<
       string,
-      { x: number; y: number; w: number; h: number; tint: number; alpha: number }
+      { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }
     >();
 
     // A blob per fogged hex, oversized and jittered in position/size so
     // neighbours overlap heavily instead of abutting at their hex edges —
     // see the FOG_BLOB_* comment above for why this replaces per-hex
-    // polygon fills entirely for both fog tiers.
+    // polygon fills entirely for both fog tiers. `z` is the blob's fog tier
+    // (FOG_BLOB_Z_SCOUTED/FOG_BLOB_Z_UNEXPLORED) — every call site below
+    // passes FOG_UNEXPLORED or FOG_SCOUTED as `tint`, so it's derived from
+    // that instead of threading a second parameter through every call.
     const addBlob = (c: AxialCoord, tint: number, alpha: number) => {
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const jx = fogDebugFlags.blobJitter ? (hash01(c.q, c.r, 20) - 0.5) * 2 : 0;
@@ -1360,6 +1385,7 @@ export class HexMapRenderer {
         h: TILE_H * FOG_BLOB_H_SCALE * sizeJ,
         tint,
         alpha,
+        z: tint === FOG_SCOUTED ? FOG_BLOB_Z_SCOUTED : FOG_BLOB_Z_UNEXPLORED,
       });
     };
 
