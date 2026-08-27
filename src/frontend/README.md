@@ -94,8 +94,24 @@ joins a running world or creates one (`src/api/client.ts`), reseeds the local
 the server generated, and founding a settlement is a real
 `POST /api/v1/worlds/{id}/settlements` call rather than a local mutation. Set
 `VITE_API_BASE_URL` too if the API isn't reachable at `/api/v1` on the same
-origin (it is by default in the single container `deploy/Dockerfile` builds).
-`src/config.ts` holds both flags.
+origin (it is by default in the single container `deploy/Dockerfile` builds,
+and in dev under Aspire — see below). `src/config.ts` holds both flags, and
+whenever `DEMO_MODE` is on, `App.vue`'s `DemoModeBadge` says so on screen —
+if you see it while expecting the real backend, one of these two env vars
+isn't reaching the dev server the way you think it is.
+
+Running `dotnet run --project src/Bjarnoy.AppHost` (see `docs/tech/backend.md`)
+starts this frontend itself via `AddNpmApp("frontend", ..., "dev")`, already
+wired to the real backend: `AppHost.cs` sets `VITE_DEMO_MODE=false` for it,
+and `vite.config.ts` proxies `/api` to whatever endpoint Aspire resolved for
+the API resource (`services__api__http__0`), so `API_BASE_URL` never needs
+overriding there. `vite.config.ts` also binds the dev server to `PORT` when
+it's set — Vite has no built-in convention for that env var and otherwise
+keeps listening on its own default (5173) regardless of which port Aspire
+told every other resource (and the dashboard) to use for this one, which
+looks like the frontend started fine right up until something actually
+tries to open that link. Opening the frontend's own URL from the Aspire
+dashboard — not routed through anything else — is exactly what this is for.
 
 The settlement view's build queue is wired up too: clicking an empty owned
 hex queues a real build order (`POST /api/v1/settlements/{id}/builds`) rather

@@ -3,35 +3,60 @@ import { foundSettlement } from './helpers';
 
 test.describe('settlement view interactions', () => {
   test('hovering a hex renders a highlight that follows the cursor', async ({ page }) => {
+    // foundSettlement() alone (page load + a real PixiJS/texture mount) can
+    // already run close to the global 45s budget under software-rendered
+    // headless Chromium, before this test's own interaction — see the
+    // panning test's comment below for the same reasoning.
+    test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    // the settlement camera always centres on the longhouse, so hexes at
+    // The settlement camera always centres on the longhouse, so hexes at
     // these offsets are reliably on screen regardless of where in the
-    // (randomly seeded) world the settlement actually landed
+    // (randomly seeded) world the settlement actually landed — but the
+    // zoom picked for a level-1 realm (zoomForFogMargin) is small enough
+    // that a much larger offset here used to land right on (or past) the
+    // explored ring's edge, which the hex-offset grid's stagger can push
+    // either side of depending on the settlement's own axial parity. These
+    // offsets are well inside the guaranteed border+explored radius.
     const clip = { x: cx - 130, y: cy - 230, width: 260, height: 220 };
+
+    const tooltip = page.locator('.hex-tooltip');
 
     // top-left corner of the canvas is well outside the level-1 border-2
     // realm — a reliable "nothing hovered" baseline (unexplored hexes
     // aren't drawn at all, hover included)
     await page.mouse.move(box.x + 5, box.y + 5);
-    await page.waitForTimeout(150);
+    await expect(tooltip).toBeHidden();
     const idle = await page.screenshot({ clip });
 
-    await page.mouse.move(cx, cy - 140, { steps: 6 });
-    await page.waitForTimeout(150);
+    // A fixed waitForTimeout here raced the renderer's own frame cadence
+    // (CI's software-rendered Chromium doesn't paint on a predictable
+    // schedule) — the tooltip mounting is the actual signal the hover took
+    // effect, so wait on that instead of guessing how long a frame takes.
+    await page.mouse.move(cx, cy - 60, { steps: 6 });
+    await expect(tooltip).toBeVisible();
     const hoverA = await page.screenshot({ clip });
     expect(Buffer.compare(idle, hoverA)).not.toBe(0);
 
-    await page.mouse.move(cx - 90, cy - 20, { steps: 6 });
-    await page.waitForTimeout(150);
+    // Position (not text) is what reliably distinguishes the two hovers:
+    // two different hexes can share the same terrain label ("Grassland" /
+    // "Unclaimed"), but the tooltip is anchored to the hovered hex's own
+    // screen coordinates, so a real hex change always moves it.
+    const hoverALeft = await tooltip.evaluate((el) => (el as HTMLElement).style.left);
+    await page.mouse.move(cx - 45, cy - 15, { steps: 6 });
+    await expect(tooltip).not.toHaveCSS('left', hoverALeft);
     const hoverB = await page.screenshot({ clip });
     expect(Buffer.compare(hoverA, hoverB)).not.toBe(0);
   });
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
+    // Same reasoning as the hover/panning tests above: foundSettlement()
+    // plus up to 8 candidate click-and-screenshot rounds runs close to (and
+    // on CI, over) the global 45s budget.
+    test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -69,6 +94,25 @@ test.describe('settlement view interactions', () => {
   });
 
   test('panning the settlement view does not error', async ({ page }) => {
+    // This test's own footprint is small (a 10-step drag plus two full
+    // canvas screenshots), but foundSettlement() plus a real drag through
+    // the live PixiJS scene has been observed taking 70-90s under
+    // software-rendered headless Chromium — most of it genuine page-load
+    // and rendering cost (confirmed by profiling: an isolated 10-step
+    // mouse-move loop on a blank page takes ~300ms, so it isn't CDP/network
+    // overhead). The global 45s default is deliberately tight to catch
+    // regressions fast elsewhere; this test and the hover one above are two
+    // of the tests that both found a settlement AND drive real interaction
+    // through it, so they get more room rather than the whole suite's
+    // budget loosened to cover them.
+    //
+    // This one specifically failed to finish inside 90s on two consecutive
+    // real CI runs (once as a bare mouse.move timeout, once as "Element is
+    // not attached to the DOM" after a WebGL "GPU stall" warning) despite
+    // completing locally in 72-78s both times — CI's run-to-run variance
+    // is evidently wider than 90s leaves room for. 120s rather than
+    // shrugging this off as a repeat flake.
+    test.setTimeout(120_000);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
 

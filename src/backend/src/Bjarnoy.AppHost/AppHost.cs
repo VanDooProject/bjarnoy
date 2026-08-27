@@ -26,7 +26,11 @@ var gamedb = postgres.AddDatabase("gamedb");
 
 // Migrations run as their own resource against the same image the API uses,
 // mirroring how a deployment does it, and the API waits for it to exit cleanly.
-var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator")
+// launchProfileName: null / explicit WithHttpEndpoint() / ASPNETCORE_ENVIRONMENT —
+// see the api resource below for why; same reasoning applies here.
+var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator", launchProfileName: null)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithHttpEndpoint()
     .WithArgs("--migrate")
     .WithReference(gamedb)
     .WaitFor(gamedb)
@@ -34,7 +38,22 @@ var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator")
     .WithEnvironment("Database__ConnectionString", gamedb.Resource.ConnectionStringExpression)
     .WithExplicitStart();
 
-var api = builder.AddProject<Projects.Bjarnoy_Api>("api")
+// launchProfileName: null — suppresses the "http"/"https" endpoints AddProject
+// would otherwise infer from launchSettings.json's fixed ports (5180/7180).
+// Those are shared across every checkout of this repo, so two AppHost
+// instances running at once (two branches, two worktrees) fight over the
+// same port; when the second one loses that race, Kestrel binds wherever's
+// actually free instead (visible in its own startup log), but the
+// dashboard/health check were already wired to the launchSettings port and
+// never learn about the fallback — they just time out forever even though
+// the API is up. WithHttpEndpoint() below (no `port:`) is one Aspire
+// allocates and tracks itself instead, so every concurrent instance gets its
+// own free port with nothing to lose a race over. ASPNETCORE_ENVIRONMENT is
+// set explicitly since suppressing the launch profile also suppresses the
+// "Development" it would otherwise have supplied.
+var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: null)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithHttpEndpoint()
     .WithReference(gamedb)
     .WaitFor(gamedb)
     .WithEnvironment("Database__Provider", "PostgreSql")
@@ -47,8 +66,25 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api")
 builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithReference(api)
     .WaitFor(api)
+    // This picks the port and hands it to the child process as PORT — the
+    // endpoint every other resource's WithReference and the dashboard
+    // actually point at. Vite has no built-in convention for PORT and binds
+    // its own default (5173) regardless, so on its own this env var does
+    // nothing: ../../../frontend/vite.config.ts reads process.env.PORT
+    // itself (its `aspirePort` const) and passes it to Vite's `server.port`
+    // with `strictPort: true`, which is what actually makes Vite bind here.
+    // Without that, the dashboard link 404s/connection-resets while `npm run
+    // dev` looks like it started fine on its own default port.
     .WithHttpEndpoint(env: "PORT")
     .WithEnvironment("BROWSER", "none")
+    // Without this the frontend defaults to VITE_DEMO_MODE's own default
+    // (true, see config.ts) and never talks to the API this apphost just
+    // wired up for it — every "aspire run" would silently fall back to the
+    // in-memory demo simulation instead of the real backend. The dev server
+    // still reaches the API same-origin (API_BASE_URL stays '/api/v1'):
+    // vite.config.ts proxies it to whatever endpoint WithReference(api)
+    // exposed as services__api__*__0.
+    .WithEnvironment("VITE_DEMO_MODE", "false")
     .WithExternalHttpEndpoints()
     .PublishAsDockerFile();
 

@@ -26,6 +26,7 @@ src/backend/
   tests/
     Bjarnoy.Domain.Tests          hex maths, noise, generation
     Bjarnoy.Api.IntegrationTests  the real app over a real database
+    Bjarnoy.AppHost.Tests         the real Aspire orchestration, driven by a real browser
 ```
 
 `Bjarnoy.Domain` deliberately has no package references. World generation, hex
@@ -55,10 +56,21 @@ Tests:
 cd src/backend
 dotnet test --project tests/Bjarnoy.Domain.Tests
 dotnet test --project tests/Bjarnoy.Api.IntegrationTests
+dotnet test --project tests/Bjarnoy.AppHost.Tests
 ```
 
 The PostgreSQL half of the integration suite needs Docker. Without it those
 tests skip with a stated reason rather than failing.
+
+`Bjarnoy.AppHost.Tests` starts the exact orchestration `dotnet run --project
+src/Bjarnoy.AppHost` does (Postgres, migrator, API, frontend dev server) via
+`Aspire.Hosting.Testing`, and drives the real frontend with Playwright — it's
+the regression test for the frontend silently falling back to demo mode
+instead of the backend Aspire just started for it (see
+`src/frontend/vite.config.ts` and `Bjarnoy.AppHost/AppHost.cs`). It needs
+Docker (for Postgres), Node (for the frontend), and Playwright's browser
+installed once: `pwsh bin/Debug/net10.0/playwright.ps1 install --with-deps
+chromium` from the test project's directory after a build.
 
 ## Database
 

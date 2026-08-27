@@ -2,13 +2,17 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  // Generous: each test waits out real camera drift/animation and takes a
-  // handful of screenshots — 20-27s observed even on a well-resourced
-  // machine, so the 30s default leaves too little margin on a loaded CI box.
-  timeout: 60_000,
+  // 45s: generous enough for real camera drift/animation and a handful of
+  // screenshots (20-27s observed even on a well-resourced machine), but
+  // short enough that a genuine perf regression (main thread stalled by,
+  // e.g., a filter left running every frame) fails fast and loud instead of
+  // eating up to 90s per attempt before anyone notices.
+  timeout: 45_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // No retries, in CI or locally: a retry silently hides a flaky test
+  // behind a green run instead of surfacing it.
+  retries: 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

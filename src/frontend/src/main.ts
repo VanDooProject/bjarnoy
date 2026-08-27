@@ -1,7 +1,10 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
+import { DEMO_MODE } from './config';
+import { fogDebugFlags } from './lib/map/HexMapRenderer';
 import { router } from './router';
+import { useWorldStore } from './stores/world';
 import './style.css';
 
 const app = createApp(App);
@@ -9,3 +12,20 @@ app.use(createPinia());
 app.use(router);
 
 app.mount('#app');
+
+// Demo-mode-only debug hooks: let test/screenshot scripts (e.g.
+// scripts/screenshot-helpers) drive the app past what the real UI exposes
+// yet. Never present in a live (VITE_DEMO_MODE=false) build.
+if (DEMO_MODE) {
+  // Drives WorldModel mutations directly — e.g. placing a building type the
+  // current UI has no picker for (see BuildingModal.vue) — without a real
+  // backend or a full building-choice menu.
+  (window as unknown as { __demoWorld: () => ReturnType<typeof useWorldStore> }).__demoWorld = () =>
+    useWorldStore();
+  // Toggles individual fog-rendering mechanisms on/off (HexMapRenderer's
+  // FogDebugFlags) so each can be inspected in isolation — see the flags'
+  // own doc comments for what each one isolates. Mutate directly, e.g.
+  // `window.__fogDebug.distJitter = false`; takes effect on the next
+  // rebuild (any camera pan/zoom), it isn't itself a trigger.
+  (window as unknown as { __fogDebug: typeof fogDebugFlags }).__fogDebug = fogDebugFlags;
+}

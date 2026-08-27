@@ -25,6 +25,14 @@ function stablePlayerId(): string {
 // exists anywhere.
 const persistedSettlementId = DEMO_MODE ? null : localStorage.getItem('bjarnoy.settlementId');
 
+// zip 6a: has this player already finished the guided landing-page
+// onboarding (longhouse + 2 more buildings)? Only a router-guard latch — the
+// live "how many buildings so far" count itself always comes straight from
+// WorldModel.countBuildings (see stores/world.ts's hud.buildingsPlaced), so
+// this flag can't drift from what's actually built. Demo mode resets every
+// reload, same as persistedSettlementId above.
+const persistedOnboardingComplete = DEMO_MODE ? false : localStorage.getItem('bjarnoy.onboardingComplete') === '1';
+
 // Deferred onboarding (zip 4): a stable local id is generated for free so
 // the world can attribute the settlement the player is about to found; a
 // display name / real account is only asked for after that first real move.
@@ -34,6 +42,7 @@ export const usePlayerStore = defineStore('player', {
     nickname: localStorage.getItem('bjarnoy.nickname') as string | null,
     hasFoundedSettlement: persistedSettlementId !== null,
     settlementId: persistedSettlementId,
+    onboardingComplete: persistedOnboardingComplete,
   }),
   getters: {
     // Live mode needs an owner name (2-100 chars) at the moment a settlement
@@ -58,6 +67,10 @@ export const usePlayerStore = defineStore('player', {
       this.hasFoundedSettlement = true;
       this.settlementId = settlementId;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.settlementId', settlementId);
+    },
+    completeOnboarding() {
+      this.onboardingComplete = true;
+      if (!DEMO_MODE) localStorage.setItem('bjarnoy.onboardingComplete', '1');
     },
   },
 });

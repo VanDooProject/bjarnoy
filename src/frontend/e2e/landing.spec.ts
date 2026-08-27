@@ -1,17 +1,20 @@
 import { expect, test } from '@playwright/test';
+import { foundSettlement } from './helpers';
 
-test('landing page is real marketing copy, not the game canvas', async ({ page }) => {
+test('landing page is the village view, not a marketing page in front of it', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.goto('/');
 
-  await expect(page.getByText('Fjørdhold')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /raise a realm/i })).toBeVisible();
-  await expect(page.locator('canvas')).toHaveCount(0);
-
-  await expect(page.getByRole('link', { name: 'Impressum' })).toHaveAttribute('href', '/impressum');
-
-  await page.getByRole('button', { name: /enter the world/i }).click();
-  await page.waitForURL('**/world');
+  // zip 6a: a real plot of terrain is on screen immediately — no world map,
+  // no click-through, no separate marketing page.
   await expect(page.locator('canvas')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /put your longhouse somewhere/i })).toBeVisible();
+  await expect(page.getByText('Longhouse & yard')).toBeVisible();
+
+  // Founding, then the 2 guided onboarding buildings, then the nickname
+  // prompt, then the full game — all without ever visiting a world map.
+  await foundSettlement(page);
+  await expect(page).toHaveURL(/\/settlement$/);
 });
 
 test('impressum page is reachable and links back', async ({ page }) => {

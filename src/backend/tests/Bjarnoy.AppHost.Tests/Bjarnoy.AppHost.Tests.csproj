@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Testing" />
+    <PackageReference Include="Microsoft.Playwright" />
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Referenced (not just run against) so this project sees the generated
+         `Projects.Bjarnoy_AppHost` type that DistributedApplicationTestingBuilder
+         needs, and the API's response contracts for asserting against the
+         database directly. -->
+    <ProjectReference Include="..\..\src\Bjarnoy.AppHost\Bjarnoy.AppHost.csproj" />
+    <ProjectReference Include="..\..\src\Bjarnoy.Api\Bjarnoy.Api.csproj" />
+  </ItemGroup>
+
+</Project>

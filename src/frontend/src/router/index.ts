@@ -28,8 +28,17 @@ export const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  if (to.name === 'settlement' && !usePlayerStore().hasFoundedSettlement) {
-    return { name: 'world' };
+  const player = usePlayerStore();
+  // zip 6a: founding (and the guided build-2-more-buildings onboarding that
+  // follows it) only ever happens on the landing page now — the world map
+  // never founds a settlement. So `/world` and `/settlement` both require an
+  // already-founded settlement, and `/` itself is done being the founding
+  // surface once onboarding is complete.
+  if (to.name === 'landing' && player.hasFoundedSettlement && player.onboardingComplete) {
+    return { name: 'settlement' };
+  }
+  if ((to.name === 'settlement' || to.name === 'world') && !player.hasFoundedSettlement) {
+    return { name: 'landing' };
   }
   return true;
 });
