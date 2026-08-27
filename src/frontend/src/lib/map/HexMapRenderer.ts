@@ -74,6 +74,10 @@ const FOG_SCOUTED = 0x0b1116;
 const FOG_UNEXPLORED = 0xe9f0f4;
 const HOVER_FILL = 0xffffff;
 const HOVER_STROKE = 0xffe9c2;
+// Generous starter-island radius (see LandingView's PREVIEW_ISLAND_RADIUS-ish
+// sizing) — used only to decide "is this the island my settlement is on"
+// for the world map's gold-vs-white island label, not real terrain extent.
+const ISLAND_LABEL_OWN_RADIUS = 8;
 
 // zip 7: islands on the world map are "small hexes (no images (yet))" —
 // unlike the settlement view, which renders full tile-art sprites, the
@@ -1514,15 +1518,44 @@ export class HexMapRenderer {
       ownerLabel.visible = true;
     }
 
+    // issue #16 "map island names": bold, letter-spaced label on a dark
+    // backdrop (was plain white text with no backing, illegible over pale
+    // terrain) — and gold, not white, for whichever island the current
+    // player has actually settled (nearest island centre to any of their
+    // own settlements, since the local Settlement doesn't carry an
+    // islandId — see api/types.ts's SettlementResponse vs lib/map/types.ts).
+    const mySettlements = worldModel.listSettlements().filter((s) => s.ownerId === playerId);
     for (const island of worldModel.listIslands()) {
       if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      const mine = mySettlements.some(
+        (s) => hexDistance({ q: s.q, r: s.r }, { q: island.q, r: island.r }) <= ISLAND_LABEL_OWN_RADIUS,
+      );
+      const color = mine ? GOLD : 0xe8f0f5;
+
       const label = this.acquireLabel();
-      label.text = island.name;
-      label.style.fill = 0xe8f0f5;
+      label.text = island.name.toUpperCase();
+      label.style.fill = color;
+      label.style.fontSize = 12;
+      label.style.fontWeight = 'bold';
+      label.style.letterSpacing = 1;
       label.anchor.set(0.5, 1);
-      label.position.set(center.x, center.y - 6 * this.camera.zoom - 4);
+
+      const padX = 9;
+      const padY = 5;
+      const labelY = center.y - 6 * this.camera.zoom - 4;
+      this.markerLayer
+        .roundRect(
+          center.x - label.width / 2 - padX,
+          labelY - label.height - padY,
+          label.width + padX * 2,
+          label.height + padY * 2,
+          5,
+        )
+        .fill({ color: 0x08121a, alpha: 0.55 })
+        .stroke({ width: 1, color, alpha: mine ? 0.9 : 0.35 });
+      label.position.set(center.x, labelY);
       label.visible = true;
     }
 
