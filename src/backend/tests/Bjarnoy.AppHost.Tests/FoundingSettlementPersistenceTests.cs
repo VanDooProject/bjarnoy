@@ -24,7 +24,7 @@ namespace Bjarnoy.AppHost.Tests;
 /// settlement through the real UI produces a row a second, independent HTTP
 /// client can read back from the database.
 /// </remarks>
-public class PersistenceE2ETests
+public class FoundingSettlementPersistenceTests
 {
     [Fact]
     public async Task FoundingASettlementThroughTheRealFrontendPersistsToTheDatabase()
