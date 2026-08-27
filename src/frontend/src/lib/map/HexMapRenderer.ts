@@ -301,6 +301,38 @@ const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
 // seam a screenshot exposed at the blob/flat boundary.
 const FOG_BLOB_OVERLAP_HEXES = 6;
 
+// Past this distance (FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES — the
+// same threshold rebuildBordersAndFog already uses to stop placing overlap
+// blobs), an unexplored hex's fog is nothing but a flat, fully-opaque
+// FOG_UNEXPLORED fill with nothing else layered on top — no blob, no blur,
+// no terrain underneath (isPastTerrainCull already stopped drawing that).
+// That's visually identical to the renderer's own background clear colour.
+//
+// World mode's low default zoom (WORLD_DEFAULT_ZOOM) means a viewport's
+// worth of hexes can run into the thousands, and it's mostly open sea (no
+// terrain sprite at any distance — see WORLD_TERRAIN_FILL/rebuildTerrainFlat)
+// — issue #20: "white fog is rendered as/on tiles on worldmap... many
+// elements... slow". A pan far enough into open ocean that the *entire*
+// viewport is past this distance (see isEntirelyDeepFog) skips per-hex fog
+// geometry for the whole rebuild, painting the renderer's own background
+// colour instead (syncWorldBackground) — one clear colour rather than
+// tessellating a Graphics.poly() per hex for a fill nothing could tell
+// apart from a blank canvas.
+//
+// This can only apply when the *whole* viewport qualifies: sea tiles never
+// draw anything of their own even once explored (see WORLD_TERRAIN_FILL's
+// comment) — a currently-visible settlement's clear halo of open water is
+// exactly as blank as unexplored fog would be, so per-hex distance is the
+// only thing telling them apart. A single canvas-wide background colour
+// can't be region-specific, so it's only safe to use when nothing in view
+// could possibly need to stay transparent — see isEntirelyDeepFog. Painting
+// the background and then only skipping the individual deep hexes (instead
+// of gating on the whole viewport) looks equivalent but isn't: a
+// settlement's own nearby explored sea, which should show real water
+// through the transparent canvas, would go solid fog-white right along
+// with the genuinely deep hexes around it.
+const FOG_WORLD_BG_HANDOFF_HEXES = FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES;
+
 // The mockup's own fogAt() (Viking Realm.dc.html) adds noise directly onto
 // the *distance* value before comparing it against any threshold — roughly
 // ±0.75 hex on its own ~2.8-hex margin (~27%) — rather than only jittering
@@ -941,10 +973,61 @@ export class HexMapRenderer {
     this.lastRebuildAtMs = performance.now();
     const fogActive = this.isFogActive();
     const coords = this.visibleCoords();
+    const deepFogOnly =
+      this.options.mode === 'world' &&
+      fogActive &&
+      !fogDebugFlags.blobsOnly &&
+      this.isEntirelyDeepFog(coords);
+    this.syncWorldBackground(deepFogOnly);
     this.rebuildTerrain(coords, fogActive);
-    this.rebuildBordersAndFog(coords, fogActive);
+    this.rebuildBordersAndFog(coords, fogActive, deepFogOnly);
     this.rebuildMarkers();
     if (this.options.mode === 'world') this.rebuildWaves();
+  }
+
+  /**
+   * True if every one of the currently-visible hexes is deep, uniformly-
+   * opaque unexplored fog (see FOG_WORLD_BG_HANDOFF_HEXES) — i.e. nothing in
+   * view is close enough to any settlement to ever need real terrain, a
+   * border, or a blended fog edge, so a single flat background colour can
+   * stand in for the whole viewport's worth of per-hex fog geometry. See
+   * FOG_WORLD_BG_HANDOFF_HEXES's own comment for why this has to check the
+   * *entire* viewport rather than deciding hex by hex. Mirrors the same
+   * isExplored/distanceBeyondExplored/jitter logic rebuildBordersAndFog's
+   * own per-hex loop uses, so the two always agree on what counts as "deep".
+   */
+  private isEntirelyDeepFog(coords: AxialCoord[]): boolean {
+    const { worldModel } = this.options;
+    for (const c of coords) {
+      if (worldModel.isExplored(c.q, c.r)) return false;
+      const beyond = jitterDistance(
+        c.q,
+        c.r,
+        worldModel.distanceBeyondExplored(c.q, c.r),
+        FOG_DIST_JITTER_SALT,
+        fogDebugFlags.distJitter,
+      );
+      if (beyond <= FOG_WORLD_BG_HANDOFF_HEXES) return false;
+    }
+    return true;
+  }
+
+  /**
+   * World mode only: once isEntirelyDeepFog has already confirmed nothing
+   * in the current viewport needs to stay transparent, paint the renderer's
+   * own clear colour as the deep unexplored mist (FOG_UNEXPLORED, fully
+   * opaque) instead — rebuildBordersAndFog then skips its whole per-hex fog
+   * loop for this rebuild (see its own `deepFogOnly` handling). Reset to
+   * fully transparent otherwise (mixed/near view, fog inactive, or
+   * settlement/preview mode, which never touches this at all) so the CSS
+   * backdrop behind the canvas (WorldMapCanvas.vue/SettlementCanvas.vue),
+   * and any explored terrain/open water this rebuild draws normally, shows
+   * through exactly as it did before this existed.
+   */
+  private syncWorldBackground(deepFogOnly: boolean) {
+    if (!this.app || this.options.mode !== 'world') return;
+    this.app.renderer.background.color = FOG_UNEXPLORED;
+    this.app.renderer.background.alpha = deepFogOnly ? 1 : 0;
   }
 
   /**
@@ -1328,10 +1411,21 @@ export class HexMapRenderer {
     });
   }
 
-  private rebuildBordersAndFog(coords: AxialCoord[], fogActive: boolean) {
+  private rebuildBordersAndFog(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
     this.fogLayer.clear();
+
+    if (deepFogOnly) {
+      // isEntirelyDeepFog already confirmed every visible hex is deep,
+      // uniformly-opaque fog, and syncWorldBackground painted the
+      // renderer's own clear colour to match — nothing here would be
+      // visible over it, so skip straight to clearing the blob cache
+      // instead of tessellating a Graphics.poly()/blob Sprite for every one
+      // of what can be thousands of hexes in a low-zoom world-map viewport.
+      this.refreshFogBlobCache(new Map());
+      return;
+    }
 
     // Distance (jittered, see FOG_VISIBLE_MARGIN_HEXES) past the currently
     // visible (line-of-sight) ring, mirroring WorldModel.visibleHexes's own
@@ -1440,7 +1534,7 @@ export class HexMapRenderer {
           // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
           // blend the outermost blobs into and they visibly fade right
           // where the flat fill starts at full strength.
-          if (!fogDebugFlags.flatFillOnly && beyond <= FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES) {
+          if (!fogDebugFlags.flatFillOnly && beyond <= FOG_WORLD_BG_HANDOFF_HEXES) {
             addBlob(c, FOG_UNEXPLORED, 1);
           }
           continue;
