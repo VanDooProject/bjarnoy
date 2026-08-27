@@ -18,7 +18,8 @@ const emit = defineEmits<{ change: [] }>();
 const flags = reactive(fogDebugFlags);
 
 const LABELS: Record<keyof FogDebugFlags, string> = {
-  distJitter: 'Distance jitter (outer ramp/cull)',
+  distJitter: 'Distance jitter (fog ramp)',
+  terrainCullJitter: 'Distance jitter (terrain cull, off by default)',
   visibleRamp: 'Visible→scouted fade',
   blobJitter: 'Blob position/size jitter',
   terrainCull: 'Cull terrain past fog cutoff',

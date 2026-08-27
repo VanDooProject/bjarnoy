@@ -125,8 +125,10 @@ function hash01(x: number, y: number, salt: number): number {
 // rebuild (a camera pan/zoom, or HexMapRenderer.refreshFog()); it doesn't
 // itself trigger one, since these are read at rebuild time, not cached.
 export interface FogDebugFlags {
-  /** Distance jitter on the outer unexplored ramp/terrain-cull boundary (FOG_DIST_JITTER_HEXES). Off = the old dead-straight hex-ring cutoff, but no more tile popping near it. */
+  /** Distance jitter on the fog ramp's own alpha/blob-vs-flat-fill boundary (FOG_DIST_JITTER_HEXES) — the mist's edge. Off = a dead-straight hex-ring mist edge. Does *not* affect where terrain sprites stop being drawn; see terrainCullJitter for that. */
   distJitter: boolean;
+  /** Also jitter the terrain-sprite draw cutoff (rebuildTerrain/rebuildTerrainFlat) by the same distance, instead of the fixed, padded cutoff isPastTerrainCull uses when this is off. Off by default: jittering *tiles* (hard-edged art, unlike the blurred/overlapping fog blobs) makes them pop in/out unpredictably near the ring — issue #20. On reproduces the old behaviour, tile popping included. */
+  terrainCullJitter: boolean;
   /** Distance jitter + fade on the visible→scouted edge (FOG_VISIBLE_MARGIN_HEXES). Off = the original hard binary jump. */
   visibleRamp: boolean;
   /** Per-hex position/size jitter on fog blobs (FOG_BLOB_JITTER_X/Y, FOG_BLOB_SIZE_JITTER). Off = blobs sit dead-centre on their hex, same size. */
@@ -140,6 +142,7 @@ export interface FogDebugFlags {
 }
 export const fogDebugFlags: FogDebugFlags = {
   distJitter: true,
+  terrainCullJitter: false,
   visibleRamp: true,
   blobJitter: true,
   terrainCull: true,
@@ -944,6 +947,37 @@ export class HexMapRenderer {
     if (this.options.mode === 'world') this.rebuildWaves();
   }
 
+  /**
+   * Whether an unexplored hex is far enough past the scouted ring that
+   * there's nothing to gain by drawing terrain under the mist there — the
+   * mist above it is guaranteed fully opaque by FOG_TERRAIN_CULL_HEXES (see
+   * rebuildBordersAndFog). Shared by rebuildTerrain (settlement tile art)
+   * and rebuildTerrainFlat (world-map flat fill) so the two agree.
+   *
+   * fogDebugFlags.terrainCullJitter defaults to *false*, unlike the fog
+   * ramp's own distJitter: jittering the fog's own edge is what turns a
+   * dead-straight hex ring into an organic mist boundary (see
+   * FOG_DIST_JITTER_HEXES's own comment), but jittering the terrain cutoff
+   * *too* makes individual tiles pop in/out unpredictably near the ring —
+   * an artifact that's obvious on hard-edged tile art in a way the blurred,
+   * overlapping fog blobs never show (issue #20: "distance jitter... affects
+   * tiles too, should not by default"). With it off, terrain instead culls
+   * at a fixed distance padded by the fog ramp's own worst-case jitter
+   * (FOG_TERRAIN_CULL_HEXES + FOG_DIST_JITTER_HEXES) — far enough out that
+   * even a maximally-jittered fog edge is still guaranteed opaque there, so
+   * the terrain/fog seam FOG_TERRAIN_CULL_HEXES was built to close stays
+   * closed regardless of whether the two flags agree.
+   */
+  private isPastTerrainCull(q: number, r: number): boolean {
+    const beyondRaw = this.options.worldModel.distanceBeyondExplored(q, r);
+    if (fogDebugFlags.terrainCullJitter) {
+      return (
+        jitterDistance(q, r, beyondRaw, FOG_DIST_JITTER_SALT, fogDebugFlags.distJitter) > FOG_TERRAIN_CULL_HEXES
+      );
+    }
+    return beyondRaw > FOG_TERRAIN_CULL_HEXES + FOG_DIST_JITTER_HEXES;
+  }
+
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
     if (this.options.mode === 'world') {
       this.rebuildTerrainFlat(coords, fogActive);
@@ -980,13 +1014,7 @@ export class HexMapRenderer {
         fogActive &&
         fogDebugFlags.terrainCull &&
         !worldModel.isExplored(c.q, c.r) &&
-        jitterDistance(
-          c.q,
-          c.r,
-          worldModel.distanceBeyondExplored(c.q, c.r),
-          FOG_DIST_JITTER_SALT,
-          fogDebugFlags.distJitter,
-        ) > FOG_TERRAIN_CULL_HEXES
+        this.isPastTerrainCull(c.q, c.r)
       ) {
         continue;
       }
@@ -1038,13 +1066,7 @@ export class HexMapRenderer {
         fogActive &&
         fogDebugFlags.terrainCull &&
         !worldModel.isExplored(c.q, c.r) &&
-        jitterDistance(
-          c.q,
-          c.r,
-          worldModel.distanceBeyondExplored(c.q, c.r),
-          FOG_DIST_JITTER_SALT,
-          fogDebugFlags.distJitter,
-        ) > FOG_TERRAIN_CULL_HEXES
+        this.isPastTerrainCull(c.q, c.r)
       ) {
         continue;
       }
