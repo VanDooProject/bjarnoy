@@ -12,10 +12,14 @@ test('clicking an island founds a settlement and opens the village view', async 
   await foundSettlement(page);
   await expect(page).toHaveURL(/\/settlement$/);
 
-  // realm panel: the settlement is real state, not a placeholder screen
-  await expect(page.getByText('Unnamed realm')).toBeVisible();
-  await expect(page.getByText('Lv 1')).toBeVisible();
-  await expect(page.getByText(/Longhouse claims a border-\d+ realm/)).toBeVisible();
+  // realm panel: the settlement is real state, not a placeholder screen.
+  // Scoped to .realm-panel — issue #16's header now also shows the
+  // settlement name as its own subheadline (TopBar.vue), so the bare text
+  // match would otherwise resolve to two elements.
+  const realmPanel = page.locator('.realm-panel');
+  await expect(realmPanel.getByText('Unnamed realm')).toBeVisible();
+  await expect(realmPanel.getByText('Lv 1')).toBeVisible();
+  await expect(realmPanel.getByText(/Longhouse claims a border-\d+ realm/)).toBeVisible();
 
   // resource bar: four resources, each a positive, growing number
   const values = page.locator('.resource-bar .resource .value');

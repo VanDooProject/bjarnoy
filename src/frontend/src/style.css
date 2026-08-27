@@ -51,3 +51,10 @@ button {
 .pill {
   border-radius: 999px;
 }
+
+/* issue #16 header: "res icons/symbols should also be hexes", "logo should
+   be a yellow hex" — one flat-top hex shape shared by the wordmark logo and
+   the resource pips, sized via width/height on the element itself. */
+.hex {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+}

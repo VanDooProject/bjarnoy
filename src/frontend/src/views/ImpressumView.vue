@@ -7,12 +7,12 @@ const router = useRouter();
 <template>
   <div class="impressum">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
+      <span class="brand">Bjarnøy</span>
     </header>
     <main class="body">
       <h1>Impressum</h1>
       <p>
-        Fjørdhold is a hobby project built for the VanDooProject community. This placeholder page exists
+        Bjarnøy is a hobby project built for the VanDooProject community. This placeholder page exists
         so the real landing page has somewhere to link to — replace it with your actual legal notice
         (operator, contact address, and any disclosures your jurisdiction requires) before going live.
       </p>

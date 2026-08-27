@@ -37,6 +37,14 @@ export const useWorldStore = defineStore('world', {
       // longhouse counts as the first) rather than a separately tracked
       // counter that could drift from what's really on the ground.
       buildingsPlaced: 0,
+      // issue #16 header: "the pop(ulation) thing should also be implemented
+      // like with the other ressources" — there's no backend population
+      // mechanic yet, so this is derived client-side from what's actually
+      // built (each building houses folk, the longhouse's level raises the
+      // cap), the same way buildingsPlaced above is derived rather than
+      // separately tracked.
+      population: 0,
+      populationCap: 0,
       // zip 9: "real-time elements: build queue countdowns" — a snapshot of
       // the backend's queue plus when it was fetched, so BuildQueuePanel can
       // count each order down locally between polls instead of only
@@ -291,6 +299,8 @@ export const useWorldStore = defineStore('world', {
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
+      this.hud.population = this.hud.buildingsPlaced * 3 + settlement.level * 2;
+      this.hud.populationCap = 10 + settlement.level * 8;
       this.hud.tick += 1;
     },
     startHudSync() {
