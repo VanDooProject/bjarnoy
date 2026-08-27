@@ -1,0 +1,76 @@
+name: Aspire E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/backend/**'
+      - 'src/frontend/**'
+      - '.github/workflows/aspire-e2e.yml'
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - 'src/frontend/**'
+      - '.github/workflows/aspire-e2e.yml'
+
+jobs:
+  aspire-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # bg_assets_hextile is a separate private repo, so the default
+      # GITHUB_TOKEN (scoped to this repo only) can't clone it — see
+      # frontend-ci.yml's identical steps. The frontend needs it even to
+      # just serve `npm run dev` (HexMapRenderer imports every texture at
+      # module load), which is exactly what Bjarnoy.AppHost starts here.
+      - run: git config --global url."https://x-access-token:${ASSETS_REPO_TOKEN}@github.com/VanDooProject/bg_assets_hextile".insteadOf "https://github.com/VanDooProject/bg_assets_hextile"
+        env:
+          ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+
+      - run: git submodule update --init --depth 1 -- src/frontend/vendor/bg_assets_hextile
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: src/backend/global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: src/frontend
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/backend/Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore Bjarnoy.slnx
+        working-directory: src/backend
+
+      - name: Build
+        run: dotnet build Bjarnoy.slnx --configuration Release --no-restore
+        working-directory: src/backend
+
+      - name: Install Playwright's browser
+        run: pwsh bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+        working-directory: src/backend/tests/Bjarnoy.AppHost.Tests
+
+      # Runs the real orchestration (Postgres, the API, the Vue dev server —
+      # see AppHost.cs) and drives the frontend with a real browser, so a
+      # regression here means an `aspire run`/`dotnet run` developer would
+      # hit it too.
+      - name: Aspire persistence E2E test
+        run: dotnet test --configuration Release --no-build
+        working-directory: src/backend/tests/Bjarnoy.AppHost.Tests
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: aspire-e2e-results
+          path: src/backend/tests/Bjarnoy.AppHost.Tests/TestResults/
+          retention-days: 7
