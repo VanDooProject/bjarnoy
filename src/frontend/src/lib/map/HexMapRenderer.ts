@@ -268,6 +268,10 @@ const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
 const TILE_CANVAS_H = TILE_W * (TILE_ART_NATIVE_H / TILE_ART_NATIVE_W);
 const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
+// How far past the viewport edge (world-space) coordsInRect/isEntirelyDeepFog
+// consider a hex "visible" — shared so the two agree on exactly the same
+// rect every rebuild.
+const VISIBLE_RECT_MARGIN = TILE_W * 2;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -987,8 +991,8 @@ export class HexMapRenderer {
       // border/fog sprite — not just the fog blur (see refreshFogBlobCache's
       // own drag skip above), so that's real per-rebuild cost under software
       // rendering, paid several times over across one drag gesture or camera
-      // animation. visibleCoords already renders a TILE_W*2 margin past the
-      // viewport edge, so there's slack to spend: throttle rebuilds to once
+      // animation. coordsInRect already renders a VISIBLE_RECT_MARGIN past
+      // the viewport edge, so there's slack to spend: throttle rebuilds to once
       // per DRAG_REBUILD_THROTTLE_MS instead of firing on every threshold-
       // crossing frame. onPointerUp's forced rebuildAll() still guarantees
       // one fully up-to-date rebuild the instant a drag ends, and
@@ -1011,9 +1015,8 @@ export class HexMapRenderer {
     return moved > TILE_W * 0.4 || Math.abs(this.camera.zoom - prev.zoom) / prev.zoom > 0.08;
   }
 
-  private visibleCoords(): AxialCoord[] {
-    const margin = TILE_W * 2;
-    const rect = visibleWorldRect(this.camera, this.viewport, margin);
+  /** Every hex axial coord whose grid position falls within `rect` (world-space). */
+  private coordsInRect(rect: { minX: number; minY: number; maxX: number; maxY: number }): AxialCoord[] {
     const colPitch = TILE_W * 0.75;
     const colMin = Math.floor(rect.minX / colPitch) - 1;
     const colMax = Math.ceil(rect.maxX / colPitch) + 1;
@@ -1036,12 +1039,13 @@ export class HexMapRenderer {
     this.lastBuiltCamera = { ...this.camera };
     this.lastRebuildAtMs = performance.now();
     const fogActive = this.isFogActive();
-    const coords = this.visibleCoords();
+    const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
+    const coords = this.coordsInRect(rect);
     const deepFogOnly =
       this.options.mode === 'world' &&
       fogActive &&
       !fogDebugFlags.blobsOnly &&
-      this.isEntirelyDeepFog(coords);
+      this.isEntirelyDeepFog(rect);
     this.syncWorldBackground(deepFogOnly);
     this.rebuildTerrain(coords, fogActive);
     this.rebuildBordersAndFog(coords, fogActive, deepFogOnly);
@@ -1050,29 +1054,47 @@ export class HexMapRenderer {
   }
 
   /**
-   * True if every one of the currently-visible hexes is deep, uniformly-
-   * opaque unexplored fog (see FOG_WORLD_BG_HANDOFF_HEXES) — i.e. nothing in
-   * view is close enough to any settlement to ever need real terrain, a
-   * border, or a blended fog edge, so a single flat background colour can
-   * stand in for the whole viewport's worth of per-hex fog geometry. See
-   * FOG_WORLD_BG_HANDOFF_HEXES's own comment for why this has to check the
-   * *entire* viewport rather than deciding hex by hex. Mirrors the same
-   * isExplored/distanceBeyondExplored/jitter logic rebuildBordersAndFog's
-   * own per-hex loop uses, so the two always agree on what counts as "deep".
+   * True only when it's certain no settlement's fog influence
+   * (exploredRadius + FOG_WORLD_BG_HANDOFF_HEXES, converted to world-space
+   * pixels) reaches anywhere into `rect` — i.e. every hex in the current
+   * viewport is deep, uniformly-opaque unexplored fog (see
+   * FOG_WORLD_BG_HANDOFF_HEXES), so a single flat background colour can
+   * stand in for the whole viewport's worth of per-hex fog geometry.
+   *
+   * This checks settlement *positions* — O(settlements) — rather than
+   * scanning every visible hex's isExplored/distanceBeyondExplored the way
+   * rebuildBordersAndFog's own per-hex loop does. An earlier version did
+   * exactly that per-hex scan, checking `coords` and bailing out at the
+   * first explored hex it found — cheap in principle (no geometry, just
+   * lookups), but wrong in practice: raster (column-major) scan order has
+   * no relationship to distance from a settlement, so for a *mixed*
+   * viewport (a settlement's own default world-map view, not a deep-ocean
+   * pan) the scan could walk a large fraction of a low-zoom viewport's
+   * thousands of hexes before reaching the one explored hex that lets it
+   * return false — on every rebuild, even though the answer never changes.
+   * Measured ~1.7x *slower* per rebuild than before this optimisation
+   * existed at all, for exactly the common "looking at your own island"
+   * case it was never supposed to touch. A bounding check against known
+   * settlement positions answers the same question in a small, fixed
+   * number of comparisons regardless of viewport hex count — and, being
+   * generous rather than exact about the radius, can only ever *under*-
+   * apply the optimisation (safe), never wrongly skip real content.
    */
-  private isEntirelyDeepFog(coords: AxialCoord[]): boolean {
+  private isEntirelyDeepFog(rect: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
     const { worldModel } = this.options;
-    for (const c of coords) {
-      if (worldModel.isExplored(c.q, c.r)) return false;
-      const beyond = jitterDistance(
-        c.q,
-        c.r,
-        worldModel.distanceBeyondExplored(c.q, c.r),
-        FOG_DIST_JITTER_SALT,
-        fogDebugFlags.distJitter,
-        FOG_DIST_JITTER_HEXES,
-      );
-      if (beyond <= FOG_WORLD_BG_HANDOFF_HEXES) return false;
+    for (const s of worldModel.listSettlements()) {
+      const grid = isoGridPosition({ q: s.q, r: s.r }, TILE_W, TILE_H);
+      // TILE_W alone already exceeds one hex's actual pixel pitch in every
+      // direction, so multiplying by it (rather than the tighter per-axis
+      // pitch) only ever over-, never under-, estimates how far a
+      // settlement's influence reaches.
+      const radiusPx = (worldModel.exploredRadius(s) + FOG_WORLD_BG_HANDOFF_HEXES) * TILE_W;
+      const reaches =
+        grid.x + radiusPx >= rect.minX &&
+        grid.x - radiusPx <= rect.maxX &&
+        grid.y + radiusPx >= rect.minY &&
+        grid.y - radiusPx <= rect.maxY;
+      if (reaches) return false;
     }
     return true;
   }
