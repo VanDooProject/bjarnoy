@@ -1589,11 +1589,26 @@ export class HexMapRenderer {
       label.style.fontSize = 13 * zoomScale;
       label.anchor.set(0, 0.5);
 
+      // issue #16 "settlement badge": "above longhouse also showing its
+      // level" — a small gold chip appended after the name, inside the same
+      // pill, echoing the "Lv N" pill RealmPanel.vue already shows in the
+      // HUD corner but glued to the hex itself.
+      const levelLabel = this.acquireLabel();
+      levelLabel.text = `LV ${settlement.level}`;
+      levelLabel.style.fill = 0x20160a;
+      levelLabel.style.fontSize = 11 * zoomScale;
+      levelLabel.style.fontWeight = 'bold';
+      levelLabel.anchor.set(0, 0.5);
+
       const dotR = 4 * zoomScale;
       const padX = 12 * zoomScale;
       const gap = 8 * zoomScale;
       const pillH = 26 * zoomScale;
-      const pillW = padX * 2 + dotR * 2 + gap + label.width;
+      const chipPadX = 7 * zoomScale;
+      const chipGap = 10 * zoomScale;
+      const chipH = 18 * zoomScale;
+      const chipW = levelLabel.width + chipPadX * 2;
+      const pillW = padX * 2 + dotR * 2 + gap + label.width + chipGap + chipW;
       const pillX = top.x - pillW / 2;
       const pillY = top.y - 30 * zoomScale - pillH;
 
@@ -1604,6 +1619,11 @@ export class HexMapRenderer {
       this.markerLayer.circle(pillX + padX + dotR, pillY + pillH / 2, dotR).fill({ color });
       label.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
       label.visible = true;
+
+      const chipX = pillX + pillW - padX - chipW;
+      this.markerLayer.roundRect(chipX, pillY + (pillH - chipH) / 2, chipW, chipH, chipH / 2).fill({ color });
+      levelLabel.position.set(chipX + chipPadX, pillY + pillH / 2);
+      levelLabel.visible = true;
     }
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
   }
