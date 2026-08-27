@@ -48,17 +48,7 @@ public class FoundingSettlementPersistenceTests
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
 
-        // All e2e coverage of this flow should fail loudly on a console
-        // error rather than silently pass while the UI quietly does
-        // nothing — that's exactly how the bootstrapLiveWorld() bug this
-        // test guards against actually showed up in practice (a swallowed
-        // 409 from creating a world that already existed).
-        var consoleErrors = new List<string>();
-        page.Console += (_, msg) =>
-        {
-            if (msg.Type == "error") consoleErrors.Add(msg.Text);
-        };
-        page.PageError += (_, err) => consoleErrors.Add(err);
+        var consoleErrors = page.CollectConsoleErrors();
 
         // The frontend resource has no health check (unlike "api"), so
         // WaitForResourceHealthyAsync above only confirms the npm process
@@ -135,11 +125,7 @@ public class FoundingSettlementPersistenceTests
         // a second "Kettil Sea".
         await using var secondContext = await browser.NewContextAsync();
         var secondPage = await secondContext.NewPageAsync();
-        secondPage.Console += (_, msg) =>
-        {
-            if (msg.Type == "error") consoleErrors.Add(msg.Text);
-        };
-        secondPage.PageError += (_, err) => consoleErrors.Add(err);
+        var secondPageConsoleErrors = secondPage.CollectConsoleErrors();
 
         await secondPage.GotoAsync(frontendUrl, new PageGotoOptions { Timeout = 120_000 });
         await Assertions.Expect(secondPage.GetByText("Demo mode")).Not.ToBeVisibleAsync(new() { Timeout = 15_000 });
@@ -176,5 +162,6 @@ public class FoundingSettlementPersistenceTests
         Assert.Equal(2, settlementsAfterSecondPlayer!.Length);
 
         Assert.Empty(consoleErrors);
+        Assert.Empty(secondPageConsoleErrors);
     }
 }
