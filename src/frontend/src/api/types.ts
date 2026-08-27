@@ -118,4 +118,12 @@ export interface ProblemDetails {
   title?: string;
   detail?: string;
   status?: number;
+  /**
+   * Machine-readable rejection reason, present on FoundSettlement's 409s —
+   * see `Bjarnoy.Infrastructure.Services.FoundingRejection`. Several distinct
+   * rejections (AlreadyFounded, PlotTaken, TooCloseToNeighbour, ...) share
+   * the same 409 status but call for very different frontend reactions, so
+   * this is what actually distinguishes them.
+   */
+  rejection?: string;
 }

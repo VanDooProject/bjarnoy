@@ -13,6 +13,12 @@ import { emptyResources } from '../lib/map/types';
 // `applyServerSnapshot`). Kept well below build/production timescales.
 const LIVE_POLL_MS = 4000;
 
+// Mirrors the backend's SettlementService.MinimumSpacing: the minimum hex
+// distance the API enforces between two settlements' centres. Kept in sync
+// here so nearestStartPosition can skip a plot the backend would reject
+// instead of finding out only after the founding request fails.
+const MINIMUM_SETTLEMENT_SPACING = 3;
+
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's
 // reactivity proxy. Only the small `hud` summary below is reactive, and it
@@ -98,6 +104,11 @@ export const useWorldStore = defineStore('world', {
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
       this.liveReady = true;
+      // Every other player already in this shared world needs to be known
+      // before the landing page picks a starting plot (nearestStartPosition
+      // must avoid their homes) and drawn on screen (rival realms are part
+      // of the world too, not just something the world map reveals later).
+      await this.refreshWorldSettlements();
     },
     /** The most recently created world, or null if none exist yet. */
     async newestWorld() {
@@ -105,11 +116,26 @@ export const useWorldStore = defineStore('world', {
       // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
       return worlds.length > 0 ? worlds[worlds.length - 1] : null;
     },
-    /** Nearest island start position to `near`, for founding via the API. */
+    /**
+     * Nearest island start position to `near` that nobody has founded on (or
+     * too close to) yet, for founding via the API.
+     *
+     * Start positions are precomputed once at world generation and never
+     * shrink as players settle, so without this check every new player on a
+     * shared world converges on the exact same nearest plot — which the
+     * backend then refuses with `PlotTaken` (an exact match) or
+     * `TooCloseToNeighbour` (see `SettlementService.MinimumSpacing`) once
+     * it's taken, rather than the client ever finding out until it tries.
+     */
     nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {
+      const settlements = this.model.listSettlements();
       let best: { islandId: string; at: AxialCoord; distance: number } | null = null;
       for (const island of this.islands) {
         for (const pos of island.startPositions) {
+          const tooCloseToExisting = settlements.some(
+            (s) => hexDistance(pos, { q: s.q, r: s.r }) < MINIMUM_SETTLEMENT_SPACING,
+          );
+          if (tooCloseToExisting) continue;
           const distance = hexDistance(near, pos);
           if (!best || distance < best.distance) {
             best = { islandId: island.id, at: pos, distance };
@@ -140,8 +166,13 @@ export const useWorldStore = defineStore('world', {
      */
     async foundStartingSettlementLive(ownerId: string, ownerName: string, realmName: string, near: AxialCoord) {
       if (!this.worldId) throw new Error('bootstrapLiveWorld() must run before founding a settlement');
+      // Bootstrap's own snapshot can be stale by the time the player
+      // actually clicks — re-sync who else has founded here first so
+      // nearestStartPosition doesn't send this request at a plot someone
+      // else claimed in the meantime.
+      await this.refreshWorldSettlements();
       const start = this.nearestStartPosition(near);
-      if (!start) throw new Error('No known start positions in this world yet');
+      if (!start) throw new Error('No unclaimed start positions in this world yet');
 
       const response = await api.foundSettlement(this.worldId, {
         islandId: start.islandId,

@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Bjarnoy.Api.IntegrationTests.Infrastructure;
 
@@ -57,6 +58,22 @@ public static class HttpResponseExtensions
             throw new JsonException(
                 $"Could not read a {typeof(T).Name} from {(int)response.StatusCode} body: {body}", ex);
         }
+    }
+
+    /// <summary>
+    /// Reads the machine-readable rejection reason off a founding failure's
+    /// ProblemDetails (see SettlementEndpoints.Problem) — the field the
+    /// frontend actually branches on, since several distinct rejections
+    /// share the same 409 status.
+    /// </summary>
+    public static async Task<string?> RejectionAsync(
+        this HttpResponseMessage response,
+        CancellationToken cancellationToken = default)
+    {
+        var problem = await response.ReadStrictAsync<ProblemDetails>(cancellationToken);
+        return problem.Extensions.TryGetValue("rejection", out var value) && value is JsonElement element
+            ? element.GetString()
+            : null;
     }
 
     public static Task<HttpResponseMessage> PostJsonAsync<T>(

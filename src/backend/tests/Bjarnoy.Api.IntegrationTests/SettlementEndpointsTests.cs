@@ -107,6 +107,11 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        // The frontend picks its reaction off this field, not the 409
+        // status alone (see LandingView.vue's foundHere) — PlotTaken means
+        // "someone beat you here, try another plot", not "you already have
+        // a settlement".
+        Assert.Equal("PlotTaken", await again.RejectionAsync(Ct));
     }
 
     [Fact]
@@ -130,6 +135,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        // Distinguishes this from PlotTaken/TooCloseToNeighbour: this is the
+        // one rejection where the frontend should navigate the player to
+        // their existing settlement instead of retrying on the landing page.
+        Assert.Equal("AlreadyFounded", await again.RejectionAsync(Ct));
 
         var list = await client.GetFromJsonAsync<List<SettlementSummary>>(
             $"/api/v1/worlds/{worldId}/settlements", SqliteApiFixture.StrictJson, Ct);

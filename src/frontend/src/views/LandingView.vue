@@ -102,8 +102,14 @@ async function foundHere(coord: AxialCoord) {
       screenBiasX: 0,
     });
   } catch (err) {
-    if (err instanceof ApiError && err.status === 409) {
-      // Another tab/reload already founded this player's settlement.
+    // A 409 covers several distinct rejections (see FoundingRejection) —
+    // only AlreadyFounded actually means "you already have a settlement,
+    // go there". The others (PlotTaken, TooCloseToNeighbour, ...) mean
+    // someone else claimed a start position between bootstrapLiveWorld()
+    // and this click; leave the player on the landing page so they can
+    // just click again — foundStartingSettlementLive re-syncs who else has
+    // founded before picking the next nearest plot.
+    if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
       router.push('/settlement');
     } else {
       console.error('Failed to found settlement against the backend', err);
