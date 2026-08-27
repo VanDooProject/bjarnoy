@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { api } from '../api/client';
+import { ApiError, api } from '../api/client';
 import type { BuildOrderResponse, IslandResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
@@ -63,12 +63,28 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || this.liveReady) return;
 
       let world = this.worldId ? await api.getWorld(this.worldId).catch(() => null) : null;
+      // Worlds are shared and meant to be created by an admin, not by
+      // whichever browser tab happens to land here first — so join
+      // whatever exists rather than filtering by status. (There used to be
+      // a `status === 'running'` filter here, but WorldResponse's `status`
+      // never actually takes that value — see WorldEntity's WorldStatus —
+      // so it silently matched nothing and fell through to createWorld()
+      // below on every visit, racing every other tab that did the same and
+      // 409-ing on the shared 'Kettil Sea' name.)
       if (!world) {
-        const worlds = await api.listWorlds();
-        world = worlds.find((w) => w.status === 'running') ?? null;
+        world = await this.newestWorld();
       }
       if (!world) {
-        world = await api.createWorld({ name: 'Kettil Sea' });
+        // Nobody has created a world yet (e.g. a fresh dev database) — seed
+        // one so there's something to join. If another tab won that race,
+        // join what it created instead of failing on the name conflict.
+        try {
+          world = await api.createWorld({ name: 'Kettil Sea' });
+        } catch (err) {
+          if (!(err instanceof ApiError) || err.status !== 409) throw err;
+          world = await this.newestWorld();
+          if (!world) throw err;
+        }
       }
 
       this.worldId = world.id;
@@ -82,6 +98,12 @@ export const useWorldStore = defineStore('world', {
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
       );
       this.liveReady = true;
+    },
+    /** The most recently created world, or null if none exist yet. */
+    async newestWorld() {
+      const worlds = await api.listWorlds();
+      // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
+      return worlds.length > 0 ? worlds[worlds.length - 1] : null;
     },
     /** Nearest island start position to `near`, for founding via the API. */
     nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {
