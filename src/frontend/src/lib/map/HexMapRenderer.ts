@@ -217,6 +217,10 @@ export interface HoverInfo {
   title: string;
   subtitle: string;
   stat: string;
+  /** issue #16 "better hover": the hex's own coordinates, always shown. */
+  coord: string;
+  /** issue #16 "better hover": "should have more info" — extra detail lines beyond the headline stat. */
+  extra: string[];
 }
 
 export const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
@@ -804,11 +808,20 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
+    const coord = `Hex ${tile.q}, ${tile.r}`;
 
     if (tile.buildingType) {
       const title = BUILDING_LABELS[tile.buildingType];
       const subtitle = owner ? (mine ? owner.name : `${owner.ownerName}'s ${owner.name}`) : title;
-      return { screenX: screen.x, screenY: screen.y, title, subtitle, stat: `Level ${tile.buildingLevel ?? 1}` };
+      return {
+        screenX: screen.x,
+        screenY: screen.y,
+        title,
+        subtitle,
+        stat: `Level ${tile.buildingLevel ?? 1}`,
+        coord,
+        extra: [`Built on ${TERRAIN_LABELS[tile.terrain]}`, mine ? 'Click for details' : 'Rival building'],
+      };
     }
     if (owner) {
       const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
@@ -818,6 +831,8 @@ export class HexMapRenderer {
         title: TERRAIN_LABELS[tile.terrain],
         subtitle,
         stat: mine ? 'Click to build here' : 'Claimed ground',
+        coord,
+        extra: [mine ? 'Inside your realm' : 'Rival territory'],
       };
     }
     return {
@@ -826,6 +841,8 @@ export class HexMapRenderer {
       title: TERRAIN_LABELS[tile.terrain],
       subtitle: 'Unclaimed',
       stat: '',
+      coord,
+      extra: [tile.terrain === 'sea' ? 'No building possible' : 'Buildable, outside any realm'],
     };
   }
 
