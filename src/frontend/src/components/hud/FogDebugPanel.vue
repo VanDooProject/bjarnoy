@@ -20,11 +20,13 @@ const flags = reactive(fogDebugFlags);
 const LABELS: Record<keyof FogDebugFlags, string> = {
   distJitter: 'Distance jitter (fog ramp)',
   terrainCullJitter: 'Distance jitter (terrain cull, off by default)',
-  visibleRamp: 'Visible→scouted fade',
+  scoutedTintFade: 'Scouted-tint fade (sight edge)',
+  scoutedFog: 'Scouted (dark) fog enabled',
   blobJitter: 'Blob position/size jitter',
   terrainCull: 'Cull terrain past fog cutoff',
   flatFillOnly: 'Skip blob/flat-fill overlap',
   blobsOnly: 'Blob-only mist (no flat fill)',
+  dragFade: 'Fade fog back in after drag (off by default)',
 };
 
 watch(
