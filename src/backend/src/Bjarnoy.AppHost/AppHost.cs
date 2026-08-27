@@ -26,7 +26,11 @@ var gamedb = postgres.AddDatabase("gamedb");
 
 // Migrations run as their own resource against the same image the API uses,
 // mirroring how a deployment does it, and the API waits for it to exit cleanly.
-var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator")
+// launchProfileName: null / explicit WithHttpEndpoint() / ASPNETCORE_ENVIRONMENT —
+// see the api resource below for why; same reasoning applies here.
+var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator", launchProfileName: null)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithHttpEndpoint()
     .WithArgs("--migrate")
     .WithReference(gamedb)
     .WaitFor(gamedb)
@@ -34,7 +38,22 @@ var migrator = builder.AddProject<Projects.Bjarnoy_Api>("migrator")
     .WithEnvironment("Database__ConnectionString", gamedb.Resource.ConnectionStringExpression)
     .WithExplicitStart();
 
-var api = builder.AddProject<Projects.Bjarnoy_Api>("api")
+// launchProfileName: null — suppresses the "http"/"https" endpoints AddProject
+// would otherwise infer from launchSettings.json's fixed ports (5180/7180).
+// Those are shared across every checkout of this repo, so two AppHost
+// instances running at once (two branches, two worktrees) fight over the
+// same port; when the second one loses that race, Kestrel binds wherever's
+// actually free instead (visible in its own startup log), but the
+// dashboard/health check were already wired to the launchSettings port and
+// never learn about the fallback — they just time out forever even though
+// the API is up. WithHttpEndpoint() below (no `port:`) is one Aspire
+// allocates and tracks itself instead, so every concurrent instance gets its
+// own free port with nothing to lose a race over. ASPNETCORE_ENVIRONMENT is
+// set explicitly since suppressing the launch profile also suppresses the
+// "Development" it would otherwise have supplied.
+var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: null)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithHttpEndpoint()
     .WithReference(gamedb)
     .WaitFor(gamedb)
     .WithEnvironment("Database__Provider", "PostgreSql")
