@@ -40,7 +40,23 @@ onMounted(async () => {
   }
   // Deterministic starter plot: same island every time, near the world's
   // own origin — not chosen by panning a world map (there is none here).
-  previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
+  //
+  // Live mode must highlight the exact hex foundStartingSettlementLive will
+  // actually found on (nearestStartPosition), not just any nearby land tile
+  // (model.findLandfall) — those are two different coordinate systems (an
+  // arbitrary walkable hex vs. one of the island's precomputed start
+  // positions) that usually don't agree. Previewing the wrong one used to
+  // mean the settlement "landed" somewhere else the instant it was founded,
+  // which then made the very next build click fail as outside its borders
+  // — the player was still clicking near where the preview told them their
+  // village was, not where it actually ended up. Demo mode has no start
+  // positions at all, so it keeps using findLandfall, which
+  // foundStartingSettlement (demo's own founder) also seeds `near` from —
+  // the two already agree there.
+  previewCoord.value = DEMO_MODE
+    ? (world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 })
+    : (world.nearestStartPosition({ q: 0, r: 0 })?.at ??
+      world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 });
 });
 onUnmounted(() => world.stopHudSync());
 
@@ -102,8 +118,14 @@ async function foundHere(coord: AxialCoord) {
       screenBiasX: 0,
     });
   } catch (err) {
-    if (err instanceof ApiError && err.status === 409) {
-      // Another tab/reload already founded this player's settlement.
+    // A 409 covers several distinct rejections (see FoundingRejection) —
+    // only AlreadyFounded actually means "you already have a settlement,
+    // go there". The others (PlotTaken, TooCloseToNeighbour, ...) mean
+    // someone else claimed a start position between bootstrapLiveWorld()
+    // and this click; leave the player on the landing page so they can
+    // just click again — foundStartingSettlementLive re-syncs who else has
+    // founded before picking the next nearest plot.
+    if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
       router.push('/settlement');
     } else {
       console.error('Failed to found settlement against the backend', err);

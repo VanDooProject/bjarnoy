@@ -83,3 +83,22 @@ jobs:
               --startup-project "src/Bjarnoy.Migrations.$provider"
             echo "::endgroup::"
           done
+
+  # `has-pending-model-changes` above only compares the model against the
+  # model snapshot, which is kept in sync with whatever a migration file
+  # currently says -- so it does not notice a migration being rewritten in
+  # place after it was merged. This catches that instead: once a migration
+  # file lands on the base branch, only a new migration may change the
+  # schema it already produced.
+  migration-history-immutable:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - run: ./scripts/ci/check-migration-history.sh ${{ github.event.pull_request.base.sha }} HEAD

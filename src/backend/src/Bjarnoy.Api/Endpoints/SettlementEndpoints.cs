@@ -252,26 +252,38 @@ public static class SettlementEndpoints
         return false;
     }
 
-    private static ProblemDetails Problem(FoundingRejection rejection) => new()
+    private static ProblemDetails Problem(FoundingRejection rejection)
     {
-        Title = "The settlement could not be founded.",
-        Detail = rejection switch
+        var problem = new ProblemDetails
         {
-            FoundingRejection.WorldNotFound => "No such world.",
-            FoundingRejection.IslandNotFound => "No such island in this world.",
-            FoundingRejection.WorldPaused => "The world is not accepting commands.",
-            FoundingRejection.NotAStartPosition =>
-                "That hex is not one of the island's start positions.",
-            FoundingRejection.PlotTaken => "Someone already founded there.",
-            FoundingRejection.TooCloseToNeighbour =>
-                $"Settlements must be at least {SettlementService.MinimumSpacing} hexes apart.",
-            FoundingRejection.WorldFull => "The world is full.",
-            FoundingRejection.AlreadyFounded =>
-                "You already have a settlement in this world. Ships and carts will let you found another one later.",
-            _ => "Refused.",
-        },
-        Status = StatusCodes.Status409Conflict,
-    };
+            Title = "The settlement could not be founded.",
+            Detail = rejection switch
+            {
+                FoundingRejection.WorldNotFound => "No such world.",
+                FoundingRejection.IslandNotFound => "No such island in this world.",
+                FoundingRejection.WorldPaused => "The world is not accepting commands.",
+                FoundingRejection.NotAStartPosition =>
+                    "That hex is not one of the island's start positions.",
+                FoundingRejection.PlotTaken => "Someone already founded there.",
+                FoundingRejection.TooCloseToNeighbour =>
+                    $"Settlements must be at least {SettlementService.MinimumSpacing} hexes apart.",
+                FoundingRejection.WorldFull => "The world is full.",
+                FoundingRejection.AlreadyFounded =>
+                    "You already have a settlement in this world. Ships and carts will let you found another one later.",
+                _ => "Refused.",
+            },
+            Status = StatusCodes.Status409Conflict,
+        };
+
+        // All of these rejections share the same 409 status, but the
+        // frontend needs to tell them apart: AlreadyFounded means "you have
+        // a settlement, go there", while PlotTaken/TooCloseToNeighbour mean
+        // "someone beat you to that plot, pick another" — very different
+        // reactions to the same HTTP status. Matching on `Detail` text would
+        // be fragile, so expose the enum itself.
+        problem.Extensions["rejection"] = rejection.ToString();
+        return problem;
+    }
 
     private static string Describe(BuildRejection rejection) => rejection switch
     {

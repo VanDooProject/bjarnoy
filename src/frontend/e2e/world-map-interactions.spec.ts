@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 
 // Mirrors settlement-interactions.spec.ts but for the world map: hover
@@ -66,9 +66,6 @@ test.describe('world map interactions', () => {
 
   test('panning the world map does not error and moves the camera', async ({ page }) => {
     test.setTimeout(120_000);
-    const errors: string[] = [];
-    page.on('pageerror', (err) => errors.push(err.message));
-
     await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(800);
@@ -90,14 +87,10 @@ test.describe('world map interactions', () => {
 
     const after = await canvas.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);
-    expect(errors).toEqual([]);
   });
 
   test('zooming with the wheel does not error', async ({ page }) => {
     test.setTimeout(120_000);
-    const errors: string[] = [];
-    page.on('pageerror', (err) => errors.push(err.message));
-
     await foundSettlement(page);
     await page.goto('/world');
     await page.waitForTimeout(800);
@@ -115,6 +108,5 @@ test.describe('world map interactions', () => {
     }
     await page.waitForTimeout(200);
 
-    expect(errors).toEqual([]);
   });
 });
