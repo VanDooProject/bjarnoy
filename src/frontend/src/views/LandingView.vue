@@ -40,7 +40,23 @@ onMounted(async () => {
   }
   // Deterministic starter plot: same island every time, near the world's
   // own origin — not chosen by panning a world map (there is none here).
-  previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
+  //
+  // Live mode must highlight the exact hex foundStartingSettlementLive will
+  // actually found on (nearestStartPosition), not just any nearby land tile
+  // (model.findLandfall) — those are two different coordinate systems (an
+  // arbitrary walkable hex vs. one of the island's precomputed start
+  // positions) that usually don't agree. Previewing the wrong one used to
+  // mean the settlement "landed" somewhere else the instant it was founded,
+  // which then made the very next build click fail as outside its borders
+  // — the player was still clicking near where the preview told them their
+  // village was, not where it actually ended up. Demo mode has no start
+  // positions at all, so it keeps using findLandfall, which
+  // foundStartingSettlement (demo's own founder) also seeds `near` from —
+  // the two already agree there.
+  previewCoord.value = DEMO_MODE
+    ? (world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 })
+    : (world.nearestStartPosition({ q: 0, r: 0 })?.at ??
+      world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 });
 });
 onUnmounted(() => world.stopHudSync());
 
