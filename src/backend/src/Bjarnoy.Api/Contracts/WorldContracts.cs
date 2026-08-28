@@ -47,7 +47,8 @@ public sealed record IslandResponse(
     int Q,
     int R,
     int TileCount,
-    IReadOnlyList<TileCoordinate> StartPositions)
+    IReadOnlyList<TileCoordinate> StartPositions,
+    IReadOnlyList<RiverTileResponse> RiverTiles)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -60,11 +61,38 @@ public sealed record IslandResponse(
             island.CentreQ,
             island.CentreR,
             island.TileCount,
-            [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))]);
+            [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
+            [.. island.RiverTiles.Select(RiverTileResponse.From)]);
     }
 }
 
 public sealed record TileCoordinate(int Q, int R);
+
+/// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>.</param>
+/// <param name="InDirections">
+/// The orientations (<c>E</c>/<c>NE</c>/<c>NW</c>/<c>W</c>/<c>SW</c>/<c>SE</c>) this tile's river
+/// flows in from — empty for a spring, two entries for a confluence, one otherwise.
+/// </param>
+/// <param name="OutDirection">
+/// The orientation this tile's river flows out toward, or <see langword="null"/> for a mouth (or
+/// a confluence that's also a river's mouth).
+/// </param>
+public sealed record RiverTileResponse(
+    int Q,
+    int R,
+    string Shape,
+    IReadOnlyList<string> InDirections,
+    string? OutDirection)
+{
+    private static readonly string[] ShapeNames = ["spring", "straight", "bend", "confluence", "mouth"];
+
+    public static RiverTileResponse From(RiverTileRecord tile) => new(
+        tile.Q,
+        tile.R,
+        ShapeNames[tile.Shape],
+        [.. tile.InDirections.Select(d => ((TileOrientation)d).ToWireName())],
+        tile.OutDirection is { } outDirection ? ((TileOrientation)outDirection).ToWireName() : null);
+}
 
 /// <param name="Terrain">
 /// One of <c>sea</c>, <c>sand</c>, <c>grass</c>, <c>forest</c>, <c>mountain</c> —

@@ -79,6 +79,7 @@ public sealed class WorldService(
                 CentreR = island.Centre.R,
                 TileCount = island.TileCount,
                 StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
+                RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
             });
         }
 
@@ -168,4 +169,12 @@ public sealed class WorldService(
     /// more than a screen at full zoom-out.
     /// </summary>
     public const int MaxTilesPerRequest = 8192;
+
+    /// <summary>The domain's <see cref="RiverTile"/>, as the entity's plain-numeric <see cref="RiverTileRecord"/>.</summary>
+    private static RiverTileRecord ToRiverTileRecord(RiverTile tile) => new(
+        tile.Coord.Q,
+        tile.Coord.R,
+        (int)tile.Shape,
+        [.. tile.InDirections.Select(d => (int)d)],
+        tile.OutDirection is { } outDirection ? (int)outDirection : null);
 }

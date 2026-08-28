@@ -34,8 +34,56 @@ public class IslandEntity
     /// <see cref="Persistence.HexListConverter"/> for the encoding.
     /// </remarks>
     public List<HexPoint> StartPositions { get; set; } = [];
+
+    /// <summary>
+    /// This island's rivers, one entry per river tile — see
+    /// <c>Bjarnoy.Domain.World.RiverGenerator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Persisted for the same reason <see cref="StartPositions"/> is: it
+    /// comes from a whole-island pass over the flood-filled tile set (and,
+    /// for river paths, every other river on the island), not something a
+    /// client — or even the server on a later request — can derive hex by
+    /// hex from the seed alone. Stored as a single column, same reasoning as
+    /// <see cref="StartPositions"/>. See
+    /// <see cref="Persistence.RiverTileListConverter"/> for the encoding.
+    /// </remarks>
+    public List<RiverTileRecord> RiverTiles { get; set; } = [];
 }
 
 /// <summary>A stored hex coordinate. Kept separate from the domain's
 /// <c>HexCoord</c> so persistence concerns never leak into the game rules.</summary>
 public readonly record struct HexPoint(int Q, int R);
+
+/// <summary>
+/// A stored river tile. Kept separate from the domain's <c>RiverTile</c> for
+/// the same reason <see cref="HexPoint"/> is kept separate from
+/// <c>HexCoord</c> — <c>Shape</c>/<c>InDirections</c>/<c>OutDirection</c> are
+/// the domain's <c>RiverTileShape</c>/<c>TileOrientation</c> values by their
+/// plain numeric index, not the enums themselves, so this type (and its
+/// converter) never has to change shape when the domain enums do.
+/// </summary>
+public readonly record struct RiverTileRecord(int Q, int R, int Shape, IReadOnlyList<int> InDirections, int? OutDirection)
+{
+    public bool Equals(RiverTileRecord other) =>
+        Q == other.Q
+        && R == other.R
+        && Shape == other.Shape
+        && OutDirection == other.OutDirection
+        && InDirections.SequenceEqual(other.InDirections);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Q);
+        hash.Add(R);
+        hash.Add(Shape);
+        hash.Add(OutDirection);
+        foreach (var direction in InDirections)
+        {
+            hash.Add(direction);
+        }
+
+        return hash.ToHashCode();
+    }
+}

@@ -70,6 +70,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RiverTiles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("StartPositions")
                         .IsRequired()
                         .HasColumnType("TEXT");
