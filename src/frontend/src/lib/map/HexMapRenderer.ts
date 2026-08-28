@@ -150,9 +150,9 @@ export interface FogDebugFlags {
   blobJitter: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
-  /** Skip the overlap blobs placed past the flat-fill cutoff (FOG_BLOB_OVERLAP_HEXES) — reproduces the blur/flat-fill seam this was added to fix. */
+  /** Skip the overlap blobs placed past each tier's flat-fill cutoff (FOG_BLOB_OVERLAP_HEXES) — reproduces the blur/flat-fill seam this was added to fix. */
   flatFillOnly: boolean;
-  /** Never switch to the flat, guaranteed-alpha:1 fill past FOG_TERRAIN_CULL_HEXES — mist stays blob-only forever, reproducing the original "fog never reaches full opacity" bug. */
+  /** Never switch to a flat, guaranteed-opacity fill once a tier is fully saturated (unexplored past FOG_TERRAIN_CULL_HEXES, scouted past FOG_VISIBLE_MARGIN_HEXES) — mist stays blob-only forever, reproducing the original "fog never reaches full opacity" bug. */
   blobsOnly: boolean;
   /** Fade the fog blur cache back in after a drag release (FOG_DRAG_FADE_MS) instead of showing the rebuilt fog immediately. Off by default: the fade dips *all* fog to FOG_DRAG_FADE_FROM_ALPHA, not just whatever the drag just revealed (it's one shared bitmap — see FOG_BLOB_CACHE_PADDING's comment) — issue #20: "drag fades ALL elements in again, not only new". On reproduces the old always-on behaviour. */
   dragFade: boolean;
@@ -197,7 +197,7 @@ export interface FogPerfStats {
   unexploredHexCount: number;
   /** Owned hexes that drew a realm-border wash/stroke — gated by realmBorders. */
   borderedHexCount: number;
-  /** Explored hexes that got a scouted (dark) tint blob added — gated by scoutedFog. */
+  /** Hexes that took the scouted (dark) fog branch (flat-filled or individually blobbed — see FOG_VISIBLE_MARGIN_HEXES) — gated by scoutedFog. */
   scoutedHexCount: number;
 
   /** refreshFogBlobCache: building the blob sprite layer and, when not mid-drag, the offscreen blur render pass — usually the single largest cost, and roughly proportional to blobCount. */
@@ -1713,6 +1713,21 @@ export class HexMapRenderer {
       });
     };
 
+    // Solid, unblurred fill for a hex whose fog tint is already fully
+    // saturated (no further gradient to render) — drawn straight into
+    // fogLayer, which composites *under* the blurred blob sprite (see the
+    // addChild order in mountApp/constructor), so it sits as a plain
+    // backdrop the organic blobs still overlay near any real edge. Once a
+    // tier is saturated it already reads as one uniform plane visually
+    // (that's what "saturated" means), so painting that plane directly
+    // instead of thousands of individually blurred blobs is free, not an
+    // approximation — see FOG_TERRAIN_CULL_HEXES (unexplored) and
+    // FOG_VISIBLE_MARGIN_HEXES (scouted) for where each tier's cutoff is.
+    const fillFlatFog = (gridPt: { x: number; y: number }, color: number, alpha: number) => {
+      const flat = inflatedTop.flatMap((p) => [gridPt.x + p.x, gridPt.y + p.y]);
+      this.fogLayer.poly(flat).fill({ color, alpha });
+    };
+
     for (const c of coords) {
       if (fogActive && fogDebugFlags.unexploredFog && !worldModel.isExplored(c.q, c.r)) {
         fogPerfStats.unexploredHexCount++;
@@ -1743,9 +1758,7 @@ export class HexMapRenderer {
           // (individually capped below 1, relying on overlap to read as
           // solid) can leave faint gaps right at the edge of what's
           // rendered, which is exactly the seam a hard flat fill closes.
-          const grid = isoGridPosition(c, TILE_W, TILE_H);
-          const flat = inflatedTop.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-          this.fogLayer.poly(flat).fill({ color: FOG_UNEXPLORED, alpha: 1 });
+          fillFlatFog(isoGridPosition(c, TILE_W, TILE_H), FOG_UNEXPLORED, 1);
           // Keep placing solid blobs a bit past the hand-off too (see
           // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
           // blend the outermost blobs into and they visibly fade right
@@ -1801,8 +1814,26 @@ export class HexMapRenderer {
 
       if (visibleEdgeDist && fogDebugFlags.scoutedFog) {
         if (fogDebugFlags.scoutedTintFade) {
-          const t = Math.min(1, Math.max(0, visibleEdgeDist(c) / FOG_VISIBLE_MARGIN_HEXES));
-          if (t > 0) {
+          const dist = visibleEdgeDist(c);
+          const t = Math.min(1, Math.max(0, dist / FOG_VISIBLE_MARGIN_HEXES));
+          if (t >= 1 && !fogDebugFlags.blobsOnly) {
+            // Saturated past FOG_VISIBLE_MARGIN_HEXES — same guaranteed-fill
+            // shortcut as the unexplored tier's own cutoff (see
+            // fillFlatFog's comment). Without it, a zoomed-out view where a
+            // huge scouted-but-out-of-sight region fills the viewport (a
+            // sea-heavy world map, say) was placing one individually
+            // blurred blob per hex across all of it for a result that
+            // already reads as one flat plane — exactly the case this
+            // closes.
+            fillFlatFog(grid, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
+            fogPerfStats.scoutedHexCount++;
+            // Keep a thin ring of blobs just past saturation too, so the
+            // blur has something real to blend into (mirrors
+            // FOG_BLOB_OVERLAP_HEXES's role in the unexplored tier).
+            if (!fogDebugFlags.flatFillOnly && dist <= FOG_VISIBLE_MARGIN_HEXES + FOG_BLOB_OVERLAP_HEXES) {
+              addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
+            }
+          } else if (t > 0) {
             addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
             fogPerfStats.scoutedHexCount++;
           }

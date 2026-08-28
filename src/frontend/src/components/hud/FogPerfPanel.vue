@@ -128,6 +128,11 @@ function share(v: number, of: number): number {
             class="bar"
             :style="{ width: share(child.ms, row.ms || child.ms || 1) + '%' }"
           />
+          <span
+            v-else-if="child.count !== undefined"
+            class="bar count"
+            :style="{ width: share(child.count, stats.hexCount) + '%' }"
+          />
         </span>
         <span class="value">
           <template v-if="child.ms !== null">{{ ms(child.ms) }}</template>
@@ -141,6 +146,9 @@ function share(v: number, of: number): number {
       <span class="value">{{ ms(stats.totalMs) }}</span>
     </div>
     <div class="meta">{{ stats.hexCount }} hexes &middot; {{ stats.blobCount }} fog blobs</div>
+    <div class="legend">
+      Hatched sub-row bars are hex counts, not timings — they show a row's <em>share of the viewport</em>, not a slice of its ms. Only Blob cache's sub-rows (solid bars: Sprite sync / Blur render pass) are real measured sub-timings that add up to their parent.
+    </div>
   </div>
 </template>
 
@@ -202,6 +210,11 @@ function share(v: number, of: number): number {
 .row.sub .bar {
   background: var(--muted-2);
 }
+.row.sub .bar.count {
+  /* Hatched, not solid: visually distinct from a real sub-timing bar so it
+     doesn't read as "this many ms of the parent's total". */
+  background: repeating-linear-gradient(45deg, var(--muted-2) 0 3px, transparent 3px 6px);
+}
 .value {
   flex: 0 0 auto;
   min-width: 72px;
@@ -211,6 +224,12 @@ function share(v: number, of: number): number {
 .meta {
   margin-top: 8px;
   font-size: 11px;
+  color: var(--muted);
+}
+.legend {
+  margin-top: 6px;
+  font-size: 10.5px;
+  line-height: 1.4;
   color: var(--muted);
 }
 </style>

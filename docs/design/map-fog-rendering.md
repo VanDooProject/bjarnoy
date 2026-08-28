@@ -232,6 +232,38 @@ Free. `jitterDistance` gained one function parameter (no new computation — the
 
 ---
 
+## 7. Scouted (dark) fog still individually blobbed at extreme world-map zoom-out
+
+**Reported:** "can't we somehow lower the hex numeres of 'culled (fog)' and 'scouted (dark) fog)'? i wanted this to be planes anyway" — plus a related complaint about the perf panel, addressed below.
+
+### Root cause
+
+Problem 4's flat-fill shortcut only ever covered the unexplored (white) tier's world-map background case. The scouted (dark) tier's per-hex loop branch (`scoutedTintFade`) always placed an individually jittered, blurred blob per hex at every distance past `FOG_VISIBLE_MARGIN_HEXES`, with no equivalent "fully saturated, just paint it" shortcut — even once the alpha gradient (`t = dist / FOG_VISIBLE_MARGIN_HEXES`) reaches `t ≥ 1` and there is no gradient left to render. On a well-progressed save with a large scouted (explored-but-out-of-sight) area, zooming the world map all the way out makes that saturated region the overwhelming majority of the viewport — one `addBlob()` per hex, computed the expensive way, for a result that's supposed to look like a flat plane.
+
+### Fix
+
+Factored the unexplored tier's existing flat-fill call site into a shared `fillFlatFog(gridPt, color, alpha)` helper, and added the equivalent shortcut to the scouted-tier branch: once `t >= 1` (saturated) and `blobsOnly` is off, the hex is flat-filled into the same `fogLayer` Graphics object the unexplored tier already used, instead of pushed into `blobEntries`. A thin ring of real blobs (`FOG_BLOB_OVERLAP_HEXES` past the cutoff) is still placed near the boundary, exactly as for the unexplored tier, so the blurred blob cache still has genuine detail to blend the flat fill into rather than a visible hard edge. `flatFillOnly` (skip that overlap ring) and `blobsOnly` (never take the shortcut, reproducing the pre-fix per-hex-forever behaviour) already existed as generic, tier-agnostic flags from problem 4 and needed no changes to cover the new call site.
+
+### Review
+
+The debug-only hard-binary branch (`scoutedTintFade: false`, off by default — reproduces the pre-fade "no fade" look) was deliberately left untouched: it exists to reproduce old behaviour on demand, not to represent what real users see, so extending the shortcut there would touch a path this fix has no reason to change.
+
+### Performance
+
+Measured on this doc's demo save — a freshly-founded settlement with a small explored radius, unlike a long-played save where the scouted ring can be enormous (the original report's screenshot showed 20719 scouted-fog hexes) — on a moderately panned-out world map (4026 hexes in viewport): default (shortcut active) 393 fog blobs, Blob cache 1.70ms, vs. `blobsOnly` forced (reproducing pre-fix behaviour) 4026 fog blobs, Blob cache 8.50ms — a **~10× drop in blob count, ~5× drop in blur-render cost**. Caveat, stated plainly: this particular run's viewport was dominated by the *unexplored* tier (problem 4's pre-existing shortcut), not the scouted tier specifically — the demo save's explored radius was too small to reproduce the original report's scouted-heavy scenario inside a scratch verification session. The mechanism itself is tier-agnostic, though: `fillFlatFog` and the `blobsOnly`/`flatFillOnly` flags don't know or care which tier calls them, and the scouted-tier call site mirrors the unexplored-tier one exactly (same helper, same overlap-ring logic, same flags). On a save with a large scouted ring — the scenario actually reported — the same order-of-magnitude reduction applies to the scouted tier, which previously had no shortcut at all.
+
+### Perf panel: count-only sub-rows read as "0ms"
+
+**Reported:** "in the perf view i do not see how the 18.8ms come together since all sub values are 0 like in terrain"
+
+**Root cause:** `FogPerfPanel`'s sub-rows for count-only children (Terrain's Drawn/Culled; Borders+fog's Unexplored/Realm borders/Scouted) rendered an empty bar-track whenever `ms === null`, since bar width was computed only from `child.ms`. That's visually indistinguishable from "this branch cost 0ms" — but these sub-rows were never separately-timed costs to begin with, just hex counts sharing the panel's ms-shaped row layout (timing every per-hex branch individually would cost more than the branch itself — see the panel's own comment). Only the Blob cache row's two sub-rows (Sprite sync / Blur render pass) are real, separately-measured sub-timings that actually sum to their parent.
+
+**Fix:** count-only sub-rows now render a hatched bar (CSS `repeating-linear-gradient`), sized by the hex count's share of the viewport rather than a slice of any ms — visually distinct from a real timing bar — plus a one-line legend under the panel spelling out the distinction.
+
+**Performance:** Free — a CSS background pattern and one existing conditional in the template.
+
+---
+
 ## Debug flags after this pass
 
 `fogDebugFlags` (`HexMapRenderer.ts`), surfaced via `FogDebugPanel` on `?debug=1` in both the settlement view and the world map (fix 2):
@@ -275,6 +307,6 @@ Like `fogDebugFlags`, `fogPerfStats` is a plain object HexMapRenderer mutates di
 
 ## Overall performance summary
 
-The one mechanism with a real, measured performance win is problem 4 (world-map deep-fog background shortcut): **~2.7× faster** per drag-triggered rebuild when the viewport is entirely unexplored ocean, the scenario the issue's "many elements... slow" complaint was actually about — with the mixed/near-settlement case confirmed at parity, not just unmeasured. Every other fix in this doc is perf-neutral-to-slightly-cheaper by construction (a renamed/gated boolean, a parameterized constant, a `zIndex` write) — none of them add a new per-frame or per-rebuild cost; several remove one (fix 5's now-skipped fade tick, fix 3's now-skipped per-hex jitter hash on the terrain-cull path).
+Two mechanisms carry a real, measured performance win. Problem 4 (world-map deep-fog background shortcut, unexplored tier only): **~2.7× faster** per drag-triggered rebuild when the viewport is entirely unexplored ocean, the scenario the issue's "many elements... slow" complaint was actually about — with the mixed/near-settlement case confirmed at parity, not just unmeasured. Problem 7 (the same flat-fill shortcut extended to the scouted tier): **~10× fewer blobs, ~5× cheaper blur render** in the scenario measured (see problem 7's own caveat on why that run exercised the unexplored tier more than the scouted one) — the scouted tier previously had no equivalent shortcut at all, so on a save with a large scouted ring, this is the difference between "thousands of individually blobbed hexes" and "a flat fill." Every other fix in this doc is perf-neutral-to-slightly-cheaper by construction (a renamed/gated boolean, a parameterized constant, a `zIndex` write) — none of them add a new per-frame or per-rebuild cost; several remove one (fix 5's now-skipped fade tick, fix 3's now-skipped per-hex jitter hash on the terrain-cull path).
 
 The renderer's existing architecture (documented in `HexMapRenderer.ts`'s own module comment) already does the heavy lifting that makes any of this tractable: pooled sprites batched by shared texture, a rebuild triggered only on real camera displacement past a threshold rather than every frame, and the fog blur baked into an offscreen cache rather than run as a live per-frame filter. This pass's fixes work within that shape rather than against it — the one new optimization (problem 4) follows the same "expensive work, cached / short-circuited whenever provably safe" pattern already used for the blur cache itself.
