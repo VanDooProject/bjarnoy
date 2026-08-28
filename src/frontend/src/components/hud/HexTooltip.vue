@@ -27,6 +27,7 @@ const style = computed(() => ({
       <span v-if="info.level" class="level">LEVEL {{ info.level }}</span>
     </div>
     <div class="subtitle">{{ info.subtitle }}</div>
+    <div class="separator" />
     <div v-if="info.stat && !info.level" class="stat">{{ info.stat }}</div>
     <dl v-if="info.output || info.modifier || info.workers" class="stats">
       <template v-if="info.output">
@@ -42,6 +43,10 @@ const style = computed(() => ({
         <dd>{{ info.workers }}</dd>
       </template>
     </dl>
+    <div v-if="info.premiumLocked" class="premium-gate">
+      <span class="lock">&#128274;</span>
+      <span>Scouting details are a <strong>Premium</strong> feature</span>
+    </div>
     <div v-if="info.cta" class="cta">{{ info.cta.toUpperCase() }}</div>
   </div>
 </template>
@@ -81,6 +86,10 @@ const style = computed(() => ({
   color: var(--muted);
   margin-top: 2px;
 }
+.separator {
+  margin-top: 8px;
+  border-top: 1px solid var(--panel-border);
+}
 .stat {
   margin-top: 6px;
   font-size: 13px;
@@ -111,5 +120,20 @@ const style = computed(() => ({
   color: var(--muted-2, var(--muted));
   border-top: 1px solid var(--panel-border);
   padding-top: 6px;
+}
+.premium-gate {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.premium-gate strong {
+  color: var(--gold);
+  font-weight: 600;
+}
+.premium-gate .lock {
+  font-size: 11px;
 }
 </style>

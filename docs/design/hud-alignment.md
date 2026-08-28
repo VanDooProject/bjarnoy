@@ -331,6 +331,37 @@ land off to the side) still shows no hover at all, matching the "only disabled i
 ![hover tooltip clear of the tile it's describing](img/hex_hover_tooltip.png)
 ![hover working on open water in the village view](img/hex_hover_water.png)
 
+**Follow-up request — gate building stats to the owner, add a separator under the realm name:** the owner
+asked for two more changes to the same tooltip, on top of the position/water fixes above:
+
+1. **Output/modifier/workers should only show for the viewer's own tiles.** Scouting a rival's building
+   previously ran the same `buildingStats` derivation as for the player's own buildings and showed identical
+   numbers — there's no reason a rival's output/worker counts should be free information, and no signal in the
+   card that they even *were* a rival's numbers rather than the player's. `hoverInfoFor` now only calls
+   `buildingStats` when `mine` is true; a rival's building tile still gets its title/level/realm name (you can
+   see *what* it is and *who* owns it — scouting shouldn't be completely blind), but the stats fields are
+   left empty.
+2. **Gate the rest behind a Premium interface** rather than just silently showing nothing where the stats used
+   to be, which would look like a bug rather than a deliberate limit. A new `HoverInfo.premiumLocked` flag
+   (set to `!mine` for every building tile) tells `HexTooltip.vue` to render a `🔒 Scouting details are a
+   Premium feature` row in that space instead. This is presentation-only, matching the same scope caveat as
+   population/storage-cap elsewhere in this doc — there's no actual premium-tier/paywall system behind it, just
+   the hook for one (a real gate would check some `player.isPremium` here instead of hardcoding "always
+   locked for non-owners").
+3. **Separator line beneath the realm name.** A `.separator` (`border-top`) now sits directly under
+   `.subtitle` in every tooltip variant, not just the gated one — a plain 1px rule matching the one the CTA
+   row already used, so the card reads as title+realm-name in one block, then everything else below a hairline.
+
+**Files:** `lib/map/HexMapRenderer.ts` (`HoverInfo.premiumLocked`, `hoverInfoFor`'s `mine`-gated `stats`),
+`components/hud/HexTooltip.vue` (`.separator`, `.premium-gate`).
+
+**Verified:** yes, with Playwright — a second demo-mode settlement was founded next to the player's own via
+the `window.__demoWorld()` debug hook (there's no real rival AI to scout against in demo mode) and its
+longhouse hovered directly.
+
+![hovering the player's own longhouse — stats + separator](img/hex_hover_tooltip.png)
+![hovering a rival's longhouse — stats replaced by the Premium gate, separator still present](img/hex_hover_premium_gate.png)
+
 ---
 
 ## 4. Settlement badge
