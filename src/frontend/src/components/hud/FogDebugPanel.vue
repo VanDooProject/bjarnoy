@@ -22,6 +22,7 @@ const LABELS: Record<keyof FogDebugFlags, string> = {
   terrainCullJitter: 'Distance jitter (terrain cull, off by default)',
   scoutedTintFade: 'Scouted-tint fade (sight edge)',
   scoutedFog: 'Scouted (dark) fog enabled',
+  unexploredFog: 'Unexplored (white) fog enabled',
   blobJitter: 'Blob position/size jitter',
   terrainCull: 'Cull terrain past fog cutoff',
   flatFillOnly: 'Skip blob/flat-fill overlap',

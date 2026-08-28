@@ -142,6 +142,8 @@ export interface FogDebugFlags {
   scoutedTintFade: boolean;
   /** Turns the scouted (dark, out-of-sight-but-explored) fog tint off entirely, independent of scoutedTintFade — for isolating whether an artifact near a settlement's edge is the tint itself or its fade/jitter. */
   scoutedFog: boolean;
+  /** Turns the unexplored (white) fog off entirely — both the per-hex blob/flat-fill mist and the world-map deep-fog background shortcut (syncWorldBackground). Off leaves unexplored hexes fully transparent/undrawn past the scouted ring, so only scoutedFog's dark tint remains visible — for isolating the black (scouted) fog from the white (unexplored) one, since the two overlap heavily near a settlement's edge and are otherwise hard to tell apart. */
+  unexploredFog: boolean;
   /** Per-hex position/size jitter on fog blobs (FOG_BLOB_JITTER_X/Y, FOG_BLOB_SIZE_JITTER). Off = blobs sit dead-centre on their hex, same size. */
   blobJitter: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
@@ -158,6 +160,7 @@ export const fogDebugFlags: FogDebugFlags = {
   terrainCullJitter: false,
   scoutedTintFade: true,
   scoutedFog: true,
+  unexploredFog: true,
   blobJitter: true,
   terrainCull: true,
   flatFillOnly: false,
@@ -1044,6 +1047,7 @@ export class HexMapRenderer {
     const deepFogOnly =
       this.options.mode === 'world' &&
       fogActive &&
+      fogDebugFlags.unexploredFog &&
       !fogDebugFlags.blobsOnly &&
       this.isEntirelyDeepFog(rect);
     this.syncWorldBackground(deepFogOnly);
@@ -1596,7 +1600,7 @@ export class HexMapRenderer {
     };
 
     for (const c of coords) {
-      if (fogActive && !worldModel.isExplored(c.q, c.r)) {
+      if (fogActive && fogDebugFlags.unexploredFog && !worldModel.isExplored(c.q, c.r)) {
         // Mist over ground the settlement has never scouted — covers every
         // hex the camera can currently see, however far it's panned, so the
         // world reads as continuing forever under fog rather than ending at

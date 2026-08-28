@@ -242,13 +242,14 @@ Free. `jitterDistance` gained one function parameter (no new computation — the
 | `terrainCullJitter` | **off** (was implicitly on) | Whether the terrain-sprite draw cutoff jitters too, or uses a fixed, padded cutoff |
 | `scoutedTintFade` | on | Renamed from `visibleRamp`. Fades the scouted (dark) tint in gradually vs. a hard binary jump |
 | `scoutedFog` | **new**, on | Turns the scouted (dark) tint off entirely, independent of its fade |
+| `unexploredFog` | **new**, on | Turns the unexplored (white) fog off entirely — both per-hex mist and the world-map deep-fog background shortcut — so only `scoutedFog`'s dark tint remains, for isolating the two fog tiers from each other |
 | `blobJitter` | on | Per-hex position/size jitter on fog blobs |
 | `terrainCull` | on | Whether terrain sprites stop being drawn past the fog cutoff at all |
 | `flatFillOnly` | off | Skip the overlap blobs placed past the flat-fill cutoff |
 | `blobsOnly` | off | Never switch to the flat, guaranteed-opaque fill — reproduces the original "fog never reaches full opacity" bug |
 | `dragFade` | **off** (was implicitly on) | Whether releasing a drag fades the whole fog bitmap back in, or shows it immediately |
 
-Three defaults changed in this pass (`terrainCullJitter`, `dragFade` off; `scoutedFog` added on) — all three were previously "always on, no way to turn off," and all three were the direct subject of an issue #20 complaint.
+Three defaults changed in this pass (`terrainCullJitter`, `dragFade` off; `scoutedFog` added on) — all three were previously "always on, no way to turn off," and all three were the direct subject of an issue #20 complaint. `unexploredFog` was added afterward, on (matching prior always-on behaviour), as the white-fog counterpart to `scoutedFog`: with `scoutedFog` alone there was no way to isolate the *black* tier, since it renders overlapped with (and mostly hidden under) the white one near a settlement's edge — flipping `unexploredFog` off leaves only the dark, out-of-sight tint visible.
 
 ## Overall performance summary
 
