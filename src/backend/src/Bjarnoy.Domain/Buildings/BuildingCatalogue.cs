@@ -48,6 +48,9 @@ public static class BuildingCatalogue
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
+            BuildingType.FishingHut => Producer(type, level, Sand, new ResourceAmounts(0, 0, Food: 30, 0)),
+            BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
+            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             _ => null,
         };
     }
@@ -96,6 +99,8 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
+    private static readonly IReadOnlySet<Terrain> Sand = new HashSet<Terrain> { Terrain.Sand };
+    private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
 
     /// <summary>Cost multiplier for a level: 1, 1.6, 2.56, …</summary>
     private static double CostFactor(int level) => Math.Pow(1.6, level - 1);
@@ -148,6 +153,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 10) * CostFactor(level),
         BuildDuration = Duration(8, level),
+        AllowedTerrain = SandOrGrass,
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
     };
 }
