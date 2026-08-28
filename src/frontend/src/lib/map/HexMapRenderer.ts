@@ -801,7 +801,10 @@ export class HexMapRenderer {
       return;
     }
     const tile = worldModel.getTile(coord.q, coord.r);
-    if (mode === 'world' && tile.terrain === 'sea') {
+    // Water is never a valid target — neither to found on (landing) nor to
+    // build on (settlement) nor to click into (world map) — so the hover
+    // outline shouldn't appear over it in any mode.
+    if (tile.terrain === 'sea') {
       this.options.onHoverChange?.(null);
       return;
     }
