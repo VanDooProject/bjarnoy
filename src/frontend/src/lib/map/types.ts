@@ -1,5 +1,15 @@
 export type Terrain = 'sea' | 'sand' | 'grass' | 'forest' | 'mountain';
 
+/**
+ * Which of the tile art pack's six camera rotations a hex renders with.
+ * Mirrors `TileOrientation` in `Bjarnoy.Domain.World` — see that type for why
+ * this exists (today every tile hardcodes `_SE`).
+ */
+export type TileOrientation = 'E' | 'NE' | 'NW' | 'W' | 'SW' | 'SE';
+
+/** `TileOrientation` values in the same order as `neighbors()`'s direction indices. */
+export const TILE_ORIENTATIONS: readonly TileOrientation[] = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
+
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;
@@ -8,6 +18,12 @@ export interface Tile {
   q: number;
   r: number;
   terrain: Terrain;
+  /** Sea that borders land — the ring a coastal-water sprite belongs on. */
+  isCoastalWater?: boolean;
+  /** Which art-pack rotation to render this hex with. */
+  orientation?: TileOrientation;
+  /** Which numbered variant of this terrain's tile art to use. */
+  variant?: number;
   /** Settlement id that currently claims this hex, if any (Settlers II style borders). */
   ownerId?: string;
   buildingType?: 'longhouse' | 'hut' | 'farm' | 'tower';
@@ -47,6 +63,24 @@ export interface IslandLabel {
   name: string;
   q: number;
   r: number;
+}
+
+/** Mirrors the backend's `RiverTileShape` wire names. */
+export type RiverTileShape = 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth';
+
+/**
+ * A single hex of a generated river, as served by the backend (see
+ * `RiverTileResponse`) — live mode only, since a river's shape depends on
+ * the whole island (and its other rivers), not just the hex's own
+ * coordinate, so it can't be derived client-side the way terrain/
+ * orientation/variant can.
+ */
+export interface RiverTile {
+  q: number;
+  r: number;
+  shape: RiverTileShape;
+  inDirections: TileOrientation[];
+  outDirection: TileOrientation | null;
 }
 
 export function emptyResources(): Resources {

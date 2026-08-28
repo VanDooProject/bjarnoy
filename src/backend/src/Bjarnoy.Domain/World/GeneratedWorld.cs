@@ -1,7 +1,12 @@
 namespace Bjarnoy.Domain.World;
 
-/// <summary>A single classified hex.</summary>
-public readonly record struct GeneratedTile(HexCoord Coord, Terrain Terrain);
+/// <summary>A single classified hex, with the rendering facts derived alongside its terrain.</summary>
+public readonly record struct GeneratedTile(
+    HexCoord Coord,
+    Terrain Terrain,
+    bool IsCoastalWater,
+    TileOrientation Orientation,
+    int Variant);
 
 /// <summary>
 /// A connected landmass found in a generated world, with the facts about it that
@@ -31,6 +36,13 @@ public sealed record GeneratedIsland
     /// island whose terrain never satisfies the rules.
     /// </summary>
     public required IReadOnlyList<HexCoord> StartPositions { get; init; }
+
+    /// <summary>
+    /// This island's rivers, one entry per river tile. Empty for an island
+    /// with no qualifying mountain cluster. See <see cref="RiverGenerator"/>
+    /// and <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public required IReadOnlyList<RiverTile> RiverTiles { get; init; }
 
     public int TileCount => Tiles.Count;
 }

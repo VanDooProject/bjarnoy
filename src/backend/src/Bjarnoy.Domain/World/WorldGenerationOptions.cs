@@ -52,6 +52,19 @@ public sealed record WorldGenerationOptions
     /// </summary>
     public int MinimumIslandTiles { get; init; } = 6;
 
+    /// <summary>
+    /// A traced river shorter than this (in tiles, spring to mouth inclusive)
+    /// is discarded rather than rendered. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public int MinRiverLength { get; init; } = 2;
+
+    /// <summary>
+    /// How much a river's path wanders sideways instead of taking the
+    /// steepest descent to the coast at every step: 0 is a straight radial
+    /// line, larger values meander more. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public double RiverMeanderWeight { get; init; } = 0.35;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
@@ -68,6 +81,8 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(IslandMinRadius);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxRadius, IslandMinRadius);
         ArgumentOutOfRangeException.ThrowIfNegative(MinimumIslandTiles);
+        ArgumentOutOfRangeException.ThrowIfLessThan(MinRiverLength, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(RiverMeanderWeight);
 
         if (MountainThreshold >= BeachThreshold)
         {

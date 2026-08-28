@@ -115,4 +115,158 @@ public sealed class TerrainSampler
     }
 
     public bool IsLand(HexCoord coord) => TerrainAt(coord).IsLand();
+
+    /// <summary>A sea hex with at least one land neighbour — the coastal-water ring around every island.</summary>
+    public bool IsCoastalWater(HexCoord coord)
+    {
+        if (TerrainAt(coord) != Terrain.Sea)
+        {
+            return false;
+        }
+
+        foreach (var neighbour in coord.Neighbours())
+        {
+            if (IsLand(neighbour))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Which of the six art-pack rotations a hex renders with. Coastal water
+    /// faces the land it borders; everything else gets a cosmetic, seed-stable
+    /// rotation so the map doesn't read as one repeated tile stamped everywhere.
+    /// </summary>
+    /// <param name="overrideOrientation">
+    /// Forces the result regardless of terrain — the hook a river (which needs
+    /// its own rotation to keep its flow direction visually continuous between
+    /// tiles) overrides through, once rivers are generated.
+    /// </param>
+    public TileOrientation OrientationAt(HexCoord coord, TileOrientation? overrideOrientation = null)
+    {
+        if (overrideOrientation is { } forced)
+        {
+            return forced;
+        }
+
+        return IsCoastalWater(coord) ? CoastalOrientation(coord) : DefaultOrientation(coord);
+    }
+
+    /// <summary>
+    /// The direction a coastal-water hex's land neighbours sit in, as a compass
+    /// point on the hex's own six-direction wheel: each land neighbour
+    /// contributes a unit vector at its direction's angle (60° apart, matching
+    /// <see cref="HexCoord.Directions"/>'s order), and the summed vector is
+    /// snapped to the nearest of those six directions.
+    /// </summary>
+    private TileOrientation CoastalOrientation(HexCoord coord)
+    {
+        var neighbours = coord.Neighbours();
+        var sumX = 0.0;
+        var sumY = 0.0;
+        var firstLandIndex = -1;
+
+        for (var i = 0; i < neighbours.Length; i++)
+        {
+            if (!IsLand(neighbours[i]))
+            {
+                continue;
+            }
+
+            if (firstLandIndex < 0)
+            {
+                firstLandIndex = i;
+            }
+
+            var angle = i * (Math.PI / 3.0);
+            sumX += Math.Cos(angle);
+            sumY += Math.Sin(angle);
+        }
+
+        // Opposite land neighbours (e.g. a one-hex-wide strait) can cancel the
+        // vector to (near) zero — a small epsilon rather than an exact `==
+        // 0.0` check, because two land neighbours 180 degrees apart don't
+        // reliably sum their sin/cos terms to bit-exact zero (this is where
+        // the .NET and JS Math libraries' cos/sin/atan2 diverge at the ULP
+        // level, and atan2 near the origin is extremely sensitive to that —
+        // the frontend mirror uses the same epsilon so both land on the same
+        // orientation for these hexes). Falling back to the first land
+        // direction found keeps the pick deterministic instead of an
+        // arbitrary default.
+        const double zeroEpsilon = 1e-9;
+        if (Math.Abs(sumX) < zeroEpsilon && Math.Abs(sumY) < zeroEpsilon)
+        {
+            return (TileOrientation)firstLandIndex;
+        }
+
+        var resultAngle = Math.Atan2(sumY, sumX);
+        if (resultAngle < 0)
+        {
+            resultAngle += 2.0 * Math.PI;
+        }
+
+        // AwayFromZero, not the .NET default (ToEven/banker's rounding): the
+        // frontend mirror (worldGenerator.ts) uses JS's Math.round, which
+        // always rounds an exact .5 up rather than to the nearest even
+        // integer. resultAngle/(pi/3) is always >= 0 here, so "away from
+        // zero" and "round half up" agree — this only changes the handful of
+        // hexes whose land-neighbour vector lands exactly on a 30° boundary,
+        // but without it those hexes silently pick a different orientation
+        // than the client renders, breaking the frontend/backend parity this
+        // whole function exists for.
+        var index = (int)Math.Round(resultAngle / (Math.PI / 3.0), MidpointRounding.AwayFromZero) % 6;
+        return (TileOrientation)index;
+    }
+
+    /// <summary>Seed-stable cosmetic rotation for tiles that don't face anything in particular.</summary>
+    private TileOrientation DefaultOrientation(HexCoord coord)
+    {
+        var hash = ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + 29);
+        var index = (int)(hash * 6.0);
+        if (index > 5)
+        {
+            index = 5;
+        }
+
+        return (TileOrientation)index;
+    }
+
+    /// <summary>
+    /// Per-terrain variant count the tile art pack actually has, everything else
+    /// falling back to 1. Grass has a plain top image plus <c>variant000</c>-
+    /// <c>variant002</c> (4); forest has a plain image plus <c>variant000</c>-
+    /// <c>variant001</c> (3); mountain isn't base/top split and the pack has no
+    /// <c>mountaintile*variant*</c> files at all, so it never gets more than its
+    /// one composited image.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<Terrain, int> VariantCounts = new Dictionary<Terrain, int>
+    {
+        [Terrain.Grass] = 4,
+        [Terrain.Forest] = 3,
+    };
+
+    /// <summary>
+    /// Seed-stable variant index for a hex, in <c>[0, N)</c> where <c>N</c> is
+    /// however many variants <see cref="VariantCounts"/> knows the art pack has
+    /// for that terrain (1 — i.e. always variant 0 — for anything not listed).
+    /// Capping the range this way *is* the fallback: a terrain with fewer
+    /// variants than the pack's richest one never gets asked for a variant it
+    /// doesn't have.
+    /// </summary>
+    public int VariantAt(HexCoord coord)
+    {
+        var terrain = TerrainAt(coord);
+        var count = VariantCounts.TryGetValue(terrain, out var known) ? known : 1;
+        if (count <= 1)
+        {
+            return 0;
+        }
+
+        var hash = ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + 31);
+        var index = (int)(hash * count);
+        return index >= count ? count - 1 : index;
+    }
 }

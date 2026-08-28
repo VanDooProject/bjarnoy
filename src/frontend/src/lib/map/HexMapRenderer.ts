@@ -55,8 +55,10 @@ import {
   TILE_ART_NATIVE_W,
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
+  baseTextureFor,
   loadTileTextures,
-  textureKeyFor,
+  riverTexturesFor,
+  topTextureFor,
   type TileTextures,
 } from './textures';
 
@@ -637,6 +639,19 @@ export class HexMapRenderer {
     // it produced there fell back to SETTLEMENT_DEFAULT_ZOOM. Redo it now
     // that the viewport is actually known.
     if (this.options.mode === 'settlement') this.camera = this.settlementCameraOrigin();
+
+    // Attached before the texture-pack await below, not after: everything
+    // these handlers touch (this.app, this.camera, this.viewport,
+    // worldModel.getTile) is already set by this point, and a pointer event
+    // is a one-shot DOM dispatch — the browser doesn't queue it for later,
+    // so a click during the (now much larger, ~150-asset) texture load
+    // would otherwise just be silently lost rather than merely delayed.
+    canvas.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointerleave', this.onPointerLeave);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
+
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large, submodule-backed) texture
     // pack at all — only settlement mode loads it.
@@ -669,12 +684,6 @@ export class HexMapRenderer {
     );
     this.fogWorld.addChild(this.fogLayer, this.fogBlobCacheSprite);
     app.stage.addChild(this.world, this.markerLayer, this.fogWorld);
-
-    canvas.addEventListener('pointerdown', this.onPointerDown);
-    window.addEventListener('pointermove', this.onPointerMove);
-    window.addEventListener('pointerup', this.onPointerUp);
-    canvas.addEventListener('pointerleave', this.onPointerLeave);
-    canvas.addEventListener('wheel', this.onWheel, { passive: false });
 
     app.ticker.add(this.onTick);
 
@@ -1160,11 +1169,22 @@ export class HexMapRenderer {
         continue;
       }
       const tile = worldModel.getTile(c.q, c.r);
+      // Rivers can't be derived from the seed the way terrain/orientation/
+      // variant can (a path depends on the whole island) — live mode only,
+      // fetched once per island and looked up here rather than folded into
+      // Tile itself, so a tile cached before that fetch lands never goes
+      // stale (see WorldModel.setRiverTiles).
+      const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
-      const textureKey = textureKeyFor(tile);
-      baseEntries.set(key, { texture: textures.base[textureKey], coord: c });
-      const topTexture = textures.top[textureKey];
+      if (river) {
+        const riverTextures = riverTexturesFor(textures, river);
+        baseEntries.set(key, { texture: riverTextures.base, coord: c });
+        topEntries.set(key, { texture: riverTextures.top, coord: c });
+        continue;
+      }
+      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const topTexture = topTextureFor(textures, tile);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
     }
 

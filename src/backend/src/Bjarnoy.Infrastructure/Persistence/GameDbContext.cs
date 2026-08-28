@@ -75,6 +75,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             island.Property(i => i.StartPositions)
                 .HasConversion(new HexListConverter())
                 .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            island.Property(i => i.RiverTiles)
+                .HasConversion(new RiverTileListConverter())
+                .Metadata.SetValueComparer(RiverTileListConverter.Comparer);
         });
 
         modelBuilder.Entity<SettlementEntity>(settlement =>

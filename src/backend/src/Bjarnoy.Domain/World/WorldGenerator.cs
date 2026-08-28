@@ -68,6 +68,7 @@ public sealed class WorldGenerator
                 Tiles = tiles,
                 Centre = CentreOf(tiles),
                 StartPositions = FindStartPositions(tiles, land),
+                RiverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index),
             });
         }
 

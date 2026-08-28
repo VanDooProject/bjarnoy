@@ -4,6 +4,10 @@ artifacts/
 *.user
 TestResults/
 
+# Local SQLite dev database (appsettings.Development.json), never committed.
+*.dev.db
+*.dev.db-*
+
 # The built frontend is copied in by the Docker build (see deploy/), never
 # committed.
 src/Bjarnoy.Api/wwwroot/
