@@ -32,6 +32,16 @@ const props = defineProps<{
   // bubble duplicating it in the ring below. So this is a real clickable
   // action, not just a text label.
   badgeAction?: BadgeAction;
+  // Issue #16 "build should open a new outer ring, concentric rings moving
+  // out": the caller renders one RingMenu per open level and spaces them by
+  // passing an increasing radius, instead of one ring replacing another.
+  radius?: number;
+  // Only the innermost/first ring in that stack owns the full-screen
+  // backdrop (closing on outside click, starting a drag, right-click to
+  // close) — the outer rings are just another orbit of bubbles floating
+  // above the same backdrop, so their own backdrop div must not intercept
+  // pointer events meant for it.
+  backdrop?: boolean;
 }>();
 const emit = defineEmits<{
   select: [id: string];
@@ -53,7 +63,10 @@ const RADIUS = 110;
 // centre, underneath the ring — the same RADIUS that keeps a badge-less
 // ring feeling spread out crowds this one from both above (the badge) and
 // the middle (that pill), so it gets extra breathing room.
-const effectiveRadius = computed(() => (props.badgeAction ? RADIUS + 40 : RADIUS));
+const effectiveRadius = computed(() => {
+  const base = props.radius ?? RADIUS;
+  return props.badgeAction ? base + 40 : base;
+});
 const badgeY = computed(() => props.y - effectiveRadius.value - 34);
 // Issue #16 "ring menu" target: "connected down to the ring by a thin
 // curved guide line" — a quadratic curve from the badge's bottom edge to
@@ -94,6 +107,16 @@ function select(action: RingAction) {
   emit('select', action.id);
 }
 
+function onBackdropPointerDown(e: PointerEvent) {
+  if (props.backdrop === false) return;
+  emit('outsidePointerDown', e);
+}
+
+function onBackdropContextMenu() {
+  if (props.backdrop === false) return;
+  emit('close');
+}
+
 // Issue #16 "build (which opens another ring outside with available
 // buildings on this spot)": the outer build-category/build-building rings
 // should open as soon as the player hovers the action that leads to them —
@@ -110,8 +133,9 @@ function hover(action: RingAction) {
 <template>
   <div
     class="ring-backdrop"
-    @pointerdown.self="emit('outsidePointerDown', $event)"
-    @contextmenu.prevent="emit('close')"
+    :class="{ 'no-backdrop': backdrop === false }"
+    @pointerdown.self="onBackdropPointerDown"
+    @contextmenu.prevent="onBackdropContextMenu"
   >
     <!-- Issue #16 "ring menu": a faint orbit track under the bubbles (the
          "ring" itself, not just floating buttons), plus the curved guide
@@ -154,6 +178,13 @@ function hover(action: RingAction) {
   inset: 0;
   z-index: 30;
 }
+/* An outer, concentric ring (see the `radius`/`backdrop` props) shares the
+   screen with the innermost ring's own full-screen backdrop underneath it
+   — it must not intercept clicks meant for that backdrop (closing the
+   rings, starting a drag), only its own bubbles should be interactive. */
+.ring-backdrop.no-backdrop {
+  pointer-events: none;
+}
 .ring-svg {
   position: absolute;
   inset: 0;
@@ -175,6 +206,10 @@ function hover(action: RingAction) {
 }
 .ring-badge {
   position: absolute;
+  /* Explicit even though it's the CSS default: pointer-events is inherited,
+     so an outer ring's `.ring-backdrop.no-backdrop` (pointer-events: none)
+     would otherwise make this unclickable too. */
+  pointer-events: auto;
   transform: translate(-50%, -50%);
   width: 76px;
   height: 76px;
@@ -208,6 +243,8 @@ function hover(action: RingAction) {
 }
 .ring-bubble {
   position: absolute;
+  /* See .ring-badge's own comment: needed for outer, backdrop-less rings. */
+  pointer-events: auto;
   transform: translate(-50%, -50%);
   /* Reference: a plain circle, same size regardless of label length — not
      a pill that stretches with its text. */

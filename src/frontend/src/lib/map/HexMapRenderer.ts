@@ -519,6 +519,13 @@ export class HexMapRenderer {
 
   private dragging = false;
   private dragMoved = 0;
+  // Issue #16 "clicking elsewhere on the map with a ring open should close
+  // it, not open a new one": beginDragFrom's synthetic drag (started to
+  // dismiss a ring on backdrop mousedown, see beginDragFrom below) ends in
+  // onPointerUp exactly like a real click when the pointer never moved —
+  // this flag tells onPointerUp that particular click is the same gesture
+  // that already closed the ring, so it shouldn't also reopen one.
+  private suppressNextClick = false;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
@@ -800,8 +807,9 @@ export class HexMapRenderer {
   // outsidePointerDown emit — and the caller re-fires that same PointerEvent
   // in here so the drag it started keeps going, instead of the player
   // needing a second, separate mousedown to start panning the map.
-  beginDragFrom(e: PointerEvent) {
+  beginDragFrom(e: PointerEvent, opts: { suppressClick?: boolean } = {}) {
     this.interactionLocked = false;
+    this.suppressNextClick = !!opts.suppressClick;
     this.startDrag(e);
   }
 
@@ -852,9 +860,10 @@ export class HexMapRenderer {
   };
 
   private onPointerUp = (e: PointerEvent) => {
-    if (this.dragging && this.dragMoved < 6) {
+    if (this.dragging && this.dragMoved < 6 && !this.suppressNextClick) {
       this.handleClick(e);
     }
+    this.suppressNextClick = false;
     const wasDragging = this.dragging;
     this.dragging = false;
     if (wasDragging) {

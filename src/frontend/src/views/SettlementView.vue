@@ -90,15 +90,25 @@ const modalOwnerLabel = computed(() => {
   return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
 });
 
-// Ring menu state. `ringLevel` walks root -> build-categories -> a
-// category's building list, per the issue's "build (which opens another
+// Ring menu state. Each open level (root -> build-categories -> a
+// category's building list) is its own entry on `ringStack`, rendered as a
+// separate, wider RingMenu — concentric rings moving outward — rather than
+// one ring replacing another, per the issue's "build (which opens another
 // ring outside with available buildings on this spot, on grass it should
 // have multiple build categories/entries and real buildings in outer ring
 // each)".
 type RingLevel = 'root' | 'build-categories' | 'build-buildings';
-const ringLevel = ref<RingLevel>('root');
+interface OpenRing {
+  level: RingLevel;
+  category?: string;
+}
 const ringScreen = ref<{ x: number; y: number } | null>(null);
-const ringCategory = ref<string | null>(null);
+const ringStack = ref<OpenRing[]>([]);
+// Spacing between concentric rings — wide enough that an outer ring's
+// bubbles (88px, see RingMenu's own .ring-bubble) never overlap the
+// previous ring's, even with the root ring's badge-driven extra radius.
+const RING_BASE_RADIUS = 110;
+const RING_STEP = 140;
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
@@ -114,7 +124,11 @@ watch(ringScreen, (screen) => {
 // mousedown just to start panning after dismissing the ring.
 function onRingOutsidePointerDown(e: PointerEvent) {
   closeRing();
-  canvasRef.value?.renderer?.beginDragFrom(e);
+  // suppressClick: this same gesture already closed the ring — a stationary
+  // release shouldn't also be treated as a map click that opens a new one
+  // (issue #16: "click somewhere else on the map should close the ring
+  // first", not close-and-immediately-reopen).
+  canvasRef.value?.renderer?.beginDragFrom(e, { suppressClick: true });
 }
 
 interface BuildCategory {
@@ -156,15 +170,12 @@ const isMineTile = computed(
 );
 const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
 
-const ringActions = computed<RingAction[]>(() => {
-  const tile = selectedTile.value;
-  if (!tile) return [];
-
-  if (ringLevel.value === 'build-categories') {
+function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
+  if (ring.level === 'build-categories') {
     return categoriesFor(tile).map((cat) => ({ id: cat.id, label: cat.label }));
   }
-  if (ringLevel.value === 'build-buildings') {
-    const category = categoriesFor(tile).find((c) => c.id === ringCategory.value);
+  if (ring.level === 'build-buildings') {
+    const category = categoriesFor(tile).find((c) => c.id === ring.category);
     return (category?.buildings ?? []).map((b) => ({ id: b.type, label: b.label }));
   }
 
@@ -214,11 +225,25 @@ const ringActions = computed<RingAction[]>(() => {
     ];
   }
   return [{ id: 'details', label: 'Details' }];
+}
+
+const ringsToRender = computed(() => {
+  const tile = selectedTile.value;
+  if (!tile) return [];
+  return ringStack.value.map((ring, i) => ({
+    ring,
+    actions: actionsForRing(tile, ring),
+    radius: RING_BASE_RADIUS + i * RING_STEP,
+  }));
 });
 
+// The badge belongs to the root ring, which is always the innermost ring
+// (index 0) for as long as any ring is open — it doesn't get replaced when
+// drilling into build-categories/build-buildings, so this doesn't need to
+// track which ring is currently "on top".
 const ringBadge = computed(() => {
   const tile = selectedTile.value;
-  if (ringLevel.value !== 'root' || !isMineTile.value || !tile?.buildingType) return undefined;
+  if (!isMineTile.value || !tile?.buildingType) return undefined;
   return { id: 'upgrade', label: `Lv ${tile.buildingLevel ?? 1}`, sublabel: 'upgrade' };
 });
 
@@ -227,16 +252,14 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   selectedCoord.value = coord;
   selectedTile.value = tile;
   ringScreen.value = screen;
-  ringLevel.value = 'root';
-  ringCategory.value = null;
+  ringStack.value = [{ level: 'root' }];
 }
 
 function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
   ringScreen.value = null;
-  ringLevel.value = 'root';
-  ringCategory.value = null;
+  ringStack.value = [];
 }
 
 // Issue #16 "build (which opens another ring outside with available
@@ -245,27 +268,32 @@ function closeRing() {
 // "build" action, and picking a category) advance the ring; every other
 // action (info/details/upgrade/raze/attack/the final building choice) still
 // needs an actual click, since those either mutate state or are terminal.
-function onRingHover(id: string) {
-  if (ringLevel.value === 'root' && id === 'build') {
-    ringLevel.value = 'build-categories';
+// Hovering pushes a new, wider ring onto the stack (concentric rings moving
+// outward) rather than replacing the current one — but only from the
+// outermost/most-recently-opened ring: hovering an inner ring's bubble
+// again (it's still visible and clickable) shouldn't push a duplicate.
+function onRingHover(i: number, id: string) {
+  if (i !== ringStack.value.length - 1) return;
+  const top = ringStack.value[i];
+  if (top.level === 'root' && id === 'build') {
+    ringStack.value = [...ringStack.value, { level: 'build-categories' }];
     return;
   }
-  if (ringLevel.value === 'build-categories') {
+  if (top.level === 'build-categories') {
     const category = categoriesFor(selectedTile.value!).find((c) => c.id === id);
     if (category) {
-      ringCategory.value = id;
-      ringLevel.value = 'build-buildings';
+      ringStack.value = [...ringStack.value, { level: 'build-buildings', category: id }];
     }
   }
 }
 
-async function onRingSelect(id: string) {
-  if (ringLevel.value === 'build-categories') {
-    ringCategory.value = id;
-    ringLevel.value = 'build-buildings';
+async function onRingSelect(i: number, id: string) {
+  const ring = ringStack.value[i];
+  if (ring.level === 'build-categories') {
+    ringStack.value = [...ringStack.value.slice(0, i + 1), { level: 'build-buildings', category: id }];
     return;
   }
-  if (ringLevel.value === 'build-buildings') {
+  if (ring.level === 'build-buildings') {
     await buildType(id as 'hut' | 'farm' | 'tower');
     closeRing();
     return;
@@ -278,7 +306,7 @@ async function onRingSelect(id: string) {
       ringScreen.value = null;
       return;
     case 'build':
-      ringLevel.value = 'build-categories';
+      ringStack.value = [...ringStack.value.slice(0, i + 1), { level: 'build-categories' }];
       return;
     case 'upgrade':
       await upgrade();
@@ -373,17 +401,22 @@ async function upgrade() {
     <RealmPanel />
     <BuildQueuePanel @select="onQueueSelect" />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-    <RingMenu
-      v-if="selectedTile && ringScreen"
-      :x="ringScreen.x"
-      :y="ringScreen.y"
-      :actions="ringActions"
-      :badge-action="ringBadge"
-      @select="onRingSelect"
-      @hover="onRingHover"
-      @close="closeRing"
-      @outside-pointer-down="onRingOutsidePointerDown"
-    />
+    <template v-if="selectedTile && ringScreen">
+      <RingMenu
+        v-for="(entry, i) in ringsToRender"
+        :key="`${entry.ring.level}-${i}`"
+        :x="ringScreen.x"
+        :y="ringScreen.y"
+        :radius="entry.radius"
+        :backdrop="i === 0"
+        :actions="entry.actions"
+        :badge-action="i === 0 ? ringBadge : undefined"
+        @select="(id: string) => onRingSelect(i, id)"
+        @hover="(id: string) => onRingHover(i, id)"
+        @close="closeRing"
+        @outside-pointer-down="onRingOutsidePointerDown"
+      />
+    </template>
     <BuildingModal
       v-if="selectedTile && !ringScreen"
       :tile="selectedTile"

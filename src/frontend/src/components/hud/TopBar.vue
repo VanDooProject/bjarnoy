@@ -46,7 +46,11 @@ const caption = computed(() => {
 .hud-bar {
   position: absolute;
   inset: 0 0 auto 0;
-  z-index: 10;
+  /* Above RingMenu's full-screen backdrop (z-index 30) so a header button
+     (e.g. "World map") always gets the real click even while a ring is
+     open, instead of the backdrop intercepting it and treating the press
+     as a map click. */
+  z-index: 40;
   height: 64px;
   display: flex;
   align-items: center;
