@@ -22,11 +22,17 @@ public sealed record WorldResponse(
     int MaxPlayers,
     string Status,
     int IslandCount,
-    DateTimeOffset CreatedAt)
+    DateTimeOffset CreatedAt,
+    bool Joinable,
+    string JoinableReason,
+    DateTimeOffset? StartsAt,
+    bool EndbossTriggered)
 {
-    public static WorldResponse From(WorldEntity world, int islandCount)
+    public static WorldResponse From(WorldEntity world, int islandCount, int playerCount, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(world);
+
+        var joinability = world.DetermineJoinability(playerCount, now);
 
         return new WorldResponse(
             world.Id,
@@ -36,7 +42,11 @@ public sealed record WorldResponse(
             world.MaxPlayers,
             world.Status.ToString().ToLowerInvariant(),
             islandCount,
-            world.CreatedAt);
+            world.CreatedAt,
+            joinability.Joinable,
+            joinability.Reason.ToString().ToLowerInvariant(),
+            world.StartsAt,
+            world.EndbossTriggeredAt is not null);
     }
 }
 

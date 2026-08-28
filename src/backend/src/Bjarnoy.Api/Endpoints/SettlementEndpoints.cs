@@ -96,7 +96,9 @@ public static class SettlementEndpoints
                 TypedResults.NotFound(problem),
             FoundingRejection.PlotTaken or FoundingRejection.TooCloseToNeighbour
                 or FoundingRejection.WorldFull or FoundingRejection.WorldPaused
-                or FoundingRejection.NotAStartPosition or FoundingRejection.AlreadyFounded =>
+                or FoundingRejection.NotAStartPosition or FoundingRejection.AlreadyFounded
+                or FoundingRejection.WorldNotActive or FoundingRejection.JoinsClosed
+                or FoundingRejection.NotStartedYet =>
                 TypedResults.Conflict(problem),
             _ => TypedResults.BadRequest(problem),
         };
@@ -276,6 +278,9 @@ public static class SettlementEndpoints
                 FoundingRejection.WorldFull => "The world is full.",
                 FoundingRejection.AlreadyFounded =>
                     "You already have a settlement in this world. Ships and carts will let you found another one later.",
+                FoundingRejection.WorldNotActive => "This world is not active.",
+                FoundingRejection.JoinsClosed => "This world is no longer accepting new players.",
+                FoundingRejection.NotStartedYet => "This world has not started yet.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,
