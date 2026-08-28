@@ -2,6 +2,7 @@
 # git / commits
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
+- PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
 
 
 # dev workflow
