@@ -4,9 +4,11 @@
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 
 
-# dev workflow
+# ai dev workflow
 - think of a solution
-- implement
+- ask me if plan is fine if its more complex
+- implement (if multiple tasks push each task as a separate commit and open PR after first push)
+- evaluate with requirements (if there are reference screenshots compare them)
 - run build and tests
 - evaluate if ci ran green
 
