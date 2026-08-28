@@ -111,9 +111,16 @@ function coastalOrientation(q: number, r: number, world: WorldSeed): TileOrienta
   });
 
   // Opposite land neighbours (e.g. a one-hex-wide strait) can cancel the
-  // vector to exactly zero. Falling back to the first land direction found
-  // keeps the pick deterministic instead of an arbitrary default.
-  if (sumX === 0 && sumY === 0) return TILE_ORIENTATIONS[firstLandIndex];
+  // vector to (near) zero — a small epsilon rather than an exact `=== 0`
+  // check, because two land neighbours 180 degrees apart don't reliably sum
+  // their sin/cos terms to bit-exact zero (this is where the .NET and JS
+  // Math libraries' cos/sin/atan2 diverge at the ULP level, and atan2 near
+  // the origin is extremely sensitive to that — the backend mirror uses the
+  // same epsilon so both land on the same orientation for these hexes).
+  // Falling back to the first land direction found keeps the pick
+  // deterministic instead of an arbitrary default.
+  const ZERO_EPSILON = 1e-9;
+  if (Math.abs(sumX) < ZERO_EPSILON && Math.abs(sumY) < ZERO_EPSILON) return TILE_ORIENTATIONS[firstLandIndex];
 
   let angle = Math.atan2(sumY, sumX);
   if (angle < 0) angle += 2 * Math.PI;
@@ -137,11 +144,17 @@ export function orientationAt(q: number, r: number, world: WorldSeed): TileOrien
   return isCoastalWater(q, r, world) ? coastalOrientation(q, r, world) : defaultOrientation(q, r, world);
 }
 
-/** Per-terrain variant count the tile art pack actually has, everything else falling back to 1. */
+/**
+ * Per-terrain variant count the tile art pack actually has, everything else
+ * falling back to 1. Grass has a plain top image plus `variant000`-
+ * `variant002` (4); forest has a plain image plus `variant000`-`variant001`
+ * (3); mountain isn't base/top split and the pack has no
+ * `mountaintile*variant*` files at all, so it never gets more than its one
+ * composited image.
+ */
 const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
-  grass: 3,
+  grass: 4,
   forest: 3,
-  mountain: 2,
 };
 
 /**

@@ -84,7 +84,7 @@ public class RiverGenerationTests
     }
 
     [Fact]
-    public void Confluence_tiles_have_exactly_two_inflows_and_one_outflow()
+    public void Confluence_tiles_have_exactly_two_inflows()
     {
         // Confluences are rare — only 3 of these 7 seeds produce one even at
         // radius 60 (verified independently under Node), so this needs a
@@ -92,6 +92,7 @@ public class RiverGenerationTests
         var checkedAny = false;
         foreach (var seed in new[] { 1, 7, 42, 1337, -5, 2147483, 0 })
         {
+            var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed) with { Radius = 60 });
             var world = Generate(seed, radius: 60);
             foreach (var island in world.Islands)
             {
@@ -104,7 +105,15 @@ public class RiverGenerationTests
 
                     checkedAny = true;
                     Assert.Equal(2, tile.InDirections.Count);
-                    Assert.NotNull(tile.OutDirection);
+                    // Usually the merged river keeps flowing (an outflow),
+                    // but two rivers can also merge right at the tile that
+                    // touches the sea — a confluence that's simultaneously
+                    // the river's mouth — in which case there's no outflow,
+                    // same as a plain Mouth tile.
+                    if (tile.OutDirection is null)
+                    {
+                        Assert.Contains(tile.Coord.Neighbours(), n => !sampler.IsLand(n));
+                    }
                 }
             }
         }

@@ -187,9 +187,17 @@ public sealed class TerrainSampler
         }
 
         // Opposite land neighbours (e.g. a one-hex-wide strait) can cancel the
-        // vector to exactly zero. Falling back to the first land direction
-        // found keeps the pick deterministic instead of an arbitrary default.
-        if (sumX == 0.0 && sumY == 0.0)
+        // vector to (near) zero — a small epsilon rather than an exact `==
+        // 0.0` check, because two land neighbours 180 degrees apart don't
+        // reliably sum their sin/cos terms to bit-exact zero (this is where
+        // the .NET and JS Math libraries' cos/sin/atan2 diverge at the ULP
+        // level, and atan2 near the origin is extremely sensitive to that —
+        // the frontend mirror uses the same epsilon so both land on the same
+        // orientation for these hexes). Falling back to the first land
+        // direction found keeps the pick deterministic instead of an
+        // arbitrary default.
+        const double zeroEpsilon = 1e-9;
+        if (Math.Abs(sumX) < zeroEpsilon && Math.Abs(sumY) < zeroEpsilon)
         {
             return (TileOrientation)firstLandIndex;
         }
@@ -200,7 +208,16 @@ public sealed class TerrainSampler
             resultAngle += 2.0 * Math.PI;
         }
 
-        var index = (int)Math.Round(resultAngle / (Math.PI / 3.0)) % 6;
+        // AwayFromZero, not the .NET default (ToEven/banker's rounding): the
+        // frontend mirror (worldGenerator.ts) uses JS's Math.round, which
+        // always rounds an exact .5 up rather than to the nearest even
+        // integer. resultAngle/(pi/3) is always >= 0 here, so "away from
+        // zero" and "round half up" agree — this only changes the handful of
+        // hexes whose land-neighbour vector lands exactly on a 30° boundary,
+        // but without it those hexes silently pick a different orientation
+        // than the client renders, breaking the frontend/backend parity this
+        // whole function exists for.
+        var index = (int)Math.Round(resultAngle / (Math.PI / 3.0), MidpointRounding.AwayFromZero) % 6;
         return (TileOrientation)index;
     }
 
@@ -217,12 +234,18 @@ public sealed class TerrainSampler
         return (TileOrientation)index;
     }
 
-    /// <summary>Per-terrain variant count the tile art pack actually has, everything else falling back to 1.</summary>
+    /// <summary>
+    /// Per-terrain variant count the tile art pack actually has, everything else
+    /// falling back to 1. Grass has a plain top image plus <c>variant000</c>-
+    /// <c>variant002</c> (4); forest has a plain image plus <c>variant000</c>-
+    /// <c>variant001</c> (3); mountain isn't base/top split and the pack has no
+    /// <c>mountaintile*variant*</c> files at all, so it never gets more than its
+    /// one composited image.
+    /// </summary>
     private static readonly IReadOnlyDictionary<Terrain, int> VariantCounts = new Dictionary<Terrain, int>
     {
-        [Terrain.Grass] = 3,
+        [Terrain.Grass] = 4,
         [Terrain.Forest] = 3,
-        [Terrain.Mountain] = 2,
     };
 
     /// <summary>

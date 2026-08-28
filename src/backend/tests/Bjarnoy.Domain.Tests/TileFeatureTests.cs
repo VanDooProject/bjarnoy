@@ -127,7 +127,6 @@ public class TileFeatureTests
     [Theory]
     [InlineData(Terrain.Grass)]
     [InlineData(Terrain.Forest)]
-    [InlineData(Terrain.Mountain)]
     public void Variants_stay_within_the_terrains_known_range(Terrain terrain)
     {
         var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
@@ -145,10 +144,12 @@ public class TileFeatureTests
             maxSeen = Math.Max(maxSeen, variant);
         }
 
-        // Sea/sand aren't asserted here — they only ever fall back to variant
-        // 0 — but grass/forest/mountain should each show more than one
-        // variant over a big enough sample, or the "not all have variants"
-        // fallback would be indistinguishable from a bug that always returns 0.
+        // Sea/sand/mountain aren't asserted here — they only ever fall back to
+        // variant 0 (mountain isn't base/top split and the art pack has no
+        // mountaintile*variant* files at all) — but grass/forest should each
+        // show more than one variant over a big enough sample, or the "not
+        // all have variants" fallback would be indistinguishable from a bug
+        // that always returns 0.
         Assert.True(maxSeen > 0, $"expected {terrain} to show more than one variant over this sample");
     }
 
@@ -160,7 +161,7 @@ public class TileFeatureTests
         foreach (var coord in HexCoord.Origin.WithinRadius(60))
         {
             var terrain = sampler.TerrainAt(coord);
-            if (terrain is Terrain.Sea or Terrain.Sand)
+            if (terrain is Terrain.Sea or Terrain.Sand or Terrain.Mountain)
             {
                 Assert.Equal(0, sampler.VariantAt(coord));
             }
@@ -180,13 +181,13 @@ public class TileFeatureTests
     /// </summary>
     public static TheoryData<int, string, string> FrontendChecksums => new()
     {
-        { 1, "041cef86959b17aecb560d3c7407e80b04c7dd10d1aaf3ac816c5f9dc45c4426", "bfb22b52135d73e7298e64088a3b395fd2c502c515b8da6a7281f2156ad48e11" },
-        { 7, "c0a7bae4c78bec590c1a5f23f700a511e50998292c02c3d71a9e75ff183ba3e2", "236eb1e0d2e102e6317f9a2657ca714157af840369d96f3374d567d1a662d5c3" },
-        { 42, "2a84f0cb4241cfad6109a18dd0288b3eaa06632b7787388f3956daab8c9a65f5", "dae78477f2a060c641da0caa4ff9ad9f442e8115b96e2d59118a9f965a4bcbc2" },
-        { 1337, "1d8997ff229025428923145c710bb0c43a656bb43f0ccd743a35e26c6b5a7fcd", "587948135d81e4fd46ffbefed052408682df7b3d37afe8a27f94a9aeaf4f0129" },
-        { -5, "d28bd1687d55e9f5cefa62b9a50b3b58822ed486d5dc84e7ddaa398056f4d720", "5ed48a46eefafac6f38f7d550ae4ac505ea1d78291fda6d2499d54be70e061a6" },
-        { 2147483, "efce899f26227d329ded02c22da1dda3652751b9b3715341deb2648546e89a77", "5d9c534d8e061eb1ed92077ea80608a1659f986e38d805e50a913e324d53a888" },
-        { 0, "e7818abf704628a800baf5407c85c983c3dcdbfb40dbdae45ef335f1018c3467", "0eae24eeb2cb92d62b399c679923757f045ecc63941d03f777a7a71afaa1011d" },
+        { 1, "415b88f6388671232e76a94be27b42575c4f5523a3985dd00b9cfd1a8d7b2fe0", "11b649fd1f18d0c3ef9794ca002b58a0938ba529aa9ffea5867b40627c2470d1" },
+        { 7, "a495087fe797726e77f67541252861c81a7aaf37eafa445f5cd13b0c0c7e44a7", "3b6fd160b05ac1e715728972bb91098f2ac5cff3ea068fba2121b5c7c94ffbc9" },
+        { 42, "ce2fb78d592a6607f216843f6f9ff62cabff4f214df05fcc463ec12efe03a067", "14b38d0fcb2102546951a5166e5d34fa1e9dca51ec27b9f5867c897ba258bc39" },
+        { 1337, "10e3b133c8f87cecb9133aaa008148a074a5f4e2d772e010a47ed0696cdfbdfe", "56ca0ee574da6fc22fb12a77faf4874367e960450914a6bc952d6dbff9d88205" },
+        { -5, "642a52baef34bf512ebf04097878a2f84c83b40ed87944685c0b372cdae12e86", "4ff9984a91c8f56fc4c2abae6eb2eebee5a8e8b23f4d9022f347ea60c0403763" },
+        { 2147483, "0ca5191ff76def31c433f299b6036abe7301ee9d35be1adf58bfbec97718c80c", "648d3d6501d09432ab122a0bbf591c0aaf31a50f074c32c9a190eded8fe4216d" },
+        { 0, "3ec7fea9cf6ccc2369f5d026d2a1aa29be1b32c788b176af4a978804df38e601", "66355d016541f7ca1fab84b41acbd25dbfa8191faffea5ad6ad08f158c517ac4" },
     };
 
     [Theory]
