@@ -32,6 +32,7 @@ const LABELS: Record<keyof FogDebugFlags, string> = {
   flatFillOnly: 'Skip blob/flat-fill overlap',
   blobsOnly: 'Blob-only mist (no flat fill)',
   dragFade: 'Fade fog back in after drag (off by default)',
+  cullThresholdDebug: 'Debug: highlight hard fog-cliff hexes (magenta)',
 };
 
 watch(

@@ -158,6 +158,8 @@ export interface FogDebugFlags {
   blobsOnly: boolean;
   /** Fade the fog blur cache back in after a drag release (FOG_DRAG_FADE_MS) instead of showing the rebuilt fog immediately. Off by default: the fade dips *all* fog to FOG_DRAG_FADE_FROM_ALPHA, not just whatever the drag just revealed (it's one shared bitmap — see FOG_BLOB_CACHE_PADDING's comment) — issue #20: "drag fades ALL elements in again, not only new". On reproduces the old always-on behaviour. */
   dragFade: boolean;
+  /** Tints hexes that hit the unexplored tier's hard flat-fill cutoff (FOG_TERRAIN_CULL_HEXES, gated on cullBeyond — see FOG_CULL_JITTER_HEXES) a distinct debug magenta instead of fog white, so the flat-fill/blob boundary — which is jittered independently of the alpha ramp, and is a *render-method* switch (crisp opaque polygon vs a blurred blob), not just a value change — is visible on its own instead of blending into the rest of the mist. */
+  cullThresholdDebug: boolean;
 }
 export const fogDebugFlags: FogDebugFlags = {
   distJitter: true,
@@ -171,6 +173,7 @@ export const fogDebugFlags: FogDebugFlags = {
   flatFillOnly: false,
   blobsOnly: false,
   dragFade: false,
+  cullThresholdDebug: false,
 };
 
 // Per-rebuild timing breakdown, read by FogPerfPanel to show what each
@@ -523,6 +526,25 @@ const FOG_DIST_JITTER_SALT = 30;
 // Separate salt for the visible→scouted ramp's own distance jitter — kept
 // independent of FOG_DIST_JITTER_SALT for the same decorrelation reason.
 const FOG_VISIBLE_JITTER_SALT = 31;
+// A second, much smaller jitter magnitude for the unexplored tier's hard
+// flat-fill cutoff specifically (FOG_TERRAIN_CULL_HEXES), decoupled from
+// FOG_DIST_JITTER_HEXES above. That constant is sized to break up the *alpha
+// ramp*'s ring facet, which is a gradual, blended value — a ±2.5-hex swing
+// there just nudges an already-soft blob's opacity. But the same jittered
+// distance was also gating the ramp-vs-flat-fill switch, which isn't a
+// gradual value change: past it, a hex swaps from a blurred, semi-transparent
+// blob to a crisp, unblurred, fully-opaque polygon (see fillFlatFog's
+// comment) — a *render-method* jump, not just a bigger number. Reusing the
+// full ±2.5-hex ramp jitter for that gate meant two neighbouring hexes at
+// nearly the same true distance could land almost 5 hexes apart in resolved
+// distance, so one pops to the hard opaque tile while the other is still
+// mid-ramp — "some tiles white out completely while nearby ones aren't
+// close to 1" (as reported). A smaller, independently-salted jitter here
+// still keeps the cutoff from being a dead-straight hex ring (same reasoning
+// as FOG_VISIBLE_JITTER_HEXES's own "tighter edge" margin below) without
+// letting it manufacture that visible pop between neighbours.
+const FOG_CULL_JITTER_HEXES = 0.6;
+const FOG_CULL_JITTER_SALT = 32;
 // How many hexes past a settlement's own claimed border (borderRadius) its
 // line-of-sight radius extends — WorldModel.visibleHexes's own "+1" comment
 // calls this out as deliberately one hex past the border, and rendering
@@ -2238,20 +2260,36 @@ export class HexMapRenderer {
           fogDebugFlags.distJitter,
           FOG_DIST_JITTER_HEXES,
         );
-        if (beyond > FOG_TERRAIN_CULL_HEXES && !fogDebugFlags.blobsOnly) {
+        // Separately (and much more mildly) jittered — see FOG_CULL_JITTER_HEXES
+        // for why the flat-fill/blob switch below can't reuse `beyond`'s full
+        // ramp-sized jitter without neighbouring hexes popping in and out of
+        // the hard-opaque tile unevenly.
+        const cullBeyond = jitterDistance(
+          c.q,
+          c.r,
+          beyondRaw,
+          FOG_CULL_JITTER_SALT,
+          fogDebugFlags.distJitter,
+          FOG_CULL_JITTER_HEXES,
+        );
+        if (cullBeyond > FOG_TERRAIN_CULL_HEXES && !fogDebugFlags.blobsOnly) {
           // Guaranteed saturated (see FOG_TERRAIN_CULL_HEXES) — paint flat
           // solid white at a literal alpha:1 instead of a blob. This is the
           // only thing that actually *guarantees* full opacity: blobs alone
           // (individually capped below 1, relying on overlap to read as
           // solid) can leave faint gaps right at the edge of what's
           // rendered, which is exactly the seam a hard flat fill closes.
-          fillFlatFog(isoGridPosition(c, TILE_W, TILE_H), FOG_UNEXPLORED, 1);
+          fillFlatFog(
+            isoGridPosition(c, TILE_W, TILE_H),
+            fogDebugFlags.cullThresholdDebug ? 0xff2ec2 : FOG_UNEXPLORED,
+            1,
+          );
           // Keep placing solid blobs a bit past the hand-off too (see
           // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
           // blend the outermost blobs into and they visibly fade right
           // where the flat fill starts at full strength.
-          if (!fogDebugFlags.flatFillOnly && beyond <= FOG_WORLD_BG_HANDOFF_HEXES) {
-            addBlob(c, FOG_UNEXPLORED, 1);
+          if (!fogDebugFlags.flatFillOnly && cullBeyond <= FOG_WORLD_BG_HANDOFF_HEXES) {
+            addBlob(c, fogDebugFlags.cullThresholdDebug ? 0xff2ec2 : FOG_UNEXPLORED, 1);
           }
           continue;
         }
