@@ -32,6 +32,9 @@ export const useWorldStore = defineStore('world', {
       rates: emptyResources() as Resources,
       settlementName: '',
       level: 1,
+      // Issue #16: population, wired the same way as the other resources —
+      // current/max stock plus a rate. See `WorldModel.populationFor`.
+      population: { current: 0, max: 0, rate: 0 },
       // zip 6a: landing-page onboarding needs "how many buildings has the
       // player actually placed" — derived from the model itself (the
       // longhouse counts as the first) rather than a separately tracked
@@ -194,6 +197,7 @@ export const useWorldStore = defineStore('world', {
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
+        islandId: response.islandId,
       });
       this.selectedSettlementId = settlement.id;
       this.syncHud();
@@ -251,6 +255,7 @@ export const useWorldStore = defineStore('world', {
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
+        islandId: response.islandId,
       });
       this.selectedSettlementId = response.id;
       this.syncHud();
@@ -291,6 +296,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
+      this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },
     startHudSync() {

@@ -146,6 +146,29 @@ export class WorldModel {
     return [...this.settlements.values()];
   }
 
+  /**
+   * Issue #16: "the pop(ulation) thing should also be implemented like with
+   * the other ressources" (current/max + a rate). Neither the backend
+   * (`Bjarnoy.Domain`) nor the legacy game models a population field at
+   * all, so rather than invent a server-side stat this derives a plausible
+   * current/max/rate purely from what the client already knows — the
+   * longhouse level and how many buildings are standing — the same inputs
+   * `countBuildings` already uses for onboarding. `max` is housing capacity
+   * (longhouse level + each building adds a little room), `current` grows
+   * toward it as buildings are worked, and `rate` is how fast it's still
+   * climbing (0 once capacity is reached, matching how the other resource
+   * rates read 0 at their storage cap).
+   */
+  populationFor(settlementId: string): { current: number; max: number; rate: number } {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return { current: 0, max: 0, rate: 0 };
+    const buildings = this.countBuildings(settlementId);
+    const max = 20 + settlement.level * 15 + buildings * 5;
+    const current = Math.min(max, 10 + settlement.level * 8 + buildings * 4);
+    const rate = current < max ? Math.max(1, Math.round((max - current) * 0.2)) : 0;
+    return { current, max, rate };
+  }
+
   borderRadius(settlement: Settlement): number {
     return BASE_BORDER_RADIUS + Math.floor(settlement.level / 2);
   }
