@@ -26,6 +26,8 @@ export interface Settlement {
   resources: Resources;
   rates: Resources;
   foundedAt: number;
+  /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
+  islandId?: string;
 }
 
 export interface Fleet {
