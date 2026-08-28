@@ -70,7 +70,7 @@ test.describe('settlement view interactions', () => {
     // renderer's own camera math (__settlementRenderer's hexCenterScreen,
     // set up by SettlementView for exactly this) for that hex's exact
     // screen position.
-    const point = await page.evaluate(() => {
+    const target = await page.evaluate(() => {
       const win = window as unknown as {
         __demoWorld: () => { model: any; selectedSettlementId: string };
         __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
@@ -103,13 +103,45 @@ test.describe('settlement view interactions', () => {
       });
     const before = await countBuildings();
 
-    // zip 9: a hex click opens BuildingModal (full-screen detail screen) —
-    // it, not the click itself, places the building, via its own "Build
-    // here" button (only rendered for an owned, buildable, still-empty
-    // hex; see BuildingModal.vue's `mine && buildable` actions guard).
-    const modal = page.locator('.modal.panel');
-    await page.mouse.click(box.x + point.x, box.y + point.y);
-    await modal.getByRole('button', { name: 'Build here' }).click();
+    // Issue #16: a hex click no longer opens BuildingModal directly — it
+    // opens a RingMenu of contextual actions; hovering its "Build" bubble
+    // drills into a category ring, and hovering a category bubble drills
+    // into that category's building-type ring (see SettlementView's
+    // onRingHover — only the root "build" action and a category's own
+    // bubbles advance the ring on hover; everything else, including the
+    // final building choice, needs a real click). Drilling via hover here
+    // (not the click-based path onRingSelect also supports) matches
+    // ring-menu.spec.ts's own drill-down coverage — the interaction path
+    // that suite already exercises and keeps green, rather than a second,
+    // untried one: a click-based version of this same test was flaky here,
+    // repeatedly racing the ring bubble getting detached and re-mounted
+    // mid-click on a loaded run, something hover-then-click rides out fine.
+    await page.mouse.click(box.x + target.x, box.y + target.y);
+
+    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
+    await expect(buildBubble).toBeVisible();
+    const buildBox = (await buildBubble.boundingBox())!;
+    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+
+    // On grass terrain the category ring has three bubbles (Housing,
+    // Resource, Defense); every other buildable terrain has just the one
+    // ("Build", reused as both the root action's label and its sole
+    // category's — see BUILD_CATEGORIES). Either way, whichever category is
+    // first leads to "Hut" as its first building (Housing's only building;
+    // "Build"'s own list starts with Hut too), so hovering the first
+    // category bubble and clicking the first building bubble always reaches
+    // a real, placeable building regardless of which terrain was picked.
+    const categoryBubble = page.locator('.ring-bubble').first();
+    await expect(categoryBubble).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+    const categoryBox = (await categoryBubble.boundingBox())!;
+    await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
+      steps: 6,
+    });
+
+    const hutBubble = page.locator('.ring-bubble', { hasText: 'Hut' }).first();
+    await expect(hutBubble).toBeVisible();
+    await hutBubble.click();
 
     await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
   });
