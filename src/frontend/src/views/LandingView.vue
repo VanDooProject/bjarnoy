@@ -195,6 +195,7 @@ function closePrompt() {
       :preview-center="player.hasFoundedSettlement ? undefined : (previewCoord ?? undefined)"
       :highlight-coord="player.hasFoundedSettlement ? undefined : (previewCoord ?? undefined)"
       :screen-bias-x="0.16"
+      hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
       @hex-click="onHexClick"
     />

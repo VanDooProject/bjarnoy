@@ -205,6 +205,23 @@ export interface HexMapRendererOptions {
    * sit right of centre rather than directly behind the copy.
    */
   screenBiasX?: number;
+  /**
+   * Suppresses the name/level badge that otherwise floats above settlements
+   * in 'settlement' mode. The landing page (zip 6a) reuses this same
+   * renderer/mode for its pre-founding plot preview and, once founded there
+   * in place (no route change yet), for the just-founded village itself;
+   * the badge is village-view HUD chrome and shouldn't appear until the
+   * player has actually navigated to the settlement view proper.
+   *
+   * Named as a "hide" flag rather than "show" so the common case (every
+   * caller except the landing page) needs no prop at all: an optional
+   * `boolean` prop declared only in TypeScript (no runtime default) is
+   * resolved by Vue's compiler as a runtime `Boolean` type, and an *absent*
+   * `Boolean` prop resolves to `false`, not `undefined` — so a `showX`
+   * flag would default to hidden everywhere it isn't explicitly passed
+   * `true`, not shown everywhere it isn't explicitly passed `false`.
+   */
+  hideSettlementBadge?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -1577,7 +1594,7 @@ export class HexMapRenderer {
   private rebuildMarkers() {
     this.markerLayer.clear();
     if (this.options.mode === 'settlement') {
-      this.rebuildSettlementLabels();
+      if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
       return;
     }
     if (this.options.mode !== 'world') {
@@ -1709,16 +1726,18 @@ export class HexMapRenderer {
       // highest tile-top vertex), scanned over the settlement's owned disc
       // rather than a flood fill since claimed tiles are already exactly
       // that disc (`foundSettlement`/`claimTile`).
-      // Measured against each tile's own *art* top edge (grid.y -
-      // TILE_TOPFACE_Y_OFFSET — the same offset `rebuildTerrain` places
-      // building/tree sprites at, see its comment above), not just its flat
-      // top-face vertex: a bare topmost tile's vertex sits well below a
-      // taller forest tile's treetops one row south of it, so anchoring on
-      // the vertex alone left the badge overlapping the trees beneath it.
-      let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET; // this hex's own art ceiling
+      // Measured against each tile's own art, halfway up the sprite rather
+      // than its full height (grid.y - TILE_TOPFACE_Y_OFFSET / 2) — the same
+      // offset `rebuildTerrain` places building/tree sprites at (see its
+      // comment above) gave the badge enough clearance to never overlap a
+      // treetop, but read as floating noticeably farther above the
+      // settlement than the reference. Half that offset still clears a
+      // bare topmost tile's own vertex (0 < TILE_TOPFACE_Y_OFFSET / 2) and
+      // most of a neighbouring forest tile's canopy, while sitting closer.
+      let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
       for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
         const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
-        topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET);
+        topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 2);
       }
       const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
       const mine = settlement.ownerId === playerId;

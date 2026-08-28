@@ -345,6 +345,18 @@ Fixed both in `rebuildSettlementLabels`: (1) the anchor now scans every hex the 
 
 ![settlement badge reading "Unnamed realm you · Lv 1", floating above the settlement's northmost tiles with a hex marker](img/settlement_badge.png)
 
+**Two more corrections after owner feedback on that screenshot — clearance too generous, and the badge leaking onto the landing page:**
+
+1. **Distance too large.** The clearance above the topmost tile used each owned tile's full `TILE_TOPFACE_Y_OFFSET` (the offset `rebuildTerrain` places building/tree sprites at) as a ceiling — enough to clear any tree canopy, but it read as floating noticeably farther above the settlement than the reference. Halved to `TILE_TOPFACE_Y_OFFSET / 2`: still clears a bare tile's own vertex and most of a neighbouring forest tile's canopy, while sitting visibly closer.
+
+2. **Badge showing on the landing page.** `HexMapRenderer`'s settlement-mode marker loop runs whenever `mode === 'settlement'` — which is also the mode the landing page's `SettlementCanvas` uses for its pre-founding plot preview and, once founded there in place (zip 6a: founding happens on the landing page itself, no route change), for the just-founded village. The badge is village-view chrome and shouldn't appear until the player actually navigates to `/settlement`, but it was showing on the landing page immediately after founding.
+
+   Added a `hideSettlementBadge` prop threaded from `LandingView` → `SettlementCanvas` → `HexMapRendererOptions`, set only on the landing page's canvas. **Named as a "hide" flag, not "show"** — a first attempt (`showSettlementBadge`) hid the badge everywhere, including the real settlement view, because of a Vue prop-casting gotcha: an optional `boolean` prop declared only in TypeScript (`showSettlementBadge?: boolean`, no runtime default) is resolved by Vue's compiler as a runtime `Boolean`-typed prop, and an *absent* `Boolean` prop resolves to `false`, not `undefined`. `SettlementView` never passes the prop at all, so it silently got `false` too — confirmed with a temporary `console.log` in the constructor and `rebuildMarkers`, which showed `showSettlementBadge: false` even on a freshly-mounted `/settlement` canvas that never set it. A `hideX` flag defaulting to `false` (i.e. shown) is what every caller except the landing page actually wants without opting in.
+
+**Files (this correction):** `lib/map/HexMapRenderer.ts` (`hideSettlementBadge` option, halved clearance), `components/map/SettlementCanvas.vue` (`hideSettlementBadge` prop), `views/LandingView.vue` (passes it).
+
+**Verified:** yes — a Playwright run through the landing page's founding flow confirmed no badge appears while still on `/`, and a follow-up navigation to `/settlement` (the real village-view route, not the landing page's in-place preview) confirmed the badge appears there with the reduced clearance and is still clear of the trees below it.
+
 ---
 
 ## 5. Status box (left side)
