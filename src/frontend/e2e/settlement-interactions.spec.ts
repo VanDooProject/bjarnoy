@@ -54,43 +54,64 @@ test.describe('settlement view interactions', () => {
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
     // Same reasoning as the hover/panning tests above: foundSettlement()
-    // plus up to 8 candidate click-and-screenshot rounds runs close to (and
-    // on CI, over) the global 45s budget.
+    // plus driving a real click through the render runs close to (and on
+    // CI, over) the global 45s budget.
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
 
-    // a spread of offsets almost certainly inside the level-1 border-2
-    // realm and not already built on (the centre hex is the longhouse)
-    const offsets: Array<[number, number]> = [
-      [0, -140],
-      [-120, -70],
-      [120, -70],
-      [-120, 70],
-      [120, 70],
-      [0, 140],
-      [-60, -140],
-      [60, -140],
-    ];
-
-    let placed = false;
-    for (const [dx, dy] of offsets) {
-      const x = cx + dx;
-      const y = cy + dy;
-      const clip = { x: x - 40, y: y - 40, width: 80, height: 80 };
-      const before = await page.screenshot({ clip });
-      await page.mouse.click(x, y);
-      await page.waitForTimeout(200);
-      const after = await page.screenshot({ clip });
-      if (Buffer.compare(before, after) !== 0) {
-        placed = true;
-        break;
+    // A guessed pixel offset from the canvas centre only happens to land on
+    // a real hex at one particular zoom/camera framing — zoomForFogMargin
+    // picks a much tighter zoom than that for a level-1 realm, so a fixed
+    // offset tuned by eyeballing one run is exactly the kind of thing that
+    // silently stops landing on a hex when the framing shifts. Instead, ask
+    // the model for a real empty hex inside the realm, then ask the
+    // renderer's own camera math (__settlementRenderer's hexCenterScreen,
+    // set up by SettlementView for exactly this) for that hex's exact
+    // screen position.
+    const point = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain !== 'sea' && !tile.buildingType) {
+            return win.__settlementRenderer().hexCenterScreen(at);
+          }
+        }
       }
-    }
-    expect(placed).toBe(true);
+      throw new Error('no empty buildable hex found inside the realm');
+    });
+
+    // The model, via the __demoWorld debug hook, is the deterministic
+    // "did the build land" signal — a fixed sleep before checking it either
+    // wastes time once it's actually placed or, on a loaded CI runner,
+    // checks before the async model update has happened.
+    const countBuildings = () =>
+      page.evaluate(() => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        return world.model.countBuildings(world.selectedSettlementId) as number;
+      });
+    const before = await countBuildings();
+
+    // zip 9: a hex click opens BuildingModal (full-screen detail screen) —
+    // it, not the click itself, places the building, via its own "Build
+    // here" button (only rendered for an owned, buildable, still-empty
+    // hex; see BuildingModal.vue's `mine && buildable` actions guard).
+    const modal = page.locator('.modal.panel');
+    await page.mouse.click(box.x + point.x, box.y + point.y);
+    await modal.getByRole('button', { name: 'Build here' }).click();
+
+    await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
   });
 
   test('panning the settlement view does not error', async ({ page }) => {
