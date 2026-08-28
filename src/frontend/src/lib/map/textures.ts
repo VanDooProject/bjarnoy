@@ -27,8 +27,8 @@
 // orientation/variant/level combination (100+ once every family is
 // covered), each asset *family* actually used — e.g. every `grasstile_*`
 // file — is pulled in with one `import.meta.glob`, scoped to that family's
-// filename prefix so unused families (fishing hut, magic tower, pumpkin
-// farm, rivers, ...) are still never bundled.
+// filename prefix so unused families (of which the pack has a few — no
+// lumberjack/quarry art exists, for instance) are still never bundled.
 import { Assets, Texture } from 'pixi.js';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import { TILE_ORIENTATIONS } from './types';
@@ -58,6 +58,12 @@ type AssetModules = Record<string, string>;
 
 const ROOT_TERRAIN = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/{watertile,coastalwatertile,sandtile,mountaintile}_*.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+// Single composited image per orientation, no levels, no base/top split —
+// same shape as the plain root terrains above.
+const ROOT_BUILDING_PLAIN = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/{fishinghutbuilding,magictower}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_TERRAIN_BASE = import.meta.glob(
@@ -218,6 +224,8 @@ const SOURCES = {
     longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
     pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
+    fishinghut: buildPlain(ROOT_BUILDING_PLAIN, 'fishinghutbuilding_'),
+    magictower: buildPlain(ROOT_BUILDING_PLAIN, 'magictower_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string>>>,
   /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own. */
   coastalBase: buildPlain(ROOT_TERRAIN, 'coastalwatertile_'),
