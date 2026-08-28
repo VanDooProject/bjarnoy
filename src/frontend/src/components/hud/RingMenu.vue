@@ -68,9 +68,11 @@ const emit = defineEmits<{
 }>();
 
 // Issue #16 "ring menu": reference shows the bubbles spread clear of the
-// tile in an orbit, not crowded around it — but not so far out that the
-// innermost ring alone dominates the screen.
-const RADIUS = 90;
+// tile in an orbit, not crowded around it — but the radius alone isn't what
+// was making the innermost ring feel oversized, the 88px bubbles were (see
+// BUBBLE_DIAMETER below); a smaller radius paired with smaller bubbles is
+// what actually tightens the footprint without cramming them together.
+const RADIUS = 76;
 // A ring with a badge (an owned building, "Lv n upgrade") also has the
 // canvas's own floating settlement-name pill sitting right at the tile's
 // centre, underneath the ring — the same RADIUS that keeps a badge-less
@@ -78,7 +80,7 @@ const RADIUS = 90;
 // the middle (that pill), so it gets extra breathing room.
 const effectiveRadius = computed(() => {
   const base = props.radius ?? RADIUS;
-  return props.badgeAction ? base + 34 : base;
+  return props.badgeAction ? base + 28 : base;
 });
 const badgeY = computed(() => props.y - effectiveRadius.value - 34);
 // Issue #16 "ring menu" target: "connected down to the ring by a thin
@@ -115,8 +117,13 @@ const positioned = computed(() => {
   });
 });
 
-const bubbleSize = computed(() => 88 * (props.bubbleScale ?? 1));
-const bubbleFontSize = computed(() => 13 * (props.bubbleScale ?? 1));
+// 64px clears the ~44-48px touch-target minimum with room to spare, at
+// roughly 3/4 the footprint of the original 88px bubbles — the radius
+// shrink above wasn't enough on its own since bubble size, not spacing,
+// was dominating how big the ring looked.
+const BUBBLE_DIAMETER = 64;
+const bubbleSize = computed(() => BUBBLE_DIAMETER * (props.bubbleScale ?? 1));
+const bubbleFontSize = computed(() => 12 * (props.bubbleScale ?? 1));
 // Depth cue: each ring out is fainter and its dashes sparser, so the
 // innermost ring reads as the "current" one and outer rings whisper. A
 // plain low-alpha white stroke (the original values here) reads fine
@@ -286,11 +293,13 @@ function hover(action: RingAction) {
   pointer-events: auto;
   transform: translate(-50%, -50%);
   /* Reference: a plain circle, same size regardless of label length — not
-     a pill that stretches with its text. */
-  width: 88px;
-  height: 88px;
+     a pill that stretches with its text. Sizing here matches RingMenu's own
+     BUBBLE_DIAMETER default; the inline style (bound to bubbleSize) always
+     wins, this is just the no-JS/pre-hydration fallback. */
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  padding: 0 10px;
+  padding: 0 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -298,7 +307,8 @@ function hover(action: RingAction) {
   background: rgba(8, 18, 26, 0.88);
   border: none;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.15;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;

@@ -101,20 +101,26 @@ type RingLevel = 'root' | 'build-categories' | 'build-buildings';
 interface OpenRing {
   level: RingLevel;
   category?: string;
+  // The angle (degrees) of the specific parent bubble that was hovered/
+  // clicked to open this ring — set only when this ring ends up with a
+  // single action. A lone bubble has no "spread evenly around the circle"
+  // to do, so instead of defaulting to due north it lines up on the same
+  // ray as whatever was just hovered, keeping the mouse travel short.
+  originAngle?: number;
 }
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringStack = ref<OpenRing[]>([]);
 // Matches RingMenu's own default RADIUS — kept in sync there too.
-const RING_BASE_RADIUS = 90;
+const RING_BASE_RADIUS = 76;
 // Each ring's bubbles shrink a little further out (RingMenu's own default
-// is 88px at scale 1) — reads as "further away", and lets the next ring's
+// is 64px at scale 1) — reads as "further away", and lets the next ring's
 // radius sit closer in without the two orbits' bubbles touching.
-const RING_BUBBLE_SIZES = [88, 76, 66];
+const RING_BUBBLE_SIZES = [64, 56, 48];
 // Gap between the outer edge of one ring's bubbles and the inner edge of
 // the next, rather than a flat centre-to-centre step — a flat step ignores
 // how much smaller the outer bubbles are, and ends up wasting space the
 // further out you go.
-const RING_GAP = 22;
+const RING_GAP = 16;
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
@@ -241,7 +247,7 @@ const ringsToRender = computed(() => {
   // it's carrying the "upgrade" badge (see RingMenu's own effectiveRadius)
   // — later rings' gap math needs to start from that real edge, not the
   // bare base radius, or ring 1 would crowd the badge.
-  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 34 : 0);
+  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 28 : 0);
   let radius = ring0Effective;
   let angleOffset = 0;
 
@@ -252,11 +258,17 @@ const ringsToRender = computed(() => {
       const prevBubbleSize = RING_BUBBLE_SIZES[Math.min(i - 1, RING_BUBBLE_SIZES.length - 1)];
       radius += prevBubbleSize / 2 + RING_GAP + bubbleSize / 2;
     }
+    // A ring with exactly one action has nothing to "spread evenly" — snap
+    // it onto the same ray as whichever parent bubble was hovered/clicked
+    // to open it (see `originAngle`/`nextRingFrom`) rather than defaulting
+    // to due north, so the pointer barely has to move to reach it.
+    const thisAngleOffset =
+      actions.length === 1 && ring.originAngle !== undefined ? ring.originAngle + 90 : angleOffset;
     const entry = {
       ring,
       actions,
       radius: i === 0 ? RING_BASE_RADIUS : radius,
-      angleOffset,
+      angleOffset: thisAngleOffset,
       bubbleScale: bubbleSize / RING_BUBBLE_SIZES[0],
       depth: i,
     };
@@ -268,10 +280,32 @@ const ringsToRender = computed(() => {
   });
 });
 
+// Mirrors RingMenu's own positioning formula (minus radius) so a parent
+// bubble's on-screen angle can be computed here, without RingMenu having to
+// report it back up. Keep in sync with RingMenu.vue's `positioned` computed.
+function angleForIndex(n: number, index: number, hasBadge: boolean, ringAngleOffset: number): number {
+  const angleStep = 360 / Math.max(1, n);
+  const rotationOffset = (n === 4 ? 45 : hasBadge ? -90 + angleStep / 2 : -90) + ringAngleOffset;
+  return angleStep * index + rotationOffset;
+}
+
+// Builds the next ring to push onto the stack, carrying the hovered/
+// clicked parent bubble's angle along so a single-action child ring (see
+// `originAngle` above) can align to it instead of defaulting to north.
+function nextRingFrom(i: number, id: string, level: RingLevel, category?: string): OpenRing {
+  const parent = ringsToRender.value[i];
+  const idx = parent.actions.findIndex((a) => a.id === id);
+  const hasBadge = i === 0 && !!ringBadge.value;
+  const originAngle = idx >= 0 ? angleForIndex(parent.actions.length, idx, hasBadge, parent.angleOffset) : undefined;
+  return { level, category, originAngle };
+}
+
 // The badge belongs to the root ring, which is always the innermost ring
 // (index 0) for as long as any ring is open — it doesn't get replaced when
 // drilling into build-categories/build-buildings, so this doesn't need to
 // track which ring is currently "on top".
+const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
+
 const ringBadge = computed(() => {
   const tile = selectedTile.value;
   if (!isMineTile.value || !tile?.buildingType) return undefined;
@@ -307,13 +341,13 @@ function onRingHover(i: number, id: string) {
   if (i !== ringStack.value.length - 1) return;
   const top = ringStack.value[i];
   if (top.level === 'root' && id === 'build') {
-    ringStack.value = [...ringStack.value, { level: 'build-categories' }];
+    ringStack.value = [...ringStack.value, nextRingFrom(i, id, 'build-categories')];
     return;
   }
   if (top.level === 'build-categories') {
     const category = categoriesFor(selectedTile.value!).find((c) => c.id === id);
     if (category) {
-      ringStack.value = [...ringStack.value, { level: 'build-buildings', category: id }];
+      ringStack.value = [...ringStack.value, nextRingFrom(i, id, 'build-buildings', id)];
     }
   }
 }
@@ -321,7 +355,7 @@ function onRingHover(i: number, id: string) {
 async function onRingSelect(i: number, id: string) {
   const ring = ringStack.value[i];
   if (ring.level === 'build-categories') {
-    ringStack.value = [...ringStack.value.slice(0, i + 1), { level: 'build-buildings', category: id }];
+    ringStack.value = [...ringStack.value.slice(0, i + 1), nextRingFrom(i, id, 'build-buildings', id)];
     return;
   }
   if (ring.level === 'build-buildings') {
@@ -337,7 +371,7 @@ async function onRingSelect(i: number, id: string) {
       ringScreen.value = null;
       return;
     case 'build':
-      ringStack.value = [...ringStack.value.slice(0, i + 1), { level: 'build-categories' }];
+      ringStack.value = [...ringStack.value.slice(0, i + 1), nextRingFrom(i, id, 'build-categories')];
       return;
     case 'upgrade':
       await upgrade();
@@ -426,10 +460,10 @@ async function upgrade() {
          of what's under them. -->
     <div class="hud-scrim" />
     <TopBar>
-      <ResourceBar />
+      <ResourceBar :ring-open="ringOpen" />
       <HudNav />
     </TopBar>
-    <RealmPanel :ring-open="!!(selectedTile && ringScreen)" />
+    <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <template v-if="selectedTile && ringScreen">

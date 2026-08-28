@@ -46,8 +46,13 @@ const claimedHexes = computed(() =>
   transition: opacity 0.15s ease;
 }
 .realm-panel.disabled {
-  opacity: 0.45;
+  opacity: 0.35;
+  filter: grayscale(0.7);
   pointer-events: none;
+}
+.realm-panel.disabled .level {
+  background: var(--muted);
+  color: #1a1a1a;
 }
 .title {
   display: flex;
