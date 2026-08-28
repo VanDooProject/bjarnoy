@@ -1562,13 +1562,20 @@ export class HexMapRenderer {
       ownerLabel.visible = true;
     }
 
+    // Issue #16 "map island names": "the one where the current player has
+    // settled needs to be gold". `Settlement.islandId` (set from the
+    // backend's SettlementResponse — see stores/world.ts) is the only link
+    // between a settlement and an island id; demo mode never populates it,
+    // so its island names simply stay neutral there, same as before.
+    const myIslandId = worldModel.listSettlements().find((s) => s.ownerId === playerId)?.islandId;
     for (const island of worldModel.listIslands()) {
       if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const label = this.acquireLabel();
       label.text = island.name;
-      label.style.fill = 0xe8f0f5;
+      label.style.fill = island.id === myIslandId ? GOLD : 0xe8f0f5;
+      label.style.fontWeight = island.id === myIslandId ? 'bold' : 'normal';
       label.anchor.set(0.5, 1);
       label.position.set(center.x, center.y - 6 * this.camera.zoom - 4);
       label.visible = true;
