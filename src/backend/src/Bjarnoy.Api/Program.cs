@@ -68,6 +68,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// Token expiry is otherwise checked against the real wall clock, not the
+// app's injected TimeProvider (the same one JwtTokenService mints tokens
+// from) — harmless in production, where they're the same clock, but it means
+// a test that moves TimeProvider away from "now" mints tokens that instantly
+// read as expired or not-yet-valid. A custom LifetimeValidator keeps
+// validation on the one clock the rest of the app uses.
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<TimeProvider>((options, time) =>
+    {
+        options.TokenValidationParameters.LifetimeValidator = (notBefore, expires, _, parameters) =>
+        {
+            var now = time.GetUtcNow().UtcDateTime;
+            return (notBefore is null || notBefore <= now + parameters.ClockSkew)
+                && (expires is null || expires >= now - parameters.ClockSkew);
+        };
+    });
+
 // One role, one policy: Admin-only endpoints (issue #27) use this. Locked/
 // banned enforcement on existing mutating endpoints is separate — see
 // ActiveUserEndpointFilter — because anonymous play must keep working, which
