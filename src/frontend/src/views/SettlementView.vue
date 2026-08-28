@@ -320,9 +320,10 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" />
-    <TopBar />
-    <HudNav />
-    <ResourceBar />
+    <TopBar>
+      <ResourceBar />
+      <HudNav />
+    </TopBar>
     <RealmPanel />
     <BuildQueuePanel @select="onQueueSelect" />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />

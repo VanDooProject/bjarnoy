@@ -6,7 +6,7 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
-import type { Fleet, IslandLabel, Resources, Settlement, Tile } from './types';
+import { emptyResources, type Fleet, type IslandLabel, type Resources, type Settlement, type Tile } from './types';
 
 const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
@@ -167,6 +167,29 @@ export class WorldModel {
     const current = Math.min(max, 10 + settlement.level * 8 + buildings * 4);
     const rate = current < max ? Math.max(1, Math.round((max - current) * 0.2)) : 0;
     return { current, max, rate };
+  }
+
+  /**
+   * Issue #16 header: the reference shows each resource pill with a
+   * "current / cap" and a fill-progress underline, but no storage-cap field
+   * exists anywhere in the data model (`Resources`, `Settlement`, the
+   * backend) — same gap `populationFor` hit for population. Rather than
+   * leave the pills capless, this derives a plausible per-resource cap the
+   * same way: purely client-side, from the longhouse level, using a
+   * different base per resource so the caps read as varied (as in the
+   * reference: wood/stone/food/iron aren't all the same number) rather than
+   * one flat value repeated four times.
+   */
+  storageCapFor(settlementId: string): Resources {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return emptyResources();
+    const growth = 1 + settlement.level * 0.5;
+    return {
+      wood: Math.round(2000 * growth),
+      stone: Math.round(2000 * growth),
+      food: Math.round(2400 * growth),
+      iron: Math.round(1000 * growth),
+    };
   }
 
   borderRadius(settlement: Settlement): number {

@@ -25,21 +25,21 @@ const initials = computed(() => {
 </script>
 
 <template>
-  <nav class="hud-nav panel">
+  <nav class="hud-nav">
     <button
       v-if="player.hasFoundedSettlement"
-      class="pill"
+      class="link"
       :class="{ active: route.name === 'settlement' }"
       @click="router.push('/settlement')"
     >
       Settlement
     </button>
-    <button class="pill" :class="{ active: route.name === 'world' }" @click="router.push('/world')">
+    <button class="link" :class="{ active: route.name === 'world' }" @click="router.push('/world')">
       World map
     </button>
-    <button class="pill disabled" type="button" disabled title="Not implemented yet">Reports</button>
-    <button class="pill disabled" type="button" disabled title="Not implemented yet">Alliance</button>
-    <button class="pill" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
+    <button class="link disabled" type="button" disabled title="Not implemented yet">Reports</button>
+    <button class="link disabled" type="button" disabled title="Not implemented yet">Alliance</button>
+    <button class="link" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
       Landing
     </button>
     <span class="avatar" :title="player.nickname ?? 'Bjarnoy'">{{ initials }}</span>
@@ -48,40 +48,40 @@ const initials = computed(() => {
 
 <style scoped>
 .hud-nav {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 10;
   display: flex;
-  gap: 6px;
-  padding: 6px;
+  align-items: center;
+  gap: 18px;
+  flex: none;
+  padding-left: 22px;
+  border-left: 1px solid var(--panel-border);
 }
-.pill {
+.link {
   background: transparent;
   border: none;
   color: var(--muted);
-  padding: 6px 14px;
-  border-radius: 999px;
+  padding: 0;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   font-family: inherit;
 }
-.pill:hover {
+.link:hover {
   color: var(--text);
 }
-.pill.active {
-  background: var(--gold);
-  color: #20160a;
+.link.active {
+  color: var(--gold);
 }
-.pill.disabled {
+.link.disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 .avatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -89,6 +89,5 @@ const initials = computed(() => {
   color: #20160a;
   font-size: 12px;
   font-weight: 700;
-  margin-left: 4px;
 }
 </style>
