@@ -64,6 +64,12 @@ export type RenderMode = 'world' | 'settlement';
 
 const GOLD = 0xffc55c;
 const RIVAL = 0xe2705f;
+// World-map island labels sit below the island's own tiles (see
+// rebuildMarkers) — this renderer has no per-island footprint to measure,
+// so the offset is picked empirically large enough to clear the biggest
+// generated island (worldGenerator's ISLAND_MAX_RADIUS, ~5.6 hexes) rather
+// than risk drawing over a smaller one's tiles.
+const ISLAND_LABEL_CLEARANCE = 3.5;
 const FOG_SCOUTED = 0x0b1116;
 // zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
 // the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
@@ -1584,11 +1590,13 @@ export class HexMapRenderer {
       label.style.fontWeight = mineIsland ? 'bold' : '600';
       label.style.fontSize = 13;
       label.style.letterSpacing = 1.5;
-      // Reference places the name *below* the island's shape, not over it —
-      // anchor at the label's top edge and offset down past the island's
-      // own footprint (its hexes extend roughly TILE_H below this centre).
+      // Reference places the name *below* the island's shape entirely, not
+      // over its tiles or clipping its bottom edge. Islands aren't a fixed
+      // size (worldGenerator's ISLAND_MAX_RADIUS is ~5.6 hexes), and this
+      // renderer has no per-island footprint to measure — so clear past the
+      // *largest* plausible island rather than risk sitting on top of one.
       label.anchor.set(0.5, 0);
-      label.position.set(center.x, center.y + TILE_H * 1.1 * this.camera.zoom);
+      label.position.set(center.x, center.y + TILE_H * ISLAND_LABEL_CLEARANCE * this.camera.zoom);
       label.visible = true;
     }
 

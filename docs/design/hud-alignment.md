@@ -314,10 +314,16 @@ explicitly on the other two label types sharing the same `Text` object pool (`ow
 so a pooled instance recycled across frames for a different label type can't inherit a stray letter-spacing
 value left over from an island label.
 
-Also fixed the label's *position*: it was anchored above the island's centre (`anchor(0.5, 1)`, offset
-upward), which draws it over the island's own hexes rather than below the island's footprint, as every
-island in the reference shows it. Anchor flipped to the label's top edge (`anchor(0.5, 0)`) and the offset
-now pushes it down past the island (`center.y + TILE_H * 1.1 * zoom`) instead of up into it.
+Also fixed the label's *position*, twice. First pass anchored it above the island's centre
+(`anchor(0.5, 1)`, offset upward), drawing it over the island's own hexes rather than below the island's
+footprint as every island in the reference shows it — flipped to the label's top edge (`anchor(0.5, 0)`) with
+a downward offset. That first downward offset (`TILE_H * 1.1 * zoom`) was still too small, though: it's
+scaled off a single tile's height, but an island is many hexes across (`worldGenerator`'s
+`ISLAND_MAX_RADIUS` is ~5.6 hexes), so the label still sat on the island's lower tiles instead of clearing
+past them — caught from a follow-up screenshot after the first "fixed" claim, not caught by inspection alone.
+The renderer has no per-island footprint to measure (islands are generated procedurally, not stored as a
+radius), so the offset (`ISLAND_LABEL_CLEARANCE = 3.5`, i.e. `TILE_H * 3.5 * zoom`) is picked empirically
+large enough to clear the biggest plausible island rather than risk sitting on top of a smaller one.
 
 **Verified:** demo mode's `WorldModel` still never calls `setIslands()` (only `bootstrapLiveWorld()` does,
 live-mode only), so the gold/non-gold *comparison* itself still can't be exercised against the real backend
