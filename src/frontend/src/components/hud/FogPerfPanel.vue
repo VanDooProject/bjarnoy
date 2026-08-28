@@ -1,8 +1,19 @@
 <script setup lang="ts">
-// Live per-rebuild-phase timing breakdown, mounted beneath FogDebugPanel —
-// toggle a flag there and watch the matching row here move on the next
-// pan/zoom (each rebuild refreshes fogPerfStats; see its own comment in
-// HexMapRenderer.ts for exactly which flags affect which row).
+// Live per-rebuild timing breakdown, mounted beneath FogDebugPanel —
+// toggle a flag there and watch the matching row (and, where a phase mixes
+// several fog features, the matching *sub*-row) move on the next
+// pan/zoom. See fogPerfStats's own comment in HexMapRenderer.ts for
+// exactly which flags affect which row.
+//
+// Sub-rows are real measurements or real counts, never fabricated: the
+// blob-cache split (sync vs blur render) is two actual timed sections of
+// refreshFogBlobCache, and the per-hex splits (terrain drawn/culled,
+// unexplored/bordered/scouted hex counts) are counters incremented in the
+// same branches the flags already gate — cheap (an integer increment),
+// unlike wrapping each per-hex branch in its own performance.now() call,
+// which would cost more than the branch it's timing and skew the very
+// loop being measured. Counts are a size-of-work proxy for a sub-row's
+// share of its parent's ms, not a separately measured time.
 //
 // fogPerfStats is a plain object mutated directly by HexMapRenderer, not a
 // Vue ref/reactive (HexMapRenderer.ts stays Vue-reactivity-free — see
@@ -12,7 +23,7 @@
 // trap, so nothing would tell this component to re-render. Polling on an
 // interval is the simplest correct way to observe an external mutable
 // object like this without pulling Vue into the renderer.
-import { onMounted, onUnmounted, reactive } from 'vue';
+import { onMounted, onUnmounted, reactive, computed } from 'vue';
 import { fogPerfStats, type FogPerfStats } from '../../lib/map/HexMapRenderer';
 
 const POLL_MS = 250;
@@ -25,35 +36,105 @@ onMounted(() => {
 });
 onUnmounted(() => clearInterval(timer));
 
-const ROWS: { key: keyof FogPerfStats; label: string }[] = [
-  { key: 'terrainMs', label: 'Terrain' },
-  { key: 'bordersFogMs', label: 'Borders + fog (per-hex)' },
-  { key: 'blobCacheMs', label: 'Blob cache (blur render)' },
-  { key: 'markersMs', label: 'Markers' },
-  { key: 'wavesMs', label: 'Waves' },
-];
+interface Row {
+  key: string;
+  label: string;
+  /** Wall-clock ms for this row, when measured directly. Bars for a row with children are sized against the *parent's* ms; leaf rows without ms show only their count. */
+  ms: number | null;
+  /** Size-of-work count (hexes, blobs) shown next to (or, for a count-only sub-row, instead of) ms. */
+  count?: number;
+  countLabel?: string;
+  children?: Row[];
+}
+
+const ROWS = computed<Row[]>(() => [
+  {
+    key: 'terrain',
+    label: 'Terrain',
+    ms: stats.terrainMs,
+    children: [
+      { key: 'terrain-drawn', label: 'Drawn', ms: null, count: stats.terrainDrawnCount, countLabel: 'hexes' },
+      { key: 'terrain-culled', label: 'Culled (fog)', ms: null, count: stats.terrainCulledCount, countLabel: 'hexes' },
+    ],
+  },
+  {
+    key: 'bordersFog',
+    label: 'Borders + fog (per-hex)',
+    ms: stats.bordersFogMs,
+    children: stats.deepFogOnly
+      ? [
+          {
+            key: 'deep-fog-shortcut',
+            label: `Background shortcut active — per-hex loop skipped (${stats.hexCount} hexes)`,
+            ms: null,
+          },
+        ]
+      : [
+          {
+            key: 'unexplored',
+            label: 'Unexplored (white) fog',
+            ms: null,
+            count: stats.unexploredHexCount,
+            countLabel: 'hexes',
+          },
+          { key: 'bordered', label: 'Realm borders', ms: null, count: stats.borderedHexCount, countLabel: 'hexes' },
+          {
+            key: 'scouted',
+            label: 'Scouted (dark) fog',
+            ms: null,
+            count: stats.scoutedHexCount,
+            countLabel: 'hexes',
+          },
+        ],
+  },
+  {
+    key: 'blobCache',
+    label: 'Blob cache (blur render)',
+    ms: stats.blobCacheMs,
+    children: [
+      { key: 'blob-sync', label: 'Sprite sync', ms: stats.blobSyncMs },
+      { key: 'blob-render', label: 'Blur render pass', ms: stats.blobRenderMs },
+    ],
+  },
+  { key: 'markers', label: 'Markers', ms: stats.markersMs },
+  { key: 'waves', label: 'Waves', ms: stats.wavesMs },
+]);
 
 function ms(v: number): string {
   return `${v.toFixed(2)} ms`;
 }
 
-// Rough per-row share of the total, so the biggest cost is visually obvious
-// without doing the division in your head.
-function share(v: number): number {
-  return stats.totalMs > 0 ? Math.round((v / stats.totalMs) * 100) : 0;
+function share(v: number, of: number): number {
+  return of > 0 ? Math.round((v / of) * 100) : 0;
 }
 </script>
 
 <template>
   <div class="fog-perf panel">
     <div class="title">Fog perf (last rebuild)</div>
-    <div v-for="row in ROWS" :key="row.key" class="row">
-      <span class="label">{{ row.label }}</span>
-      <span class="bar-track">
-        <span class="bar" :style="{ width: share(stats[row.key] as number) + '%' }" />
-      </span>
-      <span class="value">{{ ms(stats[row.key] as number) }}</span>
-    </div>
+    <template v-for="row in ROWS" :key="row.key">
+      <div class="row">
+        <span class="label">{{ row.label }}</span>
+        <span class="bar-track">
+          <span class="bar" :style="{ width: share(row.ms ?? 0, stats.totalMs) + '%' }" />
+        </span>
+        <span class="value">{{ ms(row.ms ?? 0) }}</span>
+      </div>
+      <div v-for="child in row.children" :key="child.key" class="row sub">
+        <span class="label">{{ child.label }}</span>
+        <span class="bar-track">
+          <span
+            v-if="child.ms !== null"
+            class="bar"
+            :style="{ width: share(child.ms, row.ms || child.ms || 1) + '%' }"
+          />
+        </span>
+        <span class="value">
+          <template v-if="child.ms !== null">{{ ms(child.ms) }}</template>
+          <template v-else-if="child.count !== undefined">{{ child.count }} {{ child.countLabel }}</template>
+        </span>
+      </div>
+    </template>
     <div class="row total">
       <span class="label">Total</span>
       <span class="bar-track" />
@@ -66,7 +147,7 @@ function share(v: number): number {
 <style scoped>
 .fog-perf {
   padding: 12px 14px;
-  min-width: 230px;
+  min-width: 260px;
 }
 .title {
   font-size: 12px;
@@ -84,6 +165,11 @@ function share(v: number): number {
   font-size: 12px;
   color: var(--text);
 }
+.row.sub {
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--muted);
+}
 .row.total {
   margin-top: 4px;
   padding-top: 6px;
@@ -92,7 +178,10 @@ function share(v: number): number {
 }
 .label {
   flex: 0 0 auto;
-  min-width: 130px;
+  min-width: 150px;
+}
+.row.sub .label {
+  min-width: 134px;
 }
 .bar-track {
   flex: 1 1 auto;
@@ -101,15 +190,21 @@ function share(v: number): number {
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
+.row.sub .bar-track {
+  height: 4px;
+}
 .bar {
   display: block;
   height: 100%;
   background: var(--gold);
   transition: width 0.15s ease-out;
 }
+.row.sub .bar {
+  background: var(--muted-2);
+}
 .value {
   flex: 0 0 auto;
-  min-width: 62px;
+  min-width: 72px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

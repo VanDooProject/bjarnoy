@@ -181,10 +181,29 @@ export const fogDebugFlags: FogDebugFlags = {
 export interface FogPerfStats {
   /** rebuildTerrain/rebuildTerrainFlat: placing (or culling) terrain sprites/fills. Affected by terrainCull, terrainCullJitter. */
   terrainMs: number;
+  /** Hexes that got a terrain sprite/fill this rebuild. */
+  terrainDrawnCount: number;
+  /** Hexes skipped by isPastTerrainCull (terrainCull) — the source of terrainDrawnCount + terrainCulledCount not summing to hexCount in settlement/preview mode, where an out-of-radius or sea hex is skipped for reasons unrelated to fog. */
+  terrainCulledCount: number;
+
   /** rebuildBordersAndFog's per-hex loop (borders + fog-tier decisions), excluding blobCacheMs. Affected by distJitter, scoutedTintFade, scoutedFog, unexploredFog, flatFillOnly, blobsOnly. */
   bordersFogMs: number;
-  /** refreshFogBlobCache: building the blob sprite layer (blobJitter) and, when not mid-drag, the offscreen blur render pass — usually the single largest cost, and roughly proportional to blobCount. */
+  /** True when this rebuild took the deepFogOnly shortcut (problem 4) — the per-hex loop below never ran at all, so the three *HexCount fields are 0 even though every hex in the viewport is conceptually unexplored fog. */
+  deepFogOnly: boolean;
+  /** Hexes that took the unexplored (white) fog branch — gated by unexploredFog. 0 whenever deepFogOnly is true. */
+  unexploredHexCount: number;
+  /** Explored, owned hexes that drew a realm-border wash/stroke — not gated by a fog flag, but lives in the same loop. */
+  borderedHexCount: number;
+  /** Explored hexes that got a scouted (dark) tint blob added — gated by scoutedFog. */
+  scoutedHexCount: number;
+
+  /** refreshFogBlobCache: building the blob sprite layer and, when not mid-drag, the offscreen blur render pass — usually the single largest cost, and roughly proportional to blobCount. */
   blobCacheMs: number;
+  /** refreshFogBlobCache's syncFogBlobs call (pooled-sprite placement, blobJitter) — the cheap half. */
+  blobSyncMs: number;
+  /** refreshFogBlobCache's offscreen RenderTexture render (the actual GPU blur pass) — 0 when skipped (no blobs, or mid-drag — see refreshFogBlobCache's own comment) rather than merely small. */
+  blobRenderMs: number;
+
   /** rebuildMarkers: settlement/island/fleet icon placement. */
   markersMs: number;
   /** rebuildWaves: world-mode open-water squiggle placement (world mode only; 0 in settlement mode). */
@@ -198,8 +217,16 @@ export interface FogPerfStats {
 }
 export const fogPerfStats: FogPerfStats = {
   terrainMs: 0,
+  terrainDrawnCount: 0,
+  terrainCulledCount: 0,
   bordersFogMs: 0,
+  deepFogOnly: false,
+  unexploredHexCount: 0,
+  borderedHexCount: 0,
+  scoutedHexCount: 0,
   blobCacheMs: 0,
+  blobSyncMs: 0,
+  blobRenderMs: 0,
   markersMs: 0,
   wavesMs: 0,
   totalMs: 0,
@@ -1217,6 +1244,8 @@ export class HexMapRenderer {
   }
 
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
+    fogPerfStats.terrainDrawnCount = 0;
+    fogPerfStats.terrainCulledCount = 0;
     if (this.options.mode === 'world') {
       this.rebuildTerrainFlat(coords, fogActive);
       return;
@@ -1254,6 +1283,7 @@ export class HexMapRenderer {
         !worldModel.isExplored(c.q, c.r) &&
         this.isPastTerrainCull(c.q, c.r)
       ) {
+        fogPerfStats.terrainCulledCount++;
         continue;
       }
       const tile = worldModel.getTile(c.q, c.r);
@@ -1263,6 +1293,7 @@ export class HexMapRenderer {
       baseEntries.set(key, { texture: textures.base[textureKey], coord: c });
       const topTexture = textures.top[textureKey];
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
+      fogPerfStats.terrainDrawnCount++;
     }
 
     this.syncSpriteLayer(this.terrainBase, baseEntries);
@@ -1306,12 +1337,14 @@ export class HexMapRenderer {
         !worldModel.isExplored(c.q, c.r) &&
         this.isPastTerrainCull(c.q, c.r)
       ) {
+        fogPerfStats.terrainCulledCount++;
         continue;
       }
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
       this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
+      fogPerfStats.terrainDrawnCount++;
     }
   }
 
@@ -1446,8 +1479,10 @@ export class HexMapRenderer {
     const start = performance.now();
     fogPerfStats.blobCount = blobEntries.size;
     this.syncFogBlobs(blobEntries);
+    fogPerfStats.blobSyncMs = performance.now() - start;
     if (!this.app || blobEntries.size === 0) {
       this.fogBlobCacheSprite.visible = false;
+      fogPerfStats.blobRenderMs = 0;
       fogPerfStats.blobCacheMs = performance.now() - start;
       return;
     }
@@ -1464,9 +1499,12 @@ export class HexMapRenderer {
       // stale during the drag, same tradeoff the blur-drop/fade already
       // makes — and let onPointerUp's forced rebuildAll() bake a fresh,
       // correctly-blurred one once the drag ends.
+      fogPerfStats.blobRenderMs = 0;
       fogPerfStats.blobCacheMs = performance.now() - start;
       return;
     }
+
+    const renderStart = performance.now();
 
     // Padded past the blob geometry so the blur (which bleeds a few pixels
     // past what it's applied to) doesn't get clipped at the texture's edge.
@@ -1523,6 +1561,7 @@ export class HexMapRenderer {
     this.fogBlobCacheSprite.position.set(minX, minY);
     this.fogBlobCacheSprite.scale.set(1 / scale);
     this.fogBlobCacheSprite.visible = true;
+    fogPerfStats.blobRenderMs = performance.now() - renderStart;
     fogPerfStats.blobCacheMs = performance.now() - start;
   }
 
@@ -1575,6 +1614,10 @@ export class HexMapRenderer {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
     this.fogLayer.clear();
+    fogPerfStats.deepFogOnly = deepFogOnly;
+    fogPerfStats.unexploredHexCount = 0;
+    fogPerfStats.borderedHexCount = 0;
+    fogPerfStats.scoutedHexCount = 0;
 
     if (deepFogOnly) {
       // isEntirelyDeepFog already confirmed every visible hex is deep,
@@ -1669,6 +1712,7 @@ export class HexMapRenderer {
 
     for (const c of coords) {
       if (fogActive && fogDebugFlags.unexploredFog && !worldModel.isExplored(c.q, c.r)) {
+        fogPerfStats.unexploredHexCount++;
         // Mist over ground the settlement has never scouted — covers every
         // hex the camera can currently see, however far it's panned, so the
         // world reads as continuing forever under fog rather than ending at
@@ -1722,6 +1766,7 @@ export class HexMapRenderer {
       const flat = top.flatMap((p) => [p.x, p.y]);
 
       if (tile.ownerId) {
+        fogPerfStats.borderedHexCount++;
         const owner = worldModel.getSettlement(tile.ownerId);
         const mine = owner?.ownerId === playerId;
         const color = mine ? GOLD : RIVAL;
@@ -1754,11 +1799,15 @@ export class HexMapRenderer {
       if (visibleEdgeDist && fogDebugFlags.scoutedFog) {
         if (fogDebugFlags.scoutedTintFade) {
           const t = Math.min(1, Math.max(0, visibleEdgeDist(c) / FOG_VISIBLE_MARGIN_HEXES));
-          if (t > 0) addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
+          if (t > 0) {
+            addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
+            fogPerfStats.scoutedHexCount++;
+          }
         } else if (visibleEdgeDist(c) > 0) {
           // Original hard binary: full tint the instant a hex is past the
           // (unjittered) visible radius, nothing at all inside it.
           addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
+          fogPerfStats.scoutedHexCount++;
         }
       }
     }
