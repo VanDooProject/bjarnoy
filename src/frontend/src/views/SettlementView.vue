@@ -31,6 +31,24 @@ function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
 }
 
+// Issue #16 "status box": "clicking a building in queue should center and
+// highlight (some flashes) the tile" — panTo recentres the camera on it,
+// and highlightCoord (already a pulsing gold outline HexMapRenderer draws
+// every tick — see drawHighlight) is set for a few seconds to read as a
+// flash rather than a permanent marker.
+let flashTimeout: ReturnType<typeof setTimeout> | null = null;
+function onQueueSelect(coord: { q: number; r: number }) {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return;
+  renderer.panTo(coord);
+  renderer.setHighlight(coord);
+  if (flashTimeout) clearTimeout(flashTimeout);
+  flashTimeout = setTimeout(() => {
+    renderer.setHighlight(undefined);
+    flashTimeout = null;
+  }, 2200);
+}
+
 onMounted(async () => {
   // A direct load of /settlement (reload, deep link) arrives here before
   // WorldMapView ever mounts, so this view needs its own bootstrap/restore
@@ -306,7 +324,7 @@ async function upgrade() {
     <HudNav />
     <ResourceBar />
     <RealmPanel />
-    <BuildQueuePanel />
+    <BuildQueuePanel @select="onQueueSelect" />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <RingMenu
       v-if="selectedTile && ringScreen"

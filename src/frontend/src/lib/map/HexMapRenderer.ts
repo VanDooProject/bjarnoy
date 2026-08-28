@@ -1694,6 +1694,19 @@ export class HexMapRenderer {
   }
 
   /**
+   * Issue #16 "status box": sets (or clears, passing undefined) the pulsing
+   * highlight outline (drawHighlight, redrawn every tick already) without
+   * going through `updateOptions` — that method unconditionally re-snaps
+   * the camera back to the settlement's origin once already founded (see
+   * its `wasFounded` branch below), which would cancel out a `panTo` call
+   * made just before it, exactly the combination BuildQueuePanel's
+   * click-to-center-and-flash needs.
+   */
+  setHighlight(coord: AxialCoord | undefined) {
+    this.options = { ...this.options, highlightCoord: coord };
+  }
+
+  /**
    * zip 6a: the landing page mounts one renderer in preview mode (no
    * `settlementId`) and, the instant the player founds their settlement,
    * needs it to become a real settlement view — same canvas, no
