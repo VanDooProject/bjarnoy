@@ -247,6 +247,38 @@ export interface SetUserStatusRequest {
   reason?: string;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminSettlementContracts.cs.
+
+export interface AdminSettlementSummary {
+  id: string;
+  worldId: string;
+  worldName: string;
+  name: string;
+  ownerName: string;
+  q: number;
+  r: number;
+  longhouseLevel: number;
+}
+
+export interface PagedAdminSettlementsResponse {
+  items: AdminSettlementSummary[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Signed deltas; a negative value removes resources. Omitted components default to 0. */
+export interface GrantResourcesRequest {
+  wood?: number;
+  stone?: number;
+  food?: number;
+  iron?: number;
+}
+
+export interface SetBuildingLevelRequest {
+  level: number;
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;

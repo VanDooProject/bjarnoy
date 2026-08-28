@@ -5,10 +5,13 @@ import type {
   AdminWorldResponse,
   CreateWorldRequest,
   FoundSettlementRequest,
+  GrantResourcesRequest,
   IslandResponse,
+  PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
   ProblemDetails,
   QueueBuildRequest,
+  SetBuildingLevelRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
@@ -119,6 +122,27 @@ export const api = {
   adminSetUserStatus: (userId: string, body: SetUserStatusRequest) =>
     request<AdminUserResponse>(`/admin/users/${userId}/status`, {
       method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminSearchSettlements: (params?: { worldId?: string; owner?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.worldId) query.set('worldId', params.worldId);
+    if (params?.owner) query.set('owner', params.owner);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedAdminSettlementsResponse>(`/admin/settlements${qs ? `?${qs}` : ''}`);
+  },
+  adminGetSettlement: (settlementId: string) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}`),
+  adminGrantResources: (settlementId: string, body: GrantResourcesRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/resources`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminSetBuildingLevel: (settlementId: string, q: number, r: number, body: SetBuildingLevelRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}/level`, {
+      method: 'PUT',
       body: JSON.stringify(body),
     }),
 };
