@@ -144,6 +144,8 @@ export interface FogDebugFlags {
   scoutedFog: boolean;
   /** Turns the unexplored (white) fog off entirely — both the per-hex blob/flat-fill mist and the world-map deep-fog background shortcut (syncWorldBackground). Off leaves unexplored hexes fully transparent/undrawn past the scouted ring, so only scoutedFog's dark tint remains visible — for isolating the black (scouted) fog from the white (unexplored) one, since the two overlap heavily near a settlement's edge and are otherwise hard to tell apart. */
   unexploredFog: boolean;
+  /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex (independent of both fog tiers — a claimed hex still gets its border with all fog off). For isolating whether something near a settlement's edge is fog or the border art on top of it. */
+  realmBorders: boolean;
   /** Per-hex position/size jitter on fog blobs (FOG_BLOB_JITTER_X/Y, FOG_BLOB_SIZE_JITTER). Off = blobs sit dead-centre on their hex, same size. */
   blobJitter: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
@@ -161,6 +163,7 @@ export const fogDebugFlags: FogDebugFlags = {
   scoutedTintFade: true,
   scoutedFog: true,
   unexploredFog: true,
+  realmBorders: true,
   blobJitter: true,
   terrainCull: true,
   flatFillOnly: false,
@@ -186,13 +189,13 @@ export interface FogPerfStats {
   /** Hexes skipped by isPastTerrainCull (terrainCull) — the source of terrainDrawnCount + terrainCulledCount not summing to hexCount in settlement/preview mode, where an out-of-radius or sea hex is skipped for reasons unrelated to fog. */
   terrainCulledCount: number;
 
-  /** rebuildBordersAndFog's per-hex loop (borders + fog-tier decisions), excluding blobCacheMs. Affected by distJitter, scoutedTintFade, scoutedFog, unexploredFog, flatFillOnly, blobsOnly. */
+  /** rebuildBordersAndFog's per-hex loop (borders + fog-tier decisions), excluding blobCacheMs. Affected by distJitter, scoutedTintFade, scoutedFog, unexploredFog, realmBorders, flatFillOnly, blobsOnly. */
   bordersFogMs: number;
   /** True when this rebuild took the deepFogOnly shortcut (problem 4) — the per-hex loop below never ran at all, so the three *HexCount fields are 0 even though every hex in the viewport is conceptually unexplored fog. */
   deepFogOnly: boolean;
   /** Hexes that took the unexplored (white) fog branch — gated by unexploredFog. 0 whenever deepFogOnly is true. */
   unexploredHexCount: number;
-  /** Explored, owned hexes that drew a realm-border wash/stroke — not gated by a fog flag, but lives in the same loop. */
+  /** Owned hexes that drew a realm-border wash/stroke — gated by realmBorders. */
   borderedHexCount: number;
   /** Explored hexes that got a scouted (dark) tint blob added — gated by scoutedFog. */
   scoutedHexCount: number;
@@ -1765,7 +1768,7 @@ export class HexMapRenderer {
       const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
       const flat = top.flatMap((p) => [p.x, p.y]);
 
-      if (tile.ownerId) {
+      if (tile.ownerId && fogDebugFlags.realmBorders) {
         fogPerfStats.borderedHexCount++;
         const owner = worldModel.getSettlement(tile.ownerId);
         const mine = owner?.ownerId === playerId;

@@ -239,17 +239,18 @@ Free. `jitterDistance` gained one function parameter (no new computation — the
 | Flag | Default | What it isolates |
 |---|---|---|
 | `distJitter` | on | Distance jitter on the fog ramp's own alpha/blob-vs-flat-fill boundary — the mist's edge |
-| `terrainCullJitter` | **off** (was implicitly on) | Whether the terrain-sprite draw cutoff jitters too, or uses a fixed, padded cutoff |
-| `scoutedTintFade` | on | Renamed from `visibleRamp`. Fades the scouted (dark) tint in gradually vs. a hard binary jump |
-| `scoutedFog` | **new**, on | Turns the scouted (dark) tint off entirely, independent of its fade |
-| `unexploredFog` | **new**, on | Turns the unexplored (white) fog off entirely — both per-hex mist and the world-map deep-fog background shortcut — so only `scoutedFog`'s dark tint remains, for isolating the two fog tiers from each other |
-| `blobJitter` | on | Per-hex position/size jitter on fog blobs |
 | `terrainCull` | on | Whether terrain sprites stop being drawn past the fog cutoff at all |
+| `terrainCullJitter` | **off** (was implicitly on) | Whether the terrain-sprite draw cutoff jitters too, or uses a fixed, padded cutoff |
+| `unexploredFog` | **new**, on | Turns the unexplored (white) fog off entirely — both per-hex mist and the world-map deep-fog background shortcut — so only `scoutedFog`'s dark tint remains, for isolating the two fog tiers from each other |
+| `realmBorders` | **new**, on | Turns off the realm-border wash + outer-edge glow/stroke on owned hexes, independent of either fog tier |
+| `scoutedFog` | **new**, on | Turns the scouted (dark) tint off entirely, independent of its fade |
+| `scoutedTintFade` | on | Renamed from `visibleRamp`. Fades the scouted (dark) tint in gradually vs. a hard binary jump |
+| `blobJitter` | on | Per-hex position/size jitter on fog blobs |
 | `flatFillOnly` | off | Skip the overlap blobs placed past the flat-fill cutoff |
 | `blobsOnly` | off | Never switch to the flat, guaranteed-opaque fill — reproduces the original "fog never reaches full opacity" bug |
 | `dragFade` | **off** (was implicitly on) | Whether releasing a drag fades the whole fog bitmap back in, or shows it immediately |
 
-Three defaults changed in this pass (`terrainCullJitter`, `dragFade` off; `scoutedFog` added on) — all three were previously "always on, no way to turn off," and all three were the direct subject of an issue #20 complaint. `unexploredFog` was added afterward, on (matching prior always-on behaviour), as the white-fog counterpart to `scoutedFog`: with `scoutedFog` alone there was no way to isolate the *black* tier, since it renders overlapped with (and mostly hidden under) the white one near a settlement's edge — flipping `unexploredFog` off leaves only the dark, out-of-sight tint visible.
+Three defaults changed in this pass (`terrainCullJitter`, `dragFade` off; `scoutedFog` added on) — all three were previously "always on, no way to turn off," and all three were the direct subject of an issue #20 complaint. `unexploredFog` was added afterward, on (matching prior always-on behaviour), as the white-fog counterpart to `scoutedFog`: with `scoutedFog` alone there was no way to isolate the *black* tier, since it renders overlapped with (and mostly hidden under) the white one near a settlement's edge — flipping `unexploredFog` off leaves only the dark, out-of-sight tint visible. `realmBorders` was added later still, once the live perf panel (below) made it visible that `borderedHexCount` had no toggle at all — the border wash/stroke drew unconditionally whenever a hex was owned, so there was no way to isolate it from the fog tiers it renders alongside. The table above (and `FogDebugPanel`'s own toggle order) is grouped to match the live perf panel's row order — Terrain, then the three per-hex fog/border branches in the order they run (Unexplored, Realm borders, Scouted), then Blob cache — rather than the order flags were introduced, so a label here and the row it moves in the panel below are easy to line up.
 
 ## Live performance panel
 
@@ -259,8 +260,8 @@ Three defaults changed in this pass (`terrainCullJitter`, `dragFade` off; `scout
 |---|---|---|---|
 | Terrain | — | `rebuildTerrain`/`rebuildTerrainFlat`: placing or culling terrain sprites/fills | `terrainCull`, `terrainCullJitter` |
 | | Drawn / Culled (fog) | Hex counts either side of the terrain-cull cutoff (real counters, incremented in the same branch the flag gates) | `terrainCull` |
-| Borders + fog (per-hex) | — | `rebuildBordersAndFog`'s per-hex loop (ownership borders, fog-tier decisions), excluding the blob cache render | `distJitter`, `scoutedTintFade`, `scoutedFog`, `unexploredFog`, `flatFillOnly`, `blobsOnly` |
-| | Unexplored (white) fog / Realm borders / Scouted (dark) fog | Hex counts per branch of that loop — or, when the deep-fog background shortcut (problem 4) fired, a single line saying so instead, since the loop never ran | `unexploredFog` / — / `scoutedFog` |
+| Borders + fog (per-hex) | — | `rebuildBordersAndFog`'s per-hex loop (ownership borders, fog-tier decisions), excluding the blob cache render | `distJitter`, `scoutedTintFade`, `scoutedFog`, `unexploredFog`, `realmBorders`, `flatFillOnly`, `blobsOnly` |
+| | Unexplored (white) fog / Realm borders / Scouted (dark) fog | Hex counts per branch of that loop — or, when the deep-fog background shortcut (problem 4) fired, a single line saying so instead, since the loop never ran | `unexploredFog` / `realmBorders` / `scoutedFog` |
 | Blob cache (blur render) | — | `refreshFogBlobCache`: building the blob sprite layer plus, when not mid-drag, the offscreen blur render pass — usually the largest single cost, roughly proportional to blob count | `blobJitter`, and indirectly anything that changes how many blobs get placed (`scoutedFog`, `unexploredFog`, `flatFillOnly`, `blobsOnly`) |
 | | Sprite sync / Blur render pass | Two actually-measured sub-timings — `syncFogBlobs` (pooled-sprite placement) vs. the offscreen `RenderTexture` render (the real GPU blur cost) | (same as parent) |
 | Markers | — | `rebuildMarkers`: settlement/island/fleet icons | — |

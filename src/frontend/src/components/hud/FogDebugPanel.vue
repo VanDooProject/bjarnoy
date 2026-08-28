@@ -17,14 +17,18 @@ const emit = defineEmits<{ change: [] }>();
 // two stay in sync without HexMapRenderer.ts importing Vue at all.
 const flags = reactive(fogDebugFlags);
 
+// Labelled to match FogPerfPanel's row/sub-row names ("Terrain", "Unexplored
+// (white) fog", "Realm borders", "Scouted (dark) fog", "Blob cache") so a
+// toggle here and the number it moves there are easy to line up.
 const LABELS: Record<keyof FogDebugFlags, string> = {
   distJitter: 'Distance jitter (fog ramp)',
-  terrainCullJitter: 'Distance jitter (terrain cull, off by default)',
-  scoutedTintFade: 'Scouted-tint fade (sight edge)',
-  scoutedFog: 'Scouted (dark) fog enabled',
+  terrainCull: 'Terrain: cull past fog cutoff',
+  terrainCullJitter: 'Terrain: cull distance jitter (off by default)',
   unexploredFog: 'Unexplored (white) fog enabled',
-  blobJitter: 'Blob position/size jitter',
-  terrainCull: 'Cull terrain past fog cutoff',
+  realmBorders: 'Realm borders enabled',
+  scoutedFog: 'Scouted (dark) fog enabled',
+  scoutedTintFade: 'Scouted (dark) fog: tint fade (sight edge)',
+  blobJitter: 'Blob cache: position/size jitter',
   flatFillOnly: 'Skip blob/flat-fill overlap',
   blobsOnly: 'Blob-only mist (no flat fill)',
   dragFade: 'Fade fog back in after drag (off by default)',
