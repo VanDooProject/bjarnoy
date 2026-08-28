@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -136,6 +137,93 @@ public sealed class WorldService(
 
     public Task<int> GetPlayerCountAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Settlements.AsNoTracking().CountAsync(s => s.WorldId == worldId, cancellationToken);
+
+    /// <summary>
+    /// Updates a world's admin-controlled settings: speed factor, start date,
+    /// stop-join toggle, endboss instant. Null fields are left unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Only the settings themselves are touched here — threading the speed
+    /// factor through build/production math, and ticking a settlement's
+    /// resources to "now" under the old factor before a change takes effect,
+    /// lives in <c>Bjarnoy.Domain.Economy</c>, not here.
+    /// </remarks>
+    public async Task<WorldEntity?> UpdateAdminSettingsAsync(
+        Guid worldId,
+        double? speedFactor,
+        bool hasStartsAt,
+        DateTimeOffset? startsAt,
+        bool? joinsClosed,
+        bool hasEndbossAt,
+        DateTimeOffset? endbossAt,
+        CancellationToken cancellationToken = default)
+    {
+        var world = await _dbContext.Worlds
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+
+        if (world is null)
+        {
+            return null;
+        }
+
+        if (speedFactor is { } factor)
+        {
+            world.SpeedFactor = factor;
+        }
+
+        if (hasStartsAt)
+        {
+            world.StartsAt = startsAt;
+        }
+
+        if (joinsClosed is { } closed)
+        {
+            world.JoinsClosed = closed;
+        }
+
+        if (hasEndbossAt)
+        {
+            world.EndbossAt = endbossAt;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("World {WorldId} admin settings updated.", worldId);
+
+        return world;
+    }
+
+    /// <summary>
+    /// Transitions a world's <see cref="GameClock"/> state — the same machine
+    /// <see cref="SettlementService.SetRunStateAsync"/> drives for the
+    /// non-admin surface, exposed here too for the admin run-state endpoint.
+    /// </summary>
+    public async Task<WorldEntity?> SetRunStateAsync(
+        Guid worldId,
+        WorldRunState state,
+        TimeSpan grace = default,
+        CancellationToken cancellationToken = default)
+    {
+        var world = await _dbContext.Worlds
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+
+        if (world is null)
+        {
+            return null;
+        }
+
+        var before = world.ToClock();
+        var after = before.TransitionTo(state, _timeProvider.GetUtcNow(), grace);
+        world.ApplyClock(after);
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "World {WorldId} moved from {From} to {To}; clock offset now {Offset}.",
+            worldId, before.State, after.State, after.AccumulatedOffset);
+
+        return world;
+    }
 
     public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands

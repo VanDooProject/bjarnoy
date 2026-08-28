@@ -3,6 +3,7 @@ using Asp.Versioning;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Endpoints;
 using Bjarnoy.Api.Hosting;
+using Bjarnoy.Api.Json;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -36,6 +37,12 @@ builder.Services.AddScoped<AuthService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+
+// Lets a PATCH body (e.g. UpdateWorldSettingsRequest) distinguish "field
+// omitted" from "field sent as null" for properties that are themselves
+// nullable in the domain. See Bjarnoy.Api.Json.Optional.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new OptionalJsonConverterFactory()));
 
 // Short-lived signed access tokens plus a server-side revocable refresh token
 // (RefreshTokenEntity) — see docs/tech/backend.md, "Not in here yet: Auth".
@@ -166,6 +173,7 @@ app.MapDefaultEndpoints();
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
+app.MapAdminWorldEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot
