@@ -1776,10 +1776,17 @@ export class HexMapRenderer {
     // detail, so blurring a downsampled copy and upscaling it is visually
     // indistinguishable from blurring at full resolution, while the filter
     // pass itself (whose cost scales with pixel count) runs on a fraction of
-    // the pixels. `world`'s own scale doesn't enter into this — the container
-    // is rendered into an offscreen RenderTexture at this fixed factor
-    // regardless of camera zoom.
-    const scale = FOG_BLOB_CACHE_SCALE;
+    // the pixels. FOG_BLOB_CACHE_SCALE is calibrated in *screen* pixels, so
+    // it's multiplied by camera.zoom here rather than applied to the bbox's
+    // world-unit size directly: the visible bbox's world-space extent is
+    // viewport-size / zoom, so a fixed world-space factor rendered far more
+    // texture pixels than the screen could ever show at a low zoom (a
+    // zoomed-out world-map pan spans a huge world-space area for the same
+    // screen-sized viewport) — up to ~64x oversampled at the minimum zoom.
+    // Scaling by zoom cancels that out, so the rendered texture tracks
+    // viewport size (world bbox size * zoom) rather than world-space extent,
+    // at every zoom level.
+    const scale = FOG_BLOB_CACHE_SCALE * this.camera.zoom;
     const texWidth = Math.max(1, Math.ceil(width * scale));
     const texHeight = Math.max(1, Math.ceil(height * scale));
 
