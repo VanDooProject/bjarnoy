@@ -227,8 +227,12 @@ const SOURCES = {
     fishinghut: buildPlain(ROOT_BUILDING_PLAIN, 'fishinghutbuilding_'),
     magictower: buildPlain(ROOT_BUILDING_PLAIN, 'magictower_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string>>>,
-  /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own. */
-  coastalBase: buildPlain(ROOT_TERRAIN, 'coastalwatertile_'),
+  /**
+   * Coastal water is a rendering variant of `sea`, not a `TextureKey` of its
+   * own — and the pack gives it 3 variants per orientation (plain +
+   * `variant000`/`variant001`), same shape as grass/forest's top layer.
+   */
+  coastalBase: buildIndexed(ROOT_TERRAIN, 'coastalwatertile_'),
   /** Tower isn't base/top split, so its level swap replaces the *base* texture. */
   baseIndexed: {
     tower: buildIndexed(ROOT_BUILDING_LEVELED, 'towerbuilding_'),
@@ -265,7 +269,7 @@ type RiverArtShape = 'straight' | 'bend' | 'spring' | 'confluence';
 
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
-  coastalBase: OrientationMap<Texture>;
+  coastalBase: OrientationMap<Texture[]>;
   baseIndexed: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
   top: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
   riverBase: Record<RiverArtShape, OrientationMap<Texture>>;
@@ -289,7 +293,7 @@ export function loadTileTextures(): Promise<TileTextures> {
   for (const [key, map] of Object.entries(SOURCES.base)) {
     aliasedBase[key as TextureKey] = mapOrientations(map, (o, url) => record(`base:${key}:${o}`, url));
   }
-  const aliasedCoastalBase = mapOrientations(SOURCES.coastalBase, (o, url) => record(`coastal:${o}`, url));
+  const aliasedCoastalBase = mapOrientationArrays(SOURCES.coastalBase, (o, i, url) => record(`coastal:${o}:${i}`, url));
   const aliasedBaseIndexed: Partial<Record<TextureKey, OrientationMap<string[]>>> = {};
   for (const [key, map] of Object.entries(SOURCES.baseIndexed)) {
     aliasedBaseIndexed[key as TextureKey] = mapOrientationArrays(map, (o, i, url) =>
@@ -316,7 +320,7 @@ export function loadTileTextures(): Promise<TileTextures> {
       for (const [key, map] of Object.entries(aliasedBase)) {
         base[key as TextureKey] = mapOrientations(map, (_o, alias) => resolve(alias));
       }
-      const coastalBase = mapOrientations(aliasedCoastalBase, (_o, alias) => resolve(alias));
+      const coastalBase = mapOrientationArrays(aliasedCoastalBase, (_o, _i, alias) => resolve(alias));
       const baseIndexed: TileTextures['baseIndexed'] = {};
       for (const [key, map] of Object.entries(aliasedBaseIndexed)) {
         baseIndexed[key as TextureKey] = mapOrientationArrays(map, (_o, _i, alias) => resolve(alias));
@@ -378,7 +382,8 @@ function clampIndex(index: number, length: number): number {
 export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
   const orientation = tile.orientation ?? 'SE';
   if (tile.terrain === 'sea' && tile.isCoastalWater) {
-    return textures.coastalBase[orientation];
+    const arr = textures.coastalBase[orientation];
+    return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
   const key = textureKeyFor(tile);
   const indexed = textures.baseIndexed[key];
