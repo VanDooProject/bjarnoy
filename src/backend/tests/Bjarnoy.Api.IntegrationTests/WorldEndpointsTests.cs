@@ -134,6 +134,30 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task River_tiles_survive_the_round_trip_through_the_text_encoded_column()
+    {
+        using var client = _fixture.CreateClient();
+        // Seed/radius known (Bjarnoy.Domain.Tests.RiverGenerationTests) to produce
+        // several rivers, so this doesn't depend on getting lucky with the default.
+        var world = await CreateWorldAsync(client, seed: 2024, radius: 40);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(islands);
+        var riverTiles = islands.SelectMany(i => i.RiverTiles).ToList();
+        Assert.NotEmpty(riverTiles);
+
+        var spring = riverTiles.First(t => t.Shape == "spring");
+        Assert.Empty(spring.InDirections);
+        Assert.NotNull(spring.OutDirection);
+
+        var mouth = riverTiles.First(t => t.Shape == "mouth");
+        Assert.Single(mouth.InDirections);
+        Assert.Null(mouth.OutDirection);
+    }
+
+    [Fact]
     public async Task Islands_of_an_unknown_world_are_a_404()
     {
         using var client = _fixture.CreateClient();

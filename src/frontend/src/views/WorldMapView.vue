@@ -40,9 +40,10 @@ function onHexClick() {
 <template>
   <div class="world-view">
     <WorldMapCanvas :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
-    <TopBar />
-    <HudNav />
-    <ResourceBar />
+    <TopBar>
+      <ResourceBar />
+      <HudNav />
+    </TopBar>
   </div>
 </template>
 

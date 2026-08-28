@@ -39,6 +39,14 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
 
+  <ItemGroup Label="Auth">
+    <!-- PasswordHasher<T> (PBKDF2) for account passwords. -->
+    <PackageVersion Include="Microsoft.Extensions.Identity.Core" Version="$(DotNetVersion)" />
+    <!-- JWT bearer auth for access tokens; brings System.IdentityModel.Tokens.Jwt
+         transitively, which AuthEndpoints uses to mint them. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="$(DotNetVersion)" />
+  </ItemGroup>
+
   <ItemGroup Label="Api">
     <PackageVersion Include="Asp.Versioning.Http" Version="10.2.3" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="$(DotNetVersion)" />

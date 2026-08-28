@@ -1,10 +1,15 @@
+using System.Text;
 using Asp.Versioning;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Endpoints;
 using Bjarnoy.Api.Hosting;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.ServiceDefaults;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
 // Migrator mode: this executable applies (or reports on) migrations and exits,
@@ -27,9 +32,73 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
+builder.Services.AddScoped<AuthService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+
+// Short-lived signed access tokens plus a server-side revocable refresh token
+// (RefreshTokenEntity) — see docs/tech/backend.md, "Not in here yet: Auth".
+// Jwt:SigningKey/Issuer/Audience follow the same config convention as
+// Database:ConnectionString (DatabaseOptions): appsettings.Development.json
+// has a dev default, a real deployment sets Jwt__SigningKey itself.
+//
+// None of this is needed in migrator mode: the migrator only touches the
+// database schema, never serves a request, so it must not fail to start just
+// because no JWT signing key was configured (e.g. the Docker image's CI
+// smoke test, which runs `--migrate` with no Jwt__SigningKey at all).
+if (migrationCommand == MigrationCommandKind.None)
+{
+    builder.Services.AddOptions<JwtOptions>()
+        .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+        .ValidateOnStart();
+    builder.Services.AddSingleton<JwtTokenService>();
+
+    var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
+    var jwtSigningKey = jwtSection["SigningKey"]
+        ?? throw new InvalidOperationException(
+            $"{JwtOptions.SectionName}:SigningKey is required to sign access tokens.");
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = jwtSection["Issuer"] ?? "bjarnoy",
+                ValidateAudience = true,
+                ValidAudience = jwtSection["Audience"] ?? "bjarnoy",
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey)),
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromSeconds(30),
+            };
+        });
+
+    // Token expiry is otherwise checked against the real wall clock, not the
+    // app's injected TimeProvider (the same one JwtTokenService mints tokens
+    // from) — harmless in production, where they're the same clock, but it means
+    // a test that moves TimeProvider away from "now" mints tokens that instantly
+    // read as expired or not-yet-valid. A custom LifetimeValidator keeps
+    // validation on the one clock the rest of the app uses.
+    builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+        .Configure<TimeProvider>((options, time) =>
+        {
+            options.TokenValidationParameters.LifetimeValidator = (notBefore, expires, _, parameters) =>
+            {
+                var now = time.GetUtcNow().UtcDateTime;
+                return (notBefore is null || notBefore <= now + parameters.ClockSkew)
+                    && (expires is null || expires >= now - parameters.ClockSkew);
+            };
+        });
+
+    // One role, one policy: Admin-only endpoints (issue #27) use this. Locked/
+    // banned enforcement on existing mutating endpoints is separate — see
+    // ActiveUserEndpointFilter — because anonymous play must keep working, which
+    // rules out a policy that itself demands authentication.
+    builder.Services.AddAuthorizationBuilder()
+        .AddPolicy("Admin", policy => policy.RequireRole(nameof(UserRole.Admin)));
+}
 
 // Validates the DataAnnotations on request records before a handler runs, so a
 // malformed request is a 400 with per-field detail rather than an exception from
@@ -62,8 +131,25 @@ if (databaseOptions.MigrateOnStartup)
     await scope.ServiceProvider.GetRequiredService<DatabaseMigrator>().MigrateAsync();
 }
 
+// Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD
+// if neither an Admin nor that username already exists. A no-op (with a
+// logged warning) when either variable is unset, so the app still starts
+// fine with no bootstrap admin configured — e.g. in tests.
+await using (var adminSeedScope = app.Services.CreateAsyncScope())
+{
+    var authService = adminSeedScope.ServiceProvider.GetRequiredService<AuthService>();
+    var logger = adminSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await authService.SeedAdminIfConfiguredAsync(
+        Environment.GetEnvironmentVariable("ADMIN_BOOTSTRAP_USERNAME"),
+        Environment.GetEnvironmentVariable("ADMIN_BOOTSTRAP_PASSWORD"),
+        logger);
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -77,6 +163,7 @@ var versionSet = app.NewApiVersionSet()
     .Build();
 
 app.MapDefaultEndpoints();
+app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
 

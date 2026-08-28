@@ -5,7 +5,7 @@ import type { BuildOrderResponse, IslandResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
-import type { Resources } from '../lib/map/types';
+import type { Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
 // How often live mode re-polls a settlement to pick up build-queue
@@ -30,8 +30,15 @@ export const useWorldStore = defineStore('world', {
     hud: {
       resources: emptyResources() as Resources,
       rates: emptyResources() as Resources,
+      // Issue #16 header: storage cap per resource, so each pill can show a
+      // "current / cap" and a fill-progress bar like the reference — see
+      // `WorldModel.storageCapFor`.
+      storageCap: emptyResources() as Resources,
       settlementName: '',
       level: 1,
+      // Issue #16: population, wired the same way as the other resources —
+      // current/max stock plus a rate. See `WorldModel.populationFor`.
+      population: { current: 0, max: 0, rate: 0 },
       // zip 6a: landing-page onboarding needs "how many buildings has the
       // player actually placed" — derived from the model itself (the
       // longhouse counts as the first) rather than a separately tracked
@@ -102,6 +109,17 @@ export const useWorldStore = defineStore('world', {
       // per island at this position (world map only).
       this.model.setIslands(
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
+      );
+      this.model.setRiverTiles(
+        this.islands.flatMap((island) =>
+          island.riverTiles.map((tile) => ({
+            q: tile.q,
+            r: tile.r,
+            shape: tile.shape,
+            inDirections: tile.inDirections as TileOrientation[],
+            outDirection: tile.outDirection as TileOrientation | null,
+          })),
+        ),
       );
       this.liveReady = true;
       // Every other player already in this shared world needs to be known
@@ -194,6 +212,7 @@ export const useWorldStore = defineStore('world', {
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
+        islandId: response.islandId,
       });
       this.selectedSettlementId = settlement.id;
       this.syncHud();
@@ -251,6 +270,7 @@ export const useWorldStore = defineStore('world', {
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
+        islandId: response.islandId,
       });
       this.selectedSettlementId = response.id;
       this.syncHud();
@@ -288,9 +308,11 @@ export const useWorldStore = defineStore('world', {
       if (!settlement) return;
       this.hud.resources = { ...settlement.resources };
       this.hud.rates = { ...settlement.rates };
+      this.hud.storageCap = this.model.storageCapFor(settlement.id);
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
+      this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },
     startHudSync() {
