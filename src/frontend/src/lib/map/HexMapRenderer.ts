@@ -55,8 +55,9 @@ import {
   TILE_ART_NATIVE_W,
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
+  baseTextureFor,
   loadTileTextures,
-  textureKeyFor,
+  topTextureFor,
   type TileTextures,
 } from './textures';
 
@@ -1126,9 +1127,8 @@ export class HexMapRenderer {
       const tile = worldModel.getTile(c.q, c.r);
 
       const key = coordKey(c);
-      const textureKey = textureKeyFor(tile);
-      baseEntries.set(key, { texture: textures.base[textureKey], coord: c });
-      const topTexture = textures.top[textureKey];
+      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const topTexture = topTextureFor(textures, tile);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
     }
 
