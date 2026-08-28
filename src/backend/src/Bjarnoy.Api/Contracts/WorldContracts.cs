@@ -25,7 +25,8 @@ public sealed record WorldResponse(
     DateTimeOffset CreatedAt,
     bool Joinable,
     string JoinableReason,
-    DateTimeOffset? StartsAt)
+    DateTimeOffset? StartsAt,
+    bool EndbossTriggered)
 {
     public static WorldResponse From(WorldEntity world, int islandCount, int playerCount, DateTimeOffset now)
     {
@@ -44,7 +45,8 @@ public sealed record WorldResponse(
             world.CreatedAt,
             joinability.Joinable,
             joinability.Reason.ToString().ToLowerInvariant(),
-            world.StartsAt);
+            world.StartsAt,
+            world.EndbossTriggeredAt is not null);
     }
 }
 

@@ -105,6 +105,11 @@ if (migrationCommand == MigrationCommandKind.None)
     // rules out a policy that itself demands authentication.
     builder.Services.AddAuthorizationBuilder()
         .AddPolicy("Admin", policy => policy.RequireRole(nameof(UserRole.Admin)));
+
+    // The one active poll in an otherwise lazy backend (issue #27's endboss
+    // trigger) — the migrator never serves requests, so it has no business
+    // running this. See EndbossTriggerHostedService.
+    builder.Services.AddHostedService<EndbossTriggerHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a

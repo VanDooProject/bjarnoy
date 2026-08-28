@@ -225,6 +225,65 @@ public sealed class WorldService(
         return world;
     }
 
+    /// <summary>
+    /// Fires the endboss for every world whose <see cref="WorldEntity.EndbossAt"/>
+    /// has come and has not fired yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called on a poll by <c>EndbossTriggerHostedService</c> rather than on any
+    /// read path — everything else in this backend is lazy (see
+    /// docs/tech/backend.md, "Everything is lazy"), but a world nobody happens
+    /// to read would otherwise never trigger its endboss, so this one thing
+    /// genuinely needs an active scan.
+    /// </para>
+    /// <para>
+    /// <see cref="WorldEntity.EndbossTriggeredAt"/> is the idempotency marker:
+    /// once set, a world is excluded from every later scan, so a slow poll
+    /// interval or an overlapping run can never fire the same world twice.
+    /// Joins are untouched — <see cref="WorldEntity.DetermineJoinability"/>
+    /// does not look at this field, exactly as issue #27 specifies ("joins
+    /// remain allowed" before and after).
+    /// </para>
+    /// <para>
+    /// The actual endboss event is out of scope here (a follow-up issue): this
+    /// only sets the marker and logs that it fired, which is enough for the
+    /// admin/world DTOs to show it happened.
+    /// </para>
+    /// </remarks>
+    /// <returns>The worlds whose endboss just fired.</returns>
+    public async Task<IReadOnlyList<WorldEntity>> TriggerDueEndbossesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        var due = await _dbContext.Worlds
+            .Where(w => w.EndbossAt.HasValue && !w.EndbossTriggeredAt.HasValue)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        due = [.. due.Where(w => w.EndbossAt!.Value <= now)];
+
+        if (due.Count == 0)
+        {
+            return [];
+        }
+
+        foreach (var world in due)
+        {
+            world.EndbossTriggeredAt = now;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var world in due)
+        {
+            _logger.LogInformation(
+                "World {WorldId} ({Name}) endboss triggered at {EndbossAt} (scanned at {Now}).",
+                world.Id, world.Name, world.EndbossAt, now);
+        }
+
+        return due;
+    }
+
     public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()

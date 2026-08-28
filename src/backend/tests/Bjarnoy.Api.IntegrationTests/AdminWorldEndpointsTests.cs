@@ -6,6 +6,7 @@ using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Api.Json;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -330,5 +331,49 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Equal("NotStartedYet", await refused.RejectionAsync(Ct));
+    }
+
+    [Fact]
+    public async Task The_endboss_trigger_fires_exactly_once_and_leaves_joins_open()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var endbossAt = _fixture.Factory.Time.GetUtcNow().AddHours(1);
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(
+                SpeedFactor: null, EndbossAt: Optional<DateTimeOffset?>.Of(endbossAt)),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        // Not due yet: a scan right now must not fire it.
+        var tooEarly = await TriggerDueEndbossesAsync();
+        Assert.DoesNotContain(world.Id, tooEarly);
+
+        _fixture.Factory.Time.Advance(TimeSpan.FromHours(2));
+
+        var fired = await TriggerDueEndbossesAsync();
+        Assert.Contains(world.Id, fired);
+
+        var again = await TriggerDueEndbossesAsync();
+        Assert.DoesNotContain(world.Id, again);
+
+        var list = await client.GetFromJsonAsync<List<WorldResponse>>(
+            "/api/v1/worlds", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(list!.Single(w => w.Id == world.Id).EndbossTriggered);
+
+        // Out of scope for #27, but must not regress: joins stay open.
+        await FoundSettlementAsync(client, world);
+    }
+
+    private async Task<IReadOnlyList<Guid>> TriggerDueEndbossesAsync()
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var worlds = scope.ServiceProvider.GetRequiredService<WorldService>();
+        var fired = await worlds.TriggerDueEndbossesAsync(Ct);
+        return [.. fired.Select(w => w.Id)];
     }
 }
