@@ -1,0 +1,238 @@
+<script setup lang="ts">
+// Issue #16 "ring menu on click of tile": replaces the old
+// instant-open-BuildingModal click behaviour with a radial menu of
+// contextual actions around the clicked hex, matching the mockup's bubbles
+// arranged around a tile ("Move" / "Details" / "Raze" / "Troops" style).
+// Generic on purpose: SettlementView decides *which* actions apply for a
+// given tile's state (own empty tile, own building, enemy tile, unclaimed
+// hex) and passes them in; this component only lays them out and reports a
+// selection back.
+import { computed } from 'vue';
+
+export interface RingAction {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  /** Shown as a tooltip on a disabled action, e.g. why it's unavailable. */
+  hint?: string;
+}
+
+export interface BadgeAction extends RingAction {
+  /** Second, dimmer line under `label` — e.g. label "Lv 5", sublabel "upgrade". */
+  sublabel?: string;
+}
+
+const props = defineProps<{
+  x: number;
+  y: number;
+  actions: RingAction[];
+  // Issue #16 "ring menu" target: a circular gold badge ("Lv 5" / "upgrade")
+  // floats above the ring, connected to it by a thin guide line — and in
+  // the reference, that badge *is* the upgrade control, not a separate dark
+  // bubble duplicating it in the ring below. So this is a real clickable
+  // action, not just a text label.
+  badgeAction?: BadgeAction;
+}>();
+const emit = defineEmits<{
+  select: [id: string];
+  hover: [id: string];
+  close: [];
+  // Issue #16 "mouse down on the map should close the ring so we can drag":
+  // a mousedown on the backdrop (not a bubble) closes the ring *and* hands
+  // the same PointerEvent back so the caller can immediately start a map
+  // drag from it — a plain `close` on click would only fire after the
+  // mouse is released, too late for that same gesture to become a drag.
+  outsidePointerDown: [event: PointerEvent];
+}>();
+
+// Issue #16 "ring menu": reference shows the bubbles spread well clear of
+// the tile in an orbit, not crowded around it.
+const RADIUS = 110;
+// A ring with a badge (an owned building, "Lv n upgrade") also has the
+// canvas's own floating settlement-name pill sitting right at the tile's
+// centre, underneath the ring — the same RADIUS that keeps a badge-less
+// ring feeling spread out crowds this one from both above (the badge) and
+// the middle (that pill), so it gets extra breathing room.
+const effectiveRadius = computed(() => (props.badgeAction ? RADIUS + 40 : RADIUS));
+const badgeY = computed(() => props.y - effectiveRadius.value - 34);
+// Issue #16 "ring menu" target: "connected down to the ring by a thin
+// curved guide line" — a quadratic curve from the badge's bottom edge to
+// the top of the ring track below it (a slight horizontal bow, not a
+// straight drop, to read as "curved").
+const guidePath = computed(() => {
+  if (!props.badgeAction) return '';
+  const startY = badgeY.value + 26;
+  const endY = props.y - effectiveRadius.value;
+  const midY = (startY + endY) / 2;
+  return `M ${props.x} ${startY} Q ${props.x + 16} ${midY} ${props.x} ${endY}`;
+});
+
+const positioned = computed(() => {
+  const n = props.actions.length;
+  const angleStep = 360 / Math.max(1, n);
+  // 4 actions read best as an X (NW/NE/SW/SE, like the mockup), which also
+  // happens to leave true north clear. Anything else spreads evenly
+  // starting from the top — except when a badge floats above the ring
+  // (the "Lv n upgrade" badge on an owned building): a bubble landing
+  // exactly at north then sits underneath the badge instead of beside it,
+  // so the ring is rotated half a step to move that gap to the top instead.
+  const rotationOffset = n === 4 ? 45 : props.badgeAction ? -90 + angleStep / 2 : -90;
+  const radius = effectiveRadius.value;
+  return props.actions.map((action, i) => {
+    const angleDeg = angleStep * i + rotationOffset;
+    const rad = (angleDeg * Math.PI) / 180;
+    return {
+      action,
+      left: props.x + Math.cos(rad) * radius,
+      top: props.y + Math.sin(rad) * radius,
+    };
+  });
+});
+
+function select(action: RingAction) {
+  if (action.disabled) return;
+  emit('select', action.id);
+}
+
+// Issue #16 "build (which opens another ring outside with available
+// buildings on this spot)": the outer build-category/build-building rings
+// should open as soon as the player hovers the action that leads to them —
+// not wait for a click — the way a real radial/pie menu drills down.
+// SettlementView decides which hovers actually advance the ring (only the
+// "build" root action and a category's own bubbles do); anything else is a
+// no-op there, so hovering "Upgrade" or "Raze" doesn't trigger anything.
+function hover(action: RingAction) {
+  if (action.disabled) return;
+  emit('hover', action.id);
+}
+</script>
+
+<template>
+  <div
+    class="ring-backdrop"
+    @pointerdown.self="emit('outsidePointerDown', $event)"
+    @contextmenu.prevent="emit('close')"
+  >
+    <!-- Issue #16 "ring menu": a faint orbit track under the bubbles (the
+         "ring" itself, not just floating buttons), plus the curved guide
+         line down from the badge when one is present. -->
+    <svg class="ring-svg">
+      <circle class="ring-track" :cx="x" :cy="y" :r="effectiveRadius" />
+      <path v-if="badgeAction" class="ring-guide" :d="guidePath" />
+    </svg>
+    <button
+      v-if="badgeAction"
+      class="ring-badge"
+      :class="{ disabled: badgeAction.disabled }"
+      :style="{ left: `${x}px`, top: `${badgeY}px` }"
+      :disabled="badgeAction.disabled"
+      :title="badgeAction.disabled ? badgeAction.hint : undefined"
+      @click="select(badgeAction)"
+    >
+      <span class="badge-line1">{{ badgeAction.label }}</span>
+      <span v-if="badgeAction.sublabel" class="badge-line2">{{ badgeAction.sublabel }}</span>
+    </button>
+    <button
+      v-for="p in positioned"
+      :key="p.action.id"
+      class="ring-bubble"
+      :class="{ disabled: p.action.disabled }"
+      :style="{ left: `${p.left}px`, top: `${p.top}px` }"
+      :disabled="p.action.disabled"
+      :title="p.action.disabled ? p.action.hint : undefined"
+      @click="select(p.action)"
+      @mouseenter="hover(p.action)"
+    >
+      {{ p.action.label }}
+    </button>
+  </div>
+</template>
+
+<style scoped>
+.ring-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+}
+.ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+}
+.ring-guide {
+  fill: none;
+  stroke: rgba(255, 197, 92, 0.4);
+  stroke-width: 2;
+}
+.ring-badge {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background: var(--gold);
+  border: none;
+  color: #201405;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.ring-badge:hover:not(.disabled) {
+  filter: brightness(1.08);
+}
+.ring-badge.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.badge-line1 {
+  font-size: 16px;
+  font-weight: 700;
+}
+.badge-line2 {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+.ring-bubble {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  /* Reference: a plain circle, same size regardless of label length — not
+     a pill that stretches with its text. */
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(8, 18, 26, 0.88);
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.ring-bubble:hover:not(.disabled) {
+  color: var(--gold);
+}
+.ring-bubble.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+</style>

@@ -70,6 +70,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RiverTiles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("StartPositions")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -114,6 +118,38 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.ToTable("placed_buildings", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("refresh_tokens", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
@@ -187,12 +223,17 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
 
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("IslandId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("WorldId", "OwnerId")
                         .IsUnique();
@@ -201,6 +242,94 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.ToTable("settlements", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NormalizedUserName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("StatusChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedUserName")
+                        .IsUnique();
+
+                    b.ToTable("users", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000001"),
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            NormalizedUserName = "abandoned",
+                            PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            Role = 0,
+                            Status = 0,
+                            UserName = "Abandoned"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000002"),
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            NormalizedUserName = "barbarians",
+                            PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            Role = 0,
+                            Status = 0,
+                            UserName = "Barbarians"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000003"),
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            NormalizedUserName = "endboss",
+                            PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            Role = 0,
+                            Status = 0,
+                            UserName = "Endboss"
+                        });
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
@@ -217,6 +346,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("EndbossAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("EndbossTriggeredAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("ForestRockiness")
                         .HasColumnType("REAL");
 
@@ -231,6 +366,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("IslandMinRadius")
                         .HasColumnType("REAL");
+
+                    b.Property<bool>("JoinsClosed")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("INTEGER");
@@ -260,6 +398,14 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("Seed")
                         .HasColumnType("INTEGER");
+
+                    b.Property<double>("SpeedFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(1.0);
+
+                    b.Property<DateTimeOffset?>("StartsAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
@@ -305,12 +451,29 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.IslandEntity", "Island")
                         .WithMany()
                         .HasForeignKey("IslandId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Owner")
+                        .WithMany("Settlements")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
@@ -321,6 +484,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Navigation("Island");
 
+                    b.Navigation("Owner");
+
                     b.Navigation("World");
                 });
 
@@ -329,6 +494,13 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Buildings");
 
                     b.Navigation("Queue");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
+                {
+                    b.Navigation("RefreshTokens");
+
+                    b.Navigation("Settlements");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>

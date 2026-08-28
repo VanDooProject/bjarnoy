@@ -50,6 +50,22 @@ public class SettlementEntity
     /// </summary>
     public required string OwnerId { get; set; }
 
+    /// <summary>
+    /// Real, relational ownership: the account this settlement belongs to.
+    /// Required — every settlement has one, even anonymous/unclaimed play,
+    /// which is owned by the reserved <see cref="SystemUserIds.Abandoned"/>
+    /// system user rather than left ownerless (see
+    /// <c>SettlementService.FoundAsync</c>). Reassigned from that system user
+    /// to a real account at registration when a client's existing local id
+    /// (<see cref="OwnerId"/>) matches one or more settlements — see
+    /// <c>AuthService.RegisterAsync</c> — not by founding itself, which stays
+    /// anonymous-capable. <see cref="OwnerId"/>/<see cref="OwnerName"/> above
+    /// are unrelated legacy client-local-id fields that stay as-is either way.
+    /// </summary>
+    public Guid UserId { get; set; }
+
+    public UserEntity? Owner { get; set; }
+
     /// <summary>Hex the longhouse stands on.</summary>
     public int CentreQ { get; set; }
 

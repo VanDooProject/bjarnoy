@@ -20,6 +20,9 @@ public enum FoundingRejection
     TooCloseToNeighbour,
     WorldFull,
     AlreadyFounded,
+    WorldNotActive,
+    JoinsClosed,
+    NotStartedYet,
 }
 
 public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntity? Settlement = null)
@@ -112,9 +115,19 @@ public sealed class SettlementService(
         var settlementCount = await _dbContext.Settlements
             .CountAsync(s => s.WorldId == worldId, cancellationToken).ConfigureAwait(false);
 
-        if (settlementCount >= world.MaxPlayers)
+        // Same rule the public world listing derives from WorldEntity.DetermineJoinability,
+        // so a world that stops accepting joins there also stops accepting them here.
+        var joinability = world.DetermineJoinability(settlementCount, _timeProvider.GetUtcNow());
+        if (!joinability.Joinable)
         {
-            return new FoundingResult(FoundingRejection.WorldFull);
+            return new FoundingResult(joinability.Reason switch
+            {
+                JoinableReason.WorldNotActive => FoundingRejection.WorldNotActive,
+                JoinableReason.JoinsClosed => FoundingRejection.JoinsClosed,
+                JoinableReason.NotStartedYet => FoundingRejection.NotStartedYet,
+                JoinableReason.Full => FoundingRejection.WorldFull,
+                _ => FoundingRejection.WorldFull,
+            });
         }
 
         // Spacing is checked in memory against this world's centres: the
@@ -140,6 +153,7 @@ public sealed class SettlementService(
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+        production *= world.SpeedFactor;
 
         var settlement = new SettlementEntity
         {
@@ -148,6 +162,12 @@ public sealed class SettlementService(
             Name = name,
             OwnerName = ownerName,
             OwnerId = ownerId,
+            // Anonymous founding — the only path today — has no real account
+            // yet, but UserId is required, so it starts out owned by the
+            // reserved "Abandoned" system user. AuthService.RegisterAsync
+            // reassigns it to a real account when the client later registers
+            // with this same OwnerId.
+            UserId = SystemUserIds.Abandoned,
             FoundedAt = now,
         };
 
@@ -216,7 +236,7 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var result = settlement.ToDomain().SettleTo(now);
+        var result = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor);
         if (result.Changed)
         {
             settlement.ApplyDomain(result.Settlement);
@@ -263,10 +283,10 @@ public sealed class SettlementService(
         // Settle first so the decision sees the queue and stock as of now: a
         // build that finished a minute ago must free its slot and count towards
         // production.
-        var settled = settlement.ToDomain().SettleTo(now).Settlement;
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
 
         var terrain = new TerrainSampler(settlement.World.ToGenerationOptions()).TerrainAt(coord);
-        var decision = settled.PlanBuild(type, coord, terrain, now, Guid.CreateVersion7());
+        var decision = settled.PlanBuild(type, coord, terrain, now, Guid.CreateVersion7(), settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {
@@ -285,6 +305,59 @@ public sealed class SettlementService(
             settlementId, type, decision.Order!.TargetLevel, coord, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
+    /// <summary>
+    /// Re-rates every settlement in a world for a changed speed factor: each is
+    /// settled to "now" under the old factor first — so builds already due and
+    /// resources already accrued are locked in exactly as they were — and only
+    /// then re-rated to produce at the new factor from now on.
+    /// </summary>
+    /// <remarks>
+    /// Called by the admin settings endpoint before the new
+    /// <see cref="WorldEntity.SpeedFactor"/> is persisted on the world; without
+    /// this, a settlement's stored <c>RatePerHour</c> would keep the old
+    /// factor baked in until its next building completion happened to
+    /// recompute it.
+    /// </remarks>
+    public async Task RetuneSpeedAsync(
+        Guid worldId,
+        double oldFactor,
+        double newFactor,
+        CancellationToken cancellationToken = default)
+    {
+        var world = await _dbContext.Worlds
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+
+        if (world is null)
+        {
+            return;
+        }
+
+        var clock = world.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var settlements = await _dbContext.Settlements
+            .Include(s => s.Buildings)
+            .Include(s => s.Queue)
+            .Where(s => s.WorldId == worldId)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var entity in settlements)
+        {
+            var settled = entity.ToDomain().SettleTo(now, oldFactor).Settlement;
+            var (production, capacity) = settled.CurrentTotals(newFactor);
+            entity.ApplyDomain(settled with { Resources = settled.Resources.WithRate(production, capacity, now) });
+        }
+
+        if (settlements.Count > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        _logger.LogInformation(
+            "World {WorldId} retuned from speed {Old} to {New} across {Count} settlement(s).",
+            worldId, oldFactor, newFactor, settlements.Count);
     }
 
     /// <summary>Moves a world between run states, optionally crediting grace.</summary>

@@ -6,7 +6,7 @@ import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
 
 const props = defineProps<{ worldModel: WorldModel; playerId: string }>();
-const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile] }>();
+const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }] }>();
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -15,7 +15,7 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   mode: 'world',
   worldModel: props.worldModel,
   playerId: props.playerId,
-  onHexClick: (coord, tile) => emit('hex-click', coord, tile),
+  onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
 });
 
 // FogDebugPanel (WorldMapView.vue, ?debug=1) needs to force a rebuild after

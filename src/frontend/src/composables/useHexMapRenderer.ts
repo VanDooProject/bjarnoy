@@ -22,6 +22,12 @@ export function useHexMapRenderer(
     const { width, height } = container.getBoundingClientRect();
     await r.mount(canvas, Math.max(1, width), Math.max(1, height));
     renderer.value = r;
+    // Real lifecycle signal for "the renderer is mounted and has drawn its
+    // first frame" — e.g. e2e tests wait on this instead of a guessed
+    // timeout, since there's otherwise nothing in the DOM to observe. Not a
+    // test-only branch: it's an honest reflection of composable state that
+    // any consumer (e.g. a CSS fade-in) could use.
+    container.dataset.mapReady = 'true';
 
     resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -36,6 +42,7 @@ export function useHexMapRenderer(
     resizeObserver?.disconnect();
     renderer.value?.destroy();
     renderer.value = null;
+    delete containerRef.value?.dataset.mapReady;
   });
 
   return { renderer };

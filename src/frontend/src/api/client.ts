@@ -1,12 +1,15 @@
 import { API_BASE_URL } from '../config';
 import type {
+  AdminWorldResponse,
   CreateWorldRequest,
   FoundSettlementRequest,
   IslandResponse,
   ProblemDetails,
   QueueBuildRequest,
+  SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
+  UpdateWorldSettingsRequest,
   WorldResponse,
 } from './types';
 
@@ -21,13 +24,44 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// The auth store wires these three hooks up on import (see `stores/auth.ts`)
+// so this module can attach the access token and react to auth failures
+// without importing the store directly — a store importing `api` to make
+// calls and `api` importing the store back would be circular.
+export const authHooks: {
+  getAccessToken: () => string | null;
+  refreshAccessToken: () => Promise<boolean>;
+  onAccountLocked: () => void;
+} = {
+  getAccessToken: () => null,
+  refreshAccessToken: async () => false,
+  onAccountLocked: () => {},
+};
+
+async function request<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
+  const accessToken = authHooks.getAccessToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...init?.headers,
+    },
   });
+
+  // A 401 on an authenticated call means the access token has expired (they
+  // are short-lived by design). Try the refresh token once and, if that
+  // works, retry this same call exactly once more — never a loop.
+  if (res.status === 401 && allowRefresh && accessToken) {
+    const refreshed = await authHooks.refreshAccessToken();
+    if (refreshed) return request<T>(path, init, false);
+  }
+
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
+    if (res.status === 403 && (problem as { error?: string } | undefined)?.error === 'user_locked') {
+      authHooks.onAccountLocked();
+    }
     throw new ApiError(res.status, problem);
   }
   if (res.status === 204) return undefined as T;
@@ -51,6 +85,17 @@ export const api = {
     request<SettlementResponse>(`/settlements/${settlementId}`),
   queueBuild: (settlementId: string, body: QueueBuildRequest) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListWorlds: () => request<AdminWorldResponse[]>('/admin/worlds'),
+  adminUpdateWorldSettings: (worldId: string, body: UpdateWorldSettingsRequest) =>
+    request<AdminWorldResponse>(`/admin/worlds/${worldId}/settings`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminSetWorldRunState: (worldId: string, body: SetWorldRunStateRequest) =>
+    request<AdminWorldResponse>(`/admin/worlds/${worldId}/run-state`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

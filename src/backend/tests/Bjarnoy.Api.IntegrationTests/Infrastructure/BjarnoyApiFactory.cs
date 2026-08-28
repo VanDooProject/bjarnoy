@@ -1,3 +1,4 @@
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -75,6 +76,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// <summary>The marker in the stub <c>index.html</c>, asserted by the fallback tests.</summary>
     public const string SpaStubMarker = "bjarnoy-spa-stub";
 
+    /// <summary>Fixed test signing key — long enough for HS256's minimum key size.</summary>
+    public const string TestSigningKey = "integration-test-signing-key-do-not-use-in-production-0123456789";
+
     /// <summary>Applies migrations, exactly as a deployment's migrator step would.</summary>
     public async Task MigrateAsync(CancellationToken cancellationToken = default)
     {
@@ -99,6 +103,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         builder.UseSetting($"{DatabaseOptions.SectionName}:Provider", _provider.ToString());
         builder.UseSetting($"{DatabaseOptions.SectionName}:ConnectionString", _connectionString);
         builder.UseSetting($"{DatabaseOptions.SectionName}:MigrateOnStartup", "false");
+
+        // A fixed key so tokens minted by one test are still valid tokens (not
+        // that any test relies on that) and so the app has something to sign
+        // with — Program.cs requires Jwt:SigningKey to be set, same as it
+        // requires a database connection string.
+        builder.UseSetting($"{JwtOptions.SectionName}:SigningKey", TestSigningKey);
 
         // Health endpoints are opt-in outside development; the tests assert on them.
         builder.UseSetting("ExposeHealthChecks", "true");

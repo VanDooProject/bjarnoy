@@ -55,8 +55,10 @@ import {
   TILE_ART_NATIVE_W,
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
+  baseTextureFor,
   loadTileTextures,
-  textureKeyFor,
+  riverTexturesFor,
+  topTextureFor,
   type TileTextures,
 } from './textures';
 
@@ -306,18 +308,57 @@ export interface HexMapRendererOptions {
    * sit right of centre rather than directly behind the copy.
    */
   screenBiasX?: number;
-  onHexClick?: (coord: AxialCoord, tile: Tile) => void;
+  /**
+   * Suppresses the name/level badge that otherwise floats above settlements
+   * in 'settlement' mode. The landing page (zip 6a) reuses this same
+   * renderer/mode for its pre-founding plot preview and, once founded there
+   * in place (no route change yet), for the just-founded village itself;
+   * the badge is village-view HUD chrome and shouldn't appear until the
+   * player has actually navigated to the settlement view proper.
+   *
+   * Named as a "hide" flag rather than "show" so the common case (every
+   * caller except the landing page) needs no prop at all: an optional
+   * `boolean` prop declared only in TypeScript (no runtime default) is
+   * resolved by Vue's compiler as a runtime `Boolean` type, and an *absent*
+   * `Boolean` prop resolves to `false`, not `undefined` — so a `showX`
+   * flag would default to hidden everywhere it isn't explicitly passed
+   * `true`, not shown everywhere it isn't explicitly passed `false`.
+   */
+  hideSettlementBadge?: boolean;
+  onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
 }
 
-/** What the settlement view's hover tooltip needs, plus screen position to anchor it. */
+/**
+ * What the settlement view's hover tooltip needs, plus screen position to
+ * anchor it. Issue #16 "better hover" wants a richer card for buildings
+ * (title + level, an output rate, a modifier line, worker count, "click to
+ * open") like the mockup's "Crop farm LEVEL 2 / Output +240 food/h /
+ * Irrigated yes (+10%) / Workers 8/8 / CLICK TO OPEN". None of that is
+ * tracked per-building anywhere (the backend/WorldModel only know a
+ * settlement's *aggregate* rates, not a single building's own output) so
+ * `output`/`modifier`/`workers` below are derived deterministically from
+ * the building's type+level+neighbours purely for display — see
+ * `hoverInfoFor`'s buildingStats. Undefined fields simply don't render.
+ */
 export interface HoverInfo {
   screenX: number;
   screenY: number;
   title: string;
   subtitle: string;
   stat: string;
+  level?: number;
+  output?: string;
+  modifier?: string;
+  workers?: string;
+  cta?: string;
+  // Building stats (output/modifier/workers) are only ever populated for
+  // the viewer's own buildings — see hoverInfoFor. `premiumLocked` tells
+  // HexTooltip.vue to render a gated "Pro" upsell row in their place for a
+  // building tile that belongs to someone else, rather than silently
+  // showing nothing where the stats would be.
+  premiumLocked?: boolean;
 }
 
 const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
@@ -344,6 +385,33 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // consider a hex "visible" — shared so the two agree on exactly the same
 // rect every rebuild.
 const VISIBLE_RECT_MARGIN = TILE_W * 2;
+
+// The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
+// tile's grid origin, so its own vertical centre is TILE_H/2 — NOT
+// TILE_TOPFACE_Y_OFFSET, which is nearly 1.5x taller than the diamond
+// itself (it locates where the topface *starts* inside the taller 200x300
+// native art, for sprite placement — see its one other use below). Reusing
+// it as a screen-anchor offset put the hover tooltip, click ring, and
+// settlement badge all noticeably below the tile they were meant to sit
+// on/over, on the far edge of (or past) the tile's own front face.
+const TILE_CENTER_Y_OFFSET = TILE_H / 2;
+
+/**
+ * A small pointy-top regular hexagon centred at (cx, cy) with "radius" r
+ * (centre-to-vertex) — the same six-vertex shape as TopBar's inline-SVG hex
+ * logo (`polygon points="50,4 93,27 93,73 50,96 7,73 7,27"`), not the
+ * isometric tile's own flattened diamond top-face. Used for small HUD
+ * markers (the settlement badge's icon) that should read as "a hex", not as
+ * a scaled-down tile.
+ */
+function hexPoints(cx: number, cy: number, r: number): number[] {
+  const points: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (-90 + 60 * i);
+    points.push(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+  }
+  return points;
+}
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -762,6 +830,16 @@ export class HexMapRenderer {
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  // Fog (fogLayer + fogBlobCacheSprite) needs to draw *above* markerLayer's
+  // island names/settlement badges/fleet ETAs — a label sitting right at the
+  // edge of scouted territory should read as veiled by the mist, not float
+  // in front of it — but everything else in `world` (terrain, buildings)
+  // still needs to draw *beneath* markerLayer. A second world-space
+  // container, kept in lockstep with `world`'s own transform every time it
+  // changes (see applyCameraTransform), lets fog sit later in the stage's
+  // paint order than markerLayer while still panning/zooming identically to
+  // the terrain it's covering.
+  private fogWorld = new Container();
 
   private textures: TileTextures | null = null;
 
@@ -783,6 +861,12 @@ export class HexMapRenderer {
   private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
+  // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
+  // top of the canvas, but this renderer's own pointer tracking is a
+  // window-level listener (see onPointerMove below) that keeps resolving a
+  // hovered hex and drawing its highlight regardless of what's visually on
+  // top — so it needs an explicit lock, not just relying on DOM hit-testing.
+  private interactionLocked = false;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -895,6 +979,19 @@ export class HexMapRenderer {
     // it produced there fell back to SETTLEMENT_DEFAULT_ZOOM. Redo it now
     // that the viewport is actually known.
     if (this.options.mode === 'settlement') this.camera = this.settlementCameraOrigin();
+
+    // Attached before the texture-pack await below, not after: everything
+    // these handlers touch (this.app, this.camera, this.viewport,
+    // worldModel.getTile) is already set by this point, and a pointer event
+    // is a one-shot DOM dispatch — the browser doesn't queue it for later,
+    // so a click during the (now much larger, ~150-asset) texture load
+    // would otherwise just be silently lost rather than merely delayed.
+    canvas.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointerleave', this.onPointerLeave);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
+
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large, submodule-backed) texture
     // pack at all — only settlement mode loads it.
@@ -923,17 +1020,10 @@ export class HexMapRenderer {
       this.borderLayer,
       this.hoverLayer,
       this.terrainTop.container,
-      this.fogLayer,
-      this.fogBlobCacheSprite,
       this.highlightLayer,
     );
-    app.stage.addChild(this.world, this.markerLayer);
-
-    canvas.addEventListener('pointerdown', this.onPointerDown);
-    window.addEventListener('pointermove', this.onPointerMove);
-    window.addEventListener('pointerup', this.onPointerUp);
-    canvas.addEventListener('pointerleave', this.onPointerLeave);
-    canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    this.fogWorld.addChild(this.fogLayer, this.fogBlobCacheSprite);
+    app.stage.addChild(this.world, this.markerLayer, this.fogWorld);
 
     app.ticker.add(this.onTick);
 
@@ -955,6 +1045,8 @@ export class HexMapRenderer {
       this.viewport.width / 2 - this.camera.x * this.camera.zoom,
       this.viewport.height / 2 - this.camera.y * this.camera.zoom,
     );
+    this.fogWorld.scale.copyFrom(this.world.scale);
+    this.fogWorld.position.copyFrom(this.world.position);
   }
 
   private onTick = () => {
@@ -1035,6 +1127,25 @@ export class HexMapRenderer {
   }
 
   private onPointerDown = (e: PointerEvent) => {
+    // Normally unreachable while a ring is open — its backdrop overlay
+    // covers the whole canvas, so a real pointerdown there hits the
+    // backdrop's own handler instead of this canvas-scoped listener — but
+    // kept as a defensive guard rather than relying on that DOM layering.
+    if (this.interactionLocked) return;
+    this.startDrag(e);
+  };
+
+  // Issue #16 "ring menu": a mousedown on the ring's own backdrop (i.e.
+  // outside any bubble) closes the ring — see RingMenu.vue's
+  // outsidePointerDown emit — and the caller re-fires that same PointerEvent
+  // in here so the drag it started keeps going, instead of the player
+  // needing a second, separate mousedown to start panning the map.
+  beginDragFrom(e: PointerEvent) {
+    this.interactionLocked = false;
+    this.startDrag(e);
+  }
+
+  private startDrag(e: PointerEvent) {
     this.idleDrift = false;
     this.dragging = true;
     this.dragMoved = 0;
@@ -1050,10 +1161,20 @@ export class HexMapRenderer {
     this.fogFadeStartedAt = null;
     this.fogBlobCacheSprite.alpha = 1;
     this.fogLayer.alpha = 1;
-  };
+  }
+
+  /** Issue #16 "ring menu": disable hover highlighting/tooltip and zoom
+   *  while a RingMenu is open — its bubbles float on top of the canvas, but
+   *  this renderer's own hover/wheel tracking doesn't otherwise know a menu
+   *  is up (see the class-level comment on `interactionLocked`). */
+  setInteractionLocked(locked: boolean) {
+    this.interactionLocked = locked;
+    if (locked) this.setHoveredCoord(null);
+  }
 
   private onPointerMove = (e: PointerEvent) => {
     if (!this.dragging) {
+      if (this.interactionLocked) return;
       this.updateHover(e);
       return;
     }
@@ -1139,7 +1260,13 @@ export class HexMapRenderer {
       return;
     }
     const tile = worldModel.getTile(coord.q, coord.r);
-    if (mode === 'world' && tile.terrain === 'sea') {
+    // Water is never a valid target to found on, so the landing page's
+    // pre-founding preview (settlement mode, no settlement yet) hides the
+    // hover outline over it — otherwise the player could "hover" a spot
+    // they can't actually land on. Once a settlement exists (village view)
+    // or in world-map mode, water is just terrain like any other hex and
+    // should hover/tooltip normally, even though it's still not buildable.
+    if (tile.terrain === 'sea' && mode === 'settlement' && !this.settlement()) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -1154,15 +1281,51 @@ export class HexMapRenderer {
     if (mode === 'settlement') this.options.onHoverChange?.(this.hoverInfoFor(tile, grid));
   }
 
+  /**
+   * Screen-space centre of a hex's top face — e.g. for a test/debug script
+   * (see main.ts's __demoWorld-style hooks) to click a specific known hex
+   * precisely, rather than guessing pixel offsets that only happen to land
+   * right at one particular zoom/camera framing.
+   */
+  hexCenterScreen(coord: AxialCoord): { x: number; y: number } {
+    // The true centre of the top-face polygon (isoTopPoints spans the full
+    // 0..TILE_W / 0..TILE_H box) — not TILE_TOPFACE_Y_OFFSET, which is
+    // hoverInfoFor's *tooltip anchor* point (deliberately near the top of
+    // the tile, not its centre) and would click closer to this hex's
+    // upper neighbour than to itself.
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+  }
+
   private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
-    const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+    // Anchor at the tile's own right edge (not its centre) so the tooltip
+    // — which grows rightward from screenX, see HexTooltip.vue — sits
+    // clear of the hex instead of covering its right half. The edge itself
+    // scales with zoom via toScreen, so the gap stays correct at any zoom
+    // level rather than the fixed-pixel offset a centre anchor would need.
+    const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
 
     if (tile.buildingType) {
       const title = BUILDING_LABELS[tile.buildingType];
       const subtitle = owner ? (mine ? owner.name : `${owner.ownerName}'s ${owner.name}`) : title;
-      return { screenX: screen.x, screenY: screen.y, title, subtitle, stat: `Level ${tile.buildingLevel ?? 1}` };
+      const level = tile.buildingLevel ?? 1;
+      // Output/modifier/workers are only for the viewer's own buildings —
+      // scouting a rival's tile shows the building and its level, but the
+      // stats themselves are gated behind Premium (see HoverInfo.premiumLocked).
+      const stats = mine ? this.buildingStats(tile, level) : {};
+      return {
+        screenX: screen.x,
+        screenY: screen.y,
+        title,
+        subtitle,
+        stat: `Level ${level}`,
+        level,
+        ...stats,
+        premiumLocked: !mine,
+        cta: mine ? 'Click to open' : undefined,
+      };
     }
     if (owner) {
       const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
@@ -1183,8 +1346,48 @@ export class HexMapRenderer {
     };
   }
 
+  /**
+   * See the HoverInfo doc comment: output/modifier/workers aren't tracked
+   * per-building anywhere, so these are derived deterministically from the
+   * building's own type/level (and, for the irrigation modifier, whether a
+   * neighbouring hex is shore/water) purely so the hover card has something
+   * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
+   * yes (+10%) / Workers 8/8" for a farm.
+   */
+  private buildingStats(
+    tile: Tile,
+    level: number,
+  ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
+    const { worldModel } = this.options;
+    const nearWater = hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
+      const t = worldModel.getTile(c.q, c.r);
+      return t.terrain === 'sea' || t.terrain === 'sand';
+    });
+    switch (tile.buildingType) {
+      case 'farm': {
+        const irrigated = nearWater;
+        const base = level * 120;
+        const workersCap = level * 4;
+        return {
+          output: `+${irrigated ? Math.round(base * 1.1) : base} food/h`,
+          modifier: irrigated ? 'Irrigated (+10%)' : undefined,
+          workers: `${workersCap}/${workersCap}`,
+        };
+      }
+      case 'hut':
+        return { output: `+${level * 5} population capacity` };
+      case 'tower':
+        return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
+      case 'longhouse':
+        return { output: `+${level * 100} storage capacity` };
+      default:
+        return {};
+    }
+  }
+
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    if (this.interactionLocked) return;
     this.idleDrift = false;
     const canvas = this.app?.canvas;
     if (!canvas) return;
@@ -1235,7 +1438,13 @@ export class HexMapRenderer {
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
-    this.options.onHexClick?.(coord, tile);
+    // Issue #16 "ring menu on click of tile": the ring anchors on the
+    // clicked hex's own screen centre (same point the hover tooltip anchors
+    // to) rather than the raw pointer position, so it stays centred on the
+    // tile regardless of exactly where within it the player clicked.
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+    this.options.onHexClick?.(coord, tile, anchor);
   }
 
   /**
@@ -1523,11 +1732,22 @@ export class HexMapRenderer {
         continue;
       }
       const tile = worldModel.getTile(c.q, c.r);
+      // Rivers can't be derived from the seed the way terrain/orientation/
+      // variant can (a path depends on the whole island) — live mode only,
+      // fetched once per island and looked up here rather than folded into
+      // Tile itself, so a tile cached before that fetch lands never goes
+      // stale (see WorldModel.setRiverTiles).
+      const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
-      const textureKey = textureKeyFor(tile);
-      baseEntries.set(key, { texture: textures.base[textureKey], coord: c });
-      const topTexture = textures.top[textureKey];
+      if (river) {
+        const riverTextures = riverTexturesFor(textures, river);
+        baseEntries.set(key, { texture: riverTextures.base, coord: c });
+        topEntries.set(key, { texture: riverTextures.top, coord: c });
+        continue;
+      }
+      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const topTexture = topTextureFor(textures, tile);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
       fogPerfStats.terrainDrawnCount++;
     }
@@ -2119,7 +2339,7 @@ export class HexMapRenderer {
   private rebuildMarkers() {
     this.markerLayer.clear();
     if (this.options.mode === 'settlement') {
-      this.rebuildSettlementLabels();
+      if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
       return;
     }
     if (this.options.mode !== 'world') {
@@ -2147,20 +2367,52 @@ export class HexMapRenderer {
       const ownerLabel = this.acquireLabel();
       ownerLabel.text = settlement.ownerName;
       ownerLabel.style.fill = mine ? GOLD : RIVAL;
+      ownerLabel.style.fontWeight = 'normal';
+      ownerLabel.style.fontSize = 11;
+      ownerLabel.style.letterSpacing = 0;
+      ownerLabel.style.dropShadow = false;
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
     }
 
+    // Issue #16 "map island names": "the one where the current player has
+    // settled needs to be gold". `Settlement.islandId` (set from the
+    // backend's SettlementResponse — see stores/world.ts) is the only link
+    // between a settlement and an island id; demo mode never populates it,
+    // so its island names simply stay neutral there, same as before.
+    const myIslandId = worldModel.listSettlements().find((s) => s.ownerId === playerId)?.islandId;
     for (const island of worldModel.listIslands()) {
       if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      const mineIsland = island.id === myIslandId;
       const label = this.acquireLabel();
-      label.text = island.name;
-      label.style.fill = 0xe8f0f5;
-      label.anchor.set(0.5, 1);
-      label.position.set(center.x, center.y - 6 * this.camera.zoom - 4);
+      // Reference styling: uppercase, letter-spaced small-caps label, muted
+      // gray for other islands, gold + bold for the player's own.
+      label.text = island.name.toUpperCase();
+      label.style.fill = mineIsland ? GOLD : 0x8fa3af;
+      label.style.fontWeight = mineIsland ? 'bold' : '600';
+      label.style.fontSize = 13;
+      label.style.letterSpacing = 1.5;
+      // Reference gives island names a soft drop shadow for legibility over
+      // the water/terrain behind them — a plain fill alone washes out badly
+      // over the lighter sand-colored tiles some island names sit near.
+      label.style.dropShadow = { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 };
+      // Reference places the name below the island's shape entirely, not
+      // over its tiles or clipping its bottom edge. Islands are generated at
+      // varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS), so a fixed
+      // offset either overlaps a big island or floats far below a small one
+      // — instead, measure the real bottom edge from the island's actual
+      // (flood-filled, cached) tile footprint and clear past that.
+      let bottomWorldY = grid.y + TILE_H; // this hex's own bottom vertex, as a floor
+      for (const tile of worldModel.islandFootprint(island)) {
+        const tileGrid = isoGridPosition(tile, TILE_W, TILE_H);
+        bottomWorldY = Math.max(bottomWorldY, tileGrid.y + TILE_H);
+      }
+      const bottom = this.toScreen({ x: grid.x + TILE_W / 2, y: bottomWorldY });
+      label.anchor.set(0.5, 0);
+      label.position.set(center.x, bottom.y + 10 * this.camera.zoom + 6);
       label.visible = true;
     }
 
@@ -2185,6 +2437,10 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
       label.style.fill = 0xe8f0f5;
+      label.style.fontWeight = 'normal';
+      label.style.fontSize = 11;
+      label.style.letterSpacing = 0;
+      label.style.dropShadow = false;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
@@ -2207,7 +2463,29 @@ export class HexMapRenderer {
       // Don't reveal a rival's name over ground you haven't scouted.
       if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
-      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+      // Issue #16 follow-up: the badge floated above the longhouse's own
+      // tile, which sits in the *middle* of the settlement's claimed hexes,
+      // not its northmost edge — the reference has it clear above the whole
+      // cluster instead. Same footprint-scanning approach section 6 uses for
+      // world-map island labels (there: lowest tile-bottom vertex; here:
+      // highest tile-top vertex), scanned over the settlement's owned disc
+      // rather than a flood fill since claimed tiles are already exactly
+      // that disc (`foundSettlement`/`claimTile`).
+      // Measured against each tile's own art, halfway up the sprite rather
+      // than its full height (grid.y - TILE_TOPFACE_Y_OFFSET / 2) — the same
+      // offset `rebuildTerrain` places building/tree sprites at (see its
+      // comment above) gave the badge enough clearance to never overlap a
+      // treetop, but read as floating noticeably farther above the
+      // settlement than the reference. Half that offset still clears a
+      // bare topmost tile's own vertex (0 < TILE_TOPFACE_Y_OFFSET / 2) and
+      // most of a neighbouring forest tile's canopy, while sitting closer.
+      let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
+        const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
+        //topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 4);
+        topWorldY = Math.min(topWorldY, tileGrid.y);
+      }
+      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
       const mine = settlement.ownerId === playerId;
       const color = mine ? GOLD : RIVAL;
 
@@ -2220,28 +2498,57 @@ export class HexMapRenderer {
       // HUD chrome. Past that zoom level it grows again — a fixed-size badge
       // reads as undersized once you've zoomed in close to the (now much
       // larger) hex art around it.
-      const label = this.acquireLabel();
-      label.text = settlement.name.toUpperCase();
-      label.style.fill = 0xe8f0f5;
+      // Issue #16 "settlement badge": "above longhouse also showing its
+      // level" — mockup reads "Bjornstad  you · Lv 4", with "you · Lv 4" in
+      // a visibly lighter/dimmer weight than the bold settlement name, not
+      // one uniform run of text. Two pooled labels side by side, rather
+      // than one, since Pixi's Text has no per-run rich styling.
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
-      label.style.fontSize = 13 * zoomScale;
-      label.anchor.set(0, 0.5);
+      const nameLabel = this.acquireLabel();
+      nameLabel.text = settlement.name;
+      nameLabel.style.fill = 0xe8f0f5;
+      nameLabel.style.fontWeight = 'bold';
+      nameLabel.style.fontSize = 13 * zoomScale;
+      nameLabel.style.letterSpacing = 0;
+      nameLabel.style.dropShadow = false;
+      nameLabel.alpha = 1;
+      nameLabel.anchor.set(0, 0.5);
+
+      const suffixLabel = this.acquireLabel();
+      suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
+      suffixLabel.style.fill = 0xe8f0f5;
+      suffixLabel.style.fontWeight = '400';
+      suffixLabel.style.fontSize = 12 * zoomScale;
+      suffixLabel.style.letterSpacing = 0;
+      suffixLabel.style.dropShadow = false;
+      suffixLabel.alpha = 0.6;
+      suffixLabel.anchor.set(0, 0.5);
 
       const dotR = 4 * zoomScale;
       const padX = 12 * zoomScale;
       const gap = 8 * zoomScale;
+      const nameGap = 6 * zoomScale;
       const pillH = 26 * zoomScale;
-      const pillW = padX * 2 + dotR * 2 + gap + label.width;
+      const pillW = padX * 2 + dotR * 2 + gap + nameLabel.width + nameGap + suffixLabel.width;
       const pillX = top.x - pillW / 2;
-      const pillY = top.y - 30 * zoomScale - pillH;
+      // `top` is already clear of every claimed tile's tallest possible art
+      // (see above), so this only needs a small breathing-room margin.
+      const pillY = top.y - 10 * zoomScale - pillH;
 
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
         .fill({ color: 0x08121a, alpha: 0.8 })
         .stroke({ width: 1, color, alpha: 0.9 });
-      this.markerLayer.circle(pillX + padX + dotR, pillY + pillH / 2, dotR).fill({ color });
-      label.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
-      label.visible = true;
+      // Reference mockup: a small hex (not a round dot), matching the same
+      // pointy-top hexagon TopBar's logo badge and ResourceBar's icons use
+      // elsewhere in the HUD, not the isometric tile's own hex shape.
+      this.markerLayer
+        .poly(hexPoints(pillX + padX + dotR, pillY + pillH / 2, dotR))
+        .fill({ color });
+      nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
+      suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
+      nameLabel.visible = true;
+      suffixLabel.visible = true;
     }
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
   }
@@ -2278,6 +2585,19 @@ export class HexMapRenderer {
   forceRebuild() {
     if (!this.app) return;
     this.rebuildAll();
+  }
+
+  /**
+   * Issue #16 "status box": sets (or clears, passing undefined) the pulsing
+   * highlight outline (drawHighlight, redrawn every tick already) without
+   * going through `updateOptions` — that method unconditionally re-snaps
+   * the camera back to the settlement's origin once already founded (see
+   * its `wasFounded` branch below), which would cancel out a `panTo` call
+   * made just before it, exactly the combination BuildQueuePanel's
+   * click-to-center-and-flash needs.
+   */
+  setHighlight(coord: AxialCoord | undefined) {
+    this.options = { ...this.options, highlightCoord: coord };
   }
 
   /**

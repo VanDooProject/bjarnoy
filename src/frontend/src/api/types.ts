@@ -12,11 +12,24 @@ export interface WorldResponse {
   status: string;
   islandCount: number;
   createdAt: string;
+  joinable: boolean;
+  joinableReason: string;
+  startsAt: string | null;
+  endbossTriggered: boolean;
 }
 
 export interface TileCoordinate {
   q: number;
   r: number;
+}
+
+/** Mirrors `RiverTileResponse` — see that record's own doc comments for field semantics. */
+export interface RiverTileResponse {
+  q: number;
+  r: number;
+  shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth';
+  inDirections: string[];
+  outDirection: string | null;
 }
 
 export interface IslandResponse {
@@ -27,6 +40,7 @@ export interface IslandResponse {
   r: number;
   tileCount: number;
   startPositions: TileCoordinate[];
+  riverTiles: RiverTileResponse[];
 }
 
 export interface ResourceLine {
@@ -112,6 +126,71 @@ export interface QueueBuildRequest {
   building: string;
   q: number;
   r: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.
+
+export interface RegisterRequest {
+  userName: string;
+  password: string;
+  /** The local player id (`stablePlayerId()` in `stores/player.ts`), so any settlement founded under it gets claimed. */
+  existingOwnerId?: string | null;
+}
+
+export interface LoginRequest {
+  userName: string;
+  password: string;
+}
+
+export interface UserResponse {
+  id: string;
+  userName: string;
+  role: string;
+  status: string;
+  displayName: string | null;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: UserResponse;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminWorldContracts.cs.
+
+export interface AdminWorldResponse {
+  id: string;
+  name: string;
+  status: string;
+  maxPlayers: number;
+  playerCount: number;
+  speedFactor: number;
+  startsAt: string | null;
+  joinsClosed: boolean;
+  endbossAt: string | null;
+  endbossTriggeredAt: string | null;
+  runState: string;
+  runStateSince: string;
+  createdAt: string;
+}
+
+/**
+ * All fields optional: only send what should change. `startsAt`/`endbossAt`
+ * are omitted from the request body (not sent as `null`) when left
+ * unchanged — send explicit `null` to clear them, matching the backend's
+ * `Optional<T>` PATCH semantics (see `Bjarnoy.Api.Json.Optional`).
+ */
+export interface UpdateWorldSettingsRequest {
+  speedFactor?: number;
+  startsAt?: string | null;
+  joinsClosed?: boolean;
+  endbossAt?: string | null;
+}
+
+/** `action`: one of `pause`, `maintenance`, `lock`, `resume`. */
+export interface SetWorldRunStateRequest {
+  action: string;
+  graceMinutes?: number;
 }
 
 export interface ProblemDetails {

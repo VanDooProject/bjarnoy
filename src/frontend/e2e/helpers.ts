@@ -1,6 +1,26 @@
 import type { Page } from '@playwright/test';
 
 /**
+ * Waits for the map container's own mount-complete signal (`data-map-ready`,
+ * set by useHexMapRenderer once HexMapRenderer.mount() resolves) plus one
+ * real painted frame past it, instead of a guessed sleep — used by every
+ * test that navigates to a view with a HexMapRenderer canvas (landing,
+ * settlement, world) before interacting with it.
+ */
+export async function waitForMapReady(page: Page): Promise<void> {
+  await page.locator('.map-container[data-map-ready]').waitFor({ timeout: 15_000 });
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))),
+  );
+}
+
+/** Navigates to the world map and waits for its renderer to be ready. */
+export async function gotoWorldMap(page: Page): Promise<void> {
+  await page.goto('/world');
+  await waitForMapReady(page);
+}
+
+/**
  * Founds a settlement on the landing page (zip 6a: the landing page is the
  * village view — the starter plot is deterministic, so there's exactly one
  * hex to click, not a grid sweep across a world map), places the 2 guided
@@ -13,7 +33,12 @@ export async function foundSettlement(page: Page): Promise<void> {
   // runner. See settlement-interactions.spec.ts's matching comments for the
   // other tests that share this same root cause.
   await page.goto('/');
-  await page.waitForTimeout(500);
+
+  // Wait on the renderer's own mount-complete signal rather than guessing
+  // how long that takes — a fixed sleep here either wastes time on a fast
+  // machine or, on a loaded CI runner, races the click below landing before
+  // `mount()` has wired up pointer handling at all.
+  await waitForMapReady(page);
 
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;
@@ -70,5 +95,8 @@ export async function foundSettlement(page: Page): Promise<void> {
   await prompt.waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('button.confirm').click();
   await page.waitForURL('**/settlement');
-  await page.waitForTimeout(1000); // let the renderer mount and settle
+  // The confirm click navigates to a *new* SettlementCanvas mount (a fresh
+  // renderer, not the landing page's preview one) — wait for its own
+  // mount-complete signal instead of guessing how long that takes.
+  await waitForMapReady(page);
 }

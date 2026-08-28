@@ -57,9 +57,10 @@ function onHexClick() {
       <FogDebugPanel @change="onFogDebugChange" />
       <FogPerfPanel />
     </div>
-    <TopBar />
-    <HudNav />
-    <ResourceBar />
+    <TopBar>
+      <ResourceBar />
+      <HudNav />
+    </TopBar>
   </div>
 </template>
 

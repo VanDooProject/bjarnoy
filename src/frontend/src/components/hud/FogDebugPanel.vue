@@ -53,6 +53,10 @@ watch(
 
 <style scoped>
 .fog-debug {
+  /* Positioned by the caller — both SettlementView and WorldMapView place
+     this inside a `.fog-debug-stack` flex column alongside FogPerfPanel
+     (that wrapper carries the position: absolute), so this stays a normal
+     flex child rather than positioning itself. */
   padding: 12px 14px;
   min-width: 230px;
 }

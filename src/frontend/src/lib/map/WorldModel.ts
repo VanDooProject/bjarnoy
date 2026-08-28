@@ -4,9 +4,17 @@
 // tile map that can span thousands of hexes as the camera roams. The
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
-import { coordKey, hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
-import type { Fleet, IslandLabel, Resources, Settlement, Tile } from './types';
+import {
+  emptyResources,
+  type Fleet,
+  type IslandLabel,
+  type Resources,
+  type RiverTile,
+  type Settlement,
+  type Tile,
+} from './types';
 
 const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
@@ -34,6 +42,10 @@ export class WorldModel {
   private lastTick = performance.now();
   /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
   private islands: IslandLabel[] = [];
+  /** islandFootprint()'s cache — see there for why this needs to exist at all. */
+  private islandFootprintCache = new Map<string, AxialCoord[]>();
+  /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
+  private riverTiles = new Map<string, RiverTile>();
 
   constructor(seed = 1) {
     this.seed = seed;
@@ -42,10 +54,70 @@ export class WorldModel {
   /** Live mode: island names/centres fetched from the backend (see `stores/world.ts`). */
   setIslands(islands: IslandLabel[]) {
     this.islands = islands;
+    this.islandFootprintCache.clear();
   }
 
   listIslands(): IslandLabel[] {
     return this.islands;
+  }
+
+  /**
+   * Live mode: every fetched island's river tiles, flattened — see
+   * `stores/world.ts`. A river can't be derived client-side (its shape
+   * depends on the whole island), so this is the renderer's only source for
+   * them, unlike terrain/orientation/variant which `worldGenerator.ts`
+   * computes on demand.
+   */
+  setRiverTiles(tiles: RiverTile[]) {
+    this.riverTiles = new Map(tiles.map((t) => [coordKey(t), t]));
+  }
+
+  getRiverTile(q: number, r: number): RiverTile | undefined {
+    return this.riverTiles.get(coordKey({ q, r }));
+  }
+
+  /**
+   * Issue #16 "map island names": the renderer needs to draw each island's
+   * label *below* its tiles, but islands are procedurally generated at
+   * varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS, ~2.4-5.6 hexes)
+   * with no stored radius anywhere — a fixed offset either overlaps a big
+   * island's tiles or floats absurdly far below a small one. This flood-
+   * fills the actual connected land tiles from the island's centre so the
+   * renderer can measure the real bottom edge instead of guessing.
+   *
+   * Cached per island id (cleared in `setIslands`): islands don't move or
+   * resize once fetched, and `rebuildMarkers` runs every render tick, so
+   * flood-filling from scratch every frame would be real, avoidable work —
+   * not something to hide behind a "we're in a test" branch, just something
+   * that only ever needs computing once. `MAX_FOOTPRINT_TILES` is a hard
+   * backstop against runaway growth (e.g. two islands generated close
+   * enough to touch), not the expected case.
+   */
+  islandFootprint(island: IslandLabel): AxialCoord[] {
+    const cached = this.islandFootprintCache.get(island.id);
+    if (cached) return cached;
+    const MAX_FOOTPRINT_TILES = 200;
+    const start = { q: island.q, r: island.r };
+    const tiles: AxialCoord[] = [];
+    if (this.isLand(start.q, start.r)) {
+      const seen = new Set<string>([coordKey(start)]);
+      const queue: AxialCoord[] = [start];
+      tiles.push(start);
+      while (queue.length && tiles.length < MAX_FOOTPRINT_TILES) {
+        const c = queue.shift()!;
+        for (const n of neighbors(c)) {
+          const k = coordKey(n);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          if (this.isLand(n.q, n.r)) {
+            tiles.push(n);
+            queue.push(n);
+          }
+        }
+      }
+    }
+    this.islandFootprintCache.set(island.id, tiles);
+    return tiles;
   }
 
   getTile(q: number, r: number): Tile {
@@ -144,6 +216,52 @@ export class WorldModel {
 
   listSettlements(): Settlement[] {
     return [...this.settlements.values()];
+  }
+
+  /**
+   * Issue #16: "the pop(ulation) thing should also be implemented like with
+   * the other ressources" (current/max + a rate). Neither the backend
+   * (`Bjarnoy.Domain`) nor the legacy game models a population field at
+   * all, so rather than invent a server-side stat this derives a plausible
+   * current/max/rate purely from what the client already knows — the
+   * longhouse level and how many buildings are standing — the same inputs
+   * `countBuildings` already uses for onboarding. `max` is housing capacity
+   * (longhouse level + each building adds a little room), `current` grows
+   * toward it as buildings are worked, and `rate` is how fast it's still
+   * climbing (0 once capacity is reached, matching how the other resource
+   * rates read 0 at their storage cap).
+   */
+  populationFor(settlementId: string): { current: number; max: number; rate: number } {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return { current: 0, max: 0, rate: 0 };
+    const buildings = this.countBuildings(settlementId);
+    const max = 20 + settlement.level * 15 + buildings * 5;
+    const current = Math.min(max, 10 + settlement.level * 8 + buildings * 4);
+    const rate = current < max ? Math.max(1, Math.round((max - current) * 0.2)) : 0;
+    return { current, max, rate };
+  }
+
+  /**
+   * Issue #16 header: the reference shows each resource pill with a
+   * "current / cap" and a fill-progress underline, but no storage-cap field
+   * exists anywhere in the data model (`Resources`, `Settlement`, the
+   * backend) — same gap `populationFor` hit for population. Rather than
+   * leave the pills capless, this derives a plausible per-resource cap the
+   * same way: purely client-side, from the longhouse level, using a
+   * different base per resource so the caps read as varied (as in the
+   * reference: wood/stone/food/iron aren't all the same number) rather than
+   * one flat value repeated four times.
+   */
+  storageCapFor(settlementId: string): Resources {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return emptyResources();
+    const growth = 1 + settlement.level * 0.5;
+    return {
+      wood: Math.round(2000 * growth),
+      stone: Math.round(2000 * growth),
+      food: Math.round(2400 * growth),
+      iron: Math.round(1000 * growth),
+    };
   }
 
   borderRadius(settlement: Settlement): number {
@@ -248,6 +366,21 @@ export class WorldModel {
         if (!claimed.ownerId) claimed.ownerId = settlementId;
       }
     }
+    return true;
+  }
+
+  /**
+   * Issue #16 ring menu "tear down": demo-mode only — the backend
+   * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
+   * disables this action rather than pretending to support it (see
+   * SettlementView.vue's ring-menu wiring). Clears the building but leaves
+   * the hex claimed by the settlement.
+   */
+  razeBuilding(settlementId: string, at: AxialCoord): boolean {
+    const tile = this.getTile(at.q, at.r);
+    if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
+    tile.buildingType = undefined;
+    tile.buildingLevel = undefined;
     return true;
   }
 

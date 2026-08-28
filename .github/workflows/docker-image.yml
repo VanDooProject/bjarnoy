@@ -99,7 +99,12 @@ jobs:
           docker run --rm -v "$data:/data" "$image" --migrate-status
           echo "::endgroup::"
 
-          docker run -d --name bjarnoy-smoke -p 8080:8080 -v "$data:/data" "$image"
+          # A real deployment sets Jwt__SigningKey itself; the smoke test needs
+          # one too, since (unlike --migrate) actually serving requests signs
+          # and validates JWTs.
+          docker run -d --name bjarnoy-smoke -p 8080:8080 -v "$data:/data" \
+            -e Jwt__SigningKey="smoke-test-signing-key-not-for-production-use" \
+            "$image"
           trap 'docker logs bjarnoy-smoke; docker rm -f bjarnoy-smoke' EXIT
 
           for _ in $(seq 1 60); do

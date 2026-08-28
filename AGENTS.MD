@@ -2,11 +2,14 @@
 # git / commits
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
+- PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
 
 
-# dev workflow
+# ai dev workflow
 - think of a solution
-- implement
+- ask me if plan is fine if its more complex AND use plan/todo tool to list things u have to do
+- implement (if multiple tasks push each task as a separate commit and open PR after first push)
+- evaluate with requirements (if there are reference screenshots compare them)
 - run build and tests
 - evaluate if ci ran green
 
@@ -25,6 +28,7 @@
 ## CLAUDE
 - ask questions if anything is unclear or you need more context
 - if u take screenshots always show the in chat to me too
+- for planning u can use a opus or fable subtask/subagent
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path

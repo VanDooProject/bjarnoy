@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -79,6 +80,7 @@ public sealed class WorldService(
                 CentreR = island.Centre.R,
                 TileCount = island.TileCount,
                 StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
+                RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
             });
         }
 
@@ -122,6 +124,167 @@ public sealed class WorldService(
     public Task<int> GetIslandCountAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands.AsNoTracking().CountAsync(i => i.WorldId == worldId, cancellationToken);
 
+    /// <summary>
+    /// Settlement count per world, i.e. player count: one settlement per player
+    /// per world today (see <see cref="SettlementService.FoundAsync"/>).
+    /// </summary>
+    public async Task<Dictionary<Guid, int>> GetPlayerCountsAsync(CancellationToken cancellationToken = default) =>
+        await _dbContext.Settlements
+            .AsNoTracking()
+            .GroupBy(s => s.WorldId)
+            .Select(g => new { WorldId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.WorldId, x => x.Count, cancellationToken)
+            .ConfigureAwait(false);
+
+    public Task<int> GetPlayerCountAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+        _dbContext.Settlements.AsNoTracking().CountAsync(s => s.WorldId == worldId, cancellationToken);
+
+    /// <summary>
+    /// Updates a world's admin-controlled settings: speed factor, start date,
+    /// stop-join toggle, endboss instant. Null fields are left unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Only the settings themselves are touched here — threading the speed
+    /// factor through build/production math, and ticking a settlement's
+    /// resources to "now" under the old factor before a change takes effect,
+    /// lives in <c>Bjarnoy.Domain.Economy</c>, not here.
+    /// </remarks>
+    public async Task<WorldEntity?> UpdateAdminSettingsAsync(
+        Guid worldId,
+        double? speedFactor,
+        bool hasStartsAt,
+        DateTimeOffset? startsAt,
+        bool? joinsClosed,
+        bool hasEndbossAt,
+        DateTimeOffset? endbossAt,
+        CancellationToken cancellationToken = default)
+    {
+        var world = await _dbContext.Worlds
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+
+        if (world is null)
+        {
+            return null;
+        }
+
+        if (speedFactor is { } factor)
+        {
+            world.SpeedFactor = factor;
+        }
+
+        if (hasStartsAt)
+        {
+            world.StartsAt = startsAt;
+        }
+
+        if (joinsClosed is { } closed)
+        {
+            world.JoinsClosed = closed;
+        }
+
+        if (hasEndbossAt)
+        {
+            world.EndbossAt = endbossAt;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("World {WorldId} admin settings updated.", worldId);
+
+        return world;
+    }
+
+    /// <summary>
+    /// Transitions a world's <see cref="GameClock"/> state — the same machine
+    /// <see cref="SettlementService.SetRunStateAsync"/> drives for the
+    /// non-admin surface, exposed here too for the admin run-state endpoint.
+    /// </summary>
+    public async Task<WorldEntity?> SetRunStateAsync(
+        Guid worldId,
+        WorldRunState state,
+        TimeSpan grace = default,
+        CancellationToken cancellationToken = default)
+    {
+        var world = await _dbContext.Worlds
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+
+        if (world is null)
+        {
+            return null;
+        }
+
+        var before = world.ToClock();
+        var after = before.TransitionTo(state, _timeProvider.GetUtcNow(), grace);
+        world.ApplyClock(after);
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "World {WorldId} moved from {From} to {To}; clock offset now {Offset}.",
+            worldId, before.State, after.State, after.AccumulatedOffset);
+
+        return world;
+    }
+
+    /// <summary>
+    /// Fires the endboss for every world whose <see cref="WorldEntity.EndbossAt"/>
+    /// has come and has not fired yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called on a poll by <c>EndbossTriggerHostedService</c> rather than on any
+    /// read path — everything else in this backend is lazy (see
+    /// docs/tech/backend.md, "Everything is lazy"), but a world nobody happens
+    /// to read would otherwise never trigger its endboss, so this one thing
+    /// genuinely needs an active scan.
+    /// </para>
+    /// <para>
+    /// <see cref="WorldEntity.EndbossTriggeredAt"/> is the idempotency marker:
+    /// once set, a world is excluded from every later scan, so a slow poll
+    /// interval or an overlapping run can never fire the same world twice.
+    /// Joins are untouched — <see cref="WorldEntity.DetermineJoinability"/>
+    /// does not look at this field, exactly as issue #27 specifies ("joins
+    /// remain allowed" before and after).
+    /// </para>
+    /// <para>
+    /// The actual endboss event is out of scope here (a follow-up issue): this
+    /// only sets the marker and logs that it fired, which is enough for the
+    /// admin/world DTOs to show it happened.
+    /// </para>
+    /// </remarks>
+    /// <returns>The worlds whose endboss just fired.</returns>
+    public async Task<IReadOnlyList<WorldEntity>> TriggerDueEndbossesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        var due = await _dbContext.Worlds
+            .Where(w => w.EndbossAt.HasValue && !w.EndbossTriggeredAt.HasValue)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        due = [.. due.Where(w => w.EndbossAt!.Value <= now)];
+
+        if (due.Count == 0)
+        {
+            return [];
+        }
+
+        foreach (var world in due)
+        {
+            world.EndbossTriggeredAt = now;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var world in due)
+        {
+            _logger.LogInformation(
+                "World {WorldId} ({Name}) endboss triggered at {EndbossAt} (scanned at {Now}).",
+                world.Id, world.Name, world.EndbossAt, now);
+        }
+
+        return due;
+    }
+
     public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()
@@ -153,7 +316,12 @@ public sealed class WorldService(
             for (var r = rMin; r <= rMax; r++)
             {
                 var coord = new HexCoord(q, r);
-                yield return new GeneratedTile(coord, sampler.TerrainAt(coord));
+                yield return new GeneratedTile(
+                    coord,
+                    sampler.TerrainAt(coord),
+                    sampler.IsCoastalWater(coord),
+                    sampler.OrientationAt(coord),
+                    sampler.VariantAt(coord));
             }
         }
     }
@@ -163,4 +331,12 @@ public sealed class WorldService(
     /// more than a screen at full zoom-out.
     /// </summary>
     public const int MaxTilesPerRequest = 8192;
+
+    /// <summary>The domain's <see cref="RiverTile"/>, as the entity's plain-numeric <see cref="RiverTileRecord"/>.</summary>
+    private static RiverTileRecord ToRiverTileRecord(RiverTile tile) => new(
+        tile.Coord.Q,
+        tile.Coord.R,
+        (int)tile.Shape,
+        [.. tile.InDirections.Select(d => (int)d)],
+        tile.OutDirection is { } outDirection ? (int)outDirection : null);
 }

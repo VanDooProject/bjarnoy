@@ -46,14 +46,18 @@ public static class WorldEndpoints
 
     private static async Task<Ok<IReadOnlyList<WorldResponse>>> ListWorlds(
         WorldService worlds,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var entities = await worlds.GetWorldsAsync(cancellationToken);
-        var counts = await worlds.GetIslandCountsAsync(cancellationToken);
+        var islandCounts = await worlds.GetIslandCountsAsync(cancellationToken);
+        var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
+        var now = timeProvider.GetUtcNow();
 
         IReadOnlyList<WorldResponse> response =
         [
-            .. entities.Select(w => WorldResponse.From(w, counts.GetValueOrDefault(w.Id))),
+            .. entities.Select(w => WorldResponse.From(
+                w, islandCounts.GetValueOrDefault(w.Id), playerCounts.GetValueOrDefault(w.Id), now)),
         ];
 
         return TypedResults.Ok(response);
@@ -63,6 +67,7 @@ public static class WorldEndpoints
         CreateWorld(
             CreateWorldRequest request,
             WorldService worlds,
+            TimeProvider timeProvider,
             CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -91,7 +96,7 @@ public static class WorldEndpoints
 
             return TypedResults.Created(
                 $"/api/v1/worlds/{world.Id}",
-                WorldResponse.From(world, world.Islands.Count));
+                WorldResponse.From(world, world.Islands.Count, playerCount: 0, timeProvider.GetUtcNow()));
         }
         catch (WorldCreationException ex)
         {
@@ -107,6 +112,7 @@ public static class WorldEndpoints
     private static async Task<Results<Ok<WorldResponse>, NotFound>> GetWorld(
         Guid worldId,
         WorldService worlds,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
@@ -116,7 +122,8 @@ public static class WorldEndpoints
         }
 
         var islandCount = await worlds.GetIslandCountAsync(worldId, cancellationToken);
-        return TypedResults.Ok(WorldResponse.From(world, islandCount));
+        var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
+        return TypedResults.Ok(WorldResponse.From(world, islandCount, playerCount, timeProvider.GetUtcNow()));
     }
 
     private static async Task<Results<Ok<IReadOnlyList<IslandResponse>>, NotFound>> GetIslands(
