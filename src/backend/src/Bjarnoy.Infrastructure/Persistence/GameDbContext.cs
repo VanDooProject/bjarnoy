@@ -26,6 +26,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<BuildOrderEntity> BuildOrders => Set<BuildOrderEntity>();
 
+    public DbSet<UserEntity> Users => Set<UserEntity>();
+
+    public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -133,6 +137,41 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // One order per hex at a time.
             order.HasIndex(o => new { o.SettlementId, o.Q, o.R }).IsUnique();
+        });
+
+        modelBuilder.Entity<UserEntity>(user =>
+        {
+            user.ToTable("users");
+            user.HasKey(u => u.Id);
+            user.Property(u => u.Id).ValueGeneratedNever();
+            user.Property(u => u.UserName).HasMaxLength(50).IsRequired();
+            user.Property(u => u.NormalizedUserName).HasMaxLength(50).IsRequired();
+            user.Property(u => u.PasswordHash).IsRequired();
+            user.Property(u => u.Role).HasConversion<int>();
+            user.Property(u => u.Status).HasConversion<int>();
+            user.Property(u => u.LegacyPlayerId).HasMaxLength(200);
+            user.Property(u => u.DisplayName).HasMaxLength(100);
+            user.Property(u => u.StatusReason).HasMaxLength(500);
+
+            // Case-insensitive uniqueness, enforced on the normalized column —
+            // see UserEntity.NormalizedUserName.
+            user.HasIndex(u => u.NormalizedUserName).IsUnique();
+
+            user.HasMany(u => u.RefreshTokens)
+                .WithOne(t => t.User!)
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshTokenEntity>(token =>
+        {
+            token.ToTable("refresh_tokens");
+            token.HasKey(t => t.Id);
+            token.Property(t => t.Id).ValueGeneratedNever();
+            token.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
+
+            // Looked up by hash on every refresh/logout call.
+            token.HasIndex(t => t.TokenHash).IsUnique();
         });
     }
 }
