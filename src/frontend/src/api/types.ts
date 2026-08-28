@@ -193,6 +193,60 @@ export interface SetWorldRunStateRequest {
   graceMinutes?: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
+
+export interface AdminUserResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  settlementCount: number;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AdminUserSettlementSummary {
+  id: string;
+  worldId: string;
+  worldName: string;
+  name: string;
+}
+
+export interface AdminUserDetailResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  createdAt: string;
+  lastLoginAt: string | null;
+  settlements: AdminUserSettlementSummary[];
+}
+
+export interface PagedAdminUsersResponse {
+  items: AdminUserResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** All fields optional: only send what should change. */
+export interface UpdateAdminUserRequest {
+  displayName?: string;
+  role?: string;
+}
+
+/** `status`: one of `active`, `locked`, `banned`. */
+export interface SetUserStatusRequest {
+  status: string;
+  reason?: string;
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;
