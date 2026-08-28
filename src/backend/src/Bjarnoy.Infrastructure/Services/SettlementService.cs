@@ -20,6 +20,9 @@ public enum FoundingRejection
     TooCloseToNeighbour,
     WorldFull,
     AlreadyFounded,
+    WorldNotActive,
+    JoinsClosed,
+    NotStartedYet,
 }
 
 public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntity? Settlement = null)
@@ -112,9 +115,19 @@ public sealed class SettlementService(
         var settlementCount = await _dbContext.Settlements
             .CountAsync(s => s.WorldId == worldId, cancellationToken).ConfigureAwait(false);
 
-        if (settlementCount >= world.MaxPlayers)
+        // Same rule the public world listing derives from WorldEntity.DetermineJoinability,
+        // so a world that stops accepting joins there also stops accepting them here.
+        var joinability = world.DetermineJoinability(settlementCount, _timeProvider.GetUtcNow());
+        if (!joinability.Joinable)
         {
-            return new FoundingResult(FoundingRejection.WorldFull);
+            return new FoundingResult(joinability.Reason switch
+            {
+                JoinableReason.WorldNotActive => FoundingRejection.WorldNotActive,
+                JoinableReason.JoinsClosed => FoundingRejection.JoinsClosed,
+                JoinableReason.NotStartedYet => FoundingRejection.NotStartedYet,
+                JoinableReason.Full => FoundingRejection.WorldFull,
+                _ => FoundingRejection.WorldFull,
+            });
         }
 
         // Spacing is checked in memory against this world's centres: the

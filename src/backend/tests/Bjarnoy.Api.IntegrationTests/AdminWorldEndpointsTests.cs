@@ -270,4 +270,65 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         Assert.Equal(baseRate * 2, afterRetune!.Resources.RatePerHour.Food, 6);
     }
+
+    [Fact]
+    public async Task Closing_joins_refuses_a_new_settlement_but_leaves_existing_players_alone()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var settlement = await FoundSettlementAsync(client, world);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: null, JoinsClosed: true),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        var refused = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Grimhold", "Sigrid", "sigrid-player"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("JoinsClosed", await refused.RejectionAsync(Ct));
+
+        var stillThere = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.NotNull(stillThere);
+    }
+
+    [Fact]
+    public async Task A_world_that_has_not_started_yet_refuses_new_settlements()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: null, StartsAt: Optional<DateTimeOffset?>.Of(DateTimeOffset.UtcNow.AddDays(1))),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        client.DefaultRequestHeaders.Authorization = null;
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        var refused = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Grimhold", "Sigrid", "sigrid-player"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("NotStartedYet", await refused.RejectionAsync(Ct));
+    }
 }

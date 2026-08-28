@@ -12,6 +12,9 @@ export interface WorldResponse {
   status: string;
   islandCount: number;
   createdAt: string;
+  joinable: boolean;
+  joinableReason: string;
+  startsAt: string | null;
 }
 
 export interface TileCoordinate {
