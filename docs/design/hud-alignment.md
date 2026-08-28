@@ -125,6 +125,19 @@ affordance separate from the ring/build flow). Both are left as open follow-ups 
 
 ![ring menu with circular bubbles, no border](img/ring_menu_circular.png)
 
+**Third correction after review — outer rings should open on hover, not click:** drilling from the root
+ring into the build-category ring, and from a category into its buildings, required a click at each level.
+Added a `hover` emit from `RingMenu.vue` (fired on `@mouseenter`, alongside the existing `select`/`@click`
+emit) and a new `onRingHover` handler in `SettlementView.vue` that advances `ringLevel` for exactly the two
+actions that lead to another ring (the root "build" action, and picking a category) — every other action
+(info/details/upgrade/raze/attack, and the final building choice) still requires a real click, since those
+either mutate state or are terminal, not a further drill-down. `onRingSelect`'s existing click handling for
+those same two transitions was left in place rather than removed — touch devices never fire `mouseenter`
+before a tap, so click needs to keep working as a fallback there. Verified end-to-end with Playwright:
+hovering (not clicking) "Build" opens the category ring, and hovering (not clicking) a category opens the
+buildings ring showing "Hut" / "Farm" / "Watchtower" — confirmed by reading back the ring's own button
+labels after each hover, not just a screenshot.
+
 **Current state before this pass:** `SettlementView.vue`'s `onHexClick` always opened `BuildingModal.vue`
 directly — a full-screen detail sheet — for every click, regardless of what was clicked. There was no radial
 menu and no per-tile-state branching.

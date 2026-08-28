@@ -24,7 +24,7 @@ const props = defineProps<{
   /** Small floating badge above the ring, e.g. "Lv 5 upgrade" over a building. */
   badge?: string;
 }>();
-const emit = defineEmits<{ select: [id: string]; close: [] }>();
+const emit = defineEmits<{ select: [id: string]; hover: [id: string]; close: [] }>();
 
 // Issue #16 "ring menu": reference shows the bubbles spread well clear of
 // the tile in an orbit, not crowded around it.
@@ -51,6 +51,18 @@ function select(action: RingAction) {
   if (action.disabled) return;
   emit('select', action.id);
 }
+
+// Issue #16 "build (which opens another ring outside with available
+// buildings on this spot)": the outer build-category/build-building rings
+// should open as soon as the player hovers the action that leads to them —
+// not wait for a click — the way a real radial/pie menu drills down.
+// SettlementView decides which hovers actually advance the ring (only the
+// "build" root action and a category's own bubbles do); anything else is a
+// no-op there, so hovering "Upgrade" or "Raze" doesn't trigger anything.
+function hover(action: RingAction) {
+  if (action.disabled) return;
+  emit('hover', action.id);
+}
 </script>
 
 <template>
@@ -68,6 +80,7 @@ function select(action: RingAction) {
       :disabled="p.action.disabled"
       :title="p.action.disabled ? p.action.hint : undefined"
       @click="select(p.action)"
+      @mouseenter="hover(p.action)"
     >
       {{ p.action.label }}
     </button>

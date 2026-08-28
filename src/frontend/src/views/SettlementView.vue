@@ -213,6 +213,26 @@ function closeRing() {
   ringCategory.value = null;
 }
 
+// Issue #16 "build (which opens another ring outside with available
+// buildings on this spot)": drilling into the build-category/build-building
+// rings happens on hover, not click — only these two transitions (the root
+// "build" action, and picking a category) advance the ring; every other
+// action (info/details/upgrade/raze/attack/the final building choice) still
+// needs an actual click, since those either mutate state or are terminal.
+function onRingHover(id: string) {
+  if (ringLevel.value === 'root' && id === 'build') {
+    ringLevel.value = 'build-categories';
+    return;
+  }
+  if (ringLevel.value === 'build-categories') {
+    const category = categoriesFor(selectedTile.value!).find((c) => c.id === id);
+    if (category) {
+      ringCategory.value = id;
+      ringLevel.value = 'build-buildings';
+    }
+  }
+}
+
 async function onRingSelect(id: string) {
   if (ringLevel.value === 'build-categories') {
     ringCategory.value = id;
@@ -334,6 +354,7 @@ async function upgrade() {
       :actions="ringActions"
       :badge="ringBadge"
       @select="onRingSelect"
+      @hover="onRingHover"
       @close="closeRing"
     />
     <BuildingModal
