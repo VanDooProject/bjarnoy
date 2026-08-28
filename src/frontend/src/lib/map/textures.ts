@@ -73,11 +73,11 @@ const ROOT_BUILDING_LEVELED = import.meta.glob(
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,farm_crop}_*_base.png',
+  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,farm_crop,farm_pumpkin}_*_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop}_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop,farm_pumpkin}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 // One glob per river shape (not a single `rivertile_*` prefix glob): the
@@ -217,6 +217,7 @@ const SOURCES = {
     hut: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
+    pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string>>>,
   /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own. */
   coastalBase: buildPlain(ROOT_TERRAIN, 'coastalwatertile_'),
@@ -230,6 +231,7 @@ const SOURCES = {
     hut: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),
+    pumpkinfarm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_pumpkin_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   /**
    * The art pack's four river shapes — a `RiverTileShape.Mouth` (see
