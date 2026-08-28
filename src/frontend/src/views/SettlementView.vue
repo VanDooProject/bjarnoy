@@ -117,19 +117,40 @@ function onRingOutsidePointerDown(e: PointerEvent) {
   canvasRef.value?.renderer?.beginDragFrom(e);
 }
 
+type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm';
+
 interface BuildCategory {
   id: string;
   label: string;
-  buildings: { type: 'hut' | 'farm' | 'tower'; label: string }[];
+  buildings: { type: BuildableType; label: string }[];
 }
 // Grass gets the full spread of categories (housing/resource/defense);
 // other buildable terrain only offers one outer ring rather than the same
 // multi-category spread — matches the issue calling out grass specifically.
+// fishinghut (sand-only, per BuildingCatalogue) lives in the "other" bucket
+// alongside the rest rather than getting its own sand-specific category —
+// same simplification the pre-existing buildings already made (this ring
+// doesn't filter its choices per exact terrain; the backend is the source
+// of truth and rejects a placement its catalogue's AllowedTerrain forbids).
 const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
   grass: [
     { id: 'housing', label: 'Housing', buildings: [{ type: 'hut', label: 'Hut' }] },
-    { id: 'resource', label: 'Resource', buildings: [{ type: 'farm', label: 'Farm' }] },
-    { id: 'defense', label: 'Defense', buildings: [{ type: 'tower', label: 'Watchtower' }] },
+    {
+      id: 'resource',
+      label: 'Resource',
+      buildings: [
+        { type: 'farm', label: 'Farm' },
+        { type: 'pumpkinfarm', label: 'Pumpkin Farm' },
+      ],
+    },
+    {
+      id: 'defense',
+      label: 'Defense',
+      buildings: [
+        { type: 'tower', label: 'Watchtower' },
+        { type: 'magictower', label: 'Magic Tower' },
+      ],
+    },
   ],
   other: [
     {
@@ -139,6 +160,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'hut', label: 'Hut' },
         { type: 'farm', label: 'Farm' },
         { type: 'tower', label: 'Watchtower' },
+        { type: 'fishinghut', label: 'Fishing Hut' },
       ],
     },
   ],
@@ -266,7 +288,7 @@ async function onRingSelect(id: string) {
     return;
   }
   if (ringLevel.value === 'build-buildings') {
-    await buildType(id as 'hut' | 'farm' | 'tower');
+    await buildType(id as BuildableType);
     closeRing();
     return;
   }
@@ -300,11 +322,13 @@ function closeModal() {
   modalBusy.value = false;
 }
 
-// Demo mode places the chosen building instantly; live mode queues a real
-// farm against the backend regardless of which type the ring's build-ring
-// picked (there is no "hut"/"tower" in the backend's catalogue yet — see
-// BuildingType.cs) and waits for the build order to complete.
-async function buildType(type: 'hut' | 'farm' | 'tower') {
+// Demo mode places the chosen building instantly; live mode queues that
+// same type against the backend's real catalogue (BuildingCatalogue.cs) —
+// "hut" is demo-only (BuildingModal's default when there's no picker; the
+// backend has no matching catalogue entry) and is expected to be rejected
+// server-side if ever picked in live mode, same as any other invalid
+// placement (wrong terrain, insufficient longhouse level, ...).
+async function buildType(type: BuildableType) {
   if (!world.selectedSettlementId || !selectedCoord.value) return;
   if (DEMO_MODE) {
     world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
@@ -312,7 +336,7 @@ async function buildType(type: 'hut' | 'farm' | 'tower') {
   }
   modalBusy.value = true;
   try {
-    await world.queueBuildLive('farm', selectedCoord.value);
+    await world.queueBuildLive(type, selectedCoord.value);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
   } finally {

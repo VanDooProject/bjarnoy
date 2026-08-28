@@ -1012,6 +1012,16 @@ export class HexMapRenderer {
         return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
       case 'longhouse':
         return { output: `+${level * 100} storage capacity` };
+      case 'pumpkinfarm': {
+        const workersCap = level * 4;
+        return { output: `+${level * 144} food/h`, workers: `${workersCap}/${workersCap}` };
+      }
+      case 'fishinghut': {
+        const workersCap = level * 3;
+        return { output: `+${level * 120} food/h`, modifier: nearWater ? 'Coastal' : undefined, workers: `${workersCap}/${workersCap}` };
+      }
+      case 'magictower':
+        return { output: `+${level * 24} iron/h`, modifier: 'Arcane' };
       default:
         return {};
     }

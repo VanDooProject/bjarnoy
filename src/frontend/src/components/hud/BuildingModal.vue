@@ -11,6 +11,8 @@ import grassUrl from '../../../vendor/bg_assets_hextile/hextiles/grasstile_SE.pn
 import forestUrl from '../../../vendor/bg_assets_hextile/hextiles/foresttile_SE.png';
 import mountainUrl from '../../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
 import sandUrl from '../../../vendor/bg_assets_hextile/hextiles/sandtile_SE.png';
+import fishinghutUrl from '../../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
+import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 
 const props = defineProps<{
   tile: Tile;
@@ -33,11 +35,19 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   longhouse: 'vikinghut',
   farm: 'farm_crop',
   tower: 'towerbuilding',
+  pumpkinfarm: 'farm_pumpkin',
+};
+
+// fishinghut/magictower have no level suffix at all — a single composited
+// image per building, unlike the families above.
+const SINGLE_LEVEL_ART: Record<string, string> = {
+  fishinghut: fishinghutUrl,
+  magictower: magictowerUrl,
 };
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,farm_crop,towerbuilding}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,farm_crop,towerbuilding,farm_pumpkin}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 
@@ -65,6 +75,9 @@ const BUILDING_NAMES: Record<string, string> = {
   farm: 'Farm',
   tower: 'Watchtower',
   longhouse: 'Longhouse',
+  fishinghut: 'Fishing Hut',
+  magictower: 'Magic Tower',
+  pumpkinfarm: 'Pumpkin Farm',
 };
 
 const TERRAIN_NAMES: Record<string, string> = {
@@ -84,6 +97,7 @@ function artForLevel(levels: string[], level: number): string {
 const art = computed(() => {
   const { buildingType, buildingLevel, terrain } = props.tile;
   if (buildingType) {
+    if (SINGLE_LEVEL_ART[buildingType]) return SINGLE_LEVEL_ART[buildingType];
     const levels = BUILDING_ART_BY_LEVEL[buildingType];
     if (levels?.length) return artForLevel(levels, buildingLevel ?? 1);
   }
