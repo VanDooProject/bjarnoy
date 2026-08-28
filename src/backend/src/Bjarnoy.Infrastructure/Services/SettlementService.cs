@@ -35,6 +35,37 @@ public sealed record BuildResult(BuildRejection Rejection, BuildOrder? Order = n
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 }
 
+/// <summary>A page of settlements matching an admin search.</summary>
+public sealed record SettlementsPage(IReadOnlyList<SettlementEntity> Settlements, int TotalCount);
+
+/// <summary>Outcome of an admin resource grant.</summary>
+public enum GrantResourcesOutcome
+{
+    Applied,
+    SettlementNotFound,
+}
+
+public sealed record GrantResourcesResult(
+    GrantResourcesOutcome Outcome, SettlementEntity? Settlement = null, GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == GrantResourcesOutcome.Applied && Settlement is not null;
+}
+
+/// <summary>Outcome of an admin's direct building-level set.</summary>
+public enum SetBuildingLevelOutcome
+{
+    Applied,
+    SettlementNotFound,
+    BuildingNotFound,
+    InvalidLevel,
+}
+
+public sealed record AdminSetBuildingLevelResult(
+    SetBuildingLevelOutcome Outcome, SettlementEntity? Settlement = null, GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == SetBuildingLevelOutcome.Applied && Settlement is not null;
+}
+
 /// <summary>
 /// Settlements: founding them, reading them, and queueing builds in them.
 /// </summary>
@@ -248,6 +279,117 @@ public sealed class SettlementService(
         }
 
         return (settlement, clock);
+    }
+
+    /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
+    public async Task<SettlementsPage> SearchAsync(
+        Guid? worldId,
+        string? owner,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.Settlements.AsNoTracking().Include(s => s.World).Include(s => s.Buildings).AsQueryable();
+
+        if (worldId is { } world)
+        {
+            query = query.Where(s => s.WorldId == world);
+        }
+
+        if (!string.IsNullOrWhiteSpace(owner))
+        {
+            var term = owner.Trim().ToLowerInvariant();
+            query = query.Where(s => s.OwnerName.ToLower().Contains(term));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        // Guid v7 sorts time-ordered — same stable paging key UserService.GetUsersAsync uses.
+        var settlements = await query
+            .OrderBy(s => s.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new SettlementsPage(settlements, totalCount);
+    }
+
+    /// <summary>
+    /// Admin god-mode: grants (or, with a negative component, removes) a
+    /// signed resource delta, settling the pool to now first so accrued
+    /// production since the last settle is neither lost nor misapplied.
+    /// </summary>
+    public async Task<GrantResourcesResult> GrantResourcesAsync(
+        Guid settlementId,
+        ResourceAmounts delta,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new GrantResourcesResult(GrantResourcesOutcome.SettlementNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var granted = settled with { Resources = settled.Resources.Adjust(delta, now) };
+
+        settlement.ApplyDomain(granted);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin granted {Delta} to settlement {Id}.", delta, settlementId);
+
+        return new GrantResourcesResult(GrantResourcesOutcome.Applied, settlement, clock);
+    }
+
+    /// <summary>
+    /// Admin god-mode: sets a placed building's level directly, settling the
+    /// settlement to now first so the rate recalculation applies from now
+    /// onward rather than retroactively.
+    /// </summary>
+    public async Task<AdminSetBuildingLevelResult> SetBuildingLevelAsync(
+        Guid settlementId,
+        HexCoord coord,
+        int level,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new AdminSetBuildingLevelResult(SetBuildingLevelOutcome.SettlementNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var result = settled.SetBuildingLevel(coord, level, now, settlement.World.SpeedFactor);
+
+        if (!result.Accepted)
+        {
+            var outcome = result.Rejection switch
+            {
+                SetBuildingLevelRejection.BuildingNotFound => SetBuildingLevelOutcome.BuildingNotFound,
+                SetBuildingLevelRejection.InvalidLevel => SetBuildingLevelOutcome.InvalidLevel,
+                _ => SetBuildingLevelOutcome.BuildingNotFound,
+            };
+
+            // A rejected set may still have completed due builds while
+            // settling, which is a real change worth keeping.
+            await PersistIfSettledAsync(settlement, settled, now, cancellationToken).ConfigureAwait(false);
+            return new AdminSetBuildingLevelResult(outcome);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin set building at {Coord} in settlement {Id} to level {Level}.", coord, settlementId, level);
+
+        return new AdminSetBuildingLevelResult(SetBuildingLevelOutcome.Applied, settlement, clock);
     }
 
     public Task<List<SettlementEntity>> GetForWorldAsync(

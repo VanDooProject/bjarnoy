@@ -99,4 +99,15 @@ public static class HttpResponseExtensions
 
         return client.PatchAsJsonAsync(url, value, SqliteApiFixture.StrictJson, cancellationToken);
     }
+
+    public static Task<HttpResponseMessage> PutJsonAsync<T>(
+        this HttpClient client,
+        string url,
+        T value,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        return client.PutAsJsonAsync(url, value, SqliteApiFixture.StrictJson, cancellationToken);
+    }
 }

@@ -416,6 +416,66 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Admin_setting_a_buildings_level_recomputes_rates_like_a_normal_completion()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 3, order.CompletesAt);
+
+        Assert.True(result.Accepted);
+        var farm = result.Settlement!.Buildings.Single(b => b.Type == BuildingType.Farm);
+        Assert.Equal(3, farm.Level);
+
+        var (expectedProduction, expectedCapacity) = BuildingCatalogue.Totals(
+            result.Settlement.Buildings.Select(b => (b.Type, b.Level)));
+        Assert.Equal(expectedProduction.Food, result.Settlement.Resources.RatePerHour.Food, 6);
+        Assert.Equal(expectedCapacity.Wood, result.Settlement.Resources.Capacity.Wood, 6);
+    }
+
+    [Fact]
+    public void Admin_setting_a_buildings_level_settles_first_so_no_production_is_lost()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        // Two hours of accrued production at the level-1 rate must survive the
+        // level-set, exactly like a normal SettleTo would preserve it.
+        var now = order.CompletesAt.AddHours(2);
+        var stockJustBefore = built.Resources.At(now);
+
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 2, now);
+
+        Assert.True(result.Accepted);
+        Assert.Equal(stockJustBefore.Food, result.Settlement!.Resources.At(now).Food, 6);
+        Assert.Equal(now, result.Settlement.Resources.SettledAt);
+    }
+
+    [Fact]
+    public void Setting_the_level_of_a_hex_with_no_building_is_refused()
+    {
+        var settlement = Found();
+
+        var result = settlement.SetBuildingLevel(new HexCoord(5, 5), level: 1, T0);
+
+        Assert.Equal(SetBuildingLevelRejection.BuildingNotFound, result.Rejection);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    public void Setting_a_level_outside_the_catalogues_range_is_refused(int level)
+    {
+        var settlement = Found();
+
+        var result = settlement.SetBuildingLevel(Centre, level, T0);
+
+        Assert.Equal(SetBuildingLevelRejection.InvalidLevel, result.Rejection);
+    }
+
+    [Fact]
     public void A_speed_factor_of_two_halves_the_build_duration()
     {
         var settlement = Found();

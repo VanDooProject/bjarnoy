@@ -208,6 +208,48 @@ public class ResourcePoolTests
     }
 
     [Fact]
+    public void Adjust_settles_first_so_no_production_is_lost()
+    {
+        var pool = Pool(stock: 100, rate: 60, capacity: 10_000);
+
+        // 100 + 60 accrued over the hour, then a +20 admin grant.
+        var after = pool.Adjust(ResourceAmounts.Uniform(20), T0.AddHours(1));
+
+        Assert.Equal(180, after.Stock.Wood, 6);
+        Assert.Equal(T0.AddHours(1), after.SettledAt);
+    }
+
+    [Fact]
+    public void Adjust_accepts_a_negative_delta_to_remove_resources()
+    {
+        var pool = Pool(stock: 100, rate: 0);
+
+        var after = pool.Adjust(ResourceAmounts.Uniform(-40), T0);
+
+        Assert.Equal(60, after.Stock.Wood, 6);
+    }
+
+    [Fact]
+    public void Adjust_floors_a_removal_larger_than_the_current_stock_at_zero()
+    {
+        var pool = Pool(stock: 30, rate: 0);
+
+        var after = pool.Adjust(ResourceAmounts.Uniform(-1000), T0);
+
+        Assert.Equal(0, after.Stock.Wood, 6);
+    }
+
+    [Fact]
+    public void Adjust_clamps_a_grant_to_capacity()
+    {
+        var pool = Pool(stock: 100, rate: 0, capacity: 150);
+
+        var after = pool.Adjust(ResourceAmounts.Uniform(1000), T0);
+
+        Assert.Equal(150, after.Stock.Wood, 6);
+    }
+
+    [Fact]
     public void Raising_the_rate_does_not_apply_retroactively()
     {
         var pool = Pool(stock: 0, rate: 10, capacity: 100_000);

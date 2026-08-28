@@ -218,6 +218,40 @@ public sealed record Settlement
         return this with { Resources = paid, Queue = [.. Queue, order] };
     }
 
+    /// <summary>
+    /// Admin god-mode: sets an already-placed building's level directly,
+    /// bypassing cost and queueing, and recomputes production/capacity exactly
+    /// as a normal build completion would.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement (see <see cref="SettleTo"/>) so
+    /// the rate change is stamped from "now" rather than retroactively
+    /// changing output already accrued — the same rule <see cref="SettleTo"/>
+    /// itself follows per completed order.
+    /// </remarks>
+    public SetBuildingLevelResult SetBuildingLevel(HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0)
+    {
+        var buildings = Buildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        if (index < 0)
+        {
+            return SetBuildingLevelResult.Rejected(SetBuildingLevelRejection.BuildingNotFound);
+        }
+
+        var type = buildings[index].Type;
+        if (BuildingCatalogue.TryGet(type, level) is null)
+        {
+            return SetBuildingLevelResult.Rejected(SetBuildingLevelRejection.InvalidLevel);
+        }
+
+        buildings[index] = buildings[index] with { Level = level };
+
+        var (production, capacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var resources = Resources.WithRate(production * speedFactor, capacity, now);
+
+        return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
+    }
+
     /// <summary>Production and capacity implied by what currently stands.</summary>
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(double speedFactor = 1.0)
     {
