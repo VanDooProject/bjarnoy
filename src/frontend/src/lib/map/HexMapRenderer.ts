@@ -205,7 +205,7 @@ export interface HexMapRendererOptions {
    * sit right of centre rather than directly behind the copy.
    */
   screenBiasX?: number;
-  onHexClick?: (coord: AxialCoord, tile: Tile) => void;
+  onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
 }
@@ -858,7 +858,13 @@ export class HexMapRenderer {
     const world = screenToWorld(this.camera, screen, this.viewport);
     const coord = isoPixelToAxial(world, TILE_W, TILE_H);
     const tile = this.options.worldModel.getTile(coord.q, coord.r);
-    this.options.onHexClick?.(coord, tile);
+    // Issue #16 "ring menu on click of tile": the ring anchors on the
+    // clicked hex's own screen centre (same point the hover tooltip anchors
+    // to) rather than the raw pointer position, so it stays centred on the
+    // tile regardless of exactly where within it the player clicked.
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+    this.options.onHexClick?.(coord, tile, anchor);
   }
 
   private scheduleCull() {

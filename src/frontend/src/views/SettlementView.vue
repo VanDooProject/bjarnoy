@@ -9,6 +9,7 @@ import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
@@ -46,10 +47,10 @@ function onHover(info: HoverInfo | null) {
   hoverInfo.value = info;
 }
 
-// zip 9: "Hex interaction | Hover = stats tooltip · Click = full-screen
-// building screen" — clicking a hex opens the full-screen detail screen
-// (BuildingModal) instead of building instantly; the modal's own
-// build/upgrade button does the actual placement.
+// Issue #16 "ring/radial context menu on tile click": replaces the old
+// click-always-opens-BuildingModal behaviour. A click now opens a
+// RingMenu whose actions depend on the tile's state; "Details"/"Info" is
+// what opens BuildingModal now, rather than every click doing so.
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
@@ -65,38 +66,202 @@ const modalOwnerLabel = computed(() => {
   return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
 });
 
-function onHexClick(coord: AxialCoord, tile: Tile) {
+// Ring menu state. `ringLevel` walks root -> build-categories -> a
+// category's building list, per the issue's "build (which opens another
+// ring outside with available buildings on this spot, on grass it should
+// have multiple build categories/entries and real buildings in outer ring
+// each)".
+type RingLevel = 'root' | 'build-categories' | 'build-buildings';
+const ringLevel = ref<RingLevel>('root');
+const ringScreen = ref<{ x: number; y: number } | null>(null);
+const ringCategory = ref<string | null>(null);
+
+interface BuildCategory {
+  id: string;
+  label: string;
+  buildings: { type: 'hut' | 'farm' | 'tower'; label: string }[];
+}
+// Grass gets the full spread of categories (housing/resource/defense);
+// other buildable terrain only offers one outer ring rather than the same
+// multi-category spread — matches the issue calling out grass specifically.
+const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
+  grass: [
+    { id: 'housing', label: 'Housing', buildings: [{ type: 'hut', label: 'Hut' }] },
+    { id: 'resource', label: 'Resource', buildings: [{ type: 'farm', label: 'Farm' }] },
+    { id: 'defense', label: 'Defense', buildings: [{ type: 'tower', label: 'Watchtower' }] },
+  ],
+  other: [
+    {
+      id: 'buildings',
+      label: 'Build',
+      buildings: [
+        { type: 'hut', label: 'Hut' },
+        { type: 'farm', label: 'Farm' },
+        { type: 'tower', label: 'Watchtower' },
+      ],
+    },
+  ],
+};
+
+function categoriesFor(tile: Tile): BuildCategory[] {
+  return BUILD_CATEGORIES[tile.terrain === 'grass' ? 'grass' : 'other'];
+}
+
+const isEnemyTile = computed(
+  () => !!selectedTile.value?.ownerId && selectedTile.value.ownerId !== world.selectedSettlementId,
+);
+const isMineTile = computed(
+  () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
+);
+const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
+
+const ringActions = computed<RingAction[]>(() => {
+  const tile = selectedTile.value;
+  if (!tile) return [];
+
+  if (ringLevel.value === 'build-categories') {
+    return categoriesFor(tile).map((cat) => ({ id: cat.id, label: cat.label }));
+  }
+  if (ringLevel.value === 'build-buildings') {
+    const category = categoriesFor(tile).find((c) => c.id === ringCategory.value);
+    return (category?.buildings ?? []).map((b) => ({ id: b.type, label: b.label }));
+  }
+
+  // root level
+  if (isEnemyTile.value) {
+    return [
+      { id: 'info', label: 'Info' },
+      { id: 'attack', label: 'Attack / Raid', disabled: true, hint: 'Combat is not implemented yet' },
+    ];
+  }
+  if (isUnclaimedTile.value) {
+    const onCoast = tile.terrain === 'sand';
+    return [
+      { id: 'info', label: 'Info' },
+      {
+        id: onCoast ? 'land-here' : 'send-settlers',
+        label: onCoast ? 'Land here' : 'Send settlers',
+        disabled: true,
+        hint: 'You have no settlers available yet',
+      },
+    ];
+  }
+  if (isMineTile.value && tile.buildingType) {
+    const actions: RingAction[] = [
+      { id: 'upgrade', label: 'Upgrade' },
+      {
+        id: 'raze',
+        label: 'Raze',
+        disabled: tile.buildingType === 'longhouse' || !DEMO_MODE,
+        hint: tile.buildingType === 'longhouse' ? "Can't raze the longhouse" : 'Not wired to the backend yet',
+      },
+      { id: 'details', label: 'Details' },
+    ];
+    // Building-specific actions (train/research): none of today's building
+    // types (hut/farm/tower/longhouse) expose one yet, so nothing is added
+    // here — the branch exists so a future barracks/academy building type
+    // has somewhere to plug in without restructuring the ring.
+    return actions;
+  }
+  if (isMineTile.value) {
+    return [
+      { id: 'details', label: 'Details' },
+      { id: 'build', label: 'Build', disabled: tile.terrain === 'sea', hint: 'Open water' },
+    ];
+  }
+  return [{ id: 'details', label: 'Details' }];
+});
+
+const ringBadge = computed(() => {
+  const tile = selectedTile.value;
+  if (ringLevel.value !== 'root' || !isMineTile.value || !tile?.buildingType) return undefined;
+  return `Lv ${tile.buildingLevel ?? 1} upgrade`;
+});
+
+function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
+  ringScreen.value = screen;
+  ringLevel.value = 'root';
+  ringCategory.value = null;
+}
+
+function closeRing() {
+  selectedCoord.value = null;
+  selectedTile.value = null;
+  ringScreen.value = null;
+  ringLevel.value = 'root';
+  ringCategory.value = null;
+}
+
+async function onRingSelect(id: string) {
+  if (ringLevel.value === 'build-categories') {
+    ringCategory.value = id;
+    ringLevel.value = 'build-buildings';
+    return;
+  }
+  if (ringLevel.value === 'build-buildings') {
+    await buildType(id as 'hut' | 'farm' | 'tower');
+    closeRing();
+    return;
+  }
+  switch (id) {
+    case 'details':
+    case 'info':
+      // Falls through to BuildingModal below, ring stays "open" only long
+      // enough for the modal to take over the same selectedTile.
+      ringScreen.value = null;
+      return;
+    case 'build':
+      ringLevel.value = 'build-categories';
+      return;
+    case 'upgrade':
+      await upgrade();
+      closeRing();
+      return;
+    case 'raze':
+      if (world.selectedSettlementId && selectedCoord.value) {
+        world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
+      }
+      closeRing();
+      return;
+    default:
+      return;
+  }
 }
 
 function closeModal() {
-  selectedCoord.value = null;
-  selectedTile.value = null;
+  closeRing();
   modalBusy.value = false;
 }
 
-// Demo mode places a hut instantly; live mode queues a real farm against the
-// backend (there is no "hut" in the backend's catalogue — see
-// BuildingType.cs) and waits for the build order to complete. Kept as the
-// existing stand-in for the full build-choice menu, just surfaced through
-// the modal rather than fired straight from the click.
-async function build() {
+// Demo mode places the chosen building instantly; live mode queues a real
+// farm against the backend regardless of which type the ring's build-ring
+// picked (there is no "hut"/"tower" in the backend's catalogue yet — see
+// BuildingType.cs) and waits for the build order to complete.
+async function buildType(type: 'hut' | 'farm' | 'tower') {
   if (!world.selectedSettlementId || !selectedCoord.value) return;
   if (DEMO_MODE) {
-    world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, 'hut');
-    closeModal();
+    world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
     return;
   }
   modalBusy.value = true;
   try {
     await world.queueBuildLive('farm', selectedCoord.value);
-    closeModal();
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
+  } finally {
     modalBusy.value = false;
   }
+}
+
+// BuildingModal's own "Build here" button (opened via the ring's
+// Details/Info action on an empty tile) has no category/type picker of its
+// own, so it keeps the previous default of a hut.
+async function build() {
+  await buildType('hut');
+  closeModal();
 }
 
 async function upgrade() {
@@ -143,8 +308,17 @@ async function upgrade() {
     <RealmPanel />
     <BuildQueuePanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
+    <RingMenu
+      v-if="selectedTile && ringScreen"
+      :x="ringScreen.x"
+      :y="ringScreen.y"
+      :actions="ringActions"
+      :badge="ringBadge"
+      @select="onRingSelect"
+      @close="closeRing"
+    />
     <BuildingModal
-      v-if="selectedTile"
+      v-if="selectedTile && !ringScreen"
       :tile="selectedTile"
       :mine="modalMine"
       :owner-label="modalOwnerLabel"

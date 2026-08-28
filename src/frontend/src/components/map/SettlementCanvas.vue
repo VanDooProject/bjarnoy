@@ -23,7 +23,10 @@ const props = defineProps<{
   // in-game fog.
   background?: string;
 }>();
-const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile]; hover: [info: HoverInfo | null] }>();
+const emit = defineEmits<{
+  'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
+  hover: [info: HoverInfo | null];
+}>();
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -36,7 +39,7 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   previewCenter: props.previewCenter,
   highlightCoord: props.highlightCoord,
   screenBiasX: props.screenBiasX,
-  onHexClick: (coord, tile) => emit('hex-click', coord, tile),
+  onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
 });
 

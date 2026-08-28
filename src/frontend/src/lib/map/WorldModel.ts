@@ -274,6 +274,21 @@ export class WorldModel {
     return true;
   }
 
+  /**
+   * Issue #16 ring menu "tear down": demo-mode only — the backend
+   * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
+   * disables this action rather than pretending to support it (see
+   * SettlementView.vue's ring-menu wiring). Clears the building but leaves
+   * the hex claimed by the settlement.
+   */
+  razeBuilding(settlementId: string, at: AxialCoord): boolean {
+    const tile = this.getTile(at.q, at.r);
+    if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
+    tile.buildingType = undefined;
+    tile.buildingLevel = undefined;
+    return true;
+  }
+
   addFleet(fleet: Fleet) {
     this.fleets.set(fleet.id, fleet);
   }
