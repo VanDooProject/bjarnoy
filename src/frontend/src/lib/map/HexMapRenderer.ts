@@ -1737,7 +1737,8 @@ export class HexMapRenderer {
       let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
       for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
         const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
-        topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 2);
+        //topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 4);
+        topWorldY = Math.min(topWorldY, tileGrid.y);
       }
       const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
       const mine = settlement.ownerId === playerId;
