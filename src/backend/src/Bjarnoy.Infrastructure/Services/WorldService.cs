@@ -122,6 +122,21 @@ public sealed class WorldService(
     public Task<int> GetIslandCountAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands.AsNoTracking().CountAsync(i => i.WorldId == worldId, cancellationToken);
 
+    /// <summary>
+    /// Settlement count per world, i.e. player count: one settlement per player
+    /// per world today (see <see cref="SettlementService.FoundAsync"/>).
+    /// </summary>
+    public async Task<Dictionary<Guid, int>> GetPlayerCountsAsync(CancellationToken cancellationToken = default) =>
+        await _dbContext.Settlements
+            .AsNoTracking()
+            .GroupBy(s => s.WorldId)
+            .Select(g => new { WorldId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.WorldId, x => x.Count, cancellationToken)
+            .ConfigureAwait(false);
+
+    public Task<int> GetPlayerCountAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+        _dbContext.Settlements.AsNoTracking().CountAsync(s => s.WorldId == worldId, cancellationToken);
+
     public Task<List<IslandEntity>> GetIslandsAsync(Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Islands
             .AsNoTracking()

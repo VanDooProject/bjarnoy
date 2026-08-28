@@ -347,6 +347,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("EndbossAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("EndbossTriggeredAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<double>("ForestRockiness")
                         .HasColumnType("double precision");
 
@@ -361,6 +367,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<double>("IslandMinRadius")
                         .HasColumnType("double precision");
+
+                    b.Property<bool>("JoinsClosed")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("integer");
@@ -390,6 +399,14 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<int>("Seed")
                         .HasColumnType("integer");
+
+                    b.Property<double>("SpeedFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(1.0);
+
+                    b.Property<DateTimeOffset?>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
