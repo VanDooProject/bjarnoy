@@ -1557,6 +1557,9 @@ export class HexMapRenderer {
       const ownerLabel = this.acquireLabel();
       ownerLabel.text = settlement.ownerName;
       ownerLabel.style.fill = mine ? GOLD : RIVAL;
+      ownerLabel.style.fontWeight = 'normal';
+      ownerLabel.style.fontSize = 11;
+      ownerLabel.style.letterSpacing = 0;
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
@@ -1572,12 +1575,20 @@ export class HexMapRenderer {
       if (fogActive && !worldModel.isExplored(island.q, island.r)) continue;
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+      const mineIsland = island.id === myIslandId;
       const label = this.acquireLabel();
-      label.text = island.name;
-      label.style.fill = island.id === myIslandId ? GOLD : 0xe8f0f5;
-      label.style.fontWeight = island.id === myIslandId ? 'bold' : 'normal';
-      label.anchor.set(0.5, 1);
-      label.position.set(center.x, center.y - 6 * this.camera.zoom - 4);
+      // Reference styling: uppercase, letter-spaced small-caps label, muted
+      // gray for other islands, gold + bold for the player's own.
+      label.text = island.name.toUpperCase();
+      label.style.fill = mineIsland ? GOLD : 0x8fa3af;
+      label.style.fontWeight = mineIsland ? 'bold' : '600';
+      label.style.fontSize = 13;
+      label.style.letterSpacing = 1.5;
+      // Reference places the name *below* the island's shape, not over it —
+      // anchor at the label's top edge and offset down past the island's
+      // own footprint (its hexes extend roughly TILE_H below this centre).
+      label.anchor.set(0.5, 0);
+      label.position.set(center.x, center.y + TILE_H * 1.1 * this.camera.zoom);
       label.visible = true;
     }
 
@@ -1602,6 +1613,9 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
       label.style.fill = 0xe8f0f5;
+      label.style.fontWeight = 'normal';
+      label.style.fontSize = 11;
+      label.style.letterSpacing = 0;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
