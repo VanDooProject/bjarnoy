@@ -26,7 +26,9 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ select: [id: string]; close: [] }>();
 
-const RADIUS = 92;
+// Issue #16 "ring menu": reference shows the bubbles spread well clear of
+// the tile in an orbit, not crowded around it.
+const RADIUS = 110;
 
 const positioned = computed(() => {
   const n = props.actions.length;
@@ -103,11 +105,18 @@ function select(action: RingAction) {
 .ring-bubble {
   position: absolute;
   transform: translate(-50%, -50%);
-  min-width: 84px;
-  padding: 10px 14px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
+  /* Reference: a plain circle, same size regardless of label length — not
+     a pill that stretches with its text. */
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(8, 18, 26, 0.88);
+  border: none;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -116,7 +125,6 @@ function select(action: RingAction) {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 .ring-bubble:hover:not(.disabled) {
-  border-color: var(--gold);
   color: var(--gold);
 }
 .ring-bubble.disabled {

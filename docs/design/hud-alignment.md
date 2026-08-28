@@ -107,13 +107,23 @@ authoritative spec:
 > ring bubbles are noticeably larger and more spread out than a tight cluster; the whole thing reads as
 > orbiting the tile rather than crowding it.
 
-**Correction after review:** the current `RingMenu.vue` renders small pill/capsule buttons (not perfect
-circles), with a visible 1px border and a much larger label font padding that makes 4-action rings feel
-cramped compared to the reference's clean circular bubbles with generous white space between them. There is
-also no curved guide line from a badge to the ring (the settlement-level badge floats independently, drawn
-by `HexMapRenderer`, not `RingMenu`), and the reference's stray "+" ghost button has no equivalent in this
-codebase (there's no concept of a lightweight "add" affordance separate from the ring). Track this styling
-gap as a follow-up rather than guessing further changes without re-confirming against the image above.
+**Correction after review:** `RingMenu.vue` rendered small pill/capsule buttons (not perfect circles), with
+a visible 1px border and a much larger label font padding that made 4-action rings feel cramped compared to
+the reference's clean circular bubbles with generous white space between them.
+
+Fixed: bubbles are now a fixed-size circle (`88px`, `border-radius: 50%`, centered text) regardless of label
+length instead of a text-width-driven pill, the border is gone (a plain dark fill, matching the reference's
+borderless look), and `RADIUS` (bubble orbit distance) went from `92` to `110` for more breathing room around
+the tile. Verified with a screenshot after the change — see below.
+
+Two smaller reference details were *not* replicated, and are called out rather than silently dropped: the
+reference's curved guide line from the level-up badge down to the ring (the settlement-level badge is drawn
+independently by `HexMapRenderer`, not `RingMenu`, so connecting them would mean threading ring-menu state
+into the canvas renderer — a bigger structural change than a styling pass), and the reference's stray "+"
+ghost button outside the ring entirely (there's no existing concept in this codebase of a lightweight "add"
+affordance separate from the ring/build flow). Both are left as open follow-ups rather than guessed at.
+
+![ring menu with circular bubbles, no border](img/ring_menu_circular.png)
 
 **Current state before this pass:** `SettlementView.vue`'s `onHexClick` always opened `BuildingModal.vue`
 directly — a full-screen detail sheet — for every click, regardless of what was clicked. There was no radial
