@@ -513,6 +513,12 @@ export class HexMapRenderer {
   private dragMoved = 0;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
+  // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
+  // top of the canvas, but this renderer's own pointer tracking is a
+  // window-level listener (see onPointerMove below) that keeps resolving a
+  // hovered hex and drawing its highlight regardless of what's visually on
+  // top — so it needs an explicit lock, not just relying on DOM hit-testing.
+  private interactionLocked = false;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -766,6 +772,25 @@ export class HexMapRenderer {
   }
 
   private onPointerDown = (e: PointerEvent) => {
+    // Normally unreachable while a ring is open — its backdrop overlay
+    // covers the whole canvas, so a real pointerdown there hits the
+    // backdrop's own handler instead of this canvas-scoped listener — but
+    // kept as a defensive guard rather than relying on that DOM layering.
+    if (this.interactionLocked) return;
+    this.startDrag(e);
+  };
+
+  // Issue #16 "ring menu": a mousedown on the ring's own backdrop (i.e.
+  // outside any bubble) closes the ring — see RingMenu.vue's
+  // outsidePointerDown emit — and the caller re-fires that same PointerEvent
+  // in here so the drag it started keeps going, instead of the player
+  // needing a second, separate mousedown to start panning the map.
+  beginDragFrom(e: PointerEvent) {
+    this.interactionLocked = false;
+    this.startDrag(e);
+  }
+
+  private startDrag(e: PointerEvent) {
     this.idleDrift = false;
     this.dragging = true;
     this.dragMoved = 0;
@@ -781,10 +806,20 @@ export class HexMapRenderer {
     this.fogFadeStartedAt = null;
     this.fogBlobCacheSprite.alpha = 1;
     this.fogLayer.alpha = 1;
-  };
+  }
+
+  /** Issue #16 "ring menu": disable hover highlighting/tooltip and zoom
+   *  while a RingMenu is open — its bubbles float on top of the canvas, but
+   *  this renderer's own hover/wheel tracking doesn't otherwise know a menu
+   *  is up (see the class-level comment on `interactionLocked`). */
+  setInteractionLocked(locked: boolean) {
+    this.interactionLocked = locked;
+    if (locked) this.setHoveredCoord(null);
+  }
 
   private onPointerMove = (e: PointerEvent) => {
     if (!this.dragging) {
+      if (this.interactionLocked) return;
       this.updateHover(e);
       return;
     }
@@ -961,6 +996,7 @@ export class HexMapRenderer {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    if (this.interactionLocked) return;
     this.idleDrift = false;
     const canvas = this.app?.canvas;
     if (!canvas) return;

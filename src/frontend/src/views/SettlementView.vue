@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
@@ -99,6 +99,23 @@ type RingLevel = 'root' | 'build-categories' | 'build-buildings';
 const ringLevel = ref<RingLevel>('root');
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringCategory = ref<string | null>(null);
+
+// Issue #16 "ring menu": while any ring is open, its bubbles float on top
+// of the canvas, but the renderer's own pointer tracking is window-level
+// (see HexMapRenderer's onPointerMove) and doesn't know a menu is up —
+// lock out hover/wheel there for as long as a ring is showing.
+watch(ringScreen, (screen) => {
+  canvasRef.value?.renderer?.setInteractionLocked(!!screen);
+});
+
+// A mousedown on the ring's own backdrop (not a bubble) closes the ring and
+// hands back the same PointerEvent so the map can start dragging from it
+// immediately — otherwise the player would need a second, separate
+// mousedown just to start panning after dismissing the ring.
+function onRingOutsidePointerDown(e: PointerEvent) {
+  closeRing();
+  canvasRef.value?.renderer?.beginDragFrom(e);
+}
 
 interface BuildCategory {
   id: string;
@@ -365,6 +382,7 @@ async function upgrade() {
       @select="onRingSelect"
       @hover="onRingHover"
       @close="closeRing"
+      @outside-pointer-down="onRingOutsidePointerDown"
     />
     <BuildingModal
       v-if="selectedTile && !ringScreen"

@@ -33,7 +33,17 @@ const props = defineProps<{
   // action, not just a text label.
   badgeAction?: BadgeAction;
 }>();
-const emit = defineEmits<{ select: [id: string]; hover: [id: string]; close: [] }>();
+const emit = defineEmits<{
+  select: [id: string];
+  hover: [id: string];
+  close: [];
+  // Issue #16 "mouse down on the map should close the ring so we can drag":
+  // a mousedown on the backdrop (not a bubble) closes the ring *and* hands
+  // the same PointerEvent back so the caller can immediately start a map
+  // drag from it — a plain `close` on click would only fire after the
+  // mouse is released, too late for that same gesture to become a drag.
+  outsidePointerDown: [event: PointerEvent];
+}>();
 
 // Issue #16 "ring menu": reference shows the bubbles spread well clear of
 // the tile in an orbit, not crowded around it.
@@ -98,7 +108,11 @@ function hover(action: RingAction) {
 </script>
 
 <template>
-  <div class="ring-backdrop" @click.self="emit('close')" @contextmenu.prevent="emit('close')">
+  <div
+    class="ring-backdrop"
+    @pointerdown.self="emit('outsidePointerDown', $event)"
+    @contextmenu.prevent="emit('close')"
+  >
     <!-- Issue #16 "ring menu": a faint orbit track under the bubbles (the
          "ring" itself, not just floating buttons), plus the curved guide
          line down from the badge when one is present. -->
