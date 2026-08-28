@@ -314,26 +314,39 @@ explicitly on the other two label types sharing the same `Text` object pool (`ow
 so a pooled instance recycled across frames for a different label type can't inherit a stray letter-spacing
 value left over from an island label.
 
-Also fixed the label's *position*, twice. First pass anchored it above the island's centre
-(`anchor(0.5, 1)`, offset upward), drawing it over the island's own hexes rather than below the island's
-footprint as every island in the reference shows it — flipped to the label's top edge (`anchor(0.5, 0)`) with
-a downward offset. That first downward offset (`TILE_H * 1.1 * zoom`) was still too small, though: it's
-scaled off a single tile's height, but an island is many hexes across (`worldGenerator`'s
-`ISLAND_MAX_RADIUS` is ~5.6 hexes), so the label still sat on the island's lower tiles instead of clearing
-past them — caught from a follow-up screenshot after the first "fixed" claim, not caught by inspection alone.
-The renderer has no per-island footprint to measure (islands are generated procedurally, not stored as a
-radius), so the offset (`ISLAND_LABEL_CLEARANCE = 3.5`, i.e. `TILE_H * 3.5 * zoom`) is picked empirically
-large enough to clear the biggest plausible island rather than risk sitting on top of a smaller one.
+Also fixed the label's *position*, through three attempts — worth being honest about all three, since the
+first two were each claimed fixed without actually measuring the result:
+
+1. First pass anchored it above the island's centre (`anchor(0.5, 1)`, offset upward), drawing it over the
+   island's own hexes.
+2. "Fixed" by flipping to the label's top edge with a downward offset scaled off a *single tile's* height
+   (`TILE_H * 1.1 * zoom`) — too small for an island that's many hexes across, so the label still sat on the
+   island's lower tiles. Caught from a screenshot, not from re-inspecting the code.
+3. "Fixed" again by just enlarging that same guessed multiplier (`TILE_H * 3.5 * zoom`, later `* 6`) — still
+   a guess, and a bad one: pixel-sampling the screenshot (not eyeballing it) showed the label's text rows
+   directly overlapping the island's sand-tile pixels. Guessing a bigger constant was the wrong fix for a
+   procedurally-*sized* island (`worldGenerator`'s `ISLAND_MIN/MAX_RADIUS` varies ~2.4-5.6 hexes per
+   island) — any fixed multiplier either clips a big island or strands the label far below a small one.
+
+The actual fix: `WorldModel.islandFootprint(island)` flood-fills the island's real connected land tiles from
+its centre (bounded by `isLand()`, capped at 200 tiles as a backstop) and caches the result per island id
+(`rebuildMarkers` runs every render tick, so this can't be recomputed from scratch every frame). The renderer
+then measures the true bottom edge — the lowest tile-bottom-vertex screen position across that footprint —
+and places the label a small fixed margin below *that*, which by construction cannot overlap the island
+regardless of its generated size.
 
 **Verified:** demo mode's `WorldModel` still never calls `setIslands()` (only `bootstrapLiveWorld()` does,
 live-mode only), so the gold/non-gold *comparison* itself still can't be exercised against the real backend
 in this environment. To at least verify the *rendering* (not the data plumbing) without standing up the
 .NET backend, the running demo-mode app's debug hook (`window.__demoWorld()`) was used to inject a stub
-`islandId` on the player's own settlement and three fake `IslandLabel`s via `WorldModel.setIslands()`,
-matching the reference's island names (Steinsey / Draugrsker / Kaldøy) — see screenshot below. This confirms
-the label now actually looks like the reference (uppercase, letter-spaced, gold+bold for the owned island);
-it does not confirm the live-mode `islandId` wiring end-to-end, which still needs a session with the real
-backend running.
+`islandId` on the player's own settlement and a fake `IslandLabel` matching the reference's island name
+(Kaldøy) via `WorldModel.setIslands()` — see screenshot below. This time verified by pixel-sampling the
+screenshot (finding the lowest non-gold land pixel and the label's own text rows) rather than by looking at
+it, after two rounds of "looks fixed" turning out not to be: the land pixels end at row 449, the label's text
+starts at row 462 — a clear 13px gap, confirmed visually in a zoomed crop too. This confirms the label now
+actually looks like the reference (uppercase, letter-spaced, gold+bold for the owned island) and sits clear
+of the island regardless of its size; it does not confirm the live-mode `islandId` wiring end-to-end, which
+still needs a session with the real backend running.
 
 ![world map island name in gold, demo-mode stub](img/worldmap_island_gold_demo_stub.png)
 *("KALDØY" forced via the debug hook to carry the player's `islandId` — confirms the label styling, not the live-mode data plumbing*

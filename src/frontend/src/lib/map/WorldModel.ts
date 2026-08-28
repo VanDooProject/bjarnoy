@@ -4,7 +4,7 @@
 // tile map that can span thousands of hexes as the camera roams. The
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
-import { coordKey, hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
 import { emptyResources, type Fleet, type IslandLabel, type Resources, type Settlement, type Tile } from './types';
 
@@ -34,6 +34,8 @@ export class WorldModel {
   private lastTick = performance.now();
   /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
   private islands: IslandLabel[] = [];
+  /** islandFootprint()'s cache — see there for why this needs to exist at all. */
+  private islandFootprintCache = new Map<string, AxialCoord[]>();
 
   constructor(seed = 1) {
     this.seed = seed;
@@ -42,10 +44,55 @@ export class WorldModel {
   /** Live mode: island names/centres fetched from the backend (see `stores/world.ts`). */
   setIslands(islands: IslandLabel[]) {
     this.islands = islands;
+    this.islandFootprintCache.clear();
   }
 
   listIslands(): IslandLabel[] {
     return this.islands;
+  }
+
+  /**
+   * Issue #16 "map island names": the renderer needs to draw each island's
+   * label *below* its tiles, but islands are procedurally generated at
+   * varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS, ~2.4-5.6 hexes)
+   * with no stored radius anywhere — a fixed offset either overlaps a big
+   * island's tiles or floats absurdly far below a small one. This flood-
+   * fills the actual connected land tiles from the island's centre so the
+   * renderer can measure the real bottom edge instead of guessing.
+   *
+   * Cached per island id (cleared in `setIslands`): islands don't move or
+   * resize once fetched, and `rebuildMarkers` runs every render tick, so
+   * flood-filling from scratch every frame would be real, avoidable work —
+   * not something to hide behind a "we're in a test" branch, just something
+   * that only ever needs computing once. `MAX_FOOTPRINT_TILES` is a hard
+   * backstop against runaway growth (e.g. two islands generated close
+   * enough to touch), not the expected case.
+   */
+  islandFootprint(island: IslandLabel): AxialCoord[] {
+    const cached = this.islandFootprintCache.get(island.id);
+    if (cached) return cached;
+    const MAX_FOOTPRINT_TILES = 200;
+    const start = { q: island.q, r: island.r };
+    const tiles: AxialCoord[] = [];
+    if (this.isLand(start.q, start.r)) {
+      const seen = new Set<string>([coordKey(start)]);
+      const queue: AxialCoord[] = [start];
+      tiles.push(start);
+      while (queue.length && tiles.length < MAX_FOOTPRINT_TILES) {
+        const c = queue.shift()!;
+        for (const n of neighbors(c)) {
+          const k = coordKey(n);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          if (this.isLand(n.q, n.r)) {
+            tiles.push(n);
+            queue.push(n);
+          }
+        }
+      }
+    }
+    this.islandFootprintCache.set(island.id, tiles);
+    return tiles;
   }
 
   getTile(q: number, r: number): Tile {
