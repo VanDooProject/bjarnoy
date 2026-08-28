@@ -65,6 +65,24 @@ export interface IslandLabel {
   r: number;
 }
 
+/** Mirrors the backend's `RiverTileShape` wire names. */
+export type RiverTileShape = 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth';
+
+/**
+ * A single hex of a generated river, as served by the backend (see
+ * `RiverTileResponse`) — live mode only, since a river's shape depends on
+ * the whole island (and its other rivers), not just the hex's own
+ * coordinate, so it can't be derived client-side the way terrain/
+ * orientation/variant can.
+ */
+export interface RiverTile {
+  q: number;
+  r: number;
+  shape: RiverTileShape;
+  inDirections: TileOrientation[];
+  outDirection: TileOrientation | null;
+}
+
 export function emptyResources(): Resources {
   return { wood: 0, stone: 0, food: 0, iron: 0 };
 }

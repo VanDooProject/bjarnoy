@@ -57,6 +57,7 @@ import {
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
   loadTileTextures,
+  riverTexturesFor,
   topTextureFor,
   type TileTextures,
 } from './textures';
@@ -1125,8 +1126,20 @@ export class HexMapRenderer {
         continue;
       }
       const tile = worldModel.getTile(c.q, c.r);
+      // Rivers can't be derived from the seed the way terrain/orientation/
+      // variant can (a path depends on the whole island) — live mode only,
+      // fetched once per island and looked up here rather than folded into
+      // Tile itself, so a tile cached before that fetch lands never goes
+      // stale (see WorldModel.setRiverTiles).
+      const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
+      if (river) {
+        const riverTextures = riverTexturesFor(textures, river);
+        baseEntries.set(key, { texture: riverTextures.base, coord: c });
+        topEntries.set(key, { texture: riverTextures.top, coord: c });
+        continue;
+      }
       baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
       const topTexture = topTextureFor(textures, tile);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });

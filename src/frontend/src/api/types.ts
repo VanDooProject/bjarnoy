@@ -19,6 +19,15 @@ export interface TileCoordinate {
   r: number;
 }
 
+/** Mirrors `RiverTileResponse` — see that record's own doc comments for field semantics. */
+export interface RiverTileResponse {
+  q: number;
+  r: number;
+  shape: 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth';
+  inDirections: string[];
+  outDirection: string | null;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -27,6 +36,7 @@ export interface IslandResponse {
   r: number;
   tileCount: number;
   startPositions: TileCoordinate[];
+  riverTiles: RiverTileResponse[];
 }
 
 export interface ResourceLine {

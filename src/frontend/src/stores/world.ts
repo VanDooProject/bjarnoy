@@ -5,7 +5,7 @@ import type { BuildOrderResponse, IslandResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
-import type { Resources } from '../lib/map/types';
+import type { Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
 // How often live mode re-polls a settlement to pick up build-queue
@@ -109,6 +109,17 @@ export const useWorldStore = defineStore('world', {
       // per island at this position (world map only).
       this.model.setIslands(
         this.islands.map((island) => ({ id: island.id, name: island.name, q: island.q, r: island.r })),
+      );
+      this.model.setRiverTiles(
+        this.islands.flatMap((island) =>
+          island.riverTiles.map((tile) => ({
+            q: tile.q,
+            r: tile.r,
+            shape: tile.shape,
+            inDirections: tile.inDirections as TileOrientation[],
+            outDirection: tile.outDirection as TileOrientation | null,
+          })),
+        ),
       );
       this.liveReady = true;
       // Every other player already in this shared world needs to be known

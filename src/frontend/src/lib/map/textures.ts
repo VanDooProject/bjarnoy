@@ -30,7 +30,7 @@
 // filename prefix so unused families (fishing hut, magic tower, pumpkin
 // farm, rivers, ...) are still never bundled.
 import { Assets, Texture } from 'pixi.js';
-import type { Terrain, Tile, TileOrientation } from './types';
+import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import { TILE_ORIENTATIONS } from './types';
 
 export const TILE_ART_NATIVE_W = 200;
@@ -78,6 +78,51 @@ const SPLIT_BUILDING_BASE = import.meta.glob(
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop}_*.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+// One glob per river shape (not a single `rivertile_*` prefix glob): the
+// four shapes' filenames share the `rivertile_` prefix with an extra infix
+// (`bend_`/`spring_`/`y_narrow_`) before the orientation token, so a plain
+// prefix match (as buildPlain/buildIndexed use for every other family) can't
+// tell "straight" apart from the other three by prefix alone — keeping each
+// shape in its own glob result is what does. This also sidesteps the pack's
+// one stray `rivertile_SE_x2.png` in `top/`, which doesn't fit any shape's
+// exact orientation-suffixed pattern.
+//
+// Each pattern is a plain string literal (not built from a shared constant):
+// Vite's import.meta.glob is resolved by statically parsing the source text
+// of this exact call, not by evaluating a runtime expression, so the brace
+// alternation has to be written out at every call site or Vite can't see it.
+const RIVER_BASE_STRAIGHT = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_{E,NE,NW,W,SW,SE}_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_BASE_BEND = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend_{E,NE,NW,W,SW,SE}_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_BASE_SPRING = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_spring_{E,NE,NW,W,SW,SE}_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_BASE_CONFLUENCE = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_y_narrow_{E,NE,NW,W,SW,SE}_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_TOP_STRAIGHT = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_{E,NE,NW,W,SW,SE}.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_TOP_BEND = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend_{E,NE,NW,W,SW,SE}.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_TOP_SPRING = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_spring_{E,NE,NW,W,SW,SE}.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_TOP_CONFLUENCE = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_y_narrow_{E,NE,NW,W,SW,SE}.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 
@@ -186,13 +231,35 @@ const SOURCES = {
     longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
+  /**
+   * The art pack's four river shapes — a `RiverTileShape.Mouth` (see
+   * `types.ts`) has no art of its own and renders with `straight`, same as
+   * a plain through-flow tile.
+   */
+  riverBase: {
+    straight: buildPlain(RIVER_BASE_STRAIGHT, ''),
+    bend: buildPlain(RIVER_BASE_BEND, ''),
+    spring: buildPlain(RIVER_BASE_SPRING, ''),
+    confluence: buildPlain(RIVER_BASE_CONFLUENCE, ''),
+  } satisfies Record<RiverArtShape, OrientationMap<string>>,
+  riverTop: {
+    straight: buildPlain(RIVER_TOP_STRAIGHT, ''),
+    bend: buildPlain(RIVER_TOP_BEND, ''),
+    spring: buildPlain(RIVER_TOP_SPRING, ''),
+    confluence: buildPlain(RIVER_TOP_CONFLUENCE, ''),
+  } satisfies Record<RiverArtShape, OrientationMap<string>>,
 };
+
+/** The art pack's river shapes — `RiverTileShape`'s `mouth` maps onto `straight` (see `SOURCES.riverBase`). */
+type RiverArtShape = 'straight' | 'bend' | 'spring' | 'confluence';
 
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
   coastalBase: OrientationMap<Texture>;
   baseIndexed: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
   top: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
+  riverBase: Record<RiverArtShape, OrientationMap<Texture>>;
+  riverTop: Record<RiverArtShape, OrientationMap<Texture>>;
 }
 
 let loaded: TileTextures | null = null;
@@ -223,6 +290,14 @@ export function loadTileTextures(): Promise<TileTextures> {
   for (const [key, map] of Object.entries(SOURCES.top)) {
     aliasedTop[key as TextureKey] = mapOrientationArrays(map, (o, i, url) => record(`top:${key}:${o}:${i}`, url));
   }
+  const aliasedRiverBase = {} as Record<RiverArtShape, OrientationMap<string>>;
+  for (const [shape, map] of Object.entries(SOURCES.riverBase)) {
+    aliasedRiverBase[shape as RiverArtShape] = mapOrientations(map, (o, url) => record(`riverBase:${shape}:${o}`, url));
+  }
+  const aliasedRiverTop = {} as Record<RiverArtShape, OrientationMap<string>>;
+  for (const [shape, map] of Object.entries(SOURCES.riverTop)) {
+    aliasedRiverTop[shape as RiverArtShape] = mapOrientations(map, (o, url) => record(`riverTop:${shape}:${o}`, url));
+  }
 
   loading = Assets.load(aliases.map((a) => ({ alias: a.alias, src: a.src }))).then(
     (textures: Record<string, Texture>) => {
@@ -240,8 +315,16 @@ export function loadTileTextures(): Promise<TileTextures> {
       for (const [key, map] of Object.entries(aliasedTop)) {
         top[key as TextureKey] = mapOrientationArrays(map, (_o, _i, alias) => resolve(alias));
       }
+      const riverBase = {} as Record<RiverArtShape, OrientationMap<Texture>>;
+      for (const [shape, map] of Object.entries(aliasedRiverBase)) {
+        riverBase[shape as RiverArtShape] = mapOrientations(map, (_o, alias) => resolve(alias));
+      }
+      const riverTop = {} as Record<RiverArtShape, OrientationMap<Texture>>;
+      for (const [shape, map] of Object.entries(aliasedRiverTop)) {
+        riverTop[shape as RiverArtShape] = mapOrientations(map, (_o, alias) => resolve(alias));
+      }
 
-      loaded = { base, coastalBase, baseIndexed, top };
+      loaded = { base, coastalBase, baseIndexed, top, riverBase, riverTop };
       return loaded;
     },
   );
@@ -304,4 +387,27 @@ export function topTextureFor(textures: TileTextures, tile: Tile): Texture | und
   if (!arr) return undefined;
   const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
   return arr[clampIndex(index, arr.length)];
+}
+
+/** `RiverTileShape.Mouth` has no art of its own — it renders as a plain through-flow tile. */
+function riverArtShapeFor(river: RiverTile): 'straight' | 'bend' | 'spring' | 'confluence' {
+  return river.shape === 'mouth' ? 'straight' : river.shape;
+}
+
+/**
+ * Which of the six art-pack rotations a river tile renders with: the
+ * direction its flow continues toward (`outDirection`), or — for a mouth,
+ * or a confluence that's also a river's mouth (no outflow: see
+ * `RiverGenerationTests.Confluence_tiles_have_exactly_two_inflows` on the
+ * backend) — the direction it flows in from instead.
+ */
+function riverOrientationOf(river: RiverTile): TileOrientation {
+  return river.outDirection ?? river.inDirections[0] ?? 'SE';
+}
+
+/** A river tile's own base/top textures, overriding whatever the underlying terrain would have drawn. */
+export function riverTexturesFor(textures: TileTextures, river: RiverTile): { base: Texture; top: Texture } {
+  const shape = riverArtShapeFor(river);
+  const orientation = riverOrientationOf(river);
+  return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
 }

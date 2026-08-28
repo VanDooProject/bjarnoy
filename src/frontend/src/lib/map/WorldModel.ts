@@ -6,7 +6,15 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { generateTile } from './worldGenerator';
-import { emptyResources, type Fleet, type IslandLabel, type Resources, type Settlement, type Tile } from './types';
+import {
+  emptyResources,
+  type Fleet,
+  type IslandLabel,
+  type Resources,
+  type RiverTile,
+  type Settlement,
+  type Tile,
+} from './types';
 
 const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
@@ -36,6 +44,8 @@ export class WorldModel {
   private islands: IslandLabel[] = [];
   /** islandFootprint()'s cache — see there for why this needs to exist at all. */
   private islandFootprintCache = new Map<string, AxialCoord[]>();
+  /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
+  private riverTiles = new Map<string, RiverTile>();
 
   constructor(seed = 1) {
     this.seed = seed;
@@ -49,6 +59,21 @@ export class WorldModel {
 
   listIslands(): IslandLabel[] {
     return this.islands;
+  }
+
+  /**
+   * Live mode: every fetched island's river tiles, flattened — see
+   * `stores/world.ts`. A river can't be derived client-side (its shape
+   * depends on the whole island), so this is the renderer's only source for
+   * them, unlike terrain/orientation/variant which `worldGenerator.ts`
+   * computes on demand.
+   */
+  setRiverTiles(tiles: RiverTile[]) {
+    this.riverTiles = new Map(tiles.map((t) => [coordKey(t), t]));
+  }
+
+  getRiverTile(q: number, r: number): RiverTile | undefined {
+    return this.riverTiles.get(coordKey({ q, r }));
   }
 
   /**
