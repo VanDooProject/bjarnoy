@@ -251,6 +251,22 @@ Free. `jitterDistance` gained one function parameter (no new computation — the
 
 Three defaults changed in this pass (`terrainCullJitter`, `dragFade` off; `scoutedFog` added on) — all three were previously "always on, no way to turn off," and all three were the direct subject of an issue #20 complaint. `unexploredFog` was added afterward, on (matching prior always-on behaviour), as the white-fog counterpart to `scoutedFog`: with `scoutedFog` alone there was no way to isolate the *black* tier, since it renders overlapped with (and mostly hidden under) the white one near a settlement's edge — flipping `unexploredFog` off leaves only the dark, out-of-sight tint visible.
 
+## Live performance panel
+
+`fogDebugFlags` lets you isolate *what* a mechanism looks like with a flag off; it doesn't say *what it costs*. `FogPerfPanel` (mounted directly beneath `FogDebugPanel`, same `?debug=1` gate, both views) closes that gap: every `rebuildAll()` writes a wall-clock breakdown into `fogPerfStats` (`HexMapRenderer.ts`), and the panel polls it every 250ms and renders each phase as a bar sized by its share of that rebuild's total.
+
+| Row | What it measures | Flags that move it |
+|---|---|---|
+| Terrain | `rebuildTerrain`/`rebuildTerrainFlat`: placing or culling terrain sprites/fills | `terrainCull`, `terrainCullJitter` |
+| Borders + fog (per-hex) | `rebuildBordersAndFog`'s per-hex loop (ownership borders, fog-tier decisions), excluding the blob cache render | `distJitter`, `scoutedTintFade`, `scoutedFog`, `unexploredFog`, `flatFillOnly`, `blobsOnly` |
+| Blob cache (blur render) | `refreshFogBlobCache`: building the blob sprite layer plus, when not mid-drag, the offscreen blur render pass — usually the largest single cost, roughly proportional to blob count | `blobJitter`, and indirectly anything that changes how many blobs get placed (`scoutedFog`, `unexploredFog`, `flatFillOnly`, `blobsOnly`) |
+| Markers | `rebuildMarkers`: settlement/island/fleet icons | — |
+| Waves | `rebuildWaves`: world-mode open-water squiggles (0 in settlement mode) | — |
+
+This is deliberately *phase*-level rather than *flag*-level: the flags that affect fog cost (`distJitter`, `blobJitter`, `scoutedFog`, `unexploredFog`, …) are plain per-hex conditionals inside the same loop, and wrapping each one in its own `performance.now()` call would cost more than the branch it's timing — the read would lie about what it's measuring. Instead, toggle a flag in the panel above and read the phase it belongs to (per the table) on the next pan/zoom; the two panels are meant to be used together. Measured on a settlement's default view (1677 hexes, 776 blobs): ~5ms total, split roughly 2.1ms blob cache / 2.0ms per-hex loop / 0.7ms terrain. On a sea-heavy panned-out world-map view (4026 hexes, 393 blobs, past the deep-fog background shortcut's reach) closer to 14ms, with terrain (culled-sprite bookkeeping over many more hexes) becoming the largest single row rather than the blob cache — a concrete illustration of why problem 4's fix targets *that* case specifically.
+
+Like `fogDebugFlags`, `fogPerfStats` is a plain object HexMapRenderer mutates directly rather than a Vue ref — keeping the renderer's existing Vue-reactivity-free boundary intact (see `HexMapRenderer.ts`'s own module comment) — so `FogPerfPanel` polls it on an interval instead of relying on reactivity to notice the write.
+
 ## Overall performance summary
 
 The one mechanism with a real, measured performance win is problem 4 (world-map deep-fog background shortcut): **~2.7× faster** per drag-triggered rebuild when the viewport is entirely unexplored ocean, the scenario the issue's "many elements... slow" complaint was actually about — with the mixed/near-settlement case confirmed at parity, not just unmeasured. Every other fix in this doc is perf-neutral-to-slightly-cheaper by construction (a renamed/gated boolean, a parameterized constant, a `zIndex` write) — none of them add a new per-frame or per-rebuild cost; several remove one (fix 5's now-skipped fade tick, fix 3's now-skipped per-hex jitter hash on the terrain-cull path).

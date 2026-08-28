@@ -9,6 +9,7 @@ import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
+import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
@@ -129,7 +130,10 @@ async function upgrade() {
       @hex-click="onHexClick"
       @hover="onHover"
     />
-    <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
+    <div v-if="showFogDebug" class="fog-debug-stack">
+      <FogDebugPanel @change="onFogDebugChange" />
+      <FogPerfPanel />
+    </div>
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
          much lighter than the old backdrop this HUD chrome was designed
          against, and can sit right behind the top bar depending on where
@@ -171,5 +175,15 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+.fog-debug-stack {
+  position: absolute;
+  /* Clears TopBar (top:16px) and ResourceBar (top:66px, right:16px). */
+  top: 120px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

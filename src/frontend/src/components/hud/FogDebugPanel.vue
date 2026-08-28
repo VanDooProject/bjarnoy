@@ -49,11 +49,6 @@ watch(
 
 <style scoped>
 .fog-debug {
-  position: absolute;
-  /* Clears TopBar (top:16px) and ResourceBar (top:66px, right:16px) below them. */
-  top: 120px;
-  right: 16px;
-  z-index: 20;
   padding: 12px 14px;
   min-width: 230px;
 }

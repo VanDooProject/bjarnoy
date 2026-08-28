@@ -6,6 +6,7 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
+import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { useFogDebug } from '../composables/useFogDebug';
@@ -52,7 +53,10 @@ function onHexClick() {
 <template>
   <div class="world-view">
     <WorldMapCanvas ref="canvasRef" :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
-    <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
+    <div v-if="showFogDebug" class="fog-debug-stack">
+      <FogDebugPanel @change="onFogDebugChange" />
+      <FogPerfPanel />
+    </div>
     <TopBar />
     <HudNav />
     <ResourceBar />
@@ -64,5 +68,14 @@ function onHexClick() {
   position: relative;
   width: 100vw;
   height: 100vh;
+}
+.fog-debug-stack {
+  position: absolute;
+  top: 120px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

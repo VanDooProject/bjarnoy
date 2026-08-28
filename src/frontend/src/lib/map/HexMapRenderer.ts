@@ -168,6 +168,45 @@ export const fogDebugFlags: FogDebugFlags = {
   dragFade: false,
 };
 
+// Per-rebuild timing breakdown, read by FogPerfPanel to show what each
+// fogDebugFlags toggle above actually costs — flip a flag, watch the
+// relevant number here move on the next pan/zoom. Mutated directly by
+// rebuildAll()/refreshFogBlobCache() (same plain-object, no-Vue-import
+// pattern as fogDebugFlags — see its own comment), so consumers must poll
+// rather than rely on Vue reactivity to observe changes; FogPerfPanel does
+// this on an interval. `*Ms` are wall-clock (performance.now() deltas) for
+// the single most recent rebuildAll() call, not an average — a live panel
+// reads better as "what just happened" than a smoothed number that lags
+// behind the flag you just flipped.
+export interface FogPerfStats {
+  /** rebuildTerrain/rebuildTerrainFlat: placing (or culling) terrain sprites/fills. Affected by terrainCull, terrainCullJitter. */
+  terrainMs: number;
+  /** rebuildBordersAndFog's per-hex loop (borders + fog-tier decisions), excluding blobCacheMs. Affected by distJitter, scoutedTintFade, scoutedFog, unexploredFog, flatFillOnly, blobsOnly. */
+  bordersFogMs: number;
+  /** refreshFogBlobCache: building the blob sprite layer (blobJitter) and, when not mid-drag, the offscreen blur render pass — usually the single largest cost, and roughly proportional to blobCount. */
+  blobCacheMs: number;
+  /** rebuildMarkers: settlement/island/fleet icon placement. */
+  markersMs: number;
+  /** rebuildWaves: world-mode open-water squiggle placement (world mode only; 0 in settlement mode). */
+  wavesMs: number;
+  /** Sum of the above plus the small remainder (viewport→coords, deep-fog check, background sync) not broken out on its own. */
+  totalMs: number;
+  /** Hexes in the current viewport rect — the size the above times scale with. */
+  hexCount: number;
+  /** Fog blobs placed this rebuild (both tiers) — what blobCacheMs's cost is roughly proportional to. */
+  blobCount: number;
+}
+export const fogPerfStats: FogPerfStats = {
+  terrainMs: 0,
+  bordersFogMs: 0,
+  blobCacheMs: 0,
+  markersMs: 0,
+  wavesMs: 0,
+  totalMs: 0,
+  hexCount: 0,
+  blobCount: 0,
+};
+
 // Jitters a raw hex-distance by up to ±FOG_DIST_JITTER_HEXES before any fog
 // tier boundary is compared against it — see FOG_DIST_JITTER_HEXES for why.
 // Applied with one shared salt so rebuildTerrain's cull check and
@@ -1040,7 +1079,8 @@ export class HexMapRenderer {
     if (!this.app) return;
     if (this.options.mode === 'settlement' && !this.textures) return;
     this.lastBuiltCamera = { ...this.camera };
-    this.lastRebuildAtMs = performance.now();
+    const rebuildStart = performance.now();
+    this.lastRebuildAtMs = rebuildStart;
     const fogActive = this.isFogActive();
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     const coords = this.coordsInRect(rect);
@@ -1051,10 +1091,33 @@ export class HexMapRenderer {
       !fogDebugFlags.blobsOnly &&
       this.isEntirelyDeepFog(rect);
     this.syncWorldBackground(deepFogOnly);
+
+    let phaseStart = performance.now();
     this.rebuildTerrain(coords, fogActive);
+    fogPerfStats.terrainMs = performance.now() - phaseStart;
+
+    phaseStart = performance.now();
     this.rebuildBordersAndFog(coords, fogActive, deepFogOnly);
+    // refreshFogBlobCache (called from within rebuildBordersAndFog) times
+    // and records its own share into fogPerfStats.blobCacheMs — subtracted
+    // back out here so bordersFogMs isolates just the per-hex loop around
+    // it, matching the two rows FogPerfPanel shows separately.
+    fogPerfStats.bordersFogMs = performance.now() - phaseStart - fogPerfStats.blobCacheMs;
+
+    phaseStart = performance.now();
     this.rebuildMarkers();
-    if (this.options.mode === 'world') this.rebuildWaves();
+    fogPerfStats.markersMs = performance.now() - phaseStart;
+
+    if (this.options.mode === 'world') {
+      phaseStart = performance.now();
+      this.rebuildWaves();
+      fogPerfStats.wavesMs = performance.now() - phaseStart;
+    } else {
+      fogPerfStats.wavesMs = 0;
+    }
+
+    fogPerfStats.hexCount = coords.length;
+    fogPerfStats.totalMs = performance.now() - rebuildStart;
   }
 
   /**
@@ -1380,9 +1443,12 @@ export class HexMapRenderer {
   private refreshFogBlobCache(
     blobEntries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }>,
   ) {
+    const start = performance.now();
+    fogPerfStats.blobCount = blobEntries.size;
     this.syncFogBlobs(blobEntries);
     if (!this.app || blobEntries.size === 0) {
       this.fogBlobCacheSprite.visible = false;
+      fogPerfStats.blobCacheMs = performance.now() - start;
       return;
     }
     if (this.dragging) {
@@ -1398,6 +1464,7 @@ export class HexMapRenderer {
       // stale during the drag, same tradeoff the blur-drop/fade already
       // makes — and let onPointerUp's forced rebuildAll() bake a fresh,
       // correctly-blurred one once the drag ends.
+      fogPerfStats.blobCacheMs = performance.now() - start;
       return;
     }
 
@@ -1456,6 +1523,7 @@ export class HexMapRenderer {
     this.fogBlobCacheSprite.position.set(minX, minY);
     this.fogBlobCacheSprite.scale.set(1 / scale);
     this.fogBlobCacheSprite.visible = true;
+    fogPerfStats.blobCacheMs = performance.now() - start;
   }
 
   private syncSpriteLayer(
