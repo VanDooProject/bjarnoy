@@ -42,6 +42,15 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
     [InlineData(BuildingType.Farm, Terrain.Mountain, false)]
+    [InlineData(BuildingType.FishingHut, Terrain.Sand, true)]
+    [InlineData(BuildingType.FishingHut, Terrain.Grass, false)]
+    [InlineData(BuildingType.MagicTower, Terrain.Grass, true)]
+    [InlineData(BuildingType.MagicTower, Terrain.Sand, false)]
+    [InlineData(BuildingType.PumpkinFarm, Terrain.Grass, true)]
+    [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
+    [InlineData(BuildingType.Tower, Terrain.Sand, true)]
+    [InlineData(BuildingType.Tower, Terrain.Grass, true)]
+    [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
