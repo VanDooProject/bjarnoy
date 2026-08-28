@@ -56,7 +56,7 @@ public sealed record WorldGenerationOptions
     /// A traced river shorter than this (in tiles, spring to mouth inclusive)
     /// is discarded rather than rendered. See <c>docs/design/river-generation.md</c>.
     /// </summary>
-    public int MinRiverLength { get; init; } = 3;
+    public int MinRiverLength { get; init; } = 2;
 
     /// <summary>
     /// How much a river's path wanders sideways instead of taking the

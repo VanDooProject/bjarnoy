@@ -11,7 +11,7 @@ The issue's own rules, restated as the constraints below satisfy them:
 - rivers start on high elevation and funnel down to the coast
 - rivers can merge via a Y tile, capped at two inflows, starting from a spring tile
 - there is also a river bend tile
-- rivers should not be shorter than 3 tiles
+- rivers should not be shorter than 2 tiles
 - river density should be limited — roughly one river per set of at least two mountain tiles
 
 ## Why this can't be a pure per-tile function
@@ -70,7 +70,7 @@ the coast, and naturally produces a mix of bend and straight tiles instead of "m
 
 ## Length filter
 
-After tracing, a spring's path is discarded outright if it came out shorter than 3 tiles (dead end, or a
+After tracing, a spring's path is discarded outright if it came out shorter than 2 tiles (dead end, or a
 cluster already right at the coast). That cluster's one attempt is spent — no second attempt with a
 different mountain tile in this pass.
 
@@ -87,7 +87,7 @@ processing paths in a deterministic priority order (by spring coordinate) and wa
   diverging outflows from one Y tile.
 - A third path reaching an already-full (2-inflow) tile stops there instead — its portion past that point is
   dropped, not just that one tile.
-- If a path's surviving (possibly truncated-by-confluence) portion ends up shorter than 3 tiles as a result,
+- If a path's surviving (possibly truncated-by-confluence) portion ends up shorter than 2 tiles as a result,
   it is dropped entirely, the same as a naturally-too-short river.
 
 Deliberately not attempted: rerouting a path around a soon-to-collide tile to keep it independent. Two rivers

@@ -633,6 +633,19 @@ export class HexMapRenderer {
     // it produced there fell back to SETTLEMENT_DEFAULT_ZOOM. Redo it now
     // that the viewport is actually known.
     if (this.options.mode === 'settlement') this.camera = this.settlementCameraOrigin();
+
+    // Attached before the texture-pack await below, not after: everything
+    // these handlers touch (this.app, this.camera, this.viewport,
+    // worldModel.getTile) is already set by this point, and a pointer event
+    // is a one-shot DOM dispatch — the browser doesn't queue it for later,
+    // so a click during the (now much larger, ~150-asset) texture load
+    // would otherwise just be silently lost rather than merely delayed.
+    canvas.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointerleave', this.onPointerLeave);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
+
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large, submodule-backed) texture
     // pack at all — only settlement mode loads it.
@@ -665,12 +678,6 @@ export class HexMapRenderer {
     );
     this.fogWorld.addChild(this.fogLayer, this.fogBlobCacheSprite);
     app.stage.addChild(this.world, this.markerLayer, this.fogWorld);
-
-    canvas.addEventListener('pointerdown', this.onPointerDown);
-    window.addEventListener('pointermove', this.onPointerMove);
-    window.addEventListener('pointerup', this.onPointerUp);
-    canvas.addEventListener('pointerleave', this.onPointerLeave);
-    canvas.addEventListener('wheel', this.onWheel, { passive: false });
 
     app.ticker.add(this.onTick);
 
