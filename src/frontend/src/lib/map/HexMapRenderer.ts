@@ -162,7 +162,7 @@ export interface FogDebugFlags {
 export const fogDebugFlags: FogDebugFlags = {
   distJitter: true,
   terrainCullJitter: false,
-  scoutedTintFade: true,
+  scoutedTintFade: false,
   scoutedFog: true,
   unexploredFog: true,
   realmBorders: true,

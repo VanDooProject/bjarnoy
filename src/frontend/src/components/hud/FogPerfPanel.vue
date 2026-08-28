@@ -154,8 +154,13 @@ function share(v: number, of: number): number {
 
 <style scoped>
 .fog-perf {
+  /* Fixed (not min-) width: the legend text below has no natural wrap
+     point of its own, so a min-width lets the flex column's stretch
+     sizing blow the whole panel out to the legend's unwrapped
+     max-content width. A definite width forces the legend to wrap
+     inside it instead. */
+  width: 300px;
   padding: 12px 14px;
-  min-width: 260px;
 }
 .title {
   font-size: 12px;

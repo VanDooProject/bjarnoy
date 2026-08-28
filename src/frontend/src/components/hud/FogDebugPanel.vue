@@ -27,7 +27,7 @@ const LABELS: Record<keyof FogDebugFlags, string> = {
   unexploredFog: 'Unexplored (white) fog enabled',
   realmBorders: 'Realm borders enabled',
   scoutedFog: 'Scouted (dark) fog enabled',
-  scoutedTintFade: 'Scouted (dark) fog: tint fade (sight edge)',
+  scoutedTintFade: 'Scouted (dark) fog: tint fade (sight edge, off by default)',
   blobJitter: 'Blob cache: position/size jitter',
   flatFillOnly: 'Skip blob/flat-fill overlap',
   blobsOnly: 'Blob-only mist (no flat fill)',
