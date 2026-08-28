@@ -60,6 +60,7 @@ public static class AdminWorldEndpoints
         Guid worldId,
         UpdateWorldSettingsRequest request,
         WorldService worlds,
+        SettlementService settlements,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -88,6 +89,13 @@ public static class AdminWorldEndpoints
         if (errors.Count > 0)
         {
             return TypedResults.ValidationProblem(errors);
+        }
+
+        // The old rate must be locked in before the new one takes effect —
+        // see SettlementService.RetuneSpeedAsync.
+        if (request.SpeedFactor is { } newSpeedFactor && newSpeedFactor != world.SpeedFactor)
+        {
+            await settlements.RetuneSpeedAsync(worldId, world.SpeedFactor, newSpeedFactor, cancellationToken);
         }
 
         var updated = await worlds.UpdateAdminSettingsAsync(

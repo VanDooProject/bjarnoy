@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Api.Json;
@@ -32,6 +33,23 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return await response.ReadStrictAsync<WorldResponse>(Ct);
+    }
+
+    /// <summary>Founds a settlement (one longhouse) on <paramref name="world"/>'s first usable plot.</summary>
+    private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldResponse world)
+    {
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", "ulf-player"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return await response.ReadStrictAsync<SettlementResponse>(Ct);
     }
 
     /// <summary>Registers a fresh player, promotes it to Admin in the DB, then logs in to mint a token carrying the role.</summary>
@@ -229,5 +247,27 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var runStateResponse = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{missing}/run-state", new SetWorldRunStateRequest("pause"), Ct);
         Assert.Equal(HttpStatusCode.NotFound, runStateResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Doubling_the_speed_factor_immediately_doubles_a_settlements_production_rate()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var settlement = await FoundSettlementAsync(client, world);
+        var baseRate = settlement.Resources.RatePerHour.Food;
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: 2.0),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var afterRetune = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.Equal(baseRate * 2, afterRetune!.Resources.RatePerHour.Food, 6);
     }
 }
