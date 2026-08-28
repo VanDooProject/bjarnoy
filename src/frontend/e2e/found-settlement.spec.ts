@@ -21,9 +21,10 @@ test('clicking an island founds a settlement and opens the village view', async 
   await expect(realmPanel.getByText('Lv 1')).toBeVisible();
   await expect(realmPanel.getByText(/Longhouse claims a border-\d+ realm/)).toBeVisible();
 
-  // resource bar: four resources, each a positive, growing number
+  // resource bar: four resources plus the population pill, each a
+  // positive, growing number
   const values = page.locator('.resource-bar .resource .value');
-  await expect(values).toHaveCount(4);
+  await expect(values).toHaveCount(5);
   for (const text of await values.allTextContents()) {
     expect(Number(text.replace(/[^\d]/g, ''))).toBeGreaterThan(0);
   }
