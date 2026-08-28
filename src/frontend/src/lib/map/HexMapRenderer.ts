@@ -1630,8 +1630,11 @@ export class HexMapRenderer {
       // HUD chrome. Past that zoom level it grows again — a fixed-size badge
       // reads as undersized once you've zoomed in close to the (now much
       // larger) hex art around it.
+      // Issue #16 "settlement badge": "above longhouse also showing its
+      // level" — mockup reads "Bjornstad  you · Lv 4". `you` only applies
+      // to the player's own settlement; a rival's badge just gets the level.
       const label = this.acquireLabel();
-      label.text = settlement.name.toUpperCase();
+      label.text = mine ? `${settlement.name}  you · Lv ${settlement.level}` : `${settlement.name} · Lv ${settlement.level}`;
       label.style.fill = 0xe8f0f5;
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
       label.style.fontSize = 13 * zoomScale;
