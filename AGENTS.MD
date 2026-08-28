@@ -6,7 +6,7 @@
 
 # ai dev workflow
 - think of a solution
-- ask me if plan is fine if its more complex
+- ask me if plan is fine if its more complex AND use plan/todo tool to list things u have to do
 - implement (if multiple tasks push each task as a separate commit and open PR after first push)
 - evaluate with requirements (if there are reference screenshots compare them)
 - run build and tests
