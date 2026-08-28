@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     /// <inheritdoc />
@@ -15,7 +17,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 name: "UserId",
                 table: "settlements",
                 type: "TEXT",
-                nullable: true);
+                nullable: false,
+                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
 
             migrationBuilder.CreateTable(
                 name: "users",
@@ -31,7 +34,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     LastLoginAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
                     StatusReason = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    StatusChangedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true)
+                    StatusChangedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
+                    IsSystem = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -59,6 +63,25 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.InsertData(
+                table: "users",
+                columns: new[] { "Id", "CreatedAt", "DisplayName", "IsSystem", "LastLoginAt", "NormalizedUserName", "PasswordHash", "Role", "Status", "StatusChangedAt", "StatusReason", "UserName" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000001"), new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), null, true, null, "abandoned", "SYSTEM-ACCOUNT-NO-LOGIN", 0, 0, null, null, "Abandoned" },
+                    { new Guid("00000000-0000-0000-0000-000000000002"), new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), null, true, null, "barbarians", "SYSTEM-ACCOUNT-NO-LOGIN", 0, 0, null, null, "Barbarians" },
+                    { new Guid("00000000-0000-0000-0000-000000000003"), new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), null, true, null, "endboss", "SYSTEM-ACCOUNT-NO-LOGIN", 0, 0, null, null, "Endboss" }
+                });
+
+            // Backfill: UserId is new and required, so every settlement row
+            // that already existed before this migration currently holds the
+            // AddColumn default (an empty guid, not a real user) — point
+            // them all at the "Abandoned" system user instead, which the
+            // InsertData above has just guaranteed exists. Anything founded
+            // after this migration sets UserId itself (SettlementService.FoundAsync).
+            migrationBuilder.Sql(
+                "UPDATE settlements SET \"UserId\" = '00000000-0000-0000-0000-000000000001';");
 
             migrationBuilder.CreateIndex(
                 name: "IX_settlements_UserId",

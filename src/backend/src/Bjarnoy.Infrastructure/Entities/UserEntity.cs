@@ -62,6 +62,15 @@ public class UserEntity
 
     public DateTimeOffset? StatusChangedAt { get; set; }
 
+    /// <summary>
+    /// True for a reserved, non-player account (<see cref="SystemUserIds"/>) —
+    /// e.g. <c>"Abandoned"</c>, the owner every settlement without a real
+    /// player falls back to now that <see cref="SettlementEntity.UserId"/> is
+    /// required. A system user can never log in: <c>AuthService.LoginAsync</c>
+    /// refuses it outright, regardless of <see cref="PasswordHash"/>.
+    /// </summary>
+    public bool IsSystem { get; set; }
+
     public List<RefreshTokenEntity> RefreshTokens { get; set; } = [];
 
     /// <summary>
@@ -71,6 +80,31 @@ public class UserEntity
     /// <see cref="SettlementEntity.OwnerId"/> string a settlement may also carry.
     /// </summary>
     public List<SettlementEntity> Settlements { get; set; } = [];
+}
+
+/// <summary>
+/// Fixed ids for the reserved system accounts seeded by the <c>AddUsers</c>
+/// migration (see <c>GameDbContext.OnModelCreating</c>'s <c>HasData</c> for
+/// <see cref="UserEntity"/>). Fixed rather than <c>Guid.CreateVersion7()</c>
+/// because <c>HasData</c> needs literal, stable values baked into the
+/// migration, and because other code (<c>SettlementService.FoundAsync</c>,
+/// <c>AuthService.RegisterAsync</c>) needs to reference them without a
+/// database round trip.
+/// </summary>
+public static class SystemUserIds
+{
+    /// <summary>
+    /// Owns every settlement with no real player: anonymous/unclaimed play,
+    /// and every settlement that existed before accounts did (backfilled by
+    /// the <c>AddUsers</c> migration).
+    /// </summary>
+    public static readonly Guid Abandoned = new("00000000-0000-0000-0000-000000000001");
+
+    /// <summary>Reserved for future barbarian-camp settlements. Unused for now.</summary>
+    public static readonly Guid Barbarians = new("00000000-0000-0000-0000-000000000002");
+
+    /// <summary>Reserved for a future end-game boss's settlement(s). Unused for now.</summary>
+    public static readonly Guid Endboss = new("00000000-0000-0000-0000-000000000003");
 }
 
 /// <summary>

@@ -219,7 +219,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
 
-                    b.Property<Guid?>("UserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("WorldId")
@@ -251,6 +251,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<string>("DisplayName")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("LastLoginAt")
                         .HasColumnType("TEXT");
@@ -288,6 +291,41 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000001"),
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            NormalizedUserName = "abandoned",
+                            PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            Role = 0,
+                            Status = 0,
+                            UserName = "Abandoned"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000002"),
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            NormalizedUserName = "barbarians",
+                            PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            Role = 0,
+                            Status = 0,
+                            UserName = "Barbarians"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000003"),
+                            CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            NormalizedUserName = "endboss",
+                            PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            Role = 0,
+                            Status = 0,
+                            UserName = "Endboss"
+                        });
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
@@ -414,7 +452,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Owner")
                         .WithMany("Settlements")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
                         .WithMany("Settlements")

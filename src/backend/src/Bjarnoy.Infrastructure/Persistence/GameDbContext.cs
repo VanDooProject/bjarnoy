@@ -107,10 +107,13 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Real, relational ownership (UserEntity.Settlements is the other
-            // side) — nullable and separate from the legacy OwnerId/OwnerName
+            // side) — required, and separate from the legacy OwnerId/OwnerName
             // strings above, which stay as the anonymous/unclaimed path.
-            // Restrict rather than cascade: a user account going away should
-            // not take their settlements with it.
+            // Anonymous/unclaimed settlements are owned by the reserved
+            // SystemUserIds.Abandoned user rather than left ownerless — see
+            // SettlementService.FoundAsync and the AddUsers migration's
+            // backfill. Restrict rather than cascade: a user account going
+            // away should not take their settlements with it.
             settlement.HasOne(s => s.Owner)
                 .WithMany(u => u.Settlements)
                 .HasForeignKey(s => s.UserId)
@@ -172,6 +175,51 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithOne(t => t.User!)
                 .HasForeignKey(t => t.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Reserved system accounts, seeded here (rather than at app
+            // startup) so they exist deterministically as soon as the
+            // AddUsers migration applies — the same migration's backfill of
+            // pre-existing settlements onto SystemUserIds.Abandoned depends
+            // on that row already existing. PasswordHash is a value the
+            // hasher never produces and AuthService.LoginAsync additionally
+            // refuses any IsSystem user outright, so these can never log in
+            // by either mechanism. CreatedAt is a fixed literal (HasData
+            // requires compile-time constants, not TimeProvider).
+            var systemSeededAt = DateTimeOffset.UnixEpoch;
+            user.HasData(
+                new UserEntity
+                {
+                    Id = SystemUserIds.Abandoned,
+                    UserName = "Abandoned",
+                    NormalizedUserName = "abandoned",
+                    PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                    Role = UserRole.Player,
+                    Status = UserStatus.Active,
+                    IsSystem = true,
+                    CreatedAt = systemSeededAt,
+                },
+                new UserEntity
+                {
+                    Id = SystemUserIds.Barbarians,
+                    UserName = "Barbarians",
+                    NormalizedUserName = "barbarians",
+                    PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                    Role = UserRole.Player,
+                    Status = UserStatus.Active,
+                    IsSystem = true,
+                    CreatedAt = systemSeededAt,
+                },
+                new UserEntity
+                {
+                    Id = SystemUserIds.Endboss,
+                    UserName = "Endboss",
+                    NormalizedUserName = "endboss",
+                    PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                    Role = UserRole.Player,
+                    Status = UserStatus.Active,
+                    IsSystem = true,
+                    CreatedAt = systemSeededAt,
+                });
         });
 
         modelBuilder.Entity<RefreshTokenEntity>(token =>

@@ -279,4 +279,44 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         // The legacy string column is untouched — claiming is additive.
         Assert.Equal(ownerId, settlement.OwnerId);
     }
+
+    [Fact]
+    public async Task A_reserved_system_user_can_never_log_in()
+    {
+        using var client = Client();
+
+        // "Abandoned" is seeded by the AddUsers migration with a
+        // deliberately unusable PasswordHash — but the point of this test is
+        // that login is refused outright for it regardless of password,
+        // since AuthService.LoginAsync checks IsSystem explicitly.
+        var response = await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest("Abandoned", "anything-at-all"), Ct);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_freshly_founded_anonymous_settlement_is_owned_by_the_abandoned_system_user()
+    {
+        using var client = Client();
+
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+        var island = islands!.First(i => i.StartPositions.Count > 0);
+        var plot = island.StartPositions[0];
+
+        var founded = await (await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Abandonstad", "Nobody", Unique("anon-owner-")),
+            Ct)).ReadStrictAsync<SettlementResponse>(Ct);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var settlement = await db.Settlements.AsNoTracking().SingleAsync(s => s.Id == founded.Id, Ct);
+
+        Assert.Equal(SystemUserIds.Abandoned, settlement.UserId);
+    }
 }

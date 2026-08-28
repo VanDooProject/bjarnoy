@@ -95,7 +95,7 @@ public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvid
             // UserId foreign key. Letting the change tracker hold both means
             // SaveChangesAsync orders the insert before the update itself.
             var toClaim = await _dbContext.Settlements
-                .Where(s => s.OwnerId == existingOwnerId && s.UserId == null)
+                .Where(s => s.OwnerId == existingOwnerId && s.UserId == SystemUserIds.Abandoned)
                 .ToListAsync(cancellationToken);
 
             foreach (var settlement in toClaim)
@@ -122,7 +122,12 @@ public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvid
         var user = await _dbContext.Users.FirstOrDefaultAsync(
             u => u.NormalizedUserName == normalized, cancellationToken);
 
-        if (user is null)
+        // A reserved system account (e.g. "Abandoned") is refused outright,
+        // rather than relying solely on its PasswordHash never verifying —
+        // belt and braces, since it also means a system account can never
+        // even reach the hasher (whose VerifyHashedPassword throws
+        // FormatException on a hash it didn't produce, like our sentinel).
+        if (user is null || user.IsSystem)
         {
             return new AuthResult(AuthOutcome.InvalidCredentials, null, null);
         }
