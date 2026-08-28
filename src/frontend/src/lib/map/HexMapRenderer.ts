@@ -455,6 +455,16 @@ export class HexMapRenderer {
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  // Fog (fogLayer + fogBlobCacheSprite) needs to draw *above* markerLayer's
+  // island names/settlement badges/fleet ETAs — a label sitting right at the
+  // edge of scouted territory should read as veiled by the mist, not float
+  // in front of it — but everything else in `world` (terrain, buildings)
+  // still needs to draw *beneath* markerLayer. A second world-space
+  // container, kept in lockstep with `world`'s own transform every time it
+  // changes (see applyCameraTransform), lets fog sit later in the stage's
+  // paint order than markerLayer while still panning/zooming identically to
+  // the terrain it's covering.
+  private fogWorld = new Container();
 
   private textures: TileTextures | null = null;
 
@@ -609,11 +619,10 @@ export class HexMapRenderer {
       this.borderLayer,
       this.hoverLayer,
       this.terrainTop.container,
-      this.fogLayer,
-      this.fogBlobCacheSprite,
       this.highlightLayer,
     );
-    app.stage.addChild(this.world, this.markerLayer);
+    this.fogWorld.addChild(this.fogLayer, this.fogBlobCacheSprite);
+    app.stage.addChild(this.world, this.markerLayer, this.fogWorld);
 
     canvas.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointermove', this.onPointerMove);
@@ -641,6 +650,8 @@ export class HexMapRenderer {
       this.viewport.width / 2 - this.camera.x * this.camera.zoom,
       this.viewport.height / 2 - this.camera.y * this.camera.zoom,
     );
+    this.fogWorld.scale.copyFrom(this.world.scale);
+    this.fogWorld.position.copyFrom(this.world.position);
   }
 
   private onTick = () => {
@@ -1572,6 +1583,7 @@ export class HexMapRenderer {
       ownerLabel.style.fontWeight = 'normal';
       ownerLabel.style.fontSize = 11;
       ownerLabel.style.letterSpacing = 0;
+      ownerLabel.style.dropShadow = false;
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
@@ -1596,6 +1608,10 @@ export class HexMapRenderer {
       label.style.fontWeight = mineIsland ? 'bold' : '600';
       label.style.fontSize = 13;
       label.style.letterSpacing = 1.5;
+      // Reference gives island names a soft drop shadow for legibility over
+      // the water/terrain behind them — a plain fill alone washes out badly
+      // over the lighter sand-colored tiles some island names sit near.
+      label.style.dropShadow = { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 };
       // Reference places the name below the island's shape entirely, not
       // over its tiles or clipping its bottom edge. Islands are generated at
       // varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS), so a fixed
@@ -1637,6 +1653,7 @@ export class HexMapRenderer {
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;
+      label.style.dropShadow = false;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
@@ -1673,20 +1690,37 @@ export class HexMapRenderer {
       // reads as undersized once you've zoomed in close to the (now much
       // larger) hex art around it.
       // Issue #16 "settlement badge": "above longhouse also showing its
-      // level" — mockup reads "Bjornstad  you · Lv 4". `you` only applies
-      // to the player's own settlement; a rival's badge just gets the level.
-      const label = this.acquireLabel();
-      label.text = mine ? `${settlement.name}  you · Lv ${settlement.level}` : `${settlement.name} · Lv ${settlement.level}`;
-      label.style.fill = 0xe8f0f5;
+      // level" — mockup reads "Bjornstad  you · Lv 4", with "you · Lv 4" in
+      // a visibly lighter/dimmer weight than the bold settlement name, not
+      // one uniform run of text. Two pooled labels side by side, rather
+      // than one, since Pixi's Text has no per-run rich styling.
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
-      label.style.fontSize = 13 * zoomScale;
-      label.anchor.set(0, 0.5);
+      const nameLabel = this.acquireLabel();
+      nameLabel.text = settlement.name;
+      nameLabel.style.fill = 0xe8f0f5;
+      nameLabel.style.fontWeight = 'bold';
+      nameLabel.style.fontSize = 13 * zoomScale;
+      nameLabel.style.letterSpacing = 0;
+      nameLabel.style.dropShadow = false;
+      nameLabel.alpha = 1;
+      nameLabel.anchor.set(0, 0.5);
+
+      const suffixLabel = this.acquireLabel();
+      suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
+      suffixLabel.style.fill = 0xe8f0f5;
+      suffixLabel.style.fontWeight = '400';
+      suffixLabel.style.fontSize = 12 * zoomScale;
+      suffixLabel.style.letterSpacing = 0;
+      suffixLabel.style.dropShadow = false;
+      suffixLabel.alpha = 0.6;
+      suffixLabel.anchor.set(0, 0.5);
 
       const dotR = 4 * zoomScale;
       const padX = 12 * zoomScale;
       const gap = 8 * zoomScale;
+      const nameGap = 6 * zoomScale;
       const pillH = 26 * zoomScale;
-      const pillW = padX * 2 + dotR * 2 + gap + label.width;
+      const pillW = padX * 2 + dotR * 2 + gap + nameLabel.width + nameGap + suffixLabel.width;
       const pillX = top.x - pillW / 2;
       const pillY = top.y - 30 * zoomScale - pillH;
 
@@ -1695,8 +1729,10 @@ export class HexMapRenderer {
         .fill({ color: 0x08121a, alpha: 0.8 })
         .stroke({ width: 1, color, alpha: 0.9 });
       this.markerLayer.circle(pillX + padX + dotR, pillY + pillH / 2, dotR).fill({ color });
-      label.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
-      label.visible = true;
+      nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
+      suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
+      nameLabel.visible = true;
+      suffixLabel.visible = true;
     }
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
   }

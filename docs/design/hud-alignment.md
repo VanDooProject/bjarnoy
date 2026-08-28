@@ -93,9 +93,27 @@ building that actually raises the cap, for instance, does not exist yet).
 
 ## 2. Ring menu on click of tile
 
-**Target:**
+**Target:** the issue's `github.com/user-attachments` image URL 404s to this sandbox (same fetch problem as
+the status-box images below), but the owner pasted it directly in chat. Written description, used as the
+authoritative spec:
 
-![ring menu reference](https://github.com/user-attachments/assets/3690f0be-5a0c-489e-8828-16f61ce2a24b)
+> Isometric building tile (a level-5 settlement) with a radial menu open over it. A gold/amber circular
+> badge sits well **above** the tile reading "Lv 5" (bold) / "upgrade" (smaller, beneath it), connected down
+> to the ring by a thin curved guide line — decorative, not a literal edge. Four dark-navy, semi-transparent
+> circular bubbles are arranged around the tile in an X pattern: **Move** (west), **Details** (east),
+> **Raze** (south-west), **Troops** (south-east) — white bold label text, no icons, no visible border/outline
+> on the bubbles themselves. Separately, a small square dashed-border "+" ghost button sits at ground level
+> to the lower-left, outside the ring entirely — an "add here" affordance unrelated to the radial menu. The
+> ring bubbles are noticeably larger and more spread out than a tight cluster; the whole thing reads as
+> orbiting the tile rather than crowding it.
+
+**Correction after review:** the current `RingMenu.vue` renders small pill/capsule buttons (not perfect
+circles), with a visible 1px border and a much larger label font padding that makes 4-action rings feel
+cramped compared to the reference's clean circular bubbles with generous white space between them. There is
+also no curved guide line from a badge to the ring (the settlement-level badge floats independently, drawn
+by `HexMapRenderer`, not `RingMenu`), and the reference's stray "+" ghost button has no equivalent in this
+codebase (there's no concept of a lightweight "add" affordance separate from the ring). Track this styling
+gap as a follow-up rather than guessing further changes without re-confirming against the image above.
 
 **Current state before this pass:** `SettlementView.vue`'s `onHexClick` always opened `BuildingModal.vue`
 directly — a full-screen detail sheet — for every click, regardless of what was clicked. There was no radial
@@ -145,13 +163,35 @@ The enemy-tile/unclaimed-hex/own-building branches were verified by code review 
 the logic is a straightforward computed `switch` in `SettlementView.vue` (`ringActions`), not something that
 needed a live render to sanity-check.
 
+**Correction after review — "click hits below the tile I clicked":** the reported symptom was the ring
+visually opening well below the tile that was actually clicked. Root cause, found by scanning a vertical
+line of clicks down the canvas and logging which coord each one resolved to (`isoPixelToAxial` itself turned
+out consistent and correct throughout — the same pixel always resolves to the same hex as its hover
+highlight): `hoverInfoFor`, `handleClick`, and the settlement badge (section 4) all anchored their on-screen
+marker at `grid.y + TILE_TOPFACE_Y_OFFSET`. That constant is `140/200` of the tile's native art height —
+it's where the flat top-face *starts* inside the taller 200×300 sprite (its one legitimate use is placing a
+sprite's own top-left so its top-face lines up with the tile's grid position), not the top-face's own
+vertical center. The top-face diamond only spans world-y `0..TILE_H` from the grid origin, so its true
+center is `TILE_H / 2` — roughly 0.23×`TILE_W`, versus `TILE_TOPFACE_Y_OFFSET`'s ~0.7×`TILE_W`. That ~0.47×
+`TILE_W` gap (at the settlement view's default zoom, tens of screen pixels) put the ring's center dot, the
+hover tooltip's anchor point, and the settlement badge all measurably below/past the tile's own art — for
+the ring specifically, its center dot ended up sitting near the tile's *front face* rather than its roof.
+Replaced all three with a new `TILE_CENTER_Y_OFFSET = TILE_H / 2` constant. Verified: clicking dead center of
+the canvas (a known tile) now reports a ring anchor whose screen Y exactly equals the click's own Y
+(`450` in, `450` out — previously `450` in, `479` out), and a screenshot shows the ring's center dot landing
+directly on the clicked building's roof instead of ~30px below it.
+
 ---
 
 ## 3. Better hover
 
-**Target:**
-
-![hover reference](https://github.com/user-attachments/assets/18daeaa1-6479-48d4-b81a-06f35392438a)
+**Target:** also unfetchable from the raw issue URL; the owner pasted it directly in chat. Written
+description: a dark navy, sharp-cornered card to the right of the hovered tile, vertically centered on it —
+title "Crop farm" (bold white), "LEVEL 2" underneath in gold, a thin divider, then a two-column stat block
+(dim gray label left, value right: "Output +240 food / h", "Irrigated yes (+10%)", "Workers 8 / 8"), and a
+dim gray uppercase "CLICK TO OPEN" at the bottom. Matches what was already built and verified below —
+including the tooltip's position (right of the tile, not centered on the cursor — a separate bug fixed
+later, see the anchor-offset note in section 2/4's shared fix).
 
 **Current state before this pass:** `HexTooltip.vue` showed title / subtitle / one stat line, in a rounded
 `.panel` card.
@@ -179,17 +219,28 @@ as a precedent).
 
 ## 4. Settlement badge
 
-**Target:**
-
-![settlement badge reference](https://github.com/user-attachments/assets/381a0e29-6fba-4176-9421-2b8170dc23c7)
+**Target:** unfetchable from the raw issue URL (see section 2's note); the owner pasted it directly in
+chat. Written description: a dark pill floats above the settlement (not on/over the building itself) — a
+small color dot, then the bold settlement name "Bjornstad", then, in a visibly *lighter/dimmer* weight and
+color than the name, "you · Lv 4".
 
 **Current state before this pass:** `HexMapRenderer.rebuildSettlementLabels()` already drew a floating pill
 above the longhouse hex with a dot + the settlement's name — just the name, no level or ownership indicator.
 
 **Decisions:** the label text now reads `"<name>  you · Lv <n>"` for the player's own settlement, and
-`"<name> · Lv <n>"` for a rival's — matching "Bjornstad  you · Lv 4" from the mockup exactly. One-line change
+`"<name> · Lv <n>"` for a rival's — matching "Bjornstad  you · Lv 4" from the mockup. One-line change
 (`rebuildSettlementLabels`'s label-text assignment); the existing dot-color/pill-box code (already
 gold-for-mine, a rival color otherwise) needed no changes.
+
+**Correction after review:** two real bugs found once actually compared pixel-for-pixel against the
+reference. (1) The whole string was one uniform `Text` run — no visible distinction between the bold name
+and the dimmer "you · Lv n" suffix the reference shows. Fixed by splitting into two pooled `Text` objects
+laid out side by side: a bold, full-alpha name label and a regular-weight, 0.6-alpha suffix label. (2) The
+badge's anchor Y reused `TILE_TOPFACE_Y_OFFSET`, the same wrong constant behind the ring-menu/tooltip
+mis-anchor bug below — it placed the badge's reference point almost at the *bottom* of the tile's front
+face rather than the flat top-face's own center, so the badge sat low enough to visually overlap the
+longhouse instead of floating cleanly above it (see section 2's shared root-cause writeup). Fixed by the
+same `TILE_CENTER_Y_OFFSET` swap.
 
 **Files:** `lib/map/HexMapRenderer.ts` (`rebuildSettlementLabels`).
 
@@ -283,9 +334,11 @@ by reading the code.
 
 ## 6. Map island names
 
-**Target:**
-
-![world map island names reference](https://github.com/user-attachments/assets/a1fc86d9-7725-42a1-b05c-7994ff2d5436)
+**Target:** unfetchable from the raw issue URL (see section 2's note); the owner pasted it directly in
+chat. Written description: island names ("STEINSEY", "DRAUGRSKER", "KALDØY") sit below each island's shape
+entirely, uppercase, letter-spaced, with a visible soft drop shadow beneath the letters for legibility
+against the water. A player's own settled island (and the settlement pin on it, e.g. "Torvald") is gold; a
+plain/unsettled or rival island's name is a muted gray.
 
 **Current state before this pass:** `HexMapRenderer.rebuildMarkers()`'s world-mode island loop drew every
 island name in the same neutral color (`0xe8f0f5`), regardless of who (if anyone) had settled there.
@@ -350,6 +403,29 @@ still needs a session with the real backend running.
 
 ![world map island name in gold, demo-mode stub](img/worldmap_island_gold_demo_stub.png)
 *("KALDØY" forced via the debug hook to carry the player's `islandId` — confirms the label styling, not the live-mode data plumbing*
+
+**Second correction after review — missing drop shadow, and z-order relative to fog:** two more gaps once
+compared against the reference again. (1) Island name labels had no drop shadow at all — added
+`label.style.dropShadow = { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 }`, and
+explicitly set `dropShadow = false` on the other three label types sharing the same pooled `Text` instances
+(`ownerLabel`, the fleet-ETA label, and the settlement badge's two labels) so the shadow style can't leak
+onto them from a recycled pool slot — same "reset explicitly, don't assume a clean pool slot" rule the
+letter-spacing fix above already established. (2) Island (and settlement/fleet) labels live in
+`markerLayer`, a stage-level sibling added *after* `world` (which contains the fog rendering) specifically
+so their on-screen size stays constant regardless of camera zoom — but that also meant they always drew on
+top of fog, including the soft "blob" mist right at the edge of scouted territory, where an island's label
+can plausibly sit if its footprint reaches near that edge. Fixed by splitting fog out of `world` into a new
+sibling container, `fogWorld`, kept in lockstep with `world`'s own pan/zoom transform every time
+`applyCameraTransform()` runs (same position/scale, copied across), and added to the stage *after*
+`markerLayer` instead of before it. Terrain still draws beneath markers as before; fog now draws above them.
+This is a real code-level fix (draw order is unambiguous and doesn't depend on runtime data), but the exact
+visual case that prompted it — a label sitting inside the misty halo specifically — could not be reproduced
+pixel-for-pixel in this sandbox: demo mode has no real per-tile exploration/fog-of-war progression to stage
+against a procedurally-placed island, and a synthetic attempt to shrink the explored radius via a monkeypatch
+broke unrelated rendering assumptions rather than reproducing the halo cleanly. Confirmed instead that (a)
+the base case (no artificial fog changes) renders identically to before — no regression — and (b) the
+z-order change is exactly the one-line kind of fix that can't accidentally do the wrong thing given the draw
+order it produces.
 
 ---
 
