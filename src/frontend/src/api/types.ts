@@ -12,6 +12,10 @@ export interface WorldResponse {
   status: string;
   islandCount: number;
   createdAt: string;
+  joinable: boolean;
+  joinableReason: string;
+  startsAt: string | null;
+  endbossTriggered: boolean;
 }
 
 export interface TileCoordinate {
@@ -150,6 +154,43 @@ export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   user: UserResponse;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminWorldContracts.cs.
+
+export interface AdminWorldResponse {
+  id: string;
+  name: string;
+  status: string;
+  maxPlayers: number;
+  playerCount: number;
+  speedFactor: number;
+  startsAt: string | null;
+  joinsClosed: boolean;
+  endbossAt: string | null;
+  endbossTriggeredAt: string | null;
+  runState: string;
+  runStateSince: string;
+  createdAt: string;
+}
+
+/**
+ * All fields optional: only send what should change. `startsAt`/`endbossAt`
+ * are omitted from the request body (not sent as `null`) when left
+ * unchanged — send explicit `null` to clear them, matching the backend's
+ * `Optional<T>` PATCH semantics (see `Bjarnoy.Api.Json.Optional`).
+ */
+export interface UpdateWorldSettingsRequest {
+  speedFactor?: number;
+  startsAt?: string | null;
+  joinsClosed?: boolean;
+  endbossAt?: string | null;
+}
+
+/** `action`: one of `pause`, `maintenance`, `lock`, `resume`. */
+export interface SetWorldRunStateRequest {
+  action: string;
+  graceMinutes?: number;
 }
 
 export interface ProblemDetails {

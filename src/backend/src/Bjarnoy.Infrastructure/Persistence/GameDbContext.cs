@@ -58,6 +58,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             world.HasIndex(w => w.Name).IsUnique();
             world.Property(w => w.Status).HasConversion<int>();
             world.Property(w => w.RunState).HasConversion<int>();
+            // The C# property initializer only applies to rows created through
+            // EF; existing rows picked up by this migration need the same
+            // default at the SQL level too.
+            world.Property(w => w.SpeedFactor).HasDefaultValue(1.0);
             world.HasMany(w => w.Islands)
                 .WithOne(i => i.World!)
                 .HasForeignKey(i => i.WorldId)

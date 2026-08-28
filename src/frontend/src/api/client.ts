@@ -1,12 +1,15 @@
 import { API_BASE_URL } from '../config';
 import type {
+  AdminWorldResponse,
   CreateWorldRequest,
   FoundSettlementRequest,
   IslandResponse,
   ProblemDetails,
   QueueBuildRequest,
+  SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
+  UpdateWorldSettingsRequest,
   WorldResponse,
 } from './types';
 
@@ -82,6 +85,17 @@ export const api = {
     request<SettlementResponse>(`/settlements/${settlementId}`),
   queueBuild: (settlementId: string, body: QueueBuildRequest) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListWorlds: () => request<AdminWorldResponse[]>('/admin/worlds'),
+  adminUpdateWorldSettings: (worldId: string, body: UpdateWorldSettingsRequest) =>
+    request<AdminWorldResponse>(`/admin/worlds/${worldId}/settings`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminSetWorldRunState: (worldId: string, body: SetWorldRunStateRequest) =>
+    request<AdminWorldResponse>(`/admin/worlds/${worldId}/run-state`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

@@ -62,6 +62,13 @@ export const useWorldStore = defineStore('world', {
     worldId: localStorage.getItem('bjarnoy.worldId'),
     islands: [] as IslandResponse[],
     liveReady: false,
+    // Whether the world currently accepts a new player, and why not if it
+    // doesn't (admin-only fields from issue #27: JoinsClosed, StartsAt) —
+    // LandingView reads these to show a "not open yet" state instead of
+    // letting the player attempt to found onto a world that will refuse it.
+    worldJoinable: true,
+    worldJoinableReason: 'None',
+    worldStartsAt: null as string | null,
   }),
   actions: {
     /**
@@ -101,6 +108,9 @@ export const useWorldStore = defineStore('world', {
       }
 
       this.worldId = world.id;
+      this.worldJoinable = world.joinable;
+      this.worldJoinableReason = world.joinableReason;
+      this.worldStartsAt = world.startsAt;
       localStorage.setItem('bjarnoy.worldId', world.id);
       this.model = markRaw(new WorldModel(world.seed));
       this.islands = await api.getIslands(world.id);
