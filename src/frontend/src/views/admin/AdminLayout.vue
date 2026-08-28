@@ -20,7 +20,7 @@ async function onLogout() {
       <span class="brand">Fjørdhold admin</span>
       <nav class="tabs">
         <router-link to="/admin/worlds" class="tab">Worlds</router-link>
-        <span class="tab disabled" title="Coming soon">Users</span>
+        <router-link to="/admin/users" class="tab">Users</router-link>
         <span class="tab disabled" title="Coming soon">Settlements</span>
       </nav>
       <div class="account">

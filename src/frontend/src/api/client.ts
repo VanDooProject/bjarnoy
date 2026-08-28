@@ -1,14 +1,19 @@
 import { API_BASE_URL } from '../config';
 import type {
+  AdminUserDetailResponse,
+  AdminUserResponse,
   AdminWorldResponse,
   CreateWorldRequest,
   FoundSettlementRequest,
   IslandResponse,
+  PagedAdminUsersResponse,
   ProblemDetails,
   QueueBuildRequest,
+  SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
+  UpdateAdminUserRequest,
   UpdateWorldSettingsRequest,
   WorldResponse,
 } from './types';
@@ -96,6 +101,23 @@ export const api = {
     }),
   adminSetWorldRunState: (worldId: string, body: SetWorldRunStateRequest) =>
     request<AdminWorldResponse>(`/admin/worlds/${worldId}/run-state`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.status) query.set('status', params.status);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedAdminUsersResponse>(`/admin/users${qs ? `?${qs}` : ''}`);
+  },
+  adminGetUser: (userId: string) => request<AdminUserDetailResponse>(`/admin/users/${userId}`),
+  adminUpdateUser: (userId: string, body: UpdateAdminUserRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  adminSetUserStatus: (userId: string, body: SetUserStatusRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}/status`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
