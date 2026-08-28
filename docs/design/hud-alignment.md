@@ -176,7 +176,9 @@ the tile's screen anchor point so the ring can center on it), `components/map/Se
 
 **Verified:** yes, end-to-end with Playwright — founded a settlement, clicked an empty own tile, drilled
 Build → Housing → Hut, and confirmed the hut was actually placed (the population pill moved from 22/40 to
-26/45, proving the build order went through the same code path as before).
+26/45, proving the build order went through the same code path as before). See the fourth correction below,
+though: the *interaction* works, but the tooltip-overlap and optic-mismatch bugs found afterward mean this
+section is not fully done.
 
 ![ring menu root actions on an empty tile](img/ring_menu_root.png)
 ![build category ring on grass](img/ring_menu_build_categories.png)
@@ -185,6 +187,41 @@ The enemy-tile/unclaimed-hex/own-building branches were verified by code review 
 (demo mode's single-player world has no rival settlements to click on without a lot of extra scaffolding) —
 the logic is a straightforward computed `switch` in `SettlementView.vue` (`ringActions`), not something that
 needed a live render to sanity-check.
+
+**Fourth correction after review — reported on PR #23: the ring hides itself on hover, and still doesn't
+match the target optic:**
+
+Two more gaps found by comparing the running app's own screenshots against the reference description above,
+pixel-for-pixel rather than by re-reading the earlier "Verified: yes" claims:
+
+1. **Outer ring hides itself on build hover.** Drilling "Build" → a category (e.g. hovering the root ring's
+   "Build" bubble opens Housing/Defense/Resource) doesn't suppress the tile's own hover tooltip
+   (`HexTooltip.vue`), so both render at once, in the same screen region. In
+   `img/ring_menu_build_categories.png`, the "Forest — Unclaimed" hover-tooltip box sits directly on top of
+   the freshly opened "Defense" and "Resource" bubbles, visually hiding their labels — the exact opposite of
+   the intent behind adding hover-to-drill in the third correction above. Root cause: `onRingHover` advances
+   `ringLevel` but never clears `hoverInfo`, so the tooltip that was already showing for the hex under the
+   cursor keeps rendering underneath/over the new ring. Unresolved as of this commit — needs the hover
+   handler to hide (or reposition) the tile tooltip for as long as a ring is open, not just when a ring
+   bubble itself is hovered.
+2. **Still doesn't match the target optic.** `img/ring_menu_circular.png` (the own-building ring: Upgrade /
+   Details / Raze) compared against the reference description in this section's "Target" quote above shows
+   three concrete mismatches, not just the two "not replicated" details already called out:
+   - The settlement-name badge ("Unnamed realm you · Lv 1") sits almost flush against the ring instead of
+     "well above" it — its bottom edge visually touches the top of the "Upgrade" bubble, rather than floating
+     clear of the ring the way the target's "Lv 5 / upgrade" badge does.
+   - The "Lv 1 upgrade" hover tooltip renders directly over the "Upgrade" bubble's own label, obscuring it —
+     in the target, the badge and the ring never overlap the same pixels.
+   - The ring itself reads as a tight 3-bubble cluster hugging the tile, not the target's wide, evenly spaced
+     4-bubble X (Move/Details/Raze/Troops) that visibly "orbits" the tile with generous empty space around
+     it — `RADIUS = 110` and the `88px` bubble size (from the second correction above) were tuned against a
+     4-action root ring, not the 3-action own-building one, and the badge-overlap above makes the whole
+     cluster look even more cramped than the numbers alone suggest.
+
+   Unresolved as of this commit. Both gaps need the ring-menu/tooltip/badge positioning to be reworked
+   together (they share the same anchor point, per the "click hits below the tile I clicked" fix just below)
+   rather than patched independently, to avoid re-introducing the kind of one-off constant-tuning that section
+   6's island-label history already shows doesn't converge.
 
 **Correction after review — "click hits below the tile I clicked":** the reported symptom was the ring
 visually opening well below the tile that was actually clicked. Root cause, found by scanning a vertical
