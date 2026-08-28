@@ -7,10 +7,6 @@
 import { computed } from 'vue';
 import type { Tile } from '../../lib/map/types';
 
-import hutUrl from '../../../vendor/bg_assets_hextile/hextiles/vikinghut_SE_level000.png';
-import farmUrl from '../../../vendor/bg_assets_hextile/hextiles/farm_crop_SE_level001.png';
-import towerUrl from '../../../vendor/bg_assets_hextile/hextiles/towerbuilding_SE_level000.png';
-import longhouseUrl from '../../../vendor/bg_assets_hextile/hextiles/vikinghut_SE_level004.png';
 import grassUrl from '../../../vendor/bg_assets_hextile/hextiles/grasstile_SE.png';
 import forestUrl from '../../../vendor/bg_assets_hextile/hextiles/foresttile_SE.png';
 import mountainUrl from '../../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
@@ -24,11 +20,40 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
 
-const ART: Record<string, string> = {
-  hut: hutUrl,
-  farm: farmUrl,
-  tower: towerUrl,
-  longhouse: longhouseUrl,
+// Each building's art family ships one composited (base+props already
+// merged) image per level, e.g. `vikinghut_SE_level000.png` ..
+// `vikinghut_SE_level004.png` — always the `_SE` rotation, matching the
+// fixed camera angle this modal has always rendered at. Indexed by level
+// number so the art actually changes as a building is upgraded, instead of
+// pinning one hardcoded level per building type (the previous bug: every
+// building — longhouse included, which reused hut art — always showed
+// whichever single level had been hand-picked as its import).
+const BUILDING_ART_FAMILIES: Record<string, string> = {
+  hut: 'vikinghut',
+  longhouse: 'vikinghut',
+  farm: 'farm_crop',
+  tower: 'towerbuilding',
+};
+
+const LEVEL_RE = /_level(\d{3})\.png$/;
+const buildingArtModules = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,farm_crop,towerbuilding}_SE_level*.png',
+  { eager: true, import: 'default' },
+) as Record<string, string>;
+
+const artByPrefix: Record<string, string[]> = {};
+for (const [path, url] of Object.entries(buildingArtModules)) {
+  const level = LEVEL_RE.exec(path);
+  if (!level) continue;
+  const prefix = path.slice(path.lastIndexOf('/') + 1, path.indexOf('_SE_level'));
+  (artByPrefix[prefix] ??= [])[Number(level[1])] = url;
+}
+const BUILDING_ART_BY_LEVEL: Record<string, string[]> = {};
+for (const [key, prefix] of Object.entries(BUILDING_ART_FAMILIES)) {
+  BUILDING_ART_BY_LEVEL[key] = artByPrefix[prefix] ?? [];
+}
+
+const TERRAIN_ART: Record<string, string> = {
   grass: grassUrl,
   forest: forestUrl,
   mountain: mountainUrl,
@@ -50,7 +75,20 @@ const TERRAIN_NAMES: Record<string, string> = {
   sea: 'Open water',
 };
 
-const art = computed(() => ART[props.tile.buildingType ?? props.tile.terrain] ?? grassUrl);
+/** Same fallback as `textures.ts`'s `clampIndex`: a level beyond this building's art rungs renders at the richest one it has. */
+function artForLevel(levels: string[], level: number): string {
+  const clamped = Math.min(Math.max(level, 0), levels.length - 1);
+  return levels[clamped];
+}
+
+const art = computed(() => {
+  const { buildingType, buildingLevel, terrain } = props.tile;
+  if (buildingType) {
+    const levels = BUILDING_ART_BY_LEVEL[buildingType];
+    if (levels?.length) return artForLevel(levels, buildingLevel ?? 1);
+  }
+  return TERRAIN_ART[terrain] ?? grassUrl;
+});
 const buildable = computed(() => props.tile.terrain !== 'sea');
 
 const name = computed(() =>
