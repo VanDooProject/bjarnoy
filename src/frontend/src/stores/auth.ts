@@ -70,8 +70,8 @@ export const useAuthStore = defineStore('auth', {
       this.accessToken = null;
       localStorage.removeItem(REFRESH_TOKEN_KEY);
     },
-    async register(userName: string, password: string, legacyPlayerId?: string | null) {
-      const response = await post<AuthResponse>('/auth/register', { userName, password, legacyPlayerId });
+    async register(userName: string, password: string, existingOwnerId?: string | null) {
+      const response = await post<AuthResponse>('/auth/register', { userName, password, existingOwnerId });
       this.applyAuthResponse(response);
     },
     async login(userName: string, password: string) {

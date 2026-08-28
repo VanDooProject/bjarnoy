@@ -119,7 +119,8 @@ export interface QueueBuildRequest {
 export interface RegisterRequest {
   userName: string;
   password: string;
-  legacyPlayerId?: string | null;
+  /** The local player id (`stablePlayerId()` in `stores/player.ts`), so any settlement founded under it gets claimed. */
+  existingOwnerId?: string | null;
 }
 
 export interface LoginRequest {
