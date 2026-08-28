@@ -10,8 +10,12 @@ import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 
 const props = defineProps<{ info: HoverInfo }>();
 
+// screenX is already anchored at the hovered tile's own right edge
+// (HexMapRenderer.hoverInfoFor), so only a small fixed margin is needed
+// here — the tile-width offset itself lives in world space and scales
+// with zoom on its own.
 const style = computed(() => ({
-  left: `${props.info.screenX + 22}px`,
+  left: `${props.info.screenX + 12}px`,
   top: `${props.info.screenY}px`,
 }));
 </script>

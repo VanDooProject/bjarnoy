@@ -298,6 +298,39 @@ as a precedent).
 
 ![hover tooltip on a hut](img/hex_hover_tooltip.png)
 
+**Correction after review — tooltip overlapped the hex instead of sitting beside it, and hover was broken
+on water in the village view:** review against a screenshot from the actual PR (not this doc's own) found
+two real bugs, neither caught by the "verified: yes" above.
+
+1. **Tooltip overlapping the hex.** `hoverInfoFor` anchored `screenX` at the tile's *centre*
+   (`grid.x + TILE_W / 2`), and `HexTooltip.vue` offset the card by a flat `+22px` from there. At the
+   settlement view's default zoom the tile is far wider than 22px on screen, so the card's left edge landed
+   inside the tile's own right half instead of clear of it — the reference (section 3's own written spec,
+   "a dark navy card to the right of the hovered tile") shows the card entirely outside the hex, not
+   overlapping it. Fixed by anchoring `screenX` at the tile's own right edge (`grid.x + TILE_W`, the hex's
+   actual right vertex per `isoTopPoints`) instead of its centre — that edge already scales with zoom via
+   `toScreen`, so only a small fixed margin (`+12px`) is needed in `HexTooltip.vue` on top of it, rather than
+   a flat offset that only happened to look right at one zoom level.
+2. **Hover disabled on water everywhere, including the village view.** `setHoveredCoord` unconditionally
+   skipped the hover outline/tooltip for any `sea` tile, in every mode — a blanket rule that made sense for
+   the landing page's pre-founding preview (you can't found on water, so previewing a hover there is
+   misleading) but wasn't supposed to extend to the settlement (village) view, where water is just terrain
+   like any other hex — not buildable, but still a legitimate thing to point at and see "Open water /
+   Unclaimed". Fixed by scoping the skip to exactly the landing case: `mode === 'settlement' && !this.settlement()`
+   (no settlement founded yet) — reusing the same `settlement()` check `isFogActive` already relies on to tell
+   the pre-founding preview apart from a real village. World-map mode was never affected by this bug (its own
+   sea handling is unrelated) and keeps its existing behavior.
+
+Verified both with Playwright: hovering a building in the settlement view now shows the tooltip clear of the
+hex (screenshot below, replacing the one above with the same "verified" claim), hovering open water in the
+settlement view now shows the outline plus an "Open water / Unclaimed" tooltip, and hovering a genuine sea
+tile on the landing page's pre-founding preview (coordinates confirmed via `WorldModel.getTile` — the
+preview draws no water texture at all, so a screenshot alone can't distinguish real sea from simply-unrendered
+land off to the side) still shows no hover at all, matching the "only disabled in landing page" fix.
+
+![hover tooltip clear of the tile it's describing](img/hex_hover_tooltip.png)
+![hover working on open water in the village view](img/hex_hover_water.png)
+
 ---
 
 ## 4. Settlement badge
@@ -325,11 +358,27 @@ face rather than the flat top-face's own center, so the badge sat low enough to 
 longhouse instead of floating cleanly above it (see section 2's shared root-cause writeup). Fixed by the
 same `TILE_CENTER_Y_OFFSET` swap.
 
-**Files:** `lib/map/HexMapRenderer.ts` (`rebuildSettlementLabels`).
+**Correction after further review — badge should float above the whole settlement, not just the longhouse tile, and its dot should read as a hex:** comparing a fresh screenshot against the reference again (a Bjørnstad "Lv 4" mockup) found two more gaps. (1) The badge was still anchored to the settlement's own single tile (the longhouse), which sits in the *middle* of the claimed hex cluster — the reference has it clear above the entire settlement, floating over its northmost tile, not hovering over the longhouse roof specifically. (2) The small leading dot was a plain circle; the reference shows a small hex.
 
-**Verified:** yes.
+Fixed both in `rebuildSettlementLabels`: (1) the anchor now scans every hex the settlement owns (`hexesInRadius(settlement, worldModel.borderRadius(settlement))` — the same disc `foundSettlement`/`claimTile` fill, so it's exactly the claimed footprint, no flood-fill needed) for the highest tile's own art ceiling (`grid.y - TILE_TOPFACE_Y_OFFSET`, the same offset `rebuildTerrain` places building/tree sprites at — not just the tile's flat-top vertex, since a bare topmost tile's vertex still sits below a taller forest tile's treetops one row south of it) and takes the minimum, so the badge clears every claimed tile's art regardless of which tile is actually tallest. (2) the leading dot is now a small pointy-top hexagon (`hexPoints()`, a new helper — same six-vertex shape as `TopBar`'s inline-SVG hex logo) drawn with `Graphics.poly()` instead of `Graphics.circle()`.
 
-![settlement badge reading "Unnamed realm you · Lv 1"](img/settlement_badge.png)
+**Files:** `lib/map/HexMapRenderer.ts` (`rebuildSettlementLabels`, new `hexPoints` helper).
+
+**Verified:** yes, against a fresh Playwright screenshot (demo mode, `npm run dev`) after the fix — the badge now floats clear above the settlement's topmost tiles instead of overlapping the trees below it, and the leading marker is visibly hexagonal rather than round at typical zoom.
+
+![settlement badge reading "Unnamed realm you · Lv 1", floating above the settlement's northmost tiles with a hex marker](img/settlement_badge.png)
+
+**Two more corrections after owner feedback on that screenshot — clearance too generous, and the badge leaking onto the landing page:**
+
+1. **Distance too large.** The clearance above the topmost tile used each owned tile's full `TILE_TOPFACE_Y_OFFSET` (the offset `rebuildTerrain` places building/tree sprites at) as a ceiling — enough to clear any tree canopy, but it read as floating noticeably farther above the settlement than the reference. Halved to `TILE_TOPFACE_Y_OFFSET / 2`: still clears a bare tile's own vertex and most of a neighbouring forest tile's canopy, while sitting visibly closer.
+
+2. **Badge showing on the landing page.** `HexMapRenderer`'s settlement-mode marker loop runs whenever `mode === 'settlement'` — which is also the mode the landing page's `SettlementCanvas` uses for its pre-founding plot preview and, once founded there in place (zip 6a: founding happens on the landing page itself, no route change), for the just-founded village. The badge is village-view chrome and shouldn't appear until the player actually navigates to `/settlement`, but it was showing on the landing page immediately after founding.
+
+   Added a `hideSettlementBadge` prop threaded from `LandingView` → `SettlementCanvas` → `HexMapRendererOptions`, set only on the landing page's canvas. **Named as a "hide" flag, not "show"** — a first attempt (`showSettlementBadge`) hid the badge everywhere, including the real settlement view, because of a Vue prop-casting gotcha: an optional `boolean` prop declared only in TypeScript (`showSettlementBadge?: boolean`, no runtime default) is resolved by Vue's compiler as a runtime `Boolean`-typed prop, and an *absent* `Boolean` prop resolves to `false`, not `undefined`. `SettlementView` never passes the prop at all, so it silently got `false` too — confirmed with a temporary `console.log` in the constructor and `rebuildMarkers`, which showed `showSettlementBadge: false` even on a freshly-mounted `/settlement` canvas that never set it. A `hideX` flag defaulting to `false` (i.e. shown) is what every caller except the landing page actually wants without opting in.
+
+**Files (this correction):** `lib/map/HexMapRenderer.ts` (`hideSettlementBadge` option, halved clearance), `components/map/SettlementCanvas.vue` (`hideSettlementBadge` prop), `views/LandingView.vue` (passes it).
+
+**Verified:** yes — a Playwright run through the landing page's founding flow confirmed no badge appears while still on `/`, and a follow-up navigation to `/settlement` (the real village-view route, not the landing page's in-place preview) confirmed the badge appears there with the reduced clearance and is still clear of the trees below it.
 
 ---
 

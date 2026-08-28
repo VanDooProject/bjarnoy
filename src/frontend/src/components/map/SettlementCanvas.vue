@@ -22,6 +22,16 @@ const props = defineProps<{
   // own themed backdrop instead, not the light shade tuned to blend with
   // in-game fog.
   background?: string;
+  // Issue #16 follow-up: the settlement name/level badge is village-view
+  // chrome — the landing page shouldn't show it, even for the moment after
+  // founding there (before the player navigates to /settlement). Named as
+  // a "hide" flag, not "show": an optional `boolean` prop with no runtime
+  // default resolves an *absent* value to `false` (Vue's Boolean-prop
+  // casting), not `undefined` — a `showX` flag would default to hidden for
+  // every caller that doesn't pass it, including SettlementView, the only
+  // other caller. `hideX` defaulting to `false` (shown) is what every
+  // other caller actually wants without opting in.
+  hideSettlementBadge?: boolean;
 }>();
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
@@ -39,6 +49,7 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   previewCenter: props.previewCenter,
   highlightCoord: props.highlightCoord,
   screenBiasX: props.screenBiasX,
+  hideSettlementBadge: props.hideSettlementBadge,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
 });

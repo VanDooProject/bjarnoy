@@ -205,6 +205,23 @@ export interface HexMapRendererOptions {
    * sit right of centre rather than directly behind the copy.
    */
   screenBiasX?: number;
+  /**
+   * Suppresses the name/level badge that otherwise floats above settlements
+   * in 'settlement' mode. The landing page (zip 6a) reuses this same
+   * renderer/mode for its pre-founding plot preview and, once founded there
+   * in place (no route change yet), for the just-founded village itself;
+   * the badge is village-view HUD chrome and shouldn't appear until the
+   * player has actually navigated to the settlement view proper.
+   *
+   * Named as a "hide" flag rather than "show" so the common case (every
+   * caller except the landing page) needs no prop at all: an optional
+   * `boolean` prop declared only in TypeScript (no runtime default) is
+   * resolved by Vue's compiler as a runtime `Boolean` type, and an *absent*
+   * `Boolean` prop resolves to `false`, not `undefined` — so a `showX`
+   * flag would default to hidden everywhere it isn't explicitly passed
+   * `true`, not shown everywhere it isn't explicitly passed `false`.
+   */
+  hideSettlementBadge?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -264,6 +281,23 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // settlement badge all noticeably below the tile they were meant to sit
 // on/over, on the far edge of (or past) the tile's own front face.
 const TILE_CENTER_Y_OFFSET = TILE_H / 2;
+
+/**
+ * A small pointy-top regular hexagon centred at (cx, cy) with "radius" r
+ * (centre-to-vertex) — the same six-vertex shape as TopBar's inline-SVG hex
+ * logo (`polygon points="50,4 93,27 93,73 50,96 7,73 7,27"`), not the
+ * isometric tile's own flattened diamond top-face. Used for small HUD
+ * markers (the settlement badge's icon) that should read as "a hex", not as
+ * a scaled-down tile.
+ */
+function hexPoints(cx: number, cy: number, r: number): number[] {
+  const points: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (-90 + 60 * i);
+    points.push(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+  }
+  return points;
+}
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -821,10 +855,13 @@ export class HexMapRenderer {
       return;
     }
     const tile = worldModel.getTile(coord.q, coord.r);
-    // Water is never a valid target — neither to found on (landing) nor to
-    // build on (settlement) nor to click into (world map) — so the hover
-    // outline shouldn't appear over it in any mode.
-    if (tile.terrain === 'sea') {
+    // Water is never a valid target to found on, so the landing page's
+    // pre-founding preview (settlement mode, no settlement yet) hides the
+    // hover outline over it — otherwise the player could "hover" a spot
+    // they can't actually land on. Once a settlement exists (village view)
+    // or in world-map mode, water is just terrain like any other hex and
+    // should hover/tooltip normally, even though it's still not buildable.
+    if (tile.terrain === 'sea' && mode === 'settlement' && !this.settlement()) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -840,7 +877,12 @@ export class HexMapRenderer {
   }
 
   private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
-    const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+    // Anchor at the tile's own right edge (not its centre) so the tooltip
+    // — which grows rightward from screenX, see HexTooltip.vue — sits
+    // clear of the hex instead of covering its right half. The edge itself
+    // scales with zoom via toScreen, so the gap stays correct at any zoom
+    // level rather than the fixed-pixel offset a centre anchor would need.
+    const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
 
@@ -1552,7 +1594,7 @@ export class HexMapRenderer {
   private rebuildMarkers() {
     this.markerLayer.clear();
     if (this.options.mode === 'settlement') {
-      this.rebuildSettlementLabels();
+      if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
       return;
     }
     if (this.options.mode !== 'world') {
@@ -1676,7 +1718,28 @@ export class HexMapRenderer {
       // Don't reveal a rival's name over ground you haven't scouted.
       if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
-      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+      // Issue #16 follow-up: the badge floated above the longhouse's own
+      // tile, which sits in the *middle* of the settlement's claimed hexes,
+      // not its northmost edge — the reference has it clear above the whole
+      // cluster instead. Same footprint-scanning approach section 6 uses for
+      // world-map island labels (there: lowest tile-bottom vertex; here:
+      // highest tile-top vertex), scanned over the settlement's owned disc
+      // rather than a flood fill since claimed tiles are already exactly
+      // that disc (`foundSettlement`/`claimTile`).
+      // Measured against each tile's own art, halfway up the sprite rather
+      // than its full height (grid.y - TILE_TOPFACE_Y_OFFSET / 2) — the same
+      // offset `rebuildTerrain` places building/tree sprites at (see its
+      // comment above) gave the badge enough clearance to never overlap a
+      // treetop, but read as floating noticeably farther above the
+      // settlement than the reference. Half that offset still clears a
+      // bare topmost tile's own vertex (0 < TILE_TOPFACE_Y_OFFSET / 2) and
+      // most of a neighbouring forest tile's canopy, while sitting closer.
+      let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET / 2; // this hex's own ceiling
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
+        const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
+        topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET / 2);
+      }
+      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
       const mine = settlement.ownerId === playerId;
       const color = mine ? GOLD : RIVAL;
 
@@ -1722,13 +1785,20 @@ export class HexMapRenderer {
       const pillH = 26 * zoomScale;
       const pillW = padX * 2 + dotR * 2 + gap + nameLabel.width + nameGap + suffixLabel.width;
       const pillX = top.x - pillW / 2;
-      const pillY = top.y - 30 * zoomScale - pillH;
+      // `top` is already clear of every claimed tile's tallest possible art
+      // (see above), so this only needs a small breathing-room margin.
+      const pillY = top.y - 10 * zoomScale - pillH;
 
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
         .fill({ color: 0x08121a, alpha: 0.8 })
         .stroke({ width: 1, color, alpha: 0.9 });
-      this.markerLayer.circle(pillX + padX + dotR, pillY + pillH / 2, dotR).fill({ color });
+      // Reference mockup: a small hex (not a round dot), matching the same
+      // pointy-top hexagon TopBar's logo badge and ResourceBar's icons use
+      // elsewhere in the HUD, not the isometric tile's own hex shape.
+      this.markerLayer
+        .poly(hexPoints(pillX + padX + dotR, pillY + pillH / 2, dotR))
+        .fill({ color });
       nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
       suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
       nameLabel.visible = true;
