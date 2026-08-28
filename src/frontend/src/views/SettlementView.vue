@@ -62,6 +62,12 @@ onUnmounted(() => world.stopHudSync());
 
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
+  // The renderer's pointer tracking is a window-level listener (see
+  // HexMapRenderer's onPointerMove), so it keeps resolving a hex under the
+  // cursor even while the ring's own DOM bubbles are what's visually on
+  // top — without this guard, the tile tooltip renders over freshly opened
+  // ring bubbles (e.g. hovering "Build" to drill into categories).
+  if (selectedTile.value && ringScreen.value) return;
   hoverInfo.value = info;
 }
 
@@ -165,8 +171,11 @@ const ringActions = computed<RingAction[]>(() => {
     ];
   }
   if (isMineTile.value && tile.buildingType) {
+    // "Upgrade" isn't one of the dark ring bubbles here — the reference
+    // shows the "Lv n / upgrade" badge above the ring *as* the upgrade
+    // control, so it's wired as `ringBadge` below instead of duplicated in
+    // this list.
     const actions: RingAction[] = [
-      { id: 'upgrade', label: 'Upgrade' },
       {
         id: 'raze',
         label: 'Raze',
@@ -193,7 +202,7 @@ const ringActions = computed<RingAction[]>(() => {
 const ringBadge = computed(() => {
   const tile = selectedTile.value;
   if (ringLevel.value !== 'root' || !isMineTile.value || !tile?.buildingType) return undefined;
-  return `Lv ${tile.buildingLevel ?? 1} upgrade`;
+  return { id: 'upgrade', label: `Lv ${tile.buildingLevel ?? 1}`, sublabel: 'upgrade' };
 });
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
@@ -352,7 +361,7 @@ async function upgrade() {
       :x="ringScreen.x"
       :y="ringScreen.y"
       :actions="ringActions"
-      :badge="ringBadge"
+      :badge-action="ringBadge"
       @select="onRingSelect"
       @hover="onRingHover"
       @close="closeRing"

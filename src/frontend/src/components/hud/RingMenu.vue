@@ -17,32 +17,64 @@ export interface RingAction {
   hint?: string;
 }
 
+export interface BadgeAction extends RingAction {
+  /** Second, dimmer line under `label` — e.g. label "Lv 5", sublabel "upgrade". */
+  sublabel?: string;
+}
+
 const props = defineProps<{
   x: number;
   y: number;
   actions: RingAction[];
-  /** Small floating badge above the ring, e.g. "Lv 5 upgrade" over a building. */
-  badge?: string;
+  // Issue #16 "ring menu" target: a circular gold badge ("Lv 5" / "upgrade")
+  // floats above the ring, connected to it by a thin guide line — and in
+  // the reference, that badge *is* the upgrade control, not a separate dark
+  // bubble duplicating it in the ring below. So this is a real clickable
+  // action, not just a text label.
+  badgeAction?: BadgeAction;
 }>();
 const emit = defineEmits<{ select: [id: string]; hover: [id: string]; close: [] }>();
 
 // Issue #16 "ring menu": reference shows the bubbles spread well clear of
 // the tile in an orbit, not crowded around it.
 const RADIUS = 110;
+// A ring with a badge (an owned building, "Lv n upgrade") also has the
+// canvas's own floating settlement-name pill sitting right at the tile's
+// centre, underneath the ring — the same RADIUS that keeps a badge-less
+// ring feeling spread out crowds this one from both above (the badge) and
+// the middle (that pill), so it gets extra breathing room.
+const effectiveRadius = computed(() => (props.badgeAction ? RADIUS + 40 : RADIUS));
+const badgeY = computed(() => props.y - effectiveRadius.value - 34);
+// Issue #16 "ring menu" target: "connected down to the ring by a thin
+// curved guide line" — a quadratic curve from the badge's bottom edge to
+// the top of the ring track below it (a slight horizontal bow, not a
+// straight drop, to read as "curved").
+const guidePath = computed(() => {
+  if (!props.badgeAction) return '';
+  const startY = badgeY.value + 26;
+  const endY = props.y - effectiveRadius.value;
+  const midY = (startY + endY) / 2;
+  return `M ${props.x} ${startY} Q ${props.x + 16} ${midY} ${props.x} ${endY}`;
+});
 
 const positioned = computed(() => {
   const n = props.actions.length;
-  // 4 actions read best as an X (NW/NE/SW/SE, like the mockup); anything
-  // else is spread evenly starting from the top.
-  const rotationOffset = n === 4 ? 45 : -90;
   const angleStep = 360 / Math.max(1, n);
+  // 4 actions read best as an X (NW/NE/SW/SE, like the mockup), which also
+  // happens to leave true north clear. Anything else spreads evenly
+  // starting from the top — except when a badge floats above the ring
+  // (the "Lv n upgrade" badge on an owned building): a bubble landing
+  // exactly at north then sits underneath the badge instead of beside it,
+  // so the ring is rotated half a step to move that gap to the top instead.
+  const rotationOffset = n === 4 ? 45 : props.badgeAction ? -90 + angleStep / 2 : -90;
+  const radius = effectiveRadius.value;
   return props.actions.map((action, i) => {
     const angleDeg = angleStep * i + rotationOffset;
     const rad = (angleDeg * Math.PI) / 180;
     return {
       action,
-      left: props.x + Math.cos(rad) * RADIUS,
-      top: props.y + Math.sin(rad) * RADIUS,
+      left: props.x + Math.cos(rad) * radius,
+      top: props.y + Math.sin(rad) * radius,
     };
   });
 });
@@ -67,10 +99,25 @@ function hover(action: RingAction) {
 
 <template>
   <div class="ring-backdrop" @click.self="emit('close')" @contextmenu.prevent="emit('close')">
-    <div v-if="badge" class="ring-badge" :style="{ left: `${x}px`, top: `${y - RADIUS - 34}px` }">
-      {{ badge }}
-    </div>
-    <div class="ring-center" :style="{ left: `${x}px`, top: `${y}px` }" />
+    <!-- Issue #16 "ring menu": a faint orbit track under the bubbles (the
+         "ring" itself, not just floating buttons), plus the curved guide
+         line down from the badge when one is present. -->
+    <svg class="ring-svg">
+      <circle class="ring-track" :cx="x" :cy="y" :r="effectiveRadius" />
+      <path v-if="badgeAction" class="ring-guide" :d="guidePath" />
+    </svg>
+    <button
+      v-if="badgeAction"
+      class="ring-badge"
+      :class="{ disabled: badgeAction.disabled }"
+      :style="{ left: `${x}px`, top: `${badgeY}px` }"
+      :disabled="badgeAction.disabled"
+      :title="badgeAction.disabled ? badgeAction.hint : undefined"
+      @click="select(badgeAction)"
+    >
+      <span class="badge-line1">{{ badgeAction.label }}</span>
+      <span v-if="badgeAction.sublabel" class="badge-line2">{{ badgeAction.sublabel }}</span>
+    </button>
     <button
       v-for="p in positioned"
       :key="p.action.id"
@@ -93,27 +140,57 @@ function hover(action: RingAction) {
   inset: 0;
   z-index: 30;
 }
-.ring-center {
+.ring-svg {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: var(--gold);
-  box-shadow: 0 0 0 4px rgba(255, 197, 92, 0.25);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+  overflow: visible;
+}
+.ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+}
+.ring-guide {
+  fill: none;
+  stroke: rgba(255, 197, 92, 0.4);
+  stroke-width: 2;
 }
 .ring-badge {
   position: absolute;
   transform: translate(-50%, -50%);
-  background: var(--panel-bg);
-  border: 1px solid var(--gold);
-  color: var(--gold);
-  font-size: 12px;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background: var(--gold);
+  border: none;
+  color: #201405;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.ring-badge:hover:not(.disabled) {
+  filter: brightness(1.08);
+}
+.ring-badge.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.badge-line1 {
+  font-size: 16px;
+  font-weight: 700;
+}
+.badge-line2 {
+  font-size: 11px;
   font-weight: 600;
-  padding: 4px 12px;
-  white-space: nowrap;
-  pointer-events: none;
+  opacity: 0.75;
 }
 .ring-bubble {
   position: absolute;

@@ -192,36 +192,59 @@ needed a live render to sanity-check.
 match the target optic:**
 
 Two more gaps found by comparing the running app's own screenshots against the reference description above,
-pixel-for-pixel rather than by re-reading the earlier "Verified: yes" claims:
+pixel-for-pixel rather than by re-reading the earlier "Verified: yes" claims. Both are now fixed:
 
-1. **Outer ring hides itself on build hover.** Drilling "Build" → a category (e.g. hovering the root ring's
-   "Build" bubble opens Housing/Defense/Resource) doesn't suppress the tile's own hover tooltip
-   (`HexTooltip.vue`), so both render at once, in the same screen region. In
-   `img/ring_menu_build_categories.png`, the "Forest — Unclaimed" hover-tooltip box sits directly on top of
-   the freshly opened "Defense" and "Resource" bubbles, visually hiding their labels — the exact opposite of
-   the intent behind adding hover-to-drill in the third correction above. Root cause: `onRingHover` advances
-   `ringLevel` but never clears `hoverInfo`, so the tooltip that was already showing for the hex under the
-   cursor keeps rendering underneath/over the new ring. Unresolved as of this commit — needs the hover
-   handler to hide (or reposition) the tile tooltip for as long as a ring is open, not just when a ring
-   bubble itself is hovered.
-2. **Still doesn't match the target optic.** `img/ring_menu_circular.png` (the own-building ring: Upgrade /
-   Details / Raze) compared against the reference description in this section's "Target" quote above shows
-   three concrete mismatches, not just the two "not replicated" details already called out:
-   - The settlement-name badge ("Unnamed realm you · Lv 1") sits almost flush against the ring instead of
-     "well above" it — its bottom edge visually touches the top of the "Upgrade" bubble, rather than floating
-     clear of the ring the way the target's "Lv 5 / upgrade" badge does.
-   - The "Lv 1 upgrade" hover tooltip renders directly over the "Upgrade" bubble's own label, obscuring it —
-     in the target, the badge and the ring never overlap the same pixels.
-   - The ring itself reads as a tight 3-bubble cluster hugging the tile, not the target's wide, evenly spaced
-     4-bubble X (Move/Details/Raze/Troops) that visibly "orbits" the tile with generous empty space around
-     it — `RADIUS = 110` and the `88px` bubble size (from the second correction above) were tuned against a
-     4-action root ring, not the 3-action own-building one, and the badge-overlap above makes the whole
-     cluster look even more cramped than the numbers alone suggest.
+1. **Outer ring hid itself on build hover.** Drilling "Build" → a category didn't suppress the tile's own
+   hover tooltip (`HexTooltip.vue`), so it kept rendering over freshly opened ring bubbles — `onRingHover`
+   advanced `ringLevel` but never touched `hoverInfo`, and the renderer's hover tracking is a `window`-level
+   `pointermove` listener (see `HexMapRenderer`'s `onPointerMove`), so it kept resolving a hex under the
+   cursor regardless of what DOM element was visually on top. Fixed in `SettlementView.vue`'s `onHover`: it
+   now ignores hover updates entirely while a ring is open (`selectedTile && ringScreen`), so the tile
+   tooltip is fully suppressed for as long as any ring — root, categories, or buildings — is showing.
+   Verified: hovering "Build" on an empty tile now drills into the category ring with no tooltip visible at
+   all, before or after.
 
-   Unresolved as of this commit. Both gaps need the ring-menu/tooltip/badge positioning to be reworked
-   together (they share the same anchor point, per the "click hits below the tile I clicked" fix just below)
-   rather than patched independently, to avoid re-introducing the kind of one-off constant-tuning that section
-   6's island-label history already shows doesn't converge.
+   ![before drilling into Build, no stray tooltip](img/ring_menu_build_hover_before_drill.png)
+   ![after hovering Build, category ring shown, still no tooltip](img/ring_menu_build_hover_after_drill.png)
+
+2. **Didn't match the target optic**, in three concrete ways once compared pixel-for-pixel against the
+   "Target" quote above — plus a fourth issue found only after fixing the first three, from a live look at
+   the running ring rather than a screenshot:
+   - The settlement-name badge sat almost flush against the ring, and the ring's own "Lv n upgrade" badge
+     overlapped whichever bubble happened to land due north — because `RingMenu`'s layout always put one
+     bubble at true north regardless of whether a badge was floating there.
+   - The ring read as a tight cluster hugging the tile rather than the target's wide, evenly spread bubbles.
+   - The "Lv n upgrade" badge was a plain bordered rectangle (`border-radius` unset), not the target's
+     circular badge.
+   - (found live, not from a screenshot) The badge in the reference *is* the upgrade control — a round
+     "Lv 5" / "upgrade" badge connected to the ring by a guide line — not a decorative label duplicated by a
+     separate "Upgrade" bubble in the ring. The pre-fix code had both: a static, non-interactive `badge`
+     string *and* a redundant `{ id: 'upgrade', label: 'Upgrade' }` ring bubble.
+
+   Fixed together, since they share the same layout math: `RingMenu.vue`'s `badge` prop became a real
+   `badgeAction` (a clickable `RingAction` with an optional `sublabel`), rendered as a `76px` circular gold
+   button with two text lines — clicking it emits `select('upgrade')` exactly like a ring bubble would.
+   `SettlementView.vue`'s own-building action list dropped the now-redundant `Upgrade` bubble (`Raze`/
+   `Details` remain). The ring's rotation is no longer fixed at "start from north": when a badge is present,
+   it's offset by half a step so the gap between bubbles lands at north (under the badge) instead of a bubble
+   itself; effective orbit radius also grows by `40px` for a badge ring, since that ring also has the canvas's
+   own floating settlement-name pill sitting at the tile's centre, and the extra radius pushes bubbles clear
+   of it too, not just clear of the badge above. A faint dashed circle (`.ring-track`) now renders under the
+   bubbles — the "ring" the target's guide line visibly connects to, previously nonexistent, bubbles just
+   floated with nothing marking why they were arranged in a circle — and a thin curved SVG path connects the
+   badge down to that track, matching "connected down to the ring by a thin curved guide line" from the
+   target quote above (still not threaded through `HexMapRenderer`'s own settlement-level badge, per the
+   "Two smaller reference details" note above — this is `RingMenu`'s own badge-to-track line, a smaller,
+   fully self-contained piece of the same idea). The stray gold dot marking the exact click point
+   (`.ring-center`) was also removed — it wasn't in the target and had no function once the track makes the
+   ring's centre legible on its own.
+
+   ![own-building ring: round upgrade badge, orbit track, guide line, no click-dot](img/ring_menu_own_building_fixed.png)
+
+   Verified with Playwright against `npm run dev` (demo mode): founded a settlement, clicked the longhouse to
+   confirm the badge/track/guide-line/spacing above, and separately clicked an empty tile and hovered "Build"
+   to confirm the tooltip-suppression fix drills into the category ring (a single "Build" category, since
+   this tile wasn't grass) with the tile tooltip never appearing.
 
 **Correction after review — "click hits below the tile I clicked":** the reported symptom was the ring
 visually opening well below the tile that was actually clicked. Root cause, found by scanning a vertical
