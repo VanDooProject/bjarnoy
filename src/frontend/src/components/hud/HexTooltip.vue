@@ -11,8 +11,8 @@ import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 const props = defineProps<{ info: HoverInfo }>();
 
 const style = computed(() => ({
-  left: `${props.info.screenX}px`,
-  top: `${props.info.screenY - 18}px`,
+  left: `${props.info.screenX + 22}px`,
+  top: `${props.info.screenY}px`,
 }));
 </script>
 
@@ -45,7 +45,7 @@ const style = computed(() => ({
 <style scoped>
 .hex-tooltip {
   position: absolute;
-  transform: translate(-50%, -100%);
+  transform: translate(0, -50%);
   z-index: 20;
   padding: 10px 14px;
   min-width: 170px;
