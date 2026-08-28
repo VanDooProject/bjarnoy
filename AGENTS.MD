@@ -27,6 +27,7 @@
 ## CLAUDE
 - ask questions if anything is unclear or you need more context
 - if u take screenshots always show the in chat to me too
+- for planning u can use a opus or fable subtask/subagent
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path
