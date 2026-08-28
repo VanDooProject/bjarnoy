@@ -61,3 +61,21 @@ public sealed record BuildDecision(BuildRejection Rejection, BuildOrder? Order =
 
     public static BuildDecision Accept(BuildOrder order) => new(BuildRejection.None, order);
 }
+
+/// <summary>Why an admin's direct building-level set was refused.</summary>
+public enum SetBuildingLevelRejection
+{
+    None = 0,
+    BuildingNotFound,
+    InvalidLevel,
+}
+
+/// <summary>The outcome of an admin setting a placed building's level directly.</summary>
+public sealed record SetBuildingLevelResult(SetBuildingLevelRejection Rejection, Settlement? Settlement = null)
+{
+    public bool Accepted => Rejection == SetBuildingLevelRejection.None && Settlement is not null;
+
+    public static SetBuildingLevelResult Rejected(SetBuildingLevelRejection reason) => new(reason);
+
+    public static SetBuildingLevelResult Accept(Settlement settlement) => new(SetBuildingLevelRejection.None, settlement);
+}

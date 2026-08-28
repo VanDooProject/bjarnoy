@@ -143,6 +143,24 @@ public readonly record struct ResourcePool
     }
 
     /// <summary>
+    /// Applies a signed delta — an admin grant or removal — settling to
+    /// <paramref name="now"/> first and clamping the result to
+    /// <c>[0, Capacity]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="Deposit"/>, <paramref name="delta"/> may be negative:
+    /// an admin correcting a settlement's stock needs to be able to take
+    /// resources away, not just add them. The result still cannot go negative
+    /// or above capacity — a removal larger than the current stock simply
+    /// floors at zero rather than going into debt.
+    /// </remarks>
+    public ResourcePool Adjust(ResourceAmounts delta, DateTimeOffset now)
+    {
+        var settled = SettledTo(now);
+        return settled with { Stock = (settled.Stock + delta).ClampToZero().ClampTo(Capacity) };
+    }
+
+    /// <summary>
     /// Changes production and/or capacity — what finishing a building does.
     /// </summary>
     /// <remarks>

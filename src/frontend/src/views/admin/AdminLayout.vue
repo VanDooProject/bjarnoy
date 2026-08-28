@@ -21,7 +21,7 @@ async function onLogout() {
       <nav class="tabs">
         <router-link to="/admin/worlds" class="tab">Worlds</router-link>
         <router-link to="/admin/users" class="tab">Users</router-link>
-        <span class="tab disabled" title="Coming soon">Settlements</span>
+        <router-link to="/admin/settlements" class="tab">Settlements</router-link>
       </nav>
       <div class="account">
         <span class="who">{{ auth.user?.displayName ?? auth.user?.userName }}</span>

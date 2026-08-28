@@ -181,6 +181,7 @@ app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
+app.MapAdminSettlementEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot
