@@ -265,6 +265,23 @@ const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
 // on/over, on the far edge of (or past) the tile's own front face.
 const TILE_CENTER_Y_OFFSET = TILE_H / 2;
 
+/**
+ * A small pointy-top regular hexagon centred at (cx, cy) with "radius" r
+ * (centre-to-vertex) — the same six-vertex shape as TopBar's inline-SVG hex
+ * logo (`polygon points="50,4 93,27 93,73 50,96 7,73 7,27"`), not the
+ * isometric tile's own flattened diamond top-face. Used for small HUD
+ * markers (the settlement badge's icon) that should read as "a hex", not as
+ * a scaled-down tile.
+ */
+function hexPoints(cx: number, cy: number, r: number): number[] {
+  const points: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (-90 + 60 * i);
+    points.push(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+  }
+  return points;
+}
+
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
 // explored radius is ~5 hexes, which at 0.85 filled almost the entire
@@ -1684,7 +1701,26 @@ export class HexMapRenderer {
       // Don't reveal a rival's name over ground you haven't scouted.
       if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
-      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+      // Issue #16 follow-up: the badge floated above the longhouse's own
+      // tile, which sits in the *middle* of the settlement's claimed hexes,
+      // not its northmost edge — the reference has it clear above the whole
+      // cluster instead. Same footprint-scanning approach section 6 uses for
+      // world-map island labels (there: lowest tile-bottom vertex; here:
+      // highest tile-top vertex), scanned over the settlement's owned disc
+      // rather than a flood fill since claimed tiles are already exactly
+      // that disc (`foundSettlement`/`claimTile`).
+      // Measured against each tile's own *art* top edge (grid.y -
+      // TILE_TOPFACE_Y_OFFSET — the same offset `rebuildTerrain` places
+      // building/tree sprites at, see its comment above), not just its flat
+      // top-face vertex: a bare topmost tile's vertex sits well below a
+      // taller forest tile's treetops one row south of it, so anchoring on
+      // the vertex alone left the badge overlapping the trees beneath it.
+      let topWorldY = grid.y - TILE_TOPFACE_Y_OFFSET; // this hex's own art ceiling
+      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, worldModel.borderRadius(settlement))) {
+        const tileGrid = isoGridPosition(c, TILE_W, TILE_H);
+        topWorldY = Math.min(topWorldY, tileGrid.y - TILE_TOPFACE_Y_OFFSET);
+      }
+      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: topWorldY });
       const mine = settlement.ownerId === playerId;
       const color = mine ? GOLD : RIVAL;
 
@@ -1730,13 +1766,20 @@ export class HexMapRenderer {
       const pillH = 26 * zoomScale;
       const pillW = padX * 2 + dotR * 2 + gap + nameLabel.width + nameGap + suffixLabel.width;
       const pillX = top.x - pillW / 2;
-      const pillY = top.y - 30 * zoomScale - pillH;
+      // `top` is already clear of every claimed tile's tallest possible art
+      // (see above), so this only needs a small breathing-room margin.
+      const pillY = top.y - 10 * zoomScale - pillH;
 
       this.markerLayer
         .roundRect(pillX, pillY, pillW, pillH, pillH / 2)
         .fill({ color: 0x08121a, alpha: 0.8 })
         .stroke({ width: 1, color, alpha: 0.9 });
-      this.markerLayer.circle(pillX + padX + dotR, pillY + pillH / 2, dotR).fill({ color });
+      // Reference mockup: a small hex (not a round dot), matching the same
+      // pointy-top hexagon TopBar's logo badge and ResourceBar's icons use
+      // elsewhere in the HUD, not the isometric tile's own hex shape.
+      this.markerLayer
+        .poly(hexPoints(pillX + padX + dotR, pillY + pillH / 2, dotR))
+        .fill({ color });
       nameLabel.position.set(pillX + padX + dotR * 2 + gap, pillY + pillH / 2);
       suffixLabel.position.set(nameLabel.x + nameLabel.width + nameGap, pillY + pillH / 2);
       nameLabel.visible = true;

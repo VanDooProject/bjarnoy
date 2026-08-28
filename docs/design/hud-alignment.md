@@ -335,11 +335,15 @@ face rather than the flat top-face's own center, so the badge sat low enough to 
 longhouse instead of floating cleanly above it (see section 2's shared root-cause writeup). Fixed by the
 same `TILE_CENTER_Y_OFFSET` swap.
 
-**Files:** `lib/map/HexMapRenderer.ts` (`rebuildSettlementLabels`).
+**Correction after further review — badge should float above the whole settlement, not just the longhouse tile, and its dot should read as a hex:** comparing a fresh screenshot against the reference again (a Bjørnstad "Lv 4" mockup) found two more gaps. (1) The badge was still anchored to the settlement's own single tile (the longhouse), which sits in the *middle* of the claimed hex cluster — the reference has it clear above the entire settlement, floating over its northmost tile, not hovering over the longhouse roof specifically. (2) The small leading dot was a plain circle; the reference shows a small hex.
 
-**Verified:** yes.
+Fixed both in `rebuildSettlementLabels`: (1) the anchor now scans every hex the settlement owns (`hexesInRadius(settlement, worldModel.borderRadius(settlement))` — the same disc `foundSettlement`/`claimTile` fill, so it's exactly the claimed footprint, no flood-fill needed) for the highest tile's own art ceiling (`grid.y - TILE_TOPFACE_Y_OFFSET`, the same offset `rebuildTerrain` places building/tree sprites at — not just the tile's flat-top vertex, since a bare topmost tile's vertex still sits below a taller forest tile's treetops one row south of it) and takes the minimum, so the badge clears every claimed tile's art regardless of which tile is actually tallest. (2) the leading dot is now a small pointy-top hexagon (`hexPoints()`, a new helper — same six-vertex shape as `TopBar`'s inline-SVG hex logo) drawn with `Graphics.poly()` instead of `Graphics.circle()`.
 
-![settlement badge reading "Unnamed realm you · Lv 1"](img/settlement_badge.png)
+**Files:** `lib/map/HexMapRenderer.ts` (`rebuildSettlementLabels`, new `hexPoints` helper).
+
+**Verified:** yes, against a fresh Playwright screenshot (demo mode, `npm run dev`) after the fix — the badge now floats clear above the settlement's topmost tiles instead of overlapping the trees below it, and the leading marker is visibly hexagonal rather than round at typical zoom.
+
+![settlement badge reading "Unnamed realm you · Lv 1", floating above the settlement's northmost tiles with a hex marker](img/settlement_badge.png)
 
 ---
 
