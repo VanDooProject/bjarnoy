@@ -250,6 +250,12 @@ export interface HoverInfo {
   modifier?: string;
   workers?: string;
   cta?: string;
+  // Building stats (output/modifier/workers) are only ever populated for
+  // the viewer's own buildings — see hoverInfoFor. `premiumLocked` tells
+  // HexTooltip.vue to render a gated "Pro" upsell row in their place for a
+  // building tile that belongs to someone else, rather than silently
+  // showing nothing where the stats would be.
+  premiumLocked?: boolean;
 }
 
 const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
@@ -890,6 +896,10 @@ export class HexMapRenderer {
       const title = BUILDING_LABELS[tile.buildingType];
       const subtitle = owner ? (mine ? owner.name : `${owner.ownerName}'s ${owner.name}`) : title;
       const level = tile.buildingLevel ?? 1;
+      // Output/modifier/workers are only for the viewer's own buildings —
+      // scouting a rival's tile shows the building and its level, but the
+      // stats themselves are gated behind Premium (see HoverInfo.premiumLocked).
+      const stats = mine ? this.buildingStats(tile, level) : {};
       return {
         screenX: screen.x,
         screenY: screen.y,
@@ -897,7 +907,8 @@ export class HexMapRenderer {
         subtitle,
         stat: `Level ${level}`,
         level,
-        ...this.buildingStats(tile, level),
+        ...stats,
+        premiumLocked: !mine,
         cta: mine ? 'Click to open' : undefined,
       };
     }
