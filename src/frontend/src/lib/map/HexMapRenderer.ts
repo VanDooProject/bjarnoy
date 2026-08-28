@@ -210,13 +210,29 @@ export interface HexMapRendererOptions {
   onHoverChange?: (info: HoverInfo | null) => void;
 }
 
-/** What the settlement view's hover tooltip needs, plus screen position to anchor it. */
+/**
+ * What the settlement view's hover tooltip needs, plus screen position to
+ * anchor it. Issue #16 "better hover" wants a richer card for buildings
+ * (title + level, an output rate, a modifier line, worker count, "click to
+ * open") like the mockup's "Crop farm LEVEL 2 / Output +240 food/h /
+ * Irrigated yes (+10%) / Workers 8/8 / CLICK TO OPEN". None of that is
+ * tracked per-building anywhere (the backend/WorldModel only know a
+ * settlement's *aggregate* rates, not a single building's own output) so
+ * `output`/`modifier`/`workers` below are derived deterministically from
+ * the building's type+level+neighbours purely for display — see
+ * `hoverInfoFor`'s buildingStats. Undefined fields simply don't render.
+ */
 export interface HoverInfo {
   screenX: number;
   screenY: number;
   title: string;
   subtitle: string;
   stat: string;
+  level?: number;
+  output?: string;
+  modifier?: string;
+  workers?: string;
+  cta?: string;
 }
 
 const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
@@ -808,7 +824,17 @@ export class HexMapRenderer {
     if (tile.buildingType) {
       const title = BUILDING_LABELS[tile.buildingType];
       const subtitle = owner ? (mine ? owner.name : `${owner.ownerName}'s ${owner.name}`) : title;
-      return { screenX: screen.x, screenY: screen.y, title, subtitle, stat: `Level ${tile.buildingLevel ?? 1}` };
+      const level = tile.buildingLevel ?? 1;
+      return {
+        screenX: screen.x,
+        screenY: screen.y,
+        title,
+        subtitle,
+        stat: `Level ${level}`,
+        level,
+        ...this.buildingStats(tile, level),
+        cta: mine ? 'Click to open' : undefined,
+      };
     }
     if (owner) {
       const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
@@ -827,6 +853,45 @@ export class HexMapRenderer {
       subtitle: 'Unclaimed',
       stat: '',
     };
+  }
+
+  /**
+   * See the HoverInfo doc comment: output/modifier/workers aren't tracked
+   * per-building anywhere, so these are derived deterministically from the
+   * building's own type/level (and, for the irrigation modifier, whether a
+   * neighbouring hex is shore/water) purely so the hover card has something
+   * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
+   * yes (+10%) / Workers 8/8" for a farm.
+   */
+  private buildingStats(
+    tile: Tile,
+    level: number,
+  ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
+    const { worldModel } = this.options;
+    const nearWater = hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
+      const t = worldModel.getTile(c.q, c.r);
+      return t.terrain === 'sea' || t.terrain === 'sand';
+    });
+    switch (tile.buildingType) {
+      case 'farm': {
+        const irrigated = nearWater;
+        const base = level * 120;
+        const workersCap = level * 4;
+        return {
+          output: `+${irrigated ? Math.round(base * 1.1) : base} food/h`,
+          modifier: irrigated ? 'Irrigated (+10%)' : undefined,
+          workers: `${workersCap}/${workersCap}`,
+        };
+      }
+      case 'hut':
+        return { output: `+${level * 5} population capacity` };
+      case 'tower':
+        return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
+      case 'longhouse':
+        return { output: `+${level * 100} storage capacity` };
+      default:
+        return {};
+    }
   }
 
   private onWheel = (e: WheelEvent) => {
