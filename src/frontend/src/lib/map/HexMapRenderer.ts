@@ -487,6 +487,140 @@ const FOG_VISIBLE_MARGIN_HEXES = 2;
 // same way without ever exceeding the ramp it's jittering.
 const FOG_VISIBLE_JITTER_HEXES = 0.5;
 
+// --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
+//
+// Every fog tier answers the same question per hex: "how far past the
+// nearest settlement's ring is this?" — WorldModel.distanceBeyondExplored's
+// min over *every settlement in the game*. Asking that per hex is O(hexes ×
+// settlements) per rebuild, up to twice per hex (once from the terrain cull,
+// once from rebuildBordersAndFog's fog loop) — a low-zoom world-map viewport
+// over unexplored water is thousands of hexes, on every drag rebuild. But a
+// settlement only ever changes the answer within a bounded ring around
+// itself: past the widest threshold any tier compares against, every branch
+// behaves identically no matter how much larger the number gets (terrain is
+// culled, fog is a flat opaque fill).
+//
+// So the settlement walk is hoisted out of the per-hex work entirely: once
+// per rebuild, settlements whose ring cannot reach the visible hex box are
+// dropped, and the per-hex math runs over that (normally tiny, usually
+// empty) list using plain q/r/radius primitives instead of re-deriving a
+// Settlement's radius or allocating a coord object per settlement per hex.
+// The bound below is deliberately generous — it may keep a settlement that
+// turns out not to matter, but it can never drop one that does, so the
+// rendered result is identical to the full per-hex scan (mirrors
+// isEntirelyDeepFog's own settlement-position prune above, for the same
+// reason — see its doc comment).
+//
+// The widest distance the unexplored-mist tiers still discriminate at: the
+// flat-fill hand-off (FOG_TERRAIN_CULL_HEXES) plus the overlap blobs placed
+// past it (FOG_BLOB_OVERLAP_HEXES), plus the jitter that can pull a hex from
+// beyond that boundary back inside it (FOG_DIST_JITTER_HEXES).
+const FOG_UNEXPLORED_INFLUENCE_HEXES = FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES + FOG_DIST_JITTER_HEXES;
+// Same, for the scouted (dark) tint's visible-ring ramp: past its margin the
+// ramp is saturated and the tint is flat, so only this much is discriminating.
+const FOG_VISIBLE_INFLUENCE_HEXES = FOG_VISIBLE_MARGIN_HEXES + FOG_VISIBLE_JITTER_HEXES;
+
+/** Inclusive axial bounding box of the hexes one rebuild is about to draw. */
+interface AxialBounds {
+  qMin: number;
+  qMax: number;
+  rMin: number;
+  rMax: number;
+}
+
+/**
+ * A settlement reduced to the primitives the per-hex fog math needs, so that
+ * math never touches the Settlement object (and never re-derives its radius)
+ * once per hex. `radius` is whichever ring the caller is measuring past —
+ * the explored ring for the unexplored mist, the line-of-sight ring for the
+ * scouted tint.
+ */
+interface FogSource {
+  q: number;
+  r: number;
+  radius: number;
+}
+
+function axialBounds(coords: AxialCoord[]): AxialBounds | null {
+  if (coords.length === 0) return null;
+  let qMin = Infinity;
+  let qMax = -Infinity;
+  let rMin = Infinity;
+  let rMax = -Infinity;
+  for (const c of coords) {
+    if (c.q < qMin) qMin = c.q;
+    if (c.q > qMax) qMax = c.q;
+    if (c.r < rMin) rMin = c.r;
+    if (c.r > rMax) rMax = c.r;
+  }
+  return { qMin, qMax, rMin, rMax };
+}
+
+function axisGap(v: number, lo: number, hi: number): number {
+  if (v < lo) return lo - v;
+  if (v > hi) return v - hi;
+  return 0;
+}
+
+/**
+ * A lower bound on hexDistance from (q, r) to *any* hex inside `bounds` —
+ * never larger than the true nearest distance, so a prune built on it can
+ * only ever be too generous.
+ *
+ * Hex distance is max(|dq|, |dr|, |dq + dr|) (the three cube axes). Each
+ * term is bounded below independently by how far the settlement sits
+ * outside that axis' range over the box, and the max of three lower bounds
+ * is itself a lower bound on the max.
+ */
+function minHexDistanceToBounds(q: number, r: number, bounds: AxialBounds): number {
+  return Math.max(
+    axisGap(q, bounds.qMin, bounds.qMax),
+    axisGap(r, bounds.rMin, bounds.rMax),
+    axisGap(q + r, bounds.qMin + bounds.rMin, bounds.qMax + bounds.rMax),
+  );
+}
+
+/**
+ * The once-per-rebuild prune: settlements whose ring (`radiusFor`) could
+ * still land within `marginHexes` of some hex in `bounds`. See the
+ * FOG_UNEXPLORED_INFLUENCE_HEXES comment above for why this is safe.
+ */
+function fogSourcesNear(
+  settlements: Settlement[],
+  radiusFor: (s: Settlement) => number,
+  bounds: AxialBounds | null,
+  marginHexes: number,
+): FogSource[] {
+  if (!bounds) return [];
+  const out: FogSource[] = [];
+  for (const s of settlements) {
+    const radius = radiusFor(s);
+    if (minHexDistanceToBounds(s.q, s.r, bounds) - radius <= marginHexes) {
+      out.push({ q: s.q, r: s.r, radius });
+    }
+  }
+  return out;
+}
+
+/**
+ * WorldModel.distanceBeyondExplored's answer, against a list already pruned
+ * to the settlements that can affect the current viewport. Identical result
+ * for every hex the fog tiers actually discriminate at (see
+ * FOG_UNEXPLORED_INFLUENCE_HEXES); further out it can report a larger
+ * distance — or Infinity, when nothing near remains — which every call site
+ * treats exactly the same as the true (also past-threshold) value.
+ */
+function distanceBeyondSources(q: number, r: number, sources: FogSource[]): number {
+  let min = Infinity;
+  for (const s of sources) {
+    const dq = s.q - q;
+    const dr = s.r - r;
+    const d = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr)) - s.radius;
+    if (d < min) min = d;
+  }
+  return min === Infinity ? Infinity : Math.max(0, min);
+}
+
 // prototypes/village_view/Viking Realm.dc.html's fogAt()/`fogs` never fills a
 // hex-shaped polygon at all — every fogged hex gets one large soft circular
 // blob (a blurred radial gradient, ~1.68x hex width / 2.7x hex face height,
@@ -1272,6 +1406,25 @@ export class HexMapRenderer {
   }
 
   /**
+   * Once-per-rebuild prune of the settlement list to the ones whose
+   * unexplored-mist ring can still reach `bounds` (see fogSourcesNear and
+   * FOG_UNEXPLORED_INFLUENCE_HEXES above). Shared by isPastTerrainCull's
+   * two callers (rebuildTerrain, rebuildTerrainFlat) and rebuildBordersAndFog,
+   * so a single settlement walk replaces what used to be a fresh
+   * distanceBeyondExplored scan over every settlement, per hex, in every one
+   * of those loops.
+   */
+  private unexploredFogSources(bounds: AxialBounds | null): FogSource[] {
+    const { worldModel } = this.options;
+    return fogSourcesNear(
+      worldModel.listSettlements(),
+      (s) => worldModel.exploredRadius(s),
+      bounds,
+      FOG_UNEXPLORED_INFLUENCE_HEXES,
+    );
+  }
+
+  /**
    * Whether an unexplored hex is far enough past the scouted ring that
    * there's nothing to gain by drawing terrain under the mist there — the
    * mist above it is guaranteed fully opaque by FOG_TERRAIN_CULL_HEXES (see
@@ -1292,8 +1445,8 @@ export class HexMapRenderer {
    * the terrain/fog seam FOG_TERRAIN_CULL_HEXES was built to close stays
    * closed regardless of whether the two flags agree.
    */
-  private isPastTerrainCull(q: number, r: number): boolean {
-    const beyondRaw = this.options.worldModel.distanceBeyondExplored(q, r);
+  private isPastTerrainCull(q: number, r: number, fogSources: FogSource[]): boolean {
+    const beyondRaw = distanceBeyondSources(q, r, fogSources);
     if (fogDebugFlags.terrainCullJitter) {
       return (
         jitterDistance(q, r, beyondRaw, FOG_DIST_JITTER_SALT, fogDebugFlags.distJitter, FOG_DIST_JITTER_HEXES) >
@@ -1318,6 +1471,8 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
+    const fogSources =
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
 
     for (const c of coords) {
       // zip 6a: before a settlement exists, this is the landing page's
@@ -1341,7 +1496,7 @@ export class HexMapRenderer {
         fogActive &&
         fogDebugFlags.terrainCull &&
         !worldModel.isExplored(c.q, c.r) &&
-        this.isPastTerrainCull(c.q, c.r)
+        this.isPastTerrainCull(c.q, c.r, fogSources)
       ) {
         fogPerfStats.terrainCulledCount++;
         continue;
@@ -1381,6 +1536,8 @@ export class HexMapRenderer {
       const pad = 0.75;
       return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
     });
+    const fogSources =
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
 
     for (const c of coords) {
       const tile = worldModel.getTile(c.q, c.r);
@@ -1395,7 +1552,7 @@ export class HexMapRenderer {
         fogActive &&
         fogDebugFlags.terrainCull &&
         !worldModel.isExplored(c.q, c.r) &&
-        this.isPastTerrainCull(c.q, c.r)
+        this.isPastTerrainCull(c.q, c.r, fogSources)
       ) {
         fogPerfStats.terrainCulledCount++;
         continue;
@@ -1687,6 +1844,12 @@ export class HexMapRenderer {
     fogPerfStats.borderedHexCount = 0;
     fogPerfStats.scoutedHexCount = 0;
 
+    // Hoisted once per rebuild — see fogSourcesNear/FOG_UNEXPLORED_INFLUENCE_HEXES
+    // above for why a single settlement-position prune here replaces what
+    // would otherwise be a fresh distanceBeyondExplored scan over every
+    // settlement, for every hex, below.
+    const bounds = axialBounds(coords);
+
     if (deepFogOnly) {
       // isEntirelyDeepFog already confirmed every visible hex is deep,
       // uniformly-opaque fog, and syncWorldBackground painted the
@@ -1725,14 +1888,22 @@ export class HexMapRenderer {
     } else if (fogActive) {
       const own = worldModel.listSettlements().filter((s) => s.ownerId === playerId);
       if (own.length > 0) {
+        // Same viewport prune as the unexplored tier (fogSourcesNear above),
+        // applied to the owned-settlement list this closure would otherwise
+        // rescan in full for every hex.
+        const sources = fogSourcesNear(
+          own,
+          (s) => worldModel.borderRadius(s) + FOG_VISIBLE_RADIUS_BONUS_HEXES,
+          bounds,
+          FOG_VISIBLE_INFLUENCE_HEXES,
+        );
         visibleEdgeDist = (c) => {
           let min = Infinity;
-          for (const s of own) {
-            const visRadius = worldModel.borderRadius(s) + FOG_VISIBLE_RADIUS_BONUS_HEXES;
+          for (const s of sources) {
             const d = jitterDistance(
               c.q,
               c.r,
-              hexDistance({ q: s.q, r: s.r }, c) - visRadius,
+              hexDistance({ q: s.q, r: s.r }, c) - s.radius,
               FOG_VISIBLE_JITTER_SALT,
               fogDebugFlags.scoutedTintFade,
               FOG_VISIBLE_JITTER_HEXES,
@@ -1793,6 +1964,9 @@ export class HexMapRenderer {
       this.fogLayer.poly(flat).fill({ color, alpha });
     };
 
+    const unexploredSources =
+      fogActive && fogDebugFlags.unexploredFog ? this.unexploredFogSources(bounds) : [];
+
     for (const c of coords) {
       if (fogActive && fogDebugFlags.unexploredFog && !worldModel.isExplored(c.q, c.r)) {
         fogPerfStats.unexploredHexCount++;
@@ -1803,7 +1977,7 @@ export class HexMapRenderer {
         // longer skips unexplored hexes) below FOG_TERRAIN_CULL_HEXES, so
         // instead of a hard white wall right past the scouted ring, the
         // mist fades in over FOG_MARGIN_HEXES hexes.
-        const beyondRaw = worldModel.distanceBeyondExplored(c.q, c.r);
+        const beyondRaw = distanceBeyondSources(c.q, c.r, unexploredSources);
         // Jittered before any threshold check — see FOG_DIST_JITTER_HEXES.
         // Hex-distance rings are perfect hexagons; without this, both the
         // ramp below and the cutoff here produce dead-straight ring facets
