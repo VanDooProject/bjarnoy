@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Bjarnoy.Migrations.PostgreSql.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20260828165459_AddUsers")]
+    [Migration("20260828170609_AddUsers")]
     partial class AddUsers
     {
         /// <inheritdoc />
@@ -227,12 +227,17 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("StockWood")
                         .HasColumnType("double precision");
 
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
                     b.HasIndex("IslandId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("WorldId", "OwnerId")
                         .IsUnique();
@@ -257,10 +262,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.Property<DateTimeOffset?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LegacyPlayerId")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("NormalizedUserName")
                         .IsRequired()
@@ -418,6 +419,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Owner")
+                        .WithMany("Settlements")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
                         .WithMany("Settlements")
                         .HasForeignKey("WorldId")
@@ -425,6 +431,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired();
 
                     b.Navigation("Island");
+
+                    b.Navigation("Owner");
 
                     b.Navigation("World");
                 });
@@ -439,6 +447,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("Settlements");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>

@@ -53,8 +53,17 @@ public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvid
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly PasswordHasher<UserEntity> _hasher = new();
 
+    /// <param name="existingOwnerId">
+    /// The client-generated local id (<c>SettlementEntity.OwnerId</c>) this
+    /// browser was already playing under, if any. Every settlement still
+    /// carrying that id and no owning user is claimed by the new account —
+    /// real, relational ownership via <see cref="SettlementEntity.UserId"/> —
+    /// in the same transaction as registering. Claiming a settlement someone
+    /// else already registered under the same local id (a shared machine, a
+    /// copied id) is not attempted here; only unclaimed ones are touched.
+    /// </param>
     public async Task<AuthResult> RegisterAsync(
-        string userName, string password, string? legacyPlayerId, CancellationToken cancellationToken = default)
+        string userName, string password, string? existingOwnerId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -72,12 +81,28 @@ public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvid
             PasswordHash = string.Empty,
             Role = UserRole.Player,
             Status = UserStatus.Active,
-            LegacyPlayerId = legacyPlayerId,
             CreatedAt = _timeProvider.GetUtcNow(),
         };
         user.PasswordHash = _hasher.HashPassword(user, password);
 
         _dbContext.Users.Add(user);
+
+        if (!string.IsNullOrWhiteSpace(existingOwnerId))
+        {
+            // Tracked updates, not ExecuteUpdateAsync: that issues its UPDATE
+            // immediately, ahead of the user row's own INSERT below (which
+            // only happens at SaveChangesAsync), and would violate the
+            // UserId foreign key. Letting the change tracker hold both means
+            // SaveChangesAsync orders the insert before the update itself.
+            var toClaim = await _dbContext.Settlements
+                .Where(s => s.OwnerId == existingOwnerId && s.UserId == null)
+                .ToListAsync(cancellationToken);
+
+            foreach (var settlement in toClaim)
+            {
+                settlement.UserId = user.Id;
+            }
+        }
 
         var (raw, token) = IssueRefreshToken(user.Id);
         _dbContext.RefreshTokens.Add(token);

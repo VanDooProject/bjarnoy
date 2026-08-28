@@ -106,6 +106,18 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasForeignKey(s => s.IslandId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Real, relational ownership (UserEntity.Settlements is the other
+            // side) — nullable and separate from the legacy OwnerId/OwnerName
+            // strings above, which stay as the anonymous/unclaimed path.
+            // Restrict rather than cascade: a user account going away should
+            // not take their settlements with it.
+            settlement.HasOne(s => s.Owner)
+                .WithMany(u => u.Settlements)
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            settlement.HasIndex(s => s.UserId);
+
             settlement.HasMany(s => s.Buildings)
                 .WithOne(b => b.Settlement!)
                 .HasForeignKey(b => b.SettlementId)
@@ -149,7 +161,6 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.PasswordHash).IsRequired();
             user.Property(u => u.Role).HasConversion<int>();
             user.Property(u => u.Status).HasConversion<int>();
-            user.Property(u => u.LegacyPlayerId).HasMaxLength(200);
             user.Property(u => u.DisplayName).HasMaxLength(100);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 

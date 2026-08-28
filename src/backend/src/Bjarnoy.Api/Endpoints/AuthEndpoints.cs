@@ -54,7 +54,7 @@ public static class AuthEndpoints
         ArgumentNullException.ThrowIfNull(request);
 
         var result = await authService.RegisterAsync(
-            request.UserName, request.Password, request.LegacyPlayerId, cancellationToken);
+            request.UserName, request.Password, request.ExistingOwnerId, cancellationToken);
 
         if (result.Outcome == AuthOutcome.UserNameTaken)
         {

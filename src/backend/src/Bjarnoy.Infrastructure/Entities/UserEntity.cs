@@ -23,9 +23,12 @@ public enum UserStatus
 /// </summary>
 /// <remarks>
 /// Before this, a settlement's owner was just a client-generated localStorage
-/// id (<c>SettlementEntity.OwnerId</c>). <see cref="LegacyPlayerId"/> is the
-/// bridge: it lets a user later claim the settlements they made before they had
-/// an account (claiming itself is out of scope here — see the issue).
+/// id (<see cref="SettlementEntity.OwnerId"/>). <see cref="SettlementEntity.UserId"/>
+/// is the real, relational ownership column this account gets: one user can
+/// own several settlements (<see cref="Settlements"/>), and registering with
+/// the local id already on the client claims whatever settlements it founded
+/// — see <c>AuthService.RegisterAsync</c>. The old string columns stay as-is
+/// for settlements nobody has claimed yet.
 /// </remarks>
 public class UserEntity
 {
@@ -48,13 +51,6 @@ public class UserEntity
 
     public UserStatus Status { get; set; } = UserStatus.Active;
 
-    /// <summary>
-    /// The client-generated local id (<c>SettlementEntity.OwnerId</c>) this
-    /// account was registered from, if any. Stored so a future issue can let a
-    /// player claim settlements they founded before they had an account.
-    /// </summary>
-    public string? LegacyPlayerId { get; set; }
-
     public string? DisplayName { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
@@ -67,6 +63,14 @@ public class UserEntity
     public DateTimeOffset? StatusChangedAt { get; set; }
 
     public List<RefreshTokenEntity> RefreshTokens { get; set; } = [];
+
+    /// <summary>
+    /// Settlements this user owns via <see cref="SettlementEntity.UserId"/> —
+    /// one user, many settlements. Populated by claiming (at registration) or,
+    /// in future, by founding while logged in; unrelated to the legacy
+    /// <see cref="SettlementEntity.OwnerId"/> string a settlement may also carry.
+    /// </summary>
+    public List<SettlementEntity> Settlements { get; set; } = [];
 }
 
 /// <summary>

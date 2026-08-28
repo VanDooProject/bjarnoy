@@ -11,6 +11,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<Guid>(
+                name: "UserId",
+                table: "settlements",
+                type: "uuid",
+                nullable: true);
+
             migrationBuilder.CreateTable(
                 name: "users",
                 columns: table => new
@@ -21,7 +27,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     PasswordHash = table.Column<string>(type: "text", nullable: false),
                     Role = table.Column<int>(type: "integer", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    LegacyPlayerId = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     DisplayName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     LastLoginAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -56,6 +61,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_settlements_UserId",
+                table: "settlements",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_refresh_tokens_TokenHash",
                 table: "refresh_tokens",
                 column: "TokenHash",
@@ -71,16 +81,36 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                 table: "users",
                 column: "NormalizedUserName",
                 unique: true);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_settlements_users_UserId",
+                table: "settlements",
+                column: "UserId",
+                principalTable: "users",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Restrict);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_settlements_users_UserId",
+                table: "settlements");
+
             migrationBuilder.DropTable(
                 name: "refresh_tokens");
 
             migrationBuilder.DropTable(
                 name: "users");
+
+            migrationBuilder.DropIndex(
+                name: "IX_settlements_UserId",
+                table: "settlements");
+
+            migrationBuilder.DropColumn(
+                name: "UserId",
+                table: "settlements");
         }
     }
 }

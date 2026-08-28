@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    [Migration("20260828165446_AddUsers")]
+    [Migration("20260828170601_AddUsers")]
     partial class AddUsers
     {
         /// <inheritdoc />
@@ -222,12 +222,17 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("StockWood")
                         .HasColumnType("REAL");
 
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("WorldId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("IslandId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("WorldId", "OwnerId")
                         .IsUnique();
@@ -251,10 +256,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("LastLoginAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("LegacyPlayerId")
-                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("NormalizedUserName")
@@ -413,6 +414,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Owner")
+                        .WithMany("Settlements")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
                         .WithMany("Settlements")
                         .HasForeignKey("WorldId")
@@ -420,6 +426,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired();
 
                     b.Navigation("Island");
+
+                    b.Navigation("Owner");
 
                     b.Navigation("World");
                 });
@@ -434,6 +442,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
                     b.Navigation("RefreshTokens");
+
+                    b.Navigation("Settlements");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>

@@ -3,15 +3,17 @@ using Bjarnoy.Infrastructure.Entities;
 
 namespace Bjarnoy.Api.Contracts;
 
-/// <param name="LegacyPlayerId">
+/// <param name="ExistingOwnerId">
 /// The client-generated local id (<c>stablePlayerId()</c> in the frontend's
-/// player store) this account is registering from, if any — lets a future
-/// issue offer claiming the settlements founded under it.
+/// player store) this browser was already playing under, if any. Any
+/// unclaimed settlement still carrying that id is claimed by the new account
+/// (<c>SettlementEntity.UserId</c>) as part of registering — see
+/// <c>AuthService.RegisterAsync</c>.
 /// </param>
 public sealed record RegisterRequest(
     [property: Required, MinLength(3), MaxLength(50)] string UserName,
     [property: Required, MinLength(8), MaxLength(200)] string Password,
-    [property: MaxLength(200)] string? LegacyPlayerId = null);
+    [property: MaxLength(200)] string? ExistingOwnerId = null);
 
 public sealed record LoginRequest(
     [property: Required] string UserName,
