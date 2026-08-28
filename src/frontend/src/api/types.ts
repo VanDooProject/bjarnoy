@@ -114,6 +114,34 @@ export interface QueueBuildRequest {
   r: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.
+
+export interface RegisterRequest {
+  userName: string;
+  password: string;
+  /** The local player id (`stablePlayerId()` in `stores/player.ts`), so any settlement founded under it gets claimed. */
+  existingOwnerId?: string | null;
+}
+
+export interface LoginRequest {
+  userName: string;
+  password: string;
+}
+
+export interface UserResponse {
+  id: string;
+  userName: string;
+  role: string;
+  status: string;
+  displayName: string | null;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: UserResponse;
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;

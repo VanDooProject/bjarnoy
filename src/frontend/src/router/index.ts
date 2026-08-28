@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { resolveAuthGuard } from './authGuard';
+import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
 
 export const router = createRouter({
@@ -8,6 +10,11 @@ export const router = createRouter({
       path: '/',
       name: 'landing',
       component: () => import('../views/LandingView.vue'),
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('../views/LoginView.vue'),
     },
     {
       path: '/world',
@@ -27,7 +34,17 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  // Awaited once (see `ensureInitialized`) so a page reload restores a
+  // logged-in user from the stored refresh token before this guard has to
+  // decide anything — otherwise a reload would always look unauthenticated
+  // for one tick and bounce a logged-in user to /login.
+  const auth = useAuthStore();
+  await auth.ensureInitialized();
+
+  const authRedirect = resolveAuthGuard(to, auth);
+  if (authRedirect !== true) return authRedirect;
+
   const player = usePlayerStore();
   // zip 6a: founding (and the guided build-2-more-buildings onboarding that
   // follows it) only ever happens on the landing page now — the world map

@@ -1,4 +1,5 @@
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
@@ -23,7 +24,11 @@ public static class SettlementEndpoints
 
         worlds.MapPost("/{worldId:guid}/settlements", Found)
             .WithName("FoundSettlement")
-            .WithSummary("Founds a settlement on one of an island's start positions.");
+            .WithSummary("Founds a settlement on one of an island's start positions.")
+            // Mutating: a Locked/Banned authenticated caller is refused, but
+            // anonymous play (no owner-auth yet) is unaffected — see
+            // ActiveUserEndpointFilter.
+            .AddEndpointFilter<ActiveUserEndpointFilter>();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
@@ -43,7 +48,8 @@ public static class SettlementEndpoints
 
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
-            .WithSummary("Queues a building, charging its cost immediately.");
+            .WithSummary("Queues a building, charging its cost immediately.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>();
 
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)

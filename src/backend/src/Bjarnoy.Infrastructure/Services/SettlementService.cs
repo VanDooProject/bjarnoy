@@ -148,6 +148,12 @@ public sealed class SettlementService(
             Name = name,
             OwnerName = ownerName,
             OwnerId = ownerId,
+            // Anonymous founding — the only path today — has no real account
+            // yet, but UserId is required, so it starts out owned by the
+            // reserved "Abandoned" system user. AuthService.RegisterAsync
+            // reassigns it to a real account when the client later registers
+            // with this same OwnerId.
+            UserId = SystemUserIds.Abandoned,
             FoundedAt = now,
         };
 

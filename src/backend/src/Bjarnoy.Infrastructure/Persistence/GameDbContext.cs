@@ -26,6 +26,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<BuildOrderEntity> BuildOrders => Set<BuildOrderEntity>();
 
+    public DbSet<UserEntity> Users => Set<UserEntity>();
+
+    public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -102,6 +106,21 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasForeignKey(s => s.IslandId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Real, relational ownership (UserEntity.Settlements is the other
+            // side) — required, and separate from the legacy OwnerId/OwnerName
+            // strings above, which stay as the anonymous/unclaimed path.
+            // Anonymous/unclaimed settlements are owned by the reserved
+            // SystemUserIds.Abandoned user rather than left ownerless — see
+            // SettlementService.FoundAsync and the AddUsers migration's
+            // backfill. Restrict rather than cascade: a user account going
+            // away should not take their settlements with it.
+            settlement.HasOne(s => s.Owner)
+                .WithMany(u => u.Settlements)
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            settlement.HasIndex(s => s.UserId);
+
             settlement.HasMany(s => s.Buildings)
                 .WithOne(b => b.Settlement!)
                 .HasForeignKey(b => b.SettlementId)
@@ -133,6 +152,85 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // One order per hex at a time.
             order.HasIndex(o => new { o.SettlementId, o.Q, o.R }).IsUnique();
+        });
+
+        modelBuilder.Entity<UserEntity>(user =>
+        {
+            user.ToTable("users");
+            user.HasKey(u => u.Id);
+            user.Property(u => u.Id).ValueGeneratedNever();
+            user.Property(u => u.UserName).HasMaxLength(50).IsRequired();
+            user.Property(u => u.NormalizedUserName).HasMaxLength(50).IsRequired();
+            user.Property(u => u.PasswordHash).IsRequired();
+            user.Property(u => u.Role).HasConversion<int>();
+            user.Property(u => u.Status).HasConversion<int>();
+            user.Property(u => u.DisplayName).HasMaxLength(100);
+            user.Property(u => u.StatusReason).HasMaxLength(500);
+
+            // Case-insensitive uniqueness, enforced on the normalized column —
+            // see UserEntity.NormalizedUserName.
+            user.HasIndex(u => u.NormalizedUserName).IsUnique();
+
+            user.HasMany(u => u.RefreshTokens)
+                .WithOne(t => t.User!)
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Reserved system accounts, seeded here (rather than at app
+            // startup) so they exist deterministically as soon as the
+            // AddUsers migration applies — the same migration's backfill of
+            // pre-existing settlements onto SystemUserIds.Abandoned depends
+            // on that row already existing. PasswordHash is a value the
+            // hasher never produces and AuthService.LoginAsync additionally
+            // refuses any IsSystem user outright, so these can never log in
+            // by either mechanism. CreatedAt is a fixed literal (HasData
+            // requires compile-time constants, not TimeProvider).
+            var systemSeededAt = DateTimeOffset.UnixEpoch;
+            user.HasData(
+                new UserEntity
+                {
+                    Id = SystemUserIds.Abandoned,
+                    UserName = "Abandoned",
+                    NormalizedUserName = "abandoned",
+                    PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                    Role = UserRole.Player,
+                    Status = UserStatus.Active,
+                    IsSystem = true,
+                    CreatedAt = systemSeededAt,
+                },
+                new UserEntity
+                {
+                    Id = SystemUserIds.Barbarians,
+                    UserName = "Barbarians",
+                    NormalizedUserName = "barbarians",
+                    PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                    Role = UserRole.Player,
+                    Status = UserStatus.Active,
+                    IsSystem = true,
+                    CreatedAt = systemSeededAt,
+                },
+                new UserEntity
+                {
+                    Id = SystemUserIds.Endboss,
+                    UserName = "Endboss",
+                    NormalizedUserName = "endboss",
+                    PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                    Role = UserRole.Player,
+                    Status = UserStatus.Active,
+                    IsSystem = true,
+                    CreatedAt = systemSeededAt,
+                });
+        });
+
+        modelBuilder.Entity<RefreshTokenEntity>(token =>
+        {
+            token.ToTable("refresh_tokens");
+            token.HasKey(t => t.Id);
+            token.Property(t => t.Id).ValueGeneratedNever();
+            token.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
+
+            // Looked up by hash on every refresh/logout call.
+            token.HasIndex(t => t.TokenHash).IsUnique();
         });
     }
 }
