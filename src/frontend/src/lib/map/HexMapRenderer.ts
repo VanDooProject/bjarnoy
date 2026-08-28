@@ -557,6 +557,18 @@ const FOG_BLOB_Z_UNEXPLORED = 1;
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
+// Total pointer travel (summed |dx|+|dy| over the gesture) below which a
+// pointerdown/up pair counts as a click on a hex rather than a camera pan.
+// Used by onPointerUp for both halves of that decision: whether to open the
+// ring menu, and whether there was any camera movement worth rebuilding for.
+const DRAG_CLICK_SLOP_PX = 6;
+// How long after the last wheel/pinch event a zoom gesture is considered
+// finished, at which point onWheel's idle timer bakes one final, fully
+// up-to-date (and correctly blurred) rebuild — the same guarantee
+// onPointerUp gives at the end of a drag. Long enough that the gaps between
+// events inside one continuous trackpad gesture don't end it early, short
+// enough that the settled view sharpens up immediately to the eye.
+const WHEEL_IDLE_MS = 180;
 
 export class HexMapRenderer {
   private app: Application | null = null;
@@ -622,6 +634,13 @@ export class HexMapRenderer {
 
   private dragging = false;
   private dragMoved = 0;
+  // A wheel/pinch zoom is a gesture just like a drag — a continuous stream of
+  // events, each one nudging `camera.zoom` — but unlike a drag it has no
+  // "up" event to end it, so it's tracked with an idle timer instead (see
+  // onWheel). While it's running, `isInteracting` below de-prioritises the
+  // same expensive rebuild work a drag already de-prioritises.
+  private wheeling = false;
+  private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
   // zip 4: "world view is already on screen and moving when the page loads" —
@@ -912,10 +931,16 @@ export class HexMapRenderer {
   };
 
   private onPointerUp = (e: PointerEvent) => {
-    if (this.dragging && this.dragMoved < 6) {
+    if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX) {
       this.handleClick(e);
     }
-    const wasDragging = this.dragging;
+    // `dragging` is true for *any* pointerdown, a stationary click included,
+    // so it alone doesn't say whether the camera actually moved. Gate the
+    // rebuild/fade below on the same slop threshold the click check above
+    // uses: a click that never panned the map leaves every sprite, and the
+    // fog cache, exactly as they already are — no reason to pay for a full
+    // rebuild (blur render pass and all) or to fade the fog back in.
+    const wasDragging = this.dragging && this.dragMoved >= DRAG_CLICK_SLOP_PX;
     this.dragging = false;
     if (wasDragging) {
       // The drag's last queued rebuild (scheduleCull's rAF, from the final
@@ -1036,8 +1061,31 @@ export class HexMapRenderer {
       y: this.camera.y + (before.y - after.y),
     };
     this.applyCameraTransform();
+    this.noteWheelActivity();
     this.scheduleCull();
   };
+
+  /**
+   * Marks a wheel/pinch zoom gesture as in progress and (re)arms the timer
+   * that ends it. A continuous zoom changes `camera.zoom` on every event, so
+   * it crosses cameraMovedEnough()'s threshold on many successive frames —
+   * exactly what scheduleCull/refreshFogBlobCache already throttle for a
+   * drag, except a wheel gesture has no pointerup to hang that on. Once the
+   * events stop for WHEEL_IDLE_MS the gesture is over, so the flag clears and
+   * one forced rebuild bakes the settled view — same guarantee onPointerUp
+   * gives when a drag ends and tickCameraAnim gives when an animation
+   * completes.
+   */
+  private noteWheelActivity() {
+    this.wheeling = true;
+    if (this.wheelIdleTimer !== null) clearTimeout(this.wheelIdleTimer);
+    this.wheelIdleTimer = setTimeout(() => {
+      this.wheelIdleTimer = null;
+      this.wheeling = false;
+      if (this.destroyed) return;
+      this.forceRebuild();
+    }, WHEEL_IDLE_MS);
+  }
 
   private handleClick(e: PointerEvent) {
     const canvas = this.app?.canvas;
@@ -1050,30 +1098,39 @@ export class HexMapRenderer {
     this.options.onHexClick?.(coord, tile);
   }
 
+  /**
+   * True while the camera is mid-gesture — a pointer drag, an animated
+   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteWheelActivity)
+   * — i.e. while more camera movement is expected imminently and any rebuild
+   * done right now is about to be superseded. Each of the three ends with a
+   * forced, fully up-to-date rebuild, so work skipped while this is true is
+   * never work lost.
+   */
+  private get isInteracting(): boolean {
+    return this.dragging || !!this.cameraAnim || this.wheeling;
+  }
+
   private scheduleCull() {
     if (this.cullQueued) return;
     this.cullQueued = true;
     requestAnimationFrame(() => {
       this.cullQueued = false;
       if (this.destroyed) return;
-      // A drag (or, since the founding transition, an animated camera —
-      // see tickCameraAnim) can cross cameraMovedEnough's distance threshold
-      // on almost every rAF (each pointermove/animation step nudges the
-      // camera further), and a rebuild re-syncs every visible terrain/
-      // border/fog sprite — not just the fog blur (see refreshFogBlobCache's
-      // own drag skip above), so that's real per-rebuild cost under software
-      // rendering, paid several times over across one drag gesture or camera
-      // animation. coordsInRect already renders a VISIBLE_RECT_MARGIN past
-      // the viewport edge, so there's slack to spend: throttle rebuilds to once
-      // per DRAG_REBUILD_THROTTLE_MS instead of firing on every threshold-
-      // crossing frame. onPointerUp's forced rebuildAll() still guarantees
-      // one fully up-to-date rebuild the instant a drag ends, and
-      // tickCameraAnim's own forceRebuild() does the same the instant the
-      // animation completes.
-      if (
-        (this.dragging || this.cameraAnim) &&
-        performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS
-      ) {
+      // Any ongoing camera gesture (see isInteracting: a drag, the founding
+      // transition's animation, or a wheel/pinch zoom) can cross
+      // cameraMovedEnough's threshold on almost every rAF — each pointermove,
+      // animation step or wheel event nudges the camera or its zoom further —
+      // and a rebuild re-syncs every visible terrain/border/fog sprite, not
+      // just the fog blur (see refreshFogBlobCache's own skip above), so
+      // that's real per-rebuild cost under software rendering, paid several
+      // times over across a single gesture. visibleCoords already renders a
+      // TILE_W*2 margin past the viewport edge, so there's slack to spend:
+      // throttle rebuilds to once per DRAG_REBUILD_THROTTLE_MS instead of
+      // firing on every threshold-crossing frame. Each gesture still ends
+      // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
+      // is released, tickCameraAnim's forceRebuild() when the animation
+      // completes, and noteWheelActivity's idle timer once zooming settles.
+      if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
         return;
       }
       if (this.cameraMovedEnough()) this.rebuildAll();
@@ -1489,19 +1546,27 @@ export class HexMapRenderer {
       fogPerfStats.blobCacheMs = performance.now() - start;
       return;
     }
-    if (this.dragging) {
-      // A drag can trigger a rebuild on nearly every rAF (scheduleCull fires
-      // whenever the camera has moved enough), and the visible unexplored
-      // area's bounding box shifts on almost every one of those — which,
-      // below, would mean destroying and recreating a GPU texture on
-      // (near-)every drag frame, on top of a whole extra render() pass. On
-      // CI's software-rendered headless Chromium that alone was enough to
-      // stall the main thread badly enough for page.mouse.move (a CDP
-      // command) to time out, even with the blur filter already dropped for
-      // the drag. So: leave the existing cache sprite exactly as it was —
-      // stale during the drag, same tradeoff the blur-drop/fade already
-      // makes — and let onPointerUp's forced rebuildAll() bake a fresh,
-      // correctly-blurred one once the drag ends.
+    // Deliberately `dragging || wheeling` rather than the broader
+    // `isInteracting`: a *player* gesture is over in a few hundred ms, but
+    // cameraAnim runs for CAMERA_TRANSITION_MS (1.4s) with the founding
+    // reveal's fog fade timed to it, and skipping the cache for that long
+    // would leave nothing for that fade to reveal — the mist would pop in at
+    // the end instead of rolling in.
+    if (this.dragging || this.wheeling) {
+      // An ongoing player gesture (a drag, or a wheel/pinch zoom) can trigger
+      // a rebuild on nearly every rAF (scheduleCull fires whenever the camera
+      // has moved or zoomed enough), and the visible unexplored area's
+      // bounding box shifts in world space on almost every one of those —
+      // which, below, would mean destroying and recreating a GPU texture on
+      // (near-)every frame of the gesture, on top of a whole extra render()
+      // pass. On CI's software-rendered headless Chromium that alone was
+      // enough to stall the main thread badly enough for page.mouse.move (a
+      // CDP command) to time out, even with the blur filter already dropped
+      // for the drag. So: leave the existing cache sprite exactly as it was —
+      // stale for the gesture's duration, the same tradeoff the
+      // blur-drop/fade already makes — and let the forced rebuild that ends
+      // the gesture (onPointerUp's on release, noteWheelActivity's idle timer
+      // once zooming settles) bake a fresh, correctly-blurred one.
       fogPerfStats.blobRenderMs = 0;
       fogPerfStats.blobCacheMs = performance.now() - start;
       return;
@@ -2053,6 +2118,13 @@ export class HexMapRenderer {
     window.removeEventListener('pointerup', this.onPointerUp);
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
+    // Otherwise a zoom gesture still settling when the renderer goes away
+    // would fire its rebuild into a torn-down app (see noteWheelActivity).
+    if (this.wheelIdleTimer !== null) {
+      clearTimeout(this.wheelIdleTimer);
+      this.wheelIdleTimer = null;
+    }
+    this.wheeling = false;
     this.app?.ticker.remove(this.onTick);
     // app.destroy({ children: true }) destroys the Sprites but not a texture
     // we generated ourselves (generateTexture() output isn't owned by any
