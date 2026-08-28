@@ -255,6 +255,15 @@ const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
 const TILE_CANVAS_H = TILE_W * (TILE_ART_NATIVE_H / TILE_ART_NATIVE_W);
 const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
+// The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
+// tile's grid origin, so its own vertical centre is TILE_H/2 — NOT
+// TILE_TOPFACE_Y_OFFSET, which is nearly 1.5x taller than the diamond
+// itself (it locates where the topface *starts* inside the taller 200x300
+// native art, for sprite placement — see its one other use below). Reusing
+// it as a screen-anchor offset put the hover tooltip, click ring, and
+// settlement badge all noticeably below the tile they were meant to sit
+// on/over, on the far edge of (or past) the tile's own front face.
+const TILE_CENTER_Y_OFFSET = TILE_H / 2;
 
 const WORLD_DEFAULT_ZOOM = 0.22;
 // Ceiling for the settlement camera's initial zoom — settlement level 1's
@@ -820,7 +829,7 @@ export class HexMapRenderer {
   }
 
   private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
-    const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+    const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
 
@@ -931,7 +940,7 @@ export class HexMapRenderer {
     // to) rather than the raw pointer position, so it stays centred on the
     // tile regardless of exactly where within it the player clicked.
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+    const anchor = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
     this.options.onHexClick?.(coord, tile, anchor);
   }
 
@@ -1650,7 +1659,7 @@ export class HexMapRenderer {
       // Don't reveal a rival's name over ground you haven't scouted.
       if (!worldModel.isExplored(settlement.q, settlement.r)) continue;
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
-      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_TOPFACE_Y_OFFSET });
+      const top = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
       const mine = settlement.ownerId === playerId;
       const color = mine ? GOLD : RIVAL;
 
