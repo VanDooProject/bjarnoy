@@ -275,6 +275,39 @@ as a precedent).
 
 ![hover tooltip on a hut](img/hex_hover_tooltip.png)
 
+**Correction after review — tooltip overlapped the hex instead of sitting beside it, and hover was broken
+on water in the village view:** review against a screenshot from the actual PR (not this doc's own) found
+two real bugs, neither caught by the "verified: yes" above.
+
+1. **Tooltip overlapping the hex.** `hoverInfoFor` anchored `screenX` at the tile's *centre*
+   (`grid.x + TILE_W / 2`), and `HexTooltip.vue` offset the card by a flat `+22px` from there. At the
+   settlement view's default zoom the tile is far wider than 22px on screen, so the card's left edge landed
+   inside the tile's own right half instead of clear of it — the reference (section 3's own written spec,
+   "a dark navy card to the right of the hovered tile") shows the card entirely outside the hex, not
+   overlapping it. Fixed by anchoring `screenX` at the tile's own right edge (`grid.x + TILE_W`, the hex's
+   actual right vertex per `isoTopPoints`) instead of its centre — that edge already scales with zoom via
+   `toScreen`, so only a small fixed margin (`+12px`) is needed in `HexTooltip.vue` on top of it, rather than
+   a flat offset that only happened to look right at one zoom level.
+2. **Hover disabled on water everywhere, including the village view.** `setHoveredCoord` unconditionally
+   skipped the hover outline/tooltip for any `sea` tile, in every mode — a blanket rule that made sense for
+   the landing page's pre-founding preview (you can't found on water, so previewing a hover there is
+   misleading) but wasn't supposed to extend to the settlement (village) view, where water is just terrain
+   like any other hex — not buildable, but still a legitimate thing to point at and see "Open water /
+   Unclaimed". Fixed by scoping the skip to exactly the landing case: `mode === 'settlement' && !this.settlement()`
+   (no settlement founded yet) — reusing the same `settlement()` check `isFogActive` already relies on to tell
+   the pre-founding preview apart from a real village. World-map mode was never affected by this bug (its own
+   sea handling is unrelated) and keeps its existing behavior.
+
+Verified both with Playwright: hovering a building in the settlement view now shows the tooltip clear of the
+hex (screenshot below, replacing the one above with the same "verified" claim), hovering open water in the
+settlement view now shows the outline plus an "Open water / Unclaimed" tooltip, and hovering a genuine sea
+tile on the landing page's pre-founding preview (coordinates confirmed via `WorldModel.getTile` — the
+preview draws no water texture at all, so a screenshot alone can't distinguish real sea from simply-unrendered
+land off to the side) still shows no hover at all, matching the "only disabled in landing page" fix.
+
+![hover tooltip clear of the tile it's describing](img/hex_hover_tooltip.png)
+![hover working on open water in the village view](img/hex_hover_water.png)
+
 ---
 
 ## 4. Settlement badge

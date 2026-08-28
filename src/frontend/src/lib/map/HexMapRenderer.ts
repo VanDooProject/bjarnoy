@@ -821,10 +821,13 @@ export class HexMapRenderer {
       return;
     }
     const tile = worldModel.getTile(coord.q, coord.r);
-    // Water is never a valid target — neither to found on (landing) nor to
-    // build on (settlement) nor to click into (world map) — so the hover
-    // outline shouldn't appear over it in any mode.
-    if (tile.terrain === 'sea') {
+    // Water is never a valid target to found on, so the landing page's
+    // pre-founding preview (settlement mode, no settlement yet) hides the
+    // hover outline over it — otherwise the player could "hover" a spot
+    // they can't actually land on. Once a settlement exists (village view)
+    // or in world-map mode, water is just terrain like any other hex and
+    // should hover/tooltip normally, even though it's still not buildable.
+    if (tile.terrain === 'sea' && mode === 'settlement' && !this.settlement()) {
       this.options.onHoverChange?.(null);
       return;
     }
@@ -840,7 +843,12 @@ export class HexMapRenderer {
   }
 
   private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
-    const screen = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_CENTER_Y_OFFSET });
+    // Anchor at the tile's own right edge (not its centre) so the tooltip
+    // — which grows rightward from screenX, see HexTooltip.vue — sits
+    // clear of the hex instead of covering its right half. The edge itself
+    // scales with zoom via toScreen, so the gap stays correct at any zoom
+    // level rather than the fixed-pixel offset a centre anchor would need.
+    const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
 
