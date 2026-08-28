@@ -57,8 +57,21 @@ onMounted(async () => {
     await world.restoreLiveSettlement(player.id, player.settlementId);
   }
   world.startHudSync();
+
+  // Same test/debug-hook idea as main.ts's __demoWorld: lets an e2e test
+  // convert a real hex coordinate to an exact click point via the
+  // renderer's own camera math (HexMapRenderer.hexCenterScreen), instead of
+  // guessing pixel offsets that only happen to land right at one particular
+  // zoom/camera framing.
+  if (DEMO_MODE) {
+    (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
+      canvasRef.value?.renderer;
+  }
 });
-onUnmounted(() => world.stopHudSync());
+onUnmounted(() => {
+  world.stopHudSync();
+  if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
+});
 
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {

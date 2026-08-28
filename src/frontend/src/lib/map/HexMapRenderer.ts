@@ -926,6 +926,22 @@ export class HexMapRenderer {
     if (mode === 'settlement') this.options.onHoverChange?.(this.hoverInfoFor(tile, grid));
   }
 
+  /**
+   * Screen-space centre of a hex's top face — e.g. for a test/debug script
+   * (see main.ts's __demoWorld-style hooks) to click a specific known hex
+   * precisely, rather than guessing pixel offsets that only happen to land
+   * right at one particular zoom/camera framing.
+   */
+  hexCenterScreen(coord: AxialCoord): { x: number; y: number } {
+    // The true centre of the top-face polygon (isoTopPoints spans the full
+    // 0..TILE_W / 0..TILE_H box) — not TILE_TOPFACE_Y_OFFSET, which is
+    // hoverInfoFor's *tooltip anchor* point (deliberately near the top of
+    // the tile, not its centre) and would click closer to this hex's
+    // upper neighbour than to itself.
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
+  }
+
   private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
     // Anchor at the tile's own right edge (not its centre) so the tooltip
     // — which grows rightward from screenX, see HexTooltip.vue — sits
