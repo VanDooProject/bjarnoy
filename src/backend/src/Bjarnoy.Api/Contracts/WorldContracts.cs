@@ -70,10 +70,19 @@ public sealed record TileCoordinate(int Q, int R);
 /// One of <c>sea</c>, <c>sand</c>, <c>grass</c>, <c>forest</c>, <c>mountain</c> —
 /// the frontend's terrain names.
 /// </param>
-public sealed record TileResponse(int Q, int R, string Terrain)
+/// <param name="IsCoastalWater">Sea that borders land — the ring a coastal-water sprite belongs on.</param>
+/// <param name="Orientation">One of <c>E</c>, <c>NE</c>, <c>NW</c>, <c>W</c>, <c>SW</c>, <c>SE</c> — which art-pack rotation to render.</param>
+/// <param name="Variant">Which numbered variant of this terrain's tile art to use.</param>
+public sealed record TileResponse(int Q, int R, string Terrain, bool IsCoastalWater, string Orientation, int Variant)
 {
     public static TileResponse From(GeneratedTile tile) =>
-        new(tile.Coord.Q, tile.Coord.R, tile.Terrain.ToWireName());
+        new(
+            tile.Coord.Q,
+            tile.Coord.R,
+            tile.Terrain.ToWireName(),
+            tile.IsCoastalWater,
+            tile.Orientation.ToWireName(),
+            tile.Variant);
 }
 
 public sealed record TileChunkResponse(

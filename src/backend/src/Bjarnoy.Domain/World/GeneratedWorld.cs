@@ -1,7 +1,12 @@
 namespace Bjarnoy.Domain.World;
 
-/// <summary>A single classified hex.</summary>
-public readonly record struct GeneratedTile(HexCoord Coord, Terrain Terrain);
+/// <summary>A single classified hex, with the rendering facts derived alongside its terrain.</summary>
+public readonly record struct GeneratedTile(
+    HexCoord Coord,
+    Terrain Terrain,
+    bool IsCoastalWater,
+    TileOrientation Orientation,
+    int Variant);
 
 /// <summary>
 /// A connected landmass found in a generated world, with the facts about it that

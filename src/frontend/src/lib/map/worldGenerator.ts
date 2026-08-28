@@ -3,8 +3,9 @@
 // mockup) rather than one continuous landmass. Tiles are generated on demand
 // from (q, r) and a seed, so nothing needs to be precomputed or stored for
 // the whole map — memory is bounded by hexes actually visited.
-import { axialToOddQ } from '../hex/coords';
-import type { Terrain, Tile } from './types';
+import { axialToOddQ, neighbors } from '../hex/coords';
+import { TILE_ORIENTATIONS } from './types';
+import type { Terrain, Tile, TileOrientation } from './types';
 
 function hash2(x: number, y: number, seed: number): number {
   let h = x * 374761393 + y * 668265263 + seed * 2147483647;
@@ -79,6 +80,93 @@ export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   return rockiness > 0.52 ? 'forest' : 'grass';
 }
 
+function isLand(q: number, r: number, world: WorldSeed): boolean {
+  return terrainAt(q, r, world) !== 'sea';
+}
+
+/** Sea that borders land — the ring a coastal-water sprite belongs on. */
+export function isCoastalWater(q: number, r: number, world: WorldSeed): boolean {
+  if (terrainAt(q, r, world) !== 'sea') return false;
+  return neighbors({ q, r }).some((n) => isLand(n.q, n.r, world));
+}
+
+/**
+ * The direction a coastal-water hex's land neighbours sit in: each land
+ * neighbour contributes a unit vector at its direction's angle (60° apart,
+ * matching `neighbors()`'s direction order), and the summed vector is
+ * snapped to the nearest of the six `TileOrientation`s.
+ */
+function coastalOrientation(q: number, r: number, world: WorldSeed): TileOrientation {
+  const ns = neighbors({ q, r });
+  let sumX = 0;
+  let sumY = 0;
+  let firstLandIndex = -1;
+
+  ns.forEach((n, i) => {
+    if (!isLand(n.q, n.r, world)) return;
+    if (firstLandIndex < 0) firstLandIndex = i;
+    const angle = i * (Math.PI / 3);
+    sumX += Math.cos(angle);
+    sumY += Math.sin(angle);
+  });
+
+  // Opposite land neighbours (e.g. a one-hex-wide strait) can cancel the
+  // vector to exactly zero. Falling back to the first land direction found
+  // keeps the pick deterministic instead of an arbitrary default.
+  if (sumX === 0 && sumY === 0) return TILE_ORIENTATIONS[firstLandIndex];
+
+  let angle = Math.atan2(sumY, sumX);
+  if (angle < 0) angle += 2 * Math.PI;
+  const index = Math.round(angle / (Math.PI / 3)) % 6;
+  return TILE_ORIENTATIONS[index];
+}
+
+/** Seed-stable cosmetic rotation for tiles that don't face anything in particular. */
+function defaultOrientation(q: number, r: number, world: WorldSeed): TileOrientation {
+  const h = hash2(q, r, world.seed + 29);
+  const index = Math.min(5, Math.floor(h * 6));
+  return TILE_ORIENTATIONS[index];
+}
+
+/**
+ * Which of the six art-pack rotations a hex renders with. Coastal water
+ * faces the land it borders; everything else gets a cosmetic, seed-stable
+ * rotation so the map doesn't read as one repeated tile stamped everywhere.
+ */
+export function orientationAt(q: number, r: number, world: WorldSeed): TileOrientation {
+  return isCoastalWater(q, r, world) ? coastalOrientation(q, r, world) : defaultOrientation(q, r, world);
+}
+
+/** Per-terrain variant count the tile art pack actually has, everything else falling back to 1. */
+const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
+  grass: 3,
+  forest: 3,
+  mountain: 2,
+};
+
+/**
+ * Seed-stable variant index for a hex, in `[0, N)` where `N` is however many
+ * variants `VARIANT_COUNTS` knows the art pack has for that terrain (1 —
+ * i.e. always variant 0 — for anything not listed). Capping the range this
+ * way *is* the fallback: a terrain with fewer variants than the pack's
+ * richest one never gets asked for a variant it doesn't have.
+ */
+export function variantAt(q: number, r: number, world: WorldSeed): number {
+  const terrain = terrainAt(q, r, world);
+  const count = VARIANT_COUNTS[terrain] ?? 1;
+  if (count <= 1) return 0;
+  const h = hash2(q, r, world.seed + 31);
+  const index = Math.floor(h * count);
+  return index >= count ? count - 1 : index;
+}
+
 export function generateTile(q: number, r: number, world: WorldSeed): Tile {
-  return { q, r, terrain: terrainAt(q, r, world) };
+  return {
+    q,
+    r,
+    terrain: terrainAt(q, r, world),
+    isCoastalWater: isCoastalWater(q, r, world),
+    orientation: orientationAt(q, r, world),
+    variant: variantAt(q, r, world),
+  };
 }

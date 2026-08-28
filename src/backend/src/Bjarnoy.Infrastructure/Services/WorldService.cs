@@ -153,7 +153,12 @@ public sealed class WorldService(
             for (var r = rMin; r <= rMax; r++)
             {
                 var coord = new HexCoord(q, r);
-                yield return new GeneratedTile(coord, sampler.TerrainAt(coord));
+                yield return new GeneratedTile(
+                    coord,
+                    sampler.TerrainAt(coord),
+                    sampler.IsCoastalWater(coord),
+                    sampler.OrientationAt(coord),
+                    sampler.VariantAt(coord));
             }
         }
     }
