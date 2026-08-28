@@ -712,6 +712,12 @@ export class HexMapRenderer {
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
   private wavePoints: WavePoint[] = [];
+  // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
+  // onTick's per-frame drawWaves call can skip redrawing wave strokes that
+  // the opaque fog backdrop syncWorldBackground painted would fully hide
+  // anyway — refreshed on every rebuildAll, stale (matching every other
+  // rebuild-driven field) for the frames between rebuilds during a drag.
+  private deepFogOnly = false;
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
@@ -954,7 +960,7 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.rebuildMarkers();
-    if (this.options.mode === 'world') this.drawWaves();
+    if (this.options.mode === 'world' && !this.deepFogOnly) this.drawWaves();
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -1311,10 +1317,21 @@ export class HexMapRenderer {
       fogDebugFlags.unexploredFog &&
       !fogDebugFlags.blobsOnly &&
       this.isEntirelyDeepFog(rect);
+    this.deepFogOnly = deepFogOnly;
     this.syncWorldBackground(deepFogOnly);
 
     let phaseStart = performance.now();
-    this.rebuildTerrain(coords, fogActive);
+    if (deepFogOnly) {
+      // isEntirelyDeepFog already confirmed every visible hex is deep,
+      // uniformly-opaque fog, and syncWorldBackground painted the
+      // renderer's own clear colour to match (see rebuildBordersAndFog's
+      // matching shortcut just below) — terrain drawn under that backdrop
+      // would be fully hidden, so there's nothing to gain by building it.
+      fogPerfStats.terrainDrawnCount = 0;
+      fogPerfStats.terrainCulledCount = 0;
+    } else {
+      this.rebuildTerrain(coords, fogActive);
+    }
     fogPerfStats.terrainMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
@@ -1329,7 +1346,11 @@ export class HexMapRenderer {
     this.rebuildMarkers();
     fogPerfStats.markersMs = performance.now() - phaseStart;
 
-    if (this.options.mode === 'world') {
+    if (this.options.mode === 'world' && !deepFogOnly) {
+      // Same shortcut as terrain above — the open-water wave strokes this
+      // recomputes would be drawn (by onTick's own deepFogOnly check) under
+      // the same opaque backdrop, so there's nothing to gain by refreshing
+      // wavePoints for hexes that are entirely hidden.
       phaseStart = performance.now();
       this.rebuildWaves();
       fogPerfStats.wavesMs = performance.now() - phaseStart;
