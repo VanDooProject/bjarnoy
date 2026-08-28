@@ -30,7 +30,12 @@ public sealed class EndbossTriggerHostedService(
     {
         using var timer = new PeriodicTimer(PollInterval);
 
-        do
+        // Waits for the first tick before the first poll, deliberately: a
+        // hosted service starts as soon as the host does, which in tests is
+        // before the migrator has created the schema (see
+        // SqliteApiFixture.InitializeAsync) — a poll that ran immediately
+        // would hit "no such table: worlds" every time.
+        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
         {
             try
             {
@@ -45,6 +50,5 @@ public sealed class EndbossTriggerHostedService(
                 _logger.LogError(ex, "Endboss trigger poll failed; will retry next tick.");
             }
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
     }
 }
