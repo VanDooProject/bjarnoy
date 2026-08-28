@@ -104,11 +104,17 @@ interface OpenRing {
 }
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringStack = ref<OpenRing[]>([]);
-// Spacing between concentric rings — wide enough that an outer ring's
-// bubbles (88px, see RingMenu's own .ring-bubble) never overlap the
-// previous ring's, even with the root ring's badge-driven extra radius.
-const RING_BASE_RADIUS = 110;
-const RING_STEP = 140;
+// Matches RingMenu's own default RADIUS — kept in sync there too.
+const RING_BASE_RADIUS = 90;
+// Each ring's bubbles shrink a little further out (RingMenu's own default
+// is 88px at scale 1) — reads as "further away", and lets the next ring's
+// radius sit closer in without the two orbits' bubbles touching.
+const RING_BUBBLE_SIZES = [88, 76, 66];
+// Gap between the outer edge of one ring's bubbles and the inner edge of
+// the next, rather than a flat centre-to-centre step — a flat step ignores
+// how much smaller the outer bubbles are, and ends up wasting space the
+// further out you go.
+const RING_GAP = 22;
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
@@ -230,11 +236,36 @@ function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
 const ringsToRender = computed(() => {
   const tile = selectedTile.value;
   if (!tile) return [];
-  return ringStack.value.map((ring, i) => ({
-    ring,
-    actions: actionsForRing(tile, ring),
-    radius: RING_BASE_RADIUS + i * RING_STEP,
-  }));
+
+  // Ring 0's actual on-screen radius is bigger than RING_BASE_RADIUS when
+  // it's carrying the "upgrade" badge (see RingMenu's own effectiveRadius)
+  // — later rings' gap math needs to start from that real edge, not the
+  // bare base radius, or ring 1 would crowd the badge.
+  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 34 : 0);
+  let radius = ring0Effective;
+  let angleOffset = 0;
+
+  return ringStack.value.map((ring, i) => {
+    const actions = actionsForRing(tile, ring);
+    const bubbleSize = RING_BUBBLE_SIZES[Math.min(i, RING_BUBBLE_SIZES.length - 1)];
+    if (i > 0) {
+      const prevBubbleSize = RING_BUBBLE_SIZES[Math.min(i - 1, RING_BUBBLE_SIZES.length - 1)];
+      radius += prevBubbleSize / 2 + RING_GAP + bubbleSize / 2;
+    }
+    const entry = {
+      ring,
+      actions,
+      radius: i === 0 ? RING_BASE_RADIUS : radius,
+      angleOffset,
+      bubbleScale: bubbleSize / RING_BUBBLE_SIZES[0],
+      depth: i,
+    };
+    // Stagger the next ring by half of *this* ring's own angular spacing,
+    // so its bubbles land in the gaps between this ring's bubbles instead
+    // of lining up radially with them (a "bullseye" look otherwise).
+    angleOffset += 180 / Math.max(1, actions.length);
+    return entry;
+  });
 });
 
 // The badge belongs to the root ring, which is always the innermost ring
@@ -398,7 +429,7 @@ async function upgrade() {
       <ResourceBar />
       <HudNav />
     </TopBar>
-    <RealmPanel />
+    <RealmPanel :ring-open="!!(selectedTile && ringScreen)" />
     <BuildQueuePanel @select="onQueueSelect" />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <template v-if="selectedTile && ringScreen">
@@ -409,6 +440,9 @@ async function upgrade() {
         :y="ringScreen.y"
         :radius="entry.radius"
         :backdrop="i === 0"
+        :angle-offset="entry.angleOffset"
+        :bubble-scale="entry.bubbleScale"
+        :depth="entry.depth"
         :actions="entry.actions"
         :badge-action="i === 0 ? ringBadge : undefined"
         @select="(id: string) => onRingSelect(i, id)"

@@ -42,6 +42,18 @@ const props = defineProps<{
   // above the same backdrop, so their own backdrop div must not intercept
   // pointer events meant for it.
   backdrop?: boolean;
+  // Extra rotation (degrees) added on top of this ring's own layout
+  // rotation. Without it, every ring starts its bubbles from the same
+  // angle, so an outer ring's bubbles land radially in line with the inner
+  // ring's — a "bullseye" rather than a menu unfolding outward. The caller
+  // staggers each successive ring by half its parent's angular spacing.
+  angleOffset?: number;
+  // Shrinks bubble/badge size (1 = full 88px) so outer rings read as
+  // further away, not just further out.
+  bubbleScale?: number;
+  // 0 = innermost ring (solid, brightest track); each level out fades and
+  // sparsens its own orbit track, purely a depth cue.
+  depth?: number;
 }>();
 const emit = defineEmits<{
   select: [id: string];
@@ -55,9 +67,10 @@ const emit = defineEmits<{
   outsidePointerDown: [event: PointerEvent];
 }>();
 
-// Issue #16 "ring menu": reference shows the bubbles spread well clear of
-// the tile in an orbit, not crowded around it.
-const RADIUS = 110;
+// Issue #16 "ring menu": reference shows the bubbles spread clear of the
+// tile in an orbit, not crowded around it — but not so far out that the
+// innermost ring alone dominates the screen.
+const RADIUS = 90;
 // A ring with a badge (an owned building, "Lv n upgrade") also has the
 // canvas's own floating settlement-name pill sitting right at the tile's
 // centre, underneath the ring — the same RADIUS that keeps a badge-less
@@ -65,7 +78,7 @@ const RADIUS = 110;
 // the middle (that pill), so it gets extra breathing room.
 const effectiveRadius = computed(() => {
   const base = props.radius ?? RADIUS;
-  return props.badgeAction ? base + 40 : base;
+  return props.badgeAction ? base + 34 : base;
 });
 const badgeY = computed(() => props.y - effectiveRadius.value - 34);
 // Issue #16 "ring menu" target: "connected down to the ring by a thin
@@ -89,7 +102,7 @@ const positioned = computed(() => {
   // (the "Lv n upgrade" badge on an owned building): a bubble landing
   // exactly at north then sits underneath the badge instead of beside it,
   // so the ring is rotated half a step to move that gap to the top instead.
-  const rotationOffset = n === 4 ? 45 : props.badgeAction ? -90 + angleStep / 2 : -90;
+  const rotationOffset = (n === 4 ? 45 : props.badgeAction ? -90 + angleStep / 2 : -90) + (props.angleOffset ?? 0);
   const radius = effectiveRadius.value;
   return props.actions.map((action, i) => {
     const angleDeg = angleStep * i + rotationOffset;
@@ -100,6 +113,26 @@ const positioned = computed(() => {
       top: props.y + Math.sin(rad) * radius,
     };
   });
+});
+
+const bubbleSize = computed(() => 88 * (props.bubbleScale ?? 1));
+const bubbleFontSize = computed(() => 13 * (props.bubbleScale ?? 1));
+// Depth cue: each ring out is fainter and its dashes sparser, so the
+// innermost ring reads as the "current" one and outer rings whisper. A
+// plain low-alpha white stroke (the original values here) reads fine
+// against the map's own dark backdrop overlay, but washes out completely
+// over bright terrain/fog — the drop-shadow gives it a dark halo so the
+// track stays visible over both.
+const trackStyle = computed(() => {
+  const depth = props.depth ?? 0;
+  const opacity = [0.55, 0.4, 0.28][Math.min(depth, 2)];
+  const dash = [[4, 4], [3, 5], [2, 6]][Math.min(depth, 2)];
+  return {
+    stroke: `rgba(255, 255, 255, ${opacity})`,
+    strokeWidth: depth === 0 ? 2 : 1.5,
+    strokeDasharray: dash.join(' '),
+    filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55))',
+  };
 });
 
 function select(action: RingAction) {
@@ -141,7 +174,7 @@ function hover(action: RingAction) {
          "ring" itself, not just floating buttons), plus the curved guide
          line down from the badge when one is present. -->
     <svg class="ring-svg">
-      <circle class="ring-track" :cx="x" :cy="y" :r="effectiveRadius" />
+      <circle class="ring-track" :cx="x" :cy="y" :r="effectiveRadius" :style="trackStyle" />
       <path v-if="badgeAction" class="ring-guide" :d="guidePath" />
     </svg>
     <button
@@ -161,7 +194,13 @@ function hover(action: RingAction) {
       :key="p.action.id"
       class="ring-bubble"
       :class="{ disabled: p.action.disabled }"
-      :style="{ left: `${p.left}px`, top: `${p.top}px` }"
+      :style="{
+        left: `${p.left}px`,
+        top: `${p.top}px`,
+        width: `${bubbleSize}px`,
+        height: `${bubbleSize}px`,
+        fontSize: `${bubbleFontSize}px`,
+      }"
       :disabled="p.action.disabled"
       :title="p.action.disabled ? p.action.hint : undefined"
       @click="select(p.action)"
