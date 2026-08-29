@@ -355,6 +355,18 @@ export interface LeaderboardBoardResponse {
   nextAfterRank: number | null;
 }
 
+export interface WeeklyStatResponse {
+  periodStart: string;
+  periodEnd: string;
+  isFinal: boolean;
+  scoreGained: number;
+}
+
+export interface WeeklyStatsPageResponse {
+  items: WeeklyStatResponse[];
+  nextCursor: string | null;
+}
+
 export interface LeaderboardMeResponse {
   myRank: number;
   items: LeaderboardEntryResponse[];

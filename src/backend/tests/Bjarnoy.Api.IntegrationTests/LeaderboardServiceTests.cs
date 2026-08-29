@@ -316,4 +316,244 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
             .Select(s => s.ComputedAt)
             .SingleAsync(Ct);
     }
+
+    private async Task<List<LeaderboardEntryEntity>> GetFinalBoardAsync(
+        GameDbContext db, Guid worldId, LeaderboardScope scope, LeaderboardCategory category, DateTimeOffset periodStart)
+    {
+        var snapshot = await db.LeaderboardSnapshots
+            .Include(s => s.Entries)
+            .SingleAsync(
+                s => s.WorldId == worldId && s.Scope == scope && s.Category == category
+                    && s.PeriodStart == periodStart && s.IsFinal,
+                Ct);
+
+        return [.. snapshot.Entries.OrderBy(e => e.Rank)];
+    }
+
+    private async Task CloseDueWindowsAsync(Guid worldId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+        await leaderboards.CloseDueWindowsAsync(worldId, Ct);
+    }
+
+    private async Task<List<WeeklyStatEntity>> GetWeeklyStatsAsync(Guid worldId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        // SQLite cannot ORDER BY a DateTimeOffset; order client-side.
+        var stats = await db.WeeklyStats.Where(s => s.WorldId == worldId).ToListAsync(Ct);
+        return [.. stats.OrderBy(s => s.PeriodStart)];
+    }
+
+    private async Task<DateTimeOffset?> GetWatermarkAsync(Guid worldId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        return (await db.LeaderboardWatermarks.SingleAsync(w => w.WorldId == worldId, Ct)).LastClosedPeriodStart;
+    }
+
+    [Fact]
+    public async Task Closing_the_first_window_computes_score_gained_from_a_zero_baseline()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var plots = await GetPlotsAsync(client, world.Id);
+        var settlement = await FoundSettlementAsync(client, world.Id, plots);
+
+        Guid userId;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            userId = await AssignRealOwnerAsync(db, settlement.Id);
+            await SetLonghouseLevelAsync(db, settlement.Id, 5); // score 15
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+            await leaderboards.RefreshCurrentBoardsAsync(world.Id, Ct);
+        }
+
+        _fixture.Factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(world.Id);
+
+        var stats = await GetWeeklyStatsAsync(world.Id);
+        var stat = Assert.Single(stats, s => s.UserId == userId);
+        Assert.Equal(15, stat.ScoreGained);
+        Assert.True(stat.IsFinal);
+        Assert.Equal(world.CreatedAt, stat.PeriodStart);
+        Assert.Equal(world.CreatedAt, await GetWatermarkAsync(world.Id));
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var board = await GetFinalBoardAsync(
+                db, world.Id, LeaderboardScope.User, LeaderboardCategory.WeeklyScoreGained, world.CreatedAt);
+            var entry = Assert.Single(board);
+            Assert.Equal((userId, 15.0, 1), (entry.SubjectId, entry.Value, entry.Rank));
+        }
+    }
+
+    [Fact]
+    public async Task Multiple_missed_windows_close_oldest_first_and_only_the_last_carries_the_real_delta()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var plots = await GetPlotsAsync(client, world.Id);
+        var settlement = await FoundSettlementAsync(client, world.Id, plots);
+
+        Guid userId;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            userId = await AssignRealOwnerAsync(db, settlement.Id);
+            await SetLonghouseLevelAsync(db, settlement.Id, 5); // score 15
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+            await leaderboards.RefreshCurrentBoardsAsync(world.Id, Ct);
+        }
+
+        // Three windows' worth of downtime in one go.
+        _fixture.Factory.Time.Advance((LeaderboardService.WeeklyWindowLength * 3) + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(world.Id);
+
+        var stats = await GetWeeklyStatsAsync(world.Id);
+        Assert.Equal(3, stats.Count);
+        Assert.All(stats, s => Assert.True(s.IsFinal));
+        Assert.Equal([0, 0, 15], stats.Select(s => s.ScoreGained));
+        Assert.Equal(
+            [world.CreatedAt, world.CreatedAt + LeaderboardService.WeeklyWindowLength, world.CreatedAt + (LeaderboardService.WeeklyWindowLength * 2)],
+            stats.Select(s => s.PeriodStart));
+
+        Assert.Equal(world.CreatedAt + (LeaderboardService.WeeklyWindowLength * 2), await GetWatermarkAsync(world.Id));
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var finalSnapshotCount = await db.LeaderboardSnapshots.CountAsync(
+                s => s.WorldId == world.Id && s.Scope == LeaderboardScope.User
+                    && s.Category == LeaderboardCategory.WeeklyScoreGained && s.IsFinal,
+                Ct);
+            Assert.Equal(3, finalSnapshotCount);
+        }
+    }
+
+    [Fact]
+    public async Task Rerunning_close_due_windows_does_not_double_close()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var plots = await GetPlotsAsync(client, world.Id);
+        var settlement = await FoundSettlementAsync(client, world.Id, plots);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            await AssignRealOwnerAsync(db, settlement.Id);
+            await SetLonghouseLevelAsync(db, settlement.Id, 5);
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+            await leaderboards.RefreshCurrentBoardsAsync(world.Id, Ct);
+        }
+
+        _fixture.Factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(world.Id);
+        var afterFirstRun = await GetWeeklyStatsAsync(world.Id);
+
+        // Re-running the same tick again (nothing new elapsed) must not
+        // produce a second row or re-advance the watermark.
+        await CloseDueWindowsAsync(world.Id);
+        var afterSecondRun = await GetWeeklyStatsAsync(world.Id);
+
+        Assert.Single(afterFirstRun);
+        Assert.Equal(afterFirstRun.Select(s => (s.Id, s.ScoreGained)), afterSecondRun.Select(s => (s.Id, s.ScoreGained)));
+    }
+
+    [Fact]
+    public async Task A_paused_worlds_windows_do_not_advance()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var plots = await GetPlotsAsync(client, world.Id);
+        var settlement = await FoundSettlementAsync(client, world.Id, plots);
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            await AssignRealOwnerAsync(db, settlement.Id);
+            await SetLonghouseLevelAsync(db, settlement.Id, 5);
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+            await leaderboards.RefreshCurrentBoardsAsync(world.Id, Ct);
+
+            var worlds = scope.ServiceProvider.GetRequiredService<WorldService>();
+            await worlds.SetRunStateAsync(world.Id, Bjarnoy.Domain.Economy.WorldRunState.Paused, cancellationToken: Ct);
+        }
+
+        // Wall time moves well past a window's length, but the world's game
+        // clock is frozen at the pause instant.
+        _fixture.Factory.Time.Advance(LeaderboardService.WeeklyWindowLength * 2);
+        await CloseDueWindowsAsync(world.Id);
+
+        Assert.Empty(await GetWeeklyStatsAsync(world.Id));
+        Assert.Null(await GetWatermarkAsync(world.Id));
+    }
+
+    [Fact]
+    public async Task World_end_writes_final_all_time_snapshots_exactly_once()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var plots = await GetPlotsAsync(client, world.Id);
+        var settlement = await FoundSettlementAsync(client, world.Id, plots);
+
+        Guid userId;
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            userId = await AssignRealOwnerAsync(db, settlement.Id);
+            await SetLonghouseLevelAsync(db, settlement.Id, 5); // score 15
+
+            var worldEntity = await db.Worlds.SingleAsync(w => w.Id == world.Id, Ct);
+            worldEntity.EndbossTriggeredAt = _fixture.Factory.Time.GetUtcNow();
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+            await leaderboards.FinalizeWorldEndSnapshotsAsync(world.Id, Ct);
+            // Idempotent: a second tick after the world has already ended must not duplicate it.
+            await leaderboards.FinalizeWorldEndSnapshotsAsync(world.Id, Ct);
+        }
+
+        await using (var scope = _fixture.Factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+
+            var userFinals = await db.LeaderboardSnapshots.Include(s => s.Entries).Where(
+                s => s.WorldId == world.Id && s.Scope == LeaderboardScope.User
+                    && s.Category == LeaderboardCategory.Score && s.PeriodStart == null && s.IsFinal)
+                .ToListAsync(Ct);
+            var settlementFinals = await db.LeaderboardSnapshots.Where(
+                s => s.WorldId == world.Id && s.Scope == LeaderboardScope.Settlement
+                    && s.Category == LeaderboardCategory.BiggestSettlement && s.PeriodStart == null && s.IsFinal)
+                .ToListAsync(Ct);
+
+            var userFinal = Assert.Single(userFinals);
+            Assert.Single(settlementFinals);
+            var entry = Assert.Single(userFinal.Entries);
+            Assert.Equal((userId, 15.0), (entry.SubjectId, entry.Value));
+        }
+    }
 }
