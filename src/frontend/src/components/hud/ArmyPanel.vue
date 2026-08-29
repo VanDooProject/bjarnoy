@@ -15,8 +15,10 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
 import {
   armyStatusLabel,
+  classifyUnitSelection,
   formatEta,
   hasCatapultSelected,
+  isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { buildingLabel } from '../../lib/units/battleReports';
@@ -60,6 +62,25 @@ const garrisonRows = computed(() =>
   world.hud.garrison
     .filter((g) => g.count > 0)
     .map((g) => ({ unit: g.unit, label: unitLabel(g.unit), available: g.count })),
+);
+
+// Issue #40 phase 6 §1: which class family the current selection has
+// committed to (if any) — drives greying out the other class's rows below,
+// so the player can't build a `MixedFleetAndLandUnits`-rejected request in
+// the first place. See `classifyUnitSelection`'s own comment for why
+// `'mixed'` is handled defensively rather than assumed unreachable.
+const selectionKind = computed(() => classifyUnitSelection(draft.value?.unitCounts ?? {}, catalogue.byType));
+function isRowSelectable(unit: string): boolean {
+  return isUnitSelectableFor(unit, selectionKind.value, catalogue.byType);
+}
+// Whether the garrison actually holds units of the class the current
+// selection has locked out — only worth telling the player "ships and land
+// units can't mix" when there's something of the other class sitting right
+// there, greyed out, for them to wonder about.
+const hasLockedOutUnits = computed(() =>
+  selectionKind.value !== 'none' && selectionKind.value !== 'mixed'
+    ? garrisonRows.value.some((row) => !isRowSelectable(row.unit))
+    : false,
 );
 
 function quantityFor(unit: string): number {
@@ -376,14 +397,24 @@ async function recall(armyId: string) {
           </div>
         </template>
 
+        <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">
+          {{ selectionKind === 'fleet' ? 'Ships' : 'Land units' }} only — ships and land
+          units can't be dispatched together.
+        </p>
         <div class="unit-picker">
-          <div v-for="row in garrisonRows" :key="row.unit" class="unit-picker-row">
+          <div
+            v-for="row in garrisonRows"
+            :key="row.unit"
+            class="unit-picker-row"
+            :class="{ 'is-locked-out': !isRowSelectable(row.unit) }"
+          >
             <span class="unit-picker-name">{{ row.label }}</span>
             <input
               type="number"
               min="0"
               :max="row.available"
               class="qty"
+              :disabled="!isRowSelectable(row.unit)"
               :value="quantityFor(row.unit)"
               @input="setQuantity(row.unit, ($event.target as HTMLInputElement).value, row.available)"
             />
@@ -661,6 +692,10 @@ async function recall(armyId: string) {
 .building-list {
   max-height: 120px;
 }
+.fleet-note {
+  margin-top: 0;
+  color: #e0b25a;
+}
 .unit-picker {
   display: flex;
   flex-direction: column;
@@ -670,6 +705,9 @@ async function recall(armyId: string) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.unit-picker-row.is-locked-out {
+  opacity: 0.4;
 }
 .unit-picker-name {
   flex: 1;

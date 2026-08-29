@@ -71,3 +71,39 @@ test('posting and accepting a trade offer updates the board and resources', asyn
   expect(after.wood).toBeGreaterThan(before.wood + 45);
   expect(after.iron).toBeLessThan(before.iron - 20);
 });
+
+/**
+ * PR 3 (issue #46): accepting the seeded rival offer also drops a cosmetic
+ * cart into `WorldModel`'s cart-shipment list (see
+ * `WorldModel.acceptTradeOffer`), interpolated on the world map exactly
+ * like a `Fleet` (`HexMapRenderer`'s cart-rendering loop). There is no
+ * real travel time to wait out here — same "the trade settles
+ * synchronously" reasoning as the resource assertions above — this only
+ * checks that the map has something to render, not the trade's own
+ * accounting (covered by the test above).
+ */
+test('accepting an offer drops a cart shipment onto the world map', async ({ page }) => {
+  test.setTimeout(90_000);
+  await foundSettlement(page);
+
+  await page.locator('.trade-toggle').click();
+  const panel = page.locator('.trade-panel');
+  await expect(panel).toBeVisible();
+
+  const openSection = panel.locator('.trade-section').nth(1);
+  const rivalRow = openSection.locator('.trade-row', { hasText: 'Iron' });
+  await expect(rivalRow).toBeVisible();
+
+  await rivalRow.getByRole('button', { name: 'Accept' }).click();
+  await expect(panel.locator('.trade-error')).toHaveCount(0);
+
+  const carts = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __demoWorld: () => { model: { listCartShipments: () => unknown[] } };
+        }
+      ).__demoWorld().model.listCartShipments(),
+  );
+  expect(carts.length).toBeGreaterThan(0);
+});

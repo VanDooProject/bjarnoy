@@ -85,6 +85,60 @@ export function buildAttackDispatchRequest(
 }
 
 /**
+ * Issue #40 phase 6 §1: which unit-class family a garrison selection is
+ * drawing from, so `ArmyPanel.vue` can grey out the class the player hasn't
+ * picked yet — cheaply catching the backend's `MixedFleetAndLandUnits`
+ * rejection (`Army.PlanDispatch`) before a request is even built, rather than
+ * only learning about it from a 409 after clicking dispatch.
+ *
+ * `'none'` when nothing is selected yet (either class still pickable),
+ * `'fleet'`/`'land'` once every selected unit agrees on a class, `'mixed'`
+ * when both are present at once — which the UI should never actually let the
+ * player reach (see `isUnitSelectableFor`), but is reported honestly rather
+ * than silently picked one way, in case a stale draft ever gets here (e.g.
+ * a unit's class changing between catalogue reloads).
+ */
+export type FleetSelectionKind = 'none' | 'fleet' | 'land' | 'mixed';
+
+export function classifyUnitSelection(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): FleetSelectionKind {
+  let hasShip = false;
+  let hasNonShip = false;
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    const definition = byType[type];
+    if (!definition) continue;
+    if (definition.class === 'ship') hasShip = true;
+    else hasNonShip = true;
+  }
+  if (hasShip && hasNonShip) return 'mixed';
+  if (hasShip) return 'fleet';
+  if (hasNonShip) return 'land';
+  return 'none';
+}
+
+/**
+ * Whether a garrison row for `type` should accept more units given the
+ * dispatch's current `selection` kind — the other class family is locked out
+ * once one is committed to, so the player can't build a mixed request in the
+ * first place (see `classifyUnitSelection`). Both families stay open while
+ * nothing is selected (`'none'`); a `'mixed'` selection (shouldn't happen,
+ * see `classifyUnitSelection`'s own comment) locks out nothing further, since
+ * there is no single class left to prefer.
+ */
+export function isUnitSelectableFor(
+  type: string,
+  selection: FleetSelectionKind,
+  byType: Record<string, UnitDefinitionResponse>,
+): boolean {
+  if (selection === 'none' || selection === 'mixed') return true;
+  const isShip = byType[type]?.class === 'ship';
+  return selection === 'fleet' ? isShip : !isShip;
+}
+
+/**
  * True when `unitCounts` sends at least one Catapult — the gate `ArmyPanel.vue`
  * uses to decide whether the "preferred target building" picker is even worth
  * showing (issue #40 phase 5): a catapult-free attack does no siege damage

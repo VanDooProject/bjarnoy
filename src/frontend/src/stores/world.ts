@@ -20,7 +20,7 @@ import {
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
-import type { Resources, TileOrientation } from '../lib/map/types';
+import type { CartShipment, ResourceKind, Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
 // How often live mode re-polls a settlement to pick up build-queue
@@ -438,6 +438,31 @@ export const useWorldStore = defineStore('world', {
       this.hud.tradeBoard = board;
       this.hud.myTradeOffers = mine;
       this.hud.shipments = shipments;
+
+      // Issue #46 phase 3: mirror in-transit shipments into the WorldModel
+      // so the world map can render a cart marker + ETA the same way it
+      // already does for `Fleet`s — see `CartShipment`'s own doc comment
+      // for why this is a full replace rather than a per-shipment add
+      // (ShipmentResponse's own from/to Q/R are already frozen hex
+      // coordinates — see ShipmentEntity — so no settlement-id lookup is
+      // needed here).
+      this.model.setCartShipments(
+        shipments
+          .filter((s) => !s.delivered)
+          .map(
+            (s): CartShipment => ({
+              id: s.id,
+              fromQ: s.fromQ,
+              fromR: s.fromR,
+              toQ: s.toQ,
+              toR: s.toR,
+              departedAt: new Date(s.departedAtGameTime).getTime(),
+              etaAt: new Date(s.arrivesAtGameTime).getTime(),
+              cargoResource: s.cargoResource as ResourceKind,
+              cargoAmount: s.cargoAmount,
+            }),
+          ),
+      );
     },
     /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
