@@ -343,6 +343,71 @@ export interface ProblemDetails {
   rejection?: string;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/LeaderboardContracts.cs.
+
+export type LeaderboardScope = 'user' | 'settlement' | 'guild';
+
+export type LeaderboardCategory =
+  | 'score'
+  | 'biggestSettlement'
+  | 'weeklyScoreGained'
+  | 'weeklyFightsWon'
+  | 'weeklyFightsLost'
+  | 'weeklyResourcesLooted'
+  | 'biggestArmy';
+
+/**
+ * `reason` is set only when `available` is false — one of `noBattleSystemYet`,
+ * `noArmySystemYet`, `noGuildSystemYet`, `noWeeklyWindowsYet`, `notComputedYet`,
+ * or `unknownBoard` (issue #43 §5).
+ */
+export interface LeaderboardBoardInfoResponse {
+  scope: LeaderboardScope;
+  category: LeaderboardCategory;
+  available: boolean;
+  reason: string | null;
+  computedAt: string | null;
+  entryCount: number | null;
+}
+
+export interface WeeklyWindowResponse {
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface LeaderboardDirectoryResponse {
+  boards: LeaderboardBoardInfoResponse[];
+  weeklyWindows: WeeklyWindowResponse[];
+}
+
+/** `delta`: `previousRank` minus `rank` — positive means the subject moved up. `null` for a new entrant. */
+export interface LeaderboardEntryResponse {
+  rank: number;
+  subjectId: string;
+  subjectName: string;
+  value: number;
+  previousRank: number | null;
+  delta: number | null;
+}
+
+export interface LeaderboardBoardResponse {
+  scope: LeaderboardScope;
+  category: LeaderboardCategory;
+  available: boolean;
+  reason: string | null;
+  isFinal: boolean;
+  periodStart: string | null;
+  periodEnd: string | null;
+  computedAt: string | null;
+  items: LeaderboardEntryResponse[];
+  nextAfterRank: number | null;
+}
+
+export interface LeaderboardMeResponse {
+  myRank: number;
+  items: LeaderboardEntryResponse[];
+}
+
 /** A single (building type, level) entry from the tech-tree catalogue — see `GET /api/v1/buildings`. */
 export interface BuildingDefinitionResponse {
   type: string;

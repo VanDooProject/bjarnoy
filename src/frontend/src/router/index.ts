@@ -40,6 +40,11 @@ export const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
     },
     {
+      path: '/leaderboards',
+      name: 'leaderboards',
+      component: () => import('../views/LeaderboardView.vue'),
+    },
+    {
       path: '/impressum',
       name: 'impressum',
       component: () => import('../views/ImpressumView.vue'),

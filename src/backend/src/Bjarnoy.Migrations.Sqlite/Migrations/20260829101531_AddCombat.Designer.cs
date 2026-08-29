@@ -3,6 +3,7 @@ using System;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    partial class GameDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829101531_AddCombat")]
+    partial class AddCombat
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -402,49 +405,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ProfileReportEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ReportedUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ReporterUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReportedUserId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("ReporterUserId", "ReportedUserId");
-
-                    b.ToTable("profile_reports", (string)null);
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -621,10 +581,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Bio")
-                        .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -904,25 +860,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired();
 
                     b.Navigation("Settlement");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ProfileReportEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "ReportedUser")
-                        .WithMany()
-                        .HasForeignKey("ReportedUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Reporter")
-                        .WithMany()
-                        .HasForeignKey("ReporterUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ReportedUser");
-
-                    b.Navigation("Reporter");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>

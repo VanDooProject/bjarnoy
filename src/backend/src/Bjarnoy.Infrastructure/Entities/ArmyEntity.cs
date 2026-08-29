@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Movement = Bjarnoy.Domain.Movement.Movement;
@@ -30,7 +31,19 @@ public class ArmyEntity
 
     public int Mission { get; set; }
 
+    /// <summary>The settlement an <see cref="ArmyMission.Attack"/> army is headed to fight. Null for <see cref="ArmyMission.Move"/>.</summary>
+    public Guid? TargetSettlementId { get; set; }
+
     public double Provisions { get; set; }
+
+    /// <summary>Loot carried home from a won battle, not yet deposited — see <see cref="Army.Loot"/>.</summary>
+    public double LootWood { get; set; }
+
+    public double LootStone { get; set; }
+
+    public double LootFood { get; set; }
+
+    public double LootIron { get; set; }
 
     public List<ArmyUnitStackEntity> Stacks { get; set; } = [];
 
@@ -76,6 +89,8 @@ public class ArmyEntity
             Location = location,
             Provisions = Provisions,
             Mission = (ArmyMission)Mission,
+            TargetSettlementId = TargetSettlementId,
+            Loot = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
         };
     }
 
@@ -85,7 +100,12 @@ public class ArmyEntity
         ArgumentNullException.ThrowIfNull(army);
 
         Mission = (int)army.Mission;
+        TargetSettlementId = army.TargetSettlementId;
         Provisions = army.Provisions;
+        LootWood = army.Loot.Wood;
+        LootStone = army.Loot.Stone;
+        LootFood = army.Loot.Food;
+        LootIron = army.Loot.Iron;
 
         var present = army.Stacks.Select(s => s.Type).ToHashSet();
         Stacks.RemoveAll(s => !present.Contains(s.UnitType));

@@ -39,6 +39,13 @@ const initials = computed(() => {
     <button class="link" :class="{ active: route.name === 'world' }" @click="router.push('/world')">
       World map
     </button>
+    <button
+      class="link"
+      :class="{ active: route.name === 'leaderboards' }"
+      @click="router.push('/leaderboards')"
+    >
+      Leaderboards
+    </button>
     <button class="link disabled" type="button" disabled title="Not implemented yet">Reports</button>
     <button class="link disabled" type="button" disabled title="Not implemented yet">Alliance</button>
     <button
