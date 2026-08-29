@@ -48,7 +48,7 @@ public static class BuildingCatalogue
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
-            BuildingType.FishingHut => Producer(type, level, Sand, new ResourceAmounts(0, 0, Food: 30, 0)),
+            BuildingType.FishingHut => FishingHut(level),
             BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
             BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             _ => null,
@@ -99,7 +99,6 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
-    private static readonly IReadOnlySet<Terrain> Sand = new HashSet<Terrain> { Terrain.Sand };
     private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
 
     /// <summary>Cost multiplier for a level: 1, 1.6, 2.56, …</summary>
@@ -134,6 +133,7 @@ public static class BuildingCatalogue
         // never completely stalled.
         ProductionPerHour = new ResourceAmounts(Wood: 10, Stone: 8, Food: 10, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
+        AllowedTerrain = Grass,
         RequiredLonghouseLevel = 1,
     };
 
@@ -144,6 +144,7 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 150, Stone: 120, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(6, level),
         StorageCapacity = ResourceAmounts.Uniform(1000) * level,
+        AllowedTerrain = Grass,
         RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 
@@ -155,5 +156,18 @@ public static class BuildingCatalogue
         BuildDuration = Duration(8, level),
         AllowedTerrain = SandOrGrass,
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+    };
+
+    // Same shape as the land Producers, but gated by RequiresCoastalWater
+    // instead of AllowedTerrain — the hex under it stays Terrain.Sea.
+    private static BuildingDefinition FishingHut(int level) => new()
+    {
+        Type = BuildingType.FishingHut,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 100, Stone: 80, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(4, level),
+        ProductionPerHour = new ResourceAmounts(0, 0, Food: 30, 0) * level,
+        RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
 }

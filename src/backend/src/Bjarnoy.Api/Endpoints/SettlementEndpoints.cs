@@ -307,6 +307,8 @@ public static class SettlementEndpoints
         BuildRejection.AlreadyQueuedOnHex => "Something is already queued on that hex.",
         BuildRejection.MaxLevelReached => "That building is already at its maximum level.",
         BuildRejection.LevelSkipped => "Levels must be built in order.",
+        BuildRejection.LonghousePlacementNotAllowed =>
+            "A settlement gets its longhouse from founding, not from the build queue.",
         _ => "Refused.",
     };
 }

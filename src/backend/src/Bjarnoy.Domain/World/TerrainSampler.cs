@@ -156,6 +156,44 @@ public sealed class TerrainSampler
     }
 
     /// <summary>
+    /// The orientation a fishing hut on <paramref name="coord"/> should
+    /// render with — the <see cref="OrientationAt"/> override hook, fed a
+    /// building-specific answer instead of a river's.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CoastalOrientation"/> alone isn't good enough here: it
+    /// averages every land neighbour a coastal-water hex has, which is fine
+    /// for plain water with no owner, but a fishing hut belongs to one
+    /// settlement and its art has a dock, a single fixed connection to land —
+    /// it must face the hex's land neighbour actually closest to that
+    /// settlement's own centre (its own shore), not a blend that could point
+    /// at someone else's coastline or a gap between two.
+    /// </remarks>
+    public TileOrientation FishingHutOrientation(HexCoord coord, HexCoord settlementCentre)
+    {
+        var neighbours = coord.Neighbours();
+        var bestIndex = 0;
+        var bestDistance = int.MaxValue;
+
+        for (var i = 0; i < neighbours.Length; i++)
+        {
+            if (!IsLand(neighbours[i]))
+            {
+                continue;
+            }
+
+            var distance = neighbours[i].DistanceTo(settlementCentre);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+
+        return (TileOrientation)bestIndex;
+    }
+
+    /// <summary>
     /// The direction a coastal-water hex's land neighbours sit in, as a compass
     /// point on the hex's own six-direction wheel: each land neighbour
     /// contributes a unit vector at its direction's angle (60° apart, matching

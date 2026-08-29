@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -285,9 +286,137 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var lumber = catalogue.Single(d => d.Type == "lumberjack");
 
         Assert.Equal(["forest"], lumber.AllowedTerrain);
+        Assert.False(lumber.RequiresCoastalWater);
         Assert.True(lumber.Cost.Wood > 0);
         Assert.True(lumber.BuildSeconds > 0);
         Assert.True(lumber.ProductionPerHour.Wood > 0);
+
+        var fishingHut = catalogue.Single(d => d.Type == "fishinghut");
+        Assert.True(fishingHut.RequiresCoastalWater);
+        Assert.Empty(fishingHut.AllowedTerrain);
+    }
+
+    [Fact]
+    public async Task A_fishing_hut_can_be_built_on_coastal_water_and_reports_its_orientation()
+    {
+        using var client = Client();
+
+        // Seed 1 is arbitrary — chosen only because (checked by inspection)
+        // it has an island whose start position reaches coastal water within
+        // 3 hexes, so a level-4 longhouse's claim (radius 1 + level/2) can
+        // reach the shore without an excessive number of upgrades here.
+        // Everything past that is found dynamically through the same API a
+        // player would use, not hard-coded.
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 1, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        TileCoordinate? start = null;
+        HexCoord waterCoord = default;
+        foreach (var island in islands!)
+        {
+            foreach (var candidate in island.StartPositions)
+            {
+                var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
+                    $"/api/v1/worlds/{world.Id}/tiles?qMin={candidate.Q - 3}&qMax={candidate.Q + 3}"
+                    + $"&rMin={candidate.R - 3}&rMax={candidate.R + 3}",
+                    SqliteApiFixture.StrictJson, Ct);
+
+                var candidateCentre = new HexCoord(candidate.Q, candidate.R);
+                var water = chunk!.Tiles.FirstOrDefault(t =>
+                    t.IsCoastalWater && candidateCentre.DistanceTo(new HexCoord(t.Q, t.R)) <= 3);
+
+                if (water is not null)
+                {
+                    start = candidate;
+                    waterCoord = new HexCoord(water.Q, water.R);
+                    break;
+                }
+            }
+
+            if (start is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.NotNull(start);
+        var foundStart = start!;
+
+        var founded = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(
+                islands!.First(i => i.StartPositions.Contains(foundStart)).Id,
+                foundStart.Q, foundStart.R, "Sjostad", "Ulf", "ulf-player"),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+        var settlement = await founded.ReadStrictAsync<SettlementResponse>(Ct);
+        var centre = new HexCoord(settlement.Q, settlement.R);
+
+        // Claim radius is 1 + longhouseLevel/2 — grow to level 4 (radius 3)
+        // so the shore found above is actually reachable. Each level costs
+        // more than the settlement can afford right away (cost grows faster
+        // than a single longhouse's own production), so a rejected attempt
+        // just means "not stocked up yet" — advance time and retry rather
+        // than treating it as a failure, bounded so a real regression still
+        // fails loudly instead of spinning.
+        for (var attempt = 0; settlement.LonghouseLevel < 4; attempt++)
+        {
+            Assert.True(attempt < 40, $"longhouse stuck at level {settlement.LonghouseLevel} after {attempt} attempts");
+
+            var upgrade = await client.PostJsonAsync(
+                $"/api/v1/settlements/{settlement.Id}/builds",
+                new QueueBuildRequest("longhouse", settlement.Q, settlement.R),
+                Ct);
+
+            if (upgrade.StatusCode == HttpStatusCode.Accepted)
+            {
+                _factory.Time.Advance(TimeSpan.FromHours(2));
+            }
+            else
+            {
+                // Still saving up for this level — wait longer and retry.
+                _factory.Time.Advance(TimeSpan.FromHours(24));
+            }
+
+            settlement = (await GetAsync(client, settlement.Id))!;
+        }
+
+        Assert.True(centre.DistanceTo(waterCoord) <= settlement.ClaimRadius);
+
+        HttpResponseMessage queued;
+        var queueAttempt = 0;
+        while (true)
+        {
+            Assert.True(queueAttempt++ < 20, "fishing hut never became affordable");
+
+            queued = await client.PostJsonAsync(
+                $"/api/v1/settlements/{settlement.Id}/builds",
+                new QueueBuildRequest("fishinghut", waterCoord.Q, waterCoord.R),
+                Ct);
+            if (queued.StatusCode == HttpStatusCode.Accepted)
+            {
+                break;
+            }
+
+            _factory.Time.Advance(TimeSpan.FromHours(6));
+            settlement = (await GetAsync(client, settlement.Id))!;
+        }
+
+        _factory.Time.Advance(TimeSpan.FromHours(1));
+        settlement = (await GetAsync(client, settlement.Id))!;
+
+        var hut = settlement.Buildings.Single(b => b.Type == "fishinghut");
+        Assert.Equal(1, hut.Level);
+        Assert.NotNull(hut.Orientation);
+
+        var expectedOrientation = new TerrainSampler(WorldGenerationOptions.ForSeed(1) with { Radius = 60 })
+            .FishingHutOrientation(waterCoord, centre)
+            .ToWireName();
+        Assert.Equal(expectedOrientation, hut.Orientation);
     }
 
     // ---------------------------------------------------------------- pausing

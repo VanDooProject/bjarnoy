@@ -124,13 +124,21 @@ public sealed record Settlement
     /// The world's current <c>SpeedFactor</c> — divides the base build
     /// duration, so a factor of 2 finishes a build in half the time.
     /// </param>
+    /// <param name="isCoastalWater">
+    /// Whether <paramref name="coord"/> is shallow water (a sea hex with a
+    /// land neighbour) — <see cref="World.TerrainSampler.IsCoastalWater"/>.
+    /// Only a <see cref="BuildingDefinition.RequiresCoastalWater"/> building
+    /// (the fishing hut) cares; <paramref name="terrain"/> alone can't say,
+    /// since it reports plain <see cref="Terrain.Sea"/> either way.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
         Terrain terrain,
         DateTimeOffset now,
         Guid orderId,
-        double speedFactor = 1.0)
+        double speedFactor = 1.0,
+        bool isCoastalWater = false)
     {
         if (!Claims(coord))
         {
@@ -168,15 +176,24 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.UnknownBuildingLevel);
         }
 
-        if (!definition.AllowsTerrain(terrain))
+        var terrainOk = definition.RequiresCoastalWater
+            ? isCoastalWater
+            : definition.AllowsTerrain(terrain);
+        if (!terrainOk)
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
 
-        // The longhouse is its own prerequisite at level 1, so founding works.
-        var longhouse = LonghouseLevel;
-        if (!(type == BuildingType.Longhouse && targetLevel == 1)
-            && longhouse < definition.RequiredLonghouseLevel)
+        // A settlement gets its one longhouse from founding (SettlementService.FoundAsync
+        // builds it directly, never through here) — this only ever levels up the
+        // longhouse a settlement already has, on the hex it already stands on.
+        // Placing a second one is someone else's job (a future settlers mechanic).
+        if (type == BuildingType.Longhouse && !occupied)
+        {
+            return BuildDecision.Rejected(BuildRejection.LonghousePlacementNotAllowed);
+        }
+
+        if (LonghouseLevel < definition.RequiredLonghouseLevel)
         {
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
         }
