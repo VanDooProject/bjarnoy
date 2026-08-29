@@ -203,6 +203,7 @@ app.MapSettlementEndpoints(versionSet);
 app.MapProfileEndpoints(versionSet);
 app.MapLeaderboardEndpoints(versionSet);
 app.MapArmyEndpoints(versionSet);
+app.MapActivityEndpoints(versionSet);
 app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
