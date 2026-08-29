@@ -434,3 +434,97 @@ export interface BuildingDefinitionResponse {
   requiresCoastalWater: boolean;
   requiredLonghouseLevel: number;
 }
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
+
+export type GuildFeeTier = 'copper' | 'silver' | 'gold';
+
+export type GuildRole = 'leader' | 'officer' | 'member';
+
+export type GuildBoardTopicKind = 'discussion' | 'announcement' | 'report';
+
+export type PeaceTreatyStatus = 'proposed' | 'active' | 'rejected' | 'withdrawn' | 'broken';
+
+export interface CreateGuildRequest {
+  name: string;
+  tag: string;
+  description?: string | null;
+}
+
+export interface SetGuildFeeTierRequest {
+  feeTier: GuildFeeTier;
+}
+
+export interface SetGuildMemberRoleRequest {
+  role: GuildRole;
+}
+
+export interface CreateGuildTopicRequest {
+  title: string;
+  kind: GuildBoardTopicKind;
+  body: string;
+}
+
+export interface CreateGuildPostRequest {
+  body: string;
+}
+
+export interface ProposeTreatyRequest {
+  targetGuildId: string;
+}
+
+export interface GuildMemberResponse {
+  userId: string;
+  role: GuildRole;
+  joinedAt: string;
+  feeOverdue: boolean;
+}
+
+/** The member cap, treaty cap and perks a guild's current fee tier unlocks — see `GuildRules` on the backend. */
+export interface GuildPerksResponse {
+  tradeCapacityBonus: number;
+  allowUnitSupport: boolean;
+  memberCap: number;
+  maxActivePeaceTreaties: number;
+}
+
+export interface GuildResponse {
+  id: string;
+  worldId: string;
+  name: string;
+  tag: string;
+  description: string | null;
+  feeTier: GuildFeeTier;
+  memberCount: number;
+  createdAt: string;
+  members: GuildMemberResponse[];
+}
+
+export interface GuildBoardPostResponse {
+  id: string;
+  authorUserId: string;
+  body: string;
+  createdAt: string;
+}
+
+/** `kind: 'report'` flags this topic for a future game-event-reports feature — not implemented yet. */
+export interface GuildBoardTopicResponse {
+  id: string;
+  guildId: string;
+  authorUserId: string;
+  title: string;
+  kind: GuildBoardTopicKind;
+  pinned: boolean;
+  locked: boolean;
+  createdAt: string;
+  posts: GuildBoardPostResponse[];
+}
+
+export interface GuildTreatyResponse {
+  id: string;
+  proposerGuildId: string;
+  targetGuildId: string;
+  status: PeaceTreatyStatus;
+  proposedAt: string;
+  respondedAt: string | null;
+}

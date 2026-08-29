@@ -45,6 +45,11 @@ export const router = createRouter({
       component: () => import('../views/LeaderboardView.vue'),
     },
     {
+      path: '/guild',
+      name: 'guild',
+      component: () => import('../views/GuildView.vue'),
+    },
+    {
       path: '/impressum',
       name: 'impressum',
       component: () => import('../views/ImpressumView.vue'),
