@@ -67,6 +67,11 @@ public static class BuildingCatalogue
     /// Summed from the current level of each building rather than accumulated
     /// as buildings finish, so the settlement's rate is always a function of
     /// what is standing — a razed or captured building simply stops counting.
+    /// This overload has no position, so it never applies a
+    /// <see cref="TerrainBoost"/> — it exists for callers that total a
+    /// building set with no hex to look neighbours up from (e.g. founding,
+    /// which only ever totals a fresh Longhouse). <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>
+    /// is the terrain-aware overload real settlement production goes through.
     /// </remarks>
     public static (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) Totals(
         IEnumerable<(BuildingType Type, int Level)> buildings)
@@ -96,10 +101,95 @@ public static class BuildingCatalogue
         return (production, capacity);
     }
 
+    /// <summary>
+    /// Total production and storage a completed set of placed buildings
+    /// contributes, applying each terrain-bound producer's adjacency boost
+    /// (see <see cref="Boosts"/>) from <paramref name="terrainAt"/>.
+    /// </summary>
+    /// <param name="terrainAt">
+    /// Terrain of any hex on the map, land or sea, in or out of the
+    /// settlement's claim. <see langword="null"/> disables boosts entirely
+    /// (every building totals as if it had no matching neighbours) — callers
+    /// that have no terrain source can still get a total this way.
+    /// </param>
+    public static (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) Totals(
+        IEnumerable<PlacedBuilding> buildings, Func<HexCoord, Terrain>? terrainAt)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+
+        var production = ResourceAmounts.Zero;
+        var capacity = BaseStorageCapacity;
+
+        foreach (var building in buildings)
+        {
+            if (building.Level < 1)
+            {
+                continue;
+            }
+
+            var definition = TryGet(building.Type, Math.Min(building.Level, MaxLevel));
+            if (definition is null)
+            {
+                continue;
+            }
+
+            production += definition.ProductionPerHour * BoostMultiplier(building.Type, building.Coord, terrainAt);
+            capacity += definition.StorageCapacity;
+        }
+
+        return (production, capacity);
+    }
+
+    /// <summary>
+    /// How much a matching neighbour hex is worth, and how high that can add
+    /// up, for one <see cref="BuildingType"/>. Adding a future terrain-bound
+    /// building to this boost (a hypothetical mine boosted by Mountain, say)
+    /// is a one-line data entry, not new code.
+    /// </summary>
+    public sealed record TerrainBoost(IReadOnlySet<Terrain> Matching, double PerTilePercent, double CapPercent);
+
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
     private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
+    private static readonly IReadOnlySet<Terrain> Sea = new HashSet<Terrain> { Terrain.Sea };
+
+    /// <summary>
+    /// Terrain-bound producers boosted by their matching neighbour terrain.
+    /// Deliberately excludes <see cref="BuildingType.Farm"/> and
+    /// <see cref="BuildingType.PumpkinFarm"/> — they work a fixed field, not
+    /// a resource that concentrates nearby the way trees, ore and fish do.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<BuildingType, TerrainBoost> Boosts =
+        new Dictionary<BuildingType, TerrainBoost>
+        {
+            [BuildingType.Lumberjack] = new(Forest, PerTilePercent: 0.10, CapPercent: 0.50),
+            [BuildingType.Quarry] = new(Ridge, PerTilePercent: 0.10, CapPercent: 0.50),
+            // The hut itself already stands on coastal water; more open sea
+            // around it (rather than the land it backs onto) is what makes a
+            // fishing spot better.
+            [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
+        };
+
+    /// <summary>
+    /// The production multiplier <paramref name="type"/> earns at
+    /// <paramref name="coord"/>: 1.0 (no change) for a building with no
+    /// entry in <see cref="Boosts"/>, or for a <see langword="null"/>
+    /// <paramref name="terrainAt"/>; otherwise 1.0 plus 10% per direct
+    /// neighbour hex (see <see cref="HexCoord.Neighbours"/>) matching the
+    /// building's boost terrain, capped at 50% (5 of 6 neighbours) so a
+    /// perfect hex is a nice-to-have rather than mandatory.
+    /// </summary>
+    public static double BoostMultiplier(BuildingType type, HexCoord coord, Func<HexCoord, Terrain>? terrainAt)
+    {
+        if (terrainAt is null || !Boosts.TryGetValue(type, out var boost))
+        {
+            return 1.0;
+        }
+
+        var matching = coord.Neighbours().Count(neighbour => boost.Matching.Contains(terrainAt(neighbour)));
+        return 1.0 + Math.Min(matching * boost.PerTilePercent, boost.CapPercent);
+    }
 
     /// <summary>Cost multiplier for a level: 1, 1.6, 2.56, …</summary>
     private static double CostFactor(int level) => Math.Pow(1.6, level - 1);

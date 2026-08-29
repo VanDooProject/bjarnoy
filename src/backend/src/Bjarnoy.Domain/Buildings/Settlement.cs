@@ -90,7 +90,14 @@ public sealed record Settlement
     /// <c>SettlementService.RetuneSpeedAsync</c>, which settles every
     /// settlement under the old factor before the new one is persisted).
     /// </param>
-    public SettleResult SettleTo(DateTimeOffset now, double speedFactor = 1.0)
+    /// <param name="terrainAt">
+    /// Terrain lookup for a terrain-bound producer's neighbour-adjacency
+    /// boost (<see cref="BuildingCatalogue.BoostMultiplier"/>).
+    /// <see langword="null"/> (the default) settles with no boost applied —
+    /// callers with no terrain source (e.g. tests exercising other rules)
+    /// still get a correct, if unboosted, total.
+    /// </param>
+    public SettleResult SettleTo(DateTimeOffset now, double speedFactor = 1.0, Func<HexCoord, Terrain>? terrainAt = null)
     {
         var dueBuilds = Queue.Where(o => o.IsComplete(now)).ToList();
         var dueTraining = TrainingQueue.Where(o => o.IsComplete(now)).ToList();
@@ -137,12 +144,11 @@ public sealed record Settlement
             // Each completion changes the rate from its own instant, so a
             // building (or batch) finished an hour ago has applied for that
             // hour.
-            var (production, capacity) = BuildingCatalogue.Totals(
-                buildings.Select(b => (b.Type, b.Level)));
+            var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
             resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison), capacity, time);
         }
 
-        var (finalProduction, finalCapacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var (finalProduction, finalCapacity) = BuildingCatalogue.Totals(buildings, terrainAt);
         finalProduction *= speedFactor;
 
         // Starvation is checked every settle, not only when something
@@ -421,7 +427,8 @@ public sealed record Settlement
     /// changing output already accrued — the same rule <see cref="SettleTo"/>
     /// itself follows per completed order.
     /// </remarks>
-    public SetBuildingLevelResult SetBuildingLevel(HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0)
+    public SetBuildingLevelResult SetBuildingLevel(
+        HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0, Func<HexCoord, Terrain>? terrainAt = null)
     {
         var buildings = Buildings.ToList();
         var index = buildings.FindIndex(b => b.Coord == coord);
@@ -438,16 +445,17 @@ public sealed record Settlement
 
         buildings[index] = buildings[index] with { Level = level };
 
-        var (production, capacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
         var resources = Resources.WithRate(ApplyUpkeep(production * speedFactor, Garrison), capacity, now);
 
         return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
     }
 
     /// <summary>Net production (after garrison upkeep) and capacity implied by what currently stands.</summary>
-    public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(double speedFactor = 1.0)
+    public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
+        double speedFactor = 1.0, Func<HexCoord, Terrain>? terrainAt = null)
     {
-        var (production, capacity) = BuildingCatalogue.Totals(Buildings.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BuildingCatalogue.Totals(Buildings, terrainAt);
         return (ApplyUpkeep(production * speedFactor, Garrison), capacity);
     }
 

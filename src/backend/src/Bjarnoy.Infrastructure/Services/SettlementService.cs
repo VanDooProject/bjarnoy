@@ -273,7 +273,7 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var result = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor);
+        var result = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor, TerrainAt(settlement.World));
         if (result.Changed)
         {
             settlement.ApplyDomain(result.Settlement);
@@ -339,7 +339,7 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor, TerrainAt(settlement.World)).Settlement;
         var granted = settled with { Resources = settled.Resources.Adjust(delta, now) };
 
         settlement.ApplyDomain(granted);
@@ -371,8 +371,9 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
-        var result = settled.SetBuildingLevel(coord, level, now, settlement.World.SpeedFactor);
+        var terrainAt = TerrainAt(settlement.World);
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor, terrainAt).Settlement;
+        var result = settled.SetBuildingLevel(coord, level, now, settlement.World.SpeedFactor, terrainAt);
 
         if (!result.Accepted)
         {
@@ -428,12 +429,13 @@ public sealed class SettlementService(
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+
         // Settle first so the decision sees the queue and stock as of now: a
         // build that finished a minute ago must free its slot and count towards
         // production.
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor, sampler.TerrainAt).Settlement;
 
-        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var terrain = sampler.TerrainAt(coord);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
@@ -481,7 +483,7 @@ public sealed class SettlementService(
 
         // Settle first so the decision sees the queue and stock as of now —
         // same reasoning as QueueBuildAsync.
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor, TerrainAt(settlement.World)).Settlement;
 
         var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7());
 
@@ -543,10 +545,11 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        var terrainAt = TerrainAt(world);
         foreach (var entity in settlements)
         {
-            var settled = entity.ToDomain().SettleTo(now, oldFactor).Settlement;
-            var (production, capacity) = settled.CurrentTotals(newFactor);
+            var settled = entity.ToDomain().SettleTo(now, oldFactor, terrainAt).Settlement;
+            var (production, capacity) = settled.CurrentTotals(newFactor, terrainAt);
             entity.ApplyDomain(settled with { Resources = settled.Resources.WithRate(production, capacity, now) });
         }
 
@@ -587,6 +590,15 @@ public sealed class SettlementService(
 
         return world;
     }
+
+    /// <summary>
+    /// The terrain lookup <see cref="Settlement.SettleTo"/> and friends need
+    /// for a terrain-bound producer's neighbour-adjacency boost — built fresh
+    /// per call since a <see cref="TerrainSampler"/> is cheap (no state, no
+    /// I/O) and a world's generation options can differ per request.
+    /// </summary>
+    private static Func<HexCoord, Terrain> TerrainAt(WorldEntity world) =>
+        new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
