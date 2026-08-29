@@ -51,9 +51,14 @@ public enum ArmyMission
 /// collection cannot do.
 /// </para>
 /// <para>
-/// Land-only this phase (issue #40 phase 2): dispatch rejects a non-land
-/// destination or waypoint outright, and <see cref="HexPathfinder"/> treats
-/// sea as impassable. Ship movement is phase 6.
+/// An army is either a fleet (every stack <see cref="UnitClass.Ship"/>) or a
+/// land army (no stack <see cref="UnitClass.Ship"/>) — never both (issue #40
+/// phase 6 §2; <see cref="PlanDispatch"/> rejects a mixed dispatch outright).
+/// A fleet's destination/waypoints must be <see cref="Terrain.Sea"/>, a land
+/// army's must be land — <see cref="HexPathfinder"/> treats the opposite
+/// terrain as impassable either way. There is no transport/ferry mechanic:
+/// land troops cannot be carried by ship (design doc §8, explicitly
+/// deferred).
 /// </para>
 /// </remarks>
 public sealed record Army
@@ -162,6 +167,18 @@ public sealed record Army
     /// </summary>
     public const double SupportReserveHours = 2.0;
 
+    /// <param name="targetSettlementClaimRadius">
+    /// The target settlement's own <see cref="Settlement.ClaimRadius"/> —
+    /// only consulted when <paramref name="mission"/> is
+    /// <see cref="ArmyMission.Attack"/> and the requested units are a fleet
+    /// (issue #40 phase 6, design doc §8): a fleet can only reach a
+    /// settlement that claims at least one <see cref="Shoreline.IsShoreline"/>
+    /// hex, checked by walking <paramref name="destination"/> (the target's
+    /// own <see cref="Settlement.Centre"/> — <c>ArmyService</c> always passes
+    /// it as such for Attack/Support) out to this radius, mirroring
+    /// <see cref="Settlement.Claims"/> without needing the target's whole
+    /// aggregate here. Ignored for land armies and for every other mission.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -173,12 +190,29 @@ public sealed record Army
         Func<HexCoord, Terrain> terrainAt,
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
-        HexCoord? targetBuildingCoord = null)
+        HexCoord? targetBuildingCoord = null,
+        int targetSettlementClaimRadius = 0)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        // Shape validation only — whether a requested unit type even exists is
+        // Settlement.PlanDispatch's job below; this only rejects mixing the
+        // two unit-class families (issue #40 phase 6 §2). A fleet (every
+        // requested class is UnitClass.Ship) and a land army (no Ship class
+        // requested) are otherwise handled identically from here on, just
+        // against different terrain/pathfinder tables.
+        var requestedClasses = requestedUnits
+            .Where(s => s.Count > 0)
+            .Select(s => UnitCatalogue.Get(s.Type).Class)
+            .ToHashSet();
+        var isFleet = requestedClasses.Count > 0 && requestedClasses.All(c => c == UnitClass.Ship);
+        if (!isFleet && requestedClasses.Contains(UnitClass.Ship))
+        {
+            return DispatchDecision.Rejected(DispatchRejection.MixedFleetAndLandUnits);
+        }
 
         if (mission is ArmyMission.Attack or ArmyMission.Support)
         {
@@ -205,22 +239,58 @@ public sealed record Army
             return DispatchDecision.Rejected(DispatchRejection.TargetBuildingRequiresAttackMission);
         }
 
+        // Ships raid resources only (design doc §8) — a fleet attacking a
+        // fully inland settlement has no shoreline to land on at all. Land
+        // armies are unaffected. (A fleet can never carry a Catapult in the
+        // first place — Catapult is UnitClass.Siege, not Ship, so the mixed-
+        // class rejection above already makes "an all-Ship dispatch with a
+        // catapult in it" unreachable; no separate check is needed here.)
+        if (mission == ArmyMission.Attack && isFleet)
+        {
+            var targetHasShoreline = destination.WithinRadius(targetSettlementClaimRadius)
+                .Any(coord => Shoreline.IsShoreline(coord, terrainAt));
+            if (!targetHasShoreline)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.DefenderHasNoShoreline);
+            }
+        }
+
         var settlementDecision = settlement.PlanDispatch(requestedUnits, provisions, now);
         if (!settlementDecision.Accepted)
         {
             return DispatchDecision.Rejected(settlementDecision.Rejection);
         }
 
-        if (!terrainAt(destination).IsLand())
+        // A fleet needs every hex of its route to be open sea; a land army
+        // needs every hex to be land — same shape, opposite terrain, so one
+        // isLandUnit flag threads through both the terrain checks below and
+        // every HexPathfinder call for this dispatch.
+        var isLandUnit = !isFleet;
+
+        // A land army's Attack/Support destination is always a real
+        // settlement's own centre — inherently land — so this check applies
+        // to it exactly as before fleets existed. A fleet's Attack/Support
+        // destination is that same settlement centre, which is land too —
+        // but landing there is exactly the point for a fleet (see FindPath's
+        // isLandUnit remarks on the beaching/harbor exemption it applies at
+        // both route endpoints), so this generic sea-only check is skipped
+        // only for that one combination; the real fleet-reachability gate for
+        // Attack is DefenderHasNoShoreline above, not this check.
+        var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support;
+        if (!skipDestinationTerrainCheck && terrainAt(destination).IsLand() != isLandUnit)
         {
-            return DispatchDecision.Rejected(DispatchRejection.DestinationNotLand);
+            return DispatchDecision.Rejected(isFleet
+                ? DispatchRejection.DestinationNotSea
+                : DispatchRejection.DestinationNotLand);
         }
 
         foreach (var waypoint in waypoints)
         {
-            if (!terrainAt(waypoint).IsLand())
+            if (terrainAt(waypoint).IsLand() != isLandUnit)
             {
-                return DispatchDecision.Rejected(DispatchRejection.WaypointNotLand);
+                return DispatchDecision.Rejected(isFleet
+                    ? DispatchRejection.WaypointNotSea
+                    : DispatchRejection.WaypointNotLand);
             }
         }
 
@@ -229,7 +299,7 @@ public sealed record Army
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit: true);
+            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit);
             if (leg is null || leg.Count == 0)
             {
                 return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -243,15 +313,15 @@ public sealed record Army
         var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit);
 
-        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit: true);
+        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit);
 
         // Support only needs a one-way trip plus a small reserve — see
         // SupportReserveHours — everything else still needs the full round
@@ -641,14 +711,20 @@ public sealed record Army
                 return null;
         }
 
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit: true);
+        // Stacks are never mixed (PlanDispatch's MixedFleetAndLandUnits
+        // rejection guarantees that at dispatch time), so "all Ship" or "no
+        // Ship" is an exhaustive, unambiguous read of which pathfinder table
+        // this army's own recall route needs.
+        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit);
         if (path is null || path.Count == 0)
         {
             return null;
         }
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -762,6 +838,34 @@ public enum DispatchRejection
     /// <see cref="ArmyMission.Attack"/> — see <see cref="Army.TargetBuildingCoord"/>.
     /// </summary>
     TargetBuildingRequiresAttackMission,
+
+    /// <summary>
+    /// A dispatch requested both <see cref="UnitClass.Ship"/> and non-Ship
+    /// unit types together (issue #40 phase 6 §2) — an army must be either a
+    /// fleet or a land army, never both; there is no transport/ferry
+    /// mechanic yet (design doc §8, explicitly deferred).
+    /// </summary>
+    MixedFleetAndLandUnits,
+
+    /// <summary>
+    /// A fleet's destination is not <see cref="Terrain.Sea"/> — the fleet
+    /// mirror of <see cref="DestinationNotLand"/> (issue #40 phase 6).
+    /// </summary>
+    DestinationNotSea,
+
+    /// <summary>
+    /// A fleet's waypoint is not <see cref="Terrain.Sea"/> — the fleet mirror
+    /// of <see cref="WaypointNotLand"/> (issue #40 phase 6).
+    /// </summary>
+    WaypointNotSea,
+
+    /// <summary>
+    /// A fleet's <see cref="ArmyMission.Attack"/> target settlement claims no
+    /// <see cref="Shoreline.IsShoreline"/> hex — a fully inland
+    /// settlement cannot be reached by ship at all (issue #40 phase 6, design
+    /// doc §8). Never raised for a land army.
+    /// </summary>
+    DefenderHasNoShoreline,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

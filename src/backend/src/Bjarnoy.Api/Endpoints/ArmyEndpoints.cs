@@ -299,6 +299,12 @@ public static class ArmyEndpoints
                 DispatchRejection.DestinationRequired => "A move mission requires a destination.",
                 DispatchRejection.TargetBuildingRequiresAttackMission =>
                     "A target building may only be given for an attack mission.",
+                DispatchRejection.MixedFleetAndLandUnits =>
+                    "An army must be either all ships or all non-ships, not a mix.",
+                DispatchRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
+                DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
+                DispatchRejection.DefenderHasNoShoreline =>
+                    "The target settlement is fully inland and cannot be reached by ship.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

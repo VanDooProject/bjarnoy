@@ -597,7 +597,17 @@ public sealed record Settlement
     /// Call on an already-settled settlement, so the queue and stock reflect
     /// <paramref name="now"/> — mirrors <see cref="PlanBuild"/>.
     /// </remarks>
-    public TrainDecision PlanTrain(UnitType type, int count, DateTimeOffset now, Guid orderId)
+    /// <param name="hasShoreline">
+    /// Whether this settlement's own claimed territory (<see cref="Claims"/>)
+    /// includes at least one <see cref="World.Shoreline.IsShoreline"/> hex —
+    /// computed by the caller (a real <c>TerrainSampler</c> in production),
+    /// exactly the way <see cref="PlanBuild"/>'s <c>isCoastalWater</c> is.
+    /// Only ever consulted for <see cref="UnitClass.Ship"/> unit types (issue
+    /// #40 phase 6, design doc §8: ship training needs a coastal settlement,
+    /// independent of any future Shipyard building); ignored for every other
+    /// class.
+    /// </param>
+    public TrainDecision PlanTrain(UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false)
     {
         if (count <= 0)
         {
@@ -607,6 +617,11 @@ public sealed record Settlement
         if (!UnitCatalogue.IsAvailable(type, LonghouseLevel))
         {
             return TrainDecision.Rejected(TrainRejection.UnitNotAvailable);
+        }
+
+        if (UnitCatalogue.Get(type).Class == UnitClass.Ship && !hasShoreline)
+        {
+            return TrainDecision.Rejected(TrainRejection.SettlementNotCoastal);
         }
 
         if (TrainingQueue.Count >= MaxTrainingQueueLength)

@@ -104,6 +104,7 @@ public sealed class ArmyService(
         var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
 
         HexCoord effectiveDestination;
+        var targetClaimRadius = 0;
         if (mission is ArmyMission.Attack or ArmyMission.Support)
         {
             if (targetSettlementId is not { } targetId)
@@ -122,11 +123,21 @@ public sealed class ArmyService(
 
             // Same world only — an army cannot reach a settlement in another
             // world's map, so a cross-world id is indistinguishable from one
-            // that does not exist.
+            // that does not exist. LonghouseLevel comes along so a fleet
+            // Attack dispatch can check the target's ClaimRadius (issue #40
+            // phase 6 §4) without a second round trip.
             var target = await _dbContext.Settlements
                 .AsNoTracking()
                 .Where(s => s.Id == targetId && s.WorldId == settlement.WorldId)
-                .Select(s => new { s.CentreQ, s.CentreR })
+                .Select(s => new
+                {
+                    s.CentreQ,
+                    s.CentreR,
+                    LonghouseLevel = s.Buildings
+                        .Where(b => b.Type == BuildingType.Longhouse)
+                        .Select(b => (int?)b.Level)
+                        .Max() ?? 0,
+                })
                 .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
             if (target is null)
@@ -136,6 +147,7 @@ public sealed class ArmyService(
             }
 
             effectiveDestination = new HexCoord(target.CentreQ, target.CentreR);
+            targetClaimRadius = 1 + (target.LonghouseLevel / 2); // mirrors Settlement.ClaimRadius
         }
         else
         {
@@ -154,7 +166,7 @@ public sealed class ArmyService(
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
-            mission == ArmyMission.Attack ? targetBuildingCoord : null);
+            mission == ArmyMission.Attack ? targetBuildingCoord : null, targetClaimRadius);
 
         if (!decision.Accepted)
         {
