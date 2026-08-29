@@ -1688,7 +1688,15 @@ export class HexMapRenderer {
    */
   private syncWorldBackground(deepFogOnly: boolean) {
     if (!this.app || this.options.mode !== 'world') return;
-    this.app.renderer.background.color = FOG_UNEXPLORED;
+    // WebGL's clear colour is non-premultiplied but the canvas composites
+    // premultiplied (the default premultipliedAlpha:true context) — clearing
+    // to FOG_UNEXPLORED's pale RGB at alpha 0 writes a non-premultiplied
+    // "transparent" pixel the browser then adds on top of the CSS sea
+    // backdrop behind the canvas, washing every transparent pixel out to a
+    // pale wash instead of showing the blue gradient through. Only a color
+    // whose RGB is already black at alpha 0 is a valid premultiplied
+    // transparent, so the two must be set together, never RGB alone.
+    this.app.renderer.background.color = deepFogOnly ? FOG_UNEXPLORED : 0x000000;
     this.app.renderer.background.alpha = deepFogOnly ? 1 : 0;
     // fogPatternSprite layers the pre-baked cloud texture on top of that flat
     // clear colour — see its own field comment and FOG_PATTERN_W/H's — so the
