@@ -37,4 +37,14 @@ public static class TradeResourceExtensions
         TradeResource.Iron => new ResourceAmounts(0, 0, 0, amount),
         _ => throw new ArgumentOutOfRangeException(nameof(resource), resource, "Unknown trade resource"),
     };
+
+    /// <summary>Lowercased wire name, matching the frontend's resource keys — see <c>BuildingTypeExtensions.ToWireName</c>.</summary>
+    public static string ToWireName(this TradeResource resource) => resource switch
+    {
+        TradeResource.Wood => "wood",
+        TradeResource.Stone => "stone",
+        TradeResource.Food => "food",
+        TradeResource.Iron => "iron",
+        _ => throw new ArgumentOutOfRangeException(nameof(resource), resource, "Unknown trade resource"),
+    };
 }

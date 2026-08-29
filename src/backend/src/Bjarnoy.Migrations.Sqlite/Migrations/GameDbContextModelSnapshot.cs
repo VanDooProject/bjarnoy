@@ -244,6 +244,155 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("settlements", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ShipmentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ArrivesAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("CargoAmount")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("CargoResource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Carts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("DepartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FromQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FromR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("FromSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ReturnArrivesAtGameTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ToQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ToR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ToSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromSettlementId");
+
+                    b.HasIndex("OfferId");
+
+                    b.HasIndex("ToSettlementId", "DeliveredAt", "ArrivesAt");
+
+                    b.ToTable("shipments", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("GuildOnly")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("OfferedAmount")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("OfferedResource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("PosterSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PostedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("RequestedAmount")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("RequestedResource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PosterSettlementId");
+
+                    b.HasIndex("WorldId", "State", "ExpiresAt");
+
+                    b.ToTable("trade_offers", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AcceptorSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("GuildTrade")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("OfferedAmount")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("OfferedResource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("PosterSettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("RequestedAmount")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("RequestedResource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("TravelHours")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcceptorSettlementId");
+
+                    b.HasIndex("OfferId")
+                        .IsUnique();
+
+                    b.HasIndex("PosterSettlementId");
+
+                    b.ToTable("trade_reports", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -494,6 +643,45 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Buildings");
 
                     b.Navigation("Queue");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ShipmentEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("FromSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ToSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PosterSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
