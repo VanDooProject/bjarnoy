@@ -8,6 +8,14 @@
 import { computed } from 'vue';
 import { useWorldStore } from '../../stores/world';
 
+const props = defineProps<{
+  // Issue #16 "ring menu": dims the resource pills while a ring is open, to
+  // match RealmPanel's own disabled look — these aren't interactive, but
+  // reads as one consistent "HUD chrome recedes while the ring has focus"
+  // rule rather than only RealmPanel changing.
+  ringOpen?: boolean;
+}>();
+
 const world = useWorldStore();
 
 const pills = computed(() => [
@@ -29,7 +37,7 @@ function fillPct(value: number, cap: number): number {
 </script>
 
 <template>
-  <div class="resource-bar">
+  <div class="resource-bar" :class="{ disabled: props.ringOpen }">
     <div v-for="pill in pills" :key="pill.key" class="resource">
       <span class="hex-icon" :style="{ background: pill.color }" />
       <div class="numbers">
@@ -55,6 +63,11 @@ function fillPct(value: number, cap: number): number {
   align-items: center;
   gap: 22px;
   flex: none;
+  transition: opacity 0.15s ease;
+}
+.resource-bar.disabled {
+  opacity: 0.35;
+  filter: grayscale(0.7);
 }
 .resource {
   display: flex;

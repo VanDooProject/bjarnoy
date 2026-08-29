@@ -113,6 +113,39 @@ public class TileFeatureTests
     }
 
     [Fact]
+    public void FishingHutOrientation_faces_the_settlements_own_shore_not_a_strangers()
+    {
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(7));
+        var checkedAny = false;
+
+        foreach (var coord in HexCoord.Origin.WithinRadius(40))
+        {
+            if (!sampler.IsCoastalWater(coord))
+            {
+                continue;
+            }
+
+            var neighbours = coord.Neighbours();
+            for (var i = 0; i < neighbours.Length; i++)
+            {
+                if (!sampler.IsLand(neighbours[i]))
+                {
+                    continue;
+                }
+
+                // A settlement centred right on this land neighbour is at
+                // distance 0 from it and >=1 from any other land neighbour
+                // the hex has — so it must uniquely win, whatever
+                // CoastalOrientation's land-neighbour average would say.
+                Assert.Equal((TileOrientation)i, sampler.FishingHutOrientation(coord, neighbours[i]));
+                checkedAny = true;
+            }
+        }
+
+        Assert.True(checkedAny, "expected at least one coastal hex with a land neighbour in this world");
+    }
+
+    [Fact]
     public void Orientation_is_seed_stable()
     {
         var a = new TerrainSampler(WorldGenerationOptions.ForSeed(99));

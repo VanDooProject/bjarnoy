@@ -297,6 +297,18 @@ npx openapi-typescript http://localhost:5180/openapi/v1.json \
   -o src/frontend/src/api/schema.ts --enum
 ```
 
+`GET /api/v1/buildings` also has a frontend-only fallback: the tech-tree page
+(`/tech-tree`) needs to render without a backend in demo mode, so
+`src/frontend/src/data/building-catalogue.json` is a committed snapshot of
+that endpoint's response, regenerated the same way against a running backend:
+
+```bash
+node scripts/export-catalogue-data.mjs
+```
+
+Run it whenever `BuildingCatalogue.cs` changes. Same manual/at-build-time
+policy as the codegen above — nothing regenerates it automatically.
+
 The health endpoints are only mapped outside development when
 `ExposeHealthChecks` is set; the container image sets it, since an orchestrator
 needs to probe them.
