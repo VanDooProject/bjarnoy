@@ -34,11 +34,15 @@ namespace Bjarnoy.AppHost.Tests;
 /// a real inconsistency, fixed alongside this test rather than worked
 /// around). This test uses the existing admin world-speed lever
 /// (<c>PATCH /admin/worlds/{id}/settings</c>, the same control an admin has
-/// in production for a slow-moving world) to set a very high speed factor
-/// before queuing the Thrall, so the wait below is real seconds, not real
-/// minutes — no test-only "are we in CI" branch in game code, per this
-/// repo's CLAUDE.md; this is the same lever, used the same way, a human
-/// admin already has.
+/// in production for a slow-moving world) to set a speed factor of 20
+/// (a 30-second Thrall) before queuing it — fast enough to keep this test
+/// quick, but slow enough that the UI assertions checking the order is
+/// still mid-training (the modal closing, the queue panel showing "0 / 1
+/// trained") have a real window to observe that state before it completes;
+/// an even higher factor was tried first and made training finish inside
+/// Playwright's own command latency, racing those assertions — no test-only
+/// "are we in CI" branch in game code, per this repo's CLAUDE.md; this is
+/// the same lever, used the same way, a human admin already has.
 /// </para>
 /// <para>
 /// The one legitimate shortcut this test does take is topping up the fresh
@@ -127,7 +131,7 @@ public class TroopTrainingAndDispatchTests
         // training timer resolves in seconds instead (see class remarks) ---
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 600.0),
+            new UpdateWorldSettingsRequest(SpeedFactor: 20.0),
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
@@ -188,7 +192,7 @@ public class TroopTrainingAndDispatchTests
         Assert.Equal("thrall", queuedOrder.Unit);
         Assert.Equal(1, queuedOrder.Count);
 
-        // --- Wait out training (a few real seconds at 600x speed, see class remarks) ---
+        // --- Wait out training (~30 real seconds at 20x speed, see class remarks) ---
         SettlementResponse? settled = null;
         for (var attempt = 0; attempt < 60 && !cancellationToken.IsCancellationRequested; attempt++)
         {

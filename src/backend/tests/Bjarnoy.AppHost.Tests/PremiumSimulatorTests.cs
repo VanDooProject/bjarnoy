@@ -135,6 +135,14 @@ public class PremiumSimulatorTests
         await Assertions.Expect(resultCard).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Premium feature" })).Not.ToBeVisibleAsync();
 
-        Assert.Empty(consoleErrors);
+        // Scenario 2's whole point is a 403 response from POST
+        // /api/v1/simulator (the premium gate) — Chromium logs that as a
+        // "Failed to load resource: the server responded with a status of
+        // 403" console error regardless of how gracefully SimulatorView.vue
+        // handles it, so it's expected here and not a real problem. Anything
+        // else — including a "Failed to load resource" for a different
+        // status — still fails the test.
+        Assert.DoesNotContain(consoleErrors, e =>
+            !(e.Contains("Failed to load resource", StringComparison.Ordinal) && e.Contains("403", StringComparison.Ordinal)));
     }
 }
