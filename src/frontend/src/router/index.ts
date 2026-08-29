@@ -90,6 +90,11 @@ export const router = createRouter({
           name: 'admin-reports',
           component: () => import('../views/admin/AdminReportsView.vue'),
         },
+        {
+          path: 'activity',
+          name: 'admin-activity',
+          component: () => import('../views/admin/AdminActivityView.vue'),
+        },
       ],
     },
   ],
