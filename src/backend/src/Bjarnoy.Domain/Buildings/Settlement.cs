@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Buildings;
@@ -29,6 +30,12 @@ public sealed record Settlement
     /// <summary>Orders that may be queued at once (MECHANICS.md: build slots).</summary>
     public const int MaxQueueLength = 3;
 
+    /// <summary>
+    /// The stacking cap on a shrine/rune bonus (issue #53): additive, then
+    /// capped — no multiplicative chains, no diminishing returns in v1.
+    /// </summary>
+    public const double MaxEffectBonus = 0.5;
+
     public required Guid Id { get; init; }
 
     public required string Name { get; init; }
@@ -41,6 +48,12 @@ public sealed record Settlement
     public IReadOnlyList<PlacedBuilding> Buildings { get; init; } = [];
 
     public IReadOnlyList<BuildOrder> Queue { get; init; } = [];
+
+    /// <summary>
+    /// Runes this settlement holds — slotted into a shrine (<see cref="RuneInstance.SlottedAt"/>
+    /// is that shrine's hex) or sitting unslotted in storage.
+    /// </summary>
+    public IReadOnlyList<RuneInstance> Runes { get; init; } = [];
 
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
@@ -97,8 +110,7 @@ public sealed record Settlement
 
             // Each completion changes the rate from its own instant, so a
             // building finished an hour ago has been producing for that hour.
-            var (production, capacity) = BuildingCatalogue.Totals(
-                buildings.Select(b => (b.Type, b.Level)));
+            var (production, capacity) = BoostedTotals(buildings, Runes);
             resources = resources.WithRate(production * speedFactor, capacity, order.CompletesAt);
         }
 
@@ -246,17 +258,138 @@ public sealed record Settlement
 
         buildings[index] = buildings[index] with { Level = level };
 
-        var (production, capacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BoostedTotals(buildings, Runes);
         var resources = Resources.WithRate(production * speedFactor, capacity, now);
 
         return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
     }
 
-    /// <summary>Production and capacity implied by what currently stands.</summary>
+    /// <summary>Production and capacity implied by what currently stands, shrine favour and slotted runes included.</summary>
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(double speedFactor = 1.0)
     {
-        var (production, capacity) = BuildingCatalogue.Totals(Buildings.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BoostedTotals(Buildings, Runes);
         return (production * speedFactor, capacity);
+    }
+
+    /// <summary>Adds an unslotted rune to storage — a raid's spoils, a hex find, an offering's reward.</summary>
+    public Settlement GrantRune(RuneInstance rune)
+    {
+        ArgumentNullException.ThrowIfNull(rune);
+
+        return this with { Runes = [.. Runes, rune with { SlottedAt = null }] };
+    }
+
+    /// <summary>
+    /// Slots an unslotted rune into the shrine standing on
+    /// <paramref name="shrineCoord"/>.
+    /// </summary>
+    /// <remarks>
+    /// v1 does not restrict which rune fits which god's shrine (issue #53's
+    /// "Odin accepts any rune" rule is, for now, every shrine's rule) —
+    /// domain-matching is deferred until there are enough gods for the choice
+    /// to matter.
+    /// </remarks>
+    public SlotRuneResult SlotRune(Guid runeId, HexCoord shrineCoord)
+    {
+        var rune = Runes.FirstOrDefault(r => r.Id == runeId);
+        if (rune is null)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.RuneNotFound);
+        }
+
+        if (rune.SlottedAt is not null)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.RuneAlreadySlotted);
+        }
+
+        var shrine = Buildings.FirstOrDefault(b => b.Coord == shrineCoord);
+        var occupied = Buildings.Any(b => b.Coord == shrineCoord);
+        if (!occupied || BuildingCatalogue.GodOf(shrine.Type) is null)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.NoShrineOnHex);
+        }
+
+        var slots = ShrineCatalogue.Slots(shrine.Level);
+        var slottedCount = Runes.Count(r => r.SlottedAt == shrineCoord);
+        if (slottedCount >= slots)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.ShrineSlotsFull);
+        }
+
+        var runes = Runes
+            .Select(r => r.Id == runeId ? r with { SlottedAt = shrineCoord } : r)
+            .ToList();
+
+        return SlotRuneResult.Accept(this with { Runes = runes });
+    }
+
+    /// <summary>Returns a slotted rune to storage.</summary>
+    public UnslotRuneResult UnslotRune(Guid runeId)
+    {
+        var rune = Runes.FirstOrDefault(r => r.Id == runeId);
+        if (rune is null)
+        {
+            return UnslotRuneResult.Rejected(UnslotRuneRejection.RuneNotFound);
+        }
+
+        if (rune.SlottedAt is null)
+        {
+            return UnslotRuneResult.Rejected(UnslotRuneRejection.RuneNotSlotted);
+        }
+
+        var runes = Runes
+            .Select(r => r.Id == runeId ? r with { SlottedAt = null } : r)
+            .ToList();
+
+        return UnslotRuneResult.Accept(this with { Runes = runes });
+    }
+
+    /// <summary>
+    /// The combined favour of every shrine standing, plus every rune slotted
+    /// into one, capped at <see cref="MaxEffectBonus"/> per kind.
+    /// </summary>
+    private static ShrineEffect ActiveEffect(IEnumerable<PlacedBuilding> buildings, IReadOnlyList<RuneInstance> runes)
+    {
+        var total = ShrineEffect.Zero;
+
+        foreach (var building in buildings)
+        {
+            var god = BuildingCatalogue.GodOf(building.Type);
+            if (god is null)
+            {
+                continue;
+            }
+
+            total += ShrineCatalogue.Favour(god.Value, building.Level);
+
+            var slots = ShrineCatalogue.Slots(building.Level);
+            foreach (var rune in runes.Where(r => r.SlottedAt == building.Coord).Take(slots))
+            {
+                total += RuneCatalogue.Effect(rune.Type, rune.Rarity);
+            }
+        }
+
+        return total.Capped(MaxEffectBonus, MaxEffectBonus);
+    }
+
+    /// <summary>
+    /// <see cref="BuildingCatalogue.Totals"/>, with shrine favour and slotted
+    /// runes applied as a percentage on top — the multiplicative layer.
+    /// </summary>
+    private static (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) BoostedTotals(
+        IEnumerable<PlacedBuilding> buildings, IReadOnlyList<RuneInstance> runes)
+    {
+        var placed = buildings as IReadOnlyCollection<PlacedBuilding> ?? buildings.ToList();
+        var (production, capacity) = BuildingCatalogue.Totals(placed.Select(b => (b.Type, b.Level)));
+        var effect = ActiveEffect(placed, runes);
+
+        var boostedProduction = new ResourceAmounts(
+            production.Wood * (1 + effect.ProductionBonus.Wood),
+            production.Stone * (1 + effect.ProductionBonus.Stone),
+            production.Food * (1 + effect.ProductionBonus.Food),
+            production.Iron * (1 + effect.ProductionBonus.Iron));
+
+        return (boostedProduction, capacity * (1 + effect.StorageBonus));
     }
 }
 

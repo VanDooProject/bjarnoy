@@ -1,4 +1,5 @@
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Buildings;
@@ -51,6 +52,8 @@ public static class BuildingCatalogue
             BuildingType.FishingHut => Producer(type, level, Sand, new ResourceAmounts(0, 0, Food: 30, 0)),
             BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
             BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
+            BuildingType.ShrineOfThor => Shrine(type, level),
+            BuildingType.ShrineOfFreyja => Shrine(type, level),
             _ => null,
         };
     }
@@ -95,6 +98,14 @@ public static class BuildingCatalogue
 
         return (production, capacity);
     }
+
+    /// <summary>The god a shrine <see cref="BuildingType"/> is raised to, or <see langword="null"/> if it is not a shrine.</summary>
+    public static GodType? GodOf(BuildingType type) => type switch
+    {
+        BuildingType.ShrineOfThor => GodType.Thor,
+        BuildingType.ShrineOfFreyja => GodType.Freyja,
+        _ => null,
+    };
 
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
@@ -145,6 +156,21 @@ public static class BuildingCatalogue
         BuildDuration = Duration(6, level),
         StorageCapacity = ResourceAmounts.Uniform(1000) * level,
         RequiredLonghouseLevel = 1 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// A shrine contributes no flat production or storage of its own — its
+    /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
+    /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
+    /// here alongside the additive totals.
+    /// </summary>
+    private static BuildingDefinition Shrine(BuildingType type, int level) => new()
+    {
+        Type = type,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(12, level),
+        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 
     private static BuildingDefinition Tower(int level) => new()
