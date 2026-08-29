@@ -260,12 +260,17 @@ public sealed class TradeService(
         var now = settlement.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
         var domainSettlement = settlement.ToDomain();
 
-        var openOffers = await _dbContext.TradeOffers
+        // SQLite's EF provider cannot translate a DateTimeOffset comparison
+        // server-side (see WorldService's due-endboss check for the same
+        // workaround), so ExpiresAt is filtered client-side after fetching
+        // everything else that's cheap to express in SQL.
+        var openOffers = (await _dbContext.TradeOffers
             .Where(o => o.WorldId == settlement.WorldId
                 && o.State == TradeOfferState.Open
-                && o.ExpiresAt > now
                 && o.PosterSettlementId != settlementId)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+            .ToListAsync(cancellationToken).ConfigureAwait(false))
+            .Where(o => o.ExpiresAt > now)
+            .ToList();
 
         if (openOffers.Count == 0)
         {
@@ -331,9 +336,12 @@ public sealed class TradeService(
 
         var now = settlement.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
 
-        var due = await _dbContext.Shipments
-            .Where(s => s.ToSettlementId == settlementId && s.DeliveredAt == null && s.ArrivesAt <= now)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        // ArrivesAt is filtered client-side — see the same note in ListBoardAsync.
+        var due = (await _dbContext.Shipments
+            .Where(s => s.ToSettlementId == settlementId && s.DeliveredAt == null)
+            .ToListAsync(cancellationToken).ConfigureAwait(false))
+            .Where(s => s.ArrivesAt <= now)
+            .ToList();
 
         if (due.Count == 0)
         {
@@ -430,9 +438,12 @@ public sealed class TradeService(
 
         var now = settlement.World.ToClock().ToGameTime(_timeProvider.GetUtcNow());
 
-        var overdue = await _dbContext.TradeOffers
-            .Where(o => o.PosterSettlementId == settlementId && o.State == TradeOfferState.Open && o.ExpiresAt <= now)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        // ExpiresAt is filtered client-side — see the same note in ListBoardAsync.
+        var overdue = (await _dbContext.TradeOffers
+            .Where(o => o.PosterSettlementId == settlementId && o.State == TradeOfferState.Open)
+            .ToListAsync(cancellationToken).ConfigureAwait(false))
+            .Where(o => o.ExpiresAt <= now)
+            .ToList();
 
         if (overdue.Count == 0)
         {
