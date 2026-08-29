@@ -30,6 +30,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<TrainingOrderEntity> TrainingOrders => Set<TrainingOrderEntity>();
 
+    public DbSet<ArmyEntity> Armies => Set<ArmyEntity>();
+
+    public DbSet<ArmyUnitStackEntity> ArmyUnitStacks => Set<ArmyUnitStackEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -199,6 +203,53 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             order.HasKey(o => o.Id);
             order.Property(o => o.Id).ValueGeneratedNever();
             order.Property(o => o.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<ArmyEntity>(army =>
+        {
+            army.ToTable("armies");
+            army.HasKey(a => a.Id);
+            army.Property(a => a.Id).ValueGeneratedNever();
+
+            army.Property(a => a.Path)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            army.Property(a => a.ReturnPath)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            army.Property(a => a.CumulativeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            army.Property(a => a.ReturnCumulativeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            // Restrict rather than cascade: nothing should delete a
+            // settlement out from under an army still travelling. In
+            // practice settlements are never deleted today, but the intent
+            // matches UserEntity/SettlementEntity's ownership FK below.
+            army.HasOne(a => a.Settlement)
+                .WithMany()
+                .HasForeignKey(a => a.SettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            army.HasIndex(a => a.SettlementId);
+
+            army.HasMany(a => a.Stacks)
+                .WithOne(s => s.Army!)
+                .HasForeignKey(s => s.ArmyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ArmyUnitStackEntity>(stack =>
+        {
+            stack.ToTable("army_unit_stacks");
+            stack.HasKey(s => s.Id);
+            stack.Property(s => s.Id).ValueGeneratedNever();
+            stack.Property(s => s.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>
