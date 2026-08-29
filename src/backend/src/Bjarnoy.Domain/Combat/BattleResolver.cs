@@ -54,6 +54,17 @@ public static class BattleResolver
     /// <see cref="ApplyProportionalLosses"/>) — the same seed always produces
     /// the same result.
     /// </param>
+    /// <param name="raid">
+    /// When <see langword="true"/> (issue #40 phase 7, design doc §4's
+    /// <see cref="Armies.ArmyMission.Raid"/>), the fight breaks off early:
+    /// both sides' loss fraction is capped at <c>0.5</c> instead of the loser
+    /// losing every committed unit — a raider prioritises loot over
+    /// annihilating (or being annihilated by) the defender. Everything else —
+    /// which side wins, attack/defense power, loot, and the caller's own
+    /// siege step — is unaffected; this only ever makes a battle's losses
+    /// smaller than the default (<see langword="false"/>, which preserves the
+    /// original <see cref="Armies.ArmyMission.Attack"/> behavior exactly).
+    /// </param>
     /// <remarks>
     /// <para>
     /// Attack power is Σ(count × Attack); defense power is Σ(count × Defense)
@@ -62,10 +73,13 @@ public static class BattleResolver
     /// edge, not parity, to take a settlement.
     /// </para>
     /// <para>
-    /// The loser loses every committed unit. The winner loses
-    /// <c>(loserPower / winnerPower)^1.5</c> of its own committed units,
+    /// Outside a raid, the loser loses every committed unit, and the winner
+    /// loses <c>(loserPower / winnerPower)^1.5</c> of its own committed units,
     /// applied proportionally per stack — see <see cref="ApplyProportionalLosses"/>
-    /// for how the fractional count is turned into exact integers.
+    /// for how the fractional count is turned into exact integers. In a raid,
+    /// both of those fractions (the loser's implicit <c>1.0</c> and the
+    /// winner's computed one) are capped at <c>0.5</c> before being applied
+    /// the same way.
     /// </para>
     /// <para>
     /// Handles degenerate inputs defensively rather than throwing: an empty
@@ -80,7 +94,8 @@ public static class BattleResolver
         IReadOnlyList<UnitStack> defenderGarrison,
         double defenseBonusPercent,
         ResourceAmounts lootAvailable,
-        int seed)
+        int seed,
+        bool raid = false)
     {
         ArgumentNullException.ThrowIfNull(attackerStacks);
         ArgumentNullException.ThrowIfNull(defenderGarrison);
@@ -101,18 +116,34 @@ public static class BattleResolver
 
         if (winner == BattleWinner.Attacker)
         {
-            defenderLosses = defenderGarrison;
-            defenderSurvivors = [];
+            // Outside a raid the loser loses everything (fraction 1.0); a
+            // raid caps that at 0.5 — see raid's remarks — and routes it
+            // through the same proportional-loss helper instead of the
+            // "everyone dies" shortcut.
+            (defenderLosses, defenderSurvivors) = raid
+                ? ApplyProportionalLosses(defenderGarrison, RaidLossFraction(1.0), rng)
+                : (defenderGarrison, []);
 
             var lossFraction = SafeRatioPow(defensePower, attackPower);
+            if (raid)
+            {
+                lossFraction = RaidLossFraction(lossFraction);
+            }
+
             (attackerLosses, attackerSurvivors) = ApplyProportionalLosses(attackerStacks, lossFraction, rng);
         }
         else
         {
-            attackerLosses = attackerStacks;
-            attackerSurvivors = [];
+            (attackerLosses, attackerSurvivors) = raid
+                ? ApplyProportionalLosses(attackerStacks, RaidLossFraction(1.0), rng)
+                : (attackerStacks, []);
 
             var lossFraction = SafeRatioPow(attackPower, defensePower);
+            if (raid)
+            {
+                lossFraction = RaidLossFraction(lossFraction);
+            }
+
             (defenderLosses, defenderSurvivors) = ApplyProportionalLosses(defenderGarrison, lossFraction, rng);
         }
 
@@ -124,6 +155,9 @@ public static class BattleResolver
             attackerLosses, attackerSurvivors, defenderLosses, defenderSurvivors,
             loot, winner, attackPower, defensePower);
     }
+
+    /// <summary>A raid caps any loss fraction at 0.5 — see <see cref="Resolve"/>'s <c>raid</c> remarks.</summary>
+    private static double RaidLossFraction(double fraction) => Math.Min(fraction, 0.5);
 
     /// <summary>(loserPower / winnerPower)^1.5, or 0 when either power is non-positive — a powerless loser costs the winner nothing.</summary>
     private static double SafeRatioPow(double loserPower, double winnerPower) =>

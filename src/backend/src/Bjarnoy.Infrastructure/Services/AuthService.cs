@@ -221,6 +221,23 @@ public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvid
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
+    /// A live DB read of <see cref="UserEntity.IsPremium"/> (issue #40 phase
+    /// 7) — mirrors <see cref="GetStatusAsync"/>'s shape, so a premium grant
+    /// or revocation takes effect immediately rather than only once a stale
+    /// access token expires. <see langword="null"/> when the user does not
+    /// exist (distinct from an existing, non-premium user's <see langword="false"/>).
+    /// </summary>
+    public async Task<bool?> GetIsPremiumAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var found = await _dbContext.Users
+            .Where(u => u.Id == id)
+            .Select(u => new { u.IsPremium })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return found?.IsPremium;
+    }
+
+    /// <summary>
     /// Seeds the first admin from <c>ADMIN_BOOTSTRAP_USERNAME</c>/
     /// <c>ADMIN_BOOTSTRAP_PASSWORD</c>, once, if no Admin exists yet. Called
     /// from <c>Program.cs</c> on every startup; safe to call with either

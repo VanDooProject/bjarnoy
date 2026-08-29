@@ -32,8 +32,19 @@ public enum ArmyMission
     /// </summary>
     Support = 2,
 
-    // Raid deliberately has no case yet — adding it is a data change to this
-    // enum plus a new PlanX method, not a rewrite of Army's shape.
+    /// <summary>
+    /// Travel to a target settlement and fight its garrison on arrival, same
+    /// as <see cref="Attack"/>, but the fight breaks off early (issue #40
+    /// phase 7, design doc §4): both sides' loss fraction is scaled down and
+    /// capped rather than the loser losing everything, since a raider
+    /// prioritises loot over annihilation. Dispatch validation, target-
+    /// building support, food-range rules, and siege behavior on a win are
+    /// all identical to <see cref="Attack"/> — the only difference is the
+    /// <c>raid: true</c> flag threaded into <see cref="Combat.BattleResolver.Resolve"/>
+    /// by <see cref="SettleArrival"/>. See <see cref="Combat.BattleResolver.Resolve"/>'s
+    /// remarks for the exact loss-fraction math.
+    /// </summary>
+    Raid = 3,
 }
 
 /// <summary>
@@ -214,7 +225,7 @@ public sealed record Army
             return DispatchDecision.Rejected(DispatchRejection.MixedFleetAndLandUnits);
         }
 
-        if (mission is ArmyMission.Attack or ArmyMission.Support)
+        if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
         {
             if (targetSettlementId is null)
             {
@@ -223,9 +234,9 @@ public sealed record Army
 
             if (targetSettlementId == settlement.Id)
             {
-                return DispatchDecision.Rejected(mission == ArmyMission.Attack
-                    ? DispatchRejection.CannotAttackOwnSettlement
-                    : DispatchRejection.CannotSupportOwnSettlement);
+                return DispatchDecision.Rejected(mission == ArmyMission.Support
+                    ? DispatchRejection.CannotSupportOwnSettlement
+                    : DispatchRejection.CannotAttackOwnSettlement);
             }
         }
 
@@ -233,8 +244,11 @@ public sealed record Army
         // coordinate on the target settlement is checked at resolution time
         // (see TargetBuildingCoord's remarks), since the layout can change
         // before the army arrives. All this rejects is "a target building was
-        // named for a mission that has no battle to apply it in".
-        if (targetBuildingCoord is not null && mission != ArmyMission.Attack)
+        // named for a mission that has no battle to apply it in". Raid mirrors
+        // Attack here — a raid can carry catapults just as an attack can (the
+        // design doc places no restriction on this), even though it usually
+        // wouldn't.
+        if (targetBuildingCoord is not null && mission is not (ArmyMission.Attack or ArmyMission.Raid))
         {
             return DispatchDecision.Rejected(DispatchRejection.TargetBuildingRequiresAttackMission);
         }
@@ -245,7 +259,7 @@ public sealed record Army
         // first place — Catapult is UnitClass.Siege, not Ship, so the mixed-
         // class rejection above already makes "an all-Ship dispatch with a
         // catapult in it" unreachable; no separate check is needed here.)
-        if (mission == ArmyMission.Attack && isFleet)
+        if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
         {
             var targetHasShoreline = destination.WithinRadius(targetSettlementClaimRadius)
                 .Any(coord => Shoreline.IsShoreline(coord, terrainAt));
@@ -276,7 +290,7 @@ public sealed record Army
         // both route endpoints), so this generic sea-only check is skipped
         // only for that one combination; the real fleet-reachability gate for
         // Attack is DefenderHasNoShoreline above, not this check.
-        var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support;
+        var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid;
         if (!skipDestinationTerrainCheck && terrainAt(destination).IsLand() != isLandUnit)
         {
             return DispatchDecision.Rejected(isFleet
@@ -349,23 +363,28 @@ public sealed record Army
             Location = new ArmyLocation.InTransit(movement),
             Provisions = provisions,
             Mission = mission,
-            TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
-            TargetBuildingCoord = mission == ArmyMission.Attack ? targetBuildingCoord : null,
+            TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
+            TargetBuildingCoord = mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
     }
 
     /// <summary>
-    /// Settles an <see cref="ArmyMission.Attack"/> army's arrival at its
-    /// target: if <paramref name="now"/> has reached the outbound leg's
-    /// <see cref="Movement.ArrivesAt"/>, the battle happens right there — no
-    /// standing at the destination the way <see cref="Move"/> allows — and
-    /// this returns the fought-out <see cref="BattlePlan"/> alongside the
-    /// updated army and defender settlement. Otherwise (mid-journey, already
-    /// on the return leg, or a <see cref="Move"/>-mission army) this is a
-    /// no-op: <see cref="ArmyArrivalResult.Fought"/> is <see langword="false"/>
-    /// and both aggregates come back unchanged, so a caller can call this
+    /// Settles an <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Raid"/>
+    /// army's arrival at its target: if <paramref name="now"/> has reached the
+    /// outbound leg's <see cref="Movement.ArrivesAt"/>, the battle happens
+    /// right there — no standing at the destination the way <see cref="Move"/>
+    /// allows — and this returns the fought-out <see cref="BattlePlan"/>
+    /// alongside the updated army and defender settlement. A
+    /// <see cref="ArmyMission.Raid"/> army fights through
+    /// <see cref="BattleResolver.Resolve"/>'s <c>raid: true</c> path (reduced,
+    /// capped losses on both sides — issue #40 phase 7); everything else
+    /// (guest combining, loot, siege) is identical to <see cref="ArmyMission.Attack"/>.
+    /// Otherwise (mid-journey, already on the return leg, or a
+    /// <see cref="Move"/>/<see cref="Support"/>-mission army) this is a no-op:
+    /// <see cref="ArmyArrivalResult.Fought"/> is <see langword="false"/> and
+    /// both aggregates come back unchanged, so a caller can call this
     /// unconditionally before falling back to plain <see cref="SettleTo"/>.
     /// </summary>
     /// <remarks>
@@ -406,7 +425,7 @@ public sealed record Army
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
 
-        if (army.Mission != ArmyMission.Attack
+        if (army.Mission is not (ArmyMission.Attack or ArmyMission.Raid)
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
@@ -447,7 +466,7 @@ public sealed record Army
         // outcome itself) properly reflects everyone standing on the wall.
         var combinedDefense = MergeStacksByType(settledDefender.Garrison, guestDefenderStacks);
         var plan = BattleResolver.Resolve(
-            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed);
+            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed, raid: army.Mission == ArmyMission.Raid);
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
