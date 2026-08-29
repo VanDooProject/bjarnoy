@@ -83,12 +83,19 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     {
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
-        var island = islands!.First(i => i.StartPositions.Count > 1);
-        var plot = island.StartPositions.First(p => p.Q != near.Q || p.R != near.R);
+
+        // Any distinct start position anywhere in the world will do — this
+        // settlement gets teleported next to `near` via a direct DB write
+        // regardless of where it's actually founded, so there's no need for
+        // it to share an island with `near` (islands here often have just
+        // one start position each).
+        var (islandId, plot) = islands!
+            .SelectMany(i => i.StartPositions.Select(p => (i.Id, p)))
+            .First(t => t.p.Q != near.Q || t.p.R != near.R);
 
         var response = await client.PostJsonAsync(
             $"/api/v1/worlds/{worldId}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, Unique("v"), "Bera", Unique("owner")),
+            new FoundSettlementRequest(islandId, plot.Q, plot.R, Unique("v"), "Bera", Unique("owner")),
             Ct);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var settlement = await response.ReadStrictAsync<SettlementResponse>(Ct);
