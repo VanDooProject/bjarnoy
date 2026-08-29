@@ -30,6 +30,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
+    public DbSet<LeaderboardSnapshotEntity> LeaderboardSnapshots => Set<LeaderboardSnapshotEntity>();
+
+    public DbSet<LeaderboardEntryEntity> LeaderboardEntries => Set<LeaderboardEntryEntity>();
+
+    public DbSet<LeaderboardWatermarkEntity> LeaderboardWatermarks => Set<LeaderboardWatermarkEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -239,6 +245,66 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Looked up by hash on every refresh/logout call.
             token.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<LeaderboardSnapshotEntity>(snapshot =>
+        {
+            snapshot.ToTable("leaderboard_snapshots");
+            snapshot.HasKey(s => s.Id);
+            snapshot.Property(s => s.Id).ValueGeneratedNever();
+            snapshot.Property(s => s.Scope).HasConversion<int>();
+            snapshot.Property(s => s.Category).HasConversion<int>();
+
+            snapshot.HasOne(s => s.World)
+                .WithMany()
+                .HasForeignKey(s => s.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A window is closed exactly once. This should be a unique index
+            // filtered to IsFinal = true (only one final snapshot per board per
+            // period; any number of superseded non-final ones), but there is no
+            // existing precedent in this model for a provider-parity-safe
+            // filtered index across both SQLite and PostgreSQL, so this is a
+            // plain unique index for now: LeaderboardService enforces "at most
+            // one non-final snapshot per board" itself by deleting the previous
+            // one before/after inserting the replacement.
+            snapshot.HasIndex(s => new { s.WorldId, s.Scope, s.Category, s.PeriodStart, s.IsFinal }).IsUnique();
+
+            // Finds the latest current snapshot for a board.
+            snapshot.HasIndex(s => new { s.WorldId, s.Scope, s.Category, s.ComputedAt });
+
+            snapshot.HasMany(s => s.Entries)
+                .WithOne(e => e.Snapshot!)
+                .HasForeignKey(e => e.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LeaderboardEntryEntity>(entry =>
+        {
+            entry.ToTable("leaderboard_entries");
+            entry.HasKey(e => e.Id);
+            entry.Property(e => e.Id).ValueGeneratedNever();
+            entry.Property(e => e.SubjectName).HasMaxLength(100).IsRequired();
+
+            // The keyset pagination key: ORDER BY Rank, WHERE Rank > @afterRank.
+            entry.HasIndex(e => new { e.SnapshotId, e.Rank }).IsUnique();
+
+            // The "my rank" lookup.
+            entry.HasIndex(e => new { e.SnapshotId, e.SubjectId });
+        });
+
+        modelBuilder.Entity<LeaderboardWatermarkEntity>(watermark =>
+        {
+            watermark.ToTable("leaderboard_watermarks");
+            watermark.HasKey(w => w.Id);
+            watermark.Property(w => w.Id).ValueGeneratedNever();
+
+            watermark.HasOne(w => w.World)
+                .WithMany()
+                .HasForeignKey(w => w.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            watermark.HasIndex(w => w.WorldId).IsUnique();
         });
     }
 }
