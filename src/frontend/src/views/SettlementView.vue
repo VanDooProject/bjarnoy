@@ -161,7 +161,7 @@ function onRingOutsidePointerDown(e: PointerEvent) {
   canvasRef.value?.renderer?.beginDragFrom(e, { suppressClick: true });
 }
 
-type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm';
+type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm' | 'lumberjack' | 'quarry';
 
 interface BuildCategory {
   id: string;
@@ -205,6 +205,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'farm', label: 'Farm' },
         { type: 'tower', label: 'Watchtower' },
         { type: 'fishinghut', label: 'Fishing Hut' },
+        { type: 'lumberjack', label: 'Lumberjack' },
+        { type: 'quarry', label: 'Quarry' },
       ],
     },
   ],

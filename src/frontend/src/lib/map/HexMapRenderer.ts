@@ -50,7 +50,7 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { Settlement, Terrain, Tile } from './types';
-import { buildingStatsFor } from './buildingEconomy';
+import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -269,6 +269,8 @@ const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   fishinghut: 'Fishing Hut',
   magictower: 'Magic Tower',
   pumpkinfarm: 'Pumpkin Farm',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
 };
 
 const TERRAIN_LABELS: Record<Terrain, string> = {
@@ -1027,16 +1029,16 @@ export class HexMapRenderer {
     level: number,
   ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
     if (!tile.buildingType) return {};
-    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile));
+    const boostTerrain = BOOST_TERRAIN[tile.buildingType];
+    const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
+    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile), matchingNeighbours);
   }
 
   private nearWater(tile: Tile): boolean {
-    const { worldModel } = this.options;
-    return hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
-      const t = worldModel.getTile(c.q, c.r);
-      return t.terrain === 'sea' || t.terrain === 'sand';
-    });
+    return isNearAnyOf(tile, ['sea', 'sand'], this.getTile);
   }
+
+  private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
