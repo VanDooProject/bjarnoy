@@ -47,6 +47,7 @@ builder.Services.AddOptions<UserActivityOptions>()
     .ValidateOnStart();
 builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
 builder.Services.AddScoped<UserActivityQueryService>();
+builder.Services.AddScoped<UserActivityRetentionService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -127,6 +128,10 @@ if (migrationCommand == MigrationCommandKind.None)
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
     builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+
+    // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
+    // migrator never serves requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<UserActivityRetentionHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
