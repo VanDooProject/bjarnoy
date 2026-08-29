@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Infrastructure.Entities;
@@ -104,6 +105,10 @@ public class SettlementEntity
 
     public List<BuildOrderEntity> Queue { get; set; } = [];
 
+    public List<UnitStackEntity> Garrison { get; set; } = [];
+
+    public List<TrainingOrderEntity> TrainingQueue { get; set; } = [];
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -134,6 +139,21 @@ public class SettlementEntity
                 Coord = new HexCoord(o.Q, o.R),
                 StartedAt = o.StartedAt,
                 CompletesAt = o.CompletesAt,
+            }),
+        ],
+        Garrison =
+        [
+            .. Garrison.OrderBy(g => g.UnitType).Select(g => new UnitStack(g.UnitType, g.Count)),
+        ],
+        TrainingQueue =
+        [
+            .. TrainingQueue.OrderBy(o => o.StartedAt).Select(o => new TrainingOrder
+            {
+                Id = o.Id,
+                UnitType = o.UnitType,
+                Count = o.Count,
+                StartedAt = o.StartedAt,
+                PerUnitDuration = o.PerUnitDuration,
             }),
         ],
     };
@@ -167,6 +187,8 @@ public class SettlementEntity
 
         SyncBuildings(settlement);
         SyncQueue(settlement);
+        SyncGarrison(settlement);
+        SyncTrainingQueue(settlement);
     }
 
     private void SyncBuildings(Settlement settlement)
@@ -223,6 +245,61 @@ public class SettlementEntity
             });
         }
     }
+
+    private void SyncGarrison(Settlement settlement)
+    {
+        // A stack with a type no longer present (fully starved or otherwise
+        // removed) simply drops out; the rest are updated or added in place,
+        // same shape as SyncBuildings.
+        var present = settlement.Garrison.Select(g => g.Type).ToHashSet();
+        Garrison.RemoveAll(g => !present.Contains(g.UnitType));
+
+        foreach (var stack in settlement.Garrison)
+        {
+            var existing = Garrison.FirstOrDefault(g => g.UnitType == stack.Type);
+            if (existing is null)
+            {
+                Garrison.Add(new UnitStackEntity
+                {
+                    SettlementId = Id,
+                    UnitType = stack.Type,
+                    Count = stack.Count,
+                });
+            }
+            else
+            {
+                existing.Count = stack.Count;
+            }
+        }
+    }
+
+    private void SyncTrainingQueue(Settlement settlement)
+    {
+        var keep = settlement.TrainingQueue.Select(o => o.Id).ToHashSet();
+
+        // Completed (or cancelled) orders leave the queue; EF deletes the
+        // rows via the cascade configured on the relationship — same as
+        // SyncQueue for build orders.
+        TrainingQueue.RemoveAll(o => !keep.Contains(o.Id));
+
+        foreach (var order in settlement.TrainingQueue)
+        {
+            if (TrainingQueue.Any(o => o.Id == order.Id))
+            {
+                continue;
+            }
+
+            TrainingQueue.Add(new TrainingOrderEntity
+            {
+                Id = order.Id,
+                SettlementId = Id,
+                UnitType = order.UnitType,
+                Count = order.Count,
+                StartedAt = order.StartedAt,
+                PerUnitDuration = order.PerUnitDuration,
+            });
+        }
+    }
 }
 
 /// <summary>A building standing on a hex.</summary>
@@ -265,4 +342,38 @@ public class BuildOrderEntity
 
     /// <summary>Game instant the order becomes a building.</summary>
     public DateTimeOffset CompletesAt { get; set; }
+}
+
+/// <summary>Some number of one unit type standing in a settlement's garrison.</summary>
+public class UnitStackEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    public Guid SettlementId { get; set; }
+
+    public SettlementEntity? Settlement { get; set; }
+
+    public UnitType UnitType { get; set; }
+
+    public int Count { get; set; }
+}
+
+/// <summary>A batch of units being trained. Completes by clock, same as <see cref="BuildOrderEntity"/>.</summary>
+public class TrainingOrderEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    public Guid SettlementId { get; set; }
+
+    public SettlementEntity? Settlement { get; set; }
+
+    public UnitType UnitType { get; set; }
+
+    public int Count { get; set; }
+
+    /// <summary>Game instant, not wall time.</summary>
+    public DateTimeOffset StartedAt { get; set; }
+
+    /// <summary>Time to train a single unit; the batch trains one after another.</summary>
+    public TimeSpan PerUnitDuration { get; set; }
 }

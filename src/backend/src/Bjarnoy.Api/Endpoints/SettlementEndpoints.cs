@@ -3,6 +3,7 @@ using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -51,11 +52,22 @@ public static class SettlementEndpoints
             .WithSummary("Queues a building, charging its cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>();
 
+        settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
+            .WithName("TrainUnits")
+            .WithSummary("Queues training a batch of units, charging their cost immediately.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>();
+
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)
             .WithTags("Settlements")
             .WithName("GetBuildingCatalogue")
             .WithSummary("The build options: costs, durations, and the terrain each may stand on.");
+
+        app.MapGet("/api/v1/units", UnitsCatalogue)
+            .WithApiVersionSet(versionSet)
+            .WithTags("Settlements")
+            .WithName("GetUnitCatalogue")
+            .WithSummary("The unit roster: stats, training costs, and prerequisites.");
 
         return app;
     }
@@ -194,6 +206,58 @@ public static class SettlementEndpoints
             : TypedResults.Conflict(problem);
     }
 
+    private static async Task<Results<Accepted<TrainingOrderResponse>, NotFound,
+        Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> TrainUnits(
+        Guid settlementId,
+        TrainUnitsRequest request,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!TryParseUnit(request.Unit, out var type))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Unknown unit.",
+                Detail = $"'{request.Unit}' is not a unit. "
+                    + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        var result = await settlements.TrainUnitsAsync(settlementId, type, request.Count, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world is not accepting commands.",
+                Detail = "It is paused, locked or under maintenance.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        if (result.Accepted)
+        {
+            var order = result.Order!;
+            return TypedResults.Accepted(
+                $"/api/v1/settlements/{settlementId}",
+                new TrainingOrderResponse(
+                    order.Id, order.UnitType.ToWireName(), order.Count, 0,
+                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds));
+        }
+
+        var problem = new ProblemDetails
+        {
+            Title = "The training request was refused.",
+            Detail = DescribeTrain(result.Rejection),
+            Status = StatusCodes.Status409Conflict,
+        };
+
+        return TypedResults.Conflict(problem);
+    }
+
     private static async Task<Results<Ok<WorldClockResponse>, NotFound, BadRequest<ProblemDetails>>> SetState(
         Guid worldId,
         SetWorldStateRequest request,
@@ -244,9 +308,35 @@ public static class SettlementEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static Ok<IReadOnlyList<UnitDefinitionResponse>> UnitsCatalogue()
+    {
+        IReadOnlyList<UnitDefinitionResponse> response =
+        [
+            .. UnitCatalogue.AllTypes.Select(t => UnitDefinitionResponse.From(UnitCatalogue.Get(t))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
     private static bool TryParseBuilding(string value, out BuildingType type)
     {
         foreach (var candidate in BuildingCatalogue.AllTypes)
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                type = candidate;
+                return true;
+            }
+        }
+
+        type = default;
+        return false;
+    }
+
+    private static bool TryParseUnit(string value, out UnitType type)
+    {
+        foreach (var candidate in UnitCatalogue.AllTypes)
         {
             if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
@@ -307,6 +397,16 @@ public static class SettlementEndpoints
         BuildRejection.AlreadyQueuedOnHex => "Something is already queued on that hex.",
         BuildRejection.MaxLevelReached => "That building is already at its maximum level.",
         BuildRejection.LevelSkipped => "Levels must be built in order.",
+        _ => "Refused.",
+    };
+
+    private static string DescribeTrain(TrainRejection rejection) => rejection switch
+    {
+        TrainRejection.UnitNotAvailable => "That unit is not available at this longhouse level yet.",
+        TrainRejection.TrainingQueueFull =>
+            $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
+        TrainRejection.NotEnoughResources => "Not enough resources.",
+        TrainRejection.InvalidCount => "Count must be at least 1.",
         _ => "Refused.",
     };
 }

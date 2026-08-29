@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -33,6 +34,11 @@ public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntit
 public sealed record BuildResult(BuildRejection Rejection, BuildOrder? Order = null, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
+}
+
+public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == TrainRejection.None && Order is not null;
 }
 
 /// <summary>A page of settlements matching an admin search.</summary>
@@ -449,6 +455,53 @@ public sealed class SettlementService(
         return new BuildResult(BuildRejection.None, decision.Order);
     }
 
+    /// <summary>Queues training a batch of units, charging for it up front.</summary>
+    public async Task<TrainResult> TrainUnitsAsync(
+        Guid settlementId,
+        UnitType unitType,
+        int count,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new TrainResult(TrainRejection.InvalidCount);
+        }
+
+        var clock = settlement.World.ToClock();
+        if (!clock.AllowsCommands)
+        {
+            return new TrainResult(TrainRejection.None, null, WorldPaused: true);
+        }
+
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first so the decision sees the queue and stock as of now —
+        // same reasoning as QueueBuildAsync.
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+
+        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7());
+
+        if (!decision.Accepted)
+        {
+            // Even a refused request may have completed work while settling
+            // (a build, a training batch, or a starvation death), and that is
+            // a real change worth keeping.
+            await PersistIfSettledAsync(settlement, settled, now, cancellationToken)
+                .ConfigureAwait(false);
+            return new TrainResult(decision.Rejection);
+        }
+
+        settlement.ApplyDomain(settled.EnqueueTraining(decision.Order!, now));
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Id} queued training {Count}x {Type}, completing {CompletesAt}.",
+            settlementId, count, unitType, decision.Order!.CompletesAt);
+
+        return new TrainResult(TrainRejection.None, decision.Order);
+    }
+
     /// <summary>
     /// Re-rates every settlement in a world for a changed speed factor: each is
     /// settled to "now" under the old factor first — so builds already due and
@@ -482,6 +535,8 @@ public sealed class SettlementService(
         var settlements = await _dbContext.Settlements
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
+            .Include(s => s.Garrison)
+            .Include(s => s.TrainingQueue)
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
@@ -535,6 +590,8 @@ public sealed class SettlementService(
             .Include(s => s.World)
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
+            .Include(s => s.Garrison)
+            .Include(s => s.TrainingQueue)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
     private async Task PersistIfSettledAsync(
@@ -543,7 +600,9 @@ public sealed class SettlementService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (settled.Resources.SettledAt == entity.SettledAt && settled.Queue.Count == entity.Queue.Count)
+        if (settled.Resources.SettledAt == entity.SettledAt
+            && settled.Queue.Count == entity.Queue.Count
+            && settled.TrainingQueue.Count == entity.TrainingQueue.Count)
         {
             return;
         }
