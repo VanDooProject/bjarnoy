@@ -109,7 +109,12 @@ const art = computed(() => {
   }
   return TERRAIN_ART[terrain] ?? grassUrl;
 });
-const buildable = computed(() => props.tile.terrain !== 'sea');
+// Open water is otherwise unbuildable, but a fishing hut already standing
+// on a coastal-water tile still has to be inspectable/upgradeable here —
+// this only ever sees such a tile with a building on it already (nothing in
+// this modal's own `build` flow offers water as a target), so it can't be
+// mistaken for turning open water buildable from empty.
+const buildable = computed(() => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut');
 
 const name = computed(() =>
   props.tile.buildingType ? BUILDING_NAMES[props.tile.buildingType] : TERRAIN_NAMES[props.tile.terrain],

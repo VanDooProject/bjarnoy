@@ -427,8 +427,11 @@ public sealed class SettlementService(
         // production.
         var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
 
-        var terrain = new TerrainSampler(settlement.World.ToGenerationOptions()).TerrainAt(coord);
-        var decision = settled.PlanBuild(type, coord, terrain, now, Guid.CreateVersion7(), settlement.World.SpeedFactor);
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var terrain = sampler.TerrainAt(coord);
+        var decision = settled.PlanBuild(
+            type, coord, terrain, now, Guid.CreateVersion7(),
+            settlement.World.SpeedFactor, sampler.IsCoastalWater(coord));
 
         if (!decision.Accepted)
         {
