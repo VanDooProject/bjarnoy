@@ -35,6 +35,7 @@ builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<ChatService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -182,6 +183,8 @@ app.MapSettlementEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
 app.MapAdminSettlementEndpoints(versionSet);
+app.MapChatEndpoints(versionSet);
+app.MapAdminReportEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot

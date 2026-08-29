@@ -30,6 +30,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
+    public DbSet<MessageEntity> Messages => Set<MessageEntity>();
+
+    public DbSet<MessageRecipientEntity> MessageRecipients => Set<MessageRecipientEntity>();
+
+    public DbSet<ReportEntity> Reports => Set<ReportEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -175,6 +181,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.DisplayName).HasMaxLength(100);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 
+            // No FK: there is no guild table yet — see UserEntity.GuildId.
+            user.HasIndex(u => u.GuildId);
+
             // Case-insensitive uniqueness, enforced on the normalized column —
             // see UserEntity.NormalizedUserName.
             user.HasIndex(u => u.NormalizedUserName).IsUnique();
@@ -239,6 +248,75 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Looked up by hash on every refresh/logout call.
             token.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<MessageEntity>(message =>
+        {
+            message.ToTable("messages");
+            message.HasKey(m => m.Id);
+            message.Property(m => m.Id).ValueGeneratedNever();
+            message.Property(m => m.Body).HasMaxLength(2000).IsRequired();
+
+            message.HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            message.HasIndex(m => m.SenderUserId);
+
+            message.HasMany(m => m.Recipients)
+                .WithOne(r => r.Message!)
+                .HasForeignKey(r => r.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MessageRecipientEntity>(recipient =>
+        {
+            recipient.ToTable("message_recipients");
+            recipient.HasKey(r => r.Id);
+            recipient.Property(r => r.Id).ValueGeneratedNever();
+
+            recipient.HasOne(r => r.Recipient)
+                .WithMany()
+                .HasForeignKey(r => r.RecipientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // One delivery per recipient per message.
+            recipient.HasIndex(r => new { r.MessageId, r.RecipientUserId }).IsUnique();
+
+            // Inbox paging: a recipient's messages, newest first.
+            recipient.HasIndex(r => new { r.RecipientUserId, r.MessageId });
+
+            // Unread counts: ReadAt is null.
+            recipient.HasIndex(r => new { r.RecipientUserId, r.ReadAt });
+        });
+
+        modelBuilder.Entity<ReportEntity>(report =>
+        {
+            report.ToTable("reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.SourceType).HasConversion<int>();
+            report.Property(r => r.Status).HasConversion<int>();
+            report.Property(r => r.ContextSnapshot).HasMaxLength(2200).IsRequired();
+            report.Property(r => r.Reason).HasMaxLength(500).IsRequired();
+            report.Property(r => r.ResolutionNote).HasMaxLength(500);
+
+            report.HasOne(r => r.Reporter)
+                .WithMany()
+                .HasForeignKey(r => r.ReporterUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            report.HasOne(r => r.ResolvedBy)
+                .WithMany()
+                .HasForeignKey(r => r.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Re-reporting the same thing is idempotent rather than an error.
+            report.HasIndex(r => new { r.ReporterUserId, r.SourceType, r.SourceId }).IsUnique();
+
+            // The admin queue: open reports first, oldest first.
+            report.HasIndex(r => new { r.Status, r.Id });
         });
     }
 }
