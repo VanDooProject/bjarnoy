@@ -67,6 +67,10 @@ export type RenderMode = 'world' | 'settlement';
 
 const GOLD = 0xffc55c;
 const RIVAL = 0xe2705f;
+// Distinct from GOLD (own settlements) / RIVAL (rival settlements) — trade
+// carts belong to neither ownership axis, so they get their own color
+// rather than borrowing one that would otherwise read as an owner cue.
+const CART_COLOR = 0x8fd19e;
 const FOG_SCOUTED = 0x0b1116;
 // zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
 // the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
@@ -1819,6 +1823,40 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
       label.style.fill = 0xe8f0f5;
+      label.style.fontWeight = 'normal';
+      label.style.fontSize = 11;
+      label.style.letterSpacing = 0;
+      label.style.dropShadow = false;
+      label.anchor.set(0, 0);
+      label.position.set(screen.x + 8, screen.y - 8);
+      label.visible = true;
+    }
+
+    // Issue #46 phase 3: trade carts in transit — same interpolation +
+    // fog-gating as the fleet loop just above (do not invent a second
+    // scheme), plus an actual marker dot since a cart, unlike a fleet, has
+    // no ship sprite of its own yet to carry the eye to its ETA label.
+    for (const cart of worldModel.listCartShipments()) {
+      const t = Math.min(1, Math.max(0, (now - cart.departedAt) / (cart.etaAt - cart.departedAt || 1)));
+      const fromGrid = isoGridPosition({ q: cart.fromQ, r: cart.fromR }, TILE_W, TILE_H);
+      const toGrid = isoGridPosition({ q: cart.toQ, r: cart.toR }, TILE_W, TILE_H);
+      const world = {
+        x: fromGrid.x + (toGrid.x - fromGrid.x) * t,
+        y: fromGrid.y + (toGrid.y - fromGrid.y) * t,
+      };
+      const cartCoord = isoPixelToAxial(world, TILE_W, TILE_H);
+      if (fogActive && !worldModel.isExplored(cartCoord.q, cartCoord.r)) continue;
+      const screen = this.toScreen(world);
+
+      this.markerLayer
+        .circle(screen.x, screen.y, 4 * this.camera.zoom + 2)
+        .fill({ color: CART_COLOR })
+        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
+
+      const remainingMs = Math.max(0, cart.etaAt - now);
+      const label = this.acquireLabel();
+      label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
+      label.style.fill = CART_COLOR;
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;

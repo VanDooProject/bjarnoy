@@ -8,12 +8,12 @@
 // separate views, since the detail is just "the list, but one row expanded
 // to a full card" with no separate data-loading concern once the list
 // itself is loaded.
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { DEMO_MODE } from '../config';
-import type { BattleReportResponse } from '../api/types';
+import type { BattleReportResponse, TradeReportResponse } from '../api/types';
 import {
   missionLabel,
   outcomeLabel,
@@ -21,6 +21,8 @@ import {
   sideFor,
   totalLoot,
 } from '../lib/units/battleReports';
+import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
+import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +30,7 @@ const player = usePlayerStore();
 const reports = useReportsStore();
 
 const reportId = computed(() => (typeof route.params.reportId === 'string' ? route.params.reportId : null));
+const kindFilter = ref<InboxKindFilter>('all');
 
 async function load() {
   if (!player.settlementId) return;
@@ -53,42 +56,88 @@ function sideOf(report: BattleReportResponse): 'attacker' | 'defender' {
   return sideFor(report, player.settlementId) ?? 'attacker';
 }
 
+function tradeSideOf(report: TradeReportResponse): 'poster' | 'acceptor' {
+  if (!player.settlementId) return 'poster';
+  return tradeSideFor(report, player.settlementId) ?? 'poster';
+}
+
+const filteredItems = computed(() => filterInbox(reports.inboxItems, kindFilter.value));
+
 const rows = computed(() =>
-  reports.items.map((report) => {
-    const side = sideOf(report);
+  filteredItems.value.map((item) => {
+    if (item.kind === 'battle') {
+      const side = sideOf(item.report);
+      return {
+        kind: 'battle' as const,
+        id: item.report.id,
+        outcome: outcomeLabel(item.report, side),
+        mission: missionLabel(item.report.mission),
+        summary: reportSummaryLine(item.report, side),
+        when: new Date(item.report.occurredAt).toLocaleString(),
+      };
+    }
+    const side = tradeSideOf(item.report);
     return {
-      report,
-      side,
-      outcome: outcomeLabel(report, side),
-      mission: missionLabel(report.mission),
-      summary: reportSummaryLine(report, side),
-      when: new Date(report.occurredAt).toLocaleString(),
+      kind: 'trade' as const,
+      id: item.report.id,
+      outcome: null,
+      mission: item.report.guildTrade ? 'Guild trade' : 'Trade',
+      summary: tradeSummaryLine(item.report, side),
+      when: new Date(item.report.completedAt).toLocaleString(),
     };
   }),
 );
 
-const detail = computed(() => {
-  const id = reportId.value;
-  if (!id) return null;
-  return reports.items.find((r) => r.id === id) ?? null;
-});
+const detailItem = computed(() => reports.inboxItems.find((item) => item.report.id === reportId.value) ?? null);
+const detail = computed(() => (detailItem.value?.kind === 'battle' ? detailItem.value.report : null));
+const tradeDetail = computed(() => (detailItem.value?.kind === 'trade' ? detailItem.value.report : null));
 const detailSide = computed(() => (detail.value ? sideOf(detail.value) : 'attacker'));
 const detailOutcome = computed(() => (detail.value ? outcomeLabel(detail.value, detailSide.value) : null));
 const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTaken) : 0));
+const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDetail.value) : 'poster'));
 </script>
 
 <template>
   <div class="reports-view">
     <header class="topbar">
       <span class="brand">Fjørdhold</span>
-      <button class="back" @click="detail ? backToList() : router.push('/settlement')">
-        {{ detail ? '← Reports' : '← Back' }}
+      <button class="back" @click="detailItem ? backToList() : router.push('/settlement')">
+        {{ detailItem ? '← Reports' : '← Back' }}
       </button>
     </header>
 
     <main class="body">
-      <p v-if="DEMO_MODE" class="hint">Battle reports require the live backend and aren't wired up in demo mode.</p>
+      <p v-if="DEMO_MODE" class="hint">Reports require the live backend and aren't wired up in demo mode.</p>
       <p v-else-if="!player.settlementId" class="hint">Found a settlement first to have any reports.</p>
+
+      <template v-else-if="tradeDetail">
+        <div class="card trade">
+          <div class="card-header">
+            <span class="banner trade-banner">Trade completed</span>
+            <span class="mission-pill">{{ tradeDetail.guildTrade ? 'Guild trade' : 'Trade' }}</span>
+          </div>
+          <p class="occurred">{{ new Date(tradeDetail.completedAt).toLocaleString() }}</p>
+
+          <div class="power-row">
+            <div class="power">
+              <span class="power-label">You gave</span>
+              <span class="power-value">
+                {{ Math.round(tradeDetailSide === 'poster' ? tradeDetail.offeredAmount : tradeDetail.requestedAmount) }}
+                {{ tradeDetailSide === 'poster' ? tradeDetail.offeredResource : tradeDetail.requestedResource }}
+              </span>
+            </div>
+            <div class="power">
+              <span class="power-label">You received</span>
+              <span class="power-value">
+                {{ Math.round(tradeDetailSide === 'poster' ? tradeDetail.requestedAmount : tradeDetail.offeredAmount) }}
+                {{ tradeDetailSide === 'poster' ? tradeDetail.requestedResource : tradeDetail.offeredResource }}
+              </span>
+            </div>
+          </div>
+
+          <p class="trade-travel">Carts travelled {{ tradeDetail.travelHours.toFixed(1) }}h.</p>
+        </div>
+      </template>
 
       <template v-else-if="detail">
         <div class="card" :class="detailOutcome === 'Victory' ? 'victory' : 'defeat'">
@@ -181,16 +230,36 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
       </template>
 
       <template v-else>
-        <h1>Battle reports</h1>
+        <h1>Reports</h1>
+
+        <div class="kind-tabs">
+          <button
+            v-for="tab in (['all', 'battle', 'trade'] as const)"
+            :key="tab"
+            type="button"
+            class="kind-tab"
+            :class="{ active: kindFilter === tab }"
+            @click="kindFilter = tab"
+          >
+            {{ tab === 'all' ? 'All' : tab === 'battle' ? 'Battle' : 'Trade' }}
+          </button>
+        </div>
 
         <p v-if="reports.loading && !rows.length">Loading…</p>
         <p v-else-if="reports.error" class="hint error">{{ reports.error }}</p>
-        <p v-else-if="!rows.length" class="hint">No battle reports yet.</p>
+        <p v-else-if="!rows.length" class="hint">No reports yet.</p>
 
         <div v-else class="list">
-          <button v-for="row in rows" :key="row.report.id" type="button" class="row" @click="open(row.report.id)">
+          <button v-for="row in rows" :key="row.id" type="button" class="row" @click="open(row.id)">
             <div class="row-top">
-              <span class="outcome" :class="row.outcome === 'Victory' ? 'victory' : 'defeat'">{{ row.outcome }}</span>
+              <span
+                v-if="row.kind === 'battle'"
+                class="outcome"
+                :class="row.outcome === 'Victory' ? 'victory' : 'defeat'"
+              >
+                {{ row.outcome }}
+              </span>
+              <span v-else class="outcome trade-outcome">Trade</span>
               <span class="mission-pill">{{ row.mission }}</span>
               <span class="when">{{ row.when }}</span>
             </div>
@@ -245,6 +314,32 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
   color: #e08a8a;
 }
 
+.kind-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.kind-tab {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-family: inherit;
+}
+.kind-tab:hover {
+  color: var(--text);
+}
+.kind-tab.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 .list {
   display: flex;
   flex-direction: column;
@@ -284,6 +379,9 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
 .outcome.defeat {
   color: #e08a8a;
 }
+.outcome.trade-outcome {
+  color: var(--gold);
+}
 .mission-pill {
   font-size: 11px;
   font-weight: 600;
@@ -317,6 +415,9 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
 .card.defeat {
   border-left-color: #e08a8a;
 }
+.card.trade {
+  border-left-color: var(--gold);
+}
 .card-header {
   display: flex;
   align-items: center;
@@ -333,6 +434,14 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
 }
 .card.defeat .banner {
   color: #e08a8a;
+}
+.trade-banner {
+  color: var(--gold);
+}
+.trade-travel {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 .occurred {
   margin: 4px 0 16px;

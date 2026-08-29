@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ApiError, api } from '../api/client';
-import type { BattleReportResponse } from '../api/types';
-import { unreadCount } from '../lib/units/battleReports';
+import type { BattleReportResponse, TradeReportResponse } from '../api/types';
+import { type InboxItem, inboxUnreadCount, mergeInbox } from '../lib/units/inbox';
 
 // How often the badge/inbox re-polls while a HUD nav is mounted — battle
 // reports arrive at unpredictable times (whenever another player's army
@@ -24,11 +24,19 @@ const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
  * per-player read state for reports (see `BattleReportService`) — so it's
  * just "occurred after the last time this browser looked at the inbox",
  * persisted in `localStorage` (per `lastSeenAt`'s own comment).
+ *
+ * Issue #46 phase 3 folds `TradeReport`s into the same inbox/badge — see
+ * the design doc's §7 note that both kinds share one per-player inbox.
+ * Rather than duplicating the polling/localStorage plumbing in a second
+ * store, `tradeItems` is fetched alongside `items` in the same `load`/poll
+ * cycle, and `inboxItems`/`unreadCount` below are computed over the merge
+ * of both (see `lib/units/inbox.ts`).
  */
 export const useReportsStore = defineStore('reports', {
   state: () => ({
     settlementId: null as string | null,
     items: [] as BattleReportResponse[],
+    tradeItems: [] as TradeReportResponse[],
     loading: false,
     error: null as string | null,
     lastSeenAt: (() => {
@@ -41,23 +49,33 @@ export const useReportsStore = defineStore('reports', {
     pollHandle: null as ReturnType<typeof setInterval> | null,
   }),
   getters: {
+    /** Both report kinds, merged newest-first — see `lib/units/inbox.ts`. */
+    inboxItems(state): InboxItem[] {
+      return mergeInbox(state.items, state.tradeItems);
+    },
     unreadCount(state): number {
-      return unreadCount(state.items, state.lastSeenAt);
+      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems), state.lastSeenAt);
     },
   },
   actions: {
-    /** Fetches (or re-fetches) this settlement's reports, newest first. */
+    /** Fetches (or re-fetches) this settlement's battle and trade reports, each newest first. */
     async load(settlementId: string) {
       this.settlementId = settlementId;
       this.loading = true;
       this.error = null;
       try {
-        const items = await api.getSettlementReports(settlementId);
-        this.items = [...items].sort(
+        const [battleItems, tradeItems] = await Promise.all([
+          api.getSettlementReports(settlementId),
+          api.getSettlementTradeReports(settlementId),
+        ]);
+        this.items = [...battleItems].sort(
           (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
         );
+        this.tradeItems = [...tradeItems].sort(
+          (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+        );
       } catch (err) {
-        this.error = err instanceof ApiError ? err.message : 'Could not load battle reports.';
+        this.error = err instanceof ApiError ? err.message : 'Could not load reports.';
       } finally {
         this.loading = false;
       }
