@@ -88,3 +88,36 @@ public sealed record ShipmentResponse(
 }
 
 public sealed record TradeAcceptResponse(TradeOfferResponse Offer, ShipmentResponse ToAcceptor, ShipmentResponse ToPoster);
+
+/// <summary>Wire shape of a completed <see cref="TradeReport"/> — mirrors <see cref="TradeReportEntity"/>, see design doc §7.</summary>
+public sealed record TradeReportResponse(
+    Guid Id,
+    Guid OfferId,
+    DateTimeOffset CompletedAt,
+    Guid PosterSettlementId,
+    Guid AcceptorSettlementId,
+    string OfferedResource,
+    double OfferedAmount,
+    string RequestedResource,
+    double RequestedAmount,
+    bool GuildTrade,
+    double TravelHours)
+{
+    public static TradeReportResponse From(TradeReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new TradeReportResponse(
+            entity.Id,
+            entity.OfferId,
+            entity.CompletedAt,
+            entity.PosterSettlementId,
+            entity.AcceptorSettlementId,
+            entity.OfferedResource.ToWireName(),
+            entity.OfferedAmount,
+            entity.RequestedResource.ToWireName(),
+            entity.RequestedAmount,
+            entity.GuildTrade,
+            entity.TravelHours);
+    }
+}

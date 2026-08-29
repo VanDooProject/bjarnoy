@@ -37,6 +37,10 @@ public static class TradeEndpoints
             .WithName("GetShipments")
             .WithSummary("Cart shipments in transit either way, and recently delivered ones.");
 
+        settlements.MapGet("/{settlementId:guid}/trade-reports", ListReportsForSettlement)
+            .WithName("ListSettlementTradeReports")
+            .WithSummary("Lists completed trade reports touching a settlement, as poster or acceptor, newest first.");
+
         var offers = app.MapGroup("/api/v1/trade-offers")
             .WithApiVersionSet(versionSet)
             .WithTags("Trade");
@@ -115,6 +119,13 @@ public static class TradeEndpoints
     {
         var shipments = await trade.ListShipmentsAsync(settlementId, cancellationToken);
         return TypedResults.Ok<IReadOnlyList<ShipmentResponse>>([.. shipments.Select(ShipmentResponse.From)]);
+    }
+
+    private static async Task<Ok<IReadOnlyList<TradeReportResponse>>> ListReportsForSettlement(
+        Guid settlementId, TradeService trade, CancellationToken cancellationToken)
+    {
+        var reports = await trade.ListReportsAsync(settlementId, cancellationToken);
+        return TypedResults.Ok<IReadOnlyList<TradeReportResponse>>([.. reports.Select(TradeReportResponse.From)]);
     }
 
     private static async Task<Results<Ok<TradeAcceptResponse>, NotFound, Conflict<ProblemDetails>>> Accept(
