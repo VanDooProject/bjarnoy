@@ -44,13 +44,15 @@ public static class ProfileEndpoints
             .WithName("UpdateOwnBio")
             .WithSummary("Sets (or clears) the caller's own profile bio.")
             .RequireAuthorization()
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         profiles.MapPost("/{userId:guid}/reports", ReportProfile)
             .WithName("ReportProfile")
             .WithSummary("Reports another player's profile for moderator review.")
             .RequireAuthorization()
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         return app;
     }
