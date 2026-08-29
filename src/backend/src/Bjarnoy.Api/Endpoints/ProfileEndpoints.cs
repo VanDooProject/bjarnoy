@@ -99,7 +99,7 @@ public static class ProfileEndpoints
         return TypedResults.Ok(ProfileResponse.From(user!, settlementCount?.SettlementCount ?? 0));
     }
 
-    private static async Task<Results<Created<ProfileReportResponse>, NotFound, ValidationProblem>> ReportProfile(
+    private static async Task<Results<Created<ReportResponse>, NotFound, ValidationProblem>> ReportProfile(
         Guid userId,
         ReportProfileRequest request,
         ProfileService profileService,
@@ -124,8 +124,7 @@ public static class ProfileEndpoints
             {
                 ["userId"] = ["You already have a pending report against this user."],
             }),
-            _ => TypedResults.Created(
-                $"/api/v1/admin/profile-reports/{report!.Id}", ProfileReportResponse.From(report)),
+            _ => TypedResults.Created($"/api/v1/admin/reports/{report!.Id}", ReportResponse.From(report)),
         };
     }
 }

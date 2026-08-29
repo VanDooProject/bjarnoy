@@ -25,28 +25,21 @@ public enum ProfileReportOutcome
     AlreadyReported,
 }
 
-public enum ReportResolveOutcome
-{
-    Success,
-    NotFound,
-}
-
 /// <summary>A user's public profile: the user row plus how many settlements they own.</summary>
 public sealed record ProfileData(UserEntity User, int SettlementCount);
-
-public sealed record ProfileReportsPage(IReadOnlyList<ProfileReportEntity> Reports, int TotalCount);
 
 /// <summary>
 /// The player-facing profile surface (issue #42): read a profile (own or
 /// another player's), edit one's own bio, and report a profile for
-/// moderation — plus the admin-side queue over those reports. Acting on a
-/// report (lock/ban) stays with <see cref="UserService.SetStatusAsync"/>;
-/// this service only records the decision on the report row.
+/// moderation. The report itself is recorded on the shared
+/// <see cref="ReportService"/> queue (also used by chat message reports,
+/// issue #41) rather than a profile-only one — that service, and
+/// <c>AdminReportEndpoints</c>, own listing and resolving reports.
 /// </summary>
-public sealed class ProfileService(GameDbContext dbContext, TimeProvider timeProvider)
+public sealed class ProfileService(GameDbContext dbContext, ReportService reportService)
 {
     private readonly GameDbContext _dbContext = dbContext;
-    private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly ReportService _reportService = reportService;
 
     public async Task<ProfileData?> GetProfileByIdAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -100,7 +93,7 @@ public sealed class ProfileService(GameDbContext dbContext, TimeProvider timePro
         return (BioUpdateOutcome.Success, user);
     }
 
-    public async Task<(ProfileReportOutcome Outcome, ProfileReportEntity? Report)> ReportProfileAsync(
+    public async Task<(ProfileReportOutcome Outcome, ReportEntity? Report)> ReportProfileAsync(
         Guid reporterUserId,
         Guid reportedUserId,
         string reason,
@@ -112,96 +105,28 @@ public sealed class ProfileService(GameDbContext dbContext, TimeProvider timePro
             return (ProfileReportOutcome.CannotReportSelf, null);
         }
 
-        var reportedExists = await _dbContext.Users
-            .AnyAsync(u => u.Id == reportedUserId && !u.IsSystem, cancellationToken)
+        var reportedUser = await _dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == reportedUserId && !u.IsSystem, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!reportedExists)
+        if (reportedUser is null)
         {
             return (ProfileReportOutcome.ReportedUserNotFound, null);
         }
 
-        var alreadyPending = await _dbContext.ProfileReports
-            .AnyAsync(
-                r => r.ReporterUserId == reporterUserId
-                    && r.ReportedUserId == reportedUserId
-                    && r.Status == ProfileReportStatus.Pending,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var (outcome, report) = await _reportService.CreateAsync(
+            reporterUserId,
+            reportedUserId,
+            ReportSourceType.ProfileBio,
+            reportedUserId,
+            contextSnapshot: reportedUser.Bio ?? string.Empty,
+            reason,
+            note,
+            cancellationToken).ConfigureAwait(false);
 
-        if (alreadyPending)
-        {
-            return (ProfileReportOutcome.AlreadyReported, null);
-        }
-
-        var report = new ProfileReportEntity
-        {
-            ReporterUserId = reporterUserId,
-            ReportedUserId = reportedUserId,
-            Reason = reason,
-            Note = string.IsNullOrWhiteSpace(note) ? null : note,
-            Status = ProfileReportStatus.Pending,
-            CreatedAt = _timeProvider.GetUtcNow(),
-        };
-
-        _dbContext.ProfileReports.Add(report);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return (ProfileReportOutcome.Success, report);
-    }
-
-    public async Task<ProfileReportsPage> GetReportsAsync(
-        ProfileReportStatus? status,
-        int page,
-        int pageSize,
-        CancellationToken cancellationToken = default)
-    {
-        var query = _dbContext.ProfileReports.AsNoTracking();
-
-        if (status is { } statusFilter)
-        {
-            query = query.Where(r => r.Status == statusFilter);
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken).ConfigureAwait(false);
-
-        // Guid v7 is time-ordered, so this pages newest-first without
-        // ordering by DateTimeOffset (which SQLite cannot) — the same
-        // convention as UserService.GetUsersAsync.
-        var reports = await query
-            .Include(r => r.Reporter)
-            .Include(r => r.ReportedUser)
-            .OrderByDescending(r => r.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return new ProfileReportsPage(reports, totalCount);
-    }
-
-    /// <param name="reviewerUserId">The admin resolving the report, from their own token.</param>
-    public async Task<(ReportResolveOutcome Outcome, ProfileReportEntity? Report)> ResolveReportAsync(
-        Guid reportId,
-        ProfileReportStatus status,
-        Guid reviewerUserId,
-        CancellationToken cancellationToken = default)
-    {
-        var report = await _dbContext.ProfileReports
-            .Include(r => r.Reporter)
-            .Include(r => r.ReportedUser)
-            .FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (report is null)
-        {
-            return (ReportResolveOutcome.NotFound, null);
-        }
-
-        report.Status = status;
-        report.ReviewedAt = _timeProvider.GetUtcNow();
-        report.ReviewedByUserId = reviewerUserId;
-
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return (ReportResolveOutcome.Success, report);
+        return (outcome == CreateReportOutcome.AlreadyPending
+            ? ProfileReportOutcome.AlreadyReported
+            : ProfileReportOutcome.Success, report);
     }
 }
