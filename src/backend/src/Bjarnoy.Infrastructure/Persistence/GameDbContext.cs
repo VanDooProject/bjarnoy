@@ -30,6 +30,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<TrainingOrderEntity> TrainingOrders => Set<TrainingOrderEntity>();
 
+    public DbSet<RuneInstanceEntity> Runes => Set<RuneInstanceEntity>();
+
     public DbSet<ArmyEntity> Armies => Set<ArmyEntity>();
 
     public DbSet<ArmyUnitStackEntity> ArmyUnitStacks => Set<ArmyUnitStackEntity>();
@@ -172,6 +174,11 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithOne(o => o.Settlement!)
                 .HasForeignKey(o => o.SettlementId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            settlement.HasMany(s => s.Runes)
+                .WithOne(r => r.Settlement!)
+                .HasForeignKey(r => r.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PlacedBuildingEntity>(building =>
@@ -213,6 +220,17 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             order.HasKey(o => o.Id);
             order.Property(o => o.Id).ValueGeneratedNever();
             order.Property(o => o.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<RuneInstanceEntity>(rune =>
+        {
+            rune.ToTable("runes");
+            rune.HasKey(r => r.Id);
+            rune.Property(r => r.Id).ValueGeneratedNever();
+            rune.Property(r => r.Type).HasConversion<int>();
+            rune.Property(r => r.Rarity).HasConversion<int>();
+
+            rune.HasIndex(r => r.SettlementId);
         });
 
         modelBuilder.Entity<ArmyEntity>(army =>

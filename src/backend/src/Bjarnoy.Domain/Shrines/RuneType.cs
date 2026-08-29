@@ -23,3 +23,23 @@ public enum RuneRarity
     Bound = 1,
     Blooded = 2,
 }
+
+public static class RuneTypeExtensions
+{
+    /// <summary>The wire name for a rune, as the API/frontend spell it.</summary>
+    public static string ToWireName(this RuneType type) => type switch
+    {
+        RuneType.Fehu => "fehu",
+        RuneType.Jera => "jera",
+        RuneType.Othala => "othala",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown rune type"),
+    };
+
+    public static string ToWireName(this RuneRarity rarity) => rarity switch
+    {
+        RuneRarity.Carved => "carved",
+        RuneRarity.Bound => "bound",
+        RuneRarity.Blooded => "blooded",
+        _ => throw new ArgumentOutOfRangeException(nameof(rarity), rarity, "Unknown rune rarity"),
+    };
+}

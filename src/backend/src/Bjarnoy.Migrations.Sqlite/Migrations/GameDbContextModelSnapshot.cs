@@ -509,6 +509,33 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("refresh_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RuneInstanceEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Rarity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SlottedAtQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SlottedAtR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("runes", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1014,6 +1041,17 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RuneInstanceEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany("Runes")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.IslandEntity", "Island")
@@ -1106,6 +1144,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Garrison");
 
                     b.Navigation("Queue");
+
+                    b.Navigation("Runes");
 
                     b.Navigation("TrainingQueue");
                 });

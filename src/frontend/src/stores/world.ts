@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 import { ApiError, api } from '../api/client';
-import type { BuildOrderResponse, IslandResponse } from '../api/types';
+import type { BuildOrderResponse, IslandResponse, RuneInstanceResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
@@ -51,6 +51,10 @@ export const useWorldStore = defineStore('world', {
       // WorldModel places buildings instantly and has no queue to show.
       queue: [] as BuildOrderResponse[],
       queueFetchedAt: 0,
+      // Issue #53: a settlement's rune inventory, refreshed the same way as
+      // the build queue above — always empty in demo mode, since shrines and
+      // runes have no local WorldModel simulation, only the live backend.
+      runes: [] as RuneInstanceResponse[],
       /** Increments every syncHud tick (1s) — a cheap reactive dependency for countdown displays. */
       tick: 0,
     },
@@ -254,7 +258,26 @@ export const useWorldStore = defineStore('world', {
       });
       this.hud.queue = response.queue;
       this.hud.queueFetchedAt = Date.now();
+      this.hud.runes = response.runes;
       this.syncHud();
+    },
+    /**
+     * Live mode: slots an unslotted rune into the shrine standing on `at`,
+     * then refreshes the settlement so the boosted rate and the rune's new
+     * `slottedAtQ`/`slottedAtR` show immediately. Throws `ApiError` on
+     * rejection (e.g. no shrine there, or its slots are full); callers
+     * decide how to surface that — mirrors `queueBuildLive`.
+     */
+    async slotRuneLive(runeId: string, at: AxialCoord) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.slotRune(this.selectedSettlementId, runeId, { q: at.q, r: at.r });
+      await this.refreshLiveSettlement();
+    },
+    /** Live mode: returns a slotted rune to storage, then refreshes. Mirrors `slotRuneLive`. */
+    async unslotRuneLive(runeId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.unslotRune(this.selectedSettlementId, runeId);
+      await this.refreshLiveSettlement();
     },
     /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page

@@ -161,7 +161,15 @@ function onRingOutsidePointerDown(e: PointerEvent) {
   canvasRef.value?.renderer?.beginDragFrom(e, { suppressClick: true });
 }
 
-type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm';
+type BuildableType =
+  | 'hut'
+  | 'farm'
+  | 'tower'
+  | 'fishinghut'
+  | 'magictower'
+  | 'pumpkinfarm'
+  | 'shrineofthor'
+  | 'shrineoffreyja';
 
 interface BuildCategory {
   id: string;
@@ -195,6 +203,14 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'magictower', label: 'Magic Tower' },
       ],
     },
+    {
+      id: 'religion',
+      label: 'Shrines',
+      buildings: [
+        { type: 'shrineofthor', label: 'Shrine of Thor' },
+        { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
+      ],
+    },
   ],
   other: [
     {
@@ -205,6 +221,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'farm', label: 'Farm' },
         { type: 'tower', label: 'Watchtower' },
         { type: 'fishinghut', label: 'Fishing Hut' },
+        { type: 'shrineofthor', label: 'Shrine of Thor' },
+        { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
       ],
     },
   ],

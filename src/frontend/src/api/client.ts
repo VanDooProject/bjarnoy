@@ -7,6 +7,7 @@ import type {
   CreateWorldRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
+  GrantRuneRequest,
   IslandResponse,
   LeaderboardBoardResponse,
   LeaderboardCategory,
@@ -27,6 +28,7 @@ import type {
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
+  SlotRuneRequest,
   SettlementSummary,
   UpdateAdminUserRequest,
   UpdateBioRequest,
@@ -109,6 +111,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  slotRune: (settlementId: string, runeId: string, body: SlotRuneRequest) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/slot`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  unslotRune: (settlementId: string, runeId: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/unslot`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
   getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
   getProfileByName: (userName: string) =>
     request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
@@ -182,6 +194,11 @@ export const api = {
   adminSetBuildingLevel: (settlementId: string, q: number, r: number, body: SetBuildingLevelRequest) =>
     request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}/level`, {
       method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  adminGrantRune: (settlementId: string, body: GrantRuneRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/runes`, {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
   getLeaderboardDirectory: (worldId: string) =>

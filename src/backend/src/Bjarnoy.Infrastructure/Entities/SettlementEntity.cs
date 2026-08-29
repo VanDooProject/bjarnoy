@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
@@ -109,6 +110,8 @@ public class SettlementEntity
 
     public List<TrainingOrderEntity> TrainingQueue { get; set; } = [];
 
+    public List<RuneInstanceEntity> Runes { get; set; } = [];
+
     public ResourceAmounts Stock => new(StockWood, StockStone, StockFood, StockIron);
 
     public ResourceAmounts Rate => new(RateWood, RateStone, RateFood, RateIron);
@@ -156,6 +159,18 @@ public class SettlementEntity
                 PerUnitDuration = o.PerUnitDuration,
             }),
         ],
+        Runes =
+        [
+            .. Runes.OrderBy(r => r.Id).Select(r => new RuneInstance
+            {
+                Id = r.Id,
+                Type = r.Type,
+                Rarity = r.Rarity,
+                SlottedAt = r.SlottedAtQ.HasValue && r.SlottedAtR.HasValue
+                    ? new HexCoord(r.SlottedAtQ.Value, r.SlottedAtR.Value)
+                    : null,
+            }),
+        ],
     };
 
     /// <summary>
@@ -189,6 +204,7 @@ public class SettlementEntity
         SyncQueue(settlement);
         SyncGarrison(settlement);
         SyncTrainingQueue(settlement);
+        SyncRunes(settlement);
     }
 
     private void SyncBuildings(Settlement settlement)
@@ -308,6 +324,38 @@ public class SettlementEntity
             });
         }
     }
+
+    private void SyncRunes(Settlement settlement)
+    {
+        // A rune is never destroyed once granted (issue #53 v1) — only its
+        // Id set can shrink here, and only if a caller removed one from the
+        // domain list entirely, which nothing does yet. Same add-or-update
+        // shape as SyncGarrison/SyncTrainingQueue.
+        var keep = settlement.Runes.Select(r => r.Id).ToHashSet();
+        Runes.RemoveAll(r => !keep.Contains(r.Id));
+
+        foreach (var rune in settlement.Runes)
+        {
+            var existing = Runes.FirstOrDefault(r => r.Id == rune.Id);
+            if (existing is null)
+            {
+                Runes.Add(new RuneInstanceEntity
+                {
+                    Id = rune.Id,
+                    SettlementId = Id,
+                    Type = rune.Type,
+                    Rarity = rune.Rarity,
+                    SlottedAtQ = rune.SlottedAt?.Q,
+                    SlottedAtR = rune.SlottedAt?.R,
+                });
+            }
+            else
+            {
+                existing.SlottedAtQ = rune.SlottedAt?.Q;
+                existing.SlottedAtR = rune.SlottedAt?.R;
+            }
+        }
+    }
 }
 
 /// <summary>A building standing on a hex.</summary>
@@ -384,4 +432,26 @@ public class TrainingOrderEntity
 
     /// <summary>Time to train a single unit; the batch trains one after another.</summary>
     public TimeSpan PerUnitDuration { get; set; }
+}
+
+/// <summary>
+/// A rune a settlement holds — in storage (<see cref="SlottedAtQ"/>/
+/// <see cref="SlottedAtR"/> both null) or slotted into the shrine standing on
+/// that hex (issue #53).
+/// </summary>
+public class RuneInstanceEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    public Guid SettlementId { get; set; }
+
+    public SettlementEntity? Settlement { get; set; }
+
+    public RuneType Type { get; set; }
+
+    public RuneRarity Rarity { get; set; }
+
+    public int? SlottedAtQ { get; set; }
+
+    public int? SlottedAtR { get; set; }
 }

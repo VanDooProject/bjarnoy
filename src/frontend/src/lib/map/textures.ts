@@ -222,6 +222,12 @@ const SOURCES = {
     forest: buildPlain(SPLIT_TERRAIN_BASE, 'foresttile_'),
     hut: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
+    // No shrine art exists in the pack yet (issue #53) — reusing the hut
+    // sprite as a placeholder, the same stand-in longhouse already uses
+    // above, rather than leaving the key unmapped (baseTextureFor's lookup
+    // is a non-null assertion, so an unmapped key would crash rendering).
+    shrineofthor: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
+    shrineoffreyja: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
     pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
     // Unlike towerbuilding, the pack draws the fishing hut with a real
@@ -248,6 +254,8 @@ const SOURCES = {
     forest: buildIndexed(SPLIT_TERRAIN_TOP, 'foresttile_'),
     hut: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
+    shrineofthor: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
+    shrineoffreyja: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),
     pumpkinfarm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_pumpkin_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,

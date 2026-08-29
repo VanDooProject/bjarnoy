@@ -30,6 +30,8 @@ const BUILDING_LABELS: Record<string, string> = {
   fishinghut: 'Fishing hut',
   magictower: 'Magic tower',
   pumpkinfarm: 'Pumpkin farm',
+  shrineofthor: 'Shrine of Thor',
+  shrineoffreyja: 'Shrine of Freyja',
 };
 
 // No backend concept of "how many build slots does this settlement have"
