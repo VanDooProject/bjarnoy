@@ -75,6 +75,14 @@ public enum TrainRejection
     TrainingQueueFull,
     NotEnoughResources,
     InvalidCount,
+
+    /// <summary>
+    /// A <see cref="Units.UnitClass.Ship"/> unit type was requested at a
+    /// settlement that claims no shoreline hex (issue #40 phase 6, design doc
+    /// §8) — see <see cref="Settlement.PlanTrain"/>'s <c>hasShoreline</c>
+    /// parameter. Independent of any future Shipyard building requirement.
+    /// </summary>
+    SettlementNotCoastal,
 }
 
 /// <summary>The outcome of asking to train units.</summary>

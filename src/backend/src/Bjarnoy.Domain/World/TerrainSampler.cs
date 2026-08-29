@@ -116,6 +116,13 @@ public sealed class TerrainSampler
 
     public bool IsLand(HexCoord coord) => TerrainAt(coord).IsLand();
 
+    /// <summary>
+    /// A land hex bordering at least one sea neighbour — see
+    /// <see cref="Shoreline.IsShoreline"/>, which this just applies against
+    /// this sampler's own <see cref="TerrainAt"/>.
+    /// </summary>
+    public bool IsShoreline(HexCoord coord) => Shoreline.IsShoreline(coord, TerrainAt);
+
     /// <summary>A sea hex with at least one land neighbour — the coastal-water ring around every island.</summary>
     public bool IsCoastalWater(HexCoord coord)
     {

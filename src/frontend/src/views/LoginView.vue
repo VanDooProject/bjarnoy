@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
@@ -34,6 +34,20 @@ async function onSubmit() {
     submitting.value = false;
   }
 }
+
+// Lets the Aspire dashboard's "Log in as admin" dev-only link carry the
+// generated bootstrap credentials straight through as a one-click login,
+// instead of a dev having to copy a username/password out of the dashboard
+// and paste them in by hand.
+onMounted(() => {
+  const queryUserName = route.query.username;
+  const queryPassword = route.query.password;
+  if (typeof queryUserName === 'string' && typeof queryPassword === 'string') {
+    userName.value = queryUserName;
+    password.value = queryPassword;
+    void onSubmit();
+  }
+});
 </script>
 
 <template>
