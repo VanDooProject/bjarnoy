@@ -13,16 +13,23 @@ import type {
   LeaderboardDirectoryResponse,
   LeaderboardMeResponse,
   LeaderboardScope,
+  WeeklyStatsPageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
+  PagedProfileReportsResponse,
   ProblemDetails,
+  ProfileReportResponse,
+  ProfileResponse,
   QueueBuildRequest,
+  ReportProfileRequest,
+  ResolveProfileReportRequest,
   SetBuildingLevelRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
   UpdateAdminUserRequest,
+  UpdateBioRequest,
   UpdateWorldSettingsRequest,
   WorldResponse,
 } from './types';
@@ -102,6 +109,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
+  getProfileByName: (userName: string) =>
+    request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
+  updateMyBio: (body: UpdateBioRequest) =>
+    request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
+  reportProfile: (userId: string, body: ReportProfileRequest) =>
+    request<ProfileReportResponse>(`/profiles/${userId}/reports`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListProfileReports: (params?: { status?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedProfileReportsResponse>(`/admin/profile-reports${qs ? `?${qs}` : ''}`);
+  },
+  adminResolveProfileReport: (reportId: string, body: ResolveProfileReportRequest) =>
+    request<ProfileReportResponse>(`/admin/profile-reports/${reportId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   // Public catalogue endpoint — no worldId, since the catalogue is currently
   // the same static data for every world (see `BuildingCatalogue.cs`).
   getBuildingCatalogue: () => request<BuildingDefinitionResponse[]>('/buildings'),
@@ -160,15 +190,23 @@ export const api = {
     worldId: string,
     scope: LeaderboardScope,
     category: LeaderboardCategory,
-    params?: { afterRank?: number; pageSize?: number },
+    params?: { periodStart?: string; afterRank?: number; pageSize?: number },
   ) => {
     const query = new URLSearchParams();
+    if (params?.periodStart) query.set('periodStart', params.periodStart);
     if (params?.afterRank) query.set('afterRank', String(params.afterRank));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
     return request<LeaderboardBoardResponse>(
       `/worlds/${worldId}/leaderboards/${scope}/${category}${qs ? `?${qs}` : ''}`,
     );
+  },
+  getWeeklyStats: (worldId: string, userId: string, params?: { cursor?: string; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.cursor) query.set('cursor', params.cursor);
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<WeeklyStatsPageResponse>(`/worlds/${worldId}/stats/users/${userId}/weekly${qs ? `?${qs}` : ''}`);
   },
   getMyLeaderboardRank: (
     worldId: string,

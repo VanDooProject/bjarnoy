@@ -54,11 +54,15 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<GuildPeaceTreatyEntity> GuildPeaceTreaties => Set<GuildPeaceTreatyEntity>();
 
+    public DbSet<ProfileReportEntity> ProfileReports => Set<ProfileReportEntity>();
+
     public DbSet<LeaderboardSnapshotEntity> LeaderboardSnapshots => Set<LeaderboardSnapshotEntity>();
 
     public DbSet<LeaderboardEntryEntity> LeaderboardEntries => Set<LeaderboardEntryEntity>();
 
     public DbSet<LeaderboardWatermarkEntity> LeaderboardWatermarks => Set<LeaderboardWatermarkEntity>();
+
+    public DbSet<WeeklyStatEntity> WeeklyStats => Set<WeeklyStatEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -254,6 +258,19 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             army.HasIndex(a => a.SettlementId);
 
+            // Same Restrict posture as the SettlementId FK above — an attack
+            // or support target/host settlement is never expected to vanish
+            // out from under a still-relevant army row.
+            army.HasOne(a => a.TargetSettlement)
+                .WithMany()
+                .HasForeignKey(a => a.TargetSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Guest-army lookups (issue #40 phase 4) filter on exactly this
+            // pair — "who is currently supporting settlement X" — see
+            // ArmyService/SettlementService's guest-loading helpers.
+            army.HasIndex(a => new { a.TargetSettlementId, a.IsSupporting });
+
             army.HasMany(a => a.Stacks)
                 .WithOne(s => s.Army!)
                 .HasForeignKey(s => s.ArmyId)
@@ -318,6 +335,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.Role).HasConversion<int>();
             user.Property(u => u.Status).HasConversion<int>();
             user.Property(u => u.DisplayName).HasMaxLength(100);
+            user.Property(u => u.Bio).HasMaxLength(2000);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 
             // Case-insensitive uniqueness, enforced on the normalized column —
@@ -493,6 +511,34 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<ProfileReportEntity>(report =>
+        {
+            report.ToTable("profile_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Reason).HasMaxLength(200).IsRequired();
+            report.Property(r => r.Note).HasMaxLength(2000);
+            report.Property(r => r.Status).HasConversion<int>();
+
+            // A user account going away must not silently delete the
+            // moderation record either way round — same reasoning as
+            // settlements' Restrict above. (Users are never deleted today.)
+            report.HasOne(r => r.Reporter)
+                .WithMany()
+                .HasForeignKey(r => r.ReporterUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            report.HasOne(r => r.ReportedUser)
+                .WithMany()
+                .HasForeignKey(r => r.ReportedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The admin queue lists by status; the duplicate-pending guard
+            // looks up (reporter, reported) pairs.
+            report.HasIndex(r => r.Status);
+            report.HasIndex(r => new { r.ReporterUserId, r.ReportedUserId });
+        });
+
         modelBuilder.Entity<LeaderboardSnapshotEntity>(snapshot =>
         {
             snapshot.ToTable("leaderboard_snapshots");
@@ -551,6 +597,28 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .OnDelete(DeleteBehavior.Cascade);
 
             watermark.HasIndex(w => w.WorldId).IsUnique();
+        });
+
+        modelBuilder.Entity<WeeklyStatEntity>(stat =>
+        {
+            stat.ToTable("weekly_stats");
+            stat.HasKey(s => s.Id);
+            stat.Property(s => s.Id).ValueGeneratedNever();
+
+            stat.HasOne(s => s.World)
+                .WithMany()
+                .HasForeignKey(s => s.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Same reasoning as SettlementEntity.Owner: a locked/banned user's
+            // history should not vanish with them.
+            stat.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Recomputation is an upsert keyed on this triple.
+            stat.HasIndex(s => new { s.WorldId, s.UserId, s.PeriodStart }).IsUnique();
         });
     }
 }

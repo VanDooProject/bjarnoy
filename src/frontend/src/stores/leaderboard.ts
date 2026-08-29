@@ -5,6 +5,7 @@ import type {
   LeaderboardCategory,
   LeaderboardEntryResponse,
   LeaderboardScope,
+  WeeklyWindowResponse,
 } from '../api/types';
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -13,12 +14,16 @@ export const useLeaderboardStore = defineStore('leaderboard', {
   state: () => ({
     worldId: null as string | null,
     boards: [] as LeaderboardBoardInfoResponse[],
+    weeklyWindows: [] as WeeklyWindowResponse[],
     directoryLoading: false,
     directoryError: null as string | null,
 
     scope: null as LeaderboardScope | null,
     category: null as LeaderboardCategory | null,
     board: null as LeaderboardBoardInfoResponse | null,
+    // null = the current board (live all-time, or the most recently closed
+    // window for a weekly-only category); otherwise a closed window's start.
+    selectedPeriodStart: null as string | null,
     entries: [] as LeaderboardEntryResponse[],
     nextAfterRank: null as number | null,
     boardLoading: false,
@@ -47,6 +52,7 @@ export const useLeaderboardStore = defineStore('leaderboard', {
       try {
         const response = await api.getLeaderboardDirectory(worldId);
         this.boards = response.boards;
+        this.weeklyWindows = response.weeklyWindows;
       } catch (err) {
         this.directoryError = err instanceof ApiError ? err.message : 'Could not load leaderboards.';
       } finally {
@@ -58,6 +64,17 @@ export const useLeaderboardStore = defineStore('leaderboard', {
       this.scope = scope;
       this.category = category;
       this.board = this.boards.find((b) => b.scope === scope && b.category === category) ?? null;
+      this.selectedPeriodStart = null;
+      this.entries = [];
+      this.nextAfterRank = null;
+      this.myRank = null;
+      this.myRankError = null;
+      if (!this.board?.available) return;
+      await this.loadPage();
+    },
+    /** Selects a closed weekly window (or `null` for "current") and reloads the board's first page. */
+    async selectWindow(periodStart: string | null) {
+      this.selectedPeriodStart = periodStart;
       this.entries = [];
       this.nextAfterRank = null;
       this.myRank = null;
@@ -72,6 +89,7 @@ export const useLeaderboardStore = defineStore('leaderboard', {
       this.boardError = null;
       try {
         const page = await api.getLeaderboardBoard(this.worldId, this.scope, this.category, {
+          periodStart: this.selectedPeriodStart ?? undefined,
           afterRank: this.nextAfterRank ?? undefined,
           pageSize: DEFAULT_PAGE_SIZE,
         });

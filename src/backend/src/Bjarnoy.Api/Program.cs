@@ -38,6 +38,7 @@ builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<GuildService>();
+builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
 
 builder.Services.AddProblemDetails();
@@ -188,11 +189,14 @@ app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
 app.MapGuildEndpoints(versionSet);
+app.MapProfileEndpoints(versionSet);
 app.MapLeaderboardEndpoints(versionSet);
 app.MapArmyEndpoints(versionSet);
+app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
 app.MapAdminSettlementEndpoints(versionSet);
+app.MapAdminProfileReportEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot

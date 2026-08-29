@@ -229,6 +229,96 @@ public class BattleResolverTests
         Assert.Equal(first.LootTaken, second.LootTaken);
     }
 
+    // --- Raid mission (issue #40 phase 7) ---
+
+    [Fact]
+    public void A_raid_produces_smaller_losses_for_both_sides_than_the_same_fight_as_a_plain_attack()
+    {
+        // Attacker wins, but not overwhelmingly, so the loser (defender)
+        // would otherwise lose everything and the winner (attacker) would
+        // still take a real, non-trivial loss fraction.
+        var attacker = new[] { new UnitStack(UnitType.Axeman, 30) };
+        var defender = new[] { new UnitStack(UnitType.Spearman, 20) };
+
+        var attack = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 7);
+        var raid = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 7, raid: true);
+
+        Assert.Equal(attack.Winner, raid.Winner);
+
+        var attackDefenderLost = attack.DefenderLosses.Sum(s => s.Count);
+        var raidDefenderLost = raid.DefenderLosses.Sum(s => s.Count);
+        Assert.True(raidDefenderLost < attackDefenderLost, "the raid's loser should lose fewer units than a plain attack's loser");
+
+        var attackAttackerLost = attack.AttackerLosses.Sum(s => s.Count);
+        var raidAttackerLost = raid.AttackerLosses.Sum(s => s.Count);
+        Assert.True(raidAttackerLost <= attackAttackerLost, "the raid's winner should never lose more units than a plain attack's winner");
+    }
+
+    [Fact]
+    public void A_raids_loser_loses_at_most_half_its_committed_units_instead_of_everything()
+    {
+        var attacker = new[] { new UnitStack(UnitType.Axeman, 1000) }; // an overwhelming win
+        var defender = new[] { new UnitStack(UnitType.Spearman, 5) };
+
+        var raid = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1, raid: true);
+
+        Assert.Equal(BattleWinner.Attacker, raid.Winner);
+        var defenderLost = raid.DefenderLosses.Sum(s => s.Count);
+        Assert.True(defenderLost <= 3, $"expected at most half of 5 (rounded), lost {defenderLost}"); // 5 * 0.5 = 2.5 -> rounds to 3
+        Assert.True(raid.DefenderSurvivors.Sum(s => s.Count) > 0, "a raid's loser should not be wiped out entirely");
+    }
+
+    [Fact]
+    public void A_won_raid_still_sends_loot_to_the_attacker()
+    {
+        var attacker = new[] { new UnitStack(UnitType.Axeman, 10) };
+        IReadOnlyList<UnitStack> defender = [];
+
+        var raid = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1, raid: true);
+
+        Assert.Equal(BattleWinner.Attacker, raid.Winner);
+        Assert.NotEqual(ResourceAmounts.Zero, raid.LootTaken);
+    }
+
+    [Fact]
+    public void A_lost_raid_still_loses_less_than_a_full_attack_would_have()
+    {
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10) };
+        var defender = new[] { new UnitStack(UnitType.Axeman, 1000) }; // an overwhelming defender win
+
+        var attack = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);
+        var raid = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1, raid: true);
+
+        Assert.Equal(BattleWinner.Defender, attack.Winner);
+        Assert.Equal(BattleWinner.Defender, raid.Winner);
+
+        Assert.Equal(10, attack.AttackerLosses.Sum(s => s.Count)); // a plain attack's loser loses everything
+        Assert.True(raid.AttackerLosses.Sum(s => s.Count) < 10, "a raid's loser should lose fewer than everything");
+        Assert.True(raid.AttackerSurvivors.Sum(s => s.Count) > 0);
+    }
+
+    [Fact]
+    public void Omitting_raid_preserves_the_original_attack_behavior_exactly()
+    {
+        var attacker = new[]
+        {
+            new UnitStack(UnitType.Axeman, 37),
+            new UnitStack(UnitType.Berserker, 11),
+            new UnitStack(UnitType.Bowman, 23),
+        };
+        var defender = new[] { new UnitStack(UnitType.Spearman, 200) };
+
+        var defaultCall = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 10, Abundant, seed: 12345);
+        var explicitFalse = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 10, Abundant, seed: 12345, raid: false);
+
+        Assert.Equal(defaultCall.Winner, explicitFalse.Winner);
+        Assert.Equal(defaultCall.AttackerLosses, explicitFalse.AttackerLosses);
+        Assert.Equal(defaultCall.AttackerSurvivors, explicitFalse.AttackerSurvivors);
+        Assert.Equal(defaultCall.DefenderLosses, explicitFalse.DefenderLosses);
+        Assert.Equal(defaultCall.DefenderSurvivors, explicitFalse.DefenderSurvivors);
+        Assert.Equal(defaultCall.LootTaken, explicitFalse.LootTaken);
+    }
+
     [Fact]
     public void A_different_seed_can_change_which_stack_absorbs_the_rounding_remainder_but_never_the_total()
     {

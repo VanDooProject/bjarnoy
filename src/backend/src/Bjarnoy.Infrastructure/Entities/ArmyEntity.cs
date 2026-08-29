@@ -31,8 +31,43 @@ public class ArmyEntity
 
     public int Mission { get; set; }
 
-    /// <summary>The settlement an <see cref="ArmyMission.Attack"/> army is headed to fight. Null for <see cref="ArmyMission.Move"/>.</summary>
+    /// <summary>
+    /// The settlement an <see cref="ArmyMission.Attack"/> army is headed to
+    /// fight, or an <see cref="ArmyMission.Support"/> army is headed to (and,
+    /// once <see cref="IsSupporting"/>, currently garrisons as a guest — the
+    /// destination and the host are the same settlement, so this one column
+    /// covers both; see <see cref="ArmyLocation.Supporting"/>). Null for
+    /// <see cref="ArmyMission.Move"/>.
+    /// </summary>
     public Guid? TargetSettlementId { get; set; }
+
+    /// <summary>
+    /// Navigation for <see cref="TargetSettlementId"/> — loaded where a
+    /// caller needs the target/host's own hex (e.g. to display a supporting
+    /// guest's current position). No <c>OnDelete</c> cascade concern in
+    /// practice since settlements are never deleted today; see
+    /// <see cref="Settlement"/>'s own FK for the same posture.
+    /// </summary>
+    public SettlementEntity? TargetSettlement { get; set; }
+
+    /// <summary>
+    /// The building coordinate an <see cref="ArmyMission.Attack"/> army was
+    /// told to hit (issue #40 phase 5) — see <see cref="Army.TargetBuildingCoord"/>.
+    /// Null (both columns) means "no preference"; the two are always either
+    /// both set or both null, never one alone.
+    /// </summary>
+    public int? TargetBuildingQ { get; set; }
+
+    public int? TargetBuildingR { get; set; }
+
+    /// <summary>
+    /// True when <c>Location</c> is <see cref="ArmyLocation.Supporting"/> — a
+    /// guest army standing at <see cref="TargetSettlementId"/> (issue #40
+    /// phase 4). Mutually exclusive with <see cref="AtHome"/> and an active
+    /// movement; like <see cref="AtHome"/>, the movement columns below are
+    /// unused while this is true.
+    /// </summary>
+    public bool IsSupporting { get; set; }
 
     public double Provisions { get; set; }
 
@@ -68,18 +103,20 @@ public class ArmyEntity
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
     {
-        ArmyLocation location = AtHome
-            ? new ArmyLocation.AtHome()
-            : new ArmyLocation.InTransit(new Movement
-            {
-                DepartedAt = DepartedAt,
-                Path = [.. Path.Select(p => new HexCoord(p.Q, p.R))],
-                CumulativeHours = CumulativeHours,
-                ReturnPath = [.. ReturnPath.Select(p => new HexCoord(p.Q, p.R))],
-                ReturnCumulativeHours = ReturnCumulativeHours,
-                TurnAroundAt = TurnAroundAt,
-                IsReturning = IsReturning,
-            });
+        ArmyLocation location = IsSupporting
+            ? new ArmyLocation.Supporting(TargetSettlementId!.Value)
+            : AtHome
+                ? new ArmyLocation.AtHome()
+                : new ArmyLocation.InTransit(new Movement
+                {
+                    DepartedAt = DepartedAt,
+                    Path = [.. Path.Select(p => new HexCoord(p.Q, p.R))],
+                    CumulativeHours = CumulativeHours,
+                    ReturnPath = [.. ReturnPath.Select(p => new HexCoord(p.Q, p.R))],
+                    ReturnCumulativeHours = ReturnCumulativeHours,
+                    TurnAroundAt = TurnAroundAt,
+                    IsReturning = IsReturning,
+                });
 
         return new Army
         {
@@ -90,6 +127,7 @@ public class ArmyEntity
             Provisions = Provisions,
             Mission = (ArmyMission)Mission,
             TargetSettlementId = TargetSettlementId,
+            TargetBuildingCoord = TargetBuildingQ is { } q ? new HexCoord(q, TargetBuildingR!.Value) : null,
             Loot = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
         };
     }
@@ -101,6 +139,8 @@ public class ArmyEntity
 
         Mission = (int)army.Mission;
         TargetSettlementId = army.TargetSettlementId;
+        TargetBuildingQ = army.TargetBuildingCoord?.Q;
+        TargetBuildingR = army.TargetBuildingCoord?.R;
         Provisions = army.Provisions;
         LootWood = army.Loot.Wood;
         LootStone = army.Loot.Stone;
@@ -126,6 +166,20 @@ public class ArmyEntity
         {
             case ArmyLocation.AtHome:
                 AtHome = true;
+                IsSupporting = false;
+                DepartedAt = default;
+                Path = [];
+                CumulativeHours = [];
+                ReturnPath = [];
+                ReturnCumulativeHours = [];
+                TurnAroundAt = default;
+                IsReturning = false;
+                break;
+
+            case ArmyLocation.Supporting supporting:
+                AtHome = false;
+                IsSupporting = true;
+                TargetSettlementId = supporting.HostSettlementId;
                 DepartedAt = default;
                 Path = [];
                 CumulativeHours = [];
@@ -138,6 +192,7 @@ public class ArmyEntity
             case ArmyLocation.InTransit inTransit:
                 var movement = inTransit.Movement;
                 AtHome = false;
+                IsSupporting = false;
                 DepartedAt = movement.DepartedAt;
                 Path = [.. movement.Path.Select(c => new HexPoint(c.Q, c.R))];
                 CumulativeHours = [.. movement.CumulativeHours];

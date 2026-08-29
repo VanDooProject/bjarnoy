@@ -193,6 +193,14 @@ public class SettlementEntity
 
     private void SyncBuildings(Settlement settlement)
     {
+        // A building razed to level 0 by catapults (issue #40 phase 5) drops
+        // out of settlement.Buildings entirely — see SiegeResolver.Resolve —
+        // and must be removed here too, freeing the hex on disk. Nothing
+        // before phase 5 ever removed a building, so this had no prior case
+        // to cover; same removal shape as SyncGarrison/SyncQueue below.
+        var present = settlement.Buildings.Select(b => (b.Coord.Q, b.Coord.R)).ToHashSet();
+        Buildings.RemoveAll(b => !present.Contains((b.Q, b.R)));
+
         foreach (var placed in settlement.Buildings)
         {
             var existing = Buildings.FirstOrDefault(

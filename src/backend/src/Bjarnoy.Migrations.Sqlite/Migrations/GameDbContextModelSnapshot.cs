@@ -35,6 +35,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<bool>("IsReturning")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsSupporting")
+                        .HasColumnType("INTEGER");
+
                     b.Property<double>("LootFood")
                         .HasColumnType("REAL");
 
@@ -68,6 +71,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("TargetBuildingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TargetBuildingR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid?>("TargetSettlementId")
                         .HasColumnType("TEXT");
 
@@ -77,6 +86,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SettlementId");
+
+                    b.HasIndex("TargetSettlementId", "IsSupporting");
 
                     b.ToTable("armies", (string)null);
                 });
@@ -189,6 +200,27 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Seed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeLevelAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeLevelBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("SiegeSettlementRazed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeTargetQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeTargetR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeTargetType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WasRaid")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Winner")
@@ -570,6 +602,49 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ProfileReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ReportedUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ReporterUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportedUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("ReporterUserId", "ReportedUserId");
+
+                    b.ToTable("profile_reports", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -748,12 +823,19 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Bio")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsPremium")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsSystem")
                         .HasColumnType("INTEGER");
@@ -800,6 +882,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000001"),
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsPremium = false,
                             IsSystem = true,
                             NormalizedUserName = "abandoned",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
@@ -811,6 +894,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000002"),
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsPremium = false,
                             IsSystem = true,
                             NormalizedUserName = "barbarians",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
@@ -822,6 +906,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000003"),
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsPremium = false,
                             IsSystem = true,
                             NormalizedUserName = "endboss",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
@@ -829,6 +914,39 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                             Status = 0,
                             UserName = "Endboss"
                         });
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WeeklyStatEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsFinal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PeriodStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("ScoreGained")
+                        .HasColumnType("REAL");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("WorldId", "UserId", "PeriodStart")
+                        .IsUnique();
+
+                    b.ToTable("weekly_stats", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
@@ -925,7 +1043,14 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "TargetSettlement")
+                        .WithMany()
+                        .HasForeignKey("TargetSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Settlement");
+
+                    b.Navigation("TargetSettlement");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
@@ -1105,6 +1230,25 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ProfileReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "ReportedUser")
+                        .WithMany()
+                        .HasForeignKey("ReportedUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Reporter")
+                        .WithMany()
+                        .HasForeignKey("ReporterUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ReportedUser");
+
+                    b.Navigation("Reporter");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
@@ -1163,6 +1307,25 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired();
 
                     b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WeeklyStatEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+
+                    b.Navigation("World");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>

@@ -39,6 +39,18 @@ public sealed record UnitDefinition
     /// <summary>Food consumed per hour just for this unit standing in a garrison.</summary>
     public required double UpkeepPerHour { get; init; }
 
+    /// <summary>
+    /// Siege power this unit contributes toward building destruction (issue
+    /// #40 phase 5) — zero for every unit except <see cref="UnitClass.Siege"/>
+    /// (the Catapult). Kept separate from <see cref="Attack"/>/<see cref="Defense"/>
+    /// since it only matters for <see cref="SiegeResolver"/>'s
+    /// levels-destroyed formula, never for ordinary battle power. A
+    /// placeholder balance figure, not a tuned number — see
+    /// <see cref="UnitCatalogue"/>'s Catapult entry. See
+    /// <see cref="Bjarnoy.Domain.Combat.SiegeResolver"/> for how it is spent.
+    /// </summary>
+    public int SiegePower { get; init; }
+
     public required ResourceAmounts TrainingCost { get; init; }
 
     /// <summary>Time to train one unit. A batch drips out one at a time — see <see cref="Bjarnoy.Domain.Buildings.TrainingOrder"/>.</summary>

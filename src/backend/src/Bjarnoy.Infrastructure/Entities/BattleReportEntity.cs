@@ -1,6 +1,8 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
+using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Infrastructure.Entities;
 
@@ -33,6 +35,9 @@ public class BattleReportEntity
 
     public int Seed { get; set; }
 
+    /// <summary>True when this was fought as an <see cref="Domain.Armies.ArmyMission.Raid"/> rather than a plain Attack (issue #40 phase 7).</summary>
+    public bool WasRaid { get; set; }
+
     public double LootWood { get; set; }
 
     public double LootStone { get; set; }
@@ -40,6 +45,22 @@ public class BattleReportEntity
     public double LootFood { get; set; }
 
     public double LootIron { get; set; }
+
+    /// <summary>
+    /// The building-damage section (issue #40 phase 5) — all null when no
+    /// catapult damage happened this battle; see <see cref="BattleReport.Siege"/>.
+    /// </summary>
+    public int? SiegeTargetQ { get; set; }
+
+    public int? SiegeTargetR { get; set; }
+
+    public BuildingType? SiegeTargetType { get; set; }
+
+    public int? SiegeLevelBefore { get; set; }
+
+    public int? SiegeLevelAfter { get; set; }
+
+    public bool? SiegeSettlementRazed { get; set; }
 
     public List<BattleReportAttackerLineEntity> AttackerLines { get; set; } = [];
 
@@ -60,10 +81,17 @@ public class BattleReportEntity
             AttackPower = report.AttackPower,
             DefensePower = report.DefensePower,
             Seed = report.Seed,
+            WasRaid = report.WasRaid,
             LootWood = report.LootTaken.Wood,
             LootStone = report.LootTaken.Stone,
             LootFood = report.LootTaken.Food,
             LootIron = report.LootTaken.Iron,
+            SiegeTargetQ = report.Siege?.TargetCoord.Q,
+            SiegeTargetR = report.Siege?.TargetCoord.R,
+            SiegeTargetType = report.Siege?.TargetType,
+            SiegeLevelBefore = report.Siege?.LevelBefore,
+            SiegeLevelAfter = report.Siege?.LevelAfter,
+            SiegeSettlementRazed = report.Siege?.SettlementRazed,
         };
 
         entity.AttackerLines = [.. report.AttackerLines.Select(l => new BattleReportAttackerLineEntity
@@ -97,7 +125,13 @@ public class BattleReportEntity
         AttackPower = AttackPower,
         DefensePower = DefensePower,
         Seed = Seed,
+        WasRaid = WasRaid,
         LootTaken = new ResourceAmounts(LootWood, LootStone, LootFood, LootIron),
+        Siege = SiegeTargetQ is { } q
+            ? new BattleReportSiegeLine(
+                new HexCoord(q, SiegeTargetR!.Value), SiegeTargetType!.Value, SiegeLevelBefore!.Value,
+                SiegeLevelAfter!.Value, SiegeSettlementRazed!.Value)
+            : null,
         AttackerLines =
         [
             .. AttackerLines.Select(l => new BattleReportAttackerLine(l.UnitType, l.Sent, l.Lost, l.Survived)),
