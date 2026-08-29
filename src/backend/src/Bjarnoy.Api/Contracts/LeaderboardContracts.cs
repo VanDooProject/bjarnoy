@@ -25,7 +25,7 @@ public sealed record LeaderboardBoardInfoResponse(
         status.EntryCount);
 }
 
-/// <summary>A closed weekly window. Always empty in PR 2 — issue #43 PR 4 closes the first one.</summary>
+/// <summary>A closed weekly window, oldest first.</summary>
 public sealed record WeeklyWindowResponse(DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd);
 
 public sealed record LeaderboardDirectoryResponse(
@@ -92,6 +92,21 @@ public sealed record LeaderboardMeResponse(int MyRank, IReadOnlyList<Leaderboard
     public static LeaderboardMeResponse From(LeaderboardMeResult result) => new(
         result.MyRank, [.. result.Items.Select(LeaderboardEntryResponse.From)]);
 }
+
+/// <summary>
+/// One user's weekly stat card (issue #43 §5). Only <see cref="ScoreGained"/>
+/// is populated in PR 4 — the fights/loot fields from the issue's field table
+/// arrive with PR 5's own migration, once #40's <c>BattleReport</c> exists.
+/// </summary>
+public sealed record WeeklyStatResponse(
+    DateTimeOffset PeriodStart, DateTimeOffset PeriodEnd, bool IsFinal, double ScoreGained)
+{
+    public static WeeklyStatResponse From(WeeklyStatEntity entity) => new(
+        entity.PeriodStart, entity.PeriodEnd, entity.IsFinal, entity.ScoreGained);
+}
+
+/// <param name="NextCursor">Keyset cursor for the next (older) page; <see langword="null"/> at the end.</param>
+public sealed record WeeklyStatsPageResponse(IReadOnlyList<WeeklyStatResponse> Items, Guid? NextCursor);
 
 internal static class LeaderboardWireNames
 {

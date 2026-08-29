@@ -1,5 +1,7 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
+using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Combat;
 
@@ -8,6 +10,24 @@ public sealed record BattleReportAttackerLine(UnitType Type, int Sent, int Lost,
 
 /// <summary>One unit type's lost/survived counts on the defending side of a battle.</summary>
 public sealed record BattleReportDefenderLine(UnitType Type, int Lost, int Survived);
+
+/// <summary>
+/// The building-damage section of a <see cref="BattleReport"/> (issue #40
+/// phase 5) — present only when catapult damage actually happened; see
+/// <see cref="BattleReport.Siege"/>. A trimmed-down mirror of
+/// <see cref="SiegeOutcome"/> that drops <see cref="SiegeOutcome.UpdatedBuildings"/>
+/// (the report is a record of what happened, not the defender's whole
+/// building list — that is read from the settlement itself).
+/// </summary>
+public sealed record BattleReportSiegeLine(
+    HexCoord TargetCoord, BuildingType TargetType, int LevelBefore, int LevelAfter, bool SettlementRazed)
+{
+    public static BattleReportSiegeLine? From(SiegeOutcome? siege) =>
+        siege is { Applied: true } applied
+            ? new BattleReportSiegeLine(
+                applied.TargetCoord!.Value, applied.TargetType!.Value, applied.LevelBefore, applied.LevelAfter, applied.SettlementRazed)
+            : null;
+}
 
 /// <summary>
 /// The immutable, persisted record of one <see cref="BattleResolver.Resolve"/>
@@ -51,9 +71,22 @@ public sealed record BattleReport
     public required int Seed { get; init; }
 
     /// <summary>
+    /// The building-damage outcome (issue #40 phase 5), or <see langword="null"/>
+    /// when no catapult damage happened this battle — the attacker lost, no
+    /// catapults survived to fire, or the defender had no buildings to hit.
+    /// </summary>
+    public BattleReportSiegeLine? Siege { get; init; }
+
+    /// <summary>
     /// Builds the report from a resolved <see cref="BattlePlan"/> plus the
     /// identity fields the resolver itself has no reason to know about.
     /// </summary>
+    /// <param name="siege">
+    /// The siege outcome from the same battle, if any was attempted — see
+    /// <see cref="Armies.ArmyArrivalResult.Siege"/>. Reduced to
+    /// <see cref="BattleReportSiegeLine"/> internally; pass <see langword="null"/>
+    /// when no siege resolution happened at all.
+    /// </param>
     public static BattleReport From(
         Guid id,
         DateTimeOffset occurredAt,
@@ -62,7 +95,8 @@ public sealed record BattleReport
         Guid defenderSettlementId,
         IReadOnlyList<UnitStack> attackerSent,
         BattlePlan plan,
-        int seed)
+        int seed,
+        SiegeOutcome? siege = null)
     {
         ArgumentNullException.ThrowIfNull(attackerSent);
         ArgumentNullException.ThrowIfNull(plan);
@@ -104,6 +138,7 @@ public sealed record BattleReport
             DefensePower = plan.DefensePower,
             Winner = plan.Winner,
             Seed = seed,
+            Siege = BattleReportSiegeLine.From(siege),
         };
     }
 }

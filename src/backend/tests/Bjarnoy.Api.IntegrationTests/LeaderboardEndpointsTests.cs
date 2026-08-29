@@ -95,6 +95,13 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
         await leaderboards.RefreshCurrentBoardsAsync(worldId, Ct);
     }
 
+    private async Task CloseDueWindowsAsync(Guid worldId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var leaderboards = scope.ServiceProvider.GetRequiredService<LeaderboardService>();
+        await leaderboards.CloseDueWindowsAsync(worldId, Ct);
+    }
+
     [Fact]
     public async Task Directory_reports_dark_reserved_boards_and_lights_up_once_computed()
     {
@@ -381,5 +388,91 @@ public sealed class LeaderboardEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{worldId}/leaderboards/settlement/biggestSettlement/me?subjectId={Guid.CreateVersion7()}",
             Ct);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Directory_returns_closed_windows_once_the_first_one_closes_and_lights_up_weekly_score_gained()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+        var (settlement, _) = (await BuildUserBoardAsync(client, worldId, [5]))[0]; // score 15
+
+        var before = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
+        Assert.Empty(before!.WeeklyWindows);
+        AssertDark(before.Boards, "user", "weeklyScoreGained", "noWeeklyWindowsYet");
+
+        _factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(worldId);
+
+        var after = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
+        var window = Assert.Single(after!.WeeklyWindows);
+        Assert.Equal(window.PeriodStart + LeaderboardService.WeeklyWindowLength, window.PeriodEnd);
+
+        var weeklyBoard = Assert.Single(after.Boards, b => b.Scope == "user" && b.Category == "weeklyScoreGained");
+        Assert.True(weeklyBoard.Available);
+        Assert.Null(weeklyBoard.Reason);
+        Assert.Equal(1, weeklyBoard.EntryCount);
+        Assert.NotEqual(Guid.Empty, settlement.Id); // sanity: settlement was actually founded.
+    }
+
+    [Fact]
+    public async Task Board_page_with_period_start_returns_the_matching_final_weekly_snapshot()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+        await BuildUserBoardAsync(client, worldId, [5]); // score 15
+
+        _factory.Time.Advance(LeaderboardService.WeeklyWindowLength + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(worldId);
+
+        var directory = await client.GetFromJsonAsync<LeaderboardDirectoryResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards", SqliteApiFixture.StrictJson, Ct);
+        var window = Assert.Single(directory!.WeeklyWindows);
+
+        var page = await client.GetFromJsonAsync<LeaderboardBoardResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards/user/weeklyScoreGained?periodStart={Uri.EscapeDataString(window.PeriodStart.ToString("O"))}",
+            SqliteApiFixture.StrictJson, Ct);
+
+        Assert.True(page!.Available);
+        Assert.True(page.IsFinal);
+        Assert.Equal(window.PeriodStart, page.PeriodStart);
+        Assert.Equal(window.PeriodEnd, page.PeriodEnd);
+        var entry = Assert.Single(page.Items);
+        Assert.Equal(15, entry.Value);
+
+        // The "current" (no periodStart) read falls back to the same, most recently closed window.
+        var current = await client.GetFromJsonAsync<LeaderboardBoardResponse>(
+            $"/api/v1/worlds/{worldId}/leaderboards/user/weeklyScoreGained", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(current!.IsFinal);
+        Assert.Equal(window.PeriodStart, current.PeriodStart);
+    }
+
+    [Fact]
+    public async Task Weekly_stats_endpoint_pages_newest_window_first()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+        var settlements = await BuildUserBoardAsync(client, worldId, [5]);
+        var userId = settlements[0].UserId;
+
+        // Three consecutive closed windows for the same user.
+        _factory.Time.Advance((LeaderboardService.WeeklyWindowLength * 3) + TimeSpan.FromMinutes(1));
+        await CloseDueWindowsAsync(worldId);
+
+        var firstPage = await client.GetFromJsonAsync<WeeklyStatsPageResponse>(
+            $"/api/v1/worlds/{worldId}/stats/users/{userId}/weekly?pageSize=2", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(2, firstPage!.Items.Count);
+        Assert.NotNull(firstPage.NextCursor);
+        // Newest first: the most recent window's period starts latest.
+        Assert.True(firstPage.Items[0].PeriodStart > firstPage.Items[1].PeriodStart);
+
+        var secondPage = await client.GetFromJsonAsync<WeeklyStatsPageResponse>(
+            $"/api/v1/worlds/{worldId}/stats/users/{userId}/weekly?pageSize=2&cursor={firstPage.NextCursor}",
+            SqliteApiFixture.StrictJson, Ct);
+        Assert.Single(secondPage!.Items);
+        Assert.Null(secondPage.NextCursor);
+        Assert.True(firstPage.Items[^1].PeriodStart > secondPage.Items[0].PeriodStart);
     }
 }

@@ -112,6 +112,13 @@ public static class UnitCatalogue
             CarryCapacity = 0,
             FoodCarryCapacity = 0,
             UpkeepPerHour = 3,
+            // Placeholder balance figure (issue #40 phase 5): with the design
+            // doc's levelsDestroyed = floor(sqrt(survivingSiegePower/2))
+            // formula, 40 siege power per catapult means ~4-5 surviving
+            // catapults (160-200 siege power) knock a level off — a real
+            // commitment, not a throwaway raid. Revisit alongside a real
+            // combat balancing pass, same as UpkeepPerHour/Attack/Defense above.
+            SiegePower = 40,
             TrainingCost = new ResourceAmounts(Wood: 300, Stone: 200, Food: 40, Iron: 250),
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 10,

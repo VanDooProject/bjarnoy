@@ -56,6 +56,17 @@ function selectTab(scope: LeaderboardScope, category: LeaderboardCategory) {
   void leaderboard.selectBoard(scope, category);
 }
 
+// Newest window first, so "current" reads as the top of a chronological list.
+const windowOptions = computed(() => [...leaderboard.weeklyWindows].reverse());
+
+function windowLabel(periodStart: string) {
+  return new Date(periodStart).toLocaleDateString();
+}
+
+function selectWindow(periodStart: string | null) {
+  void leaderboard.selectWindow(periodStart);
+}
+
 function loadMore() {
   void leaderboard.loadPage();
 }
@@ -110,6 +121,27 @@ watch(() => world.worldId, loadForCurrentWorld);
             <h2>{{ categoryLabels[activeBoard.category] }}</h2>
             <button v-if="canJumpToMyRank" type="button" class="jump-btn" @click="jumpToMyRank">
               Jump to my rank
+            </button>
+          </div>
+
+          <div v-if="windowOptions.length > 0" class="tabs windows">
+            <button
+              type="button"
+              class="tab"
+              :class="{ active: leaderboard.selectedPeriodStart === null }"
+              @click="selectWindow(null)"
+            >
+              Current
+            </button>
+            <button
+              v-for="window in windowOptions"
+              :key="window.periodStart"
+              type="button"
+              class="tab"
+              :class="{ active: leaderboard.selectedPeriodStart === window.periodStart }"
+              @click="selectWindow(window.periodStart)"
+            >
+              Week of {{ windowLabel(window.periodStart) }}
             </button>
           </div>
 
@@ -210,6 +242,9 @@ watch(() => world.worldId, loadForCurrentWorld);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 12px;
+}
+.windows {
   margin-bottom: 12px;
 }
 .board-header h2 {

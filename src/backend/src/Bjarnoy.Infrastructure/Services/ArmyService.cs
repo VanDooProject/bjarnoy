@@ -58,14 +58,21 @@ public sealed class ArmyService(
     /// </summary>
     /// <param name="destination">
     /// Required for <see cref="ArmyMission.Move"/>; ignored for
-    /// <see cref="ArmyMission.Attack"/>, whose destination is always the
-    /// target settlement's own hex — resolved here rather than trusted from
-    /// the caller.
+    /// <see cref="ArmyMission.Attack"/>/<see cref="ArmyMission.Support"/>,
+    /// whose destination is always the target settlement's own hex —
+    /// resolved here rather than trusted from the caller.
     /// </param>
     /// <param name="targetSettlementId">
-    /// Required for <see cref="ArmyMission.Attack"/> — the settlement to
-    /// fight on arrival (issue #40 phase 3). Attacking an army standing in
-    /// the open field, rather than a settlement, is not supported this phase.
+    /// Required for <see cref="ArmyMission.Attack"/> (the settlement to fight
+    /// on arrival — issue #40 phase 3) and <see cref="ArmyMission.Support"/>
+    /// (the settlement to garrison as a guest on arrival — issue #40 phase 4).
+    /// Targeting an army standing in the open field, rather than a
+    /// settlement, is not supported.
+    /// </param>
+    /// <param name="targetBuildingCoord">
+    /// Optional; only meaningful for <see cref="ArmyMission.Attack"/> — the
+    /// building coordinate to hit with any surviving catapults (issue #40
+    /// phase 5). See <see cref="Army.TargetBuildingCoord"/>.
     /// </param>
     public async Task<ArmyDispatchResult> DispatchAsync(
         Guid settlementId,
@@ -75,6 +82,7 @@ public sealed class ArmyService(
         double provisions,
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
+        HexCoord? targetBuildingCoord = null,
         CancellationToken cancellationToken = default)
     {
         var settlement = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -96,7 +104,7 @@ public sealed class ArmyService(
         var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
 
         HexCoord effectiveDestination;
-        if (mission == ArmyMission.Attack)
+        if (mission is ArmyMission.Attack or ArmyMission.Support)
         {
             if (targetSettlementId is not { } targetId)
             {
@@ -107,7 +115,9 @@ public sealed class ArmyService(
             if (targetId == settlementId)
             {
                 await PersistIfSettledAsync(settlement, settled, cancellationToken).ConfigureAwait(false);
-                return new ArmyDispatchResult(DispatchRejection.CannotAttackOwnSettlement);
+                return new ArmyDispatchResult(mission == ArmyMission.Attack
+                    ? DispatchRejection.CannotAttackOwnSettlement
+                    : DispatchRejection.CannotSupportOwnSettlement);
             }
 
             // Same world only — an army cannot reach a settlement in another
@@ -143,7 +153,8 @@ public sealed class ArmyService(
 
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
-            mission, mission == ArmyMission.Attack ? targetSettlementId : null);
+            mission, mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
+            mission == ArmyMission.Attack ? targetBuildingCoord : null);
 
         if (!decision.Accepted)
         {
@@ -196,18 +207,36 @@ public sealed class ArmyService(
         return outcome == ArmySettleOutcome.FoldedHome ? (null, clock) : (army, clock);
     }
 
-    /// <summary>Armies belonging to a settlement — home and in transit. Not settled on read; see <see cref="SettlementService.GetForWorldAsync"/> for the same reasoning.</summary>
+    /// <summary>Armies belonging to a settlement — home, in transit, and currently supporting elsewhere. Not settled on read; see <see cref="SettlementService.GetForWorldAsync"/> for the same reasoning.</summary>
     public Task<List<ArmyEntity>> GetForSettlementAsync(Guid settlementId, CancellationToken cancellationToken = default) =>
         _dbContext.Armies
             .AsNoTracking()
             .Include(a => a.Stacks)
+            .Include(a => a.TargetSettlement)
             .Where(a => a.SettlementId == settlementId)
             .OrderBy(a => a.Id)
             .ToListAsync(cancellationToken);
 
     /// <summary>
-    /// Turns an army around mid-journey. Refused (as <see cref="RecallOutcome.NothingToRecall"/>)
-    /// when it is already returning, or arrived home during this very settle.
+    /// Guest (<see cref="ArmyMission.Support"/>) armies currently stationed at
+    /// <paramref name="hostSettlementId"/> (issue #40 phase 4 §5) — the
+    /// host's view of who is defending it, distinct from
+    /// <see cref="GetForSettlementAsync"/>, which lists a settlement's own
+    /// armies by where they came <em>from</em>.
+    /// </summary>
+    public Task<List<ArmyEntity>> GetGuestArmiesAsync(Guid hostSettlementId, CancellationToken cancellationToken = default) =>
+        _dbContext.Armies
+            .AsNoTracking()
+            .Include(a => a.Stacks)
+            .Where(a => a.IsSupporting && a.TargetSettlementId == hostSettlementId)
+            .OrderBy(a => a.Id)
+            .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// Turns an army around mid-journey — or, for a <see cref="ArmyLocation.Supporting"/>
+    /// guest, calls it home from its host (issue #40 phase 4 §4). Refused (as
+    /// <see cref="RecallOutcome.NothingToRecall"/>) when it is already
+    /// returning, or arrived home during this very settle.
     /// </summary>
     public async Task<RecallResult> RecallAsync(Guid armyId, CancellationToken cancellationToken = default)
     {
@@ -229,7 +258,26 @@ public sealed class ArmyService(
 
         var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
-        var recalled = army.ToDomain().Recall(now, home, sampler.TerrainAt);
+
+        var domain = army.ToDomain();
+        HexCoord? currentHex = null;
+        if (domain.Location is ArmyLocation.Supporting supporting)
+        {
+            // A guest army has no active Movement to derive its position
+            // from — look up the host settlement's hex directly.
+            var host = await _dbContext.Settlements
+                .AsNoTracking()
+                .Where(s => s.Id == supporting.HostSettlementId)
+                .Select(s => new { s.CentreQ, s.CentreR })
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+            if (host is not null)
+            {
+                currentHex = new HexCoord(host.CentreQ, host.CentreR);
+            }
+        }
+
+        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex);
 
         if (recalled is null)
         {
@@ -268,7 +316,15 @@ public sealed class ArmyService(
     /// routed to <see cref="ResolveBattleAsync"/> instead of the plain
     /// <c>Army.SettleTo</c> path: it fights right there rather than standing
     /// and later auto-returning the way <see cref="ArmyMission.Move"/> does —
-    /// see <see cref="Army.SettleArrival"/>.
+    /// see <see cref="Army.SettleArrival"/>. An <see cref="ArmyMission.Support"/>
+    /// army in the same "outbound leg's arrival has passed" situation is
+    /// similarly special-cased (issue #40 phase 4): it becomes a guest at its
+    /// host and the row is kept (<see cref="ArmySettleOutcome.Updated"/>), not
+    /// folded home — see <see cref="Army.SettleSupportArrival"/>. Once a
+    /// support army is actually <see cref="ArmyLocation.Supporting"/>, plain
+    /// <c>Army.SettleTo</c> already treats that as "nothing to settle" (it
+    /// only handles <see cref="ArmyLocation.InTransit"/>), so it falls
+    /// straight through to the no-op branch below until the owner recalls it.
     /// </remarks>
     private async Task<ArmySettleOutcome> SettleAndFoldAsync(
         ArmyEntity army, DateTimeOffset now, CancellationToken cancellationToken)
@@ -280,6 +336,20 @@ public sealed class ArmyService(
             && now >= inTransit.Movement.ArrivesAt)
         {
             return await ResolveBattleAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (domain.Mission == ArmyMission.Support
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } supportTransit
+            && now >= supportTransit.Movement.ArrivesAt)
+        {
+            var supportArrival = Army.SettleSupportArrival(domain, now);
+            army.ApplyDomain(supportArrival.Army);
+
+            _logger.LogInformation(
+                "Army {ArmyId} arrived at settlement {HostId} to support it as a guest.",
+                army.Id, supportArrival.Army.TargetSettlementId);
+
+            return ArmySettleOutcome.Updated;
         }
 
         var result = domain.SettleTo(now);
@@ -300,11 +370,14 @@ public sealed class ArmyService(
 
     /// <summary>
     /// Settles an <see cref="ArmyMission.Attack"/> army's arrival: loads the
-    /// target settlement, runs <see cref="Army.SettleArrival"/> against it,
-    /// persists the resulting <see cref="BattleReportEntity"/> and the
-    /// defender's post-battle state, and either removes the army row (a
-    /// wiped-out attacker, or one that folds straight home within this same
-    /// settle) or writes its post-battle return-leg state back.
+    /// target settlement (and every guest army currently supporting it — see
+    /// <see cref="Army.SettleArrival"/>'s <c>guestDefenderStacks</c> parameter,
+    /// issue #40 phase 4 §3), runs <see cref="Army.SettleArrival"/> against
+    /// it, persists the resulting <see cref="BattleReportEntity"/>, the
+    /// defender's post-battle state, and each guest army's post-battle
+    /// stacks, and either removes the army row (a wiped-out attacker, or one
+    /// that folds straight home within this same settle) or writes its
+    /// post-battle return-leg state back.
     /// </summary>
     private async Task<ArmySettleOutcome> ResolveBattleAsync(
         ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
@@ -326,9 +399,16 @@ public sealed class ArmyService(
             return ApplyArmyOutcome(armyEntity, TurnHomeWithoutBattle(domain, movement), now);
         }
 
+        var guestArmies = await GetGuestArmyEntitiesForWriteAsync(targetId, cancellationToken).ConfigureAwait(false);
+        var guestDefenderStacks = guestArmies
+            .SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count)))
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .ToList();
+
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
-            domain, defenderEntity.ToDomain(), defenderEntity.World.SpeedFactor, now, seed);
+            domain, defenderEntity.ToDomain(), defenderEntity.World.SpeedFactor, now, seed, guestDefenderStacks);
 
         // Guaranteed true: the caller only reaches this method when the
         // outbound leg's ArrivesAt has already passed for a not-yet-returning
@@ -337,10 +417,31 @@ public sealed class ArmyService(
 
         defenderEntity.ApplyDomain(arrival.DefenderSettlement);
 
+        // Attribute the guest side's pooled share of the battle back onto
+        // the actual guest Army records — the second half of the same
+        // cross-aggregate split Settlement's starvation pass uses (see
+        // GuestArmyAllocation's remarks). A guest fully wiped out here is
+        // removed exactly like a wiped-out attacker; a partial survivor keeps
+        // supporting with what is left.
+        GuestArmyAllocation.ApplyLosses(guestArmies, arrival.GuestLosses);
+        foreach (var guest in guestArmies.Where(a => a.Stacks.Count == 0))
+        {
+            _dbContext.Armies.Remove(guest);
+        }
+
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
-            domain.Stacks, battle, seed);
+            domain.Stacks, battle, seed, arrival.Siege);
         _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
+
+        if (arrival.Siege is { Applied: true } siege)
+        {
+            _logger.LogInformation(
+                "Army {ArmyId}'s catapults reduced {TargetType} at ({Q},{R}) in settlement {TargetId} from "
+                    + "level {Before} to {After}{RazedNote}.",
+                armyEntity.Id, siege.TargetType, siege.TargetCoord!.Value.Q, siege.TargetCoord.Value.R, targetId,
+                siege.LevelBefore, siege.LevelAfter, siege.SettlementRazed ? " — the settlement is razed" : string.Empty);
+        }
 
         _logger.LogInformation(
             "Army {ArmyId} attacked settlement {TargetId}: {Winner} won ({AttackPower} vs {DefensePower}); "
@@ -422,6 +523,18 @@ public sealed class ArmyService(
             armyEntity.Id, armyEntity.SettlementId);
     }
 
+    /// <summary>
+    /// Guest armies at <paramref name="hostSettlementId"/>, tracked (not
+    /// <c>AsNoTracking</c>) so <see cref="GuestArmyAllocation.ApplyLosses"/>
+    /// can write battle losses straight onto them — the write-path
+    /// counterpart to the public, read-only <see cref="GetGuestArmiesAsync"/>.
+    /// </summary>
+    private Task<List<ArmyEntity>> GetGuestArmyEntitiesForWriteAsync(Guid hostSettlementId, CancellationToken cancellationToken) =>
+        _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Where(a => a.IsSupporting && a.TargetSettlementId == hostSettlementId)
+            .ToListAsync(cancellationToken);
+
     private static Settlement MergeIntoGarrison(Settlement settlement, IReadOnlyList<UnitStack> stacks)
     {
         var garrison = settlement.Garrison.ToList();
@@ -453,6 +566,7 @@ public sealed class ArmyService(
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>
         _dbContext.Armies
             .Include(a => a.Stacks)
+            .Include(a => a.TargetSettlement)
             .Include(a => a.Settlement!).ThenInclude(s => s.World)
             .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)
             .Include(a => a.Settlement!).ThenInclude(s => s.Queue)

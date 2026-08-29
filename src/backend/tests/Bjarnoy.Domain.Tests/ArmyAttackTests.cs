@@ -44,7 +44,8 @@ public class ArmyAttackTests
         Settlement settlement,
         Guid targetSettlementId,
         double provisions,
-        IReadOnlyList<UnitStack>? requested = null) => Army.PlanDispatch(
+        IReadOnlyList<UnitStack>? requested = null,
+        HexCoord? targetBuildingCoord = null) => Army.PlanDispatch(
             settlement,
             requested ?? [new UnitStack(UnitType.Axeman, 20)],
             provisions,
@@ -54,7 +55,8 @@ public class ArmyAttackTests
             Guid.CreateVersion7(),
             AllGrass(),
             ArmyMission.Attack,
-            targetSettlementId);
+            targetSettlementId,
+            targetBuildingCoord);
 
     [Fact]
     public void Attack_dispatch_is_rejected_without_a_target_settlement()
@@ -226,6 +228,83 @@ public class ArmyAttackTests
     }
 
     [Fact]
+    public void Guest_defenders_combine_their_defense_power_with_the_home_garrison()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 100, requested: [new UnitStack(UnitType.Axeman, 10)]);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 10)]);
+        var guestDefenders = new[] { new UnitStack(UnitType.Spearman, 10) };
+
+        var withoutGuests = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+        var withGuests = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1, guestDefenders);
+
+        Assert.True(withGuests.Battle!.DefensePower > withoutGuests.Battle!.DefensePower);
+    }
+
+    [Fact]
+    public void Defensive_battle_losses_are_split_between_home_and_guest_proportional_to_their_pre_battle_holding()
+    {
+        var settlement = Found();
+        // Strong enough attacker that the defense loses, but not everything —
+        // a partial loss actually exercises ProportionalAllocator's split
+        // rather than the trivial "100% to everyone" attacker-win case.
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 100, requested: [new UnitStack(UnitType.Axeman, 12)]);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        // 30 home Spearmen, 10 guest Spearmen — a 3:1 pre-battle split.
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 30)]);
+        var guestDefenders = new[] { new UnitStack(UnitType.Spearman, 10) };
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 42, guestDefenders);
+
+        Assert.True(arrival.Fought);
+        Assert.Equal(BattleWinner.Defender, arrival.Battle!.Winner);
+
+        var homeSurvivors = arrival.DefenderSettlement.Garrison.Sum(s => s.Count);
+        var homeLosses = 30 - homeSurvivors;
+        var guestLosses = arrival.GuestLosses.Sum(s => s.Count);
+
+        Assert.True(homeLosses > 0, "expected the home garrison to take some losses");
+        Assert.True(guestLosses > 0, "expected the guest to take some losses too — not just the home garrison");
+
+        // Losses split roughly 3:1 (home:guest), matching the 3:1 pre-battle
+        // holding — within a unit or two either way from largest-remainder
+        // rounding on small counts.
+        var ratio = (double)homeLosses / guestLosses;
+        Assert.InRange(ratio, 1.5, 6.0);
+
+        // The pooled total the resolver actually computed is fully accounted
+        // for between the two sides — nothing lost or double-counted.
+        var pooledDefenderLoss = arrival.Battle.DefenderLosses.Sum(s => s.Count);
+        Assert.Equal(pooledDefenderLoss, homeLosses + guestLosses);
+    }
+
+    [Fact]
+    public void An_attacker_win_wipes_out_both_home_and_guest_defenders_fully()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 5)]);
+        var guestDefenders = new[] { new UnitStack(UnitType.Spearman, 3) };
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1, guestDefenders);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Empty(arrival.DefenderSettlement.Garrison); // home wiped
+        Assert.Equal(3, arrival.GuestLosses.Single().Count); // guest wiped, exactly its pre-battle count
+    }
+
+    [Fact]
     public void Tower_level_raises_the_defense_bonus_applied_in_battle()
     {
         var settlement = Found();
@@ -245,5 +324,234 @@ public class ArmyAttackTests
 
         Assert.Equal(0.0, BuildingCatalogue.TowerDefenseBonusPercent(0));
         Assert.True(withBonus.Battle!.DefensePower > withoutBonus.Battle!.DefensePower);
+    }
+
+    // --- Catapult targeting & building destruction (issue #40 phase 5) ---
+
+    /// <summary>
+    /// A pure-Catapult army cannot even carry provisions for its own round
+    /// trip (Catapult's <c>FoodCarryCapacity</c> is 0), so every siege test
+    /// below tags along enough Provisioners (high <c>FoodCarryCapacity</c>,
+    /// near-zero combat contribution) to actually clear <c>PlanDispatch</c>'s
+    /// food-range check — a real player would do the same.
+    /// </summary>
+    private static IReadOnlyList<UnitStack> CatapultForce(int catapults) =>
+        [new UnitStack(UnitType.Catapult, catapults), new UnitStack(UnitType.Provisioner, catapults)];
+
+    /// <summary>
+    /// Comfortably covers <see cref="CatapultForce"/>'s round trip to
+    /// <see cref="TargetHex"/> without exceeding either its carry capacity or
+    /// <see cref="Found"/>'s default settlement's (fairly modest) food
+    /// storage capacity.
+    /// </summary>
+    private static double ProvisionsFor(int catapults) => 45.0 * catapults;
+
+    [Fact]
+    public void A_target_building_may_only_be_named_for_an_attack_mission()
+    {
+        var settlement = Found();
+
+        var decision = Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
+            Guid.CreateVersion7(), AllGrass(), ArmyMission.Move, targetSettlementId: null,
+            targetBuildingCoord: new HexCoord(1, 1));
+
+        Assert.Equal(DispatchRejection.TargetBuildingRequiresAttackMission, decision.Rejection);
+    }
+
+    [Fact]
+    public void An_attack_dispatch_may_name_a_target_building()
+    {
+        var settlement = Found();
+        var targetBuilding = new HexCoord(1, 1);
+
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100, targetBuildingCoord: targetBuilding);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(targetBuilding, decision.Army!.TargetBuildingCoord);
+    }
+
+    [Fact]
+    public void An_attack_dispatch_with_no_target_building_leaves_it_null()
+    {
+        var settlement = Found();
+
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+
+        Assert.Null(decision.Army!.TargetBuildingCoord);
+    }
+
+    [Fact]
+    public void A_won_battle_with_surviving_catapults_destroys_levels_on_the_named_target()
+    {
+        var settlement = Found(garrison: CatapultForce(20)); // 800 siege power
+        var farmHex = new HexCoord(5, 5);
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(20),
+            requested: CatapultForce(20), targetBuildingCoord: farmHex);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(
+            centre: TargetHex, garrison: [],
+            extraBuildings: [new PlacedBuilding(farmHex, BuildingType.Farm, 5)]);
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.True(arrival.Fought);
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.NotNull(arrival.Siege);
+        Assert.True(arrival.Siege!.Applied);
+        Assert.Equal(farmHex, arrival.Siege.TargetCoord);
+        Assert.Equal(BuildingType.Farm, arrival.Siege.TargetType);
+        Assert.Equal(0, arrival.Siege.LevelAfter); // 800 siege power vastly exceeds level 5
+        Assert.DoesNotContain(arrival.DefenderSettlement.Buildings, b => b.Coord == farmHex);
+    }
+
+    [Fact]
+    public void An_explicit_target_building_gone_by_arrival_falls_back_to_a_random_pick()
+    {
+        var settlement = Found(garrison: CatapultForce(20));
+        var goneHex = new HexCoord(9, 9); // never actually placed on the defender
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(20),
+            requested: CatapultForce(20), targetBuildingCoord: goneHex);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        // Only the Longhouse stands on the defender; the named target never
+        // existed there at all.
+        var defender = Found(centre: TargetHex, garrison: []);
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.True(arrival.Siege!.Applied);
+        Assert.NotEqual(goneHex, arrival.Siege.TargetCoord);
+        Assert.Equal(BuildingType.Longhouse, arrival.Siege.TargetType); // the only building actually present
+    }
+
+    [Fact]
+    public void No_target_building_specified_picks_randomly_but_deterministically_for_a_given_seed()
+    {
+        var settlement = Found(garrison: CatapultForce(5)); // partial damage, not a clean sweep
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(5), requested: CatapultForce(5));
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(
+            centre: TargetHex, garrison: [],
+            extraBuildings:
+            [
+                new PlacedBuilding(new HexCoord(5, 5), BuildingType.Farm, 3),
+                new PlacedBuilding(new HexCoord(6, 6), BuildingType.Tower, 3),
+            ]);
+
+        var first = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 123);
+        var second = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 123);
+
+        Assert.Equal(first.Siege!.TargetCoord, second.Siege!.TargetCoord);
+        Assert.Equal(first.Siege.TargetType, second.Siege.TargetType);
+    }
+
+    [Fact]
+    public void Destroying_the_longhouse_razes_the_settlement_without_throwing_anywhere_reachable()
+    {
+        var settlement = Found(garrison: CatapultForce(20)); // 800 siege power
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(20),
+            requested: CatapultForce(20), targetBuildingCoord: TargetHex); // the Longhouse's own hex
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [], longhouseLevel: 5);
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.True(arrival.Siege!.SettlementRazed);
+        Assert.Equal(0, arrival.DefenderSettlement.LonghouseLevel);
+        Assert.Equal(1, arrival.DefenderSettlement.ClaimRadius); // 1 + (0 / 2) — the level-0 floor, not a crash
+        Assert.Empty(arrival.DefenderSettlement.Buildings);
+
+        // Reading the razed settlement further does not throw anywhere
+        // reachable from ordinary settlement operations — the assertion here
+        // is just that this call returns at all.
+        var resettled = arrival.DefenderSettlement.SettleTo(movement.ArrivesAt.AddHours(1));
+        Assert.NotNull(resettled.Settlement);
+    }
+
+    [Fact]
+    public void A_non_longhouse_building_reduced_to_zero_is_removed_and_the_hex_freed_but_the_settlement_is_not_razed()
+    {
+        var settlement = Found(garrison: CatapultForce(20));
+        var towerHex = new HexCoord(3, 3);
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(20),
+            requested: CatapultForce(20), targetBuildingCoord: towerHex);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(
+            centre: TargetHex, garrison: [],
+            extraBuildings: [new PlacedBuilding(towerHex, BuildingType.Tower, 3)]);
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.False(arrival.Siege!.SettlementRazed);
+        Assert.DoesNotContain(arrival.DefenderSettlement.Buildings, b => b.Coord == towerHex);
+        Assert.True(arrival.DefenderSettlement.LonghouseLevel > 0);
+    }
+
+    [Fact]
+    public void Defender_win_never_applies_siege_damage_even_when_the_attacker_brought_catapults()
+    {
+        var settlement = Found(garrison: CatapultForce(1)); // trivially weak attack
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(1),
+            requested: CatapultForce(1));
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Axeman, 1000)]);
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.Equal(BattleWinner.Defender, arrival.Battle!.Winner);
+        Assert.NotNull(arrival.Siege);
+        Assert.False(arrival.Siege!.Applied);
+        Assert.Equal(defender.Buildings.Count, arrival.DefenderSettlement.Buildings.Count);
+    }
+
+    [Fact]
+    public void Destroying_the_defenders_only_farm_reduces_its_food_production_rate_on_the_next_settle()
+    {
+        var settlement = Found(garrison: CatapultForce(20)); // 800 siege power
+        var farmHex = new HexCoord(5, 5);
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: ProvisionsFor(20),
+            requested: CatapultForce(20), targetBuildingCoord: farmHex);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(
+            centre: TargetHex, garrison: [],
+            extraBuildings: [new PlacedBuilding(farmHex, BuildingType.Farm, 5)]);
+        var foodRateBefore = defender.CurrentTotals().ProductionPerHour.Food;
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.True(arrival.Siege!.Applied);
+        Assert.Equal(BuildingType.Farm, arrival.Siege.TargetType);
+
+        // Settlement.SettleTo already recomputed production from the reduced
+        // Buildings list as part of SettleArrival — no extra code needed for
+        // this to fall out, just confirming it actually does.
+        var foodRateAfter = arrival.DefenderSettlement.Resources.RatePerHour.Food;
+        Assert.True(foodRateAfter < foodRateBefore, "destroying the only Farm should reduce the food rate");
+
+        // Settling further forward stays consistent — reading it again does
+        // not silently un-apply the damage.
+        var resettled = arrival.DefenderSettlement.SettleTo(movement.ArrivesAt.AddHours(2)).Settlement;
+        Assert.Equal(foodRateAfter, resettled.Resources.RatePerHour.Food, 6);
     }
 }

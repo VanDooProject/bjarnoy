@@ -122,6 +122,48 @@ describe('useLeaderboardStore', () => {
     });
   });
 
+  it('selecting a window reloads the board with that periodStart and resets on the next board switch', async () => {
+    const withWindows = {
+      ...directoryFixture,
+      weeklyWindows: [{ periodStart: '2026-01-01T00:00:00Z', periodEnd: '2026-01-08T00:00:00Z' }],
+    };
+    vi.mocked(api.getLeaderboardDirectory).mockResolvedValue(withWindows as never);
+    vi.mocked(api.getLeaderboardBoard).mockResolvedValue({
+      scope: 'user',
+      category: 'score',
+      available: true,
+      reason: null,
+      isFinal: false,
+      periodStart: null,
+      periodEnd: null,
+      computedAt: '2026-01-01T00:00:00Z',
+      items: [entry(1, 1)],
+      nextAfterRank: null,
+    } as never);
+    const store = useLeaderboardStore();
+    await store.loadDirectory('world-1');
+    expect(store.weeklyWindows).toHaveLength(1);
+
+    await store.selectBoard('user', 'score');
+    expect(api.getLeaderboardBoard).toHaveBeenLastCalledWith('world-1', 'user', 'score', {
+      periodStart: undefined,
+      afterRank: undefined,
+      pageSize: 25,
+    });
+
+    await store.selectWindow('2026-01-01T00:00:00Z');
+    expect(store.selectedPeriodStart).toBe('2026-01-01T00:00:00Z');
+    expect(api.getLeaderboardBoard).toHaveBeenLastCalledWith('world-1', 'user', 'score', {
+      periodStart: '2026-01-01T00:00:00Z',
+      afterRank: undefined,
+      pageSize: 25,
+    });
+
+    // Switching boards resets back to "current".
+    await store.selectBoard('settlement', 'biggestSettlement');
+    expect(store.selectedPeriodStart).toBeNull();
+  });
+
   it('jumping to my rank replaces the visible page with the /me window', async () => {
     vi.mocked(api.getLeaderboardDirectory).mockResolvedValue(directoryFixture as never);
     vi.mocked(api.getLeaderboardBoard).mockResolvedValue({

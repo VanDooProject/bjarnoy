@@ -13,6 +13,7 @@ import type {
   LeaderboardDirectoryResponse,
   LeaderboardMeResponse,
   LeaderboardScope,
+  WeeklyStatsPageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
   PagedProfileReportsResponse,
@@ -189,15 +190,23 @@ export const api = {
     worldId: string,
     scope: LeaderboardScope,
     category: LeaderboardCategory,
-    params?: { afterRank?: number; pageSize?: number },
+    params?: { periodStart?: string; afterRank?: number; pageSize?: number },
   ) => {
     const query = new URLSearchParams();
+    if (params?.periodStart) query.set('periodStart', params.periodStart);
     if (params?.afterRank) query.set('afterRank', String(params.afterRank));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
     return request<LeaderboardBoardResponse>(
       `/worlds/${worldId}/leaderboards/${scope}/${category}${qs ? `?${qs}` : ''}`,
     );
+  },
+  getWeeklyStats: (worldId: string, userId: string, params?: { cursor?: string; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.cursor) query.set('cursor', params.cursor);
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<WeeklyStatsPageResponse>(`/worlds/${worldId}/stats/users/${userId}/weekly${qs ? `?${qs}` : ''}`);
   },
   getMyLeaderboardRank: (
     worldId: string,
