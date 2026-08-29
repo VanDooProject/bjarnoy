@@ -215,6 +215,8 @@ export const api = {
     const query = new URLSearchParams({ from: params.from, to: params.to });
     return request<AdminUserActivityDetailResponse>(`/admin/activity/users/${userId}?${query.toString()}`);
   },
+  // Plain authenticated user action, not admin-only — see useActivityHeartbeat.
+  heartbeat: () => request<void>('/activity/heartbeat', { method: 'POST' }),
   getLeaderboardDirectory: (worldId: string) =>
     request<LeaderboardDirectoryResponse>(`/worlds/${worldId}/leaderboards`),
   getLeaderboardBoard: (
