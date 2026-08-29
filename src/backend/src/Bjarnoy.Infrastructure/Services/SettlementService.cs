@@ -493,7 +493,9 @@ public sealed class SettlementService(
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
-        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7());
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
+        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline);
 
         if (!decision.Accepted)
         {

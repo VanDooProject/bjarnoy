@@ -220,6 +220,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int?>("SiegeTargetType")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("WasRaid")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Winner")
                         .HasColumnType("INTEGER");
 
@@ -663,6 +666,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsPremium")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsSystem")
                         .HasColumnType("INTEGER");
 
@@ -708,6 +714,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000001"),
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsPremium = false,
                             IsSystem = true,
                             NormalizedUserName = "abandoned",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
@@ -719,6 +726,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000002"),
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsPremium = false,
                             IsSystem = true,
                             NormalizedUserName = "barbarians",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
@@ -730,6 +738,7 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000003"),
                             CreatedAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsPremium = false,
                             IsSystem = true,
                             NormalizedUserName = "endboss",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",

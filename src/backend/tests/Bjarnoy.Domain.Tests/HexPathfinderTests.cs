@@ -111,10 +111,82 @@ public class HexPathfinderTests
     }
 
     [Fact]
-    public void Throws_for_sea_units_rather_than_silently_pathing_like_a_land_unit()
+    public void Fleet_finds_a_path_across_open_sea()
     {
-        Assert.Throws<NotSupportedException>(
-            () => HexPathfinder.FindPath(HexCoord.Origin, new HexCoord(1, 0), AllGrass(), isLandUnit: false));
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(3, -1);
+
+        var path = HexPathfinder.FindPath(from, to, _ => Terrain.Sea, isLandUnit: false);
+
+        Assert.NotNull(path);
+        Assert.Equal(from, path![0]);
+        Assert.Equal(to, path[^1]);
+        Assert.Equal(from.DistanceTo(to) + 1, path.Count);
+    }
+
+    [Fact]
+    public void Fleet_path_is_blocked_by_land()
+    {
+        var landWall = new HashSet<HexCoord>();
+        for (var r = -10; r <= 10; r++)
+        {
+            landWall.Add(new HexCoord(2, r));
+        }
+
+        Terrain TerrainAt(HexCoord c) => landWall.Contains(c) ? Terrain.Grass : Terrain.Sea;
+
+        var path = HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(5, 0), TerrainAt, isLandUnit: false);
+
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void Fleet_may_beach_at_a_land_destination_reachable_by_sea()
+    {
+        // A fleet's own home settlement and an attack target's settlement are
+        // always land hexes, even coastal ones — FindPath exempts exactly the
+        // two route endpoints from the sea-only rule so a fleet can still
+        // depart its own harbor and land at a shoreline target (issue #40
+        // phase 6 §4; see the isLandUnit remarks on FindPath).
+        Terrain TerrainAt(HexCoord c) => c == new HexCoord(3, 0) ? Terrain.Grass : Terrain.Sea;
+
+        var path = HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(3, 0), TerrainAt, isLandUnit: false);
+
+        Assert.NotNull(path);
+        Assert.Equal(new HexCoord(3, 0), path![^1]);
+    }
+
+    [Fact]
+    public void Fleet_cannot_beach_when_the_land_destination_has_no_adjacent_sea()
+    {
+        // The destination endpoint exemption only waives the *terrain* check
+        // for the final hop — it still has to be reachable through actual
+        // open sea from somewhere. A land destination entirely walled off by
+        // more land is still unreachable.
+        var landBlob = new HashSet<HexCoord>
+        {
+            new(3, 0), new(4, 0), new(4, -1), new(3, -1), new(2, 0), new(2, 1), new(3, 1),
+        };
+        Terrain TerrainAt(HexCoord c) => landBlob.Contains(c) ? Terrain.Grass : Terrain.Sea;
+
+        var path = HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(3, 0), TerrainAt, isLandUnit: false);
+
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void Land_pathing_is_unaffected_by_the_sea_cost_table_existing()
+    {
+        // Byte-for-byte the same scenario as Prefers_cheaper_terrain_over_a_shorter_raw_distance,
+        // re-run after fleet support was added — nothing about the land
+        // terrain-cost table should have changed.
+        var mountainLine = new HashSet<HexCoord> { new(1, 0), new(2, 0), new(3, 0) };
+        Terrain TerrainAt(HexCoord c) => mountainLine.Contains(c) ? Terrain.Mountain : Terrain.Grass;
+
+        var path = HexPathfinder.FindPath(new HexCoord(0, 0), new HexCoord(4, 0), TerrainAt, isLandUnit: true);
+
+        Assert.NotNull(path);
+        Assert.DoesNotContain(path!, mountainLine.Contains);
     }
 
     [Fact]

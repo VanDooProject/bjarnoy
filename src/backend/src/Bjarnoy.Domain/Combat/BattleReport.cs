@@ -71,6 +71,14 @@ public sealed record BattleReport
     public required int Seed { get; init; }
 
     /// <summary>
+    /// True when this battle was fought as an <see cref="Armies.ArmyMission.Raid"/>
+    /// rather than a plain <see cref="Armies.ArmyMission.Attack"/> (issue #40
+    /// phase 7) — see <see cref="BattleResolver.Resolve"/>'s <c>raid</c>
+    /// parameter for what that changed about the fight.
+    /// </summary>
+    public bool WasRaid { get; init; }
+
+    /// <summary>
     /// The building-damage outcome (issue #40 phase 5), or <see langword="null"/>
     /// when no catapult damage happened this battle — the attacker lost, no
     /// catapults survived to fire, or the defender had no buildings to hit.
@@ -96,7 +104,8 @@ public sealed record BattleReport
         IReadOnlyList<UnitStack> attackerSent,
         BattlePlan plan,
         int seed,
-        SiegeOutcome? siege = null)
+        SiegeOutcome? siege = null,
+        bool wasRaid = false)
     {
         ArgumentNullException.ThrowIfNull(attackerSent);
         ArgumentNullException.ThrowIfNull(plan);
@@ -138,6 +147,7 @@ public sealed record BattleReport
             DefensePower = plan.DefensePower,
             Winner = plan.Winner,
             Seed = seed,
+            WasRaid = wasRaid,
             Siege = BattleReportSiegeLine.From(siege),
         };
     }

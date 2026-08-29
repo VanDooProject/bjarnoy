@@ -318,6 +318,62 @@ public class ArmyTests
     }
 
     [Fact]
+    public void Dispatch_is_rejected_when_mixing_ships_and_land_units()
+    {
+        var settlement = Found(garrison:
+        [
+            new UnitStack(UnitType.Karve, 5),
+            new UnitStack(UnitType.Spearman, 5),
+        ]);
+
+        var decision = Dispatch(settlement, new HexCoord(4, 0), provisions: 40,
+            requested: [new UnitStack(UnitType.Karve, 5), new UnitStack(UnitType.Spearman, 5)]);
+
+        Assert.Equal(DispatchRejection.MixedFleetAndLandUnits, decision.Rejection);
+    }
+
+    [Fact]
+    public void Fleet_dispatch_validates_the_destination_as_sea_not_land()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        Terrain TerrainAt(HexCoord c) => c == new HexCoord(5, 0) ? Terrain.Grass : Terrain.Sea;
+
+        var decision = Dispatch(settlement, new HexCoord(5, 0), provisions: 40,
+            requested: [new UnitStack(UnitType.Karve, 5)], terrainAt: TerrainAt);
+
+        Assert.Equal(DispatchRejection.DestinationNotSea, decision.Rejection);
+    }
+
+    [Fact]
+    public void Fleet_dispatch_accepted_over_open_sea()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        var destination = new HexCoord(4, 0);
+
+        var decision = Dispatch(settlement, destination, provisions: 40,
+            requested: [new UnitStack(UnitType.Karve, 5)], terrainAt: _ => Terrain.Sea);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        var movement = ((ArmyLocation.InTransit)decision.Army!.Location).Movement;
+        Assert.Equal(Home, movement.Path[0]);
+        Assert.Equal(destination, movement.Path[^1]);
+    }
+
+    [Fact]
+    public void Land_dispatch_to_a_non_land_hex_is_still_rejected_the_ordinary_way()
+    {
+        // Mirrors Fleet_dispatch_validates_the_destination_as_sea_not_land —
+        // a land army dispatched to sea keeps its own pre-existing rejection,
+        // unaffected by fleet support existing.
+        var settlement = Found();
+        Terrain TerrainAt(HexCoord c) => c == new HexCoord(5, 0) ? Terrain.Sea : Terrain.Grass;
+
+        var decision = Dispatch(settlement, new HexCoord(5, 0), provisions: 40, terrainAt: TerrainAt);
+
+        Assert.Equal(DispatchRejection.DestinationNotLand, decision.Rejection);
+    }
+
+    [Fact]
     public void Merging_a_returned_army_adds_its_stacks_back_into_the_garrison()
     {
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
