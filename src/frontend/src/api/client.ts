@@ -8,6 +8,11 @@ import type {
   FoundSettlementRequest,
   GrantResourcesRequest,
   IslandResponse,
+  LeaderboardBoardResponse,
+  LeaderboardCategory,
+  LeaderboardDirectoryResponse,
+  LeaderboardMeResponse,
+  LeaderboardScope,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
   ProblemDetails,
@@ -149,4 +154,34 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  getLeaderboardDirectory: (worldId: string) =>
+    request<LeaderboardDirectoryResponse>(`/worlds/${worldId}/leaderboards`),
+  getLeaderboardBoard: (
+    worldId: string,
+    scope: LeaderboardScope,
+    category: LeaderboardCategory,
+    params?: { afterRank?: number; pageSize?: number },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.afterRank) query.set('afterRank', String(params.afterRank));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<LeaderboardBoardResponse>(
+      `/worlds/${worldId}/leaderboards/${scope}/${category}${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getMyLeaderboardRank: (
+    worldId: string,
+    scope: LeaderboardScope,
+    category: LeaderboardCategory,
+    params?: { radius?: number; subjectId?: string },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.radius) query.set('radius', String(params.radius));
+    if (params?.subjectId) query.set('subjectId', params.subjectId);
+    const qs = query.toString();
+    return request<LeaderboardMeResponse>(
+      `/worlds/${worldId}/leaderboards/${scope}/${category}/me${qs ? `?${qs}` : ''}`,
+    );
+  },
 };
