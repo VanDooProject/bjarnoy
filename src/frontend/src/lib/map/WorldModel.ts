@@ -370,9 +370,13 @@ export class WorldModel {
   /**
    * Applies a settlement snapshot fetched from the backend (live mode; see
    * `stores/world.ts`) — resources/rate/level and any buildings the queue has
-   * completed since the last poll. Only building types the frontend has art
-   * for are placed on their hex; the rest are silently skipped rather than
-   * risking a texture lookup failure (see `lib/map/textures.ts`).
+   * completed since the last poll. Only building types this whitelist knows
+   * about are placed on their hex; a type the frontend doesn't model yet
+   * (e.g. `storagehouse`, which isn't in `Tile['buildingType']` at all) is
+   * silently skipped rather than stored as an unrecognized string. A type
+   * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
+   * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
+   * tile's bare terrain rather than throwing.
    */
   applyServerSnapshot(
     settlementId: string,
@@ -380,7 +384,7 @@ export class WorldModel {
       level: number;
       resources: Resources;
       rates: Resources;
-      buildings: { q: number; r: number; type: string; level: number }[];
+      buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
     },
   ) {
     const settlement = this.settlements.get(settlementId);
@@ -399,24 +403,46 @@ export class WorldModel {
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
 
-    const RENDERABLE_TYPES = new Set(['longhouse', 'farm', 'tower', 'fishinghut', 'magictower', 'pumpkinfarm']);
+    const RENDERABLE_TYPES = new Set([
+      'longhouse',
+      'farm',
+      'tower',
+      'fishinghut',
+      'magictower',
+      'pumpkinfarm',
+      'lumberjack',
+      'quarry',
+    ]);
     for (const building of snapshot.buildings) {
       if (!RENDERABLE_TYPES.has(building.type)) continue;
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = settlementId;
       tile.buildingType = building.type as Tile['buildingType'];
       tile.buildingLevel = building.level;
+      // The fishing hut is the only building with its own orientation (a
+      // dock that has to face this settlement's shore, not whatever a bare
+      // coastal-water tile would default to) — see PlacedBuildingResponse.
+      if (building.orientation) {
+        tile.orientation = building.orientation as Tile['orientation'];
+      }
     }
   }
 
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return false;
+    // A settlement gets its one longhouse from founding (foundSettlement
+    // above), never from placing a building — matches the backend rule in
+    // Settlement.PlanBuild (BuildRejection.LonghousePlacementNotAllowed).
+    if (type === 'longhouse') return false;
     if (hexDistance({ q: settlement.q, r: settlement.r }, at) > this.borderRadius(settlement)) {
       return false;
     }
     const tile = this.getTile(at.q, at.r);
-    if (tile.terrain === 'sea' || tile.buildingType) return false;
+    // Every other building needs dry land; the fishing hut is the one
+    // exception, and only on the coastal ring of the sea, not open water.
+    const seaOk = type === 'fishinghut' && tile.isCoastalWater;
+    if ((tile.terrain === 'sea' && !seaOk) || tile.buildingType) return false;
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;

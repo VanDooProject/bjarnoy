@@ -279,6 +279,13 @@ development.
 | `GET /api/v1/settlements/{id}` | a settlement as of now, completing what its queue owed |
 | `POST /api/v1/settlements/{id}/builds` | queue a building |
 | `GET /api/v1/buildings` | the catalogue: costs, durations, allowed terrain |
+| `POST /api/v1/messages` | send a direct message to another player |
+| `GET /api/v1/messages/conversations` | the caller's conversations, most recently active first |
+| `GET /api/v1/messages/conversations/{userId}` | message history with one other player |
+| `POST /api/v1/messages/conversations/{userId}/read` | mark that player's messages as read |
+| `POST /api/v1/messages/{id}/report` | report a message to moderation |
+| `GET /api/v1/admin/reports` | the moderation queue (Admin only) |
+| `POST /api/v1/admin/reports/{id}/resolve` | resolve or dismiss a report (Admin only) |
 | `GET /health`, `GET /alive` | readiness and liveness |
 
 Versions are literal path segments rather than a `{version:apiVersion}` route
@@ -289,6 +296,18 @@ OpenAPI document, which is what the frontend generates its typed client from:
 npx openapi-typescript http://localhost:5180/openapi/v1.json \
   -o src/frontend/src/api/schema.ts --enum
 ```
+
+`GET /api/v1/buildings` also has a frontend-only fallback: the tech-tree page
+(`/tech-tree`) needs to render without a backend in demo mode, so
+`src/frontend/src/data/building-catalogue.json` is a committed snapshot of
+that endpoint's response, regenerated the same way against a running backend:
+
+```bash
+node scripts/export-catalogue-data.mjs
+```
+
+Run it whenever `BuildingCatalogue.cs` changes. Same manual/at-build-time
+policy as the codegen above — nothing regenerates it automatically.
 
 The health endpoints are only mapped outside development when
 `ExposeHealthChecks` is set; the container image sets it, since an orchestrator

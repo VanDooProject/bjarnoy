@@ -4,6 +4,8 @@
 //
 // Production is deliberately not this: there the frontend is built into the
 // API's wwwroot and the two ship as a single image (see deploy/Dockerfile).
+using System.Security.Cryptography;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // A fixed password rather than Aspire's default random one. Postgres only sets
@@ -19,14 +21,36 @@ var postgresPassword = builder.AddParameter("postgres-password", "bjarnoy-dev-on
 var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
 
-var postgres = builder.AddPostgres("postgres", password: postgresPassword)
-    .WithDataVolume()
-    // Keeps a restart from wiping the world you were testing against.
-    .WithLifetime(ContainerLifetime.Persistent);
+// A fresh random admin password every run — unlike postgres-password above,
+// there's no persisted state to desync from, since AuthService.SeedAdminIfConfiguredAsync
+// (called from Program.cs on every startup) is a no-op once any Admin already
+// exists, so re-seeding with a new password each run only matters for a
+// clean database. This means a dev never has to invent, remember, or type
+// admin credentials for local Aspire runs: the "Log in as admin" dashboard
+// link added on the frontend resource below carries them.
+const string adminUserName = "admin";
+var adminPasswordValue = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
 
+var postgres = builder.AddPostgres("postgres", password: postgresPassword);
+
+// Bjarnoy.AppHost.Tests builds and starts this whole AppHost fresh for every
+// [Fact] — several independent instances in the same CI job, one after
+// another. WithDataVolume()'s volume name comes from this resource alone,
+// with nothing distinguishing one test's instance from the next, so a
+// persistent volume here would carry Postgres state (including whichever
+// test's admin account got seeded first, and *its* password) from one test
+// straight into the next's supposedly-fresh database — exactly the bug that
+// made AdminBootstrapLoginTests intermittently 401 with "wrong password"
+// despite generating a correct one every time. Session-lifetime, volume-less
+// Postgres (the default) gives every test run its own genuinely empty
+// database instead; only interactive local dev gets the persistent one.
 if (!isCI)
 {
-    postgres.WithPgAdmin();
+    postgres = postgres
+        .WithDataVolume()
+        // Keeps a restart from wiping the world you were testing against.
+        .WithLifetime(ContainerLifetime.Persistent)
+        .WithPgAdmin();
 }
 
 var gamedb = postgres.AddDatabase("gamedb");
@@ -68,9 +92,16 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: nul
     // In a local run there is no separate migration step to wait on, so the API
     // brings the schema forward itself.
     .WithEnvironment("Database__MigrateOnStartup", "true")
+    .WithEnvironment("ADMIN_BOOTSTRAP_USERNAME", adminUserName)
+    // The raw string, not an Aspire secret ParameterResource: that indirection
+    // (resolved lazily via an env-var callback rather than written straight
+    // through, unlike the fixed postgres-password above) turned up an actual
+    // login-rejection failure in CI that a direct string assignment doesn't
+    // leave room for.
+    .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPasswordValue)
     .WithHttpHealthCheck("/health");
 
-builder.AddNpmApp("frontend", "../../../frontend", "dev")
+var frontend = builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithReference(api)
     .WaitFor(api)
     // This picks the port and hands it to the child process as PORT — the
@@ -94,6 +125,31 @@ builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithEnvironment("VITE_DEMO_MODE", "false")
     .WithExternalHttpEndpoints()
     .PublishAsDockerFile();
+
+// One-click admin login from the dashboard, so nobody has to go dig the
+// generated password out of an env var or user secret. Runs after Aspire has
+// allocated the frontend's endpoints, hence the callback rather than a plain
+// WithUrl: the frontend's dev-server port isn't known until then (see the
+// WithHttpEndpoint(env: "PORT") comment above).
+frontend.WithUrls(context =>
+{
+    var baseUrl = context.Urls.FirstOrDefault(u => u.Endpoint is not null)?.Url;
+    if (string.IsNullOrEmpty(baseUrl))
+    {
+        return;
+    }
+
+    context.Urls.Add(new ResourceUrlAnnotation
+    {
+        Url = $"{baseUrl}/login?username={Uri.EscapeDataString(adminUserName)}" +
+              $"&password={Uri.EscapeDataString(adminPasswordValue)}" +
+              // Without this, LoginView.vue's post-login redirect falls back
+              // to its default of '/' (see its onSubmit) rather than landing
+              // in the admin area this link exists to reach.
+              $"&redirect={Uri.EscapeDataString("/admin")}",
+        DisplayText = "Log in as admin",
+    });
+});
 
 _ = migrator;
 

@@ -50,6 +50,7 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { Settlement, Terrain, Tile } from './types';
+import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -230,6 +231,34 @@ export interface HexMapRendererOptions {
 }
 
 /**
+ * Issue #40 phase 2: one army's marker on the settlement map — its current
+ * hex, and whether it's the one selected in `ArmyPanel.vue` (drawn bigger and
+ * gold rather than the muted blue every other army marker gets, same
+ * "selected reads as gold" convention as the settlement badge/labels above).
+ */
+export interface ArmyOverlayMarker {
+  id: string;
+  position: AxialCoord;
+  selected: boolean;
+  returning: boolean;
+}
+
+/**
+ * Everything `setArmyOverlay` needs to draw on the settlement map: every
+ * dispatched army's live marker, the selected army's full route (waypoints +
+ * computed path, both ends included — mirrors `MovementResponse.Path`), and
+ * an in-progress dispatch's waypoint pins/line (before anything has actually
+ * been sent to the backend). All three are independent — armies always show
+ * their own marker; `route` only has content while an army is selected;
+ * `draftWaypoints` only has content while a dispatch is being composed.
+ */
+export interface ArmyOverlayData {
+  armies: ArmyOverlayMarker[];
+  route: AxialCoord[];
+  draftWaypoints: AxialCoord[];
+}
+
+/**
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
  * (title + level, an output rate, a modifier line, worker count, "click to
@@ -268,6 +297,8 @@ const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   fishinghut: 'Fishing Hut',
   magictower: 'Magic Tower',
   pumpkinfarm: 'Pumpkin Farm',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
 };
 
 const TERRAIN_LABELS: Record<Terrain, string> = {
@@ -500,6 +531,11 @@ export class HexMapRenderer {
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  // Issue #40 phase 2: see `setArmyOverlay` — drawn every tick alongside the
+  // settlement badge (rebuildMarkers), same "recomputed from hex coords on
+  // every rebuild" pattern as everything else in this layer, so it keeps up
+  // with pan/zoom for free.
+  private armyOverlay: ArmyOverlayData | null = null;
   // Fog (fogLayer + fogBlobCacheSprite) needs to draw *above* markerLayer's
   // island names/settlement badges/fleet ETAs — a label sitting right at the
   // edge of scouted territory should read as veiled by the mist, not float
@@ -522,6 +558,13 @@ export class HexMapRenderer {
 
   private dragging = false;
   private dragMoved = 0;
+  // Issue #16 "clicking elsewhere on the map with a ring open should close
+  // it, not open a new one": beginDragFrom's synthetic drag (started to
+  // dismiss a ring on backdrop mousedown, see beginDragFrom below) ends in
+  // onPointerUp exactly like a real click when the pointer never moved —
+  // this flag tells onPointerUp that particular click is the same gesture
+  // that already closed the ring, so it shouldn't also reopen one.
+  private suppressNextClick = false;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
@@ -715,6 +758,15 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.rebuildMarkers();
+    // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
+    // below) floats right where the ring's own bubbles/track need to sit — it
+    // stays fully opaque otherwise since it's PixiJS-rendered, not DOM, so the
+    // ring's CSS z-index/opacity tricks can't touch it. `interactionLocked` is
+    // already the "a ring is open" signal (see setInteractionLocked); ease the
+    // whole marker layer's alpha toward hidden/shown off that same flag rather
+    // than snapping, matching the fog fade's feel elsewhere in this renderer.
+    const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
+    this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
     if (this.options.mode === 'world') this.drawWaves();
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
@@ -803,8 +855,9 @@ export class HexMapRenderer {
   // outsidePointerDown emit — and the caller re-fires that same PointerEvent
   // in here so the drag it started keeps going, instead of the player
   // needing a second, separate mousedown to start panning the map.
-  beginDragFrom(e: PointerEvent) {
+  beginDragFrom(e: PointerEvent, opts: { suppressClick?: boolean } = {}) {
     this.interactionLocked = false;
+    this.suppressNextClick = !!opts.suppressClick;
     this.startDrag(e);
   }
 
@@ -855,9 +908,10 @@ export class HexMapRenderer {
   };
 
   private onPointerUp = (e: PointerEvent) => {
-    if (this.dragging && this.dragMoved < 6) {
+    if (this.dragging && this.dragMoved < 6 && !this.suppressNextClick) {
       this.handleClick(e);
     }
+    this.suppressNextClick = false;
     const wasDragging = this.dragging;
     this.dragging = false;
     if (wasDragging) {
@@ -1000,48 +1054,24 @@ export class HexMapRenderer {
    * building's own type/level (and, for the irrigation modifier, whether a
    * neighbouring hex is shore/water) purely so the hover card has something
    * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
-   * yes (+10%) / Workers 8/8" for a farm.
+   * yes (+10%) / Workers 8/8" for a farm. The formulas themselves live in
+   * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(
     tile: Tile,
     level: number,
   ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
-    const { worldModel } = this.options;
-    const nearWater = hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
-      const t = worldModel.getTile(c.q, c.r);
-      return t.terrain === 'sea' || t.terrain === 'sand';
-    });
-    switch (tile.buildingType) {
-      case 'farm': {
-        const irrigated = nearWater;
-        const base = level * 120;
-        const workersCap = level * 4;
-        return {
-          output: `+${irrigated ? Math.round(base * 1.1) : base} food/h`,
-          modifier: irrigated ? 'Irrigated (+10%)' : undefined,
-          workers: `${workersCap}/${workersCap}`,
-        };
-      }
-      case 'hut':
-        return { output: `+${level * 5} population capacity` };
-      case 'tower':
-        return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
-      case 'longhouse':
-        return { output: `+${level * 100} storage capacity` };
-      case 'pumpkinfarm': {
-        const workersCap = level * 4;
-        return { output: `+${level * 144} food/h`, workers: `${workersCap}/${workersCap}` };
-      }
-      case 'fishinghut': {
-        const workersCap = level * 3;
-        return { output: `+${level * 120} food/h`, modifier: nearWater ? 'Coastal' : undefined, workers: `${workersCap}/${workersCap}` };
-      }
-      case 'magictower':
-        return { output: `+${level * 24} iron/h`, modifier: 'Arcane' };
-      default:
-        return {};
-    }
+    if (!tile.buildingType) return {};
+    const boostTerrain = BOOST_TERRAIN[tile.buildingType];
+    const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
+    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile), matchingNeighbours);
   }
+
+  private nearWater(tile: Tile): boolean {
+    return isNearAnyOf(tile, ['sea', 'sand'], this.getTile);
+  }
+
+  private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -1691,6 +1721,7 @@ export class HexMapRenderer {
     this.markerLayer.clear();
     if (this.options.mode === 'settlement') {
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
+      this.drawArmyOverlay();
       return;
     }
     if (this.options.mode !== 'world') {
@@ -1949,6 +1980,67 @@ export class HexMapRenderer {
    */
   setHighlight(coord: AxialCoord | undefined) {
     this.options = { ...this.options, highlightCoord: coord };
+  }
+
+  /**
+   * Issue #40 phase 2: hands the renderer everything it needs to draw
+   * dispatched armies, a selected army's route, and an in-progress dispatch's
+   * waypoints — see `ArmyOverlayData`. Pass `null` to clear it (e.g. leaving
+   * the settlement view). Like `setHighlight`, this only stores the data;
+   * `rebuildMarkers` (already running every tick — see `onTick`) picks it up
+   * on the very next frame without needing a forced rebuild here.
+   */
+  setArmyOverlay(data: ArmyOverlayData | null) {
+    this.armyOverlay = data;
+  }
+
+  private drawArmyOverlay() {
+    const overlay = this.armyOverlay;
+    if (!overlay) return;
+
+    // The selected army's full route (waypoints + computed path) — a
+    // muted blue line, distinct from the gold in-progress-dispatch line
+    // below so a player editing a *new* dispatch while another army is
+    // already selected can't confuse the two.
+    if (overlay.route.length > 1) {
+      const points = overlay.route.map((c) => this.hexCenterScreen(c));
+      this.markerLayer.moveTo(points[0].x, points[0].y);
+      for (const p of points.slice(1)) this.markerLayer.lineTo(p.x, p.y);
+      this.markerLayer.stroke({ width: 2, color: 0x5ab0e6, alpha: 0.8 });
+    }
+
+    // An in-progress dispatch's clicked waypoints, plus a numbered-order
+    // line connecting them — the "pins and a line" the design doc asks for,
+    // shown before anything has actually been sent to the backend.
+    if (overlay.draftWaypoints.length > 1) {
+      const points = overlay.draftWaypoints.map((c) => this.hexCenterScreen(c));
+      this.markerLayer.moveTo(points[0].x, points[0].y);
+      for (const p of points.slice(1)) this.markerLayer.lineTo(p.x, p.y);
+      this.markerLayer.stroke({ width: 2, color: GOLD, alpha: 0.9 });
+    }
+    overlay.draftWaypoints.forEach((c, i) => {
+      const p = this.hexCenterScreen(c);
+      const isDestination = i === overlay.draftWaypoints.length - 1;
+      this.markerLayer
+        .circle(p.x, p.y, isDestination ? 8 : 5)
+        .fill({ color: GOLD, alpha: isDestination ? 0.95 : 0.7 })
+        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.85 });
+    });
+
+    // Every dispatched army gets a small diamond marker at its live/last-
+    // reached position (ArmyResponse.Position — see stores/world.ts's
+    // refreshArmies) — gold and bigger for the one currently selected,
+    // muted blue for everything else, grey for one already turned around
+    // and heading home.
+    for (const army of overlay.armies) {
+      const p = this.hexCenterScreen(army.position);
+      const color = army.selected ? GOLD : army.returning ? 0x8fa3af : 0x5ab0e6;
+      const r = army.selected ? 9 : 7;
+      this.markerLayer
+        .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
+        .fill({ color })
+        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+    }
   }
 
   /**

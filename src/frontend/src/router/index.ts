@@ -27,9 +27,67 @@ export const router = createRouter({
       component: () => import('../views/SettlementView.vue'),
     },
     {
+      // Own profile — needs a logged-in user to know whose it is.
+      path: '/profile',
+      name: 'own-profile',
+      component: () => import('../views/ProfileView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // Another player's public profile, by username.
+      path: '/profile/:userName',
+      name: 'profile',
+      component: () => import('../views/ProfileView.vue'),
+    },
+    {
+      path: '/leaderboards',
+      name: 'leaderboards',
+      component: () => import('../views/LeaderboardView.vue'),
+    },
+    {
+      // Issue #40 phase 3: battle-reports inbox, and the same view's detail
+      // mode when a report id is in the URL (so a report can be deep-linked/
+      // shared, e.g. from a future notification) — see ReportsView.vue.
+      path: '/reports',
+      name: 'reports',
+      component: () => import('../views/ReportsView.vue'),
+    },
+    {
+      path: '/reports/:reportId',
+      name: 'report-detail',
+      component: () => import('../views/ReportsView.vue'),
+    },
+    {
+      path: '/messages',
+      name: 'messages',
+      component: () => import('../views/MessagesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/messages/:userId',
+      name: 'conversation',
+      component: () => import('../views/ConversationView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/impressum',
       name: 'impressum',
       component: () => import('../views/ImpressumView.vue'),
+    },
+    {
+      path: '/docs',
+      name: 'docs',
+      component: () => import('../views/DocsView.vue'),
+    },
+    {
+      path: '/tech-tree',
+      name: 'tech-tree',
+      component: () => import('../views/TechTreeView.vue'),
+    },
+    {
+      path: '/docs/tiles',
+      name: 'tile-docs',
+      component: () => import('../views/TileDocsView.vue'),
     },
     {
       path: '/admin',
@@ -51,6 +109,11 @@ export const router = createRouter({
           path: 'settlements',
           name: 'admin-settlements',
           component: () => import('../views/admin/AdminSettlementsView.vue'),
+        },
+        {
+          path: 'reports',
+          name: 'admin-reports',
+          component: () => import('../views/admin/AdminReportsView.vue'),
         },
       ],
     },

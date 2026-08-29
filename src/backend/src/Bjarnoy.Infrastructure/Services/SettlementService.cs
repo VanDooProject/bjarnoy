@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -33,6 +34,11 @@ public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntit
 public sealed record BuildResult(BuildRejection Rejection, BuildOrder? Order = null, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
+}
+
+public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == TrainRejection.None && Order is not null;
 }
 
 /// <summary>A page of settlements matching an admin search.</summary>
@@ -267,10 +273,12 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var result = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor);
+        var (_, result, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         if (result.Changed)
         {
             settlement.ApplyDomain(result.Settlement);
+            ApplyGuestDeaths(guestArmies, result.GuestDeaths);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
             _logger.LogInformation(
@@ -333,10 +341,12 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         var granted = settled with { Resources = settled.Resources.Adjust(delta, now) };
 
         settlement.ApplyDomain(granted);
+        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -365,8 +375,11 @@ public sealed class SettlementService(
         var clock = settlement.World.ToClock();
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
-        var result = settled.SetBuildingLevel(coord, level, now, settlement.World.SpeedFactor);
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+        var result = settled.SetBuildingLevel(
+            coord, level, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
 
         if (!result.Accepted)
         {
@@ -379,11 +392,12 @@ public sealed class SettlementService(
 
             // A rejected set may still have completed due builds while
             // settling, which is a real change worth keeping.
-            await PersistIfSettledAsync(settlement, settled, now, cancellationToken).ConfigureAwait(false);
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
             return new AdminSetBuildingLevelResult(outcome);
         }
 
         settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -422,24 +436,30 @@ public sealed class SettlementService(
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+
         // Settle first so the decision sees the queue and stock as of now: a
         // build that finished a minute ago must free its slot and count towards
         // production.
-        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
-        var terrain = new TerrainSampler(settlement.World.ToGenerationOptions()).TerrainAt(coord);
-        var decision = settled.PlanBuild(type, coord, terrain, now, Guid.CreateVersion7(), settlement.World.SpeedFactor);
+        var terrain = sampler.TerrainAt(coord);
+        var decision = settled.PlanBuild(
+            type, coord, terrain, now, Guid.CreateVersion7(),
+            settlement.World.SpeedFactor, sampler.IsCoastalWater(coord));
 
         if (!decision.Accepted)
         {
             // Even a refused build may have completed work while settling, and
             // that is a real change worth keeping.
-            await PersistIfSettledAsync(settlement, settled, now, cancellationToken)
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
                 .ConfigureAwait(false);
             return new BuildResult(decision.Rejection);
         }
 
         settlement.ApplyDomain(settled.Enqueue(decision.Order!, now));
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -447,6 +467,57 @@ public sealed class SettlementService(
             settlementId, type, decision.Order!.TargetLevel, coord, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
+    /// <summary>Queues training a batch of units, charging for it up front.</summary>
+    public async Task<TrainResult> TrainUnitsAsync(
+        Guid settlementId,
+        UnitType unitType,
+        int count,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new TrainResult(TrainRejection.InvalidCount);
+        }
+
+        var clock = settlement.World.ToClock();
+        if (!clock.AllowsCommands)
+        {
+            return new TrainResult(TrainRejection.None, null, WorldPaused: true);
+        }
+
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first so the decision sees the queue and stock as of now —
+        // same reasoning as QueueBuildAsync.
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
+        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline);
+
+        if (!decision.Accepted)
+        {
+            // Even a refused request may have completed work while settling
+            // (a build, a training batch, or a starvation death), and that is
+            // a real change worth keeping.
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
+                .ConfigureAwait(false);
+            return new TrainResult(decision.Rejection);
+        }
+
+        settlement.ApplyDomain(settled.EnqueueTraining(decision.Order!, now));
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Id} queued training {Count}x {Type}, completing {CompletesAt}.",
+            settlementId, count, unitType, decision.Order!.CompletesAt);
+
+        return new TrainResult(TrainRejection.None, decision.Order);
     }
 
     /// <summary>
@@ -482,13 +553,31 @@ public sealed class SettlementService(
         var settlements = await _dbContext.Settlements
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
+            .Include(s => s.Garrison)
+            .Include(s => s.TrainingQueue)
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        var terrainAt = TerrainAt(world);
+
+        var settlementIds = settlements.Select(s => s.Id).ToHashSet();
+        var guestArmies = await _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Where(a => a.IsSupporting && settlementIds.Contains(a.TargetSettlementId!.Value))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var guestArmiesByHost = guestArmies.ToLookup(a => a.TargetSettlementId!.Value);
+
         foreach (var entity in settlements)
         {
-            var settled = entity.ToDomain().SettleTo(now, oldFactor).Settlement;
-            var (production, capacity) = settled.CurrentTotals(newFactor);
+            var hostGuestArmies = guestArmiesByHost[entity.Id].ToList();
+            var guestStacks = AggregateStacks(
+                hostGuestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+
+            var result = entity.ToDomain().SettleTo(now, oldFactor, guestStacks, terrainAt);
+            var settled = result.Settlement;
+            ApplyGuestDeaths(hostGuestArmies, result.GuestDeaths);
+
+            var (production, capacity) = settled.CurrentTotals(newFactor, guestStacks, terrainAt);
             entity.ApplyDomain(settled with { Resources = settled.Resources.WithRate(production, capacity, now) });
         }
 
@@ -530,25 +619,90 @@ public sealed class SettlementService(
         return world;
     }
 
+    /// <summary>
+    /// The terrain lookup <see cref="Settlement.SettleTo"/> and friends need
+    /// for a terrain-bound producer's neighbour-adjacency boost — built fresh
+    /// per call since a <see cref="TerrainSampler"/> is cheap (no state, no
+    /// I/O) and a world's generation options can differ per request.
+    /// </summary>
+    private static Func<HexCoord, Terrain> TerrainAt(WorldEntity world) =>
+        new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
+
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
             .Include(s => s.World)
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
+            .Include(s => s.Garrison)
+            .Include(s => s.TrainingQueue)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
-    private async Task PersistIfSettledAsync(
-        SettlementEntity entity,
-        Settlement settled,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads every guest (<see cref="Bjarnoy.Domain.Armies.ArmyMission.Support"/>)
+    /// army currently hosted at <paramref name="settlementId"/> (issue #40
+    /// phase 4 §2) and settles the settlement against their pooled upkeep and
+    /// its terrain-bound producers' adjacency boost in one step —
+    /// <see cref="Settlement.SettleTo"/>'s <c>guestStacks</c> and
+    /// <c>terrainAt</c> parameters. Tracked (not <c>AsNoTracking</c>): a
+    /// starvation pass may need to write guest deaths back onto these same
+    /// entities — see <see cref="ApplyGuestDeaths"/>. Requires
+    /// <paramref name="entity"/>.World to already be loaded (every caller
+    /// checks this before calling in).
+    /// </summary>
+    private async Task<(Settlement Settled, SettleResult Result, List<ArmyEntity> GuestArmies)> SettleWithGuestsAsync(
+        SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
     {
-        if (settled.Resources.SettledAt == entity.SettledAt && settled.Queue.Count == entity.Queue.Count)
+        var guestArmies = await _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Where(a => a.IsSupporting && a.TargetSettlementId == entity.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var guestStacks = AggregateStacks(
+            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+
+        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, TerrainAt(entity.World!));
+        return (result.Settlement, result, guestArmies);
+    }
+
+    private static List<UnitStack> AggregateStacks(IEnumerable<UnitStack> stacks) =>
+        [.. stacks.GroupBy(s => s.Type).Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))];
+
+    /// <summary>
+    /// Splits <paramref name="guestDeaths"/> (pooled by type, from
+    /// <see cref="SettleResult.GuestDeaths"/>) across the actual guest
+    /// <paramref name="guestArmies"/> present and removes any left with no
+    /// stacks — <see cref="GuestArmyAllocation"/> does the split; this just
+    /// also deletes the now-empty rows, which that helper deliberately leaves
+    /// to the caller (its own remarks explain why).
+    /// </summary>
+    private void ApplyGuestDeaths(IReadOnlyList<ArmyEntity> guestArmies, IReadOnlyList<UnitStack> guestDeaths)
+    {
+        if (guestDeaths.Count == 0)
         {
             return;
         }
 
-        entity.ApplyDomain(settled);
+        GuestArmyAllocation.ApplyLosses(guestArmies, guestDeaths);
+
+        foreach (var army in guestArmies.Where(a => a.Stacks.Count == 0))
+        {
+            _dbContext.Armies.Remove(army);
+        }
+    }
+
+    private async Task PersistIfSettledAsync(
+        SettlementEntity entity,
+        SettleResult result,
+        List<ArmyEntity> guestArmies,
+        CancellationToken cancellationToken)
+    {
+        if (!result.Changed)
+        {
+            return;
+        }
+
+        entity.ApplyDomain(result.Settlement);
+        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

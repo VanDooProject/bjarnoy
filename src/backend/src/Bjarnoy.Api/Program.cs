@@ -34,8 +34,14 @@ builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<TradeService>();
+builder.Services.AddScoped<ArmyService>();
+builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<LeaderboardService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -112,6 +118,10 @@ if (migrationCommand == MigrationCommandKind.None)
     // trigger) — the migrator never serves requests, so it has no business
     // running this. See EndbossTriggerHostedService.
     builder.Services.AddHostedService<EndbossTriggerHostedService>();
+
+    // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
+    // migrator never serves requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<WeeklyAggregationHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
@@ -181,9 +191,15 @@ app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
 app.MapTradeEndpoints(versionSet);
+app.MapProfileEndpoints(versionSet);
+app.MapLeaderboardEndpoints(versionSet);
+app.MapArmyEndpoints(versionSet);
+app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
 app.MapAdminSettlementEndpoints(versionSet);
+app.MapChatEndpoints(versionSet);
+app.MapAdminReportEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot

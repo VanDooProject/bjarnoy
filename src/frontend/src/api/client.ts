@@ -4,16 +4,38 @@ import type {
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
+  ArmyResponse,
+  ArmySummary,
+  BattleReportResponse,
+  BuildingDefinitionResponse,
   CancelTradeOfferRequest,
   CreateWorldRequest,
+  DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
   IslandResponse,
+  LeaderboardBoardResponse,
+  LeaderboardCategory,
+  LeaderboardDirectoryResponse,
+  LeaderboardMeResponse,
+  LeaderboardScope,
+  WeeklyStatsPageResponse,
+  MarkReadResponse,
+  MessageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
+  PagedConversationsResponse,
+  PagedMessagesResponse,
+  PagedReportsResponse,
   PostTradeOfferRequest,
   ProblemDetails,
+  ProfileResponse,
   QueueBuildRequest,
+  ReportMessageRequest,
+  ReportProfileRequest,
+  ReportResponse,
+  ResolveReportRequest,
+  SendMessageRequest,
   SetBuildingLevelRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
@@ -22,7 +44,11 @@ import type {
   ShipmentResponse,
   TradeAcceptResponse,
   TradeOfferResponse,
+  TrainingOrderResponse,
+  TrainUnitsRequest,
+  UnitDefinitionResponse,
   UpdateAdminUserRequest,
+  UpdateBioRequest,
   UpdateWorldSettingsRequest,
   WorldResponse,
 } from './types';
@@ -123,6 +149,64 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
+    request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  sendMessage: (body: SendMessageRequest) =>
+    request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
+  listConversations: (params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedConversationsResponse>(`/messages/conversations${qs ? `?${qs}` : ''}`);
+  },
+  getConversation: (otherUserId: string, params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedMessagesResponse>(`/messages/conversations/${otherUserId}${qs ? `?${qs}` : ''}`);
+  },
+  markConversationRead: (otherUserId: string) =>
+    request<MarkReadResponse>(`/messages/conversations/${otherUserId}/read`, { method: 'POST' }),
+  reportMessage: (messageId: string, body: ReportMessageRequest) =>
+    request<ReportResponse>(`/messages/${messageId}/report`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
+  getProfileByName: (userName: string) =>
+    request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
+  updateMyBio: (body: UpdateBioRequest) =>
+    request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
+  reportProfile: (userId: string, body: ReportProfileRequest) =>
+    request<ReportResponse>(`/profiles/${userId}/reports`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListReports: (params?: { status?: string; sourceType?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.sourceType) query.set('sourceType', params.sourceType);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedReportsResponse>(`/admin/reports${qs ? `?${qs}` : ''}`);
+  },
+  adminResolveReport: (reportId: string, body: ResolveReportRequest) =>
+    request<ReportResponse>(`/admin/reports/${reportId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  // Public catalogue endpoint — no worldId, since the catalogue is currently
+  // the same static data for every world (see `BuildingCatalogue.cs`).
+  getBuildingCatalogue: () => request<BuildingDefinitionResponse[]>('/buildings'),
+  // Public catalogue endpoint, same reasoning as getBuildingCatalogue above —
+  // the unit roster (UnitCatalogue.cs) is static, not per-world data.
+  getUnitCatalogue: () => request<UnitDefinitionResponse[]>('/units'),
   adminListWorlds: () => request<AdminWorldResponse[]>('/admin/worlds'),
   adminUpdateWorldSettings: (worldId: string, body: UpdateWorldSettingsRequest) =>
     request<AdminWorldResponse>(`/admin/worlds/${worldId}/settings`, {
@@ -172,4 +256,60 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  getLeaderboardDirectory: (worldId: string) =>
+    request<LeaderboardDirectoryResponse>(`/worlds/${worldId}/leaderboards`),
+  getLeaderboardBoard: (
+    worldId: string,
+    scope: LeaderboardScope,
+    category: LeaderboardCategory,
+    params?: { periodStart?: string; afterRank?: number; pageSize?: number },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.periodStart) query.set('periodStart', params.periodStart);
+    if (params?.afterRank) query.set('afterRank', String(params.afterRank));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<LeaderboardBoardResponse>(
+      `/worlds/${worldId}/leaderboards/${scope}/${category}${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getWeeklyStats: (worldId: string, userId: string, params?: { cursor?: string; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.cursor) query.set('cursor', params.cursor);
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<WeeklyStatsPageResponse>(`/worlds/${worldId}/stats/users/${userId}/weekly${qs ? `?${qs}` : ''}`);
+  },
+  // Issue #40 phase 2: dispatching/tracking armies. Mirrors ArmyEndpoints.cs's
+  // routes exactly (`/settlements/{id}/armies`, `/armies/{id}`, `/armies/{id}/recall`).
+  dispatchArmy: (settlementId: string, body: DispatchArmyRequest) =>
+    request<ArmyResponse>(`/settlements/${settlementId}/armies`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getSettlementArmies: (settlementId: string) =>
+    request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
+  getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
+  recallArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST' }),
+  // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
+  // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
+  // latter is a flat newest-first list, not paged (BattleReportService has
+  // no pagination), so the reports store just holds it as-is.
+  getReport: (reportId: string) => request<BattleReportResponse>(`/reports/${reportId}`),
+  getSettlementReports: (settlementId: string) =>
+    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`),
+  getMyLeaderboardRank: (
+    worldId: string,
+    scope: LeaderboardScope,
+    category: LeaderboardCategory,
+    params?: { radius?: number; subjectId?: string },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.radius) query.set('radius', String(params.radius));
+    if (params?.subjectId) query.set('subjectId', params.subjectId);
+    const qs = query.toString();
+    return request<LeaderboardMeResponse>(
+      `/worlds/${worldId}/leaderboards/${scope}/${category}/me${qs ? `?${qs}` : ''}`,
+    );
+  },
 };

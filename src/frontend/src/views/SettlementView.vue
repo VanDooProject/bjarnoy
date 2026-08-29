@@ -8,8 +8,11 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
+import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
+import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
@@ -17,7 +20,7 @@ import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
-import type { HoverInfo } from '../lib/map/HexMapRenderer';
+import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -74,6 +77,36 @@ onUnmounted(() => {
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
 
+// Issue #40 phase 2: pushes armies/route/draft-waypoints into the renderer's
+// own overlay layer (HexMapRenderer.setArmyOverlay) whenever any of them
+// change, or as soon as the renderer itself becomes available — watching
+// both together (rather than assuming the renderer is already mounted the
+// first time this fires) covers the ordering race between the canvas
+// mounting and this store data arriving.
+const armyOverlayData = computed<ArmyOverlayData>(() => {
+  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+    id: a.id,
+    position: a.position,
+    selected: a.id === world.selectedArmyId,
+    returning: !!a.movement?.isReturning,
+  }));
+  const selected = world.armies.find((a) => a.id === world.selectedArmyId);
+  const route = selected?.movement
+    ? selected.movement.isReturning
+      ? selected.movement.returnPath
+      : selected.movement.path
+    : [];
+  const draftWaypoints = world.dispatchDraft?.route ?? [];
+  return { armies, route, draftWaypoints };
+});
+watch(
+  [() => canvasRef.value?.renderer, armyOverlayData],
+  ([renderer, data]) => {
+    renderer?.setArmyOverlay(data ?? null);
+  },
+  { immediate: true },
+);
+
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
@@ -92,6 +125,10 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
+// Issue #40 phase 1: a separate modal from BuildingModal (train has no
+// per-hex build/upgrade action, it lists the whole unit roster at once) —
+// see the ring's 'train' action below.
+const trainModalOpen = ref(false);
 
 const modalMine = computed(
   () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
@@ -104,15 +141,42 @@ const modalOwnerLabel = computed(() => {
   return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
 });
 
-// Ring menu state. `ringLevel` walks root -> build-categories -> a
-// category's building list, per the issue's "build (which opens another
+// Ring menu state. Each open level (root -> build-categories -> a
+// category's building list) is its own entry on `ringStack`, rendered as a
+// separate, wider RingMenu — concentric rings moving outward — rather than
+// one ring replacing another, per the issue's "build (which opens another
 // ring outside with available buildings on this spot, on grass it should
 // have multiple build categories/entries and real buildings in outer ring
 // each)".
 type RingLevel = 'root' | 'build-categories' | 'build-buildings';
-const ringLevel = ref<RingLevel>('root');
+interface OpenRing {
+  level: RingLevel;
+  category?: string;
+  // The angle (degrees) of the specific parent bubble that was hovered/
+  // clicked to open this ring — set only when this ring ends up with a
+  // single action. A lone bubble has no "spread evenly around the circle"
+  // to do, so instead of defaulting to due north it lines up on the same
+  // ray as whatever was just hovered, keeping the mouse travel short.
+  originAngle?: number;
+}
 const ringScreen = ref<{ x: number; y: number } | null>(null);
-const ringCategory = ref<string | null>(null);
+const ringStack = ref<OpenRing[]>([]);
+// Matches RingMenu's own default RADIUS — kept in sync there too. The root
+// ring only ever has 1-2 actions (see actionsForRing), so shrinking this
+// further doesn't risk crowding bubbles into each other the way an outer
+// 3-action ring would.
+const RING_BASE_RADIUS = 52;
+// Bigger than the previous pass (RingMenu's own default is 72px at scale
+// 1) — smaller bubbles were wrapping labels like "Watchtower" into an
+// awkward mid-word break. The radius/gap values here are pulled in tighter
+// to compensate, so the bigger bubbles don't just make the whole thing
+// bigger again.
+const RING_BUBBLE_SIZES = [72, 62, 54];
+// Gap between the outer edge of one ring's bubbles and the inner edge of
+// the next, rather than a flat centre-to-centre step — a flat step ignores
+// how much smaller the outer bubbles are, and ends up wasting space the
+// further out you go.
+const RING_GAP = 6;
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
@@ -128,10 +192,14 @@ watch(ringScreen, (screen) => {
 // mousedown just to start panning after dismissing the ring.
 function onRingOutsidePointerDown(e: PointerEvent) {
   closeRing();
-  canvasRef.value?.renderer?.beginDragFrom(e);
+  // suppressClick: this same gesture already closed the ring — a stationary
+  // release shouldn't also be treated as a map click that opens a new one
+  // (issue #16: "click somewhere else on the map should close the ring
+  // first", not close-and-immediately-reopen).
+  canvasRef.value?.renderer?.beginDragFrom(e, { suppressClick: true });
 }
 
-type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm';
+type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm' | 'lumberjack' | 'quarry';
 
 interface BuildCategory {
   id: string;
@@ -175,6 +243,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'farm', label: 'Farm' },
         { type: 'tower', label: 'Watchtower' },
         { type: 'fishinghut', label: 'Fishing Hut' },
+        { type: 'lumberjack', label: 'Lumberjack' },
+        { type: 'quarry', label: 'Quarry' },
       ],
     },
   ],
@@ -192,15 +262,12 @@ const isMineTile = computed(
 );
 const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
 
-const ringActions = computed<RingAction[]>(() => {
-  const tile = selectedTile.value;
-  if (!tile) return [];
-
-  if (ringLevel.value === 'build-categories') {
+function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
+  if (ring.level === 'build-categories') {
     return categoriesFor(tile).map((cat) => ({ id: cat.id, label: cat.label }));
   }
-  if (ringLevel.value === 'build-buildings') {
-    const category = categoriesFor(tile).find((c) => c.id === ringCategory.value);
+  if (ring.level === 'build-buildings') {
+    const category = categoriesFor(tile).find((c) => c.id === ring.category);
     return (category?.buildings ?? []).map((b) => ({ id: b.type, label: b.label }));
   }
 
@@ -237,10 +304,13 @@ const ringActions = computed<RingAction[]>(() => {
       },
       { id: 'details', label: 'Details' },
     ];
-    // Building-specific actions (train/research): none of today's building
-    // types (hut/farm/tower/longhouse) expose one yet, so nothing is added
-    // here — the branch exists so a future barracks/academy building type
-    // has somewhere to plug in without restructuring the ring.
+    // Issue #40 phase 1: "build units in longhouse" — the longhouse is
+    // where training happens per the backend design (UnitDefinition's
+    // RequiredLonghouseLevel, TrainingOrder queued against the settlement),
+    // so it's the one building type that gets an extra ring action here.
+    if (tile.buildingType === 'longhouse') {
+      actions.push({ id: 'train', label: 'Train units' });
+    }
     return actions;
   }
   if (isMineTile.value) {
@@ -250,29 +320,102 @@ const ringActions = computed<RingAction[]>(() => {
     ];
   }
   return [{ id: 'details', label: 'Details' }];
+}
+
+const ringsToRender = computed(() => {
+  const tile = selectedTile.value;
+  if (!tile) return [];
+
+  // Ring 0's actual on-screen radius is bigger than RING_BASE_RADIUS when
+  // it's carrying the "upgrade" badge (see RingMenu's own effectiveRadius)
+  // — later rings' gap math needs to start from that real edge, not the
+  // bare base radius, or ring 1 would crowd the badge.
+  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 20 : 0);
+  let radius = ring0Effective;
+  let angleOffset = 0;
+
+  return ringStack.value.map((ring, i) => {
+    const actions = actionsForRing(tile, ring);
+    const bubbleSize = RING_BUBBLE_SIZES[Math.min(i, RING_BUBBLE_SIZES.length - 1)];
+    if (i > 0) {
+      const prevBubbleSize = RING_BUBBLE_SIZES[Math.min(i - 1, RING_BUBBLE_SIZES.length - 1)];
+      radius += prevBubbleSize / 2 + RING_GAP + bubbleSize / 2;
+    }
+    // A ring with exactly one action has nothing to "spread evenly" — snap
+    // it onto the same ray as whichever parent bubble was hovered/clicked
+    // to open it (see `originAngle`/`nextRingFrom`) rather than defaulting
+    // to due north, so the pointer barely has to move to reach it.
+    const thisAngleOffset =
+      actions.length === 1 && ring.originAngle !== undefined ? ring.originAngle + 90 : angleOffset;
+    const entry = {
+      ring,
+      actions,
+      radius: i === 0 ? RING_BASE_RADIUS : radius,
+      angleOffset: thisAngleOffset,
+      bubbleScale: bubbleSize / RING_BUBBLE_SIZES[0],
+      depth: i,
+    };
+    // Stagger the next ring by half of *this* ring's own angular spacing,
+    // so its bubbles land in the gaps between this ring's bubbles instead
+    // of lining up radially with them (a "bullseye" look otherwise).
+    angleOffset += 180 / Math.max(1, actions.length);
+    return entry;
+  });
 });
+
+// Mirrors RingMenu's own positioning formula (minus radius) so a parent
+// bubble's on-screen angle can be computed here, without RingMenu having to
+// report it back up. Keep in sync with RingMenu.vue's `positioned` computed.
+function angleForIndex(n: number, index: number, hasBadge: boolean, ringAngleOffset: number): number {
+  const angleStep = 360 / Math.max(1, n);
+  const rotationOffset = (n === 4 ? 45 : hasBadge ? -90 + angleStep / 2 : -90) + ringAngleOffset;
+  return angleStep * index + rotationOffset;
+}
+
+// Builds the next ring to push onto the stack, carrying the hovered/
+// clicked parent bubble's angle along so a single-action child ring (see
+// `originAngle` above) can align to it instead of defaulting to north.
+function nextRingFrom(i: number, id: string, level: RingLevel, category?: string): OpenRing {
+  const parent = ringsToRender.value[i];
+  const idx = parent.actions.findIndex((a) => a.id === id);
+  const hasBadge = i === 0 && !!ringBadge.value;
+  const originAngle = idx >= 0 ? angleForIndex(parent.actions.length, idx, hasBadge, parent.angleOffset) : undefined;
+  return { level, category, originAngle };
+}
+
+// The badge belongs to the root ring, which is always the innermost ring
+// (index 0) for as long as any ring is open — it doesn't get replaced when
+// drilling into build-categories/build-buildings, so this doesn't need to
+// track which ring is currently "on top".
+const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
 
 const ringBadge = computed(() => {
   const tile = selectedTile.value;
-  if (ringLevel.value !== 'root' || !isMineTile.value || !tile?.buildingType) return undefined;
+  if (!isMineTile.value || !tile?.buildingType) return undefined;
   return { id: 'upgrade', label: `Lv ${tile.buildingLevel ?? 1}`, sublabel: 'upgrade' };
 });
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+  // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
+  // "Dispatch army" flow), a click plots the next waypoint instead of
+  // opening the usual ring menu — the two interaction modes are mutually
+  // exclusive on this same canvas, per the design doc.
+  if (world.dispatchDraft) {
+    world.addWaypoint(coord);
+    return;
+  }
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
   ringScreen.value = screen;
-  ringLevel.value = 'root';
-  ringCategory.value = null;
+  ringStack.value = [{ level: 'root' }];
 }
 
 function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
   ringScreen.value = null;
-  ringLevel.value = 'root';
-  ringCategory.value = null;
+  ringStack.value = [];
 }
 
 // Issue #16 "build (which opens another ring outside with available
@@ -281,27 +424,32 @@ function closeRing() {
 // "build" action, and picking a category) advance the ring; every other
 // action (info/details/upgrade/raze/attack/the final building choice) still
 // needs an actual click, since those either mutate state or are terminal.
-function onRingHover(id: string) {
-  if (ringLevel.value === 'root' && id === 'build') {
-    ringLevel.value = 'build-categories';
+// Hovering pushes a new, wider ring onto the stack (concentric rings moving
+// outward) rather than replacing the current one — but only from the
+// outermost/most-recently-opened ring: hovering an inner ring's bubble
+// again (it's still visible and clickable) shouldn't push a duplicate.
+function onRingHover(i: number, id: string) {
+  if (i !== ringStack.value.length - 1) return;
+  const top = ringStack.value[i];
+  if (top.level === 'root' && id === 'build') {
+    ringStack.value = [...ringStack.value, nextRingFrom(i, id, 'build-categories')];
     return;
   }
-  if (ringLevel.value === 'build-categories') {
+  if (top.level === 'build-categories') {
     const category = categoriesFor(selectedTile.value!).find((c) => c.id === id);
     if (category) {
-      ringCategory.value = id;
-      ringLevel.value = 'build-buildings';
+      ringStack.value = [...ringStack.value, nextRingFrom(i, id, 'build-buildings', id)];
     }
   }
 }
 
-async function onRingSelect(id: string) {
-  if (ringLevel.value === 'build-categories') {
-    ringCategory.value = id;
-    ringLevel.value = 'build-buildings';
+async function onRingSelect(i: number, id: string) {
+  const ring = ringStack.value[i];
+  if (ring.level === 'build-categories') {
+    ringStack.value = [...ringStack.value.slice(0, i + 1), nextRingFrom(i, id, 'build-buildings', id)];
     return;
   }
-  if (ringLevel.value === 'build-buildings') {
+  if (ring.level === 'build-buildings') {
     await buildType(id as BuildableType);
     closeRing();
     return;
@@ -314,11 +462,17 @@ async function onRingSelect(id: string) {
       ringScreen.value = null;
       return;
     case 'build':
-      ringLevel.value = 'build-categories';
+      ringStack.value = [...ringStack.value.slice(0, i + 1), nextRingFrom(i, id, 'build-categories')];
       return;
     case 'upgrade':
       await upgrade();
       closeRing();
+      return;
+    case 'train':
+      // Falls through to TrainingModal below, same pattern as
+      // 'details'/'info' handing off to BuildingModal.
+      ringScreen.value = null;
+      trainModalOpen.value = true;
       return;
     case 'raze':
       if (world.selectedSettlementId && selectedCoord.value) {
@@ -334,6 +488,11 @@ async function onRingSelect(id: string) {
 function closeModal() {
   closeRing();
   modalBusy.value = false;
+}
+
+function closeTrainModal() {
+  closeRing();
+  trainModalOpen.value = false;
 }
 
 // Demo mode places the chosen building instantly; live mode queues that
@@ -405,26 +564,36 @@ async function upgrade() {
          of what's under them. -->
     <div class="hud-scrim" />
     <TopBar>
-      <ResourceBar />
+      <ResourceBar :ring-open="ringOpen" />
       <HudNav />
     </TopBar>
-    <RealmPanel />
+    <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
     <TradePanel />
+    <TrainingQueuePanel />
+    <ArmyPanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-    <RingMenu
-      v-if="selectedTile && ringScreen"
-      :x="ringScreen.x"
-      :y="ringScreen.y"
-      :actions="ringActions"
-      :badge-action="ringBadge"
-      @select="onRingSelect"
-      @hover="onRingHover"
-      @close="closeRing"
-      @outside-pointer-down="onRingOutsidePointerDown"
-    />
+    <template v-if="selectedTile && ringScreen">
+      <RingMenu
+        v-for="(entry, i) in ringsToRender"
+        :key="`${entry.ring.level}-${i}`"
+        :x="ringScreen.x"
+        :y="ringScreen.y"
+        :radius="entry.radius"
+        :backdrop="i === 0"
+        :angle-offset="entry.angleOffset"
+        :bubble-scale="entry.bubbleScale"
+        :depth="entry.depth"
+        :actions="entry.actions"
+        :badge-action="i === 0 ? ringBadge : undefined"
+        @select="(id: string) => onRingSelect(i, id)"
+        @hover="(id: string) => onRingHover(i, id)"
+        @close="closeRing"
+        @outside-pointer-down="onRingOutsidePointerDown"
+      />
+    </template>
     <BuildingModal
-      v-if="selectedTile && !ringScreen"
+      v-if="selectedTile && !ringScreen && !trainModalOpen"
       :tile="selectedTile"
       :mine="modalMine"
       :owner-label="modalOwnerLabel"
@@ -432,6 +601,11 @@ async function upgrade() {
       @close="closeModal"
       @build="build"
       @upgrade="upgrade"
+    />
+    <TrainingModal
+      v-if="selectedTile && trainModalOpen"
+      @close="closeTrainModal"
+      @trained="closeTrainModal"
     />
   </div>
 </template>
