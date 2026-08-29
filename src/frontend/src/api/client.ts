@@ -9,14 +9,20 @@ import type {
   IslandResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
+  PagedProfileReportsResponse,
   ProblemDetails,
+  ProfileReportResponse,
+  ProfileResponse,
   QueueBuildRequest,
+  ReportProfileRequest,
+  ResolveProfileReportRequest,
   SetBuildingLevelRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
   UpdateAdminUserRequest,
+  UpdateBioRequest,
   UpdateWorldSettingsRequest,
   WorldResponse,
 } from './types';
@@ -93,6 +99,29 @@ export const api = {
     request<SettlementResponse>(`/settlements/${settlementId}`),
   queueBuild: (settlementId: string, body: QueueBuildRequest) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
+  getProfileByName: (userName: string) =>
+    request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
+  updateMyBio: (body: UpdateBioRequest) =>
+    request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
+  reportProfile: (userId: string, body: ReportProfileRequest) =>
+    request<ProfileReportResponse>(`/profiles/${userId}/reports`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListProfileReports: (params?: { status?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedProfileReportsResponse>(`/admin/profile-reports${qs ? `?${qs}` : ''}`);
+  },
+  adminResolveProfileReport: (reportId: string, body: ResolveProfileReportRequest) =>
+    request<ProfileReportResponse>(`/admin/profile-reports/${reportId}/resolve`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
