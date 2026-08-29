@@ -15,17 +15,11 @@ public enum ReportMessageOutcome
 {
     Success,
 
-    /// <summary>Already open/resolved for this reporter — the existing report is returned instead.</summary>
+    /// <summary>This reporter already has a Pending report against the same message — the existing report is returned instead.</summary>
     AlreadyReported,
 
     /// <summary>No such message, or the caller is neither its sender nor its recipient.</summary>
     MessageNotVisible,
-}
-
-public enum ResolveReportOutcome
-{
-    Success,
-    NotFound,
 }
 
 public sealed record ConversationSummary(
@@ -33,19 +27,20 @@ public sealed record ConversationSummary(
 
 public sealed record MessagesPage(IReadOnlyList<MessageEntity> Messages, int TotalCount);
 
-public sealed record ReportsPage(IReadOnlyList<ReportEntity> Reports, int TotalCount);
-
 /// <summary>
 /// Player-to-player direct messages, reports on them, and the guild-scoped
 /// read-receipt visibility rule — issue #41. A message is delivered as one
 /// <see cref="MessageEntity"/> plus one <see cref="MessageRecipientEntity"/>
 /// per recipient (a single row for a DM today); that row's
 /// <see cref="MessageRecipientEntity.ReadAt"/> doubles as the read receipt.
+/// Reporting a message records it on the shared <see cref="ReportService"/>
+/// queue rather than a chat-only one — see that type.
 /// </summary>
-public sealed class ChatService(GameDbContext dbContext, TimeProvider timeProvider)
+public sealed class ChatService(GameDbContext dbContext, TimeProvider timeProvider, ReportService reportService)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly ReportService _reportService = reportService;
 
     /// <summary>
     /// Whether <paramref name="senderId"/> is allowed to see when
@@ -236,88 +231,18 @@ public sealed class ChatService(GameDbContext dbContext, TimeProvider timeProvid
             return (ReportMessageOutcome.MessageNotVisible, null);
         }
 
-        var existing = await _dbContext.Reports
-            .Include(r => r.Reporter)
-            .FirstOrDefaultAsync(
-                r => r.ReporterUserId == reporterId
-                    && r.SourceType == ReportSourceType.ChatMessage
-                    && r.SourceId == messageId,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (existing is not null)
-        {
-            return (ReportMessageOutcome.AlreadyReported, existing);
-        }
+        var (outcome, report) = await _reportService.CreateAsync(
+            reporterId,
+            message!.SenderUserId,
+            ReportSourceType.ChatMessage,
+            messageId,
+            contextSnapshot: $"{message.Sender?.UserName ?? message.SenderUserId.ToString()}: {message.Body}",
+            reason,
+            note: null,
+            cancellationToken).ConfigureAwait(false);
 
-        var reporter = await _dbContext.Users
-            .FirstAsync(u => u.Id == reporterId, cancellationToken)
-            .ConfigureAwait(false);
-
-        var report = new ReportEntity
-        {
-            ReporterUserId = reporterId,
-            Reporter = reporter,
-            SourceType = ReportSourceType.ChatMessage,
-            SourceId = messageId,
-            ContextSnapshot = $"{message!.Sender?.UserName ?? message.SenderUserId.ToString()}: {message.Body}",
-            Reason = reason,
-            CreatedAt = _timeProvider.GetUtcNow(),
-        };
-
-        _dbContext.Reports.Add(report);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-        return (ReportMessageOutcome.Success, report);
-    }
-
-    public async Task<ReportsPage> GetReportsAsync(
-        ReportStatus? status, ReportSourceType? sourceType, int page, int pageSize,
-        CancellationToken cancellationToken = default)
-    {
-        var query = _dbContext.Reports.AsNoTracking().Include(r => r.Reporter).AsQueryable();
-
-        if (status is { } statusFilter)
-        {
-            query = query.Where(r => r.Status == statusFilter);
-        }
-
-        if (sourceType is { } sourceTypeFilter)
-        {
-            query = query.Where(r => r.SourceType == sourceTypeFilter);
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken).ConfigureAwait(false);
-
-        var reports = await query
-            .OrderBy(r => r.Status)
-            .ThenBy(r => r.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        return new ReportsPage(reports, totalCount);
-    }
-
-    public async Task<(ResolveReportOutcome Outcome, ReportEntity? Report)> ResolveReportAsync(
-        Guid reportId, Guid adminUserId, ReportStatus outcome, string? note,
-        CancellationToken cancellationToken = default)
-    {
-        var report = await _dbContext.Reports
-            .Include(r => r.Reporter)
-            .FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken)
-            .ConfigureAwait(false);
-        if (report is null)
-        {
-            return (ResolveReportOutcome.NotFound, null);
-        }
-
-        report.Status = outcome;
-        report.ResolvedByUserId = adminUserId;
-        report.ResolvedAt = _timeProvider.GetUtcNow();
-        report.ResolutionNote = note;
-
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return (ResolveReportOutcome.Success, report);
+        return (outcome == CreateReportOutcome.AlreadyPending
+            ? ReportMessageOutcome.AlreadyReported
+            : ReportMessageOutcome.Success, report);
     }
 }

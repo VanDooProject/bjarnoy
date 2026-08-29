@@ -6,11 +6,14 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     /// <inheritdoc />
-    public partial class AddChatAndReports : Migration
+    public partial class AddChatAndUnifiedReports : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "profile_reports");
+
             migrationBuilder.AddColumn<Guid>(
                 name: "GuildId",
                 table: "users",
@@ -43,10 +46,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
                     ReporterUserId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ReportedUserId = table.Column<Guid>(type: "TEXT", nullable: false),
                     SourceType = table.Column<int>(type: "INTEGER", nullable: false),
                     SourceId = table.Column<Guid>(type: "TEXT", nullable: false),
                     ContextSnapshot = table.Column<string>(type: "TEXT", maxLength: 2200, nullable: false),
                     Reason = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
+                    Note = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     Status = table.Column<int>(type: "INTEGER", nullable: false),
                     ResolvedByUserId = table.Column<Guid>(type: "TEXT", nullable: true),
@@ -56,6 +61,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_reports", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_reports_users_ReportedUserId",
+                        column: x => x.ReportedUserId,
+                        principalTable: "users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_reports_users_ReporterUserId",
                         column: x => x.ReporterUserId,
@@ -144,10 +155,14 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 column: "SenderUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_reports_ReportedUserId",
+                table: "reports",
+                column: "ReportedUserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_reports_ReporterUserId_SourceType_SourceId",
                 table: "reports",
-                columns: new[] { "ReporterUserId", "SourceType", "SourceId" },
-                unique: true);
+                columns: new[] { "ReporterUserId", "SourceType", "SourceId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_reports_ResolvedByUserId",
@@ -179,6 +194,52 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             migrationBuilder.DropColumn(
                 name: "GuildId",
                 table: "users");
+
+            migrationBuilder.CreateTable(
+                name: "profile_reports",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ReportedUserId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ReporterUserId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
+                    Note = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
+                    Reason = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    ReviewedAt = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
+                    ReviewedByUserId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    Status = table.Column<int>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_profile_reports", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_profile_reports_users_ReportedUserId",
+                        column: x => x.ReportedUserId,
+                        principalTable: "users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_profile_reports_users_ReporterUserId",
+                        column: x => x.ReporterUserId,
+                        principalTable: "users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_profile_reports_ReportedUserId",
+                table: "profile_reports",
+                column: "ReportedUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_profile_reports_ReporterUserId_ReportedUserId",
+                table: "profile_reports",
+                columns: new[] { "ReporterUserId", "ReportedUserId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_profile_reports_Status",
+                table: "profile_reports",
+                column: "Status");
         }
     }
 }

@@ -202,7 +202,7 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
             $"/api/v1/profiles/{reportedId}/reports",
             new ReportProfileRequest("Offensive bio", "The ASCII art is rude."), Ct);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var report = await created.ReadStrictAsync<ProfileReportResponse>(Ct);
+        var report = await created.ReadStrictAsync<ReportResponse>(Ct);
         Assert.Equal(reporterId, report.ReporterUserId);
         Assert.Equal(reportedId, report.ReportedUserId);
         Assert.Equal("Offensive bio", report.Reason);
@@ -241,14 +241,14 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
     public async Task Anonymous_and_player_callers_are_refused_the_admin_reports_surface()
     {
         using var anonymous = _fixture.CreateClient();
-        var anonymousResponse = await anonymous.GetAsync("/api/v1/admin/profile-reports", Ct);
+        var anonymousResponse = await anonymous.GetAsync("/api/v1/admin/reports", Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
 
         using var player = _fixture.CreateClient();
         var (_, playerToken, _) = await CreatePlayerAsync(player);
         Authorize(player, playerToken);
 
-        var playerResponse = await player.GetAsync("/api/v1/admin/profile-reports", Ct);
+        var playerResponse = await player.GetAsync("/api/v1/admin/reports", Ct);
         Assert.Equal(HttpStatusCode.Forbidden, playerResponse.StatusCode);
     }
 
@@ -263,40 +263,40 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
         var created = await client.PostJsonAsync(
             $"/api/v1/profiles/{reportedId}/reports", new ReportProfileRequest("Offensive bio"), Ct);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var report = await created.ReadStrictAsync<ProfileReportResponse>(Ct);
+        var report = await created.ReadStrictAsync<ReportResponse>(Ct);
 
         var (adminToken, _) = await CreateAdminAsync(client);
         Authorize(client, adminToken);
 
-        var listResponse = await client.GetAsync("/api/v1/admin/profile-reports?status=pending", Ct);
+        var listResponse = await client.GetAsync("/api/v1/admin/reports?status=pending", Ct);
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var listed = await listResponse.ReadStrictAsync<PagedProfileReportsResponse>(Ct);
+        var listed = await listResponse.ReadStrictAsync<PagedReportsResponse>(Ct);
         var listedReport = Assert.Single(listed.Items, r => r.Id == report.Id);
         Assert.Equal(reporterName, listedReport.ReporterUserName);
         Assert.Equal(reportedName, listedReport.ReportedUserName);
-        Assert.Null(listedReport.ReviewedAt);
+        Assert.Null(listedReport.ResolvedAt);
 
         var resolveResponse = await client.PostJsonAsync(
-            $"/api/v1/admin/profile-reports/{report.Id}/resolve",
-            new ResolveProfileReportRequest("dismissed"), Ct);
+            $"/api/v1/admin/reports/{report.Id}/resolve",
+            new ResolveReportRequest("dismissed"), Ct);
         Assert.Equal(HttpStatusCode.OK, resolveResponse.StatusCode);
-        var resolved = await resolveResponse.ReadStrictAsync<ProfileReportResponse>(Ct);
+        var resolved = await resolveResponse.ReadStrictAsync<ReportResponse>(Ct);
         Assert.Equal("dismissed", resolved.Status);
-        Assert.NotNull(resolved.ReviewedAt);
+        Assert.NotNull(resolved.ResolvedAt);
 
         // Resolved, it drops out of the pending queue.
-        var pendingAfter = await client.GetAsync("/api/v1/admin/profile-reports?status=pending", Ct);
-        var pendingItems = await pendingAfter.ReadStrictAsync<PagedProfileReportsResponse>(Ct);
+        var pendingAfter = await client.GetAsync("/api/v1/admin/reports?status=pending", Ct);
+        var pendingItems = await pendingAfter.ReadStrictAsync<PagedReportsResponse>(Ct);
         Assert.DoesNotContain(pendingItems.Items, r => r.Id == report.Id);
 
         // An unknown status string and an unknown report id are refused.
         var badStatus = await client.PostJsonAsync(
-            $"/api/v1/admin/profile-reports/{report.Id}/resolve", new ResolveProfileReportRequest("nuked"), Ct);
+            $"/api/v1/admin/reports/{report.Id}/resolve", new ResolveReportRequest("nuked"), Ct);
         Assert.Equal(HttpStatusCode.BadRequest, badStatus.StatusCode);
 
         var missing = await client.PostJsonAsync(
-            $"/api/v1/admin/profile-reports/{Guid.CreateVersion7()}/resolve",
-            new ResolveProfileReportRequest("reviewed"), Ct);
+            $"/api/v1/admin/reports/{Guid.CreateVersion7()}/resolve",
+            new ResolveReportRequest("resolved"), Ct);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 }

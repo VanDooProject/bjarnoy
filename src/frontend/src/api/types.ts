@@ -303,30 +303,41 @@ export interface ReportProfileRequest {
   note?: string | null;
 }
 
-export interface ProfileReportResponse {
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs — the
+// generic moderation queue behind both chat message reports and profile
+// reports (previously a separate ProfileReportResponse/profile_reports
+// system, unified onto this one queue).
+
+export interface ReportResponse {
   id: string;
   reporterUserId: string;
   reporterUserName: string;
   reportedUserId: string;
   reportedUserName: string;
+  /** One of `chatMessage`, `profileBio`. */
+  sourceType: string;
+  sourceId: string;
+  contextSnapshot: string;
   reason: string;
   note: string | null;
-  /** One of `pending`, `reviewed`, `dismissed`, `actioned`. */
-  status: string;
   createdAt: string;
-  reviewedAt: string | null;
+  /** One of `pending`, `resolved`, `dismissed`, `actioned`. */
+  status: string;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
 }
 
-export interface PagedProfileReportsResponse {
-  items: ProfileReportResponse[];
+export interface PagedReportsResponse {
+  items: ReportResponse[];
   totalCount: number;
   page: number;
   pageSize: number;
 }
 
-/** `status`: one of `pending`, `reviewed`, `dismissed`, `actioned`. */
-export interface ResolveProfileReportRequest {
-  status: string;
+/** `outcome`: one of `resolved`, `dismissed`, `actioned`. */
+export interface ResolveReportRequest {
+  outcome: string;
+  note?: string | null;
 }
 
 export interface ProblemDetails {

@@ -200,7 +200,7 @@ public sealed class ChatEndpointsTests(SqliteApiFixture fixture) : IClassFixture
         Assert.Equal(HttpStatusCode.Created, reported.StatusCode);
         var report = await reported.ReadStrictAsync<ReportResponse>(Ct);
         Assert.Equal("chatMessage", report.SourceType);
-        Assert.Equal("open", report.Status);
+        Assert.Equal("pending", report.Status);
         Assert.Contains("insult", report.ContextSnapshot);
 
         // Reporting the same message again is idempotent.
@@ -216,7 +216,7 @@ public sealed class ChatEndpointsTests(SqliteApiFixture fixture) : IClassFixture
         var forbidden = await recipientClient.GetAsync("/api/v1/admin/reports", Ct);
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-        var listed = await adminClient.GetAsync("/api/v1/admin/reports?status=open", Ct);
+        var listed = await adminClient.GetAsync("/api/v1/admin/reports?status=pending", Ct);
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
         var page = await listed.ReadStrictAsync<PagedReportsResponse>(Ct);
         Assert.Single(page.Items, r => r.Id == report.Id);

@@ -58,14 +58,18 @@ public sealed record MarkReadResponse(int MarkedRead);
 
 public sealed record ReportMessageRequest([property: Required, MinLength(1), MaxLength(500)] string Reason);
 
+/// <param name="Status">One of <c>pending</c>, <c>resolved</c>, <c>dismissed</c>, <c>actioned</c>.</param>
 public sealed record ReportResponse(
     Guid Id,
     Guid ReporterUserId,
     string ReporterUserName,
+    Guid ReportedUserId,
+    string ReportedUserName,
     string SourceType,
     Guid SourceId,
     string ContextSnapshot,
     string Reason,
+    string? Note,
     DateTimeOffset CreatedAt,
     string Status,
     DateTimeOffset? ResolvedAt,
@@ -75,15 +79,19 @@ public sealed record ReportResponse(
     {
         ArgumentNullException.ThrowIfNull(report);
         ArgumentNullException.ThrowIfNull(report.Reporter);
+        ArgumentNullException.ThrowIfNull(report.ReportedUser);
 
         return new ReportResponse(
             report.Id,
             report.ReporterUserId,
             report.Reporter.UserName,
+            report.ReportedUserId,
+            report.ReportedUser.UserName,
             ToWireName(report.SourceType),
             report.SourceId,
             report.ContextSnapshot,
             report.Reason,
+            report.Note,
             report.CreatedAt,
             report.Status.ToString().ToLowerInvariant(),
             report.ResolvedAt,
@@ -102,4 +110,4 @@ public sealed record PagedReportsResponse(IReadOnlyList<ReportResponse> Items, i
 
 public sealed record ResolveReportRequest(
     [property: Required] string Outcome,
-    [property: MaxLength(500)] string? Note);
+    [property: MaxLength(500)] string? Note = null);

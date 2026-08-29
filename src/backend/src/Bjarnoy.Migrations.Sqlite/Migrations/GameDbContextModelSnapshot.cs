@@ -406,6 +406,55 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("leaderboard_watermarks", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.MessageEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SenderUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.ToTable("messages", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.MessageRecipientEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId", "RecipientUserId")
+                        .IsUnique();
+
+                    b.HasIndex("RecipientUserId", "MessageId");
+
+                    b.HasIndex("RecipientUserId", "ReadAt");
+
+                    b.ToTable("message_recipients", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -432,49 +481,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.ToTable("placed_buildings", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ProfileReportEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ReportedUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ReporterUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReportedUserId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("ReporterUserId", "ReportedUserId");
-
-                    b.ToTable("profile_reports", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
@@ -507,6 +513,66 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("refresh_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ReportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContextSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(2200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ReportedUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ReporterUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportedUserId");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("Status", "Id");
+
+                    b.HasIndex("ReporterUserId", "SourceType", "SourceId");
+
+                    b.ToTable("reports", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
@@ -666,6 +732,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("GuildId")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsPremium")
                         .HasColumnType("INTEGER");
 
@@ -703,6 +772,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("GuildId");
 
                     b.HasIndex("NormalizedUserName")
                         .IsUnique();
@@ -973,6 +1044,36 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("World");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.MessageEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Sender");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.MessageRecipientEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.MessageEntity", "Message")
+                        .WithMany("Recipients")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Message");
+
+                    b.Navigation("Recipient");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -984,7 +1085,18 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ProfileReportEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ReportEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "ReportedUser")
                         .WithMany()
@@ -998,20 +1110,16 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "ResolvedBy")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("ReportedUser");
 
                     b.Navigation("Reporter");
-                });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
-                        .WithMany("RefreshTokens")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
+                    b.Navigation("ResolvedBy");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
@@ -1097,6 +1205,11 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardSnapshotEntity", b =>
                 {
                     b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.MessageEntity", b =>
+                {
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>

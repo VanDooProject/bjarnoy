@@ -16,13 +16,13 @@ import type {
   WeeklyStatsPageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
-  PagedProfileReportsResponse,
+  PagedReportsResponse,
   ProblemDetails,
-  ProfileReportResponse,
   ProfileResponse,
   QueueBuildRequest,
   ReportProfileRequest,
-  ResolveProfileReportRequest,
+  ReportResponse,
+  ResolveReportRequest,
   SetBuildingLevelRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
@@ -115,20 +115,21 @@ export const api = {
   updateMyBio: (body: UpdateBioRequest) =>
     request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
   reportProfile: (userId: string, body: ReportProfileRequest) =>
-    request<ProfileReportResponse>(`/profiles/${userId}/reports`, {
+    request<ReportResponse>(`/profiles/${userId}/reports`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  adminListProfileReports: (params?: { status?: string; page?: number; pageSize?: number }) => {
+  adminListReports: (params?: { status?: string; sourceType?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.status) query.set('status', params.status);
+    if (params?.sourceType) query.set('sourceType', params.sourceType);
     if (params?.page) query.set('page', String(params.page));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
-    return request<PagedProfileReportsResponse>(`/admin/profile-reports${qs ? `?${qs}` : ''}`);
+    return request<PagedReportsResponse>(`/admin/reports${qs ? `?${qs}` : ''}`);
   },
-  adminResolveProfileReport: (reportId: string, body: ResolveProfileReportRequest) =>
-    request<ProfileReportResponse>(`/admin/profile-reports/${reportId}/resolve`, {
+  adminResolveReport: (reportId: string, body: ResolveReportRequest) =>
+    request<ReportResponse>(`/admin/reports/${reportId}/resolve`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

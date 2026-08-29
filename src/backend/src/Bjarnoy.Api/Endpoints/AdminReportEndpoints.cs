@@ -9,11 +9,12 @@ using Microsoft.AspNetCore.Http.HttpResults;
 namespace Bjarnoy.Api.Endpoints;
 
 /// <summary>
-/// Admin-only moderation queue over <see cref="ReportEntity"/> — issue #41.
-/// Deliberately generic over <see cref="ReportSourceType"/>, even though chat
-/// messages are the only source implemented today, so a future report source
-/// lands in this same queue rather than a parallel one. Acting on the
-/// reported *user* (lock/ban) stays on the existing
+/// Admin-only moderation queue over <see cref="ReportEntity"/> — one queue
+/// for both chat message reports (issue #41) and profile reports (issue
+/// #42, previously a separate <c>AdminProfileReportEndpoints</c>/
+/// <c>profile_reports</c> table), generic over <see cref="ReportSourceType"/>
+/// so a future report source lands here too rather than in a parallel one.
+/// Acting on the reported *user* (lock/ban) stays on the existing
 /// <c>POST /api/v1/admin/users/{id}/status</c> — not duplicated here.
 /// </summary>
 public static class AdminReportEndpoints
@@ -27,7 +28,7 @@ public static class AdminReportEndpoints
         var reports = app.MapGroup("/api/v1/admin/reports")
             .WithApiVersionSet(versionSet)
             .HasApiVersion(new ApiVersion(1, 0))
-            .WithTags("Admin", "Chat")
+            .WithTags("Admin", "Chat", "Profiles")
             .RequireAuthorization("Admin");
 
         reports.MapGet("/", ListReports)
@@ -36,7 +37,7 @@ public static class AdminReportEndpoints
 
         reports.MapPost("/{reportId:guid}/resolve", Resolve)
             .WithName("AdminResolveReport")
-            .WithSummary("Marks a report resolved or dismissed.");
+            .WithSummary("Marks a report resolved, dismissed, or actioned.");
 
         return app;
     }
@@ -46,7 +47,7 @@ public static class AdminReportEndpoints
         string? sourceType,
         int? page,
         int? pageSize,
-        ChatService chat,
+        ReportService reports,
         CancellationToken cancellationToken)
     {
         ReportStatus? statusFilter = null;
@@ -56,7 +57,7 @@ public static class AdminReportEndpoints
             {
                 return TypedResults.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    [nameof(status)] = ["Valid: open, resolved, dismissed."],
+                    [nameof(status)] = ["Valid: pending, resolved, dismissed, actioned."],
                 });
             }
 
@@ -70,7 +71,7 @@ public static class AdminReportEndpoints
             {
                 return TypedResults.ValidationProblem(new Dictionary<string, string[]>
                 {
-                    [nameof(sourceType)] = ["Valid: chatMessage."],
+                    [nameof(sourceType)] = ["Valid: chatMessage, profileBio."],
                 });
             }
 
@@ -80,7 +81,7 @@ public static class AdminReportEndpoints
         var effectivePage = page is > 0 ? page.Value : 1;
         var effectivePageSize = pageSize is > 0 and <= 200 ? pageSize.Value : 25;
 
-        var result = await chat.GetReportsAsync(
+        var result = await reports.GetReportsAsync(
             statusFilter, sourceTypeFilter, effectivePage, effectivePageSize, cancellationToken);
 
         var items = result.Reports.Select(ReportResponse.From).ToList();
@@ -91,17 +92,17 @@ public static class AdminReportEndpoints
         Guid reportId,
         ResolveReportRequest request,
         ClaimsPrincipal principal,
-        ChatService chat,
+        ReportService reports,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         if (!Enum.TryParse<ReportStatus>(request.Outcome, ignoreCase: true, out var outcome)
-            || outcome == ReportStatus.Open)
+            || outcome == ReportStatus.Pending)
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
-                [nameof(request.Outcome)] = ["Valid: resolved, dismissed."],
+                [nameof(request.Outcome)] = ["Valid: resolved, dismissed, actioned."],
             });
         }
 
@@ -110,7 +111,7 @@ public static class AdminReportEndpoints
         // AdminUserEndpoints.SetStatus.
         var adminUserId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        var (result, report) = await chat.ResolveReportAsync(
+        var (result, report) = await reports.ResolveAsync(
             reportId, adminUserId, outcome, request.Note, cancellationToken);
 
         return result == ResolveReportOutcome.NotFound
