@@ -463,6 +463,89 @@ export interface BuildingDefinitionResponse {
   requiredLonghouseLevel: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ArmyContracts.cs (issue #40
+// phase 2: dispatching an army on a "move" mission, waypoint editing, and
+// live position/path rendering). Only Move-mission fields are used by any
+// UI this phase builds, but the request/response shapes themselves already
+// cover attack/support/raid too (Mission/TargetSettlementId/TargetBuildingCoord)
+// so a later phase can add that UI without reshaping these types.
+
+export interface HexPoint {
+  q: number;
+  r: number;
+}
+
+export interface UnitCountRequest {
+  unit: string;
+  count: number;
+}
+
+/**
+ * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
+ * `destination`: required for `mission: 'move'` (the default); ignored for
+ * attack/support/raid, whose destination is always the target settlement's
+ * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * and what the settlement can afford.
+ */
+export interface DispatchArmyRequest {
+  units: UnitCountRequest[];
+  waypoints?: HexPoint[];
+  destination?: HexPoint;
+  provisions: number;
+  mission?: string;
+  targetSettlementId?: string;
+  targetBuildingCoord?: HexPoint;
+}
+
+/** Mirrors `MovementResponse` — the full outbound route, start and destination included. */
+export interface MovementResponse {
+  departedAt: string;
+  path: HexPoint[];
+  arrivesAt: string;
+  returnPath: HexPoint[];
+  turnAroundAt: string;
+  returnArrivesAt: string;
+  isReturning: boolean;
+}
+
+/**
+ * Mirrors `ArmyResponse`. `atHome`/`supporting` are mutually exclusive with
+ * `movement` being non-null (an army is either in transit, at home, or a
+ * guest garrison elsewhere). `position` is already resolved server-side
+ * (`Movement.PositionAt`) to the last hex actually reached — no client-side
+ * A* or interpolation needed to know "where is it now", though the frontend
+ * may still interpolate visually between `position` and the next `path`
+ * point for smoother rendering between polls (see `ArmyPanel.vue`).
+ */
+export interface ArmyResponse {
+  id: string;
+  settlementId: string;
+  mission: string;
+  targetSettlementId: string | null;
+  atHome: boolean;
+  supporting: boolean;
+  position: HexPoint;
+  provisions: number;
+  totalSpeed: number;
+  totalUpkeepPerHour: number;
+  stacks: ArmyUnitStackResponse[];
+  movement: MovementResponse | null;
+}
+
+export interface ArmyUnitStackResponse {
+  unit: string;
+  count: number;
+}
+
+/** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
+export interface ArmySummary {
+  id: string;
+  mission: string;
+  atHome: boolean;
+  supporting: boolean;
+  position: HexPoint;
+}
+
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's
 // UnitDefinitionResponse (issue #40 phase 1: unit catalogue, training queue).
 

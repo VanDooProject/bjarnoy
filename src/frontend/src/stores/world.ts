@@ -1,9 +1,16 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 import { ApiError, api } from '../api/client';
-import type { BuildOrderResponse, IslandResponse, TrainingOrderResponse, UnitStackResponse } from '../api/types';
+import type {
+  ArmyResponse,
+  BuildOrderResponse,
+  IslandResponse,
+  TrainingOrderResponse,
+  UnitStackResponse,
+} from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
+import { buildMoveDispatchRequest } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
 import type { Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
@@ -12,6 +19,14 @@ import { emptyResources } from '../lib/map/types';
 // completions and rate changes it didn't cause itself (see
 // `applyServerSnapshot`). Kept well below build/production timescales.
 const LIVE_POLL_MS = 4000;
+
+// Issue #40 phase 2: armies keep moving between polls (unlike buildings,
+// which only change on a queue completion), so they're refetched on a
+// tighter interval than LIVE_POLL_MS — still no sub-second animation (the
+// design doc's own PositionAt is discrete, last-hex-reached; this just keeps
+// that discrete position from ever looking stale for long) rather than a
+// full websocket/animation loop, which the design doc explicitly defers.
+const ARMY_POLL_MS = 2000;
 
 // Mirrors the backend's SettlementService.MinimumSpacing: the minimum hex
 // distance the API enforces between two settlements' centres. Kept in sync
@@ -61,6 +76,32 @@ export const useWorldStore = defineStore('world', {
       /** Increments every syncHud tick (1s) — a cheap reactive dependency for countdown displays. */
       tick: 0,
     },
+    // Issue #40 phase 2: armies belonging to the current settlement — an
+    // `Army` record only exists once dispatched (it's folded back into the
+    // settlement's plain `garrison` and deleted the moment it arrives home —
+    // see `ArmyService.SettleAndFoldAsync`), so this list never contains a
+    // "home garrison as an army" entry; it's home/in-transit/returning/
+    // supporting dispatched bodies only. Always empty in demo mode, same as
+    // `hud.garrison`/`hud.trainingQueue` above.
+    armies: [] as ArmyResponse[],
+    armiesFetchedAt: 0,
+    // The army currently shown selected in ArmyPanel.vue — its live route is
+    // drawn on the map (HexMapRenderer.setArmyOverlay) while selected. Not a
+    // computed getter: selection persists across `refreshArmies` polls by id.
+    selectedArmyId: null as string | null,
+    // Waypoint-editing / dispatch-composition state — see `startDispatch`/
+    // `addWaypoint`/`confirmDispatch`. `null` while no dispatch is being
+    // composed; SettlementView threads this into SettlementCanvas's
+    // onHexClick to switch it into "clicking adds a waypoint" mode instead
+    // of opening the usual ring menu.
+    dispatchDraft: null as {
+      unitCounts: Record<string, number>;
+      route: AxialCoord[];
+      provisions: number;
+      submitting: boolean;
+      error: string | null;
+    } | null,
+    armyPollHandle: null as ReturnType<typeof setInterval> | null,
     syncHandle: null as ReturnType<typeof setInterval> | null,
     livePollHandle: null as ReturnType<typeof setInterval> | null,
     // Live-mode state: which backend world this session is playing in, and
@@ -332,6 +373,96 @@ export const useWorldStore = defineStore('world', {
         });
       }
     },
+    /** Pulls this settlement's armies from the backend. No-op in demo mode. See `armies`'s own comment for why home garrison never appears here. */
+    async refreshArmies() {
+      if (DEMO_MODE || !this.selectedSettlementId) return;
+      const summaries = await api.getSettlementArmies(this.selectedSettlementId);
+      // ArmySummary (the list endpoint) omits unit composition/movement/
+      // provisions — ArmyPanel needs those, so fetch each army's full detail.
+      // Settlements realistically hold a handful of dispatched armies at
+      // once, so N+1 here is a non-issue compared to a purpose-built bulk
+      // endpoint the backend doesn't expose.
+      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id)));
+      this.armiesFetchedAt = Date.now();
+      // An army that arrived home (and was folded back/deleted — see the
+      // `armies` state comment) simply stops appearing in the list; drop a
+      // selection that's no longer valid rather than leaving the map overlay
+      // pointed at a route that no longer exists.
+      if (this.selectedArmyId && !this.armies.some((a) => a.id === this.selectedArmyId)) {
+        this.selectedArmyId = null;
+      }
+    },
+    selectArmy(armyId: string) {
+      this.selectedArmyId = armyId;
+    },
+    clearSelectedArmy() {
+      this.selectedArmyId = null;
+    },
+    /** Live mode: recalls an in-transit army, then refreshes so its turned-around state shows immediately. Throws `ApiError` on rejection (e.g. it's already heading home). */
+    async recallArmyLive(armyId: string) {
+      await api.recallArmy(armyId);
+      await this.refreshArmies();
+    },
+    /** Enters waypoint-editing mode for a fresh dispatch from the current settlement's garrison. */
+    startDispatch() {
+      this.dispatchDraft = { unitCounts: {}, route: [], provisions: 0, submitting: false, error: null };
+    },
+    cancelDispatch() {
+      this.dispatchDraft = null;
+    },
+    setDispatchUnitCount(unit: string, count: number) {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.unitCounts[unit] = Math.max(0, Math.floor(count));
+    },
+    setDispatchProvisions(provisions: number) {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.provisions = Math.max(0, provisions);
+    },
+    /** Clicking a hex on the map while a dispatch is being composed appends it as the next waypoint (the last click is always the eventual destination). */
+    addWaypoint(coord: AxialCoord) {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.route.push(coord);
+    },
+    removeLastWaypoint() {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.route.pop();
+    },
+    clearWaypoints() {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.route = [];
+    },
+    /**
+     * Sends the composed draft to the backend as a `move` dispatch. Leaves
+     * the draft in place (with `error` set) on rejection so the player can
+     * adjust and retry rather than losing their unit/waypoint selection;
+     * clears it and refreshes the army list on success.
+     */
+    async confirmDispatch() {
+      const draft = this.dispatchDraft;
+      if (!draft || !this.selectedSettlementId) return;
+      const request = buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+      if (!request) {
+        draft.error = draft.route.length === 0
+          ? 'Click the map to set a destination first.'
+          : 'Select at least one unit to send.';
+        return;
+      }
+      draft.submitting = true;
+      draft.error = null;
+      try {
+        await api.dispatchArmy(this.selectedSettlementId, request);
+        this.dispatchDraft = null;
+        await this.refreshArmies();
+        await this.refreshLiveSettlement(); // garrison shrank by the dispatched units
+      } catch (err) {
+        // Mirrors TrainingModal's ApiError.problem.detail convention —
+        // DispatchRejection has no `rejection` wire property either (same as
+        // TrainRejection), just a human-readable Detail (ArmyEndpoints.Problem).
+        draft.error = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Dispatch failed.';
+      } finally {
+        draft.submitting = false;
+      }
+    },
     syncHud() {
       const settlement = this.selectedSettlementId
         ? this.model.getSettlement(this.selectedSettlementId)
@@ -353,10 +484,15 @@ export const useWorldStore = defineStore('world', {
       if (!DEMO_MODE) {
         void this.refreshLiveSettlement();
         void this.refreshWorldSettlements();
+        void this.refreshArmies();
         this.livePollHandle = setInterval(() => {
           void this.refreshLiveSettlement();
           void this.refreshWorldSettlements();
         }, LIVE_POLL_MS);
+        // Separate, tighter interval than LIVE_POLL_MS — see ARMY_POLL_MS's
+        // own comment for why armies need to be polled more often than
+        // buildings/queues.
+        this.armyPollHandle = setInterval(() => void this.refreshArmies(), ARMY_POLL_MS);
       }
     },
     stopHudSync() {
@@ -364,6 +500,8 @@ export const useWorldStore = defineStore('world', {
       this.syncHandle = null;
       if (this.livePollHandle) clearInterval(this.livePollHandle);
       this.livePollHandle = null;
+      if (this.armyPollHandle) clearInterval(this.armyPollHandle);
+      this.armyPollHandle = null;
     },
   },
 });

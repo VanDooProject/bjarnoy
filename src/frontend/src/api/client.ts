@@ -3,8 +3,11 @@ import type {
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
+  ArmyResponse,
+  ArmySummary,
   BuildingDefinitionResponse,
   CreateWorldRequest,
+  DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
   IslandResponse,
@@ -219,6 +222,17 @@ export const api = {
     const qs = query.toString();
     return request<WeeklyStatsPageResponse>(`/worlds/${worldId}/stats/users/${userId}/weekly${qs ? `?${qs}` : ''}`);
   },
+  // Issue #40 phase 2: dispatching/tracking armies. Mirrors ArmyEndpoints.cs's
+  // routes exactly (`/settlements/{id}/armies`, `/armies/{id}`, `/armies/{id}/recall`).
+  dispatchArmy: (settlementId: string, body: DispatchArmyRequest) =>
+    request<ArmyResponse>(`/settlements/${settlementId}/armies`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getSettlementArmies: (settlementId: string) =>
+    request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
+  getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
+  recallArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST' }),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,
