@@ -1,6 +1,7 @@
 using System.Net;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,6 +30,24 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
 
     private static string Unique(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..20];
 
+    /// <summary>
+    /// Trade requires <see cref="Bjarnoy.Domain.Trade.TradeCartCatalogue.RequiredLonghouseLevel"/>
+    /// (2) — a freshly founded settlement's longhouse is level 1, so every
+    /// trade test needs this bumped first. Setting the placed building's
+    /// level directly (a DB write, not a real build queue completion) is
+    /// enough: <c>Settlement.LonghouseLevel</c>/<c>CartCount</c>/<c>TradeRadius</c>
+    /// all derive from the buildings list at read time, not from the stored
+    /// resource rate, which this deliberately leaves untouched.
+    /// </summary>
+    private async Task BumpLonghouseAsync(Guid settlementId, int level) => await WithDbAsync(async db =>
+    {
+        var longhouse = await db.PlacedBuildings
+            .FirstAsync(b => b.SettlementId == settlementId && b.Type == BuildingType.Longhouse, Ct);
+        longhouse.Level = level;
+        await db.SaveChangesAsync(Ct);
+        return true;
+    });
+
     private async Task<(Guid WorldId, SettlementResponse Settlement)> FoundAsync(
         HttpClient client, int seed = 21, int radius = 60)
     {
@@ -48,7 +67,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (world.Id, await response.ReadStrictAsync<SettlementResponse>(Ct));
+        var settlement = await response.ReadStrictAsync<SettlementResponse>(Ct);
+        await BumpLonghouseAsync(settlement.Id, 5);
+        return (world.Id, settlement);
     }
 
     /// <summary>
@@ -79,6 +100,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         entity.CentreR = near.R;
         await db.SaveChangesAsync(Ct);
 
+        await BumpLonghouseAsync(settlement.Id, 5);
         return settlement with { Q = entity.CentreQ, R = entity.CentreR };
     }
 
