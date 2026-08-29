@@ -74,6 +74,37 @@ export function buildAttackDispatchRequest(
 }
 
 /**
+ * Builds a `support`-mission `DispatchArmyRequest` — identical shape to
+ * `buildAttackDispatchRequest` (a target settlement plus optional waypoints,
+ * no split-off "destination" the way `move` gets), since both missions
+ * resolve their real destination server-side to the target settlement's own
+ * hex (see `ArmyService.DispatchAsync`). Kept as its own function rather than
+ * reusing `buildAttackDispatchRequest` under the hood so each mission's
+ * request-building stays a one-line, self-contained read at the call site —
+ * mirrors why `buildAttackDispatchRequest` doesn't share `buildMoveDispatchRequest`.
+ */
+export function buildSupportDispatchRequest(
+  unitCounts: Record<string, number>,
+  route: AxialCoord[],
+  provisions: number,
+  targetSettlementId: string | null,
+): DispatchArmyRequest | null {
+  const units = Object.entries(unitCounts)
+    .filter(([, count]) => count > 0)
+    .map(([unit, count]) => ({ unit, count }));
+  if (units.length === 0 || !targetSettlementId) return null;
+
+  const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
+  return {
+    units,
+    waypoints: waypoints.length > 0 ? waypoints : undefined,
+    provisions,
+    mission: 'support',
+    targetSettlementId,
+  };
+}
+
+/**
  * The most food a dispatch can carry: capped by the units' combined
  * `foodCarryCapacity` (what they can physically carry) and by what the
  * settlement's own food stock can afford — mirrors the backend's
@@ -127,14 +158,26 @@ export function formatEta(targetIso: string, now: number): string {
  * A short status label for an army row — mirrors the backend's own
  * mutually-exclusive location states (`AtHome`/`Supporting`/`InTransit`,
  * with `Movement.IsReturning` distinguishing outbound from the trip home).
+ *
+ * `targetSettlementName` (issue #40 phase 4): when a Support army has
+ * arrived (`supporting: true`), the row should read "Supporting <name>"
+ * rather than the bare "Supporting" — the whole point of the owner's
+ * "armies abroad" view is knowing *where* each army sits. Pass the name
+ * resolved from `army.targetSettlementId` (e.g. via `WorldModel.getSettlement`)
+ * when it's known; omit it (or pass `null`, e.g. before the world-settlements
+ * list has loaded that settlement) to fall back to the bare label rather than
+ * showing a misleading placeholder.
  */
-export function armyStatusLabel(army: {
-  atHome: boolean;
-  supporting: boolean;
-  movement: { isReturning: boolean } | null;
-}): 'At home' | 'Supporting' | 'In transit' | 'Returning' {
+export function armyStatusLabel(
+  army: {
+    atHome: boolean;
+    supporting: boolean;
+    movement: { isReturning: boolean } | null;
+  },
+  targetSettlementName?: string | null,
+): string {
   if (army.atHome) return 'At home';
-  if (army.supporting) return 'Supporting';
+  if (army.supporting) return targetSettlementName ? `Supporting ${targetSettlementName}` : 'Supporting';
   if (army.movement?.isReturning) return 'Returning';
   return 'In transit';
 }

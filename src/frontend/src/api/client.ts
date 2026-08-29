@@ -11,6 +11,7 @@ import type {
   DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
+  GuestArmySummary,
   IslandResponse,
   LeaderboardBoardResponse,
   LeaderboardCategory,
@@ -264,6 +265,11 @@ export const api = {
     request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
   getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
   recallArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST' }),
+  // Issue #40 phase 4: the host's read-only view of who is currently
+  // supporting this settlement. Mirrors ArmyEndpoints.cs's
+  // `/settlements/{id}/guests`.
+  getSettlementGuests: (settlementId: string) =>
+    request<GuestArmySummary[]>(`/settlements/${settlementId}/guests`),
   // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
   // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
   // latter is a flat newest-first list, not paged (BattleReportService has
