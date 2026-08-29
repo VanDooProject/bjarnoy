@@ -309,6 +309,54 @@ export interface SetBuildingLevelRequest {
   level: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
+
+export interface SendMessageRequest {
+  recipientUserId: string;
+  body: string;
+}
+
+export interface MessageResponse {
+  id: string;
+  senderUserId: string;
+  recipientUserId: string;
+  body: string;
+  sentAt: string;
+  /** Only ever populated when `readReceiptVisible` is true. */
+  readAt: string | null;
+  /** Whether the sender is allowed to see `readAt` (sender and recipient in the same guild). */
+  readReceiptVisible: boolean;
+}
+
+export interface ConversationResponse {
+  otherUserId: string;
+  otherUserName: string;
+  otherDisplayName: string | null;
+  lastMessage: MessageResponse;
+  unreadCount: number;
+}
+
+export interface PagedMessagesResponse {
+  items: MessageResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PagedConversationsResponse {
+  items: ConversationResponse[];
+  page: number;
+  pageSize: number;
+}
+
+export interface MarkReadResponse {
+  markedRead: number;
+}
+
+export interface ReportMessageRequest {
+  reason: string;
+}
+
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ProfileContracts.cs.
 
 export interface ProfileResponse {

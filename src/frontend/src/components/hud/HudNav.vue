@@ -46,6 +46,14 @@ const initials = computed(() => {
     >
       Leaderboards
     </button>
+    <button
+      v-if="auth.isAuthenticated"
+      class="link"
+      :class="{ active: ['messages', 'conversation'].includes(String(route.name)) }"
+      @click="router.push('/messages')"
+    >
+      Messages
+    </button>
     <button class="link disabled" type="button" disabled title="Not implemented yet">Reports</button>
     <button class="link disabled" type="button" disabled title="Not implemented yet">Alliance</button>
     <button

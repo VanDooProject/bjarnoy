@@ -14,15 +14,21 @@ import type {
   LeaderboardMeResponse,
   LeaderboardScope,
   WeeklyStatsPageResponse,
+  MarkReadResponse,
+  MessageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
+  PagedConversationsResponse,
+  PagedMessagesResponse,
   PagedReportsResponse,
   ProblemDetails,
   ProfileResponse,
   QueueBuildRequest,
+  ReportMessageRequest,
   ReportProfileRequest,
   ReportResponse,
   ResolveReportRequest,
+  SendMessageRequest,
   SetBuildingLevelRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
@@ -114,6 +120,29 @@ export const api = {
     }),
   trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  sendMessage: (body: SendMessageRequest) =>
+    request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
+  listConversations: (params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedConversationsResponse>(`/messages/conversations${qs ? `?${qs}` : ''}`);
+  },
+  getConversation: (otherUserId: string, params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedMessagesResponse>(`/messages/conversations/${otherUserId}${qs ? `?${qs}` : ''}`);
+  },
+  markConversationRead: (otherUserId: string) =>
+    request<MarkReadResponse>(`/messages/conversations/${otherUserId}/read`, { method: 'POST' }),
+  reportMessage: (messageId: string, body: ReportMessageRequest) =>
+    request<ReportResponse>(`/messages/${messageId}/report`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
