@@ -89,6 +89,20 @@ public class UserEntity
     /// </summary>
     public bool IsSystem { get; set; }
 
+    /// <summary>
+    /// Stub for the guild this user belongs to — there is no guild system yet
+    /// (no <c>GuildEntity</c>, no membership table), just this nullable id.
+    /// The only consumer today is <c>ChatService</c>'s guild-scoped
+    /// read-receipt check: "are sender and reader in the same guild", which a
+    /// bare scalar column answers with no join. Always null until guilds
+    /// exist, so that check is always false and read receipts stay hidden —
+    /// graceful degradation rather than a half-built feature. When a real
+    /// guild system lands, this column either becomes a real foreign key or
+    /// is replaced by a membership lookup; either way <c>ChatService</c> is
+    /// the one call site to update.
+    /// </summary>
+    public Guid? GuildId { get; set; }
+
     public List<RefreshTokenEntity> RefreshTokens { get; set; } = [];
 
     /// <summary>

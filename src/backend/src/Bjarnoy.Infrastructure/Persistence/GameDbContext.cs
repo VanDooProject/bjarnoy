@@ -54,7 +54,11 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<GuildPeaceTreatyEntity> GuildPeaceTreaties => Set<GuildPeaceTreatyEntity>();
 
-    public DbSet<ProfileReportEntity> ProfileReports => Set<ProfileReportEntity>();
+    public DbSet<MessageEntity> Messages => Set<MessageEntity>();
+
+    public DbSet<MessageRecipientEntity> MessageRecipients => Set<MessageRecipientEntity>();
+
+    public DbSet<ReportEntity> Reports => Set<ReportEntity>();
 
     public DbSet<LeaderboardSnapshotEntity> LeaderboardSnapshots => Set<LeaderboardSnapshotEntity>();
 
@@ -338,6 +342,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.Bio).HasMaxLength(2000);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 
+            // No FK: there is no guild table yet — see UserEntity.GuildId.
+            user.HasIndex(u => u.GuildId);
+
             // Case-insensitive uniqueness, enforced on the normalized column —
             // see UserEntity.NormalizedUserName.
             user.HasIndex(u => u.NormalizedUserName).IsUnique();
@@ -511,32 +518,85 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<ProfileReportEntity>(report =>
+        modelBuilder.Entity<MessageEntity>(message =>
         {
-            report.ToTable("profile_reports");
+            message.ToTable("messages");
+            message.HasKey(m => m.Id);
+            message.Property(m => m.Id).ValueGeneratedNever();
+            message.Property(m => m.Body).HasMaxLength(2000).IsRequired();
+
+            message.HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            message.HasIndex(m => m.SenderUserId);
+
+            message.HasMany(m => m.Recipients)
+                .WithOne(r => r.Message!)
+                .HasForeignKey(r => r.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MessageRecipientEntity>(recipient =>
+        {
+            recipient.ToTable("message_recipients");
+            recipient.HasKey(r => r.Id);
+            recipient.Property(r => r.Id).ValueGeneratedNever();
+
+            recipient.HasOne(r => r.Recipient)
+                .WithMany()
+                .HasForeignKey(r => r.RecipientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // One delivery per recipient per message.
+            recipient.HasIndex(r => new { r.MessageId, r.RecipientUserId }).IsUnique();
+
+            // Inbox paging: a recipient's messages, newest first.
+            recipient.HasIndex(r => new { r.RecipientUserId, r.MessageId });
+
+            // Unread counts: ReadAt is null.
+            recipient.HasIndex(r => new { r.RecipientUserId, r.ReadAt });
+        });
+
+        // A generic moderation report — issue #41 (chat) unified with issue
+        // #42's profile reports (previously a separate ProfileReportEntity/
+        // profile_reports table) onto one queue via SourceType/SourceId.
+        modelBuilder.Entity<ReportEntity>(report =>
+        {
+            report.ToTable("reports");
             report.HasKey(r => r.Id);
             report.Property(r => r.Id).ValueGeneratedNever();
-            report.Property(r => r.Reason).HasMaxLength(200).IsRequired();
-            report.Property(r => r.Note).HasMaxLength(2000);
+            report.Property(r => r.SourceType).HasConversion<int>();
             report.Property(r => r.Status).HasConversion<int>();
+            report.Property(r => r.ContextSnapshot).HasMaxLength(2200).IsRequired();
+            report.Property(r => r.Reason).HasMaxLength(500).IsRequired();
+            report.Property(r => r.Note).HasMaxLength(2000);
+            report.Property(r => r.ResolutionNote).HasMaxLength(500);
 
-            // A user account going away must not silently delete the
-            // moderation record either way round — same reasoning as
-            // settlements' Restrict above. (Users are never deleted today.)
             report.HasOne(r => r.Reporter)
                 .WithMany()
                 .HasForeignKey(r => r.ReporterUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // A user account going away must not silently delete the
+            // moderation record either way round — same reasoning as
+            // settlements' Restrict above. (Users are never deleted today.)
             report.HasOne(r => r.ReportedUser)
                 .WithMany()
                 .HasForeignKey(r => r.ReportedUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            report.HasOne(r => r.ResolvedBy)
+                .WithMany()
+                .HasForeignKey(r => r.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // The admin queue lists by status; the duplicate-pending guard
-            // looks up (reporter, reported) pairs.
-            report.HasIndex(r => r.Status);
-            report.HasIndex(r => new { r.ReporterUserId, r.ReportedUserId });
+            // (only one Pending report per reporter+source at a time — see
+            // ReportService.CreateAsync) looks up (reporter, source) pairs.
+            report.HasIndex(r => new { r.Status, r.Id });
+            report.HasIndex(r => new { r.ReporterUserId, r.SourceType, r.SourceId });
         });
 
         modelBuilder.Entity<LeaderboardSnapshotEntity>(snapshot =>
