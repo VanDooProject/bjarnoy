@@ -409,6 +409,7 @@ public static class SettlementEndpoints
             $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
         TrainRejection.NotEnoughResources => "Not enough resources.",
         TrainRejection.InvalidCount => "Count must be at least 1.",
+        TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
         _ => "Refused.",
     };
 }

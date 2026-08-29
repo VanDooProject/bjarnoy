@@ -346,6 +346,49 @@ public class ArmyAttackTests
     /// </summary>
     private static double ProvisionsFor(int catapults) => 45.0 * catapults;
 
+    /// <summary>Fleet attack shoreline validation (issue #40 phase 6 §4).</summary>
+    [Fact]
+    public void Fleet_attack_is_accepted_when_the_target_has_a_shoreline_hex()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        Terrain TerrainAt(HexCoord c) => c == TargetHex ? Terrain.Grass : Terrain.Sea;
+
+        var decision = Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
+            Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
+            targetSettlementClaimRadius: 0);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Fleet_attack_is_rejected_against_a_fully_inland_settlement()
+    {
+        var settlement = Found(garrison: [new UnitStack(UnitType.Karve, 5)]);
+        var landBlob = TargetHex.Neighbours().Append(TargetHex).ToHashSet();
+        Terrain TerrainAt(HexCoord c) => landBlob.Contains(c) ? Terrain.Grass : Terrain.Sea;
+
+        var decision = Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
+            Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
+            targetSettlementClaimRadius: 0);
+
+        Assert.Equal(DispatchRejection.DefenderHasNoShoreline, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_land_armys_attack_is_unaffected_by_the_shoreline_check()
+    {
+        // Entirely land terrain, no sea anywhere — a fleet dispatched here
+        // would find no shoreline at all, but a land army never even runs
+        // that check.
+        var settlement = Found();
+
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
     [Fact]
     public void A_target_building_may_only_be_named_for_an_attack_mission()
     {

@@ -122,6 +122,37 @@ public class TrainingAndGarrisonTests
         Assert.Equal(TrainRejection.TrainingQueueFull, overflow.Rejection);
     }
 
+    /// <summary>Ship training's coastal requirement (issue #40 phase 6 §4).</summary>
+    [Fact]
+    public void Training_a_ship_at_a_non_coastal_settlement_is_refused()
+    {
+        var settlement = Found(longhouseLevel: 5);
+
+        var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: false);
+
+        Assert.Equal(TrainRejection.SettlementNotCoastal, decision.Rejection);
+    }
+
+    [Fact]
+    public void Training_a_ship_at_a_coastal_settlement_is_accepted()
+    {
+        var settlement = Found(longhouseLevel: 5);
+
+        var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_non_ship_unit_is_unaffected_by_the_shoreline_requirement()
+    {
+        var settlement = Found(longhouseLevel: 1);
+
+        var decision = settlement.PlanTrain(UnitType.Thrall, 1, T0, Guid.CreateVersion7(), hasShoreline: false);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
     [Fact]
     public void Enqueueing_an_unaffordable_order_throws_rather_than_going_into_debt()
     {

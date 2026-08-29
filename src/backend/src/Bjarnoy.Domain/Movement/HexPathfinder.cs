@@ -3,7 +3,8 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Movement;
 
 /// <summary>
-/// A* pathfinding for land armies over the hex grid (issue #40 phase 2).
+/// A* pathfinding for land armies and fleets over the hex grid (issue #40
+/// phases 2 and 6).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,27 +14,46 @@ namespace Bjarnoy.Domain.Movement;
 /// enough.
 /// </para>
 /// <para>
-/// Land-only this phase: <see cref="Terrain.Sea"/> has no entry in
-/// <see cref="TerrainCost"/> and is therefore always impassable. Ship/fleet
-/// pathing is issue #40 phase 6.
+/// One search loop, two terrain-cost tables (<see cref="LandTerrainCost"/>/
+/// <see cref="SeaTerrainCost"/>), picked by <paramref name="isLandUnit"/> — a
+/// land army finds every sea hex impassable and vice versa, so "land-only" and
+/// "sea-only" fall out of the same lookup-and-reject shape rather than needing
+/// two copies of the A* loop.
 /// </para>
 /// </remarks>
 public static class HexPathfinder
 {
     /// <summary>
-    /// Per-hex-step cost multiplier by terrain. <see cref="Terrain.Sea"/> is
-    /// deliberately absent — it is impassable to this land-only pathfinder.
-    /// Every value is &gt;= 1.0, which is what keeps <see cref="Heuristic"/>
-    /// (plain hex distance) admissible: it can never overestimate the true
-    /// cost of a step.
+    /// Per-hex-step cost multiplier by terrain for land units.
+    /// <see cref="Terrain.Sea"/> is deliberately absent — it is impassable to
+    /// land armies. Every value is &gt;= 1.0, which is what keeps
+    /// <see cref="Heuristic"/> (plain hex distance) admissible: it can never
+    /// overestimate the true cost of a step.
     /// </summary>
-    private static readonly IReadOnlyDictionary<Terrain, double> TerrainCost = new Dictionary<Terrain, double>
+    private static readonly IReadOnlyDictionary<Terrain, double> LandTerrainCost = new Dictionary<Terrain, double>
     {
         [Terrain.Grass] = 1.0,
         [Terrain.Sand] = 1.1,
         [Terrain.Forest] = 1.3,
         [Terrain.Mountain] = 2.0,
     };
+
+    /// <summary>
+    /// Per-hex-step cost multiplier by terrain for fleets. Every land terrain
+    /// is deliberately absent — it is impassable to ships; no docking/beaching
+    /// mechanic exists yet (issue #40 design doc defers ferrying land troops
+    /// by ship entirely). <see cref="Terrain.Sea"/> costs a flat 1.0 — the
+    /// design doc calls for no varying sea terrain (no currents/storm tiles),
+    /// so there is nothing to differentiate open water by.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<Terrain, double> SeaTerrainCost = new Dictionary<Terrain, double>
+    {
+        [Terrain.Sea] = 1.0,
+    };
+
+    /// <summary>The terrain-cost table this phase's isLandUnit flag selects.</summary>
+    private static IReadOnlyDictionary<Terrain, double> CostTable(bool isLandUnit) =>
+        isLandUnit ? LandTerrainCost : SeaTerrainCost;
 
     /// <summary>
     /// Hard cap on nodes a single search may expand. A world is unbounded, so
@@ -55,23 +75,39 @@ public static class HexPathfinder
     /// in tests, a small hand-built grid.
     /// </param>
     /// <param name="isLandUnit">
-    /// Always <see langword="true"/> this phase — sea pathing for ships
-    /// (issue #40 phase 6) is not implemented, and passing
-    /// <see langword="false"/> throws rather than silently behaving like a
-    /// land unit.
+    /// <see langword="true"/> for a land army — <see cref="Terrain.Sea"/> is
+    /// impassable and every land terrain costs per <see cref="LandTerrainCost"/>.
+    /// A land army's own <paramref name="from"/>/<paramref name="to"/> must
+    /// themselves be land (a settlement's own hex always is, so this never
+    /// actually rejects a land army's own endpoints — it exists so an
+    /// arbitrary <see cref="Armies.ArmyMission.Move"/> sea destination is
+    /// still rejected outright rather than searched for).
+    /// <see langword="false"/> for a fleet — every land terrain is impassable
+    /// and <see cref="Terrain.Sea"/> costs a flat 1.0 per <see cref="SeaTerrainCost"/>,
+    /// <em>except</em> at the two endpoints: a settlement's own hex is always
+    /// land, even a coastal one's, so a fleet's <paramref name="from"/>
+    /// (its home harbor) and <paramref name="to"/> (an
+    /// <see cref="Armies.ArmyMission.Attack"/>/<see cref="Armies.ArmyMission.Support"/>
+    /// target's centre) are exempt from the sea-only rule — the search still
+    /// requires every hex in between to be real open sea, so a fleet with no
+    /// adjacent sea at all (impossible in practice — issue #40 phase 6 §4
+    /// requires a coastal settlement to train ships in the first place) or a
+    /// target with no shoreline hex to beach on (see
+    /// <see cref="World.Shoreline"/>) still fails to find a route.
     /// </param>
     public static IReadOnlyList<HexCoord>? FindPath(
         HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (!isLandUnit)
-        {
-            throw new NotSupportedException(
-                "Sea pathing is not implemented this phase — land armies only (issue #40 phase 2; ships are phase 6).");
-        }
+        var costTable = CostTable(isLandUnit);
 
-        if (!terrainAt(from).IsLand() || !terrainAt(to).IsLand())
+        // Land keeps its original hard endpoint check (byte-for-byte, issue
+        // #40 phase 6): a land army's destination/origin must themselves be
+        // land, so an arbitrary sea Move destination is rejected outright. A
+        // fleet skips this — see the isLandUnit remarks above for why its own
+        // endpoints are deliberately exempt from the sea-only rule.
+        if (isLandUnit && (!costTable.ContainsKey(terrainAt(from)) || !costTable.ContainsKey(terrainAt(to))))
         {
             return null;
         }
@@ -119,8 +155,21 @@ public static class HexPathfinder
 
             foreach (var neighbour in current.Neighbours())
             {
-                if (!InBounds(neighbour) || closed.Contains(neighbour)
-                    || !TerrainCost.TryGetValue(terrainAt(neighbour), out var stepCost))
+                if (!InBounds(neighbour) || closed.Contains(neighbour))
+                {
+                    continue;
+                }
+
+                // The final hop onto the goal is always allowed for a fleet
+                // even when the goal itself is land (a beaching/harbor hex —
+                // see the isLandUnit remarks above); every other hex still
+                // has to pass the ordinary cost-table check.
+                double stepCost;
+                if (!isLandUnit && neighbour == to)
+                {
+                    stepCost = costTable.TryGetValue(terrainAt(neighbour), out var seaCost) ? seaCost : 1.0;
+                }
+                else if (!costTable.TryGetValue(terrainAt(neighbour), out stepCost))
                 {
                     continue;
                 }
@@ -142,8 +191,9 @@ public static class HexPathfinder
 
     /// <summary>
     /// Plain hex distance. Admissible because every real step costs at least
-    /// 1.0 (grass, the cheapest terrain) — see <see cref="TerrainCost"/> —
-    /// so distance never overestimates the cheapest possible route.
+    /// 1.0 (grass or sea, the cheapest terrain either table has) — see
+    /// <see cref="LandTerrainCost"/>/<see cref="SeaTerrainCost"/> — so
+    /// distance never overestimates the cheapest possible route.
     /// </summary>
     private static double Heuristic(HexCoord a, HexCoord b) => a.DistanceTo(b);
 
@@ -165,14 +215,21 @@ public static class HexPathfinder
     /// <c>path[0]</c> (always 0), travelling at <paramref name="hexesPerHour"/>
     /// (an army's <see cref="Armies.Army.TotalSpeed"/>).
     /// </summary>
+    /// <param name="isLandUnit">
+    /// Which terrain-cost table to charge each step against — must match
+    /// whatever <see cref="FindPath"/> call produced <paramref name="path"/>.
+    /// Defaults to <see langword="true"/> (land), matching this method's
+    /// signature before fleets existed (issue #40 phase 6).
+    /// </param>
     /// <remarks>
-    /// Reuses the exact per-terrain <see cref="TerrainCost"/> table
-    /// <see cref="FindPath"/> costs its edges with, so a route that prefers
-    /// cheaper terrain over shorter raw distance reports the travel time that
-    /// terrain actually costs, not a plain distance/speed estimate.
+    /// Reuses the exact per-terrain cost table (<see cref="LandTerrainCost"/>
+    /// or <see cref="SeaTerrainCost"/>) <see cref="FindPath"/> costs its edges
+    /// with, so a route that prefers cheaper terrain over shorter raw distance
+    /// reports the travel time that terrain actually costs, not a plain
+    /// distance/speed estimate.
     /// </remarks>
     public static IReadOnlyList<double> CumulativeHours(
-        IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour)
+        IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -186,10 +243,19 @@ public static class HexPathfinder
             throw new ArgumentOutOfRangeException(nameof(hexesPerHour), hexesPerHour, "Speed must be positive.");
         }
 
+        var costTable = CostTable(isLandUnit);
         var hours = new double[path.Count];
         for (var i = 1; i < path.Count; i++)
         {
-            var stepCost = TerrainCost.TryGetValue(terrainAt(path[i]), out var cost) ? cost : double.PositiveInfinity;
+            // Mirrors FindPath's own beaching/harbor exemption: a fleet's
+            // very last hex (an Attack/Support target's or its own home
+            // settlement's land centre — see FindPath's isLandUnit remarks)
+            // charges the same flat fallback cost FindPath itself used to
+            // reach it, rather than the double.PositiveInfinity every other
+            // impassable hex gets.
+            var stepCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
+                ? cost
+                : !isLandUnit && i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
             hours[i] = hours[i - 1] + (stepCost / hexesPerHour);
         }
 
