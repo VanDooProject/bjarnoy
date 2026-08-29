@@ -34,6 +34,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<ArmyUnitStackEntity> ArmyUnitStacks => Set<ArmyUnitStackEntity>();
 
+    public DbSet<BattleReportEntity> BattleReports => Set<BattleReportEntity>();
+
+    public DbSet<BattleReportAttackerLineEntity> BattleReportAttackerLines => Set<BattleReportAttackerLineEntity>();
+
+    public DbSet<BattleReportDefenderLineEntity> BattleReportDefenderLines => Set<BattleReportDefenderLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -250,6 +256,45 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             stack.HasKey(s => s.Id);
             stack.Property(s => s.Id).ValueGeneratedNever();
             stack.Property(s => s.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<BattleReportEntity>(report =>
+        {
+            report.ToTable("battle_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Winner).HasConversion<int>();
+
+            // Both endpoints of a battle (attacker's and defender's inbox) read
+            // by settlement id — see BattleReportService.GetForSettlementAsync.
+            report.HasIndex(r => r.AttackerSettlementId);
+            report.HasIndex(r => r.DefenderSettlementId);
+
+            report.HasMany(r => r.AttackerLines)
+                .WithOne(l => l.BattleReport!)
+                .HasForeignKey(l => l.BattleReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.DefenderLines)
+                .WithOne(l => l.BattleReport!)
+                .HasForeignKey(l => l.BattleReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BattleReportAttackerLineEntity>(line =>
+        {
+            line.ToTable("battle_report_attacker_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<BattleReportDefenderLineEntity>(line =>
+        {
+            line.ToTable("battle_report_defender_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>
