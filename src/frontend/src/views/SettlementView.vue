@@ -7,6 +7,7 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import TradePanel from '../components/hud/TradePanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
@@ -409,6 +410,7 @@ async function upgrade() {
     </TopBar>
     <RealmPanel />
     <BuildQueuePanel @select="onQueueSelect" />
+    <TradePanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <RingMenu
       v-if="selectedTile && ringScreen"
