@@ -5,6 +5,7 @@ import type {
   AdminWorldResponse,
   ArmyResponse,
   ArmySummary,
+  BattleReportResponse,
   BuildingDefinitionResponse,
   CreateWorldRequest,
   DispatchArmyRequest,
@@ -234,6 +235,13 @@ export const api = {
     request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
   getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
   recallArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST' }),
+  // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
+  // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
+  // latter is a flat newest-first list, not paged (BattleReportService has
+  // no pagination), so the reports store just holds it as-is.
+  getReport: (reportId: string) => request<BattleReportResponse>(`/reports/${reportId}`),
+  getSettlementReports: (settlementId: string) =>
+    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

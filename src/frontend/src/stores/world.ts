@@ -10,7 +10,7 @@ import type {
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
-import { buildMoveDispatchRequest } from '../lib/units/armyDispatch';
+import { buildAttackDispatchRequest, buildMoveDispatchRequest } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
 import type { Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
@@ -100,6 +100,14 @@ export const useWorldStore = defineStore('world', {
       provisions: number;
       submitting: boolean;
       error: string | null;
+      // Issue #40 phase 3: 'move' keeps phase 2's free-hex-destination
+      // behaviour (last clicked hex = destination); 'attack' reuses the same
+      // waypoint-editing route but every clicked hex is just a waypoint —
+      // the backend always resolves an attack's real destination to
+      // `targetSettlementId`'s own hex, never a clicked one (see
+      // `buildAttackDispatchRequest`'s own comment).
+      mission: 'move' | 'attack';
+      targetSettlementId: string | null;
     } | null,
     armyPollHandle: null as ReturnType<typeof setInterval> | null,
     syncHandle: null as ReturnType<typeof setInterval> | null,
@@ -405,10 +413,47 @@ export const useWorldStore = defineStore('world', {
     },
     /** Enters waypoint-editing mode for a fresh dispatch from the current settlement's garrison. */
     startDispatch() {
-      this.dispatchDraft = { unitCounts: {}, route: [], provisions: 0, submitting: false, error: null };
+      this.dispatchDraft = {
+        unitCounts: {},
+        route: [],
+        provisions: 0,
+        submitting: false,
+        error: null,
+        mission: 'move',
+        targetSettlementId: null,
+      };
     },
     cancelDispatch() {
       this.dispatchDraft = null;
+    },
+    /** Switching mission clears the plotted route/target — a move destination and an attack's waypoint-only route aren't interchangeable, and a stale target settlement from a previous attack draft shouldn't silently carry over. */
+    setDispatchMission(mission: 'move' | 'attack') {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.mission = mission;
+      this.dispatchDraft.route = [];
+      this.dispatchDraft.targetSettlementId = null;
+      this.dispatchDraft.error = null;
+    },
+    setDispatchTarget(settlementId: string | null) {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.targetSettlementId = settlementId;
+    },
+    /**
+     * Every settlement this player could send an Attack at — every
+     * settlement `refreshWorldSettlements` has registered into the local
+     * `WorldModel` (issue #40 phase 2's rival-realms feed), minus this
+     * player's own. Not a Pinia getter: `model` is `markRaw` (see the state
+     * comment on it), so nothing here is reactively tracked — callers that
+     * want this list to stay live across a poll should recompute it
+     * themselves off a reactive dependency they already have (e.g.
+     * `hud.tick`), the same trade-off `TopBar.vue`'s `islandName` already
+     * accepts for reading the model directly.
+     */
+    listAttackableSettlements() {
+      return this.model
+        .listSettlements()
+        .filter((s) => s.id !== this.selectedSettlementId)
+        .map((s) => ({ id: s.id, name: s.name, ownerName: s.ownerName, q: s.q, r: s.r }));
     },
     setDispatchUnitCount(unit: string, count: number) {
       if (!this.dispatchDraft) return;
@@ -432,19 +477,28 @@ export const useWorldStore = defineStore('world', {
       this.dispatchDraft.route = [];
     },
     /**
-     * Sends the composed draft to the backend as a `move` dispatch. Leaves
-     * the draft in place (with `error` set) on rejection so the player can
-     * adjust and retry rather than losing their unit/waypoint selection;
-     * clears it and refreshes the army list on success.
+     * Sends the composed draft to the backend as a `move` or `attack`
+     * dispatch (issue #40 phase 3 added the latter). Leaves the draft in
+     * place (with `error` set) on rejection so the player can adjust and
+     * retry rather than losing their unit/waypoint/target selection; clears
+     * it and refreshes the army list on success.
      */
     async confirmDispatch() {
       const draft = this.dispatchDraft;
       if (!draft || !this.selectedSettlementId) return;
-      const request = buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+      const request = draft.mission === 'attack'
+        ? buildAttackDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
+        : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
-        draft.error = draft.route.length === 0
-          ? 'Click the map to set a destination first.'
-          : 'Select at least one unit to send.';
+        if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
+          draft.error = 'Select at least one unit to send.';
+        } else if (draft.mission === 'move' && draft.route.length === 0) {
+          draft.error = 'Click the map to set a destination first.';
+        } else if (draft.mission === 'attack' && !draft.targetSettlementId) {
+          draft.error = 'Choose a settlement to attack first.';
+        } else {
+          draft.error = 'Select at least one unit to send.';
+        }
         return;
       }
       draft.submitting = true;
