@@ -60,7 +60,24 @@ public class AdminBootstrapLoginTests
         // to '/admin' after a successful auto-login — there's no full page
         // navigation to catch. ToHaveURLAsync is a polling assertion that
         // re-reads the page's current URL instead, which does catch it.
-        await Assertions.Expect(page).ToHaveURLAsync(new Regex("/admin"), new PageAssertionsToHaveURLOptions { Timeout = 30_000 });
+        try
+        {
+            await Assertions.Expect(page).ToHaveURLAsync(new Regex("/admin"), new PageAssertionsToHaveURLOptions { Timeout = 30_000 });
+        }
+        catch (PlaywrightException ex)
+        {
+            // Turns an opaque 30s timeout into an answer: was the seeded
+            // admin login actually rejected (LoginView.vue's `error.value`,
+            // set from onSubmit's catch block), or did the page never even
+            // attempt it?
+            var errorLocator = page.Locator("p.error");
+            var shownError = await errorLocator.CountAsync() > 0 ? await errorLocator.TextContentAsync() : null;
+            throw new Exception(
+                $"Never reached /admin; stuck at {page.Url}. " +
+                $"On-page login error: {shownError ?? "(none shown)"}. " +
+                $"Console errors so far: {(consoleErrors.Count == 0 ? "(none)" : string.Join(" | ", consoleErrors))}",
+                ex);
+        }
         await Assertions.Expect(page.GetByText("Wrong username or password.")).Not.ToBeVisibleAsync();
         await Assertions.Expect(page.GetByRole(AriaRole.Heading)).ToBeVisibleAsync();
 
