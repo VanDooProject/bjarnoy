@@ -399,4 +399,52 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         var reportCount = await WithDbAsync(db => db.TradeReports.CountAsync(r => r.OfferId == posted.Id, Ct));
         Assert.Equal(1, reportCount);
     }
+
+    [Fact]
+    public async Task Completed_trade_report_is_visible_to_both_settlements()
+    {
+        using var client = Client();
+        var (worldId, poster) = await FoundAsync(client);
+        var acceptor = await FoundAdjacentAsync(client, worldId, poster);
+
+        var posted = await (await client.PostJsonAsync(
+            $"/api/v1/settlements/{poster.Id}/trade-offers",
+            new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
+            Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
+
+        var acceptResponse = await client.PostJsonAsync(
+            $"/api/v1/trade-offers/{posted.Id}/accept",
+            new AcceptTradeOfferRequest(acceptor.Id),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, acceptResponse.StatusCode);
+
+        // Adjacent settlements at the cart's 6 hex/h speed arrive in well
+        // under a game-hour; two hours is a generous margin.
+        _factory.Time.Advance(TimeSpan.FromHours(2));
+
+        // Settling deliveries is lazy, keyed off a read against the
+        // arriving settlement — touch both settlements' shipments first so
+        // TryCompleteOfferAsync has written the report before we ask for it.
+        await client.GetFromJsonAsync<List<ShipmentResponse>>(
+            $"/api/v1/settlements/{acceptor.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
+        await client.GetFromJsonAsync<List<ShipmentResponse>>(
+            $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
+
+        var posterReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
+            $"/api/v1/settlements/{poster.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+        var acceptorReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
+            $"/api/v1/settlements/{acceptor.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+
+        var posterReport = Assert.Single(posterReports!, r => r.OfferId == posted.Id);
+        var acceptorReport = Assert.Single(acceptorReports!, r => r.OfferId == posted.Id);
+
+        Assert.Equal(posterReport.Id, acceptorReport.Id);
+        Assert.Equal(poster.Id, posterReport.PosterSettlementId);
+        Assert.Equal(acceptor.Id, posterReport.AcceptorSettlementId);
+        Assert.Equal("wood", posterReport.OfferedResource);
+        Assert.Equal(200, posterReport.OfferedAmount);
+        Assert.Equal("iron", posterReport.RequestedResource);
+        Assert.Equal(100, posterReport.RequestedAmount);
+        Assert.False(posterReport.GuildTrade);
+    }
 }

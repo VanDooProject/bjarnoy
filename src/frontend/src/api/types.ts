@@ -187,6 +187,21 @@ export interface TradeAcceptResponse {
   toPoster: ShipmentResponse;
 }
 
+/** Mirrors `TradeReportResponse` in TradeContracts.cs — a completed trade, visible to both settlements. */
+export interface TradeReportResponse {
+  id: string;
+  offerId: string;
+  completedAt: string;
+  posterSettlementId: string;
+  acceptorSettlementId: string;
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildTrade: boolean;
+  travelHours: number;
+}
+
 export interface CreateWorldRequest {
   name: string;
   seed?: number;

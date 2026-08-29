@@ -47,6 +47,7 @@ import type {
   SimulatorResponse,
   TradeAcceptResponse,
   TradeOfferResponse,
+  TradeReportResponse,
   TrainingOrderResponse,
   TrainUnitsRequest,
   UnitDefinitionResponse,
@@ -142,6 +143,8 @@ export const api = {
     request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`),
   getShipments: (settlementId: string) =>
     request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`),
+  getSettlementTradeReports: (settlementId: string) =>
+    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`),
   acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
     request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
       method: 'POST',
