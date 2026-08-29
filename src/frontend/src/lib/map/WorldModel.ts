@@ -310,9 +310,13 @@ export class WorldModel {
   /**
    * Applies a settlement snapshot fetched from the backend (live mode; see
    * `stores/world.ts`) — resources/rate/level and any buildings the queue has
-   * completed since the last poll. Only building types the frontend has art
-   * for are placed on their hex; the rest are silently skipped rather than
-   * risking a texture lookup failure (see `lib/map/textures.ts`).
+   * completed since the last poll. Only building types this whitelist knows
+   * about are placed on their hex; a type the frontend doesn't model yet
+   * (e.g. `storagehouse`, which isn't in `Tile['buildingType']` at all) is
+   * silently skipped rather than stored as an unrecognized string. A type
+   * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
+   * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
+   * tile's bare terrain rather than throwing.
    */
   applyServerSnapshot(
     settlementId: string,
@@ -339,7 +343,16 @@ export class WorldModel {
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
 
-    const RENDERABLE_TYPES = new Set(['longhouse', 'farm', 'tower', 'fishinghut', 'magictower', 'pumpkinfarm']);
+    const RENDERABLE_TYPES = new Set([
+      'longhouse',
+      'farm',
+      'tower',
+      'fishinghut',
+      'magictower',
+      'pumpkinfarm',
+      'lumberjack',
+      'quarry',
+    ]);
     for (const building of snapshot.buildings) {
       if (!RENDERABLE_TYPES.has(building.type)) continue;
       const tile = this.getTile(building.q, building.r);

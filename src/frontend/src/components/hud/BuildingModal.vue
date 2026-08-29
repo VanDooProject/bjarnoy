@@ -8,8 +8,14 @@ import { computed } from 'vue';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import { useWorldStore } from '../../stores/world';
-import { hexesInRadius } from '../../lib/hex/coords';
-import { buildingStatsFor, buildingUpgradeCost, type BuildingKind } from '../../lib/map/buildingEconomy';
+import {
+  BOOST_TERRAIN,
+  buildingStatsFor,
+  buildingUpgradeCost,
+  isNearAnyOf,
+  matchingNeighbourCount,
+  type BuildingKind,
+} from '../../lib/map/buildingEconomy';
 
 const world = useWorldStore();
 
@@ -84,6 +90,8 @@ const BUILDING_NAMES: Record<string, string> = {
   fishinghut: 'Fishing Hut',
   magictower: 'Magic Tower',
   pumpkinfarm: 'Pumpkin Farm',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
 };
 
 const TERRAIN_NAMES: Record<string, string> = {
@@ -125,19 +133,22 @@ const sub = computed(() => {
 });
 const level = computed(() => props.tile.buildingLevel ?? 0);
 
-// Same irrigation check hoverInfoFor/buildingStats uses in HexMapRenderer.ts,
-// so the modal's "current stats" match whatever the hover tooltip just showed.
-const nearWater = computed(() =>
-  hexesInRadius({ q: props.tile.q, r: props.tile.r }, 1).some((c) => {
-    const t = world.model.getTile(c.q, c.r);
-    return t.terrain === 'sea' || t.terrain === 'sand';
-  }),
-);
+// Same terrain-adjacency helpers hoverInfoFor/buildingStats uses in
+// HexMapRenderer.ts, so the modal's "current stats" match whatever the hover
+// tooltip just showed.
+const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
+const nearWater = computed(() => isNearAnyOf(props.tile, ['sea', 'sand'], getTile));
+const matchingNeighbours = computed(() => {
+  const boostTerrain = props.tile.buildingType ? BOOST_TERRAIN[props.tile.buildingType] : undefined;
+  return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
+});
 
 // The existing building's current-level output/modifier/workers — undefined
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const currentStats = computed(() =>
-  props.tile.buildingType ? buildingStatsFor(props.tile.buildingType, level.value, nearWater.value) : undefined,
+  props.tile.buildingType
+    ? buildingStatsFor(props.tile.buildingType, level.value, nearWater.value, matchingNeighbours.value)
+    : undefined,
 );
 
 // "hut" is the fixed default a fresh build here places (see

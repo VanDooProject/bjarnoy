@@ -378,7 +378,8 @@ public sealed class SettlementService(
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-        var result = settled.SetBuildingLevel(coord, level, now, settlement.World.SpeedFactor, guestStacks);
+        var result = settled.SetBuildingLevel(
+            coord, level, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
 
         if (!result.Accepted)
         {
@@ -435,13 +436,14 @@ public sealed class SettlementService(
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+
         // Settle first so the decision sees the queue and stock as of now: a
         // build that finished a minute ago must free its slot and count towards
         // production.
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
-        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var terrain = sampler.TerrainAt(coord);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
@@ -556,6 +558,8 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        var terrainAt = TerrainAt(world);
+
         var settlementIds = settlements.Select(s => s.Id).ToHashSet();
         var guestArmies = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -569,11 +573,11 @@ public sealed class SettlementService(
             var guestStacks = AggregateStacks(
                 hostGuestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-            var result = entity.ToDomain().SettleTo(now, oldFactor, guestStacks);
+            var result = entity.ToDomain().SettleTo(now, oldFactor, guestStacks, terrainAt);
             var settled = result.Settlement;
             ApplyGuestDeaths(hostGuestArmies, result.GuestDeaths);
 
-            var (production, capacity) = settled.CurrentTotals(newFactor, guestStacks);
+            var (production, capacity) = settled.CurrentTotals(newFactor, guestStacks, terrainAt);
             entity.ApplyDomain(settled with { Resources = settled.Resources.WithRate(production, capacity, now) });
         }
 
@@ -615,6 +619,15 @@ public sealed class SettlementService(
         return world;
     }
 
+    /// <summary>
+    /// The terrain lookup <see cref="Settlement.SettleTo"/> and friends need
+    /// for a terrain-bound producer's neighbour-adjacency boost — built fresh
+    /// per call since a <see cref="TerrainSampler"/> is cheap (no state, no
+    /// I/O) and a world's generation options can differ per request.
+    /// </summary>
+    private static Func<HexCoord, Terrain> TerrainAt(WorldEntity world) =>
+        new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
+
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
             .Include(s => s.World)
@@ -627,11 +640,14 @@ public sealed class SettlementService(
     /// <summary>
     /// Loads every guest (<see cref="Bjarnoy.Domain.Armies.ArmyMission.Support"/>)
     /// army currently hosted at <paramref name="settlementId"/> (issue #40
-    /// phase 4 §2) and settles the settlement against their pooled upkeep in
-    /// one step — <see cref="Settlement.SettleTo"/>'s <c>guestStacks</c>
-    /// parameter. Tracked (not <c>AsNoTracking</c>): a starvation pass may
-    /// need to write guest deaths back onto these same entities — see
-    /// <see cref="ApplyGuestDeaths"/>.
+    /// phase 4 §2) and settles the settlement against their pooled upkeep and
+    /// its terrain-bound producers' adjacency boost in one step —
+    /// <see cref="Settlement.SettleTo"/>'s <c>guestStacks</c> and
+    /// <c>terrainAt</c> parameters. Tracked (not <c>AsNoTracking</c>): a
+    /// starvation pass may need to write guest deaths back onto these same
+    /// entities — see <see cref="ApplyGuestDeaths"/>. Requires
+    /// <paramref name="entity"/>.World to already be loaded (every caller
+    /// checks this before calling in).
     /// </summary>
     private async Task<(Settlement Settled, SettleResult Result, List<ArmyEntity> GuestArmies)> SettleWithGuestsAsync(
         SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
@@ -644,7 +660,7 @@ public sealed class SettlementService(
         var guestStacks = AggregateStacks(
             guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks);
+        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, TerrainAt(entity.World!));
         return (result.Settlement, result, guestArmies);
     }
 

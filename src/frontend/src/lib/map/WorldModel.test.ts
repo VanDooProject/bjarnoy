@@ -60,6 +60,28 @@ describe('WorldModel border-anchoring (watchtower)', () => {
   });
 });
 
+describe('WorldModel applyServerSnapshot renders every backend building type', () => {
+  it('places a lumberjack and a quarry from a snapshot, not just the pre-existing types', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const lumberjackCoord = { q: at.q + 1, r: at.r };
+    const quarryCoord = { q: at.q, r: at.r + 1 };
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      buildings: [
+        { q: lumberjackCoord.q, r: lumberjackCoord.r, type: 'lumberjack', level: 1 },
+        { q: quarryCoord.q, r: quarryCoord.r, type: 'quarry', level: 1 },
+      ],
+    });
+
+    expect(model.getTile(lumberjackCoord.q, lumberjackCoord.r).buildingType).toBe('lumberjack');
+    expect(model.getTile(quarryCoord.q, quarryCoord.r).buildingType).toBe('quarry');
+  });
+});
+
 describe('WorldModel longhouse placement', () => {
   it('refuses to place a longhouse on an otherwise-buildable owned hex — founding is the only source of one', () => {
     const model = new WorldModel(20260825);
