@@ -179,11 +179,19 @@ public class ChatFlowTests
     private static async Task LogInAsync(
         IPage page, string frontendUrl, string userName, string password, string redirectPath)
     {
-        // Generous timeout for the same reason as FoundingSettlementPersistenceTests:
-        // a cold Vite dev server transpiling everything on first request can
-        // outlast Playwright's default navigation timeout on a loaded CI runner.
+        // frontendUrl (a bare System.Uri.ToString() on an authority-only
+        // endpoint) already ends in "/" — see ProfileEditPersistenceTests'
+        // identical `{frontendUrl}login?...` construction. A `/login`
+        // prefixed with another slash produced `//login`, which Vite's dev
+        // server serves index.html for either way (verified: byte-identical
+        // response), but the browser's window.location.pathname then reads
+        // literally as "//login", which vue-router's exact matcher for
+        // `/login` never matches — with no catch-all route, <router-view>
+        // silently rendered nothing, which is why #userName never appeared
+        // no matter how long the wait below was budgeted (three CI runs,
+        // 30s/60s/120s, identical failure every time: not a timing problem).
         await page.GotoAsync(
-            $"{frontendUrl}/login?redirect={Uri.EscapeDataString(redirectPath)}",
+            $"{frontendUrl}login?redirect={Uri.EscapeDataString(redirectPath)}",
             new PageGotoOptions { Timeout = 120_000 });
 
         // GotoAsync's "load" event fires once the bare HTML/CSS/JS have
