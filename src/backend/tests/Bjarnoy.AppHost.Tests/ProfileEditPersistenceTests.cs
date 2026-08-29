@@ -66,16 +66,20 @@ public class ProfileEditPersistenceTests
         // Logs in through the real UI (LoginView's onMounted auto-submits
         // when username/password arrive as query params), which exercises
         // the same auth store / localStorage refresh-token path a real
-        // player's login does, rather than injecting a token directly.
-        var loginUrl = $"{frontendUrl}login?username={Uri.EscapeDataString(userName)}&password={Uri.EscapeDataString(password)}";
+        // player's login does, rather than injecting a token directly. The
+        // `redirect` param sends the post-login push straight to /profile
+        // instead of '/' — landing on LandingView first (even briefly)
+        // kicks off its own bootstrapLiveWorld() fetch, and navigating away
+        // before that settles gets it aborted, which the browser logs as a
+        // console error ("TypeError: Failed to fetch") that then fails this
+        // test's own forbid-console-errors check for a reason that has
+        // nothing to do with the profile flow under test. The later
+        // page.ReloadAsync() below already covers ensureInitialized()'s
+        // localStorage-refresh-token path on a real reload; this avoids
+        // needing a second full navigation just to reach it once more.
+        var loginUrl = $"{frontendUrl}login?username={Uri.EscapeDataString(userName)}&password={Uri.EscapeDataString(password)}&redirect={Uri.EscapeDataString("/profile")}";
         await page.GotoAsync(loginUrl, new PageGotoOptions { Timeout = 120_000 });
-        await page.WaitForURLAsync(url => !url.Contains("/login"), new PageWaitForURLOptions { Timeout = 15_000 });
-
-        // A fresh navigation to /profile — this re-runs the router guard's
-        // ensureInitialized() from the refresh token login just stored in
-        // localStorage, the same as a real reload, rather than relying on
-        // in-page SPA navigation state surviving from the login above.
-        await page.GotoAsync($"{frontendUrl}profile", new PageGotoOptions { Timeout = 120_000 });
+        await page.WaitForURLAsync(url => url.Contains("/profile"), new PageWaitForURLOptions { Timeout = 15_000 });
 
         var addBioButton = page.GetByRole(AriaRole.Button, new() { Name = "Add a bio" });
         await Assertions.Expect(addBioButton).ToBeVisibleAsync(new() { Timeout = 15_000 });
