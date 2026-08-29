@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text.RegularExpressions;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
@@ -54,7 +55,12 @@ public class AdminBootstrapLoginTests
         // LoginView.vue's onMounted) — no separate typed-in login step here.
         await page.GotoAsync(adminLoginUrl, new PageGotoOptions { Timeout = 120_000 });
 
-        await page.WaitForURLAsync(url => url.Contains("/admin"), new PageWaitForURLOptions { Timeout = 30_000 });
+        // WaitForURLAsync waits for a *navigation event* and never fires for
+        // Vue Router's client-side (History API) route change from '/login'
+        // to '/admin' after a successful auto-login — there's no full page
+        // navigation to catch. ToHaveURLAsync is a polling assertion that
+        // re-reads the page's current URL instead, which does catch it.
+        await Assertions.Expect(page).ToHaveURLAsync(new Regex("/admin"), new PageAssertionsToHaveURLOptions { Timeout = 30_000 });
         await Assertions.Expect(page.GetByText("Wrong username or password.")).Not.ToBeVisibleAsync();
         await Assertions.Expect(page.GetByRole(AriaRole.Heading)).ToBeVisibleAsync();
 
