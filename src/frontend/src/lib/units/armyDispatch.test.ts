@@ -5,8 +5,10 @@ import {
   buildAttackDispatchRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
+  classifyUnitSelection,
   formatEta,
   hasCatapultSelected,
+  isUnitSelectableFor,
   maxAffordableProvisions,
   routeToWaypointsAndDestination,
   totalUpkeepPerHour,
@@ -247,5 +249,62 @@ describe('armyStatusLabel', () => {
     expect(
       armyStatusLabel({ atHome: false, supporting: false, movement: { isReturning: true } }),
     ).toBe('Returning');
+  });
+});
+
+describe('classifyUnitSelection', () => {
+  const byType = {
+    spearman: unit({ type: 'spearman', class: 'infantry' }),
+    catapult: unit({ type: 'catapult', class: 'siege' }),
+    karve: unit({ type: 'karve', class: 'ship' }),
+    longship: unit({ type: 'longship', class: 'ship' }),
+  };
+
+  it('reports "none" when nothing is selected', () => {
+    expect(classifyUnitSelection({}, byType)).toBe('none');
+    expect(classifyUnitSelection({ spearman: 0, karve: 0 }, byType)).toBe('none');
+  });
+
+  it('reports "land" for a non-ship-only selection, siege included', () => {
+    expect(classifyUnitSelection({ spearman: 3, catapult: 1 }, byType)).toBe('land');
+  });
+
+  it('reports "fleet" for a ship-only selection', () => {
+    expect(classifyUnitSelection({ karve: 2, longship: 1 }, byType)).toBe('fleet');
+  });
+
+  it('reports "mixed" once both families are selected', () => {
+    expect(classifyUnitSelection({ spearman: 1, karve: 1 }, byType)).toBe('mixed');
+  });
+
+  it('ignores unit types missing from the catalogue', () => {
+    expect(classifyUnitSelection({ unknown: 5 }, byType)).toBe('none');
+  });
+});
+
+describe('isUnitSelectableFor', () => {
+  const byType = {
+    spearman: unit({ type: 'spearman', class: 'infantry' }),
+    karve: unit({ type: 'karve', class: 'ship' }),
+  };
+
+  it('leaves every class pickable when nothing is selected yet', () => {
+    expect(isUnitSelectableFor('spearman', 'none', byType)).toBe(true);
+    expect(isUnitSelectableFor('karve', 'none', byType)).toBe(true);
+  });
+
+  it('locks out ships once a land selection is committed', () => {
+    expect(isUnitSelectableFor('spearman', 'land', byType)).toBe(true);
+    expect(isUnitSelectableFor('karve', 'land', byType)).toBe(false);
+  });
+
+  it('locks out land units once a fleet selection is committed', () => {
+    expect(isUnitSelectableFor('karve', 'fleet', byType)).toBe(true);
+    expect(isUnitSelectableFor('spearman', 'fleet', byType)).toBe(false);
+  });
+
+  it('locks out nothing further for an (unreachable in practice) mixed selection', () => {
+    expect(isUnitSelectableFor('spearman', 'mixed', byType)).toBe(true);
+    expect(isUnitSelectableFor('karve', 'mixed', byType)).toBe(true);
   });
 });
