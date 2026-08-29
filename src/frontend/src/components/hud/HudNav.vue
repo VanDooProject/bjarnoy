@@ -41,6 +41,13 @@ const initials = computed(() => {
     </button>
     <button class="link disabled" type="button" disabled title="Not implemented yet">Reports</button>
     <button class="link disabled" type="button" disabled title="Not implemented yet">Alliance</button>
+    <button
+      class="link"
+      :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }"
+      @click="router.push('/docs')"
+    >
+      Docs
+    </button>
     <button class="link" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
       Landing
     </button>

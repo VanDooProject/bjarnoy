@@ -45,6 +45,21 @@ export const router = createRouter({
       component: () => import('../views/ImpressumView.vue'),
     },
     {
+      path: '/docs',
+      name: 'docs',
+      component: () => import('../views/DocsView.vue'),
+    },
+    {
+      path: '/tech-tree',
+      name: 'tech-tree',
+      component: () => import('../views/TechTreeView.vue'),
+    },
+    {
+      path: '/docs/tiles',
+      name: 'tile-docs',
+      component: () => import('../views/TileDocsView.vue'),
+    },
+    {
       path: '/admin',
       component: () => import('../views/admin/AdminLayout.vue'),
       meta: { requiresAdmin: true },

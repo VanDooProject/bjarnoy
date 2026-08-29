@@ -59,3 +59,15 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     expect(model.getTile(outside.q, outside.r).ownerId).toBeUndefined();
   });
 });
+
+describe('WorldModel longhouse placement', () => {
+  it('refuses to place a longhouse on an otherwise-buildable owned hex — founding is the only source of one', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const edge = findLandBorderEdge(model, at, radius);
+
+    expect(model.placeBuilding(settlement.id, edge, 'longhouse')).toBe(false);
+    expect(model.getTile(edge.q, edge.r).buildingType).toBeUndefined();
+  });
+});

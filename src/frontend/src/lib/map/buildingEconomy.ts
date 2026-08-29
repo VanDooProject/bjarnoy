@@ -41,14 +41,11 @@ export function buildingStatsFor(type: BuildingKind, level: number, nearWater: b
       const workersCap = level * 4;
       return { output: `+${level * 144} food/h`, workers: `${workersCap}/${workersCap}` };
     }
-    case 'fishinghut': {
-      const workersCap = level * 3;
-      return {
-        output: `+${level * 120} food/h`,
-        modifier: nearWater ? 'Coastal' : undefined,
-        workers: `${workersCap}/${workersCap}`,
-      };
-    }
+    // Placed on coastal water itself (BuildingCatalogue.cs's FishingHut),
+    // not merely built near it, so unlike farm's irrigation bonus this is
+    // unconditional rather than gated on nearWater.
+    case 'fishinghut':
+      return { output: `+${level * 30} food/h`, modifier: 'Coastal' };
     case 'magictower':
       return { output: `+${level * 24} iron/h`, modifier: 'Arcane' };
     default:

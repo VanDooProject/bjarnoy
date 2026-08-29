@@ -61,6 +61,8 @@ export interface PlacedBuildingResponse {
   r: number;
   type: string;
   level: number;
+  /** Which art-pack rotation to render with — set only for a building whose art has a fixed connection to something around it (e.g. the fishing hut's dock). */
+  orientation?: string | null;
 }
 
 export interface BuildOrderResponse {
@@ -339,4 +341,19 @@ export interface ProblemDetails {
    * this is what actually distinguishes them.
    */
   rejection?: string;
+}
+
+/** A single (building type, level) entry from the tech-tree catalogue — see `GET /api/v1/buildings`. */
+export interface BuildingDefinitionResponse {
+  type: string;
+  level: number;
+  cost: ResourceLine;
+  buildSeconds: number;
+  productionPerHour: ResourceLine;
+  storageCapacity: ResourceLine;
+  /** Empty both for "any land" and for a requiresCoastalWater building — check that flag first. */
+  allowedTerrain: string[];
+  /** Placed on shallow (coastal) water instead of any land terrain — see BuildingDefinition.RequiresCoastalWater. */
+  requiresCoastalWater: boolean;
+  requiredLonghouseLevel: number;
 }

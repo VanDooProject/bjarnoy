@@ -292,6 +292,55 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("settlements", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan>("PerUnitDuration")
+                        .HasColumnType("interval");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UnitType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("training_orders", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UnitStackEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("UnitType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId", "UnitType")
+                        .IsUnique();
+
+                    b.ToTable("unit_stacks", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -560,11 +609,37 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("World");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany("TrainingQueue")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UnitStackEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
+                        .WithMany("Garrison")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Settlement");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.SettlementEntity", b =>
                 {
                     b.Navigation("Buildings");
 
+                    b.Navigation("Garrison");
+
                     b.Navigation("Queue");
+
+                    b.Navigation("TrainingQueue");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>

@@ -320,7 +320,7 @@ export class WorldModel {
       level: number;
       resources: Resources;
       rates: Resources;
-      buildings: { q: number; r: number; type: string; level: number }[];
+      buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
     },
   ) {
     const settlement = this.settlements.get(settlementId);
@@ -346,17 +346,30 @@ export class WorldModel {
       tile.ownerId = settlementId;
       tile.buildingType = building.type as Tile['buildingType'];
       tile.buildingLevel = building.level;
+      // The fishing hut is the only building with its own orientation (a
+      // dock that has to face this settlement's shore, not whatever a bare
+      // coastal-water tile would default to) — see PlacedBuildingResponse.
+      if (building.orientation) {
+        tile.orientation = building.orientation as Tile['orientation'];
+      }
     }
   }
 
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return false;
+    // A settlement gets its one longhouse from founding (foundSettlement
+    // above), never from placing a building — matches the backend rule in
+    // Settlement.PlanBuild (BuildRejection.LonghousePlacementNotAllowed).
+    if (type === 'longhouse') return false;
     if (hexDistance({ q: settlement.q, r: settlement.r }, at) > this.borderRadius(settlement)) {
       return false;
     }
     const tile = this.getTile(at.q, at.r);
-    if (tile.terrain === 'sea' || tile.buildingType) return false;
+    // Every other building needs dry land; the fishing hut is the one
+    // exception, and only on the coastal ring of the sea, not open water.
+    const seaOk = type === 'fishinghut' && tile.isCoastalWater;
+    if ((tile.terrain === 'sea' && !seaOk) || tile.buildingType) return false;
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;
