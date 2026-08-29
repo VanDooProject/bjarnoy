@@ -3,6 +3,7 @@ import type {
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
+  BuildingDefinitionResponse,
   CreateWorldRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
@@ -96,6 +97,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  // Public catalogue endpoint — no worldId, since the catalogue is currently
+  // the same static data for every world (see `BuildingCatalogue.cs`).
+  getBuildingCatalogue: () => request<BuildingDefinitionResponse[]>('/buildings'),
   adminListWorlds: () => request<AdminWorldResponse[]>('/admin/worlds'),
   adminUpdateWorldSettings: (worldId: string, body: UpdateWorldSettingsRequest) =>
     request<AdminWorldResponse>(`/admin/worlds/${worldId}/settings`, {

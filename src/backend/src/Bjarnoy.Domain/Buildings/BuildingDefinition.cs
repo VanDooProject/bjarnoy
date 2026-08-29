@@ -41,9 +41,21 @@ public sealed record BuildingDefinition
 
     /// <summary>
     /// Terrain this building may stand on. Empty means anywhere buildable —
-    /// which is any land hex; nothing is built on open sea.
+    /// which is any land hex; nothing is built on open sea. Meaningless (and
+    /// unused — see <see cref="RequiresCoastalWater"/>) for a building that
+    /// stands on water instead of land.
     /// </summary>
     public IReadOnlySet<Terrain> AllowedTerrain { get; init; } = new HashSet<Terrain>();
+
+    /// <summary>
+    /// Placed on shallow (coastal) water rather than land — a sea hex with at
+    /// least one land neighbour (<see cref="World.TerrainSampler.IsCoastalWater"/>).
+    /// A settlement's <see cref="Buildings.Settlement.PlanBuild"/> checks this
+    /// instead of <see cref="AllowsTerrain"/> for such a building; the terrain
+    /// under it stays plain <see cref="Terrain.Sea"/>, so it is a separate rail
+    /// rather than another <see cref="AllowedTerrain"/> entry.
+    /// </summary>
+    public bool RequiresCoastalWater { get; init; }
 
     /// <summary>
     /// Longhouse level required before this may be built, so the anchor gates

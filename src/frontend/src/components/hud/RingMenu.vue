@@ -32,6 +32,28 @@ const props = defineProps<{
   // bubble duplicating it in the ring below. So this is a real clickable
   // action, not just a text label.
   badgeAction?: BadgeAction;
+  // Issue #16 "build should open a new outer ring, concentric rings moving
+  // out": the caller renders one RingMenu per open level and spaces them by
+  // passing an increasing radius, instead of one ring replacing another.
+  radius?: number;
+  // Only the innermost/first ring in that stack owns the full-screen
+  // backdrop (closing on outside click, starting a drag, right-click to
+  // close) — the outer rings are just another orbit of bubbles floating
+  // above the same backdrop, so their own backdrop div must not intercept
+  // pointer events meant for it.
+  backdrop?: boolean;
+  // Extra rotation (degrees) added on top of this ring's own layout
+  // rotation. Without it, every ring starts its bubbles from the same
+  // angle, so an outer ring's bubbles land radially in line with the inner
+  // ring's — a "bullseye" rather than a menu unfolding outward. The caller
+  // staggers each successive ring by half its parent's angular spacing.
+  angleOffset?: number;
+  // Shrinks bubble/badge size (1 = full 88px) so outer rings read as
+  // further away, not just further out.
+  bubbleScale?: number;
+  // 0 = innermost ring (solid, brightest track); each level out fades and
+  // sparsens its own orbit track, purely a depth cue.
+  depth?: number;
 }>();
 const emit = defineEmits<{
   select: [id: string];
@@ -45,15 +67,25 @@ const emit = defineEmits<{
   outsidePointerDown: [event: PointerEvent];
 }>();
 
-// Issue #16 "ring menu": reference shows the bubbles spread well clear of
-// the tile in an orbit, not crowded around it.
-const RADIUS = 110;
+// Issue #16 "ring menu": reference shows the bubbles spread clear of the
+// tile in an orbit, not crowded around it — but the radius alone isn't what
+// was making the innermost ring feel oversized, the 88px bubbles were (see
+// BUBBLE_DIAMETER below); a smaller radius paired with smaller bubbles is
+// what actually tightens the footprint without cramming them together.
+// The root ring only ever carries 1-2 actions (see SettlementView's
+// ringActions), so it has no tangential crowding risk from a bigger bubble
+// at a tight radius — the two never need to be traded off against each
+// other here, unlike an outer ring with 3+ actions on the same orbit.
+const RADIUS = 52;
 // A ring with a badge (an owned building, "Lv n upgrade") also has the
 // canvas's own floating settlement-name pill sitting right at the tile's
 // centre, underneath the ring — the same RADIUS that keeps a badge-less
 // ring feeling spread out crowds this one from both above (the badge) and
 // the middle (that pill), so it gets extra breathing room.
-const effectiveRadius = computed(() => (props.badgeAction ? RADIUS + 40 : RADIUS));
+const effectiveRadius = computed(() => {
+  const base = props.radius ?? RADIUS;
+  return props.badgeAction ? base + 20 : base;
+});
 const badgeY = computed(() => props.y - effectiveRadius.value - 34);
 // Issue #16 "ring menu" target: "connected down to the ring by a thin
 // curved guide line" — a quadratic curve from the badge's bottom edge to
@@ -76,7 +108,7 @@ const positioned = computed(() => {
   // (the "Lv n upgrade" badge on an owned building): a bubble landing
   // exactly at north then sits underneath the badge instead of beside it,
   // so the ring is rotated half a step to move that gap to the top instead.
-  const rotationOffset = n === 4 ? 45 : props.badgeAction ? -90 + angleStep / 2 : -90;
+  const rotationOffset = (n === 4 ? 45 : props.badgeAction ? -90 + angleStep / 2 : -90) + (props.angleOffset ?? 0);
   const radius = effectiveRadius.value;
   return props.actions.map((action, i) => {
     const angleDeg = angleStep * i + rotationOffset;
@@ -89,9 +121,45 @@ const positioned = computed(() => {
   });
 });
 
+// Bigger than the previous 60px pass — labels like "Watchtower" were
+// wrapping into an awkward mid-word break at that size even with the
+// overflow-wrap fallback. The radius shrink above (and the tighter
+// inter-ring gap in SettlementView) claws the footprint back down despite
+// the bigger bubbles.
+const BUBBLE_DIAMETER = 72;
+const bubbleSize = computed(() => BUBBLE_DIAMETER * (props.bubbleScale ?? 1));
+const bubbleFontSize = computed(() => 12 * (props.bubbleScale ?? 1));
+// Depth cue: each ring out is fainter and its dashes sparser, so the
+// innermost ring reads as the "current" one and outer rings whisper. A
+// plain low-alpha white stroke (the original values here) reads fine
+// against the map's own dark backdrop overlay, but washes out completely
+// over bright terrain/fog — the drop-shadow gives it a dark halo so the
+// track stays visible over both.
+const trackStyle = computed(() => {
+  const depth = props.depth ?? 0;
+  const opacity = [0.55, 0.4, 0.28][Math.min(depth, 2)];
+  const dash = [[4, 4], [3, 5], [2, 6]][Math.min(depth, 2)];
+  return {
+    stroke: `rgba(255, 255, 255, ${opacity})`,
+    strokeWidth: depth === 0 ? 2 : 1.5,
+    strokeDasharray: dash.join(' '),
+    filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55))',
+  };
+});
+
 function select(action: RingAction) {
   if (action.disabled) return;
   emit('select', action.id);
+}
+
+function onBackdropPointerDown(e: PointerEvent) {
+  if (props.backdrop === false) return;
+  emit('outsidePointerDown', e);
+}
+
+function onBackdropContextMenu() {
+  if (props.backdrop === false) return;
+  emit('close');
 }
 
 // Issue #16 "build (which opens another ring outside with available
@@ -110,14 +178,15 @@ function hover(action: RingAction) {
 <template>
   <div
     class="ring-backdrop"
-    @pointerdown.self="emit('outsidePointerDown', $event)"
-    @contextmenu.prevent="emit('close')"
+    :class="{ 'no-backdrop': backdrop === false }"
+    @pointerdown.self="onBackdropPointerDown"
+    @contextmenu.prevent="onBackdropContextMenu"
   >
     <!-- Issue #16 "ring menu": a faint orbit track under the bubbles (the
          "ring" itself, not just floating buttons), plus the curved guide
          line down from the badge when one is present. -->
     <svg class="ring-svg">
-      <circle class="ring-track" :cx="x" :cy="y" :r="effectiveRadius" />
+      <circle class="ring-track" :cx="x" :cy="y" :r="effectiveRadius" :style="trackStyle" />
       <path v-if="badgeAction" class="ring-guide" :d="guidePath" />
     </svg>
     <button
@@ -137,7 +206,13 @@ function hover(action: RingAction) {
       :key="p.action.id"
       class="ring-bubble"
       :class="{ disabled: p.action.disabled }"
-      :style="{ left: `${p.left}px`, top: `${p.top}px` }"
+      :style="{
+        left: `${p.left}px`,
+        top: `${p.top}px`,
+        width: `${bubbleSize}px`,
+        height: `${bubbleSize}px`,
+        fontSize: `${bubbleFontSize}px`,
+      }"
       :disabled="p.action.disabled"
       :title="p.action.disabled ? p.action.hint : undefined"
       @click="select(p.action)"
@@ -153,6 +228,13 @@ function hover(action: RingAction) {
   position: absolute;
   inset: 0;
   z-index: 30;
+}
+/* An outer, concentric ring (see the `radius`/`backdrop` props) shares the
+   screen with the innermost ring's own full-screen backdrop underneath it
+   — it must not intercept clicks meant for that backdrop (closing the
+   rings, starting a drag), only its own bubbles should be interactive. */
+.ring-backdrop.no-backdrop {
+  pointer-events: none;
 }
 .ring-svg {
   position: absolute;
@@ -175,6 +257,10 @@ function hover(action: RingAction) {
 }
 .ring-badge {
   position: absolute;
+  /* Explicit even though it's the CSS default: pointer-events is inherited,
+     so an outer ring's `.ring-backdrop.no-backdrop` (pointer-events: none)
+     would otherwise make this unclickable too. */
+  pointer-events: auto;
   transform: translate(-50%, -50%);
   width: 76px;
   height: 76px;
@@ -208,13 +294,17 @@ function hover(action: RingAction) {
 }
 .ring-bubble {
   position: absolute;
+  /* See .ring-badge's own comment: needed for outer, backdrop-less rings. */
+  pointer-events: auto;
   transform: translate(-50%, -50%);
   /* Reference: a plain circle, same size regardless of label length — not
-     a pill that stretches with its text. */
-  width: 88px;
-  height: 88px;
+     a pill that stretches with its text. Sizing here matches RingMenu's own
+     BUBBLE_DIAMETER default; the inline style (bound to bubbleSize) always
+     wins, this is just the no-JS/pre-hydration fallback. */
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  padding: 0 10px;
+  padding: 0 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -222,11 +312,18 @@ function hover(action: RingAction) {
   background: rgba(8, 18, 26, 0.88);
   border: none;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.1;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  /* A long single word (e.g. "Watchtower") has nowhere to break on a plain
+     `word-break: normal` — it just overflows the circle. This forces a
+     mid-word break only when nothing else fits, so short labels still wrap
+     on natural word boundaries first. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 .ring-bubble:hover:not(.disabled) {
   color: var(--gold);
