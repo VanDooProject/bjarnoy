@@ -5,16 +5,60 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
+import { validateTradeRatio } from '../trade/tradeRatio';
 import { generateTile } from './worldGenerator';
 import {
   emptyResources,
   type Fleet,
   type IslandLabel,
+  type ResourceKind,
   type Resources,
   type RiverTile,
   type Settlement,
   type Tile,
 } from './types';
+
+/**
+ * Demo mode's client-only trade offer — mirrors the shape of the backend's
+ * `TradeOfferResponse` closely enough that TradePanel.vue can read either
+ * with the same template, without actually matching it field-for-field
+ * (there's no id-per-poster-settlement notion of a shipment here — see
+ * `WorldModel.acceptTradeOffer`'s doc comment for why).
+ */
+export interface DemoTradeOffer {
+  id: string;
+  posterSettlementId: string;
+  posterName: string;
+  offeredResource: ResourceKind;
+  offeredAmount: number;
+  requestedResource: ResourceKind;
+  requestedAmount: number;
+  guildOnly: boolean;
+  state: 'open' | 'accepted' | 'delivered' | 'cancelled' | 'expired';
+  postedAt: number;
+}
+
+/**
+ * Demo-mode trade rejection, thrown by `WorldModel`'s trade methods —
+ * mirrors `ApiError`'s `problem.rejection` closely enough that
+ * TradePanel.vue can display both the same way (`err.rejection` here vs
+ * `err.problem?.rejection` there) without a real HTTP round trip to reject.
+ */
+export class DemoTradeError extends Error {
+  readonly rejection: string;
+  constructor(rejection: string) {
+    super(rejection);
+    this.rejection = rejection;
+  }
+}
+
+// A single canned rival offer, seeded once at world construction so the demo
+// (and its e2e test) has something on the board to accept without needing a
+// second real settlement — see `WorldModel`'s constructor. This settlement
+// id is never registered via `registerSettlement`, so it never renders on
+// the map; it exists only as a label for this one offer.
+const DEMO_RIVAL_SETTLEMENT_ID = 'demo-rival';
+const DEMO_RIVAL_NAME = 'Ravenshold';
 
 const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
@@ -46,9 +90,25 @@ export class WorldModel {
   private islandFootprintCache = new Map<string, AxialCoord[]>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
+  /** Demo mode's client-only trade offers — see `postTradeOffer` and friends. */
+  private demoTradeOffers = new Map<string, DemoTradeOffer>();
 
   constructor(seed = 1) {
     this.seed = seed;
+    // One canned open offer so a fresh demo world always has something on
+    // the trade board to accept — see the constant's own doc comment.
+    this.demoTradeOffers.set('demo-seed-offer', {
+      id: 'demo-seed-offer',
+      posterSettlementId: DEMO_RIVAL_SETTLEMENT_ID,
+      posterName: DEMO_RIVAL_NAME,
+      offeredResource: 'wood',
+      offeredAmount: 50,
+      requestedResource: 'iron',
+      requestedAmount: 25,
+      guildOnly: false,
+      state: 'open',
+      postedAt: Date.now(),
+    });
   }
 
   /** Live mode: island names/centres fetched from the backend (see `stores/world.ts`). */
@@ -420,6 +480,118 @@ export class WorldModel {
       if (fleet.etaAt < now - 5000) this.fleets.delete(id);
     }
     return [...this.fleets.values()];
+  }
+
+  /**
+   * Demo mode's client-only stand-in for `POST .../trade-offers`: validates
+   * the same ratio corridor the backend enforces (`lib/trade/tradeRatio.ts`)
+   * and escrows the offered goods out of `resources` immediately, exactly
+   * like `TradeService.PostOfferAsync` does server-side. Throws
+   * `DemoTradeError` (mirroring `ApiError.problem.rejection`) on rejection.
+   */
+  postTradeOffer(
+    settlementId: string,
+    offeredResource: ResourceKind,
+    offeredAmount: number,
+    requestedResource: ResourceKind,
+    requestedAmount: number,
+    guildOnly: boolean,
+  ): DemoTradeOffer {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) throw new DemoTradeError('SettlementNotFound');
+
+    const rejection = validateTradeRatio(
+      offeredResource,
+      offeredAmount,
+      requestedResource,
+      requestedAmount,
+      guildOnly,
+    );
+    if (rejection) throw new DemoTradeError(rejection);
+
+    if (settlement.resources[offeredResource] < offeredAmount) {
+      throw new DemoTradeError('NotEnoughResources');
+    }
+
+    settlement.resources[offeredResource] -= offeredAmount;
+
+    const offer: DemoTradeOffer = {
+      id: `offer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      posterSettlementId: settlementId,
+      posterName: settlement.name,
+      offeredResource,
+      offeredAmount,
+      requestedResource,
+      requestedAmount,
+      guildOnly,
+      state: 'open',
+      postedAt: Date.now(),
+    };
+    this.demoTradeOffers.set(offer.id, offer);
+    return offer;
+  }
+
+  /** Open offers not posted by `excludeSettlementId` — the demo "trade board" (mirrors `GET .../board`). */
+  listOpenTradeOffers(excludeSettlementId: string): DemoTradeOffer[] {
+    return [...this.demoTradeOffers.values()].filter(
+      (o) => o.state === 'open' && o.posterSettlementId !== excludeSettlementId,
+    );
+  }
+
+  /** This settlement's own offers, any state, most recent first (mirrors `GET .../mine`). */
+  listMyTradeOffers(settlementId: string): DemoTradeOffer[] {
+    return [...this.demoTradeOffers.values()]
+      .filter((o) => o.posterSettlementId === settlementId)
+      .sort((a, b) => b.postedAt - a.postedAt);
+  }
+
+  /** Withdraws an open offer and refunds its escrow — mirrors `CancelOfferAsync`. */
+  cancelTradeOffer(offerId: string, settlementId: string): DemoTradeOffer {
+    const offer = this.demoTradeOffers.get(offerId);
+    if (!offer) throw new DemoTradeError('OfferNotFound');
+    if (offer.posterSettlementId !== settlementId) throw new DemoTradeError('NotYourOffer');
+    if (offer.state !== 'open') throw new DemoTradeError('OfferNotOpen');
+
+    const settlement = this.settlements.get(offer.posterSettlementId);
+    if (settlement) settlement.resources[offer.offeredResource] += offer.offeredAmount;
+
+    offer.state = 'cancelled';
+    return offer;
+  }
+
+  /**
+   * Demo mode's stand-in for `POST /trade-offers/{id}/accept`. Real trades
+   * dispatch two shipments that travel over real game time (see the
+   * backend's `ShipmentResponse`); the demo simulation has no travel loop to
+   * hang a cart's ETA off of, so it settles synchronously — both
+   * settlements' resources update immediately and the offer goes straight
+   * to 'delivered' rather than 'accepted'. This is a deliberate
+   * simplification (there is nothing for a "Shipments" list to show in demo
+   * mode), not a bug. The seeded rival settlement (`DEMO_RIVAL_SETTLEMENT_ID`)
+   * is never registered, so it has no `resources` to credit — only the real
+   * (player) side of the trade actually moves stock either way.
+   */
+  acceptTradeOffer(offerId: string, acceptorSettlementId: string): DemoTradeOffer {
+    const offer = this.demoTradeOffers.get(offerId);
+    if (!offer) throw new DemoTradeError('OfferNotFound');
+    if (offer.state !== 'open') throw new DemoTradeError('OfferNotOpen');
+    if (offer.guildOnly) throw new DemoTradeError('GuildOnlyOffer');
+    if (offer.posterSettlementId === acceptorSettlementId) throw new DemoTradeError('OwnOffer');
+
+    const acceptor = this.settlements.get(acceptorSettlementId);
+    if (!acceptor) throw new DemoTradeError('SettlementNotFound');
+    if (acceptor.resources[offer.requestedResource] < offer.requestedAmount) {
+      throw new DemoTradeError('NotEnoughResources');
+    }
+
+    acceptor.resources[offer.requestedResource] -= offer.requestedAmount;
+    acceptor.resources[offer.offeredResource] += offer.offeredAmount;
+
+    const poster = this.settlements.get(offer.posterSettlementId);
+    if (poster) poster.resources[offer.requestedResource] += offer.requestedAmount;
+
+    offer.state = 'delivered';
+    return offer;
   }
 
   /** Advances resource stockpiles by elapsed real time. Call from a game loop, not from Vue. */

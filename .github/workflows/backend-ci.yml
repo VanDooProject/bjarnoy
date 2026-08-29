@@ -44,8 +44,18 @@ jobs:
 
       # Runs the SQLite suite and, because GitHub runners have Docker, the
       # Testcontainers PostgreSQL suite as well.
+      #
+      # appsettings.Development.json turns EF Core's per-command SQL logging
+      # up to Information, which the test host inherits (WebApplicationFactory
+      # defaults to the Development environment) — on a full run that's tens
+      # of thousands of lines of "Executed DbCommand ..." noise ahead of any
+      # actual failure output, which is exactly what a CI log needs to show.
+      # Overriding it back down to Warning here keeps a failing run's own
+      # assertion output the thing actually visible in the log.
       - name: Integration tests
         run: dotnet test --project tests/Bjarnoy.Api.IntegrationTests --configuration Release --no-build
+        env:
+          Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
 
   # The migration sets are generated from the model, so they can silently fall
   # out of step with it. This fails the build when they have.

@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import type {
+  AcceptTradeOfferRequest,
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
@@ -7,6 +8,7 @@ import type {
   ArmySummary,
   BattleReportResponse,
   BuildingDefinitionResponse,
+  CancelTradeOfferRequest,
   CreateWorldRequest,
   DispatchArmyRequest,
   FoundSettlementRequest,
@@ -26,6 +28,7 @@ import type {
   PagedConversationsResponse,
   PagedMessagesResponse,
   PagedReportsResponse,
+  PostTradeOfferRequest,
   ProblemDetails,
   ProfileResponse,
   QueueBuildRequest,
@@ -39,6 +42,9 @@ import type {
   SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
+  ShipmentResponse,
+  TradeAcceptResponse,
+  TradeOfferResponse,
   TrainingOrderResponse,
   TrainUnitsRequest,
   UnitDefinitionResponse,
@@ -120,6 +126,27 @@ export const api = {
     request<SettlementResponse>(`/settlements/${settlementId}`),
   queueBuild: (settlementId: string, body: QueueBuildRequest) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
+    request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getTradeBoard: (settlementId: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/board`),
+  getMyTradeOffers: (settlementId: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`),
+  getShipments: (settlementId: string) =>
+    request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`),
+  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
+    request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest) =>
+    request<TradeOfferResponse>(`/trade-offers/${offerId}/cancel`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
