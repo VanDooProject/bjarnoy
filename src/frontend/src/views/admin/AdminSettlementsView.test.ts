@@ -52,6 +52,8 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
     },
     buildings: [{ q: 0, r: 0, type: 'Longhouse', level: 1 }],
     queue: [],
+    garrison: [],
+    trainingQueue: [],
     world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
     ...overrides,
   };
