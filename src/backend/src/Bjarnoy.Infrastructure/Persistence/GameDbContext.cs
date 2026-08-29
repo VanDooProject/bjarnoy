@@ -54,6 +54,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<GuildPeaceTreatyEntity> GuildPeaceTreaties => Set<GuildPeaceTreatyEntity>();
 
+    public DbSet<TradeOfferEntity> TradeOffers => Set<TradeOfferEntity>();
+
+    public DbSet<ShipmentEntity> Shipments => Set<ShipmentEntity>();
+
+    public DbSet<TradeReportEntity> TradeReports => Set<TradeReportEntity>();
+
     public DbSet<MessageEntity> Messages => Set<MessageEntity>();
 
     public DbSet<MessageRecipientEntity> MessageRecipients => Set<MessageRecipientEntity>();
@@ -516,6 +522,73 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithMany()
                 .HasForeignKey(t => t.TargetGuildId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Trade offers and shipments are not a nested aggregate under
+        // SettlementEntity the way Buildings/Queue are — a trade always
+        // spans two settlements, so each is its own table, queried directly
+        // off this context rather than synced through Settlement.ApplyDomain.
+        // No navigation properties onto SettlementEntity: `.WithMany()`
+        // below creates the foreign key without requiring a back-collection
+        // on the settlement side, so SettlementEntity stays untouched.
+        modelBuilder.Entity<TradeOfferEntity>(offer =>
+        {
+            offer.ToTable("trade_offers");
+            offer.HasKey(o => o.Id);
+            offer.Property(o => o.Id).ValueGeneratedNever();
+            offer.Property(o => o.OfferedResource).HasConversion<int>();
+            offer.Property(o => o.RequestedResource).HasConversion<int>();
+            offer.Property(o => o.State).HasConversion<int>();
+
+            offer.HasOne<SettlementEntity>().WithMany()
+                .HasForeignKey(o => o.PosterSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The trade board's query: open, unexpired offers in a world,
+            // excluding the caller's own.
+            offer.HasIndex(o => new { o.WorldId, o.State, o.ExpiresAt });
+            offer.HasIndex(o => o.PosterSettlementId);
+        });
+
+        modelBuilder.Entity<ShipmentEntity>(shipment =>
+        {
+            shipment.ToTable("shipments");
+            shipment.HasKey(s => s.Id);
+            shipment.Property(s => s.Id).ValueGeneratedNever();
+            shipment.Property(s => s.CargoResource).HasConversion<int>();
+
+            shipment.HasOne<TradeOfferEntity>().WithMany()
+                .HasForeignKey(s => s.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            shipment.HasOne<SettlementEntity>().WithMany()
+                .HasForeignKey(s => s.FromSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            shipment.HasOne<SettlementEntity>().WithMany()
+                .HasForeignKey(s => s.ToSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            shipment.HasIndex(s => s.OfferId);
+            shipment.HasIndex(s => new { s.ToSettlementId, s.DeliveredAt, s.ArrivesAt });
+            shipment.HasIndex(s => s.FromSettlementId);
+        });
+
+        modelBuilder.Entity<TradeReportEntity>(report =>
+        {
+            report.ToTable("trade_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.OfferedResource).HasConversion<int>();
+            report.Property(r => r.RequestedResource).HasConversion<int>();
+
+            report.HasOne<TradeOfferEntity>().WithMany()
+                .HasForeignKey(r => r.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasIndex(r => r.OfferId).IsUnique();
+            report.HasIndex(r => r.PosterSettlementId);
+            report.HasIndex(r => r.AcceptorSettlementId);
         });
 
         modelBuilder.Entity<MessageEntity>(message =>

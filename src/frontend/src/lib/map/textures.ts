@@ -401,7 +401,11 @@ export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
     const arr = indexed[orientation];
     return arr[clampIndex(tile.buildingLevel ?? 1, arr.length)];
   }
-  return textures.base[key]![orientation];
+  // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —
+  // see the module doc comment above) renders as its bare terrain instead of
+  // throwing; BuildingModal.vue's own `art` computed falls back the same way.
+  const base = textures.base[key] ?? textures.base[tile.terrain];
+  return base![orientation];
 }
 
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
