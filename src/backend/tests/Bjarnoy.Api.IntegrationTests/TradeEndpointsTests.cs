@@ -2,6 +2,9 @@ using System.Net;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -73,42 +76,54 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Founds a second settlement in the same world and relocates it one hex
-    /// from <paramref name="near"/> — a direct DB write, since the founding
-    /// API can only place a settlement on the world generator's own start
-    /// positions, which land wherever the generator put them rather than
-    /// somewhere a test can rely on being in trade range.
+    /// Creates a second settlement one hex from <paramref name="near"/>,
+    /// directly via the DbContext rather than the founding HTTP endpoint —
+    /// the founding API can only place a settlement on one of the world
+    /// generator's own precomputed start positions (and requires it be at
+    /// least <c>SettlementService.MinimumSpacing</c> hexes from every other
+    /// settlement), neither of which a test can rely on lining up with a
+    /// specific hex next to <paramref name="near"/>. Longhouse level 5
+    /// matches <see cref="FoundAsync"/>'s post-founding bump, so no
+    /// separate <see cref="BumpLonghouseAsync"/> call is needed here.
     /// </summary>
     private async Task<SettlementResponse> FoundAdjacentAsync(HttpClient client, Guid worldId, SettlementResponse near)
     {
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var islandId = islands!.First().Id;
+        var coord = new HexCoord(near.Q + 1, near.R);
 
-        // Any distinct start position anywhere in the world will do — this
-        // settlement gets teleported next to `near` via a direct DB write
-        // regardless of where it's actually founded, so there's no need for
-        // it to share an island with `near` (islands here often have just
-        // one start position each).
-        var (islandId, plot) = islands!
-            .SelectMany(i => i.StartPositions.Select(p => (i.Id, p)))
-            .First(t => t.p.Q != near.Q || t.p.R != near.R);
+        var settlementId = await WithDbAsync(async db =>
+        {
+            var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]);
+            var now = _factory.Time.GetUtcNow();
 
-        var response = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/settlements",
-            new FoundSettlementRequest(islandId, plot.Q, plot.R, Unique("v"), "Bera", Unique("owner")),
-            Ct);
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var settlement = await response.ReadStrictAsync<SettlementResponse>(Ct);
+            var entity = new SettlementEntity
+            {
+                WorldId = worldId,
+                IslandId = islandId,
+                Name = Unique("v"),
+                OwnerName = "Bera",
+                OwnerId = Unique("owner"),
+                UserId = SystemUserIds.Abandoned,
+                FoundedAt = now,
+            };
+            entity.ApplyDomain(new Settlement
+            {
+                Id = entity.Id,
+                Name = entity.Name,
+                Centre = coord,
+                Buildings = [new PlacedBuilding(coord, BuildingType.Longhouse, 5)],
+                Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, now),
+            });
 
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
-        var entity = await db.Settlements.FirstAsync(s => s.Id == settlement.Id, Ct);
-        entity.CentreQ = near.Q + 1;
-        entity.CentreR = near.R;
-        await db.SaveChangesAsync(Ct);
+            db.Settlements.Add(entity);
+            await db.SaveChangesAsync(Ct);
+            return entity.Id;
+        });
 
-        await BumpLonghouseAsync(settlement.Id, 5);
-        return settlement with { Q = entity.CentreQ, R = entity.CentreR };
+        return (await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct))!;
     }
 
     private Task<List<TradeOfferEntitySnapshot>> ReadOffersAsync(Guid settlementId) => WithDbAsync(db =>
