@@ -281,6 +281,54 @@ export interface SetBuildingLevelRequest {
   level: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ProfileContracts.cs.
+
+export interface ProfileResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  /** Plain text with significant whitespace (ASCII art) — render escaped, `white-space: pre`. */
+  bio: string | null;
+  createdAt: string;
+  settlementCount: number;
+}
+
+/** `bio: null` (or empty) clears the bio. */
+export interface UpdateBioRequest {
+  bio: string | null;
+}
+
+export interface ReportProfileRequest {
+  reason: string;
+  note?: string | null;
+}
+
+export interface ProfileReportResponse {
+  id: string;
+  reporterUserId: string;
+  reporterUserName: string;
+  reportedUserId: string;
+  reportedUserName: string;
+  reason: string;
+  note: string | null;
+  /** One of `pending`, `reviewed`, `dismissed`, `actioned`. */
+  status: string;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+export interface PagedProfileReportsResponse {
+  items: ProfileReportResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** `status`: one of `pending`, `reviewed`, `dismissed`, `actioned`. */
+export interface ResolveProfileReportRequest {
+  status: string;
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;

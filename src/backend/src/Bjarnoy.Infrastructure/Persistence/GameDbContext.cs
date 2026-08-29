@@ -44,6 +44,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
+    public DbSet<ProfileReportEntity> ProfileReports => Set<ProfileReportEntity>();
+
     public DbSet<LeaderboardSnapshotEntity> LeaderboardSnapshots => Set<LeaderboardSnapshotEntity>();
 
     public DbSet<LeaderboardEntryEntity> LeaderboardEntries => Set<LeaderboardEntryEntity>();
@@ -310,6 +312,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.Role).HasConversion<int>();
             user.Property(u => u.Status).HasConversion<int>();
             user.Property(u => u.DisplayName).HasMaxLength(100);
+            user.Property(u => u.Bio).HasMaxLength(2000);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 
             // Case-insensitive uniqueness, enforced on the normalized column —
@@ -376,6 +379,34 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Looked up by hash on every refresh/logout call.
             token.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<ProfileReportEntity>(report =>
+        {
+            report.ToTable("profile_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Reason).HasMaxLength(200).IsRequired();
+            report.Property(r => r.Note).HasMaxLength(2000);
+            report.Property(r => r.Status).HasConversion<int>();
+
+            // A user account going away must not silently delete the
+            // moderation record either way round — same reasoning as
+            // settlements' Restrict above. (Users are never deleted today.)
+            report.HasOne(r => r.Reporter)
+                .WithMany()
+                .HasForeignKey(r => r.ReporterUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            report.HasOne(r => r.ReportedUser)
+                .WithMany()
+                .HasForeignKey(r => r.ReportedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The admin queue lists by status; the duplicate-pending guard
+            // looks up (reporter, reported) pairs.
+            report.HasIndex(r => r.Status);
+            report.HasIndex(r => new { r.ReporterUserId, r.ReportedUserId });
         });
 
         modelBuilder.Entity<LeaderboardSnapshotEntity>(snapshot =>

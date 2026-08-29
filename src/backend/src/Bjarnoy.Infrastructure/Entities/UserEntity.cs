@@ -53,6 +53,15 @@ public class UserEntity
 
     public string? DisplayName { get; set; }
 
+    /// <summary>
+    /// Free-text profile bio (issue #42). Whitespace and line breaks are
+    /// significant — the frontend renders it with <c>white-space: pre</c> so
+    /// ASCII art survives — which is why nothing here trims or normalizes it.
+    /// It is stored and served as plain text; the frontend never interprets
+    /// it as HTML (Vue's escaped interpolation, no <c>v-html</c>).
+    /// </summary>
+    public string? Bio { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? LastLoginAt { get; set; }
