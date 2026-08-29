@@ -21,9 +21,19 @@ public enum ArmyMission
     /// </summary>
     Attack = 1,
 
-    // Raid and Support (support-joins-garrison is issue #40 phase 4) deliberately
-    // have no cases yet — adding them is a data change to this enum plus new
-    // PlanX methods, not a rewrite of Army's shape.
+    /// <summary>
+    /// Travel to a target settlement and, on arrival, join it as a guest
+    /// garrison — <see cref="ArmyLocation.Supporting"/> — rather than fighting
+    /// or standing idle (issue #40 phase 4). Stays there, still owned by its
+    /// origin <see cref="Army.SettlementId"/>, feeding off the host's food
+    /// (see <c>Settlement.SettleTo</c>) and fighting alongside its garrison
+    /// (see <c>Army.SettleArrival</c>'s <c>guestDefenderStacks</c> parameter)
+    /// until the owner <see cref="Army.Recall"/>s it home.
+    /// </summary>
+    Support = 2,
+
+    // Raid deliberately has no case yet — adding it is a data change to this
+    // enum plus a new PlanX method, not a rewrite of Army's shape.
 }
 
 /// <summary>
@@ -123,6 +133,20 @@ public sealed record Army
     /// singleton map — while still letting the caller (<c>ArmyService</c>)
     /// supply a real <c>TerrainSampler.TerrainAt</c>.
     /// </remarks>
+    /// <summary>
+    /// A support army only needs to reach its host, plus a small buffer — the
+    /// host feeds it from the moment it arrives (see
+    /// <c>Settlement.SettleTo</c>'s <c>guestStacks</c> parameter), so unlike
+    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Attack"/> there is
+    /// no return trip to provision for. The buffer covers the gap between
+    /// "arrives" and "the host's next settle actually picks it up as a guest"
+    /// (a settlement is only settled when something reads or writes it, not
+    /// continuously) — two hours is comfortably more than that gap will
+    /// realistically ever be, without materially weakening the one-way food
+    /// check into a non-check for slow-upkeep units.
+    /// </summary>
+    public const double SupportReserveHours = 2.0;
+
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -140,7 +164,7 @@ public sealed record Army
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (mission == ArmyMission.Attack)
+        if (mission is ArmyMission.Attack or ArmyMission.Support)
         {
             if (targetSettlementId is null)
             {
@@ -149,7 +173,9 @@ public sealed record Army
 
             if (targetSettlementId == settlement.Id)
             {
-                return DispatchDecision.Rejected(DispatchRejection.CannotAttackOwnSettlement);
+                return DispatchDecision.Rejected(mission == ArmyMission.Attack
+                    ? DispatchRejection.CannotAttackOwnSettlement
+                    : DispatchRejection.CannotSupportOwnSettlement);
             }
         }
 
@@ -201,10 +227,19 @@ public sealed record Army
 
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed);
 
-        var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+        // Support only needs a one-way trip plus a small reserve — see
+        // SupportReserveHours — everything else still needs the full round
+        // trip, since standing at a Move destination or returning from an
+        // Attack both burn provisions with nobody else feeding the army.
+        var totalFoodNeeded = mission == ArmyMission.Support
+            ? (cumulativeHours[^1] + SupportReserveHours) * upkeepPerHour
+            : (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+
         if (provisions < totalFoodNeeded)
         {
-            return DispatchDecision.Rejected(DispatchRejection.InsufficientProvisionsForRoundTrip);
+            return DispatchDecision.Rejected(mission == ArmyMission.Support
+                ? DispatchRejection.InsufficientProvisionsForTrip
+                : DispatchRejection.InsufficientProvisionsForRoundTrip);
         }
 
         var movement = Movement.Movement.Create(
@@ -218,7 +253,7 @@ public sealed record Army
             Location = new ArmyLocation.InTransit(movement),
             Provisions = provisions,
             Mission = mission,
-            TargetSettlementId = mission == ArmyMission.Attack ? targetSettlementId : null,
+            TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
@@ -268,7 +303,8 @@ public sealed record Army
     /// </para>
     /// </remarks>
     public static ArmyArrivalResult SettleArrival(
-        Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed)
+        Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed,
+        IReadOnlyList<UnitStack>? guestDefenderStacks = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
@@ -277,15 +313,26 @@ public sealed record Army
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
-            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null);
+            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: []);
         }
+
+        guestDefenderStacks ??= [];
 
         var movement = inTransit.Movement;
         var battleInstant = movement.ArrivesAt;
 
         // The defender as of the exact instant the attacker lands — not
         // "now", which may be later — so the garrison and stock the battle
-        // sees are the ones that were actually there.
+        // sees are the ones that were actually there. Deliberately not
+        // guest-aware here (issue #40 phase 4 simplification): folding guest
+        // upkeep into this specific settle-to-instant call would mean also
+        // propagating a second, mid-battle cross-aggregate starvation death
+        // list, on top of the one this method already produces for combat
+        // losses. Guest starvation is instead applied continuously by the
+        // ordinary SettlementService read/write path (see
+        // Settlement.SettleTo's guestStacks parameter) — the same
+        // last-time-anyone-looked staleness the engine already accepts for
+        // ordinary garrison starvation between reads.
         var settledDefender = defenderSettlement.SettleTo(battleInstant, defenderSpeedFactor).Settlement;
 
         var towerLevel = settledDefender.Buildings
@@ -296,8 +343,14 @@ public sealed record Army
         var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(towerLevel);
 
         var lootAvailable = settledDefender.Resources.At(battleInstant);
+
+        // Guest armies fight alongside the home garrison (issue #40 phase 4
+        // §3): their stacks are merged, by type, into the defense side the
+        // resolver sees, so combined defense power (and hence the win/loss
+        // outcome itself) properly reflects everyone standing on the wall.
+        var combinedDefense = MergeStacksByType(settledDefender.Garrison, guestDefenderStacks);
         var plan = BattleResolver.Resolve(
-            army.Stacks, settledDefender.Garrison, defenseBonusPercent, lootAvailable, seed);
+            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed);
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the
@@ -307,13 +360,25 @@ public sealed record Army
             ? spent
             : settledDefender.Resources.SettledTo(battleInstant);
 
-        var defenderPostBattle = settledDefender with { Garrison = plan.DefenderSurvivors, Resources = afterLoot };
+        // plan.DefenderLosses/DefenderSurvivors are pooled across home+guest
+        // (they were computed against combinedDefense above) — split each
+        // type's pooled loss back between "home garrison" and "the guest
+        // total", proportional to each side's own pre-battle holding of that
+        // type (ProportionalAllocator; see its remarks). A second split, of
+        // the guest total across the actual guest Army records, happens one
+        // layer up in ArmyService — this method only knows the pooled guest
+        // total, never individual guest armies, to keep it DB-free.
+        var homeLosses = SplitPooledByOwner(plan.DefenderLosses, settledDefender.Garrison, guestDefenderStacks, wantHome: true);
+        var guestLosses = SplitPooledByOwner(plan.DefenderLosses, settledDefender.Garrison, guestDefenderStacks, wantHome: false);
+        var homeSurvivors = SubtractStacks(settledDefender.Garrison, homeLosses);
+
+        var defenderPostBattle = settledDefender with { Garrison = homeSurvivors, Resources = afterLoot };
         var finalDefender = defenderPostBattle.SettleTo(now, defenderSpeedFactor).Settlement;
 
         var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
         if (survivorCount == 0)
         {
-            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan);
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses);
         }
 
         // Rebase provisions to what the (pre-battle, full-strength) army had
@@ -341,7 +406,96 @@ public sealed record Army
             Loot = plan.LootTaken,
         };
 
-        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan);
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses);
+    }
+
+    /// <summary>Merges two stack lists into one, aggregated by type.</summary>
+    private static IReadOnlyList<UnitStack> MergeStacksByType(
+        IReadOnlyList<UnitStack> a, IReadOnlyList<UnitStack> b) =>
+        a.Concat(b)
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .ToList();
+
+    /// <summary>Subtracts <paramref name="losses"/> from <paramref name="stacks"/>, per type, dropping a type that reaches zero.</summary>
+    private static IReadOnlyList<UnitStack> SubtractStacks(
+        IReadOnlyList<UnitStack> stacks, IReadOnlyList<UnitStack> losses)
+    {
+        var lossByType = losses.ToDictionary(s => s.Type, s => s.Count);
+        return stacks
+            .Select(s => s with { Count = s.Count - lossByType.GetValueOrDefault(s.Type) })
+            .Where(s => s.Count > 0)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Splits <paramref name="pooled"/> (a per-type total already computed
+    /// against the home+guest combined pool) into the home share or the guest
+    /// share, per <see cref="ProportionalAllocator"/> — see
+    /// <see cref="SettleArrival"/>'s remarks.
+    /// </summary>
+    private static IReadOnlyList<UnitStack> SplitPooledByOwner(
+        IReadOnlyList<UnitStack> pooled,
+        IReadOnlyList<UnitStack> homeStacks,
+        IReadOnlyList<UnitStack> guestStacks,
+        bool wantHome)
+    {
+        var result = new List<UnitStack>();
+        foreach (var entry in pooled)
+        {
+            var homeCount = homeStacks.FirstOrDefault(s => s.Type == entry.Type).Count;
+            var guestCount = guestStacks.FirstOrDefault(s => s.Type == entry.Type).Count;
+            var split = ProportionalAllocator.Allocate(entry.Count, [homeCount, guestCount]);
+            var share = wantHome ? split[0] : split[1];
+            if (share > 0)
+            {
+                result.Add(new UnitStack(entry.Type, share));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.Support"/> army's arrival at its
+    /// host: once <paramref name="now"/> reaches the outbound leg's arrival,
+    /// the army stops travelling and starts standing as a guest at
+    /// <see cref="TargetSettlementId"/> — see <see cref="ArmyLocation.Supporting"/>.
+    /// Unlike <see cref="ArmyMission.Attack"/> there is no battle, and unlike
+    /// <see cref="ArmyMission.Move"/> there is no auto-return leg to start: a
+    /// support army simply stays put until its owner calls
+    /// <see cref="Recall"/>. A no-op (<see cref="ArmySupportArrivalResult.Arrived"/>
+    /// <see langword="false"/>, the army unchanged) before arrival, on the
+    /// return leg, or for any other mission — so a caller can call this
+    /// unconditionally before falling back to plain <see cref="SettleTo"/>,
+    /// mirroring <see cref="SettleArrival"/>'s own contract.
+    /// </summary>
+    public static ArmySupportArrivalResult SettleSupportArrival(Army army, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+
+        if (army.Mission != ArmyMission.Support
+            || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
+            || now < inTransit.Movement.ArrivesAt)
+        {
+            return new ArmySupportArrivalResult(army, Arrived: false);
+        }
+
+        var movement = inTransit.Movement;
+
+        // Rebase provisions to what was actually burned reaching the host —
+        // same trick SettleTo's turn-around branch and SettleArrival's
+        // battle-instant branch use.
+        var elapsedHours = (movement.ArrivesAt - movement.DepartedAt).TotalHours;
+        var provisionsAtArrival = Math.Max(0, army.Provisions - (army.TotalUpkeepPerHour * elapsedHours));
+
+        var arrived = army with
+        {
+            Location = new ArmyLocation.Supporting(army.TargetSettlementId!.Value),
+            Provisions = provisionsAtArrival,
+        };
+
+        return new ArmySupportArrivalResult(arrived, Arrived: true);
     }
 
     /// <summary>
@@ -411,17 +565,38 @@ public sealed record Army
     /// leaving the caller's copy unchanged) when the army is already
     /// returning or already home — there is nothing left to redirect.
     /// </summary>
-    public Army? Recall(DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt)
+    /// <param name="currentHex">
+    /// Required (and only meaningful) when <see cref="Location"/> is
+    /// <see cref="ArmyLocation.Supporting"/> — a guest army has no active
+    /// <see cref="Movement"/> to derive its position from, so the caller
+    /// (<c>ArmyService</c>, which knows the host settlement's hex) supplies
+    /// it directly. Ignored for <see cref="ArmyLocation.InTransit"/>, whose
+    /// position comes from its own movement as before. A supporting army
+    /// recalled this way departs straight for <paramref name="home"/> — this
+    /// already <em>is</em> the trip home, not an outbound leg needing its own
+    /// return (<see cref="Movement.IsReturning"/> is set immediately, same as
+    /// a mid-journey <see cref="ArmyMission.Move"/> recall).
+    /// </param>
+    public Army? Recall(DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
-        if (Location is not ArmyLocation.InTransit inTransit || inTransit.Movement.IsReturning)
+        HexCoord fromHex;
+        switch (Location)
         {
-            return null;
+            case ArmyLocation.InTransit { Movement.IsReturning: false } inTransit:
+                fromHex = inTransit.Movement.PositionAt(now);
+                break;
+
+            case ArmyLocation.Supporting when currentHex is { } supportingHex:
+                fromHex = supportingHex;
+                break;
+
+            default:
+                return null;
         }
 
-        var currentHex = inTransit.Movement.PositionAt(now);
-        var path = HexPathfinder.FindPath(currentHex, home, terrainAt, isLandUnit: true);
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit: true);
         if (path is null || path.Count == 0)
         {
             return null;
@@ -429,6 +604,12 @@ public sealed record Army
 
         var speed = TotalSpeed;
         var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed);
+
+        // ProvisionsAt returns the raw Provisions field for anything other
+        // than InTransit — including Supporting, which is exactly right here:
+        // a guest army does not burn its own provisions while hosted (the
+        // host feeds it), so nothing needs rebasing the way a mid-journey
+        // Move/Attack recall rebases against elapsed outbound upkeep.
         var provisionsNow = ProvisionsAt(now);
 
         var recallMovement = new Movement.Movement
@@ -466,7 +647,25 @@ public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome)
 /// settlement back unchanged.
 /// </param>
 /// <param name="Fought">Whether a battle actually happened this call — see <see cref="Army.SettleArrival"/>.</param>
-public sealed record ArmyArrivalResult(Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle);
+/// <param name="GuestLosses">
+/// The guest side's pooled per-type share of <c>Battle.DefenderLosses</c>
+/// (issue #40 phase 4 §3) — empty when no guest defenders were passed in, or
+/// when nothing happened this call. The caller (<c>ArmyService</c>) still has
+/// to split this further across the actual guest <c>ArmyEntity</c> rows
+/// present (<see cref="Army.SettleArrival"/>'s remarks explain why that
+/// second split cannot happen here).
+/// </param>
+public sealed record ArmyArrivalResult(
+    Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle,
+    IReadOnlyList<UnitStack> GuestLosses);
+
+/// <param name="Arrived">
+/// True when this call actually brought the army to its host — the caller
+/// (<c>ArmyService</c>) writes <see cref="ArmySupportArrivalResult.Army"/>
+/// back either way, but only that transition is a real change worth
+/// persisting; see <see cref="Army.SettleSupportArrival"/>.
+/// </param>
+public sealed record ArmySupportArrivalResult(Army Army, bool Arrived);
 
 /// <summary>Why a dispatch was refused.</summary>
 public enum DispatchRejection
@@ -482,7 +681,7 @@ public enum DispatchRejection
     UnreachableLeg,
     InsufficientProvisionsForRoundTrip,
 
-    /// <summary>An <see cref="ArmyMission.Attack"/> dispatch named no target settlement.</summary>
+    /// <summary>An <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Support"/> dispatch named no target settlement.</summary>
     TargetSettlementRequired,
 
     /// <summary>The named target settlement does not exist.</summary>
@@ -493,6 +692,17 @@ public enum DispatchRejection
 
     /// <summary>A <see cref="ArmyMission.Move"/> dispatch named no destination.</summary>
     DestinationRequired,
+
+    /// <summary>An army cannot be sent to support the settlement it was dispatched from.</summary>
+    CannotSupportOwnSettlement,
+
+    /// <summary>
+    /// A <see cref="ArmyMission.Support"/> dispatch's provisions do not cover
+    /// the one-way trip plus <see cref="Army.SupportReserveHours"/> — see
+    /// <see cref="Army.PlanDispatch"/>'s remarks on why support only needs a
+    /// one-way check, unlike <see cref="InsufficientProvisionsForRoundTrip"/>.
+    /// </summary>
+    InsufficientProvisionsForTrip,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>
