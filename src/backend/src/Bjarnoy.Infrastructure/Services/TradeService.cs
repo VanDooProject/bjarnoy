@@ -302,10 +302,13 @@ public sealed class TradeService(
         await SettleDeliveriesAsync(settlementId, cancellationToken).ConfigureAwait(false);
         await SettleExpiriesAsync(settlementId, cancellationToken).ConfigureAwait(false);
 
-        return await _dbContext.TradeOffers
+        // Ordered client-side: SQLite's EF provider doesn't support
+        // DateTimeOffset in ORDER BY at all (a stricter limitation than the
+        // WHERE-clause one noted elsewhere in this file).
+        var offers = await _dbContext.TradeOffers
             .Where(o => o.PosterSettlementId == settlementId)
-            .OrderByDescending(o => o.PostedAt)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return [.. offers.OrderByDescending(o => o.PostedAt)];
     }
 
     /// <summary>Shipments touching this settlement either way, most recently departed first.</summary>
@@ -314,10 +317,10 @@ public sealed class TradeService(
     {
         await SettleDeliveriesAsync(settlementId, cancellationToken).ConfigureAwait(false);
 
-        return await _dbContext.Shipments
+        var shipments = await _dbContext.Shipments
             .Where(s => s.FromSettlementId == settlementId || s.ToSettlementId == settlementId)
-            .OrderByDescending(s => s.DepartedAt)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return [.. shipments.OrderByDescending(s => s.DepartedAt)];
     }
 
     /// <summary>

@@ -95,7 +95,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
 
         var settlementId = await WithDbAsync(async db =>
         {
-            var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]);
+            var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]);
             var now = _factory.Time.GetUtcNow();
 
             var entity = new SettlementEntity
@@ -114,7 +114,13 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
                 Name = entity.Name,
                 Centre = coord,
                 Buildings = [new PlacedBuilding(coord, BuildingType.Longhouse, 5)],
-                Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, now),
+                // A generous, uniform stock/capacity rather than
+                // BuildingCatalogue.FoundingStock (which is zero on iron) —
+                // this settlement needs to be able to pay whatever resource
+                // a test's offer happens to request, not just what a real
+                // founding starts with.
+                Resources = ResourcePool.Create(
+                    ResourceAmounts.Uniform(1000), production, ResourceAmounts.Uniform(10_000), now),
             });
 
             db.Settlements.Add(entity);
