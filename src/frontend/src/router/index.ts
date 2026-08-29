@@ -58,6 +58,18 @@ export const router = createRouter({
       component: () => import('../views/ReportsView.vue'),
     },
     {
+      path: '/messages',
+      name: 'messages',
+      component: () => import('../views/MessagesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/messages/:userId',
+      name: 'conversation',
+      component: () => import('../views/ConversationView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/impressum',
       name: 'impressum',
       component: () => import('../views/ImpressumView.vue'),

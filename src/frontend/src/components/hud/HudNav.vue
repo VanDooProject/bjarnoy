@@ -66,6 +66,14 @@ const initials = computed(() => {
       Leaderboards
     </button>
     <button
+      v-if="auth.isAuthenticated"
+      class="link"
+      :class="{ active: ['messages', 'conversation'].includes(String(route.name)) }"
+      @click="router.push('/messages')"
+    >
+      Messages
+    </button>
+    <button
       class="link reports-link"
       :class="{ active: String(route.name).startsWith('report') }"
       @click="router.push('/reports')"
