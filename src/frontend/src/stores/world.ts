@@ -6,6 +6,7 @@ import type {
   BuildOrderResponse,
   GuestArmySummary,
   IslandResponse,
+  PlacedBuildingResponse,
   ShipmentResponse,
   TradeOfferResponse,
   TrainingOrderResponse,
@@ -133,7 +134,31 @@ export const useWorldStore = defineStore('world', {
       // optional waypoints — see `buildSupportDispatchRequest`.
       mission: 'move' | 'attack' | 'support';
       targetSettlementId: string | null;
+      // Issue #40 phase 5: the coordinate of a building within the target
+      // settlement a Catapult-carrying Attack would prefer to hit — a
+      // *preference*, not a guarantee (see `buildAttackDispatchRequest`'s own
+      // comment). `null` means "no preference", the same as never having
+      // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
+      // dispatch has no battle to apply it in (see `setDispatchMission`).
+      targetBuildingCoord: { q: number; r: number } | null;
     } | null,
+    // The target settlement's own placed buildings, fetched on demand once an
+    // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
+    // the "preferred target building" picker in ArmyPanel.vue lists from.
+    // `GET /api/v1/settlements/{id}` (`api.getSettlement`) carries no
+    // ownership check, so it works for any settlement id, someone else's
+    // included — see the PR notes for why this phase reuses it rather than
+    // inventing a lighter endpoint. `dispatchTargetBuildingsFor` names which
+    // settlement `dispatchTargetBuildings` actually belongs to, so a stale
+    // fetch from a previously-picked target is never shown against a new one
+    // while the new fetch is still in flight.
+    dispatchTargetBuildings: null as PlacedBuildingResponse[] | null,
+    dispatchTargetBuildingsFor: null as string | null,
+    dispatchTargetBuildingsLoading: false,
+    // Set when `loadDispatchTargetBuildings` fails (e.g. the settlement no
+    // longer exists) — ArmyPanel falls back to "no preference" copy rather
+    // than a picker when this is set.
+    dispatchTargetBuildingsError: false,
     armyPollHandle: null as ReturnType<typeof setInterval> | null,
     syncHandle: null as ReturnType<typeof setInterval> | null,
     livePollHandle: null as ReturnType<typeof setInterval> | null,
@@ -547,7 +572,11 @@ export const useWorldStore = defineStore('world', {
         error: null,
         mission: 'move',
         targetSettlementId: null,
+        targetBuildingCoord: null,
       };
+      this.dispatchTargetBuildings = null;
+      this.dispatchTargetBuildingsFor = null;
+      this.dispatchTargetBuildingsError = false;
     },
     cancelDispatch() {
       this.dispatchDraft = null;
@@ -558,11 +587,53 @@ export const useWorldStore = defineStore('world', {
       this.dispatchDraft.mission = mission;
       this.dispatchDraft.route = [];
       this.dispatchDraft.targetSettlementId = null;
+      this.dispatchDraft.targetBuildingCoord = null;
       this.dispatchDraft.error = null;
     },
     setDispatchTarget(settlementId: string | null) {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.targetSettlementId = settlementId;
+      // A previously-picked building preference belonged to whichever target
+      // was selected before — it doesn't carry over to a new (or cleared)
+      // target's layout.
+      this.dispatchDraft.targetBuildingCoord = null;
+      if (settlementId && this.dispatchDraft.mission === 'attack') {
+        void this.loadDispatchTargetBuildings(settlementId);
+      } else {
+        this.dispatchTargetBuildings = null;
+        this.dispatchTargetBuildingsFor = null;
+        this.dispatchTargetBuildingsError = false;
+      }
+    },
+    setDispatchTargetBuilding(coord: { q: number; r: number } | null) {
+      if (!this.dispatchDraft) return;
+      this.dispatchDraft.targetBuildingCoord = coord;
+    },
+    /**
+     * Fetches the target settlement's placed buildings for the "preferred
+     * target building" picker (issue #40 phase 5) — see
+     * `dispatchTargetBuildings`'s own comment on why `api.getSettlement`
+     * works here even though `settlementId` is someone else's settlement.
+     * Swallows a failure into `dispatchTargetBuildingsError` rather than
+     * surfacing it as a dispatch-blocking error: the picker is a nice-to-have
+     * preference, not a requirement to dispatch (the backend's own fallback
+     * is a random pick), so ArmyPanel just falls back to "no preference"
+     * copy when this can't be loaded.
+     */
+    async loadDispatchTargetBuildings(settlementId: string) {
+      this.dispatchTargetBuildingsLoading = true;
+      this.dispatchTargetBuildingsError = false;
+      try {
+        const response = await api.getSettlement(settlementId);
+        this.dispatchTargetBuildings = response.buildings;
+        this.dispatchTargetBuildingsFor = settlementId;
+      } catch {
+        this.dispatchTargetBuildings = null;
+        this.dispatchTargetBuildingsFor = null;
+        this.dispatchTargetBuildingsError = true;
+      } finally {
+        this.dispatchTargetBuildingsLoading = false;
+      }
     },
     /**
      * Every settlement this player could send an Attack at — every
@@ -614,7 +685,13 @@ export const useWorldStore = defineStore('world', {
       if (!draft || !this.selectedSettlementId) return;
       const request =
         draft.mission === 'attack'
-          ? buildAttackDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
+          ? buildAttackDispatchRequest(
+              draft.unitCounts,
+              draft.route,
+              draft.provisions,
+              draft.targetSettlementId,
+              draft.targetBuildingCoord,
+            )
           : draft.mission === 'support'
             ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
             : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
@@ -635,6 +712,9 @@ export const useWorldStore = defineStore('world', {
       try {
         await api.dispatchArmy(this.selectedSettlementId, request);
         this.dispatchDraft = null;
+        this.dispatchTargetBuildings = null;
+        this.dispatchTargetBuildingsFor = null;
+        this.dispatchTargetBuildingsError = false;
         await this.refreshArmies();
         await this.refreshLiveSettlement(); // garrison shrank by the dispatched units
       } catch (err) {
