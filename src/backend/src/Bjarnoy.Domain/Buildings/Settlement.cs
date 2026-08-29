@@ -617,7 +617,15 @@ public sealed record Settlement
     /// independent of any future Shipyard building); ignored for every other
     /// class.
     /// </param>
-    public TrainDecision PlanTrain(UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false)
+    /// <param name="speedFactor">
+    /// The world's current <c>SpeedFactor</c> — divides per-unit training
+    /// duration, the same way <see cref="PlanBuild"/> already divides build
+    /// duration. Previously not applied here at all, which meant a world
+    /// sped up for testing/admin purposes still trained units at the
+    /// unscaled rate while every building finished faster.
+    /// </param>
+    public TrainDecision PlanTrain(
+        UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false, double speedFactor = 1.0)
     {
         if (count <= 0)
         {
@@ -646,13 +654,17 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.NotEnoughResources);
         }
 
+        var perUnitDuration = speedFactor == 1.0
+            ? definition.TrainingDuration
+            : TimeSpan.FromTicks((long)(definition.TrainingDuration.Ticks / speedFactor));
+
         return TrainDecision.Accept(new TrainingOrder
         {
             Id = orderId,
             UnitType = type,
             Count = count,
             StartedAt = now,
-            PerUnitDuration = definition.TrainingDuration,
+            PerUnitDuration = perUnitDuration,
         });
     }
 

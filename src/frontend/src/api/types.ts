@@ -308,6 +308,7 @@ export interface AdminUserResponse {
   settlementCount: number;
   createdAt: string;
   lastLoginAt: string | null;
+  isPremium: boolean;
 }
 
 export interface AdminUserSettlementSummary {
@@ -347,6 +348,10 @@ export interface UpdateAdminUserRequest {
 export interface SetUserStatusRequest {
   status: string;
   reason?: string;
+}
+
+export interface SetUserPremiumRequest {
+  isPremium: boolean;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminSettlementContracts.cs.

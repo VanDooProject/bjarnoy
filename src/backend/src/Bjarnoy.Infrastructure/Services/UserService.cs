@@ -176,4 +176,28 @@ public sealed class UserService(GameDbContext dbContext, TimeProvider timeProvid
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return (UserStatusChangeOutcome.Success, user);
     }
+
+    /// <summary>
+    /// Grants or revokes premium (issue #40 phase 7's <c>PremiumUserEndpointFilter</c>
+    /// gate on the fight simulator) — the one control surface missing for that
+    /// filter, since nothing else in the API ever sets
+    /// <see cref="UserEntity.IsPremium"/>.
+    /// </summary>
+    public async Task<(UserEditOutcome Outcome, UserEntity? User)> SetPremiumAsync(
+        Guid id, bool isPremium, CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsSystem, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (user is null)
+        {
+            return (UserEditOutcome.NotFound, null);
+        }
+
+        user.IsPremium = isPremium;
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return (UserEditOutcome.Success, user);
+    }
 }
