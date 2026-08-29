@@ -50,6 +50,7 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { Settlement, Terrain, Tile } from './types';
+import { buildingStatsFor } from './buildingEconomy';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -1000,47 +1001,23 @@ export class HexMapRenderer {
    * building's own type/level (and, for the irrigation modifier, whether a
    * neighbouring hex is shore/water) purely so the hover card has something
    * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
-   * yes (+10%) / Workers 8/8" for a farm.
+   * yes (+10%) / Workers 8/8" for a farm. The formulas themselves live in
+   * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(
     tile: Tile,
     level: number,
   ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
+    if (!tile.buildingType) return {};
+    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile));
+  }
+
+  private nearWater(tile: Tile): boolean {
     const { worldModel } = this.options;
-    const nearWater = hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
+    return hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
       const t = worldModel.getTile(c.q, c.r);
       return t.terrain === 'sea' || t.terrain === 'sand';
     });
-    switch (tile.buildingType) {
-      case 'farm': {
-        const irrigated = nearWater;
-        const base = level * 120;
-        const workersCap = level * 4;
-        return {
-          output: `+${irrigated ? Math.round(base * 1.1) : base} food/h`,
-          modifier: irrigated ? 'Irrigated (+10%)' : undefined,
-          workers: `${workersCap}/${workersCap}`,
-        };
-      }
-      case 'hut':
-        return { output: `+${level * 5} population capacity` };
-      case 'tower':
-        return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
-      case 'longhouse':
-        return { output: `+${level * 100} storage capacity` };
-      case 'pumpkinfarm': {
-        const workersCap = level * 4;
-        return { output: `+${level * 144} food/h`, workers: `${workersCap}/${workersCap}` };
-      }
-      case 'fishinghut': {
-        const workersCap = level * 3;
-        return { output: `+${level * 120} food/h`, modifier: nearWater ? 'Coastal' : undefined, workers: `${workersCap}/${workersCap}` };
-      }
-      case 'magictower':
-        return { output: `+${level * 24} iron/h`, modifier: 'Arcane' };
-      default:
-        return {};
-    }
   }
 
   private onWheel = (e: WheelEvent) => {
