@@ -38,6 +38,7 @@ import {
   Container,
   FillGradient,
   Graphics,
+  Rectangle,
   RenderTexture,
   Sprite,
   Text,
@@ -731,6 +732,18 @@ const FOG_BLOB_JITTER_Y = 0.18;
 // irregularity so the mist doesn't read as a grid of identical stamps.
 const FOG_BLOB_SIZE_JITTER = 0.15;
 const FOG_SCOUTED_ALPHA = 0.6;
+// isEntirelyDeepFog's flat-background shortcut (see syncWorldBackground)
+// used to stand in for the whole viewport with a single solid clear colour —
+// cheap, but with none of the organic blob texture above, so a fully-zoomed-
+// out deep-ocean pan read as a flat, featureless white rectangle instead of
+// mist. FOG_PATTERN_W/H size a static, pre-baked tiling of the same blob
+// texture (createFogPatternTexture), generated once and stretched to cover
+// the viewport — restores the cloudy look without paying the per-hex cost
+// the shortcut exists to avoid. Generous enough to cover any real viewport
+// without visible stretching; a wider window just tiles a hair coarser.
+const FOG_PATTERN_W = 2400;
+const FOG_PATTERN_H = 1400;
+const FOG_PATTERN_BLOB_COUNT = 130;
 // The blob layer's BlurFilter is a full-container GPU post-pass. Naively
 // left attached to a container that sits directly in the scene graph, Pixi
 // re-runs it on literally every ticker frame regardless of whether the fog
@@ -830,6 +843,13 @@ export class HexMapRenderer {
   private fogBlobCacheTexture: RenderTexture | null = null;
   private fogBlobCacheSize = { width: 0, height: 0 };
   private fogBlobCacheSprite = new Sprite();
+  // Static, pre-baked stand-in for the organic blob mist (see
+  // FOG_PATTERN_W/H) shown only while isEntirelyDeepFog's shortcut is active
+  // — screen-space (added directly to app.stage, not `world`/`fogWorld`), so
+  // it neither pans nor needs rebuilding: syncWorldBackground only toggles
+  // its visibility. Sized to the viewport in mount/resize.
+  private fogPatternTexture: Texture | null = null;
+  private fogPatternSprite = new Sprite();
   // Set while a fog fade is running (either the drag-release fade, see
   // FOG_DRAG_FADE_MS, or the founding reveal, see FOG_REVEAL_FADE_MS); null
   // once it completes or a new drag starts. duration/fromAlpha are set
@@ -1035,6 +1055,12 @@ export class HexMapRenderer {
     this.fogBlobFilter = new BlurFilter({ strength: 10, quality: 3 });
     this.fogBlobCacheSprite.visible = false;
 
+    this.fogPatternTexture = this.createFogPatternTexture(app);
+    this.fogPatternSprite.texture = this.fogPatternTexture;
+    this.fogPatternSprite.tint = FOG_UNEXPLORED;
+    this.fogPatternSprite.visible = false;
+    this.syncFogPatternSpriteSize();
+
     this.world.addChild(
       this.terrainBase.container,
       this.waveLayer,
@@ -1045,7 +1071,7 @@ export class HexMapRenderer {
       this.highlightLayer,
     );
     this.fogWorld.addChild(this.fogLayer, this.fogBlobCacheSprite);
-    app.stage.addChild(this.world, this.markerLayer, this.fogWorld);
+    app.stage.addChild(this.fogPatternSprite, this.world, this.markerLayer, this.fogWorld);
 
     app.ticker.add(this.onTick);
 
@@ -1058,7 +1084,16 @@ export class HexMapRenderer {
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
     this.applyCameraTransform();
+    this.syncFogPatternSpriteSize();
     this.scheduleCull();
+  }
+
+  // Stretches the pre-baked pattern texture to always cover the viewport —
+  // see FOG_PATTERN_W/H's comment for why a fixed-size texture rather than a
+  // regenerated one is fine here.
+  private syncFogPatternSpriteSize() {
+    this.fogPatternSprite.width = this.viewport.width;
+    this.fogPatternSprite.height = this.viewport.height;
   }
 
   private applyCameraTransform() {
@@ -1655,6 +1690,12 @@ export class HexMapRenderer {
     if (!this.app || this.options.mode !== 'world') return;
     this.app.renderer.background.color = FOG_UNEXPLORED;
     this.app.renderer.background.alpha = deepFogOnly ? 1 : 0;
+    // fogPatternSprite layers the pre-baked cloud texture on top of that flat
+    // clear colour — see its own field comment and FOG_PATTERN_W/H's — so the
+    // shortcut still reads as mist, not a blank rectangle. Any gap between
+    // its blobs just shows the same flat FOG_UNEXPLORED behind it, so this
+    // never leaks anything the per-hex path wouldn't have shown anyway.
+    this.fogPatternSprite.visible = deepFogOnly;
   }
 
   /**
@@ -1905,6 +1946,46 @@ export class HexMapRenderer {
     const g = new Graphics().circle(radius, radius, radius).fill(gradient);
     const texture = app.renderer.generateTexture(g);
     g.destroy();
+    return texture;
+  }
+
+  // Bakes FOG_PATTERN_BLOB_COUNT copies of the same soft-circle texture
+  // above at deterministic (hash01-seeded, not Math.random — a stable
+  // pattern across mounts, same reasoning as every other jittered fog value
+  // in this file) positions/sizes/alphas into one FOG_PATTERN_W x
+  // FOG_PATTERN_H texture, once, at mount. This is the flat-background
+  // shortcut's stand-in for the organic blob mist — see fogPatternSprite's
+  // own comment — generated the same way refreshFogBlobCache bakes its own
+  // on-demand cache (stamp blurred sprites into an offscreen container, then
+  // renderer.generateTexture it), just once instead of per-rebuild and over
+  // a fixed area instead of the current viewport.
+  private createFogPatternTexture(app: Application): Texture {
+    const blobTexture = this.fogBlobTexture;
+    if (!blobTexture) return Texture.EMPTY;
+    const container = new Container();
+    const baseW = TILE_W * FOG_BLOB_W_SCALE;
+    const baseH = TILE_W * FOG_BLOB_H_SCALE;
+    for (let i = 0; i < FOG_PATTERN_BLOB_COUNT; i++) {
+      const sprite = new Sprite(blobTexture);
+      sprite.anchor.set(0.5);
+      // Overscan past the texture edges so blobs centred near a border still
+      // contribute their full falloff instead of clipping to a hard edge.
+      sprite.position.set(
+        hash01(i, 0, 401) * (FOG_PATTERN_W + baseW) - baseW / 2,
+        hash01(i, 0, 402) * (FOG_PATTERN_H + baseH) - baseH / 2,
+      );
+      const sizeJitter = 1 + (hash01(i, 0, 403) * 2 - 1) * FOG_BLOB_SIZE_JITTER * 2;
+      sprite.width = baseW * sizeJitter;
+      sprite.height = baseH * sizeJitter;
+      sprite.alpha = 0.55 + hash01(i, 0, 404) * 0.45;
+      container.addChild(sprite);
+    }
+    container.filters = [new BlurFilter({ strength: 14, quality: 3 })];
+    const texture = app.renderer.generateTexture({
+      target: container,
+      frame: new Rectangle(0, 0, FOG_PATTERN_W, FOG_PATTERN_H),
+    });
+    container.destroy({ children: true });
     return texture;
   }
 
@@ -2691,6 +2772,8 @@ export class HexMapRenderer {
     // one Sprite), so it needs its own explicit destroy.
     this.fogBlobTexture?.destroy(true);
     this.fogBlobTexture = null;
+    this.fogPatternTexture?.destroy(true);
+    this.fogPatternTexture = null;
     // fogBlobLayer.container is deliberately never added to app.stage (see
     // FOG_BLOB_CACHE_PADDING above), so app.destroy's children:true won't
     // reach it or fogBlobCacheTexture — both need their own explicit destroy.
