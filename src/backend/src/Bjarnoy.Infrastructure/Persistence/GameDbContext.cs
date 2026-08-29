@@ -26,6 +26,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<BuildOrderEntity> BuildOrders => Set<BuildOrderEntity>();
 
+    public DbSet<UnitStackEntity> UnitStacks => Set<UnitStackEntity>();
+
+    public DbSet<TrainingOrderEntity> TrainingOrders => Set<TrainingOrderEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -138,6 +142,16 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithOne(o => o.Settlement!)
                 .HasForeignKey(o => o.SettlementId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            settlement.HasMany(s => s.Garrison)
+                .WithOne(g => g.Settlement!)
+                .HasForeignKey(g => g.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            settlement.HasMany(s => s.TrainingQueue)
+                .WithOne(o => o.Settlement!)
+                .HasForeignKey(o => o.SettlementId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PlacedBuildingEntity>(building =>
@@ -160,6 +174,25 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // One order per hex at a time.
             order.HasIndex(o => new { o.SettlementId, o.Q, o.R }).IsUnique();
+        });
+
+        modelBuilder.Entity<UnitStackEntity>(stack =>
+        {
+            stack.ToTable("unit_stacks");
+            stack.HasKey(s => s.Id);
+            stack.Property(s => s.Id).ValueGeneratedNever();
+            stack.Property(s => s.UnitType).HasConversion<int>();
+
+            // One stack row per unit type per settlement.
+            stack.HasIndex(s => new { s.SettlementId, s.UnitType }).IsUnique();
+        });
+
+        modelBuilder.Entity<TrainingOrderEntity>(order =>
+        {
+            order.ToTable("training_orders");
+            order.HasKey(o => o.Id);
+            order.Property(o => o.Id).ValueGeneratedNever();
+            order.Property(o => o.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>

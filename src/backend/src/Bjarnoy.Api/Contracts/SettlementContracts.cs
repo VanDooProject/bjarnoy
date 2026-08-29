@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 
@@ -26,6 +27,10 @@ public sealed record QueueBuildRequest(
     [property: Required] string Building,
     int Q,
     int R);
+
+public sealed record TrainUnitsRequest(
+    [property: Required] string Unit,
+    [property: Range(1, int.MaxValue)] int Count);
 
 /// <param name="Stock">Whole units, as a player sees them.</param>
 /// <param name="RatePerHour">
@@ -70,6 +75,25 @@ public sealed record BuildOrderResponse(
     DateTimeOffset CompletesAtGameTime,
     double? CompletesInSeconds);
 
+public sealed record UnitStackResponse(string Unit, int Count);
+
+/// <param name="CompletedCount">
+/// How many units of the batch are done so far — display only; they land in
+/// the garrison all at once when the whole batch completes (see
+/// <c>TrainingOrder</c>'s remarks).
+/// </param>
+/// <param name="CompletesInSeconds">
+/// Remaining game time until the last unit in the batch finishes. Null while
+/// the world is frozen — same reasoning as <see cref="BuildOrderResponse"/>.
+/// </param>
+public sealed record TrainingOrderResponse(
+    Guid Id,
+    string Unit,
+    int Count,
+    int CompletedCount,
+    DateTimeOffset CompletesAtGameTime,
+    double? CompletesInSeconds);
+
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -83,6 +107,8 @@ public sealed record SettlementResponse(
     ResourcesResponse Resources,
     IReadOnlyList<PlacedBuildingResponse> Buildings,
     IReadOnlyList<BuildOrderResponse> Queue,
+    IReadOnlyList<UnitStackResponse> Garrison,
+    IReadOnlyList<TrainingOrderResponse> TrainingQueue,
     WorldClockResponse World)
 {
     public static SettlementResponse From(
@@ -129,6 +155,14 @@ public sealed record SettlementResponse(
                 o.Coord.R,
                 o.Type.ToWireName(),
                 o.TargetLevel,
+                o.CompletesAt,
+                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds))],
+            [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
+            [.. domain.TrainingQueue.Select(o => new TrainingOrderResponse(
+                o.Id,
+                o.UnitType.ToWireName(),
+                o.Count,
+                o.CompletedCount(gameNow),
                 o.CompletesAt,
                 clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds))],
             WorldClockResponse.From(clock, gameNow));
@@ -190,3 +224,37 @@ public sealed record BuildingDefinitionResponse(
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
 public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel);
+
+public sealed record UnitDefinitionResponse(
+    string Type,
+    string Class,
+    int Attack,
+    int Defense,
+    double Speed,
+    int CarryCapacity,
+    int FoodCarryCapacity,
+    double UpkeepPerHour,
+    ResourceLine TrainingCost,
+    double TrainingSeconds,
+    int RequiredLonghouseLevel,
+    string? RequiredUnitType)
+{
+    public static UnitDefinitionResponse From(UnitDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return new UnitDefinitionResponse(
+            definition.Type.ToWireName(),
+            definition.Class.ToString().ToLowerInvariant(),
+            definition.Attack,
+            definition.Defense,
+            definition.Speed,
+            definition.CarryCapacity,
+            definition.FoodCarryCapacity,
+            definition.UpkeepPerHour,
+            ResourceLine.From(definition.TrainingCost),
+            definition.TrainingDuration.TotalSeconds,
+            definition.RequiredLonghouseLevel,
+            definition.RequiredUnitType?.ToWireName());
+    }
+}
