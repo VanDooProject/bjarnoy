@@ -4,6 +4,8 @@
 //
 // Production is deliberately not this: there the frontend is built into the
 // API's wwwroot and the two ship as a single image (see deploy/Dockerfile).
+using System.Security.Cryptography;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // A fixed password rather than Aspire's default random one. Postgres only sets
@@ -18,6 +20,17 @@ var postgresPassword = builder.AddParameter("postgres-password", "bjarnoy-dev-on
 
 var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+
+// A fresh random admin password every run — unlike postgres-password above,
+// there's no persisted state to desync from, since AuthService.SeedAdminIfConfiguredAsync
+// (called from Program.cs on every startup) is a no-op once any Admin already
+// exists, so re-seeding with a new password each run only matters for a
+// clean database. This means a dev never has to invent, remember, or type
+// admin credentials for local Aspire runs: the "Log in as admin" dashboard
+// link added on the frontend resource below carries them.
+const string adminUserName = "admin";
+var adminPasswordValue = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
+var adminPassword = builder.AddParameter("admin-bootstrap-password", adminPasswordValue, secret: true);
 
 var postgres = builder.AddPostgres("postgres", password: postgresPassword)
     .WithDataVolume()
@@ -68,9 +81,11 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: nul
     // In a local run there is no separate migration step to wait on, so the API
     // brings the schema forward itself.
     .WithEnvironment("Database__MigrateOnStartup", "true")
+    .WithEnvironment("ADMIN_BOOTSTRAP_USERNAME", adminUserName)
+    .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPassword)
     .WithHttpHealthCheck("/health");
 
-builder.AddNpmApp("frontend", "../../../frontend", "dev")
+var frontend = builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithReference(api)
     .WaitFor(api)
     // This picks the port and hands it to the child process as PORT — the
@@ -94,6 +109,27 @@ builder.AddNpmApp("frontend", "../../../frontend", "dev")
     .WithEnvironment("VITE_DEMO_MODE", "false")
     .WithExternalHttpEndpoints()
     .PublishAsDockerFile();
+
+// One-click admin login from the dashboard, so nobody has to go dig the
+// generated password out of an env var or user secret. Runs after Aspire has
+// allocated the frontend's endpoints, hence the callback rather than a plain
+// WithUrl: the frontend's dev-server port isn't known until then (see the
+// WithHttpEndpoint(env: "PORT") comment above).
+frontend.WithUrls(context =>
+{
+    var baseUrl = context.Urls.FirstOrDefault(u => u.Endpoint is not null)?.Url;
+    if (string.IsNullOrEmpty(baseUrl))
+    {
+        return;
+    }
+
+    context.Urls.Add(new ResourceUrlAnnotation
+    {
+        Url = $"{baseUrl}/login?username={Uri.EscapeDataString(adminUserName)}" +
+              $"&password={Uri.EscapeDataString(adminPasswordValue)}",
+        DisplayText = "Log in as admin",
+    });
+});
 
 _ = migrator;
 

@@ -30,6 +30,16 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<TrainingOrderEntity> TrainingOrders => Set<TrainingOrderEntity>();
 
+    public DbSet<ArmyEntity> Armies => Set<ArmyEntity>();
+
+    public DbSet<ArmyUnitStackEntity> ArmyUnitStacks => Set<ArmyUnitStackEntity>();
+
+    public DbSet<BattleReportEntity> BattleReports => Set<BattleReportEntity>();
+
+    public DbSet<BattleReportAttackerLineEntity> BattleReportAttackerLines => Set<BattleReportAttackerLineEntity>();
+
+    public DbSet<BattleReportDefenderLineEntity> BattleReportDefenderLines => Set<BattleReportDefenderLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -43,6 +53,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public DbSet<GuildBoardPostEntity> GuildBoardPosts => Set<GuildBoardPostEntity>();
 
     public DbSet<GuildPeaceTreatyEntity> GuildPeaceTreaties => Set<GuildPeaceTreatyEntity>();
+
+    public DbSet<LeaderboardSnapshotEntity> LeaderboardSnapshots => Set<LeaderboardSnapshotEntity>();
+
+    public DbSet<LeaderboardEntryEntity> LeaderboardEntries => Set<LeaderboardEntryEntity>();
+
+    public DbSet<LeaderboardWatermarkEntity> LeaderboardWatermarks => Set<LeaderboardWatermarkEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -203,6 +219,92 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             order.HasKey(o => o.Id);
             order.Property(o => o.Id).ValueGeneratedNever();
             order.Property(o => o.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<ArmyEntity>(army =>
+        {
+            army.ToTable("armies");
+            army.HasKey(a => a.Id);
+            army.Property(a => a.Id).ValueGeneratedNever();
+
+            army.Property(a => a.Path)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            army.Property(a => a.ReturnPath)
+                .HasConversion(new HexListConverter())
+                .Metadata.SetValueComparer(HexListConverter.Comparer);
+
+            army.Property(a => a.CumulativeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            army.Property(a => a.ReturnCumulativeHours)
+                .HasConversion(new DoubleListConverter())
+                .Metadata.SetValueComparer(DoubleListConverter.Comparer);
+
+            // Restrict rather than cascade: nothing should delete a
+            // settlement out from under an army still travelling. In
+            // practice settlements are never deleted today, but the intent
+            // matches UserEntity/SettlementEntity's ownership FK below.
+            army.HasOne(a => a.Settlement)
+                .WithMany()
+                .HasForeignKey(a => a.SettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            army.HasIndex(a => a.SettlementId);
+
+            army.HasMany(a => a.Stacks)
+                .WithOne(s => s.Army!)
+                .HasForeignKey(s => s.ArmyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ArmyUnitStackEntity>(stack =>
+        {
+            stack.ToTable("army_unit_stacks");
+            stack.HasKey(s => s.Id);
+            stack.Property(s => s.Id).ValueGeneratedNever();
+            stack.Property(s => s.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<BattleReportEntity>(report =>
+        {
+            report.ToTable("battle_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Winner).HasConversion<int>();
+
+            // Both endpoints of a battle (attacker's and defender's inbox) read
+            // by settlement id — see BattleReportService.GetForSettlementAsync.
+            report.HasIndex(r => r.AttackerSettlementId);
+            report.HasIndex(r => r.DefenderSettlementId);
+
+            report.HasMany(r => r.AttackerLines)
+                .WithOne(l => l.BattleReport!)
+                .HasForeignKey(l => l.BattleReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasMany(r => r.DefenderLines)
+                .WithOne(l => l.BattleReport!)
+                .HasForeignKey(l => l.BattleReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BattleReportAttackerLineEntity>(line =>
+        {
+            line.ToTable("battle_report_attacker_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<BattleReportDefenderLineEntity>(line =>
+        {
+            line.ToTable("battle_report_defender_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
         });
 
         modelBuilder.Entity<UserEntity>(user =>
@@ -389,6 +491,66 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithMany()
                 .HasForeignKey(t => t.TargetGuildId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LeaderboardSnapshotEntity>(snapshot =>
+        {
+            snapshot.ToTable("leaderboard_snapshots");
+            snapshot.HasKey(s => s.Id);
+            snapshot.Property(s => s.Id).ValueGeneratedNever();
+            snapshot.Property(s => s.Scope).HasConversion<int>();
+            snapshot.Property(s => s.Category).HasConversion<int>();
+
+            snapshot.HasOne(s => s.World)
+                .WithMany()
+                .HasForeignKey(s => s.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A window is closed exactly once. This should be a unique index
+            // filtered to IsFinal = true (only one final snapshot per board per
+            // period; any number of superseded non-final ones), but there is no
+            // existing precedent in this model for a provider-parity-safe
+            // filtered index across both SQLite and PostgreSQL, so this is a
+            // plain unique index for now: LeaderboardService enforces "at most
+            // one non-final snapshot per board" itself by deleting the previous
+            // one before/after inserting the replacement.
+            snapshot.HasIndex(s => new { s.WorldId, s.Scope, s.Category, s.PeriodStart, s.IsFinal }).IsUnique();
+
+            // Finds the latest current snapshot for a board.
+            snapshot.HasIndex(s => new { s.WorldId, s.Scope, s.Category, s.ComputedAt });
+
+            snapshot.HasMany(s => s.Entries)
+                .WithOne(e => e.Snapshot!)
+                .HasForeignKey(e => e.SnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LeaderboardEntryEntity>(entry =>
+        {
+            entry.ToTable("leaderboard_entries");
+            entry.HasKey(e => e.Id);
+            entry.Property(e => e.Id).ValueGeneratedNever();
+            entry.Property(e => e.SubjectName).HasMaxLength(100).IsRequired();
+
+            // The keyset pagination key: ORDER BY Rank, WHERE Rank > @afterRank.
+            entry.HasIndex(e => new { e.SnapshotId, e.Rank }).IsUnique();
+
+            // The "my rank" lookup.
+            entry.HasIndex(e => new { e.SnapshotId, e.SubjectId });
+        });
+
+        modelBuilder.Entity<LeaderboardWatermarkEntity>(watermark =>
+        {
+            watermark.ToTable("leaderboard_watermarks");
+            watermark.HasKey(w => w.Id);
+            watermark.Property(w => w.Id).ValueGeneratedNever();
+
+            watermark.HasOne(w => w.World)
+                .WithMany()
+                .HasForeignKey(w => w.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            watermark.HasIndex(w => w.WorldId).IsUnique();
         });
     }
 }
