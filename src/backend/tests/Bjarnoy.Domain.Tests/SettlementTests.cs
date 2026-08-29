@@ -42,8 +42,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
     [InlineData(BuildingType.Farm, Terrain.Mountain, false)]
-    [InlineData(BuildingType.FishingHut, Terrain.Sand, true)]
-    [InlineData(BuildingType.FishingHut, Terrain.Grass, false)]
     [InlineData(BuildingType.MagicTower, Terrain.Grass, true)]
     [InlineData(BuildingType.MagicTower, Terrain.Sand, false)]
     [InlineData(BuildingType.PumpkinFarm, Terrain.Grass, true)]
@@ -58,15 +56,38 @@ public class BuildingCatalogueTests
         Assert.Equal(allowed, BuildingCatalogue.Get(type, 1).AllowsTerrain(terrain));
     }
 
-    [Fact]
-    public void Unrestricted_buildings_go_on_any_land_but_never_on_water()
+    [Theory]
+    [InlineData(BuildingType.Longhouse)]
+    [InlineData(BuildingType.StorageHouse)]
+    public void Anchor_and_support_buildings_are_gated_to_grass(BuildingType type)
     {
-        var storageHouse = BuildingCatalogue.Get(BuildingType.StorageHouse, 1);
+        var definition = BuildingCatalogue.Get(type, 1);
 
-        Assert.True(storageHouse.AllowsTerrain(Terrain.Grass));
-        Assert.True(storageHouse.AllowsTerrain(Terrain.Sand));
-        Assert.True(storageHouse.AllowsTerrain(Terrain.Mountain));
-        Assert.False(storageHouse.AllowsTerrain(Terrain.Sea));
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.False(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Sea));
+    }
+
+    [Fact]
+    public void The_tower_is_gated_to_grass_or_sand()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Tower, 1);
+
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.True(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Sea));
+    }
+
+    [Fact]
+    public void The_fishing_hut_requires_coastal_water_instead_of_a_land_terrain()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.FishingHut, 1);
+
+        Assert.True(definition.RequiresCoastalWater);
     }
 
     [Fact]
@@ -204,6 +225,43 @@ public class SettlementTests
             BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_is_refused_on_land_even_when_affordable()
+    {
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_is_refused_on_open_sea_that_is_not_coastal()
+    {
+        var settlement = Found();
+
+        // Terrain.Sea alone can't distinguish coastal water from open
+        // sea — isCoastalWater is what actually gates a fishing hut.
+        var decision = settlement.PlanBuild(
+            BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: false);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_may_be_built_on_coastal_water()
+    {
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: true);
+
+        Assert.True(decision.Accepted);
     }
 
     [Fact]
@@ -411,6 +469,32 @@ public class SettlementTests
     }
 
     [Fact]
+    public void A_second_longhouse_cannot_be_queued_through_the_build_menu()
+    {
+        // Founding (SettlementService.FoundAsync) is the only place a
+        // longhouse comes from today; the build queue must refuse one on an
+        // empty hex even though it is otherwise a perfectly buildable plot.
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Longhouse, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.LonghousePlacementNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void The_existing_longhouse_can_still_be_levelled_up_through_the_build_menu()
+    {
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted);
+        Assert.Equal(2, decision.Order!.TargetLevel);
+    }
+
+    [Fact]
     public void Enqueueing_an_unaffordable_order_throws_rather_than_going_into_debt()
     {
         var settlement = Found();
@@ -511,6 +595,46 @@ public class SettlementTests
         var doubled = queued.SettleTo(order.CompletesAt, speedFactor: 2.0).Settlement;
 
         Assert.Equal(normal.Resources.RatePerHour.Food * 2, doubled.Resources.RatePerHour.Food, 6);
+    }
+
+    [Fact]
+    public void An_empty_settlement_scores_zero()
+    {
+        var settlement = Found() with { Buildings = [] };
+
+        Assert.Equal(0, settlement.Score);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 3)]
+    [InlineData(5, 15)]
+    [InlineData(10, 55)]
+    public void A_single_buildings_score_is_the_triangular_number_of_its_level(int level, int expected)
+    {
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, level)],
+        };
+
+        Assert.Equal(expected, settlement.Score);
+    }
+
+    [Fact]
+    public void Several_buildings_score_the_sum_of_their_triangular_numbers()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 5),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.Farm, 2),
+                new PlacedBuilding(new HexCoord(0, 1), BuildingType.Lumberjack, 10),
+            ],
+        };
+
+        // 15 + 3 + 55
+        Assert.Equal(73, settlement.Score);
     }
 
     [Fact]

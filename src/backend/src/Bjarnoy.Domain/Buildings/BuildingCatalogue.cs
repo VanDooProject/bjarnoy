@@ -49,7 +49,7 @@ public static class BuildingCatalogue
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
-            BuildingType.FishingHut => Producer(type, level, Sand, new ResourceAmounts(0, 0, Food: 30, 0)),
+            BuildingType.FishingHut => FishingHut(level),
             BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
             BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
@@ -99,6 +99,17 @@ public static class BuildingCatalogue
         return (production, capacity);
     }
 
+    /// <summary>
+    /// Percent added to a defending garrison's power for a given Tower level
+    /// (issue #40 phase 3), applied by <see cref="Bjarnoy.Domain.Combat.BattleResolver.Resolve"/>.
+    /// </summary>
+    /// <remarks>
+    /// A placeholder balance figure — flat 5% per level, no Tower at all
+    /// meaning no bonus — not a tuned number. Revisit alongside a real combat
+    /// balancing pass.
+    /// </remarks>
+    public static double TowerDefenseBonusPercent(int towerLevel) => Math.Max(0, towerLevel) * 5.0;
+
     /// <summary>The god a shrine <see cref="BuildingType"/> is raised to, or <see langword="null"/> if it is not a shrine.</summary>
     public static GodType? GodOf(BuildingType type) => type switch
     {
@@ -110,7 +121,6 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };
-    private static readonly IReadOnlySet<Terrain> Sand = new HashSet<Terrain> { Terrain.Sand };
     private static readonly IReadOnlySet<Terrain> SandOrGrass = new HashSet<Terrain> { Terrain.Sand, Terrain.Grass };
 
     /// <summary>Cost multiplier for a level: 1, 1.6, 2.56, …</summary>
@@ -145,6 +155,7 @@ public static class BuildingCatalogue
         // never completely stalled.
         ProductionPerHour = new ResourceAmounts(Wood: 10, Stone: 8, Food: 10, Iron: 2) * level,
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
+        AllowedTerrain = Grass,
         RequiredLonghouseLevel = 1,
     };
 
@@ -155,22 +166,8 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 150, Stone: 120, Food: 0, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(6, level),
         StorageCapacity = ResourceAmounts.Uniform(1000) * level,
+        AllowedTerrain = Grass,
         RequiredLonghouseLevel = 1 + ((level - 1) / 2),
-    };
-
-    /// <summary>
-    /// A shrine contributes no flat production or storage of its own — its
-    /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
-    /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
-    /// here alongside the additive totals.
-    /// </summary>
-    private static BuildingDefinition Shrine(BuildingType type, int level) => new()
-    {
-        Type = type,
-        Level = level,
-        Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
-        BuildDuration = Duration(12, level),
-        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 
     private static BuildingDefinition Tower(int level) => new()
@@ -181,5 +178,35 @@ public static class BuildingCatalogue
         BuildDuration = Duration(8, level),
         AllowedTerrain = SandOrGrass,
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+    };
+
+    // Same shape as the land Producers, but gated by RequiresCoastalWater
+    // instead of AllowedTerrain — the hex under it stays Terrain.Sea.
+    private static BuildingDefinition FishingHut(int level) => new()
+    {
+        Type = BuildingType.FishingHut,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 100, Stone: 80, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(4, level),
+        ProductionPerHour = new ResourceAmounts(0, 0, Food: 30, 0) * level,
+        RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// A shrine contributes no flat production or storage of its own — its
+    /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
+    /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
+    /// here alongside the additive totals. Buildable on any land hex, like
+    /// the anchor buildings before terrain was tightened to Grass-only —
+    /// a shrine has no production to protect by terrain-gating it.
+    /// </summary>
+    private static BuildingDefinition Shrine(BuildingType type, int level) => new()
+    {
+        Type = type,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(12, level),
+        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 }

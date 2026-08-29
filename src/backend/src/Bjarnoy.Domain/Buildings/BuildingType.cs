@@ -27,13 +27,13 @@ public enum BuildingType
     /// <summary>Food, on grass.</summary>
     Farm = 3,
 
-    /// <summary>Storage capacity. Placed anywhere buildable.</summary>
+    /// <summary>Storage capacity. Placed on grass.</summary>
     StorageHouse = 4,
 
-    /// <summary>Extends the claimed border. Placed on a border hex.</summary>
+    /// <summary>Extends the claimed border. Placed on grass.</summary>
     Tower = 5,
 
-    /// <summary>Food, from the coast. Placed on sand.</summary>
+    /// <summary>Food, from shallow (coastal) water rather than land.</summary>
     FishingHut = 6,
 
     /// <summary>Iron, from arcane means. Placed on grass only.</summary>
