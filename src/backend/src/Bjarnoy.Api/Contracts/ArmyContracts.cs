@@ -22,32 +22,38 @@ public sealed record HexPointRequest(int Q, int R)
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
 /// <param name="Destination">
 /// Required for a <c>"move"</c> mission (the default); ignored for
-/// <c>"attack"</c>/<c>"support"</c>, whose destination is always the target
-/// settlement's own hex.
+/// <c>"attack"</c>/<c>"support"</c>/<c>"raid"</c>, whose destination is always
+/// the target settlement's own hex.
 /// </param>
 /// <param name="Provisions">
 /// Food to load onto the army, capped by what its units can carry and what
 /// the settlement can afford. A <c>"support"</c> dispatch only needs to cover
 /// the one-way trip plus a small reserve (<see cref="Army.SupportReserveHours"/>)
-/// — the host feeds it from arrival — unlike <c>"move"</c>/<c>"attack"</c>,
-/// which both need the full round trip.
+/// — the host feeds it from arrival — unlike <c>"move"</c>/<c>"attack"</c>/
+/// <c>"raid"</c>, which all need the full round trip.
 /// </param>
-/// <param name="Mission"><c>"move"</c> (default), <c>"attack"</c>, or <c>"support"</c> — see <see cref="ArmyMission"/>.</param>
+/// <param name="Mission">
+/// <c>"move"</c> (default), <c>"attack"</c>, <c>"support"</c>, or
+/// <c>"raid"</c> (issue #40 phase 7 — like <c>"attack"</c>, but the fight
+/// breaks off early with reduced losses on both sides) — see
+/// <see cref="ArmyMission"/>.
+/// </param>
 /// <param name="TargetSettlementId">
-/// Required when <paramref name="Mission"/> is <c>"attack"</c> (the
-/// settlement to fight on arrival) or <c>"support"</c> (the settlement to
-/// garrison as a guest on arrival).
+/// Required when <paramref name="Mission"/> is <c>"attack"</c>/<c>"raid"</c>
+/// (the settlement to fight on arrival) or <c>"support"</c> (the settlement
+/// to garrison as a guest on arrival).
 /// </param>
 /// <param name="TargetBuildingCoord">
-/// Optional, only meaningful for <c>"attack"</c> — the coordinate of a
-/// building within the target settlement to hit with any surviving
-/// catapults on arrival (issue #40 phase 5). Omit (or leave <see langword="null"/>)
-/// for "no preference" — <see cref="Bjarnoy.Domain.Combat.SiegeResolver"/>
-/// then picks uniformly at random among whatever buildings the defender
-/// actually has standing when the army arrives. Not validated against the
-/// target's actual layout here — that can change before arrival — only that
-/// it was not given for a non-<c>"attack"</c> mission (see
-/// <see cref="Army.TargetBuildingCoord"/>'s remarks).
+/// Optional, only meaningful for <c>"attack"</c>/<c>"raid"</c> — the
+/// coordinate of a building within the target settlement to hit with any
+/// surviving catapults on arrival (issue #40 phase 5). Omit (or leave
+/// <see langword="null"/>) for "no preference" —
+/// <see cref="Bjarnoy.Domain.Combat.SiegeResolver"/> then picks uniformly at
+/// random among whatever buildings the defender actually has standing when
+/// the army arrives. Not validated against the target's actual layout here —
+/// that can change before arrival — only that it was not given for a mission
+/// with no battle to apply it in (see <see cref="Army.TargetBuildingCoord"/>'s
+/// remarks).
 /// </param>
 public sealed record DispatchArmyRequest(
     [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
@@ -216,12 +222,17 @@ public sealed record BattleReportSiegeResponse(
 }
 
 /// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
+/// <param name="Mission">
+/// <c>"attack"</c> or <c>"raid"</c> (issue #40 phase 7) — which mission fought
+/// this battle; see <see cref="Domain.Armies.ArmyMission.Raid"/>.
+/// </param>
 public sealed record BattleReportResponse(
     Guid Id,
     DateTimeOffset OccurredAt,
     Guid AttackerArmyId,
     Guid AttackerSettlementId,
     Guid DefenderSettlementId,
+    string Mission,
     string Winner,
     double AttackPower,
     double DefensePower,
@@ -242,6 +253,7 @@ public sealed record BattleReportResponse(
             domain.AttackerArmyId,
             domain.AttackerSettlementId,
             domain.DefenderSettlementId,
+            domain.WasRaid ? "raid" : "attack",
             domain.Winner.ToString().ToLowerInvariant(),
             domain.AttackPower,
             domain.DefensePower,

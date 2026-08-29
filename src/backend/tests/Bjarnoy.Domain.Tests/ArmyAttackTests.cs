@@ -565,6 +565,148 @@ public class ArmyAttackTests
         Assert.Equal(defender.Buildings.Count, arrival.DefenderSettlement.Buildings.Count);
     }
 
+    // --- Raid mission (issue #40 phase 7) ---
+
+    private static DispatchDecision DispatchRaid(
+        Settlement settlement,
+        Guid targetSettlementId,
+        double provisions,
+        IReadOnlyList<UnitStack>? requested = null,
+        HexCoord? targetBuildingCoord = null) => Army.PlanDispatch(
+            settlement,
+            requested ?? [new UnitStack(UnitType.Axeman, 20)],
+            provisions,
+            [],
+            TargetHex,
+            T0,
+            Guid.CreateVersion7(),
+            AllGrass(),
+            ArmyMission.Raid,
+            targetSettlementId,
+            targetBuildingCoord);
+
+    [Fact]
+    public void Raid_dispatch_is_rejected_without_a_target_settlement()
+    {
+        var settlement = Found();
+
+        var decision = Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Axeman, 5)], 40, [], TargetHex, T0,
+            Guid.CreateVersion7(), AllGrass(), ArmyMission.Raid, targetSettlementId: null);
+
+        Assert.Equal(DispatchRejection.TargetSettlementRequired, decision.Rejection);
+    }
+
+    [Fact]
+    public void Raid_dispatch_is_rejected_against_ones_own_settlement()
+    {
+        var settlement = Found();
+
+        var decision = DispatchRaid(settlement, settlement.Id, provisions: 40);
+
+        Assert.Equal(DispatchRejection.CannotAttackOwnSettlement, decision.Rejection);
+    }
+
+    [Fact]
+    public void Raid_dispatch_produces_an_army_with_the_mission_and_target_recorded()
+    {
+        var settlement = Found();
+        var targetId = Guid.CreateVersion7();
+
+        var decision = DispatchRaid(settlement, targetId, provisions: 100);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(ArmyMission.Raid, decision.Army!.Mission);
+        Assert.Equal(targetId, decision.Army.TargetSettlementId);
+    }
+
+    [Fact]
+    public void A_raid_dispatch_may_also_name_a_target_building_just_like_attack()
+    {
+        var settlement = Found();
+        var targetBuilding = new HexCoord(1, 1);
+
+        var decision = DispatchRaid(settlement, Guid.CreateVersion7(), provisions: 100, targetBuildingCoord: targetBuilding);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(targetBuilding, decision.Army!.TargetBuildingCoord);
+    }
+
+    [Fact]
+    public void SettleArrival_fights_a_raid_army_on_arrival_just_like_an_attack()
+    {
+        var settlement = Found();
+        var decision = DispatchRaid(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 20)]);
+        var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 1);
+
+        Assert.True(arrival.Fought);
+        Assert.NotNull(arrival.Battle);
+    }
+
+    [Fact]
+    public void A_raid_that_wins_leaves_the_defender_with_survivors_unlike_a_plain_attack_win()
+    {
+        var settlement = Found();
+        var requested = new[] { new UnitStack(UnitType.Axeman, 30) };
+        var defenderGarrison = new[] { new UnitStack(UnitType.Spearman, 20) };
+
+        var raidDecision = DispatchRaid(settlement, Guid.CreateVersion7(), provisions: 200, requested: requested);
+        var raidArmy = raidDecision.Army!;
+        var raidMovement = ((ArmyLocation.InTransit)raidArmy.Location).Movement;
+        var raidDefender = Found(centre: TargetHex, garrison: defenderGarrison);
+        var raidArrival = Army.SettleArrival(raidArmy, raidDefender, 1.0, raidMovement.ArrivesAt, seed: 7);
+
+        var attackDecision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 200, requested: requested);
+        var attackArmy = attackDecision.Army!;
+        var attackMovement = ((ArmyLocation.InTransit)attackArmy.Location).Movement;
+        var attackDefender = Found(centre: TargetHex, garrison: defenderGarrison);
+        var attackArrival = Army.SettleArrival(attackArmy, attackDefender, 1.0, attackMovement.ArrivesAt, seed: 7);
+
+        Assert.Equal(BattleWinner.Attacker, raidArrival.Battle!.Winner);
+        Assert.Equal(BattleWinner.Attacker, attackArrival.Battle!.Winner);
+
+        Assert.Empty(attackArrival.DefenderSettlement.Garrison); // a plain attack win wipes the defender
+        Assert.NotEmpty(raidArrival.DefenderSettlement.Garrison); // a raid win leaves survivors
+    }
+
+    [Fact]
+    public void A_won_raid_still_carries_loot_home_on_the_return_leg()
+    {
+        var settlement = Found();
+        var decision = DispatchRaid(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: []);
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 7);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.NotNull(arrival.Army);
+        Assert.NotEqual(ResourceAmounts.Zero, arrival.Army!.Loot);
+    }
+
+    [Fact]
+    public void Existing_attack_behavior_is_unaffected_by_the_raid_mission_existing()
+    {
+        // Regression: dispatching and resolving an ordinary Attack still
+        // behaves exactly as before Raid was added.
+        var settlement = Found();
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: []);
+        var arrival = Army.SettleArrival(army, defender, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 7);
+
+        Assert.True(arrival.Fought);
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Empty(arrival.DefenderSettlement.Garrison); // a plain attack still wipes an empty garrison out fully
+    }
+
     [Fact]
     public void Destroying_the_defenders_only_farm_reduces_its_food_production_rate_on_the_next_settle()
     {

@@ -95,7 +95,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -234,7 +234,8 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
-    private static bool TryParseMission(string? value, out ArmyMission mission)
+    /// <summary>Internal, not private: reused by <see cref="SimulatorEndpoints"/> to parse the simulator's own attack/raid mission field.</summary>
+    internal static bool TryParseMission(string? value, out ArmyMission mission)
     {
         if (string.IsNullOrWhiteSpace(value) || string.Equals(value, "move", StringComparison.OrdinalIgnoreCase))
         {
@@ -254,11 +255,18 @@ public static class ArmyEndpoints
             return true;
         }
 
+        if (string.Equals(value, "raid", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Raid;
+            return true;
+        }
+
         mission = default;
         return false;
     }
 
-    private static bool TryParseUnit(string value, out UnitType type)
+    /// <summary>Internal, not private: reused by <see cref="SimulatorEndpoints"/> to parse its own attacker/defender unit stacks.</summary>
+    internal static bool TryParseUnit(string value, out UnitType type)
     {
         foreach (var candidate in UnitCatalogue.AllTypes)
         {

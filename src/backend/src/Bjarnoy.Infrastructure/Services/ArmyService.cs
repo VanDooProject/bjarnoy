@@ -105,7 +105,7 @@ public sealed class ArmyService(
 
         HexCoord effectiveDestination;
         var targetClaimRadius = 0;
-        if (mission is ArmyMission.Attack or ArmyMission.Support)
+        if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
         {
             if (targetSettlementId is not { } targetId)
             {
@@ -116,9 +116,9 @@ public sealed class ArmyService(
             if (targetId == settlementId)
             {
                 await PersistIfSettledAsync(settlement, settled, cancellationToken).ConfigureAwait(false);
-                return new ArmyDispatchResult(mission == ArmyMission.Attack
-                    ? DispatchRejection.CannotAttackOwnSettlement
-                    : DispatchRejection.CannotSupportOwnSettlement);
+                return new ArmyDispatchResult(mission == ArmyMission.Support
+                    ? DispatchRejection.CannotSupportOwnSettlement
+                    : DispatchRejection.CannotAttackOwnSettlement);
             }
 
             // Same world only — an army cannot reach a settlement in another
@@ -165,8 +165,8 @@ public sealed class ArmyService(
 
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
-            mission, mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
-            mission == ArmyMission.Attack ? targetBuildingCoord : null, targetClaimRadius);
+            mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
+            mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimRadius);
 
         if (!decision.Accepted)
         {
@@ -323,9 +323,10 @@ public sealed class ArmyService(
     /// (SaveChanges is still the caller's job either way).
     /// </summary>
     /// <remarks>
-    /// An <see cref="ArmyMission.Attack"/> army whose outbound
-    /// <c>Movement.ArrivesAt</c> has passed and has not yet turned around is
-    /// routed to <see cref="ResolveBattleAsync"/> instead of the plain
+    /// An <see cref="ArmyMission.Attack"/> or <see cref="ArmyMission.Raid"/>
+    /// (issue #40 phase 7) army whose outbound <c>Movement.ArrivesAt</c> has
+    /// passed and has not yet turned around is routed to
+    /// <see cref="ResolveBattleAsync"/> instead of the plain
     /// <c>Army.SettleTo</c> path: it fights right there rather than standing
     /// and later auto-returning the way <see cref="ArmyMission.Move"/> does —
     /// see <see cref="Army.SettleArrival"/>. An <see cref="ArmyMission.Support"/>
@@ -343,7 +344,7 @@ public sealed class ArmyService(
     {
         var domain = army.ToDomain();
 
-        if (domain.Mission == ArmyMission.Attack
+        if (domain.Mission is ArmyMission.Attack or ArmyMission.Raid
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             && now >= inTransit.Movement.ArrivesAt)
         {
@@ -443,7 +444,7 @@ public sealed class ArmyService(
 
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
-            domain.Stacks, battle, seed, arrival.Siege);
+            domain.Stacks, battle, seed, arrival.Siege, wasRaid: domain.Mission == ArmyMission.Raid);
         _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
 
         if (arrival.Siege is { Applied: true } siege)
