@@ -71,6 +71,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("TargetBuildingQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TargetBuildingR")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid?>("TargetSettlementId")
                         .HasColumnType("TEXT");
 
@@ -194,6 +200,24 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Seed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeLevelAfter")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeLevelBefore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("SiegeSettlementRazed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeTargetQ")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeTargetR")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SiegeTargetType")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Winner")

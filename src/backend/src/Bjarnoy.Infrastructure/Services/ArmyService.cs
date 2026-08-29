@@ -69,6 +69,11 @@ public sealed class ArmyService(
     /// Targeting an army standing in the open field, rather than a
     /// settlement, is not supported.
     /// </param>
+    /// <param name="targetBuildingCoord">
+    /// Optional; only meaningful for <see cref="ArmyMission.Attack"/> — the
+    /// building coordinate to hit with any surviving catapults (issue #40
+    /// phase 5). See <see cref="Army.TargetBuildingCoord"/>.
+    /// </param>
     public async Task<ArmyDispatchResult> DispatchAsync(
         Guid settlementId,
         IReadOnlyList<UnitStack> unitCounts,
@@ -77,6 +82,7 @@ public sealed class ArmyService(
         double provisions,
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
+        HexCoord? targetBuildingCoord = null,
         CancellationToken cancellationToken = default)
     {
         var settlement = await LoadSettlementAsync(settlementId, cancellationToken).ConfigureAwait(false);
@@ -147,7 +153,8 @@ public sealed class ArmyService(
 
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
-            mission, mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null);
+            mission, mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
+            mission == ArmyMission.Attack ? targetBuildingCoord : null);
 
         if (!decision.Accepted)
         {
@@ -424,8 +431,17 @@ public sealed class ArmyService(
 
         var report = BattleReport.From(
             Guid.CreateVersion7(), movement.ArrivesAt, armyEntity.Id, armyEntity.SettlementId, targetId,
-            domain.Stacks, battle, seed);
+            domain.Stacks, battle, seed, arrival.Siege);
         _dbContext.BattleReports.Add(BattleReportEntity.FromDomain(report));
+
+        if (arrival.Siege is { Applied: true } siege)
+        {
+            _logger.LogInformation(
+                "Army {ArmyId}'s catapults reduced {TargetType} at ({Q},{R}) in settlement {TargetId} from "
+                    + "level {Before} to {After}{RazedNote}.",
+                armyEntity.Id, siege.TargetType, siege.TargetCoord!.Value.Q, siege.TargetCoord.Value.R, targetId,
+                siege.LevelBefore, siege.LevelAfter, siege.SettlementRazed ? " — the settlement is razed" : string.Empty);
+        }
 
         _logger.LogInformation(
             "Army {ArmyId} attacked settlement {TargetId}: {Winner} won ({AttackPower} vs {DefensePower}); "

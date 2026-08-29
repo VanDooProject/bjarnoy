@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -37,13 +38,25 @@ public sealed record HexPointRequest(int Q, int R)
 /// settlement to fight on arrival) or <c>"support"</c> (the settlement to
 /// garrison as a guest on arrival).
 /// </param>
+/// <param name="TargetBuildingCoord">
+/// Optional, only meaningful for <c>"attack"</c> — the coordinate of a
+/// building within the target settlement to hit with any surviving
+/// catapults on arrival (issue #40 phase 5). Omit (or leave <see langword="null"/>)
+/// for "no preference" — <see cref="Bjarnoy.Domain.Combat.SiegeResolver"/>
+/// then picks uniformly at random among whatever buildings the defender
+/// actually has standing when the army arrives. Not validated against the
+/// target's actual layout here — that can change before arrival — only that
+/// it was not given for a non-<c>"attack"</c> mission (see
+/// <see cref="Army.TargetBuildingCoord"/>'s remarks).
+/// </param>
 public sealed record DispatchArmyRequest(
     [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
     IReadOnlyList<HexPointRequest>? Waypoints,
     HexPointRequest? Destination,
     [property: Range(0, double.MaxValue)] double Provisions,
     string? Mission = null,
-    Guid? TargetSettlementId = null);
+    Guid? TargetSettlementId = null,
+    HexPointRequest? TargetBuildingCoord = null);
 
 public sealed record ArmyUnitStackResponse(string Unit, int Count);
 
@@ -190,6 +203,18 @@ public sealed record BattleReportAttackerLineResponse(string Unit, int Sent, int
 
 public sealed record BattleReportDefenderLineResponse(string Unit, int Lost, int Survived);
 
+/// <summary>The building-damage section of a battle report (issue #40 phase 5) — present only when catapult damage actually happened.</summary>
+public sealed record BattleReportSiegeResponse(
+    HexPointResponse TargetCoord, string TargetType, int LevelBefore, int LevelAfter, bool SettlementRazed)
+{
+    public static BattleReportSiegeResponse? From(BattleReportSiegeLine? siege) =>
+        siege is null
+            ? null
+            : new BattleReportSiegeResponse(
+                HexPointResponse.From(siege.TargetCoord), siege.TargetType.ToWireName(),
+                siege.LevelBefore, siege.LevelAfter, siege.SettlementRazed);
+}
+
 /// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
 public sealed record BattleReportResponse(
     Guid Id,
@@ -203,7 +228,8 @@ public sealed record BattleReportResponse(
     int Seed,
     ResourceAmountsResponse LootTaken,
     IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
-    IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines)
+    IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines,
+    BattleReportSiegeResponse? Siege)
 {
     public static BattleReportResponse From(BattleReportEntity entity)
     {
@@ -222,6 +248,7 @@ public sealed record BattleReportResponse(
             domain.Seed,
             ResourceAmountsResponse.From(domain.LootTaken),
             [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
-            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))]);
+            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))],
+            BattleReportSiegeResponse.From(domain.Siege));
     }
 }
