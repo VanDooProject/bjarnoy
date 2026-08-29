@@ -4,13 +4,18 @@ import { ApiError, api } from '../api/client';
 import type {
   ArmyResponse,
   BuildOrderResponse,
+  GuestArmySummary,
   IslandResponse,
   TrainingOrderResponse,
   UnitStackResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
-import { buildAttackDispatchRequest, buildMoveDispatchRequest } from '../lib/units/armyDispatch';
+import {
+  buildAttackDispatchRequest,
+  buildMoveDispatchRequest,
+  buildSupportDispatchRequest,
+} from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
 import type { Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
@@ -85,6 +90,13 @@ export const useWorldStore = defineStore('world', {
     // `hud.garrison`/`hud.trainingQueue` above.
     armies: [] as ArmyResponse[],
     armiesFetchedAt: 0,
+    // Issue #40 phase 4: guest (Support) armies currently stationed at this
+    // settlement — the host's read-only view (`GET /settlements/{id}/guests`).
+    // Refetched on the same tick as `armies` (see `refreshArmies` below)
+    // rather than a third independent poll timer — guests change no more
+    // often than the owner's own army list does. Always empty in demo mode.
+    guestArmies: [] as GuestArmySummary[],
+    guestArmiesFetchedAt: 0,
     // The army currently shown selected in ArmyPanel.vue — its live route is
     // drawn on the map (HexMapRenderer.setArmyOverlay) while selected. Not a
     // computed getter: selection persists across `refreshArmies` polls by id.
@@ -105,8 +117,10 @@ export const useWorldStore = defineStore('world', {
       // waypoint-editing route but every clicked hex is just a waypoint —
       // the backend always resolves an attack's real destination to
       // `targetSettlementId`'s own hex, never a clicked one (see
-      // `buildAttackDispatchRequest`'s own comment).
-      mission: 'move' | 'attack';
+      // `buildAttackDispatchRequest`'s own comment). 'support' (issue #40
+      // phase 4) is shaped identically to 'attack' — a target settlement plus
+      // optional waypoints — see `buildSupportDispatchRequest`.
+      mission: 'move' | 'attack' | 'support';
       targetSettlementId: string | null;
     } | null,
     armyPollHandle: null as ReturnType<typeof setInterval> | null,
@@ -381,10 +395,20 @@ export const useWorldStore = defineStore('world', {
         });
       }
     },
-    /** Pulls this settlement's armies from the backend. No-op in demo mode. See `armies`'s own comment for why home garrison never appears here. */
+    /**
+     * Pulls this settlement's armies (and, issue #40 phase 4, the guest
+     * armies currently supporting it) from the backend in the same tick — one
+     * poll interval (`ARMY_POLL_MS`) covers both rather than a third
+     * independent timer, since guests change no more often than the owner's
+     * own army list does. No-op in demo mode. See `armies`'s own comment for
+     * why home garrison never appears here.
+     */
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      const summaries = await api.getSettlementArmies(this.selectedSettlementId);
+      const [summaries, guests] = await Promise.all([
+        api.getSettlementArmies(this.selectedSettlementId),
+        api.getSettlementGuests(this.selectedSettlementId),
+      ]);
       // ArmySummary (the list endpoint) omits unit composition/movement/
       // provisions — ArmyPanel needs those, so fetch each army's full detail.
       // Settlements realistically hold a handful of dispatched armies at
@@ -392,6 +416,8 @@ export const useWorldStore = defineStore('world', {
       // endpoint the backend doesn't expose.
       this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id)));
       this.armiesFetchedAt = Date.now();
+      this.guestArmies = guests;
+      this.guestArmiesFetchedAt = Date.now();
       // An army that arrived home (and was folded back/deleted — see the
       // `armies` state comment) simply stops appearing in the list; drop a
       // selection that's no longer valid rather than leaving the map overlay
@@ -426,8 +452,8 @@ export const useWorldStore = defineStore('world', {
     cancelDispatch() {
       this.dispatchDraft = null;
     },
-    /** Switching mission clears the plotted route/target — a move destination and an attack's waypoint-only route aren't interchangeable, and a stale target settlement from a previous attack draft shouldn't silently carry over. */
-    setDispatchMission(mission: 'move' | 'attack') {
+    /** Switching mission clears the plotted route/target — a move destination and an attack's/support's waypoint-only route aren't interchangeable, and a stale target settlement from a previous draft shouldn't silently carry over. */
+    setDispatchMission(mission: 'move' | 'attack' | 'support') {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.mission = mission;
       this.dispatchDraft.route = [];
@@ -477,25 +503,28 @@ export const useWorldStore = defineStore('world', {
       this.dispatchDraft.route = [];
     },
     /**
-     * Sends the composed draft to the backend as a `move` or `attack`
-     * dispatch (issue #40 phase 3 added the latter). Leaves the draft in
-     * place (with `error` set) on rejection so the player can adjust and
-     * retry rather than losing their unit/waypoint/target selection; clears
-     * it and refreshes the army list on success.
+     * Sends the composed draft to the backend as a `move`, `attack`, or
+     * `support` dispatch (issue #40 phase 3 added Attack, phase 4 Support).
+     * Leaves the draft in place (with `error` set) on rejection so the player
+     * can adjust and retry rather than losing their unit/waypoint/target
+     * selection; clears it and refreshes the army list on success.
      */
     async confirmDispatch() {
       const draft = this.dispatchDraft;
       if (!draft || !this.selectedSettlementId) return;
-      const request = draft.mission === 'attack'
-        ? buildAttackDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
-        : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
+      const request =
+        draft.mission === 'attack'
+          ? buildAttackDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
+          : draft.mission === 'support'
+            ? buildSupportDispatchRequest(draft.unitCounts, draft.route, draft.provisions, draft.targetSettlementId)
+            : buildMoveDispatchRequest(draft.unitCounts, draft.route, draft.provisions);
       if (!request) {
         if (Object.values(draft.unitCounts).every((c) => c <= 0)) {
           draft.error = 'Select at least one unit to send.';
         } else if (draft.mission === 'move' && draft.route.length === 0) {
           draft.error = 'Click the map to set a destination first.';
-        } else if (draft.mission === 'attack' && !draft.targetSettlementId) {
-          draft.error = 'Choose a settlement to attack first.';
+        } else if ((draft.mission === 'attack' || draft.mission === 'support') && !draft.targetSettlementId) {
+          draft.error = `Choose a settlement to ${draft.mission} first.`;
         } else {
           draft.error = 'Select at least one unit to send.';
         }

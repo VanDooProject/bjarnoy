@@ -14,7 +14,6 @@ import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
 import { armyStatusLabel, formatEta, maxAffordableProvisions } from '../../lib/units/armyDispatch';
-import { missionLabel } from '../../lib/units/battleReports';
 
 const world = useWorldStore();
 const catalogue = useUnitCatalogueStore();
@@ -36,6 +35,15 @@ const UNIT_LABELS: Record<string, string> = {
 };
 function unitLabel(unit: string): string {
   return UNIT_LABELS[unit] ?? unit;
+}
+
+// A row's mission tag: unlike battleReports.ts's `missionLabel` (which only
+// ever sees 'attack'/'raid' — the two missions a battle report can be for),
+// an army row can be 'attack'/'support'/'raid' (never 'move' — see the
+// `!== 'move'` guard below), so this just title-cases the wire value rather
+// than special-casing two of the four.
+function missionTagLabel(mission: string): string {
+  return mission.charAt(0).toUpperCase() + mission.slice(1);
 }
 
 const draft = computed(() => world.dispatchDraft);
@@ -70,10 +78,13 @@ const hasUnitsSelected = computed(() =>
   !!draft.value && Object.values(draft.value.unitCounts).some((c) => c > 0),
 );
 // A move dispatch needs a plotted route (the last click is the destination);
-// an attack dispatch needs a target settlement instead — a route is optional
-// waypoints along the way (see buildAttackDispatchRequest's own comment).
+// an attack/support dispatch needs a target settlement instead — a route is
+// optional waypoints along the way (see buildAttackDispatchRequest's own
+// comment; buildSupportDispatchRequest mirrors it exactly).
 const hasDestination = computed(() =>
-  draft.value?.mission === 'attack' ? !!draft.value.targetSettlementId : routeLength.value > 0,
+  draft.value?.mission === 'attack' || draft.value?.mission === 'support'
+    ? !!draft.value.targetSettlementId
+    : routeLength.value > 0,
 );
 const canConfirm = computed(
   () => hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
@@ -83,16 +94,17 @@ function beginDispatch() {
   world.startDispatch();
 }
 
-function setMission(mission: 'move' | 'attack') {
+function setMission(mission: 'move' | 'attack' | 'support') {
   world.setDispatchMission(mission);
 }
 
-// Target-settlement picker for an Attack dispatch: a searchable list rather
-// than a world-map click — see the PR notes for why (WorldMapCanvas's
+// Target-settlement picker for an Attack/Support dispatch: a searchable list
+// rather than a world-map click — see the PR notes for why (WorldMapCanvas's
 // hex-click only carries a coordinate, not a settlement id, and teaching the
 // renderer a "pick a settlement" selection mode would be a bigger change
 // than reusing the settlement list `refreshWorldSettlements` already
-// maintains client-side).
+// maintains client-side). Support needs a target settlement just like Attack
+// does (issue #40 phase 4) — same list, same search box.
 const targetSearch = ref('');
 const attackTargets = computed(() => {
   const all = world.listAttackableSettlements();
@@ -121,6 +133,10 @@ async function confirm() {
 }
 
 // Armies already dispatched — never AtHome persistently (see stores/world.ts).
+// A Supporting army's row (issue #40 phase 4, "armies abroad") shows
+// "Supporting <settlement name>" rather than the bare status, and still
+// offers Recall — same button, same endpoint, just no active Movement to
+// gate it on (see world.model.getSettlement for the name lookup).
 const armyRows = computed(() => {
   void world.hud.tick; // reactive dependency so ETA countdowns tick every second
   const now = Date.now();
@@ -129,11 +145,14 @@ const armyRows = computed(() => {
       .filter((s) => s.count > 0)
       .map((s) => `${s.count}× ${unitLabel(s.unit)}`)
       .join(', ');
-    const status = armyStatusLabel(army);
+    const targetName = army.targetSettlementId
+      ? world.model.getSettlement(army.targetSettlementId)?.name ?? null
+      : null;
+    const status = armyStatusLabel(army, army.supporting ? targetName : null);
     const eta = army.movement
       ? formatEta(army.movement.isReturning ? army.movement.returnArrivesAt : army.movement.arrivesAt, now)
       : null;
-    const canRecall = !army.atHome && !army.supporting && army.movement !== null && !army.movement.isReturning;
+    const canRecall = !army.atHome && (army.supporting || (army.movement !== null && !army.movement.isReturning));
     return {
       id: army.id,
       composition: composition || '—',
@@ -141,7 +160,7 @@ const armyRows = computed(() => {
       eta,
       canRecall,
       selected: army.id === world.selectedArmyId,
-      mission: army.mission !== 'move' ? missionLabel(army.mission) : null,
+      mission: army.mission !== 'move' ? missionTagLabel(army.mission) : null,
     };
   });
 });
@@ -235,6 +254,14 @@ async function recall(armyId: string) {
           >
             Attack
           </button>
+          <button
+            type="button"
+            class="mission-tab support"
+            :class="{ active: draft.mission === 'support' }"
+            @click="setMission('support')"
+          >
+            Support
+          </button>
         </div>
 
         <p v-if="draft.mission === 'move'" class="status-subtext instructions">
@@ -243,7 +270,7 @@ async function recall(armyId: string) {
         </p>
         <template v-else>
           <p class="status-subtext instructions">
-            Choose a settlement to attack, then optionally click hexes on the
+            Choose a settlement to {{ draft.mission }}, then optionally click hexes on the
             map to plot a route there. {{ routeLength }} waypoint{{ routeLength === 1 ? '' : 's' }} plotted.
           </p>
 
@@ -256,7 +283,7 @@ async function recall(armyId: string) {
               v-model="targetSearch"
               type="text"
               class="target-search"
-              placeholder="Search settlements to attack…"
+              :placeholder="`Search settlements to ${draft.mission}…`"
             />
             <div v-if="attackTargets.length" class="target-list">
               <button
@@ -272,6 +299,11 @@ async function recall(armyId: string) {
             </div>
             <p v-else class="status-subtext">No other settlements found yet.</p>
           </div>
+
+          <p v-if="draft.mission === 'support'" class="status-subtext support-note">
+            Support needs less food than an attack or long march — the host
+            feeds your troops once they arrive.
+          </p>
         </template>
 
         <div class="unit-picker">
@@ -483,6 +515,14 @@ async function recall(armyId: string) {
   border-color: #e08a8a;
   color: #e08a8a;
   background: rgba(224, 138, 138, 0.08);
+}
+.mission-tab.support.active {
+  border-color: #6fbf8a;
+  color: #6fbf8a;
+  background: rgba(111, 191, 138, 0.08);
+}
+.support-note {
+  margin-top: 0;
 }
 .target-selected {
   display: flex;

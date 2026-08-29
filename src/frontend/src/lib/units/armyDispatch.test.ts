@@ -4,6 +4,7 @@ import {
   armyStatusLabel,
   buildAttackDispatchRequest,
   buildMoveDispatchRequest,
+  buildSupportDispatchRequest,
   formatEta,
   maxAffordableProvisions,
   routeToWaypointsAndDestination,
@@ -104,6 +105,34 @@ describe('buildAttackDispatchRequest', () => {
   });
 });
 
+describe('buildSupportDispatchRequest', () => {
+  it('returns null when no units are selected', () => {
+    expect(buildSupportDispatchRequest({ spearman: 0 }, [], 100, 'target-1')).toBeNull();
+  });
+
+  it('returns null when no target settlement is chosen', () => {
+    expect(buildSupportDispatchRequest({ spearman: 5 }, [], 100, null)).toBeNull();
+  });
+
+  it('builds a support request with no waypoints when the route is empty (a direct route)', () => {
+    const request = buildSupportDispatchRequest({ spearman: 5, axeman: 0 }, [], 50, 'target-1');
+    expect(request).toEqual({
+      units: [{ unit: 'spearman', count: 5 }],
+      waypoints: undefined,
+      provisions: 50,
+      mission: 'support',
+      targetSettlementId: 'target-1',
+    });
+  });
+
+  it('treats every clicked hex as a waypoint — never a destination, same as an attack dispatch', () => {
+    const route = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
+    const request = buildSupportDispatchRequest({ spearman: 3 }, route, 20, 'target-1');
+    expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }]);
+    expect(request?.destination).toBeUndefined();
+  });
+});
+
 describe('maxAffordableProvisions', () => {
   const byType = {
     spearman: unit({ type: 'spearman', foodCarryCapacity: 10 }),
@@ -163,8 +192,18 @@ describe('armyStatusLabel', () => {
     expect(armyStatusLabel({ atHome: true, supporting: false, movement: null })).toBe('At home');
   });
 
-  it('labels a supporting guest army', () => {
+  it('labels a supporting guest army with no settlement name given', () => {
     expect(armyStatusLabel({ atHome: false, supporting: true, movement: null })).toBe('Supporting');
+  });
+
+  it('labels a supporting guest army with the host settlement name when known', () => {
+    expect(
+      armyStatusLabel({ atHome: false, supporting: true, movement: null }, 'Fjordholm'),
+    ).toBe('Supporting Fjordholm');
+  });
+
+  it('falls back to the bare label when the settlement name is not yet known', () => {
+    expect(armyStatusLabel({ atHome: false, supporting: true, movement: null }, null)).toBe('Supporting');
   });
 
   it('labels an outbound army as in transit', () => {

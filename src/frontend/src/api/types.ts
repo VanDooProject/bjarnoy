@@ -605,6 +605,21 @@ export interface ArmySummary {
   position: HexPoint;
 }
 
+/**
+ * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
+ * *host* settlement sees it: counts only, since the host cannot command a
+ * guest garrison (no recall/action buttons on this view — only the owner,
+ * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * is the guest's home, not its current location (which is always the
+ * settlement `getSettlementGuests` was asked about).
+ */
+export interface GuestArmySummary {
+  armyId: string;
+  ownerSettlementId: string;
+  totalUpkeepPerHour: number;
+  stacks: ArmyUnitStackResponse[];
+}
+
 // Issue #40 phase 3 (frontend): battle reports. Mirrors
 // `BattleReportAttackerLineResponse`/`BattleReportDefenderLineResponse`/
 // `BattleReportSiegeResponse`/`BattleReportResponse` in ArmyContracts.cs.
