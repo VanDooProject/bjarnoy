@@ -28,7 +28,10 @@ public class ChatFlowTests
     [Fact]
     public async Task TwoPlayersCanMessageAndReportThroughTheRealUiAndAnAdminCanResolveIt()
     {
-        var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
+        // 8, not FoundingSettlementPersistenceTests' 6: three logins each
+        // pay a share of the cold-Vite-chunk tax LogInAsync budgets up to
+        // 2 minutes for, on top of the message/report/resolve steps.
+        var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(8)).Token;
 
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Bjarnoy_AppHost>(cancellationToken);
         appHost.Services.ConfigureHttpClientDefaults(clientBuilder => clientBuilder.AddStandardResilienceHandler());
@@ -185,14 +188,19 @@ public class ChatFlowTests
 
         // GotoAsync's "load" event fires once the bare HTML/CSS/JS have
         // arrived, not once Vue has actually mounted — on a cold Vite dev
-        // server that first module transpile-and-execute can still run well
-        // past Playwright's default 30s actionability wait (this is exactly
-        // why FoundingSettlementPersistenceTests waits on its canvas with an
-        // explicit long timeout instead of trusting the implicit one on its
-        // first interaction). Wait for the login form itself, explicitly,
-        // before touching it.
+        // server, `/login`'s lazily-imported chunk (router/index.ts's
+        // `() => import(...)`) is only requested, transpiled and executed
+        // *after* that, and observed CI runs (two failures in a row here, at
+        // 30s and then 60s, with no other error — just this same wait
+        // running out) show that can still take over a minute once three
+        // AppHost tests are sharing one runner instead of two. This is the
+        // same class of fix FoundingSettlementPersistenceTests already
+        // applies to its canvas mount, just with a bigger number: wait for
+        // the login form itself, explicitly and generously, before
+        // touching it, rather than trusting Playwright's default (or a
+        // smaller custom) actionability wait on first interaction.
         var userNameInput = page.Locator("#userName");
-        await userNameInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
+        await userNameInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 120_000 });
 
         await userNameInput.FillAsync(userName);
         await page.Locator("#password").FillAsync(password);
