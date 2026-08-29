@@ -130,6 +130,63 @@ export interface SettlementSummary {
   longhouseLevel: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see
+// TradeEndpoints for the endpoints these are used against.
+
+export interface PostTradeOfferRequest {
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildOnly?: boolean;
+}
+
+export interface AcceptTradeOfferRequest {
+  acceptorSettlementId: string;
+}
+
+export interface CancelTradeOfferRequest {
+  settlementId: string;
+}
+
+/** `state` is one of: 'open' | 'accepted' | 'delivered' | 'cancelled' | 'expired'. */
+export interface TradeOfferResponse {
+  id: string;
+  posterSettlementId: string;
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildOnly: boolean;
+  state: string;
+  postedAtGameTime: string;
+  expiresAtGameTime: string;
+}
+
+export interface ShipmentResponse {
+  id: string;
+  offerId: string;
+  fromSettlementId: string;
+  toSettlementId: string;
+  cargoResource: string;
+  cargoAmount: number;
+  carts: number;
+  fromQ: number;
+  fromR: number;
+  toQ: number;
+  toR: number;
+  departedAtGameTime: string;
+  arrivesAtGameTime: string;
+  returnArrivesAtGameTime: string;
+  delivered: boolean;
+}
+
+export interface TradeAcceptResponse {
+  offer: TradeOfferResponse;
+  toAcceptor: ShipmentResponse;
+  toPoster: ShipmentResponse;
+}
+
 export interface CreateWorldRequest {
   name: string;
   seed?: number;

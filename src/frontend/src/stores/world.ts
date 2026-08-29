@@ -7,6 +7,8 @@ import type {
   GuestArmySummary,
   IslandResponse,
   PlacedBuildingResponse,
+  ShipmentResponse,
+  TradeOfferResponse,
   TrainingOrderResponse,
   UnitStackResponse,
 } from '../api/types';
@@ -72,6 +74,15 @@ export const useWorldStore = defineStore('world', {
       // WorldModel places buildings instantly and has no queue to show.
       queue: [] as BuildOrderResponse[],
       queueFetchedAt: 0,
+      // Trade system (PR 2): live-mode-only snapshots of the trade board,
+      // this settlement's own offers, and its shipments — see
+      // `refreshTradeAsync`. Always empty in demo mode; TradePanel.vue reads
+      // `WorldModel`'s own demo trade offers directly there instead (there
+      // are no shipments to show in demo mode at all — see
+      // `WorldModel.acceptTradeOffer`'s doc comment).
+      tradeBoard: [] as TradeOfferResponse[],
+      myTradeOffers: [] as TradeOfferResponse[],
+      shipments: [] as ShipmentResponse[],
       // Issue #40 phase 1: garrison (who's standing at this settlement) and
       // the training queue, fetched/refreshed the same way as buildings/
       // queue above. Always empty in demo mode — there is no local
@@ -321,6 +332,7 @@ export const useWorldStore = defineStore('world', {
       });
       this.selectedSettlementId = settlement.id;
       this.syncHud();
+      void this.refreshTradeAsync();
       return settlement;
     },
     /**
@@ -366,6 +378,68 @@ export const useWorldStore = defineStore('world', {
       this.syncHud();
     },
     /**
+     * Live mode: posts a trade offer at this settlement's longhouse.
+     * Throws `ApiError` on rejection (e.g. `RatioExceeded`,
+     * `NotEnoughResources`) — TradePanel.vue surfaces `err.problem?.rejection`.
+     * A no-op in demo mode; TradePanel.vue calls `world.model.postTradeOffer`
+     * directly there instead (see the file's other DEMO_MODE branches).
+     */
+    async postTradeOfferLive(
+      offeredResource: string,
+      offeredAmount: number,
+      requestedResource: string,
+      requestedAmount: number,
+      guildOnly: boolean,
+    ) {
+      if (DEMO_MODE || !this.selectedSettlementId) return;
+      await api.postTradeOffer(this.selectedSettlementId, {
+        offeredResource,
+        offeredAmount,
+        requestedResource,
+        requestedAmount,
+        guildOnly,
+      });
+      await this.refreshTradeAsync();
+    },
+    /**
+     * Live mode: accepts an open offer, dispatching both shipments
+     * server-side. Throws `ApiError` on rejection (e.g. `OutOfRange`,
+     * `GuildOnlyOffer`). A no-op in demo mode — see `postTradeOfferLive`.
+     */
+    async acceptTradeOfferLive(offerId: string) {
+      if (DEMO_MODE || !this.selectedSettlementId) return;
+      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId });
+      await this.refreshTradeAsync();
+      await this.refreshLiveSettlement();
+    },
+    /**
+     * Live mode: withdraws one of this settlement's own open offers and
+     * refunds its escrow. A no-op in demo mode — see `postTradeOfferLive`.
+     */
+    async cancelTradeOfferLive(offerId: string) {
+      if (DEMO_MODE || !this.selectedSettlementId) return;
+      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId });
+      await this.refreshTradeAsync();
+      await this.refreshLiveSettlement();
+    },
+    /**
+     * Live mode: pulls the trade board, this settlement's own offers, and
+     * its shipments in one go, for TradePanel.vue. No-op in demo mode
+     * (`hud.tradeBoard`/`myTradeOffers`/`shipments` stay empty there —
+     * TradePanel.vue reads `WorldModel`'s demo trade offers directly).
+     */
+    async refreshTradeAsync() {
+      if (DEMO_MODE || !this.selectedSettlementId) return;
+      const [board, mine, shipments] = await Promise.all([
+        api.getTradeBoard(this.selectedSettlementId),
+        api.getMyTradeOffers(this.selectedSettlementId),
+        api.getShipments(this.selectedSettlementId),
+      ]);
+      this.hud.tradeBoard = board;
+      this.hud.myTradeOffers = mine;
+      this.hud.shipments = shipments;
+    },
+    /**
      * Live mode: rehydrates `selectedSettlementId`/`WorldModel` after a page
      * reload, using the settlement id `stores/player.ts` persisted. Without
      * this, `hasFoundedSettlement` (and thus the router's `/settlement`
@@ -393,6 +467,7 @@ export const useWorldStore = defineStore('world', {
       });
       this.selectedSettlementId = response.id;
       this.syncHud();
+      void this.refreshTradeAsync();
     },
     /**
      * Live mode: pulls every settlement in the world (not just this
@@ -647,10 +722,12 @@ export const useWorldStore = defineStore('world', {
       if (!DEMO_MODE) {
         void this.refreshLiveSettlement();
         void this.refreshWorldSettlements();
+        void this.refreshTradeAsync();
         void this.refreshArmies();
         this.livePollHandle = setInterval(() => {
           void this.refreshLiveSettlement();
           void this.refreshWorldSettlements();
+          void this.refreshTradeAsync();
         }, LIVE_POLL_MS);
         // Separate, tighter interval than LIVE_POLL_MS — see ARMY_POLL_MS's
         // own comment for why armies need to be polled more often than

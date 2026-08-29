@@ -7,6 +7,7 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import TradePanel from '../components/hud/TradePanel.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
@@ -568,6 +569,7 @@ async function upgrade() {
     </TopBar>
     <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
+    <TradePanel />
     <TrainingQueuePanel />
     <ArmyPanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
