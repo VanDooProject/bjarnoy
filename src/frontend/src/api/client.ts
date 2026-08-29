@@ -24,14 +24,14 @@ import type {
   WeeklyStatsPageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
-  PagedProfileReportsResponse,
+  PagedReportsResponse,
   ProblemDetails,
-  ProfileReportResponse,
   ProfileResponse,
   ProposeTreatyRequest,
   QueueBuildRequest,
   ReportProfileRequest,
-  ResolveProfileReportRequest,
+  ReportResponse,
+  ResolveReportRequest,
   SetBuildingLevelRequest,
   SetGuildFeeTierRequest,
   SetGuildMemberRoleRequest,
@@ -39,6 +39,9 @@ import type {
   SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
+  TrainingOrderResponse,
+  TrainUnitsRequest,
+  UnitDefinitionResponse,
   UpdateAdminUserRequest,
   UpdateBioRequest,
   UpdateWorldSettingsRequest,
@@ -120,32 +123,41 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
+    request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
   getProfileByName: (userName: string) =>
     request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
   updateMyBio: (body: UpdateBioRequest) =>
     request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
   reportProfile: (userId: string, body: ReportProfileRequest) =>
-    request<ProfileReportResponse>(`/profiles/${userId}/reports`, {
+    request<ReportResponse>(`/profiles/${userId}/reports`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  adminListProfileReports: (params?: { status?: string; page?: number; pageSize?: number }) => {
+  adminListReports: (params?: { status?: string; sourceType?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.status) query.set('status', params.status);
+    if (params?.sourceType) query.set('sourceType', params.sourceType);
     if (params?.page) query.set('page', String(params.page));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
-    return request<PagedProfileReportsResponse>(`/admin/profile-reports${qs ? `?${qs}` : ''}`);
+    return request<PagedReportsResponse>(`/admin/reports${qs ? `?${qs}` : ''}`);
   },
-  adminResolveProfileReport: (reportId: string, body: ResolveProfileReportRequest) =>
-    request<ProfileReportResponse>(`/admin/profile-reports/${reportId}/resolve`, {
+  adminResolveReport: (reportId: string, body: ResolveReportRequest) =>
+    request<ReportResponse>(`/admin/reports/${reportId}/resolve`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
   // Public catalogue endpoint — no worldId, since the catalogue is currently
   // the same static data for every world (see `BuildingCatalogue.cs`).
   getBuildingCatalogue: () => request<BuildingDefinitionResponse[]>('/buildings'),
+  // Public catalogue endpoint, same reasoning as getBuildingCatalogue above —
+  // the unit roster (UnitCatalogue.cs) is static, not per-world data.
+  getUnitCatalogue: () => request<UnitDefinitionResponse[]>('/units'),
   adminListWorlds: () => request<AdminWorldResponse[]>('/admin/worlds'),
   adminUpdateWorldSettings: (worldId: string, body: UpdateWorldSettingsRequest) =>
     request<AdminWorldResponse>(`/admin/worlds/${worldId}/settings`, {

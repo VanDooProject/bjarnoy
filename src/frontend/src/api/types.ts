@@ -75,6 +75,27 @@ export interface BuildOrderResponse {
   completesInSeconds: number | null;
 }
 
+/** A garrison line: how many of one unit type currently stand at a settlement. */
+export interface UnitStackResponse {
+  unit: string;
+  count: number;
+}
+
+/**
+ * One queued training batch. `completedCount` is display-only — the whole
+ * batch lands in the garrison at once when it completes (see the backend's
+ * `TrainingOrder` remarks); `completesInSeconds` is null while the world is
+ * frozen, same as `BuildOrderResponse.completesInSeconds`.
+ */
+export interface TrainingOrderResponse {
+  id: string;
+  unit: string;
+  count: number;
+  completedCount: number;
+  completesAtGameTime: string;
+  completesInSeconds: number | null;
+}
+
 export interface WorldClockResponse {
   state: string;
   running: boolean;
@@ -95,6 +116,8 @@ export interface SettlementResponse {
   resources: ResourcesResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
+  garrison: UnitStackResponse[];
+  trainingQueue: TrainingOrderResponse[];
   world: WorldClockResponse;
 }
 
@@ -128,6 +151,11 @@ export interface QueueBuildRequest {
   building: string;
   q: number;
   r: number;
+}
+
+export interface TrainUnitsRequest {
+  unit: string;
+  count: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.
@@ -303,30 +331,41 @@ export interface ReportProfileRequest {
   note?: string | null;
 }
 
-export interface ProfileReportResponse {
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs — the
+// generic moderation queue behind both chat message reports and profile
+// reports (previously a separate ProfileReportResponse/profile_reports
+// system, unified onto this one queue).
+
+export interface ReportResponse {
   id: string;
   reporterUserId: string;
   reporterUserName: string;
   reportedUserId: string;
   reportedUserName: string;
+  /** One of `chatMessage`, `profileBio`. */
+  sourceType: string;
+  sourceId: string;
+  contextSnapshot: string;
   reason: string;
   note: string | null;
-  /** One of `pending`, `reviewed`, `dismissed`, `actioned`. */
-  status: string;
   createdAt: string;
-  reviewedAt: string | null;
+  /** One of `pending`, `resolved`, `dismissed`, `actioned`. */
+  status: string;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
 }
 
-export interface PagedProfileReportsResponse {
-  items: ProfileReportResponse[];
+export interface PagedReportsResponse {
+  items: ReportResponse[];
   totalCount: number;
   page: number;
   pageSize: number;
 }
 
-/** `status`: one of `pending`, `reviewed`, `dismissed`, `actioned`. */
-export interface ResolveProfileReportRequest {
-  status: string;
+/** `outcome`: one of `resolved`, `dismissed`, `actioned`. */
+export interface ResolveReportRequest {
+  outcome: string;
+  note?: string | null;
 }
 
 export interface ProblemDetails {
@@ -527,4 +566,26 @@ export interface GuildTreatyResponse {
   status: PeaceTreatyStatus;
   proposedAt: string;
   respondedAt: string | null;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's
+// UnitDefinitionResponse (issue #40 phase 1: unit catalogue, training queue).
+
+/** One unit type's stats and training prerequisites — see `GET /api/v1/units`. */
+export interface UnitDefinitionResponse {
+  type: string;
+  /** `infantry` | `cavalry` | `siege` | `ship` | `civilian` (`UnitClass`, lowercased on the wire). */
+  class: string;
+  attack: number;
+  defense: number;
+  /** Hexes per hour. Unused by anything this phase builds (army movement is a later phase). */
+  speed: number;
+  carryCapacity: number;
+  foodCarryCapacity: number;
+  upkeepPerHour: number;
+  trainingCost: ResourceLine;
+  trainingSeconds: number;
+  requiredLonghouseLevel: number;
+  /** Another unit type that must itself be available (a prerequisite chain), or null. */
+  requiredUnitType: string | null;
 }
