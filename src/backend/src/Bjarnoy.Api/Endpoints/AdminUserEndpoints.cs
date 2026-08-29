@@ -43,6 +43,10 @@ public static class AdminUserEndpoints
             .WithName("AdminSetUserStatus")
             .WithSummary("Locks, unlocks, bans, or unbans a user.");
 
+        users.MapPost("/{userId:guid}/premium", SetPremium)
+            .WithName("AdminSetUserPremium")
+            .WithSummary("Grants or revokes a user's premium flag (gates the fight simulator).");
+
         return app;
     }
 
@@ -161,6 +165,25 @@ public static class AdminUserEndpoints
             {
                 [nameof(request.Status)] = ["You cannot lock or ban your own account."],
             });
+        }
+
+        var settlementCount = await userService.GetSettlementCountAsync(userId, cancellationToken);
+        return TypedResults.Ok(AdminUserResponse.From(user!, settlementCount));
+    }
+
+    private static async Task<Results<Ok<AdminUserResponse>, NotFound>> SetPremium(
+        Guid userId,
+        SetUserPremiumRequest request,
+        UserService userService,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var (outcome, user) = await userService.SetPremiumAsync(userId, request.IsPremium, cancellationToken);
+
+        if (outcome == UserEditOutcome.NotFound)
+        {
+            return TypedResults.NotFound();
         }
 
         var settlementCount = await userService.GetSettlementCountAsync(userId, cancellationToken);

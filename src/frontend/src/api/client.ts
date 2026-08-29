@@ -38,6 +38,7 @@ import type {
   ResolveReportRequest,
   SendMessageRequest,
   SetBuildingLevelRequest,
+  SetUserPremiumRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
@@ -238,6 +239,11 @@ export const api = {
     request<AdminUserResponse>(`/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   adminSetUserStatus: (userId: string, body: SetUserStatusRequest) =>
     request<AdminUserResponse>(`/admin/users/${userId}/status`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminSetUserPremium: (userId: string, body: SetUserPremiumRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}/premium`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

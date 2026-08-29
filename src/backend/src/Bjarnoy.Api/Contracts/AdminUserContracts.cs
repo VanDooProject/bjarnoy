@@ -12,7 +12,8 @@ public sealed record AdminUserResponse(
     DateTimeOffset? StatusChangedAt,
     int SettlementCount,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastLoginAt)
+    DateTimeOffset? LastLoginAt,
+    bool IsPremium)
 {
     public static AdminUserResponse From(UserEntity user, int settlementCount)
     {
@@ -28,7 +29,8 @@ public sealed record AdminUserResponse(
             user.StatusChangedAt,
             settlementCount,
             user.CreatedAt,
-            user.LastLoginAt);
+            user.LastLoginAt,
+            user.IsPremium);
     }
 }
 
@@ -87,3 +89,6 @@ public sealed record UpdateAdminUserRequest(string? DisplayName = null, string? 
 /// <param name="Status">One of <c>active</c>, <c>locked</c>, <c>banned</c>.</param>
 /// <param name="Reason">Stored on the user for moderators; optional.</param>
 public sealed record SetUserStatusRequest(string Status, string? Reason = null);
+
+/// <param name="IsPremium">Grants premium (true) or revokes it (false).</param>
+public sealed record SetUserPremiumRequest(bool IsPremium);
