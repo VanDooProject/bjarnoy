@@ -26,7 +26,7 @@ export interface Tile {
   variant?: number;
   /** Settlement id that currently claims this hex, if any (Settlers II style borders). */
   ownerId?: string;
-  buildingType?: 'longhouse' | 'hut' | 'farm' | 'tower';
+  buildingType?: 'longhouse' | 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm';
   buildingLevel?: number;
 }
 

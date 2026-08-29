@@ -3,6 +3,7 @@ using Asp.Versioning;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Endpoints;
 using Bjarnoy.Api.Hosting;
+using Bjarnoy.Api.Json;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -33,9 +34,16 @@ builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UserService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+
+// Lets a PATCH body (e.g. UpdateWorldSettingsRequest) distinguish "field
+// omitted" from "field sent as null" for properties that are themselves
+// nullable in the domain. See Bjarnoy.Api.Json.Optional.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new OptionalJsonConverterFactory()));
 
 // Short-lived signed access tokens plus a server-side revocable refresh token
 // (RefreshTokenEntity) — see docs/tech/backend.md, "Not in here yet: Auth".
@@ -98,6 +106,11 @@ if (migrationCommand == MigrationCommandKind.None)
     // rules out a policy that itself demands authentication.
     builder.Services.AddAuthorizationBuilder()
         .AddPolicy("Admin", policy => policy.RequireRole(nameof(UserRole.Admin)));
+
+    // The one active poll in an otherwise lazy backend (issue #27's endboss
+    // trigger) — the migrator never serves requests, so it has no business
+    // running this. See EndbossTriggerHostedService.
+    builder.Services.AddHostedService<EndbossTriggerHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
@@ -166,6 +179,9 @@ app.MapDefaultEndpoints();
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
+app.MapAdminWorldEndpoints(versionSet);
+app.MapAdminUserEndpoints(versionSet);
+app.MapAdminSettlementEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot

@@ -158,15 +158,23 @@ const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
 };
 
 /**
+ * Coastal water (`coastalwatertile_*`) has its own plain image plus
+ * `variant000`-`variant001` (3) — a different art family from open
+ * `watertile_*` sea, which has no variants at all, so this can't live in
+ * `VARIANT_COUNTS` (keyed by `Terrain`, not by coastal-ness).
+ */
+const COASTAL_WATER_VARIANT_COUNT = 3;
+
+/**
  * Seed-stable variant index for a hex, in `[0, N)` where `N` is however many
- * variants `VARIANT_COUNTS` knows the art pack has for that terrain (1 —
- * i.e. always variant 0 — for anything not listed). Capping the range this
- * way *is* the fallback: a terrain with fewer variants than the pack's
- * richest one never gets asked for a variant it doesn't have.
+ * variants the art pack has for that terrain (1 — i.e. always variant 0 —
+ * for anything not listed). Capping the range this way *is* the fallback: a
+ * terrain with fewer variants than the pack's richest one never gets asked
+ * for a variant it doesn't have.
  */
 export function variantAt(q: number, r: number, world: WorldSeed): number {
   const terrain = terrainAt(q, r, world);
-  const count = VARIANT_COUNTS[terrain] ?? 1;
+  const count = isCoastalWater(q, r, world) ? COASTAL_WATER_VARIANT_COUNT : (VARIANT_COUNTS[terrain] ?? 1);
   if (count <= 1) return 0;
   const h = hash2(q, r, world.seed + 31);
   const index = Math.floor(h * count);

@@ -10,6 +10,19 @@ public enum WorldStatus
     Full = 2,
 }
 
+/// <summary>Why <see cref="WorldEntity.DetermineJoinability"/> refused a join.</summary>
+public enum JoinableReason
+{
+    None = 0,
+    WorldNotActive,
+    JoinsClosed,
+    NotStartedYet,
+    Full,
+}
+
+/// <summary>Whether a world currently accepts new players, and why not if it doesn't.</summary>
+public readonly record struct Joinability(bool Joinable, JoinableReason Reason);
+
 /// <summary>
 /// A game world: one sea, its islands, and the players in it.
 /// </summary>
@@ -70,6 +83,29 @@ public class WorldEntity
     /// </summary>
     public long ClockOffsetTicks { get; set; }
 
+    /// <summary>
+    /// Multiplies build speed and resource production. Applied in
+    /// <c>Bjarnoy.Domain.Economy</c>, not here and not through <see cref="GameClock"/> —
+    /// that machine is a pause/maintenance mechanism with its own grace-period
+    /// semantics, unrelated to this factor.
+    /// </summary>
+    public double SpeedFactor { get; set; } = 1.0;
+
+    /// <summary>World not joinable before this instant. Null means open immediately.</summary>
+    public DateTimeOffset? StartsAt { get; set; }
+
+    /// <summary>Admin stop-join toggle. Existing players are unaffected.</summary>
+    public bool JoinsClosed { get; set; }
+
+    /// <summary>Joins remain allowed; the endboss fires at this instant. Null means none scheduled.</summary>
+    public DateTimeOffset? EndbossAt { get; set; }
+
+    /// <summary>
+    /// Set once the endboss has fired, so the background trigger that scans for
+    /// due worlds does not fire it a second time.
+    /// </summary>
+    public DateTimeOffset? EndbossTriggeredAt { get; set; }
+
     public List<IslandEntity> Islands { get; set; } = [];
 
     public List<SettlementEntity> Settlements { get; set; } = [];
@@ -83,6 +119,35 @@ public class WorldEntity
         RunState = clock.State;
         RunStateSince = clock.StateSince;
         ClockOffsetTicks = clock.AccumulatedOffset.Ticks;
+    }
+
+    /// <summary>
+    /// Whether the world currently accepts a new player. Computed here once so
+    /// callers (the public world DTO, the join endpoint) never re-derive it.
+    /// </summary>
+    public Joinability DetermineJoinability(int playerCount, DateTimeOffset now)
+    {
+        if (Status != WorldStatus.Active)
+        {
+            return new Joinability(false, JoinableReason.WorldNotActive);
+        }
+
+        if (JoinsClosed)
+        {
+            return new Joinability(false, JoinableReason.JoinsClosed);
+        }
+
+        if (StartsAt is { } startsAt && now < startsAt)
+        {
+            return new Joinability(false, JoinableReason.NotStartedYet);
+        }
+
+        if (playerCount >= MaxPlayers)
+        {
+            return new Joinability(false, JoinableReason.Full);
+        }
+
+        return new Joinability(true, JoinableReason.None);
     }
 
     /// <summary>Rebuilds the generation options this world was created from.</summary>

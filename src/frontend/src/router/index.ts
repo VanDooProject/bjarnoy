@@ -31,6 +31,29 @@ export const router = createRouter({
       name: 'impressum',
       component: () => import('../views/ImpressumView.vue'),
     },
+    {
+      path: '/admin',
+      component: () => import('../views/admin/AdminLayout.vue'),
+      meta: { requiresAdmin: true },
+      children: [
+        { path: '', redirect: '/admin/worlds' },
+        {
+          path: 'worlds',
+          name: 'admin-worlds',
+          component: () => import('../views/admin/AdminWorldsView.vue'),
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('../views/admin/AdminUsersView.vue'),
+        },
+        {
+          path: 'settlements',
+          name: 'admin-settlements',
+          component: () => import('../views/admin/AdminSettlementsView.vue'),
+        },
+      ],
+    },
   ],
 });
 

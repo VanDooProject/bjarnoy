@@ -346,6 +346,12 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("EndbossAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("EndbossTriggeredAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("ForestRockiness")
                         .HasColumnType("REAL");
 
@@ -360,6 +366,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<double>("IslandMinRadius")
                         .HasColumnType("REAL");
+
+                    b.Property<bool>("JoinsClosed")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("INTEGER");
@@ -389,6 +398,14 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.Property<int>("Seed")
                         .HasColumnType("INTEGER");
+
+                    b.Property<double>("SpeedFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(1.0);
+
+                    b.Property<DateTimeOffset?>("StartsAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");

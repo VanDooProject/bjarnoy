@@ -42,6 +42,15 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
     [InlineData(BuildingType.Farm, Terrain.Mountain, false)]
+    [InlineData(BuildingType.FishingHut, Terrain.Sand, true)]
+    [InlineData(BuildingType.FishingHut, Terrain.Grass, false)]
+    [InlineData(BuildingType.MagicTower, Terrain.Grass, true)]
+    [InlineData(BuildingType.MagicTower, Terrain.Sand, false)]
+    [InlineData(BuildingType.PumpkinFarm, Terrain.Grass, true)]
+    [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
+    [InlineData(BuildingType.Tower, Terrain.Sand, true)]
+    [InlineData(BuildingType.Tower, Terrain.Grass, true)]
+    [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -413,6 +422,120 @@ public class SettlementTests
         };
 
         Assert.Throws<InvalidOperationException>(() => broke.Enqueue(order, T0));
+    }
+
+    [Fact]
+    public void Admin_setting_a_buildings_level_recomputes_rates_like_a_normal_completion()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 3, order.CompletesAt);
+
+        Assert.True(result.Accepted);
+        var farm = result.Settlement!.Buildings.Single(b => b.Type == BuildingType.Farm);
+        Assert.Equal(3, farm.Level);
+
+        var (expectedProduction, expectedCapacity) = BuildingCatalogue.Totals(
+            result.Settlement.Buildings.Select(b => (b.Type, b.Level)));
+        Assert.Equal(expectedProduction.Food, result.Settlement.Resources.RatePerHour.Food, 6);
+        Assert.Equal(expectedCapacity.Wood, result.Settlement.Resources.Capacity.Wood, 6);
+    }
+
+    [Fact]
+    public void Admin_setting_a_buildings_level_settles_first_so_no_production_is_lost()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        // Two hours of accrued production at the level-1 rate must survive the
+        // level-set, exactly like a normal SettleTo would preserve it.
+        var now = order.CompletesAt.AddHours(2);
+        var stockJustBefore = built.Resources.At(now);
+
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 2, now);
+
+        Assert.True(result.Accepted);
+        Assert.Equal(stockJustBefore.Food, result.Settlement!.Resources.At(now).Food, 6);
+        Assert.Equal(now, result.Settlement.Resources.SettledAt);
+    }
+
+    [Fact]
+    public void Setting_the_level_of_a_hex_with_no_building_is_refused()
+    {
+        var settlement = Found();
+
+        var result = settlement.SetBuildingLevel(new HexCoord(5, 5), level: 1, T0);
+
+        Assert.Equal(SetBuildingLevelRejection.BuildingNotFound, result.Rejection);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    public void Setting_a_level_outside_the_catalogues_range_is_refused(int level)
+    {
+        var settlement = Found();
+
+        var result = settlement.SetBuildingLevel(Centre, level, T0);
+
+        Assert.Equal(SetBuildingLevelRejection.InvalidLevel, result.Rejection);
+    }
+
+    [Fact]
+    public void A_speed_factor_of_two_halves_the_build_duration()
+    {
+        var settlement = Found();
+
+        var normal = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var doubled = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), speedFactor: 2.0);
+
+        var baseDuration = normal.Order!.CompletesAt - T0;
+        var doubledDuration = doubled.Order!.CompletesAt - T0;
+
+        Assert.Equal((double)(baseDuration.Ticks / 2), doubledDuration.Ticks, 1);
+    }
+
+    [Fact]
+    public void A_speed_factor_of_two_doubles_the_production_rate_a_completed_building_adds()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var queued = settlement.Enqueue(order, T0);
+
+        var normal = queued.SettleTo(order.CompletesAt).Settlement;
+        var doubled = queued.SettleTo(order.CompletesAt, speedFactor: 2.0).Settlement;
+
+        Assert.Equal(normal.Resources.RatePerHour.Food * 2, doubled.Resources.RatePerHour.Food, 6);
+    }
+
+    [Fact]
+    public void A_speed_change_never_rescales_output_already_accrued()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var queued = settlement.Enqueue(order, T0);
+
+        // Two hours pass at 1x, the farm produces normally, then the admin
+        // doubles the speed and the settlement is re-rated from "now" (this is
+        // what SettlementService.RetuneSpeedAsync does): the stock already
+        // earned at 1x must be untouched, only the rate going forward changes.
+        var now = order.CompletesAt.AddHours(2);
+        var settledAtOldSpeed = queued.SettleTo(now, speedFactor: 1.0).Settlement;
+        var stockBeforeRetune = settledAtOldSpeed.Resources.At(now);
+
+        var (production, capacity) = settledAtOldSpeed.CurrentTotals(speedFactor: 2.0);
+        var retuned = settledAtOldSpeed with
+        {
+            Resources = settledAtOldSpeed.Resources.WithRate(production, capacity, now),
+        };
+
+        Assert.Equal(stockBeforeRetune.Food, retuned.Resources.At(now).Food, 6);
+        Assert.Equal(settledAtOldSpeed.Resources.RatePerHour.Food * 2, retuned.Resources.RatePerHour.Food, 6);
     }
 }
 

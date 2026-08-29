@@ -60,6 +60,24 @@ onMounted(async () => {
 });
 onUnmounted(() => world.stopHudSync());
 
+// Admin-set gates (issue #27): a world that hasn't started yet, or has had
+// joins closed, still renders (existing players restore fine) but refuses a
+// *new* founding — so tell the player why instead of letting them click a
+// hex that will just come back 409.
+const joinBlocked = computed(
+  () => !DEMO_MODE && !player.hasFoundedSettlement && !world.worldJoinable,
+);
+const joinBlockedMessage = computed(() => {
+  if (world.worldJoinableReason === 'NotStartedYet' && world.worldStartsAt) {
+    const startsAt = new Date(world.worldStartsAt);
+    return `This world opens ${startsAt.toLocaleString()}.`;
+  }
+  if (world.worldJoinableReason === 'JoinsClosed') {
+    return 'This world is no longer accepting new players.';
+  }
+  return 'This world is not accepting new players right now.';
+});
+
 const buildingsPlaced = computed(() => world.hud.buildingsPlaced);
 const onboardingComplete = computed(() => buildingsPlaced.value >= ONBOARDING_TARGET_BUILDINGS);
 
@@ -86,7 +104,7 @@ const modalOwnerLabel = computed(() => {
 
 function onHexClick(coord: AxialCoord, tile: Tile) {
   if (!player.hasFoundedSettlement) {
-    if (tile.terrain === 'sea' || founding.value) return;
+    if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
     void foundHere(coord);
     return;
   }
@@ -208,7 +226,12 @@ function closePrompt() {
          moving mist or (once centred, no more screenBiasX) right behind
          the village itself. The progress tray below already carries
          onboarding status, so it's the only thing left on screen. -->
-    <div v-if="!player.hasFoundedSettlement" class="hero">
+    <div v-if="!player.hasFoundedSettlement && joinBlocked" class="hero">
+      <div class="eyebrow">Empty plot · Bjarnøy</div>
+      <h1>Not open yet.</h1>
+      <p class="lede">{{ joinBlockedMessage }}</p>
+    </div>
+    <div v-else-if="!player.hasFoundedSettlement" class="hero">
       <div class="eyebrow">Empty plot · Bjarnøy</div>
       <h1>Put your longhouse somewhere.</h1>
       <p class="lede">
@@ -218,7 +241,7 @@ function closePrompt() {
       <p v-if="founding" class="status">Making landfall…</p>
     </div>
 
-    <div class="tray panel">
+    <div v-if="!joinBlocked" class="tray panel">
       <div class="tray-item" :class="{ done: player.hasFoundedSettlement }">
         <div class="dot" />
         <div>

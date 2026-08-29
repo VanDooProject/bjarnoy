@@ -64,7 +64,15 @@ public sealed record Settlement
     /// <see cref="SettleResult.Changed"/> is false nothing completed, the pool
     /// was never rolled forward, and there is nothing to write.
     /// </remarks>
-    public SettleResult SettleTo(DateTimeOffset now)
+    /// <param name="speedFactor">
+    /// The world's current <c>SpeedFactor</c> — multiplies the production rate
+    /// each completed building contributes from its own completion instant
+    /// onward. A change in speed is never applied retroactively: history
+    /// already settled under the old factor is untouched (see
+    /// <c>SettlementService.RetuneSpeedAsync</c>, which settles every
+    /// settlement under the old factor before the new one is persisted).
+    /// </param>
+    public SettleResult SettleTo(DateTimeOffset now, double speedFactor = 1.0)
     {
         var due = Queue.Where(o => o.IsComplete(now)).OrderBy(o => o.CompletesAt).ToList();
         if (due.Count == 0)
@@ -91,7 +99,7 @@ public sealed record Settlement
             // building finished an hour ago has been producing for that hour.
             var (production, capacity) = BuildingCatalogue.Totals(
                 buildings.Select(b => (b.Type, b.Level)));
-            resources = resources.WithRate(production, capacity, order.CompletesAt);
+            resources = resources.WithRate(production * speedFactor, capacity, order.CompletesAt);
         }
 
         var settled = this with
@@ -112,12 +120,17 @@ public sealed record Settlement
     /// Call on an already-settled settlement, so the queue and stock reflect
     /// <paramref name="now"/>.
     /// </remarks>
+    /// <param name="speedFactor">
+    /// The world's current <c>SpeedFactor</c> — divides the base build
+    /// duration, so a factor of 2 finishes a build in half the time.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
         Terrain terrain,
         DateTimeOffset now,
-        Guid orderId)
+        Guid orderId,
+        double speedFactor = 1.0)
     {
         if (!Claims(coord))
         {
@@ -173,6 +186,10 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.NotEnoughResources);
         }
 
+        var duration = speedFactor == 1.0
+            ? definition.BuildDuration
+            : TimeSpan.FromTicks((long)(definition.BuildDuration.Ticks / speedFactor));
+
         return BuildDecision.Accept(new BuildOrder
         {
             Id = orderId,
@@ -180,7 +197,7 @@ public sealed record Settlement
             TargetLevel = targetLevel,
             Coord = coord,
             StartedAt = now,
-            CompletesAt = now + definition.BuildDuration,
+            CompletesAt = now + duration,
         });
     }
 
@@ -201,9 +218,46 @@ public sealed record Settlement
         return this with { Resources = paid, Queue = [.. Queue, order] };
     }
 
+    /// <summary>
+    /// Admin god-mode: sets an already-placed building's level directly,
+    /// bypassing cost and queueing, and recomputes production/capacity exactly
+    /// as a normal build completion would.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement (see <see cref="SettleTo"/>) so
+    /// the rate change is stamped from "now" rather than retroactively
+    /// changing output already accrued — the same rule <see cref="SettleTo"/>
+    /// itself follows per completed order.
+    /// </remarks>
+    public SetBuildingLevelResult SetBuildingLevel(HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0)
+    {
+        var buildings = Buildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        if (index < 0)
+        {
+            return SetBuildingLevelResult.Rejected(SetBuildingLevelRejection.BuildingNotFound);
+        }
+
+        var type = buildings[index].Type;
+        if (BuildingCatalogue.TryGet(type, level) is null)
+        {
+            return SetBuildingLevelResult.Rejected(SetBuildingLevelRejection.InvalidLevel);
+        }
+
+        buildings[index] = buildings[index] with { Level = level };
+
+        var (production, capacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var resources = Resources.WithRate(production * speedFactor, capacity, now);
+
+        return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
+    }
+
     /// <summary>Production and capacity implied by what currently stands.</summary>
-    public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals() =>
-        BuildingCatalogue.Totals(Buildings.Select(b => (b.Type, b.Level)));
+    public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(double speedFactor = 1.0)
+    {
+        var (production, capacity) = BuildingCatalogue.Totals(Buildings.Select(b => (b.Type, b.Level)));
+        return (production * speedFactor, capacity);
+    }
 }
 
 /// <param name="Changed">

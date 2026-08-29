@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Bjarnoy.Api.Json;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bjarnoy.Api.IntegrationTests.Infrastructure;
@@ -20,6 +21,7 @@ public sealed class SqliteApiFixture : IAsyncLifetime
     public static JsonSerializerOptions StrictJson { get; } = new(JsonSerializerDefaults.Web)
     {
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        Converters = { new OptionalJsonConverterFactory() },
     };
 
     public HttpClient CreateClient() => Factory.CreateClient();
@@ -85,5 +87,27 @@ public static class HttpResponseExtensions
         ArgumentNullException.ThrowIfNull(client);
 
         return client.PostAsJsonAsync(url, value, SqliteApiFixture.StrictJson, cancellationToken);
+    }
+
+    public static Task<HttpResponseMessage> PatchJsonAsync<T>(
+        this HttpClient client,
+        string url,
+        T value,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        return client.PatchAsJsonAsync(url, value, SqliteApiFixture.StrictJson, cancellationToken);
+    }
+
+    public static Task<HttpResponseMessage> PutJsonAsync<T>(
+        this HttpClient client,
+        string url,
+        T value,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        return client.PutAsJsonAsync(url, value, SqliteApiFixture.StrictJson, cancellationToken);
     }
 }

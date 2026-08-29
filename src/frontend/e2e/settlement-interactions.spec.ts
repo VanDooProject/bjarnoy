@@ -54,43 +54,96 @@ test.describe('settlement view interactions', () => {
 
   test('clicking an empty hex inside the realm places a building', async ({ page }) => {
     // Same reasoning as the hover/panning tests above: foundSettlement()
-    // plus up to 8 candidate click-and-screenshot rounds runs close to (and
-    // on CI, over) the global 45s budget.
+    // plus driving a real click through the render runs close to (and on
+    // CI, over) the global 45s budget.
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
 
-    // a spread of offsets almost certainly inside the level-1 border-2
-    // realm and not already built on (the centre hex is the longhouse)
-    const offsets: Array<[number, number]> = [
-      [0, -140],
-      [-120, -70],
-      [120, -70],
-      [-120, 70],
-      [120, 70],
-      [0, 140],
-      [-60, -140],
-      [60, -140],
-    ];
-
-    let placed = false;
-    for (const [dx, dy] of offsets) {
-      const x = cx + dx;
-      const y = cy + dy;
-      const clip = { x: x - 40, y: y - 40, width: 80, height: 80 };
-      const before = await page.screenshot({ clip });
-      await page.mouse.click(x, y);
-      await page.waitForTimeout(200);
-      const after = await page.screenshot({ clip });
-      if (Buffer.compare(before, after) !== 0) {
-        placed = true;
-        break;
+    // A guessed pixel offset from the canvas centre only happens to land on
+    // a real hex at one particular zoom/camera framing — zoomForFogMargin
+    // picks a much tighter zoom than that for a level-1 realm, so a fixed
+    // offset tuned by eyeballing one run is exactly the kind of thing that
+    // silently stops landing on a hex when the framing shifts. Instead, ask
+    // the model for a real empty hex inside the realm, then ask the
+    // renderer's own camera math (__settlementRenderer's hexCenterScreen,
+    // set up by SettlementView for exactly this) for that hex's exact
+    // screen position.
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain !== 'sea' && !tile.buildingType) {
+            return win.__settlementRenderer().hexCenterScreen(at);
+          }
+        }
       }
-    }
-    expect(placed).toBe(true);
+      throw new Error('no empty buildable hex found inside the realm');
+    });
+
+    // The model, via the __demoWorld debug hook, is the deterministic
+    // "did the build land" signal — a fixed sleep before checking it either
+    // wastes time once it's actually placed or, on a loaded CI runner,
+    // checks before the async model update has happened.
+    const countBuildings = () =>
+      page.evaluate(() => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        return world.model.countBuildings(world.selectedSettlementId) as number;
+      });
+    const before = await countBuildings();
+
+    // Issue #16: a hex click no longer opens BuildingModal directly — it
+    // opens a RingMenu of contextual actions; hovering its "Build" bubble
+    // drills into a category ring, and hovering a category bubble drills
+    // into that category's building-type ring (see SettlementView's
+    // onRingHover — only the root "build" action and a category's own
+    // bubbles advance the ring on hover; everything else, including the
+    // final building choice, needs a real click). Drilling via hover here
+    // (not the click-based path onRingSelect also supports) matches
+    // ring-menu.spec.ts's own drill-down coverage — the interaction path
+    // that suite already exercises and keeps green, rather than a second,
+    // untried one: a click-based version of this same test was flaky here,
+    // repeatedly racing the ring bubble getting detached and re-mounted
+    // mid-click on a loaded run, something hover-then-click rides out fine.
+    await page.mouse.click(box.x + target.x, box.y + target.y);
+
+    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
+    await expect(buildBubble).toBeVisible();
+    const buildBox = (await buildBubble.boundingBox())!;
+    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+
+    // On grass terrain the category ring has three bubbles (Housing,
+    // Resource, Defense); every other buildable terrain has just the one
+    // ("Build", reused as both the root action's label and its sole
+    // category's — see BUILD_CATEGORIES). Either way, whichever category is
+    // first leads to "Hut" as its first building (Housing's only building;
+    // "Build"'s own list starts with Hut too), so hovering the first
+    // category bubble and clicking the first building bubble always reaches
+    // a real, placeable building regardless of which terrain was picked.
+    const categoryBubble = page.locator('.ring-bubble').first();
+    await expect(categoryBubble).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+    const categoryBox = (await categoryBubble.boundingBox())!;
+    await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
+      steps: 6,
+    });
+
+    const hutBubble = page.locator('.ring-bubble', { hasText: 'Hut' }).first();
+    await expect(hutBubble).toBeVisible();
+    await hutBubble.click();
+
+    await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
   });
 
   test('panning the settlement view does not error', async ({ page }) => {

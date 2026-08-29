@@ -12,6 +12,10 @@ export interface WorldResponse {
   status: string;
   islandCount: number;
   createdAt: string;
+  joinable: boolean;
+  joinableReason: string;
+  startsAt: string | null;
+  endbossTriggered: boolean;
 }
 
 export interface TileCoordinate {
@@ -150,6 +154,129 @@ export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   user: UserResponse;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminWorldContracts.cs.
+
+export interface AdminWorldResponse {
+  id: string;
+  name: string;
+  status: string;
+  maxPlayers: number;
+  playerCount: number;
+  speedFactor: number;
+  startsAt: string | null;
+  joinsClosed: boolean;
+  endbossAt: string | null;
+  endbossTriggeredAt: string | null;
+  runState: string;
+  runStateSince: string;
+  createdAt: string;
+}
+
+/**
+ * All fields optional: only send what should change. `startsAt`/`endbossAt`
+ * are omitted from the request body (not sent as `null`) when left
+ * unchanged — send explicit `null` to clear them, matching the backend's
+ * `Optional<T>` PATCH semantics (see `Bjarnoy.Api.Json.Optional`).
+ */
+export interface UpdateWorldSettingsRequest {
+  speedFactor?: number;
+  startsAt?: string | null;
+  joinsClosed?: boolean;
+  endbossAt?: string | null;
+}
+
+/** `action`: one of `pause`, `maintenance`, `lock`, `resume`. */
+export interface SetWorldRunStateRequest {
+  action: string;
+  graceMinutes?: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
+
+export interface AdminUserResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  settlementCount: number;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AdminUserSettlementSummary {
+  id: string;
+  worldId: string;
+  worldName: string;
+  name: string;
+}
+
+export interface AdminUserDetailResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  role: string;
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  createdAt: string;
+  lastLoginAt: string | null;
+  settlements: AdminUserSettlementSummary[];
+}
+
+export interface PagedAdminUsersResponse {
+  items: AdminUserResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** All fields optional: only send what should change. */
+export interface UpdateAdminUserRequest {
+  displayName?: string;
+  role?: string;
+}
+
+/** `status`: one of `active`, `locked`, `banned`. */
+export interface SetUserStatusRequest {
+  status: string;
+  reason?: string;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminSettlementContracts.cs.
+
+export interface AdminSettlementSummary {
+  id: string;
+  worldId: string;
+  worldName: string;
+  name: string;
+  ownerName: string;
+  q: number;
+  r: number;
+  longhouseLevel: number;
+}
+
+export interface PagedAdminSettlementsResponse {
+  items: AdminSettlementSummary[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Signed deltas; a negative value removes resources. Omitted components default to 0. */
+export interface GrantResourcesRequest {
+  wood?: number;
+  stone?: number;
+  food?: number;
+  iron?: number;
+}
+
+export interface SetBuildingLevelRequest {
+  level: number;
 }
 
 export interface ProblemDetails {
