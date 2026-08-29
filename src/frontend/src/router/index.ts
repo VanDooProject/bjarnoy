@@ -58,6 +58,18 @@ export const router = createRouter({
       component: () => import('../views/ReportsView.vue'),
     },
     {
+      // Issue #40 phase 7: the premium fight simulator — the one endpoint in
+      // this game that actually requires login (every other troop endpoint
+      // works anonymously), so it needs `requiresAuth` even though most
+      // routes here don't. Being logged in doesn't mean being premium
+      // though — SimulatorView.vue itself handles the 403 for that, since
+      // there's no client-side premium flag to gate on ahead of time.
+      path: '/simulator',
+      name: 'simulator',
+      component: () => import('../views/SimulatorView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/messages',
       name: 'messages',
       component: () => import('../views/MessagesView.vue'),

@@ -43,6 +43,8 @@ import type {
   SettlementResponse,
   SettlementSummary,
   ShipmentResponse,
+  SimulatorRequest,
+  SimulatorResponse,
   TradeAcceptResponse,
   TradeOfferResponse,
   TradeReportResponse,
@@ -321,4 +323,11 @@ export const api = {
       `/worlds/${worldId}/leaderboards/${scope}/${category}/me${qs ? `?${qs}` : ''}`,
     );
   },
+  // Issue #40 phase 7: the premium fight simulator. `PremiumUserEndpointFilter`
+  // returns 401 (unauthenticated) or 403 `{ error: "premium_required" }`
+  // (authenticated but not premium) — both surface as an `ApiError` here,
+  // same as any other rejection; SimulatorView.vue is what gives the latter
+  // its own friendly copy instead of showing raw problem text.
+  simulate: (body: SimulatorRequest) =>
+    request<SimulatorResponse>('/simulator', { method: 'POST', body: JSON.stringify(body) }),
 };

@@ -8,22 +8,20 @@
 // separate views, since the detail is just "the list, but one row expanded
 // to a full card" with no separate data-loading concern once the list
 // itself is loaded.
+//
+// The battle-detail card itself is BattleReportCard.vue (issue #40 phase 7)
+// — extracted so the premium fight simulator can render its result with the
+// exact same markup as a real report, rather than duplicating it.
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { DEMO_MODE } from '../config';
 import type { BattleReportResponse, TradeReportResponse } from '../api/types';
-import {
-  missionLabel,
-  outcomeLabel,
-  reportSummaryLine,
-  siegeSummaryLine,
-  sideFor,
-  totalLoot,
-} from '../lib/units/battleReports';
+import { missionLabel, outcomeLabel, reportSummaryLine, sideFor } from '../lib/units/battleReports';
 import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
 import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
+import BattleReportCard from '../components/battle/BattleReportCard.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -93,10 +91,7 @@ const detailItem = computed(() => reports.inboxItems.find((item) => item.report.
 const detail = computed(() => (detailItem.value?.kind === 'battle' ? detailItem.value.report : null));
 const tradeDetail = computed(() => (detailItem.value?.kind === 'trade' ? detailItem.value.report : null));
 const detailSide = computed(() => (detail.value ? sideOf(detail.value) : 'attacker'));
-const detailOutcome = computed(() => (detail.value ? outcomeLabel(detail.value, detailSide.value) : null));
-const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTaken) : 0));
 const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDetail.value) : 'poster'));
-const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLine(detail.value.siege) : null));
 </script>
 
 <template>
@@ -142,93 +137,7 @@ const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLin
       </template>
 
       <template v-else-if="detail">
-        <div class="card" :class="detailOutcome === 'Victory' ? 'victory' : 'defeat'">
-          <div class="card-header">
-            <span class="banner">{{ detailOutcome }}</span>
-            <span class="mission-pill">{{ missionLabel(detail.mission) }}</span>
-          </div>
-          <p class="occurred">{{ new Date(detail.occurredAt).toLocaleString() }}</p>
-
-          <div class="power-row">
-            <div class="power">
-              <span class="power-label">Attack power</span>
-              <span class="power-value">{{ Math.round(detail.attackPower) }}</span>
-            </div>
-            <div class="power">
-              <span class="power-label">Defense power</span>
-              <span class="power-value">{{ Math.round(detail.defensePower) }}</span>
-            </div>
-          </div>
-
-          <div class="sides">
-            <section class="side">
-              <h3>Attacker</h3>
-              <table class="lines">
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Sent</th>
-                    <th>Lost</th>
-                    <th>Survived</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in detail.attackerLines" :key="line.unit">
-                    <td>{{ line.unit }}</td>
-                    <td>{{ line.sent }}</td>
-                    <td class="lost">{{ line.lost }}</td>
-                    <td class="survived">{{ line.survived }}</td>
-                  </tr>
-                  <tr v-if="!detail.attackerLines.length">
-                    <td colspan="4" class="empty">No stacks recorded.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
-
-            <section class="side">
-              <h3>Defender</h3>
-              <table class="lines">
-                <thead>
-                  <tr>
-                    <th>Unit</th>
-                    <th>Lost</th>
-                    <th>Survived</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="line in detail.defenderLines" :key="line.unit">
-                    <td>{{ line.unit }}</td>
-                    <td class="lost">{{ line.lost }}</td>
-                    <td class="survived">{{ line.survived }}</td>
-                  </tr>
-                  <tr v-if="!detail.defenderLines.length">
-                    <td colspan="3" class="empty">No stacks recorded.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
-          </div>
-
-          <div v-if="detailLoot > 0" class="loot">
-            <h3>Loot taken</h3>
-            <div class="loot-row">
-              <span>Wood {{ Math.round(detail.lootTaken.wood) }}</span>
-              <span>Stone {{ Math.round(detail.lootTaken.stone) }}</span>
-              <span>Food {{ Math.round(detail.lootTaken.food) }}</span>
-              <span>Iron {{ Math.round(detail.lootTaken.iron) }}</span>
-            </div>
-          </div>
-
-          <div v-if="detail.siege" class="siege" :class="{ razed: detail.siege.settlementRazed }">
-            <div v-if="detail.siege.settlementRazed" class="razed-banner">Settlement razed</div>
-            <h3>Siege</h3>
-            <p>{{ detailSiegeSummary }}</p>
-            <p class="siege-coord">
-              Hex ({{ detail.siege.targetCoord.q }}, {{ detail.siege.targetCoord.r }})
-            </p>
-          </div>
-        </div>
+        <BattleReportCard :report="detail" :side="detailSide" :occurred-at="detail.occurredAt" />
       </template>
 
       <template v-else>
@@ -268,6 +177,11 @@ const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLin
             <div class="row-summary">{{ row.summary }}</div>
           </button>
         </div>
+
+        <p class="simulator-link">
+          Want to test a fight without risking real troops?
+          <router-link to="/simulator">Try the fight simulator →</router-link>
+        </p>
       </template>
     </main>
   </div>
@@ -403,6 +317,14 @@ const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLin
   font-size: 13px;
   color: var(--muted);
 }
+.simulator-link {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.simulator-link a {
+  color: var(--gold);
+}
 
 .card {
   margin-top: 20px;
@@ -410,12 +332,6 @@ const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLin
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-left: 4px solid var(--panel-border);
-}
-.card.victory {
-  border-left-color: var(--gold);
-}
-.card.defeat {
-  border-left-color: #e08a8a;
 }
 .card.trade {
   border-left-color: var(--gold);
@@ -430,12 +346,6 @@ const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLin
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-.card.victory .banner {
-  color: var(--gold);
-}
-.card.defeat .banner {
-  color: #e08a8a;
 }
 .trade-banner {
   color: var(--gold);
@@ -470,87 +380,5 @@ const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLin
   font-size: 20px;
   font-weight: 700;
   color: var(--text);
-}
-.sides {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-.side h3,
-.loot h3,
-.siege h3 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-.lines {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.lines th {
-  text-align: left;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--panel-border);
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-}
-.lines td {
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--panel-border);
-}
-.lines .lost {
-  color: #e08a8a;
-}
-.lines .survived {
-  color: #8ac48a;
-}
-.lines .empty {
-  color: var(--muted);
-  text-align: center;
-}
-.loot-row {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-}
-.siege {
-  padding-top: 4px;
-}
-.siege p {
-  font-size: 13px;
-  margin: 0;
-}
-.siege-coord {
-  margin-top: 2px !important;
-  color: var(--muted);
-  font-size: 12px !important;
-}
-/* Reuses the outcome-banner visual language from `.card`/`.banner`
-   (win/loss, phase 3) for the one other "the state of this settlement just
-   changed" moment a report can carry: its Longhouse was destroyed. */
-.razed-banner {
-  display: inline-block;
-  margin-bottom: 8px;
-  padding: 4px 10px;
-  background: rgba(224, 138, 138, 0.12);
-  border: 1px solid #e08a8a;
-  border-radius: 4px;
-  color: #e08a8a;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-@media (max-width: 640px) {
-  .sides {
-    grid-template-columns: 1fr;
-  }
 }
 </style>
