@@ -126,7 +126,11 @@ frontend.WithUrls(context =>
     context.Urls.Add(new ResourceUrlAnnotation
     {
         Url = $"{baseUrl}/login?username={Uri.EscapeDataString(adminUserName)}" +
-              $"&password={Uri.EscapeDataString(adminPasswordValue)}",
+              $"&password={Uri.EscapeDataString(adminPasswordValue)}" +
+              // Without this, LoginView.vue's post-login redirect falls back
+              // to its default of '/' (see its onSubmit) rather than landing
+              // in the admin area this link exists to reach.
+              $"&redirect={Uri.EscapeDataString("/admin")}",
         DisplayText = "Log in as admin",
     });
 });
