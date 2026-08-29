@@ -3,6 +3,7 @@ using System;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Bjarnoy.Migrations.PostgreSql.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    partial class GameDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829091131_AddUnitsAndTraining")]
+    partial class AddUnitsAndTraining
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -95,102 +98,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsUnique();
 
                     b.ToTable("islands", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardEntryEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("PreviousRank")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Rank")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("SnapshotId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SubjectId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SubjectName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<double>("Value")
-                        .HasColumnType("double precision");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SnapshotId", "Rank")
-                        .IsUnique();
-
-                    b.HasIndex("SnapshotId", "SubjectId");
-
-                    b.ToTable("leaderboard_entries", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardSnapshotEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Category")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("ComputedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsFinal")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("PeriodEnd")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("PeriodStart")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Scope")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("WorldId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorldId", "Scope", "Category", "ComputedAt");
-
-                    b.HasIndex("WorldId", "Scope", "Category", "PeriodStart", "IsFinal")
-                        .IsUnique();
-
-                    b.ToTable("leaderboard_snapshots", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardWatermarkEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("LastBattleReportId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("LastClosedPeriodStart")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("LastSnapshotAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("WorldId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorldId")
-                        .IsUnique();
-
-                    b.ToTable("leaderboard_watermarks", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
@@ -590,39 +497,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("World");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardEntryEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.LeaderboardSnapshotEntity", "Snapshot")
-                        .WithMany("Entries")
-                        .HasForeignKey("SnapshotId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Snapshot");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardSnapshotEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
-                        .WithMany()
-                        .HasForeignKey("WorldId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("World");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardWatermarkEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
-                        .WithMany()
-                        .HasForeignKey("WorldId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("World");
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlacedBuildingEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -670,11 +544,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("Owner");
 
                     b.Navigation("World");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.LeaderboardSnapshotEntity", b =>
-                {
-                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
