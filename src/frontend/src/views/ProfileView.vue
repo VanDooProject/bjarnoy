@@ -138,8 +138,13 @@ function joinedDate(iso: string): string {
           <h1>{{ profile.displayName || profile.userName }}</h1>
           <p v-if="profile.displayName" class="muted">@{{ profile.userName }}</p>
         </div>
-        <button v-if="canReport && !reportDone" class="secondary" @click="openReport">Report</button>
-        <span v-if="reportDone" class="muted">Report sent — thank you.</span>
+        <div class="head-actions">
+          <router-link v-if="canReport" class="secondary" :to="`/messages/${profile.id}`">
+            Message
+          </router-link>
+          <button v-if="canReport && !reportDone" class="secondary" @click="openReport">Report</button>
+          <span v-if="reportDone" class="muted">Report sent — thank you.</span>
+        </div>
       </header>
 
       <dl class="facts">
@@ -233,6 +238,11 @@ function joinedDate(iso: string): string {
 }
 .head h1 {
   margin: 0;
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .facts {
   display: flex;
@@ -357,5 +367,17 @@ button.secondary {
 button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+a.secondary {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
 }
 </style>
