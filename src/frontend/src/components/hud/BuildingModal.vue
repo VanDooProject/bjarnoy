@@ -6,6 +6,12 @@
 // name/level/description/action on the right.
 import { computed } from 'vue';
 import type { Tile } from '../../lib/map/types';
+import type { ResourceLine } from '../../api/types';
+import { useWorldStore } from '../../stores/world';
+import { hexesInRadius } from '../../lib/hex/coords';
+import { buildingStatsFor, buildingUpgradeCost, type BuildingKind } from '../../lib/map/buildingEconomy';
+
+const world = useWorldStore();
 
 import grassUrl from '../../../vendor/bg_assets_hextile/hextiles/grasstile_SE.png';
 import forestUrl from '../../../vendor/bg_assets_hextile/hextiles/foresttile_SE.png';
@@ -113,6 +119,41 @@ const sub = computed(() => {
   return props.ownerLabel ?? 'Wild ruin';
 });
 const level = computed(() => props.tile.buildingLevel ?? 0);
+
+// Same irrigation check hoverInfoFor/buildingStats uses in HexMapRenderer.ts,
+// so the modal's "current stats" match whatever the hover tooltip just showed.
+const nearWater = computed(() =>
+  hexesInRadius({ q: props.tile.q, r: props.tile.r }, 1).some((c) => {
+    const t = world.model.getTile(c.q, c.r);
+    return t.terrain === 'sea' || t.terrain === 'sand';
+  }),
+);
+
+// The existing building's current-level output/modifier/workers — undefined
+// (and hidden) for an empty tile, since there's nothing standing yet.
+const currentStats = computed(() =>
+  props.tile.buildingType ? buildingStatsFor(props.tile.buildingType, level.value, nearWater.value) : undefined,
+);
+
+// "hut" is the fixed default a fresh build here places (see
+// SettlementView.vue's build()); an existing building instead costs its own
+// next level.
+const upgradeType = computed<BuildingKind>(() => props.tile.buildingType ?? 'hut');
+const upgradeLevel = computed(() => level.value + 1);
+const upgradeCost = computed<ResourceLine>(() => buildingUpgradeCost(upgradeType.value, upgradeLevel.value));
+
+const RESOURCE_LABELS: Record<keyof ResourceLine, string> = {
+  wood: 'Wood',
+  stone: 'Stone',
+  food: 'Food',
+  iron: 'Iron',
+};
+const costLine = computed(() =>
+  (Object.keys(upgradeCost.value) as (keyof ResourceLine)[])
+    .filter((key) => upgradeCost.value[key] > 0)
+    .map((key) => `${upgradeCost.value[key]} ${RESOURCE_LABELS[key]}`)
+    .join(' · '),
+);
 </script>
 
 <template>
@@ -144,7 +185,23 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
           }}
         </p>
 
+        <dl v-if="currentStats && (currentStats.output || currentStats.modifier || currentStats.workers)" class="stats">
+          <template v-if="currentStats.output">
+            <dt>Output</dt>
+            <dd>{{ currentStats.output }}</dd>
+          </template>
+          <template v-if="currentStats.modifier">
+            <dt>Modifier</dt>
+            <dd>{{ currentStats.modifier }}</dd>
+          </template>
+          <template v-if="currentStats.workers">
+            <dt>Workers</dt>
+            <dd>{{ currentStats.workers }}</dd>
+          </template>
+        </dl>
+
         <div v-if="mine && buildable" class="actions">
+          <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
           <button v-if="tile.buildingType" class="primary" :disabled="busy" @click="emit('upgrade')">
             {{ busy ? 'Queuing…' : `Upgrade to level ${level + 1}` }}
           </button>
@@ -238,8 +295,31 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
   color: var(--muted);
   max-width: 380px;
 }
+.stats {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 14px;
+  row-gap: 4px;
+  font-size: 13px;
+  max-width: 380px;
+}
+.stats dt {
+  color: var(--muted);
+}
+.stats dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+}
 .actions {
   margin-top: 22px;
+}
+.cost {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--gold);
 }
 .primary {
   padding: 12px 22px;
