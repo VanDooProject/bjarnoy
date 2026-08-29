@@ -192,4 +192,213 @@ public sealed class LeaderboardService(
         _dbContext.LeaderboardSnapshots.Add(snapshot);
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Status of every board in <see cref="LeaderboardCatalogue.Boards"/> for
+    /// <paramref name="worldId"/>: live with its current snapshot's stats, or
+    /// dark with a reason (issue #43 §5, board directory).
+    /// </summary>
+    public async Task<IReadOnlyList<LeaderboardBoardStatus>> GetDirectoryAsync(
+        Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var current = await _dbContext.LeaderboardSnapshots
+            .AsNoTracking()
+            .Where(s => s.WorldId == worldId && s.PeriodStart == null && !s.IsFinal)
+            .Select(s => new { s.Scope, s.Category, s.ComputedAt, EntryCount = s.Entries.Count })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. LeaderboardCatalogue.Boards.Keys.Select(board =>
+            {
+                var snapshot = current.Find(s => s.Scope == board.Scope && s.Category == board.Category);
+                return snapshot is not null
+                    ? new LeaderboardBoardStatus(
+                        board.Scope, board.Category, Available: true, Reason: null,
+                        snapshot.ComputedAt, snapshot.EntryCount)
+                    : new LeaderboardBoardStatus(
+                        board.Scope, board.Category, Available: false,
+                        LeaderboardCatalogue.DarkReason(board.Scope, board.Category), ComputedAt: null, EntryCount: null);
+            }),
+        ];
+    }
+
+    /// <summary>
+    /// A keyset page (<c>Rank &gt; afterRank</c>, ordered by <c>Rank</c>) of the
+    /// current, all-time snapshot for (<paramref name="scope"/>, <paramref name="category"/>),
+    /// or the dark response if none exists yet (issue #43 §5, board page).
+    /// </summary>
+    public async Task<LeaderboardBoardPage> GetBoardPageAsync(
+        Guid worldId,
+        LeaderboardScope scope,
+        LeaderboardCategory category,
+        int afterRank,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await CurrentSnapshotAsync(worldId, scope, category, cancellationToken).ConfigureAwait(false);
+        if (snapshot is null)
+        {
+            return new LeaderboardBoardPage(
+                Available: false, LeaderboardCatalogue.DarkReason(scope, category),
+                IsFinal: false, PeriodStart: null, PeriodEnd: null, ComputedAt: null,
+                Items: [], NextAfterRank: null);
+        }
+
+        var items = await _dbContext.LeaderboardEntries
+            .AsNoTracking()
+            .Where(e => e.SnapshotId == snapshot.Id && e.Rank > afterRank)
+            .OrderBy(e => e.Rank)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new LeaderboardBoardPage(
+            Available: true, Reason: null,
+            snapshot.IsFinal, snapshot.PeriodStart, snapshot.PeriodEnd, snapshot.ComputedAt,
+            items, items.Count > 0 ? items[^1].Rank : null);
+    }
+
+    /// <summary>
+    /// The caller's rank plus a window of <paramref name="radius"/> entries
+    /// around it on the current snapshot, or <see langword="null"/> if
+    /// <paramref name="subjectId"/> has no entry there (issue #43 §5, <c>/me</c>).
+    /// </summary>
+    public async Task<LeaderboardMeResult?> GetMyRankAsync(
+        Guid worldId,
+        LeaderboardScope scope,
+        LeaderboardCategory category,
+        Guid subjectId,
+        int radius,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await CurrentSnapshotAsync(worldId, scope, category, cancellationToken).ConfigureAwait(false);
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        var mine = await _dbContext.LeaderboardEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.SnapshotId == snapshot.Id && e.SubjectId == subjectId, cancellationToken)
+            .ConfigureAwait(false);
+        if (mine is null)
+        {
+            return null;
+        }
+
+        var minRank = Math.Max(1, mine.Rank - radius);
+        var maxRank = mine.Rank + radius;
+
+        var items = await _dbContext.LeaderboardEntries
+            .AsNoTracking()
+            .Where(e => e.SnapshotId == snapshot.Id && e.Rank >= minRank && e.Rank <= maxRank)
+            .OrderBy(e => e.Rank)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return new LeaderboardMeResult(mine.Rank, items);
+    }
+
+    /// <summary>
+    /// Resolves which subject a <c>/me</c> call is asking about: the caller
+    /// themselves for <see cref="LeaderboardScope.User"/>, or one of the
+    /// caller's own settlements for <see cref="LeaderboardScope.Settlement"/>
+    /// — <paramref name="requestedSettlementId"/> picks which one, defaulting
+    /// to any settlement the caller owns in the world.
+    /// </summary>
+    public async Task<MeSubjectResolution> ResolveMeSubjectAsync(
+        Guid worldId,
+        LeaderboardScope scope,
+        Guid userId,
+        Guid? requestedSettlementId,
+        CancellationToken cancellationToken = default)
+    {
+        if (scope != LeaderboardScope.Settlement)
+        {
+            return MeSubjectResolution.Resolved(userId);
+        }
+
+        if (requestedSettlementId is { } settlementId)
+        {
+            var settlement = await _dbContext.Settlements
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    s => s.Id == settlementId && s.WorldId == worldId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (settlement is null)
+            {
+                return MeSubjectResolution.SettlementNotFound;
+            }
+
+            return settlement.UserId == userId
+                ? MeSubjectResolution.Resolved(settlement.Id)
+                : MeSubjectResolution.NotOwner;
+        }
+
+        var owned = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.WorldId == worldId && s.UserId == userId)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return owned is { } ownedId ? MeSubjectResolution.Resolved(ownedId) : MeSubjectResolution.NoSettlementOwned;
+    }
+
+    private Task<LeaderboardSnapshotEntity?> CurrentSnapshotAsync(
+        Guid worldId, LeaderboardScope scope, LeaderboardCategory category, CancellationToken cancellationToken) =>
+        _dbContext.LeaderboardSnapshots
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                s => s.WorldId == worldId && s.Scope == scope && s.Category == category
+                    && s.PeriodStart == null && !s.IsFinal,
+                cancellationToken);
+}
+
+/// <summary>One board's directory entry (issue #43 §5).</summary>
+public sealed record LeaderboardBoardStatus(
+    LeaderboardScope Scope,
+    LeaderboardCategory Category,
+    bool Available,
+    string? Reason,
+    DateTimeOffset? ComputedAt,
+    int? EntryCount);
+
+/// <summary>One keyset page of a board, or its dark response.</summary>
+public sealed record LeaderboardBoardPage(
+    bool Available,
+    string? Reason,
+    bool IsFinal,
+    DateTimeOffset? PeriodStart,
+    DateTimeOffset? PeriodEnd,
+    DateTimeOffset? ComputedAt,
+    IReadOnlyList<LeaderboardEntryEntity> Items,
+    int? NextAfterRank);
+
+/// <summary>The caller's rank plus the entries around it.</summary>
+public sealed record LeaderboardMeResult(int MyRank, IReadOnlyList<LeaderboardEntryEntity> Items);
+
+/// <summary>Outcome of resolving which subject a <c>/me</c> call is about.</summary>
+public readonly struct MeSubjectResolution
+{
+    private MeSubjectResolution(Guid? subjectId, string? failure)
+    {
+        SubjectId = subjectId;
+        Failure = failure;
+    }
+
+    public Guid? SubjectId { get; }
+
+    /// <summary><see langword="null"/> when resolution succeeded.</summary>
+    public string? Failure { get; }
+
+    public bool Succeeded => Failure is null;
+
+    public static MeSubjectResolution Resolved(Guid subjectId) => new(subjectId, null);
+
+    public static MeSubjectResolution NoSettlementOwned { get; } = new(null, nameof(NoSettlementOwned));
+
+    public static MeSubjectResolution NotOwner { get; } = new(null, nameof(NotOwner));
+
+    public static MeSubjectResolution SettlementNotFound { get; } = new(null, nameof(SettlementNotFound));
 }
