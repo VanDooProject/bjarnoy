@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Combat;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -17,12 +19,21 @@ public sealed record HexPointRequest(int Q, int R)
 }
 
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
+/// <param name="Destination">
+/// Required for a <c>"move"</c> mission (the default); ignored for
+/// <c>"attack"</c>, whose destination is always the target settlement's own
+/// hex.
+/// </param>
 /// <param name="Provisions">Food to load onto the army, capped by what its units can carry and what the settlement can afford.</param>
+/// <param name="Mission"><c>"move"</c> (default) or <c>"attack"</c> — see <see cref="ArmyMission"/>.</param>
+/// <param name="TargetSettlementId">Required when <paramref name="Mission"/> is <c>"attack"</c> — the settlement to fight on arrival.</param>
 public sealed record DispatchArmyRequest(
     [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
     IReadOnlyList<HexPointRequest>? Waypoints,
-    [property: Required] HexPointRequest Destination,
-    [property: Range(0, double.MaxValue)] double Provisions);
+    HexPointRequest? Destination,
+    [property: Range(0, double.MaxValue)] double Provisions,
+    string? Mission = null,
+    Guid? TargetSettlementId = null);
 
 public sealed record ArmyUnitStackResponse(string Unit, int Count);
 
@@ -57,6 +68,7 @@ public sealed record ArmyResponse(
     Guid Id,
     Guid SettlementId,
     string Mission,
+    Guid? TargetSettlementId,
     bool AtHome,
     HexPointResponse Position,
     double Provisions,
@@ -79,6 +91,7 @@ public sealed record ArmyResponse(
             entity.Id,
             entity.SettlementId,
             domain.Mission.ToString().ToLowerInvariant(),
+            domain.TargetSettlementId,
             atHome,
             HexPointResponse.From(domain.PositionAt(home, gameNow)),
             domain.ProvisionsAt(gameNow),
@@ -104,5 +117,51 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, HexPointR
         return new ArmySummary(
             entity.Id, domain.Mission.ToString().ToLowerInvariant(), atHome,
             HexPointResponse.From(domain.PositionAt(home, gameNow)));
+    }
+}
+
+public sealed record ResourceAmountsResponse(double Wood, double Stone, double Food, double Iron)
+{
+    public static ResourceAmountsResponse From(ResourceAmounts amounts) =>
+        new(amounts.Wood, amounts.Stone, amounts.Food, amounts.Iron);
+}
+
+public sealed record BattleReportAttackerLineResponse(string Unit, int Sent, int Lost, int Survived);
+
+public sealed record BattleReportDefenderLineResponse(string Unit, int Lost, int Survived);
+
+/// <summary>A resolved battle (issue #40 phase 3), as read from either side's inbox.</summary>
+public sealed record BattleReportResponse(
+    Guid Id,
+    DateTimeOffset OccurredAt,
+    Guid AttackerArmyId,
+    Guid AttackerSettlementId,
+    Guid DefenderSettlementId,
+    string Winner,
+    double AttackPower,
+    double DefensePower,
+    int Seed,
+    ResourceAmountsResponse LootTaken,
+    IReadOnlyList<BattleReportAttackerLineResponse> AttackerLines,
+    IReadOnlyList<BattleReportDefenderLineResponse> DefenderLines)
+{
+    public static BattleReportResponse From(BattleReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var domain = entity.ToDomain();
+        return new BattleReportResponse(
+            domain.Id,
+            domain.OccurredAt,
+            domain.AttackerArmyId,
+            domain.AttackerSettlementId,
+            domain.DefenderSettlementId,
+            domain.Winner.ToString().ToLowerInvariant(),
+            domain.AttackPower,
+            domain.DefensePower,
+            domain.Seed,
+            ResourceAmountsResponse.From(domain.LootTaken),
+            [.. domain.AttackerLines.Select(l => new BattleReportAttackerLineResponse(l.Type.ToWireName(), l.Sent, l.Lost, l.Survived))],
+            [.. domain.DefenderLines.Select(l => new BattleReportDefenderLineResponse(l.Type.ToWireName(), l.Lost, l.Survived))]);
     }
 }

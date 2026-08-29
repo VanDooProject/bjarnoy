@@ -34,6 +34,7 @@ builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<ArmyService>();
+builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<LeaderboardService>();

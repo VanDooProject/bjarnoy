@@ -1,20 +1,29 @@
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Combat;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Armies;
 
-/// <summary>What an army is currently doing. Only <see cref="Move"/> exists this phase.</summary>
+/// <summary>What an army is currently doing.</summary>
 public enum ArmyMission
 {
     /// <summary>Travel to a destination, stand there, and auto-return once provisions demand it.</summary>
     Move = 0,
 
-    // Attack, Raid and Support (support-joins-garrison is issue #40 phase 4;
-    // combat resolution is phase 3) deliberately have no cases yet — adding
-    // them is a data change to this enum plus new PlanX methods, not a
-    // rewrite of Army's shape.
+    /// <summary>
+    /// Travel to a target settlement and fight its garrison on arrival
+    /// (issue #40 phase 3) — see <see cref="Army.SettleArrival"/>. Survivors
+    /// (if any) and loot immediately start the precomputed return leg; there
+    /// is no standing at the destination the way <see cref="Move"/> allows.
+    /// </summary>
+    Attack = 1,
+
+    // Raid and Support (support-joins-garrison is issue #40 phase 4) deliberately
+    // have no cases yet — adding them is a data change to this enum plus new
+    // PlanX methods, not a rewrite of Army's shape.
 }
 
 /// <summary>
@@ -57,6 +66,22 @@ public sealed record Army
     public double Provisions { get; init; }
 
     public ArmyMission Mission { get; init; } = ArmyMission.Move;
+
+    /// <summary>
+    /// The settlement this <see cref="ArmyMission.Attack"/> army is headed to
+    /// fight. <see langword="null"/> for <see cref="ArmyMission.Move"/> — see
+    /// <see cref="PlanDispatch"/>.
+    /// </summary>
+    public Guid? TargetSettlementId { get; init; }
+
+    /// <summary>
+    /// Resources looted from a won <see cref="ArmyMission.Attack"/> battle,
+    /// carried home alongside the surviving stacks and deposited into the
+    /// home settlement's stock only once the army actually arrives (mirroring
+    /// how <see cref="Stacks"/> itself is only folded into the garrison on
+    /// arrival — see <c>ArmyService</c>). Zero otherwise.
+    /// </summary>
+    public ResourceAmounts Loot { get; init; }
 
     /// <summary>The slowest unit type present sets the pace — a catapult army crawls at catapult speed.</summary>
     public double TotalSpeed => Stacks.Count == 0 ? 0 : Stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
@@ -106,12 +131,27 @@ public sealed record Army
         HexCoord destination,
         DateTimeOffset now,
         Guid armyId,
-        Func<HexCoord, Terrain> terrainAt)
+        Func<HexCoord, Terrain> terrainAt,
+        ArmyMission mission = ArmyMission.Move,
+        Guid? targetSettlementId = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (mission == ArmyMission.Attack)
+        {
+            if (targetSettlementId is null)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.TargetSettlementRequired);
+            }
+
+            if (targetSettlementId == settlement.Id)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.CannotAttackOwnSettlement);
+            }
+        }
 
         var settlementDecision = settlement.PlanDispatch(requestedUnits, provisions, now);
         if (!settlementDecision.Accepted)
@@ -177,10 +217,131 @@ public sealed record Army
             Stacks = stacks,
             Location = new ArmyLocation.InTransit(movement),
             Provisions = provisions,
-            Mission = ArmyMission.Move,
+            Mission = mission,
+            TargetSettlementId = mission == ArmyMission.Attack ? targetSettlementId : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
+    }
+
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.Attack"/> army's arrival at its
+    /// target: if <paramref name="now"/> has reached the outbound leg's
+    /// <see cref="Movement.ArrivesAt"/>, the battle happens right there — no
+    /// standing at the destination the way <see cref="Move"/> allows — and
+    /// this returns the fought-out <see cref="BattlePlan"/> alongside the
+    /// updated army and defender settlement. Otherwise (mid-journey, already
+    /// on the return leg, or a <see cref="Move"/>-mission army) this is a
+    /// no-op: <see cref="ArmyArrivalResult.Fought"/> is <see langword="false"/>
+    /// and both aggregates come back unchanged, so a caller can call this
+    /// unconditionally before falling back to plain <see cref="SettleTo"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <paramref name="defenderSettlement"/> must be the defender's own
+    /// aggregate — not yet settled to the battle instant, that is this
+    /// method's job (mirroring how <c>Settlement.SettleTo</c> is always
+    /// called before other settlement operations elsewhere): it is settled to
+    /// the exact arrival instant first, so the garrison and food the battle
+    /// sees are correct for that moment, the battle applies, and only then is
+    /// the defender settled forward again to <paramref name="now"/> so
+    /// ordinary production/starvation since the battle still happens.
+    /// </para>
+    /// <para>
+    /// A wiped-out attacker (<see cref="BattlePlan.AttackerSurvivors"/> empty)
+    /// simply ceases to exist — <see cref="ArmyArrivalResult.Army"/> comes
+    /// back <see langword="null"/>, and the caller (<c>ArmyService</c>)
+    /// removes the row rather than starting a return trip for zero units.
+    /// Otherwise the survivors (plus <see cref="Loot"/>) are put straight onto
+    /// the already-precomputed <see cref="Movement.ReturnPath"/>/
+    /// <see cref="Movement.ReturnCumulativeHours"/> — no new pathfinding is
+    /// needed, since that leg was already computed at dispatch.
+    /// </para>
+    /// <para>
+    /// Simultaneous-arrival note (issue #40 design doc): this does not by
+    /// itself impose an order between two different attackers landing on the
+    /// same settlement in the same settle pass — the caller is responsible
+    /// for processing due arrivals one at a time in a stable order (e.g. by
+    /// <see cref="Id"/>) if that situation can occur. A real total order over
+    /// simultaneous combat events is a nice-to-have, not required by issue #40
+    /// phase 3.
+    /// </para>
+    /// </remarks>
+    public static ArmyArrivalResult SettleArrival(
+        Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        ArgumentNullException.ThrowIfNull(defenderSettlement);
+
+        if (army.Mission != ArmyMission.Attack
+            || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
+            || now < inTransit.Movement.ArrivesAt)
+        {
+            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null);
+        }
+
+        var movement = inTransit.Movement;
+        var battleInstant = movement.ArrivesAt;
+
+        // The defender as of the exact instant the attacker lands — not
+        // "now", which may be later — so the garrison and stock the battle
+        // sees are the ones that were actually there.
+        var settledDefender = defenderSettlement.SettleTo(battleInstant, defenderSpeedFactor).Settlement;
+
+        var towerLevel = settledDefender.Buildings
+            .Where(b => b.Type == BuildingType.Tower)
+            .Select(b => b.Level)
+            .DefaultIfEmpty(0)
+            .Max();
+        var defenseBonusPercent = BuildingCatalogue.TowerDefenseBonusPercent(towerLevel);
+
+        var lootAvailable = settledDefender.Resources.At(battleInstant);
+        var plan = BattleResolver.Resolve(
+            army.Stacks, settledDefender.Garrison, defenseBonusPercent, lootAvailable, seed);
+
+        // Loot leaves the defender's stock at the instant of battle even
+        // though it does not reach the attacker's own stock until the
+        // survivors physically get home (see Loot's remarks) — it is gone
+        // from the defender either way.
+        var afterLoot = settledDefender.Resources.TrySpend(plan.LootTaken, battleInstant, out var spent)
+            ? spent
+            : settledDefender.Resources.SettledTo(battleInstant);
+
+        var defenderPostBattle = settledDefender with { Garrison = plan.DefenderSurvivors, Resources = afterLoot };
+        var finalDefender = defenderPostBattle.SettleTo(now, defenderSpeedFactor).Settlement;
+
+        var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
+        if (survivorCount == 0)
+        {
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan);
+        }
+
+        // Rebase provisions to what the (pre-battle, full-strength) army had
+        // actually burned reaching the battle instant — same trick
+        // SettleTo's turn-around branch uses for Move.
+        var elapsedOutboundHours = (battleInstant - movement.DepartedAt).TotalHours;
+        var provisionsAtBattle = Math.Max(0, army.Provisions - (army.TotalUpkeepPerHour * elapsedOutboundHours));
+
+        var returning = new Movement.Movement
+        {
+            DepartedAt = battleInstant,
+            Path = movement.ReturnPath,
+            CumulativeHours = movement.ReturnCumulativeHours,
+            ReturnPath = movement.ReturnPath,
+            ReturnCumulativeHours = movement.ReturnCumulativeHours,
+            TurnAroundAt = battleInstant,
+            IsReturning = true,
+        };
+
+        var survivorArmy = army with
+        {
+            Stacks = plan.AttackerSurvivors,
+            Location = new ArmyLocation.InTransit(returning),
+            Provisions = provisionsAtBattle,
+            Loot = plan.LootTaken,
+        };
+
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan);
     }
 
     /// <summary>
@@ -293,6 +454,20 @@ public sealed record Army
 /// </param>
 public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome);
 
+/// <param name="Army">
+/// The updated army — <see langword="null"/> when a wiped-out attacker
+/// ceases to exist entirely; the unchanged input army when
+/// <paramref name="Fought"/> is <see langword="false"/>.
+/// </param>
+/// <param name="DefenderSettlement">
+/// The defender, settled through the battle instant (and, when
+/// <paramref name="Fought"/>, forward to "now" as well) — always non-null,
+/// since even a no-op result still needs somewhere to hand the caller's own
+/// settlement back unchanged.
+/// </param>
+/// <param name="Fought">Whether a battle actually happened this call — see <see cref="Army.SettleArrival"/>.</param>
+public sealed record ArmyArrivalResult(Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle);
+
 /// <summary>Why a dispatch was refused.</summary>
 public enum DispatchRejection
 {
@@ -306,6 +481,18 @@ public enum DispatchRejection
     WaypointNotLand,
     UnreachableLeg,
     InsufficientProvisionsForRoundTrip,
+
+    /// <summary>An <see cref="ArmyMission.Attack"/> dispatch named no target settlement.</summary>
+    TargetSettlementRequired,
+
+    /// <summary>The named target settlement does not exist.</summary>
+    TargetSettlementNotFound,
+
+    /// <summary>An army cannot be sent to attack the settlement it was dispatched from.</summary>
+    CannotAttackOwnSettlement,
+
+    /// <summary>A <see cref="ArmyMission.Move"/> dispatch named no destination.</summary>
+    DestinationRequired,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

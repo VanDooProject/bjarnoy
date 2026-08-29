@@ -4,6 +4,7 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,18 @@ public static class ArmyEndpoints
             .WithSummary("Turns an army around mid-journey to head home early.")
             .AddEndpointFilter<ActiveUserEndpointFilter>();
 
+        var reports = app.MapGroup("/api/v1")
+            .WithApiVersionSet(versionSet)
+            .WithTags("Battle reports");
+
+        reports.MapGet("/reports/{reportId:guid}", GetReport)
+            .WithName("GetBattleReport")
+            .WithSummary("Fetches one battle report by id.");
+
+        reports.MapGet("/settlements/{settlementId:guid}/reports", ListReportsForSettlement)
+            .WithName("ListSettlementBattleReports")
+            .WithSummary("Lists battle reports touching a settlement, as attacker or defender, newest first.");
+
         return app;
     }
 
@@ -73,11 +86,22 @@ public static class ArmyEndpoints
             unitStacks.Add(new UnitStack(type, unit.Count));
         }
 
+        if (!TryParseMission(request.Mission, out var mission))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Unknown mission.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
         var waypoints = (request.Waypoints ?? []).Select(w => w.ToHexCoord()).ToList();
-        var destination = request.Destination.ToHexCoord();
+        var destination = request.Destination?.ToHexCoord();
 
         var result = await armies.DispatchAsync(
-            settlementId, unitStacks, waypoints, destination, request.Provisions, cancellationToken);
+            settlementId, unitStacks, waypoints, destination, request.Provisions,
+            mission, request.TargetSettlementId, cancellationToken);
 
         if (result.WorldPaused)
         {
@@ -100,7 +124,7 @@ public static class ArmyEndpoints
         }
 
         var problem = Problem(result.Rejection);
-        return result.Rejection == DispatchRejection.SettlementNotFound
+        return result.Rejection is DispatchRejection.SettlementNotFound or DispatchRejection.TargetSettlementNotFound
             ? TypedResults.NotFound()
             : TypedResults.Conflict(problem);
     }
@@ -175,6 +199,45 @@ public static class ArmyEndpoints
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
+    private static async Task<Results<Ok<BattleReportResponse>, NotFound>> GetReport(
+        Guid reportId,
+        BattleReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(BattleReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<BattleReportResponse>>> ListReportsForSettlement(
+        Guid settlementId,
+        BattleReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
+        IReadOnlyList<BattleReportResponse> response = [.. entities.Select(BattleReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
+    private static bool TryParseMission(string? value, out ArmyMission mission)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value, "move", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Move;
+            return true;
+        }
+
+        if (string.Equals(value, "attack", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Attack;
+            return true;
+        }
+
+        mission = default;
+        return false;
+    }
+
     private static bool TryParseUnit(string value, out UnitType type)
     {
         foreach (var candidate in UnitCatalogue.AllTypes)
@@ -207,6 +270,10 @@ public static class ArmyEndpoints
                 DispatchRejection.UnreachableLeg => "No land route exists for one or more legs of the journey.",
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
+                DispatchRejection.TargetSettlementRequired => "An attack mission requires a target settlement.",
+                DispatchRejection.TargetSettlementNotFound => "The target settlement does not exist.",
+                DispatchRejection.CannotAttackOwnSettlement => "An army cannot attack its own settlement.",
+                DispatchRejection.DestinationRequired => "A move mission requires a destination.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,
