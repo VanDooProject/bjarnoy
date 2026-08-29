@@ -719,6 +719,15 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.rebuildMarkers();
+    // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
+    // below) floats right where the ring's own bubbles/track need to sit — it
+    // stays fully opaque otherwise since it's PixiJS-rendered, not DOM, so the
+    // ring's CSS z-index/opacity tricks can't touch it. `interactionLocked` is
+    // already the "a ring is open" signal (see setInteractionLocked); ease the
+    // whole marker layer's alpha toward hidden/shown off that same flag rather
+    // than snapping, matching the fog fade's feel elsewhere in this renderer.
+    const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
+    this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
     if (this.options.mode === 'world') this.drawWaves();
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };

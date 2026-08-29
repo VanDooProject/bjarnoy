@@ -72,7 +72,7 @@ const emit = defineEmits<{
 // was making the innermost ring feel oversized, the 88px bubbles were (see
 // BUBBLE_DIAMETER below); a smaller radius paired with smaller bubbles is
 // what actually tightens the footprint without cramming them together.
-const RADIUS = 76;
+const RADIUS = 64;
 // A ring with a badge (an owned building, "Lv n upgrade") also has the
 // canvas's own floating settlement-name pill sitting right at the tile's
 // centre, underneath the ring — the same RADIUS that keeps a badge-less
@@ -80,7 +80,7 @@ const RADIUS = 76;
 // the middle (that pill), so it gets extra breathing room.
 const effectiveRadius = computed(() => {
   const base = props.radius ?? RADIUS;
-  return props.badgeAction ? base + 28 : base;
+  return props.badgeAction ? base + 24 : base;
 });
 const badgeY = computed(() => props.y - effectiveRadius.value - 34);
 // Issue #16 "ring menu" target: "connected down to the ring by a thin
@@ -117,13 +117,12 @@ const positioned = computed(() => {
   });
 });
 
-// 64px clears the ~44-48px touch-target minimum with room to spare, at
-// roughly 3/4 the footprint of the original 88px bubbles — the radius
-// shrink above wasn't enough on its own since bubble size, not spacing,
-// was dominating how big the ring looked.
-const BUBBLE_DIAMETER = 64;
+// 60px still clears the ~44-48px touch-target minimum with a little room
+// to spare — tighter than the original 88px bubbles, since bubble size (not
+// ring spacing) was what dominated how big the whole thing looked.
+const BUBBLE_DIAMETER = 60;
 const bubbleSize = computed(() => BUBBLE_DIAMETER * (props.bubbleScale ?? 1));
-const bubbleFontSize = computed(() => 12 * (props.bubbleScale ?? 1));
+const bubbleFontSize = computed(() => 11 * (props.bubbleScale ?? 1));
 // Depth cue: each ring out is fainter and its dashes sparser, so the
 // innermost ring reads as the "current" one and outer rings whisper. A
 // plain low-alpha white stroke (the original values here) reads fine
@@ -296,10 +295,10 @@ function hover(action: RingAction) {
      a pill that stretches with its text. Sizing here matches RingMenu's own
      BUBBLE_DIAMETER default; the inline style (bound to bubbleSize) always
      wins, this is just the no-JS/pre-hydration fallback. */
-  width: 64px;
-  height: 64px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  padding: 0 6px;
+  padding: 0 5px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -307,12 +306,18 @@ function hover(action: RingAction) {
   background: rgba(8, 18, 26, 0.88);
   border: none;
   color: var(--text);
-  font-size: 12px;
-  line-height: 1.15;
+  font-size: 11px;
+  line-height: 1.1;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  /* A long single word (e.g. "Watchtower") has nowhere to break on a plain
+     `word-break: normal` — it just overflows the circle. This forces a
+     mid-word break only when nothing else fits, so short labels still wrap
+     on natural word boundaries first. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 .ring-bubble:hover:not(.disabled) {
   color: var(--gold);
