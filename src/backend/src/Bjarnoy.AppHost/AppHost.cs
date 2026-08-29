@@ -31,14 +31,26 @@ var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
 const string adminUserName = "admin";
 var adminPasswordValue = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
 
-var postgres = builder.AddPostgres("postgres", password: postgresPassword)
-    .WithDataVolume()
-    // Keeps a restart from wiping the world you were testing against.
-    .WithLifetime(ContainerLifetime.Persistent);
+var postgres = builder.AddPostgres("postgres", password: postgresPassword);
 
+// Bjarnoy.AppHost.Tests builds and starts this whole AppHost fresh for every
+// [Fact] — several independent instances in the same CI job, one after
+// another. WithDataVolume()'s volume name comes from this resource alone,
+// with nothing distinguishing one test's instance from the next, so a
+// persistent volume here would carry Postgres state (including whichever
+// test's admin account got seeded first, and *its* password) from one test
+// straight into the next's supposedly-fresh database — exactly the bug that
+// made AdminBootstrapLoginTests intermittently 401 with "wrong password"
+// despite generating a correct one every time. Session-lifetime, volume-less
+// Postgres (the default) gives every test run its own genuinely empty
+// database instead; only interactive local dev gets the persistent one.
 if (!isCI)
 {
-    postgres.WithPgAdmin();
+    postgres = postgres
+        .WithDataVolume()
+        // Keeps a restart from wiping the world you were testing against.
+        .WithLifetime(ContainerLifetime.Persistent)
+        .WithPgAdmin();
 }
 
 var gamedb = postgres.AddDatabase("gamedb");
