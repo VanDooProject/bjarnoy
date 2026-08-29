@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { UnitDefinitionResponse } from '../../api/types';
 import {
   armyStatusLabel,
+  buildAttackDispatchRequest,
   buildMoveDispatchRequest,
   formatEta,
   maxAffordableProvisions,
@@ -72,6 +73,34 @@ describe('buildMoveDispatchRequest', () => {
     const request = buildMoveDispatchRequest({ spearman: 3 }, route, 20);
     expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
     expect(request?.destination).toEqual({ q: 2, r: 0 });
+  });
+});
+
+describe('buildAttackDispatchRequest', () => {
+  it('returns null when no units are selected', () => {
+    expect(buildAttackDispatchRequest({ spearman: 0 }, [], 100, 'target-1')).toBeNull();
+  });
+
+  it('returns null when no target settlement is chosen', () => {
+    expect(buildAttackDispatchRequest({ spearman: 5 }, [], 100, null)).toBeNull();
+  });
+
+  it('builds an attack request with no waypoints when the route is empty (a direct route)', () => {
+    const request = buildAttackDispatchRequest({ spearman: 5, axeman: 0 }, [], 50, 'target-1');
+    expect(request).toEqual({
+      units: [{ unit: 'spearman', count: 5 }],
+      waypoints: undefined,
+      provisions: 50,
+      mission: 'attack',
+      targetSettlementId: 'target-1',
+    });
+  });
+
+  it('treats every clicked hex as a waypoint — never a destination, unlike a move dispatch', () => {
+    const route = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
+    const request = buildAttackDispatchRequest({ spearman: 3 }, route, 20, 'target-1');
+    expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }]);
+    expect(request?.destination).toBeUndefined();
   });
 });
 

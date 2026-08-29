@@ -44,6 +44,36 @@ export function buildMoveDispatchRequest(
 }
 
 /**
+ * Builds an `attack`-mission `DispatchArmyRequest` from a unit-count map, a
+ * clicked route, and provisions. Unlike `buildMoveDispatchRequest`, the
+ * clicked route is never split into "waypoints + final destination" — the
+ * backend ignores `destination` for an attack dispatch and always resolves
+ * it server-side to the target settlement's own hex (see
+ * `ArmyService.DispatchAsync`), so every clicked hex here is just an
+ * intermediate waypoint on the way to `targetSettlementId`.
+ */
+export function buildAttackDispatchRequest(
+  unitCounts: Record<string, number>,
+  route: AxialCoord[],
+  provisions: number,
+  targetSettlementId: string | null,
+): DispatchArmyRequest | null {
+  const units = Object.entries(unitCounts)
+    .filter(([, count]) => count > 0)
+    .map(([unit, count]) => ({ unit, count }));
+  if (units.length === 0 || !targetSettlementId) return null;
+
+  const waypoints = route.map((c) => ({ q: c.q, r: c.r }));
+  return {
+    units,
+    waypoints: waypoints.length > 0 ? waypoints : undefined,
+    provisions,
+    mission: 'attack',
+    targetSettlementId,
+  };
+}
+
+/**
  * The most food a dispatch can carry: capped by the units' combined
  * `foodCarryCapacity` (what they can physically carry) and by what the
  * settlement's own food stock can afford — mirrors the backend's

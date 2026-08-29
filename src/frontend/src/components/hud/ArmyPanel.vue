@@ -14,6 +14,7 @@ import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
 import { armyStatusLabel, formatEta, maxAffordableProvisions } from '../../lib/units/armyDispatch';
+import { missionLabel } from '../../lib/units/battleReports';
 
 const world = useWorldStore();
 const catalogue = useUnitCatalogueStore();
@@ -68,12 +69,51 @@ const routeLength = computed(() => draft.value?.route.length ?? 0);
 const hasUnitsSelected = computed(() =>
   !!draft.value && Object.values(draft.value.unitCounts).some((c) => c > 0),
 );
+// A move dispatch needs a plotted route (the last click is the destination);
+// an attack dispatch needs a target settlement instead — a route is optional
+// waypoints along the way (see buildAttackDispatchRequest's own comment).
+const hasDestination = computed(() =>
+  draft.value?.mission === 'attack' ? !!draft.value.targetSettlementId : routeLength.value > 0,
+);
 const canConfirm = computed(
-  () => hasUnitsSelected.value && routeLength.value > 0 && !draft.value?.submitting,
+  () => hasUnitsSelected.value && hasDestination.value && !draft.value?.submitting,
 );
 
 function beginDispatch() {
   world.startDispatch();
+}
+
+function setMission(mission: 'move' | 'attack') {
+  world.setDispatchMission(mission);
+}
+
+// Target-settlement picker for an Attack dispatch: a searchable list rather
+// than a world-map click — see the PR notes for why (WorldMapCanvas's
+// hex-click only carries a coordinate, not a settlement id, and teaching the
+// renderer a "pick a settlement" selection mode would be a bigger change
+// than reusing the settlement list `refreshWorldSettlements` already
+// maintains client-side).
+const targetSearch = ref('');
+const attackTargets = computed(() => {
+  const all = world.listAttackableSettlements();
+  const query = targetSearch.value.trim().toLowerCase();
+  const filtered = query
+    ? all.filter(
+        (s) => s.name.toLowerCase().includes(query) || s.ownerName.toLowerCase().includes(query),
+      )
+    : all;
+  return filtered.slice(0, 25);
+});
+const selectedTarget = computed(() =>
+  draft.value?.targetSettlementId
+    ? world.listAttackableSettlements().find((s) => s.id === draft.value?.targetSettlementId) ?? null
+    : null,
+);
+function pickTarget(settlementId: string) {
+  world.setDispatchTarget(settlementId);
+}
+function clearTarget() {
+  world.setDispatchTarget(null);
 }
 
 async function confirm() {
@@ -101,6 +141,7 @@ const armyRows = computed(() => {
       eta,
       canRecall,
       selected: army.id === world.selectedArmyId,
+      mission: army.mission !== 'move' ? missionLabel(army.mission) : null,
     };
   });
 });
@@ -150,7 +191,7 @@ async function recall(armyId: string) {
             <span class="status-row-time">{{ row.eta ?? '—' }}</span>
           </div>
           <div class="status-subtext">
-            {{ row.status }}
+            {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
           </div>
           <button
             v-if="row.canRecall"
@@ -176,10 +217,62 @@ async function recall(armyId: string) {
     <template v-else>
       <div class="dispatch-form">
         <p v-if="draft.error" class="status-subtext error-note">{{ draft.error }}</p>
-        <p class="status-subtext instructions">
+
+        <div class="mission-tabs">
+          <button
+            type="button"
+            class="mission-tab"
+            :class="{ active: draft.mission === 'move' }"
+            @click="setMission('move')"
+          >
+            Move
+          </button>
+          <button
+            type="button"
+            class="mission-tab attack"
+            :class="{ active: draft.mission === 'attack' }"
+            @click="setMission('attack')"
+          >
+            Attack
+          </button>
+        </div>
+
+        <p v-if="draft.mission === 'move'" class="status-subtext instructions">
           Click hexes on the map to plot a route — the last click is the
           destination. {{ routeLength }} hex{{ routeLength === 1 ? '' : 'es' }} plotted.
         </p>
+        <template v-else>
+          <p class="status-subtext instructions">
+            Choose a settlement to attack, then optionally click hexes on the
+            map to plot a route there. {{ routeLength }} waypoint{{ routeLength === 1 ? '' : 's' }} plotted.
+          </p>
+
+          <div v-if="selectedTarget" class="target-selected">
+            <span>Target: <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
+            <button type="button" class="secondary change-target" @click="clearTarget">Change</button>
+          </div>
+          <div v-else class="target-picker">
+            <input
+              v-model="targetSearch"
+              type="text"
+              class="target-search"
+              placeholder="Search settlements to attack…"
+            />
+            <div v-if="attackTargets.length" class="target-list">
+              <button
+                v-for="t in attackTargets"
+                :key="t.id"
+                type="button"
+                class="target-row"
+                @click="pickTarget(t.id)"
+              >
+                <span class="target-name">{{ t.name }}</span>
+                <span class="target-owner">{{ t.ownerName }}</span>
+              </button>
+            </div>
+            <p v-else class="status-subtext">No other settlements found yet.</p>
+          </div>
+        </template>
 
         <div class="unit-picker">
           <div v-for="row in garrisonRows" :key="row.unit" class="unit-picker-row">
@@ -360,6 +453,92 @@ async function recall(armyId: string) {
 }
 .instructions {
   margin-top: 0;
+}
+.mission-tag {
+  color: var(--gold);
+}
+.mission-tabs {
+  display: flex;
+  gap: 6px;
+}
+.mission-tab {
+  flex: 1;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.mission-tab.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(255, 197, 92, 0.08);
+}
+.mission-tab.attack.active {
+  border-color: #e08a8a;
+  color: #e08a8a;
+  background: rgba(224, 138, 138, 0.08);
+}
+.target-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.change-target {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.target-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.target-search {
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.target-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.target-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.target-row:hover {
+  background: rgba(255, 197, 92, 0.08);
+}
+.target-owner {
+  color: var(--muted);
+  white-space: nowrap;
 }
 .unit-picker {
   display: flex;

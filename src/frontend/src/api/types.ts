@@ -605,6 +605,60 @@ export interface ArmySummary {
   position: HexPoint;
 }
 
+// Issue #40 phase 3 (frontend): battle reports. Mirrors
+// `BattleReportAttackerLineResponse`/`BattleReportDefenderLineResponse`/
+// `BattleReportSiegeResponse`/`BattleReportResponse` in ArmyContracts.cs.
+
+export interface BattleReportAttackerLine {
+  unit: string;
+  sent: number;
+  lost: number;
+  survived: number;
+}
+
+export interface BattleReportDefenderLine {
+  unit: string;
+  lost: number;
+  survived: number;
+}
+
+/**
+ * The building-damage section of a report (backend phase 5) — present only
+ * when catapult damage actually happened. Passed through and displayed
+ * generically (this phase builds no catapult-targeting UI of its own).
+ */
+export interface BattleReportSiege {
+  targetCoord: HexPoint;
+  targetType: string;
+  levelBefore: number;
+  levelAfter: number;
+  settlementRazed: boolean;
+}
+
+/**
+ * Mirrors `BattleReportResponse`. `mission` is `'attack'` or `'raid'`
+ * (backend phase 7) — this phase's dispatch UI only offers Attack, but a
+ * report can still come back as a Raid (e.g. from another player), so it's
+ * rendered with its own label rather than assumed to always be an Attack.
+ * `winner` is `'attacker'` or `'defender'` (no draw).
+ */
+export interface BattleReportResponse {
+  id: string;
+  occurredAt: string;
+  attackerArmyId: string;
+  attackerSettlementId: string;
+  defenderSettlementId: string;
+  mission: string;
+  winner: string;
+  attackPower: number;
+  defensePower: number;
+  seed: number;
+  lootTaken: ResourceLine;
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  siege: BattleReportSiege | null;
+}
+
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's
 // UnitDefinitionResponse (issue #40 phase 1: unit catalogue, training queue).
 
