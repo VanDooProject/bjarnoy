@@ -306,6 +306,99 @@ The health endpoints are only mapped outside development when
 `ExposeHealthChecks` is set; the container image sets it, since an orchestrator
 needs to probe them.
 
+## User activity tracking
+
+Two things are tracked per user: a **last-active timestamp**
+(`UserActivityEntity`, one row per user, overwritten in place) and **session
+windows** (`UserActivitySessionEntity`, a `StartedAtUtc`/`LastSeenAtUtc` pair
+per burst of activity — a ping within `GapThreshold` of the previous one
+extends the current session in place; a later one opens a new row).
+
+Three things feed it, from most to least authoritative:
+
+- `UserActivityEndpointFilter`, applied to every authenticated route. It is
+  transparent to an anonymous request and, like `ActiveUserEndpointFilter`,
+  never fails the request it rides along on — a tracking failure is logged
+  and swallowed, not rethrown.
+- A hook in `AuthService`'s refresh-token exchange, since that resolves a
+  user id from a DB-backed token rather than a validated JWT and so is not
+  covered by the endpoint filter.
+- The frontend's `useActivityHeartbeat` composable (mounted from `App.vue`),
+  which pings `POST /api/v1/activity/heartbeat` every ~5 minutes while the
+  tab is visible and the user is authenticated. This is optional and
+  best-effort: it only closes the gap where a logged-in user has a tab open
+  and focused but isn't triggering any other API call — the other two
+  signals cover everything else.
+
+All three write through the same `IUserActivityTracker` (`UserActivityService`),
+so there is one code path, one throttle, one session-boundary rule.
+
+### Configuration
+
+`UserActivityOptions`, bound from the `UserActivity` config section (same
+convention as `JwtOptions`):
+
+| Option | Default | Meaning |
+|---|---|---|
+| `GapThreshold` | 30 minutes | How long a gap between pings still counts as the same session. |
+| `ThrottleInterval` | 60 seconds | At most one database write per user per interval — every `TrackAsync` call inside the window is a no-op. |
+| `RetentionDays` | 180 days | How long a session row survives before `UserActivityRetentionService` may prune it. |
+
+Override any of them the usual way, e.g. in `appsettings.json` or via
+environment variables:
+
+```json
+{ "UserActivity": { "GapThreshold": "00:15:00", "RetentionDays": 90 } }
+```
+
+`UserActivityRetentionHostedService` sweeps hourly and deletes sessions past
+`RetentionDays`; it never touches `UserActivityEntity`, which has no age to
+prune — it is just overwritten by the next ping. Per this repo's CLAUDE.md,
+the throttle and the retention sweep are real production behavior, not a
+branch on whether this is a test run: a test that wants to see a second write
+advances the injected `TimeProvider` past the interval instead.
+
+### Admin UI and endpoints
+
+The admin UI lives at `/admin/activity` (`AdminActivityView.vue`, alongside
+the other `/admin/*` tabs — see `AdminLayout.vue`), showing an aggregate
+active-users chart (`ActivityChart.vue`, Chart.js), a paged users table sorted
+by last-active, and a per-user drill-down into session windows. All three
+endpoints live under `/api/v1/admin/activity` and require the `Admin`
+authorization policy:
+
+| Route | Returns |
+|---|---|
+| `GET /admin/activity/summary?from=&to=&bucket=day\|hour` | Distinct active-user counts per time bucket (max 92 days for `day`, 7 for `hour`). |
+| `GET /admin/activity/users?page=&pageSize=&sort=` | Every non-system user, paged and sorted newest-active-first, including users who have never been tracked (`lastActiveAtUtc: null`). |
+| `GET /admin/activity/users/{userId}?from=&to=` | One user's session windows in the range, plus session count and total active duration. |
+
+### The `DateTimeOffset` translation limitation
+
+EF Core's SQLite provider cannot translate a relational comparison (`<`,
+`>=`, `ORDER BY`, ...) on a `DateTimeOffset` column — only equality does. This
+shows up in three places in this area:
+
+- `UserActivityService` orders sessions by `Id` (a UUIDv7, sorting
+  chronologically anyway) instead of `LastSeenAtUtc` to find the session to
+  extend.
+- `UserActivityQueryService` (bucketed summary, users-by-last-active sort,
+  per-user session windows) and `UserActivityRetentionService` (the
+  retention cutoff) both pull the rows a translatable predicate — an
+  equality filter, or none at all — can select, then do the actual
+  date/time comparison, sort, or delete-id selection **in memory** once the
+  rows are materialized. The eventual write (if any) is a set-based
+  operation keyed on the resulting id list, so it's still one query, not a
+  per-row loop.
+
+The same "load, then compare/order in memory" idiom already existed before
+this feature (`WorldService.TriggerDueEndbossesAsync`); it is now used in
+three places here too. It's one code path, identical on SQLite and
+PostgreSQL — worth knowing about up front before adding a fourth service that
+naively puts a `DateTimeOffset` comparison in a LINQ `Where`/`OrderBy` that
+EF is expected to translate to SQL, since that fails silently in some
+provider/query shapes and loudly (`InvalidOperationException`) in others.
+
 ## The image
 
 `deploy/Dockerfile` builds the Vue app, copies it into the API's `wwwroot`
