@@ -131,9 +131,19 @@ test.describe('settlement view interactions', () => {
     // "Build"'s own list starts with Hut too), so hovering the first
     // category bubble and clicking the first building bubble always reaches
     // a real, placeable building regardless of which terrain was picked.
-    const categoryBubble = page.locator('.ring-bubble').first();
+    // Issue #16 follow-up "concentric rings": the root ring's own bubbles
+    // are still on screen at this point (a plain `.ring-bubble` locator
+    // would grab one of those instead) — the category ring is specifically
+    // the one *without* its own backdrop (see RingMenu's `backdrop` prop,
+    // false for every ring but the innermost), so scope through that rather
+    // than by label text, which the "other"-terrain category can share
+    // with the root "Build" bubble ("Build" is reused as both).
+    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
     await expect(categoryBubble).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+    // Issue #16 follow-up "concentric rings": drilling into the category
+    // ring opens a new, wider ring around the same tile rather than
+    // replacing the root ring — "Details" (a root-ring action) stays put.
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(1);
     const categoryBox = (await categoryBubble.boundingBox())!;
     await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
       steps: 6,
