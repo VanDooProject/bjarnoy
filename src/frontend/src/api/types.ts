@@ -281,6 +281,54 @@ export interface SetBuildingLevelRequest {
   level: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ProfileContracts.cs.
+
+export interface ProfileResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  /** Plain text with significant whitespace (ASCII art) — render escaped, `white-space: pre`. */
+  bio: string | null;
+  createdAt: string;
+  settlementCount: number;
+}
+
+/** `bio: null` (or empty) clears the bio. */
+export interface UpdateBioRequest {
+  bio: string | null;
+}
+
+export interface ReportProfileRequest {
+  reason: string;
+  note?: string | null;
+}
+
+export interface ProfileReportResponse {
+  id: string;
+  reporterUserId: string;
+  reporterUserName: string;
+  reportedUserId: string;
+  reportedUserName: string;
+  reason: string;
+  note: string | null;
+  /** One of `pending`, `reviewed`, `dismissed`, `actioned`. */
+  status: string;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+export interface PagedProfileReportsResponse {
+  items: ProfileReportResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** `status`: one of `pending`, `reviewed`, `dismissed`, `actioned`. */
+export interface ResolveProfileReportRequest {
+  status: string;
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;
@@ -293,6 +341,83 @@ export interface ProblemDetails {
    * this is what actually distinguishes them.
    */
   rejection?: string;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/LeaderboardContracts.cs.
+
+export type LeaderboardScope = 'user' | 'settlement' | 'guild';
+
+export type LeaderboardCategory =
+  | 'score'
+  | 'biggestSettlement'
+  | 'weeklyScoreGained'
+  | 'weeklyFightsWon'
+  | 'weeklyFightsLost'
+  | 'weeklyResourcesLooted'
+  | 'biggestArmy';
+
+/**
+ * `reason` is set only when `available` is false — one of `noBattleSystemYet`,
+ * `noArmySystemYet`, `noGuildSystemYet`, `noWeeklyWindowsYet`, `notComputedYet`,
+ * or `unknownBoard` (issue #43 §5).
+ */
+export interface LeaderboardBoardInfoResponse {
+  scope: LeaderboardScope;
+  category: LeaderboardCategory;
+  available: boolean;
+  reason: string | null;
+  computedAt: string | null;
+  entryCount: number | null;
+}
+
+export interface WeeklyWindowResponse {
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface LeaderboardDirectoryResponse {
+  boards: LeaderboardBoardInfoResponse[];
+  weeklyWindows: WeeklyWindowResponse[];
+}
+
+/** `delta`: `previousRank` minus `rank` — positive means the subject moved up. `null` for a new entrant. */
+export interface LeaderboardEntryResponse {
+  rank: number;
+  subjectId: string;
+  subjectName: string;
+  value: number;
+  previousRank: number | null;
+  delta: number | null;
+}
+
+export interface LeaderboardBoardResponse {
+  scope: LeaderboardScope;
+  category: LeaderboardCategory;
+  available: boolean;
+  reason: string | null;
+  isFinal: boolean;
+  periodStart: string | null;
+  periodEnd: string | null;
+  computedAt: string | null;
+  items: LeaderboardEntryResponse[];
+  nextAfterRank: number | null;
+}
+
+export interface WeeklyStatResponse {
+  periodStart: string;
+  periodEnd: string;
+  isFinal: boolean;
+  scoreGained: number;
+}
+
+export interface WeeklyStatsPageResponse {
+  items: WeeklyStatResponse[];
+  nextCursor: string | null;
+}
+
+export interface LeaderboardMeResponse {
+  myRank: number;
+  items: LeaderboardEntryResponse[];
 }
 
 /** A single (building type, level) entry from the tech-tree catalogue — see `GET /api/v1/buildings`. */

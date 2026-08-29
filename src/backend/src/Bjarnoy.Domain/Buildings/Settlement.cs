@@ -1,3 +1,5 @@
+using Bjarnoy.Domain.Armies;
+using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -73,6 +75,15 @@ public sealed record Settlement
     public bool Claims(HexCoord coord) => Centre.DistanceTo(coord) <= ClaimRadius;
 
     /// <summary>
+    /// This settlement's leaderboard score (issue #43): the triangular number
+    /// <c>L(L+1)/2</c> of each building's level, summed over <see cref="Buildings"/>.
+    /// Rewards tall building over wide spam and needs no catalogue lookup or
+    /// balance table — a per-<see cref="BuildingType"/> weight is the obvious
+    /// later refinement, not a v1 concern.
+    /// </summary>
+    public int Score => Buildings.Sum(b => b.Level * (b.Level + 1) / 2);
+
+    /// <summary>
     /// The settlement as of <paramref name="now"/>: every order whose time has
     /// come is applied, and production and capacity are recomputed from what is
     /// then standing.
@@ -90,6 +101,26 @@ public sealed record Settlement
     /// <c>SettlementService.RetuneSpeedAsync</c>, which settles every
     /// settlement under the old factor before the new one is persisted).
     /// </param>
+    /// <param name="guestStacks">
+    /// The combined stacks of every guest (<see cref="Armies.ArmyMission.Support"/>)
+    /// army currently hosted here, aggregated by type (issue #40 phase 4 §2)
+    /// — <see langword="null"/> or empty when none. <see cref="Settlement"/>
+    /// has no knowledge of armies as an aggregate (and stays that way — see
+    /// the type-level remarks) so the service layer (<c>ArmyService</c>/
+    /// <c>SettlementService</c>) queries the guest <c>ArmyEntity</c> rows and
+    /// passes their pooled stacks in here before calling this method. Guests
+    /// count toward upkeep exactly like the home <see cref="Garrison"/> and
+    /// share the very same starvation pass — a settlement that could
+    /// previously feed itself can be starved purely by hosting guests, and a
+    /// starving settlement kills guest units too, not only its own. Deaths
+    /// are tallied separately in <see cref="SettleResult.GuestDeaths"/> (still
+    /// pooled by type across every guest present) because
+    /// <see cref="Settlement"/> only ever sees the pooled total, never
+    /// individual guest armies — see <see cref="ApplyStarvation"/>'s remarks
+    /// for how the split back to "home" vs "guest pool" works, and
+    /// <c>SettlementService</c> for the second split, of the guest pool
+    /// across the actual guest <c>ArmyEntity</c> rows.
+    /// </param>
     /// <param name="terrainAt">
     /// Terrain lookup for a terrain-bound producer's neighbour-adjacency
     /// boost (<see cref="BuildingCatalogue.BoostMultiplier"/>).
@@ -97,13 +128,20 @@ public sealed record Settlement
     /// callers with no terrain source (e.g. tests exercising other rules)
     /// still get a correct, if unboosted, total.
     /// </param>
-    public SettleResult SettleTo(DateTimeOffset now, double speedFactor = 1.0, Func<HexCoord, Terrain>? terrainAt = null)
+    public SettleResult SettleTo(
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
+        guestStacks ??= [];
+
         var dueBuilds = Queue.Where(o => o.IsComplete(now)).ToList();
         var dueTraining = TrainingQueue.Where(o => o.IsComplete(now)).ToList();
 
         var buildings = Buildings.ToList();
         var garrison = Garrison.ToList();
+        var guestPool = guestStacks.ToList();
         var resources = Resources;
 
         // Build completions and training completions both change the rate
@@ -145,21 +183,39 @@ public sealed record Settlement
             // building (or batch) finished an hour ago has applied for that
             // hour.
             var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
-            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison), capacity, time);
+            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, time);
         }
 
         var (finalProduction, finalCapacity) = BuildingCatalogue.Totals(buildings, terrainAt);
         finalProduction *= speedFactor;
 
         // Starvation is checked every settle, not only when something
-        // completed: a garrison can run its settlement out of food purely by
-        // sitting there while nobody looks, with no order due at all.
-        var deaths = ApplyStarvation(ref resources, garrison, finalProduction, finalCapacity, now);
+        // completed: a garrison (home or guest) can run its settlement out of
+        // food purely by sitting there while nobody looks, with no order due
+        // at all.
+        var (deaths, guestDeaths) = ApplyStarvation(ref resources, garrison, guestPool, finalProduction, finalCapacity, now);
 
-        var changed = dueBuilds.Count > 0 || dueTraining.Count > 0 || deaths.Count > 0;
+        // A guest army arriving or departing changes upkeep from outside this
+        // settlement's own Queue/TrainingQueue timeline entirely — there is
+        // no "event" above to trigger a rate refresh the way a build or
+        // training completion does. So the net rate is always re-derived here
+        // and compared against what is already stored: if a guest joined or
+        // left since the last settle, the two disagree and this is the only
+        // place that catches it. Comparing (rather than unconditionally
+        // re-writing) keeps the "nothing due, nothing to persist" contract
+        // intact for the overwhelming majority of settles where nothing
+        // guest-related changed.
+        var correctNetProduction = ApplyUpkeep(finalProduction, garrison, guestPool);
+        var rateIsStale = !ApproximatelyEqual(resources.RatePerHour, correctNetProduction);
+        if (rateIsStale)
+        {
+            resources = resources.WithRate(correctNetProduction, finalCapacity, now);
+        }
+
+        var changed = dueBuilds.Count > 0 || dueTraining.Count > 0 || deaths.Count > 0 || guestDeaths.Count > 0 || rateIsStale;
         if (!changed)
         {
-            return new SettleResult(this, Changed: false, [], [], []);
+            return new SettleResult(this, Changed: false, [], [], [], []);
         }
 
         var settled = this with
@@ -171,7 +227,7 @@ public sealed record Settlement
             Resources = resources,
         };
 
-        return new SettleResult(settled, Changed: true, dueBuilds, dueTraining, deaths);
+        return new SettleResult(settled, Changed: true, dueBuilds, dueTraining, deaths, guestDeaths);
     }
 
     /// <summary>
@@ -179,24 +235,41 @@ public sealed record Settlement
     /// stock would otherwise go negative.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Simplification for v1 (issue #40 phase 1): rather than a gradual
     /// per-hour death rate, enough units are killed all at once, at the
     /// instant food would cross zero, to make the net food rate non-negative
     /// again. A more gradual timeline is future work per the design doc.
-    /// Units are removed highest-upkeep-stack-first — proportional loss
+    /// Units are removed highest-upkeep-type-first — proportional loss
     /// across every stack would be more "fair" but is unnecessary complexity
     /// for a first pass.
+    /// </para>
+    /// <para>
+    /// Phase 4 (issue #40 §2) extends this to guests: <paramref name="garrison"/>
+    /// and <paramref name="guestPool"/> are first merged, by type, into one
+    /// pooled view — so which type dies first, and how many, is decided
+    /// exactly as it always was, just against a bigger number. Only once the
+    /// pooled per-type death counts are known are they split back between
+    /// "home" and "guest pool", proportional to each side's own pre-starvation
+    /// holding of that type (<see cref="ProportionalAllocator"/>), and the
+    /// split applied to <paramref name="garrison"/>/<paramref name="guestPool"/>
+    /// in place. This is a deliberate simplification: a home-heavy and a
+    /// guest-heavy stack of the same type die in the same proportion as each
+    /// other, rather than, say, always sacrificing guests first or last — a
+    /// policy call issue #40 leaves to a future balance pass.
+    /// </para>
     /// </remarks>
-    private static IReadOnlyList<UnitStack> ApplyStarvation(
+    private static (IReadOnlyList<UnitStack> HomeDeaths, IReadOnlyList<UnitStack> GuestDeaths) ApplyStarvation(
         ref ResourcePool resources,
         List<UnitStack> garrison,
+        List<UnitStack> guestPool,
         ResourceAmounts grossProductionPerHour,
         ResourceAmounts capacity,
         DateTimeOffset now)
     {
         if (resources.RatePerHour.Food >= 0)
         {
-            return [];
+            return ([], []);
         }
 
         // How long, at the current (pre-starvation) rate, until the food
@@ -206,7 +279,7 @@ public sealed record Settlement
         if (crossingTime > now)
         {
             // Still short by `now`, but not yet actually starving.
-            return [];
+            return ([], []);
         }
 
         // Settle to the crossing instant under the old rate first — the food
@@ -215,40 +288,100 @@ public sealed record Settlement
         // cause.
         resources = resources.SettledTo(crossingTime);
 
-        var deaths = new List<UnitStack>();
-        while (garrison.Count > 0)
+        var pooled = MergeByType(garrison, guestPool);
+        var pooledDeaths = new List<UnitStack>();
+        while (pooled.Count > 0)
         {
-            var netFood = grossProductionPerHour.Food - TotalUpkeepPerHour(garrison);
+            var netFood = grossProductionPerHour.Food - TotalUpkeepPerHour(pooled);
             if (netFood >= 0)
             {
                 break;
             }
 
-            var index = HighestUpkeepIndex(garrison);
-            var stack = garrison[index];
+            var index = HighestUpkeepIndex(pooled);
+            var stack = pooled[index];
             var perUnitUpkeep = UnitCatalogue.Get(stack.Type).UpkeepPerHour;
             var deficit = -netFood;
             var unitsToKill = perUnitUpkeep > 0
                 ? Math.Min(stack.Count, (int)Math.Ceiling(deficit / perUnitUpkeep))
                 : stack.Count;
 
-            deaths.Add(new UnitStack(stack.Type, unitsToKill));
+            pooledDeaths.Add(new UnitStack(stack.Type, unitsToKill));
 
             if (unitsToKill >= stack.Count)
             {
-                garrison.RemoveAt(index);
+                pooled.RemoveAt(index);
             }
             else
             {
-                garrison[index] = stack with { Count = stack.Count - unitsToKill };
+                pooled[index] = stack with { Count = stack.Count - unitsToKill };
             }
         }
 
-        var finalNetFood = grossProductionPerHour.Food - TotalUpkeepPerHour(garrison);
+        var finalNetFood = grossProductionPerHour.Food - TotalUpkeepPerHour(pooled);
         resources = resources.WithRate(
             grossProductionPerHour with { Food = finalNetFood }, capacity, crossingTime);
 
-        return deaths;
+        // Split each pooled death back between home and guest, and actually
+        // apply it to the two real lists — see this method's remarks.
+        var homeDeaths = new List<UnitStack>();
+        var guestDeaths = new List<UnitStack>();
+        foreach (var death in pooledDeaths)
+        {
+            var homeCount = CountOf(garrison, death.Type);
+            var guestCount = CountOf(guestPool, death.Type);
+            var split = ProportionalAllocator.Allocate(death.Count, [homeCount, guestCount]);
+
+            if (split[0] > 0)
+            {
+                Reduce(garrison, death.Type, split[0]);
+                homeDeaths.Add(new UnitStack(death.Type, split[0]));
+            }
+
+            if (split[1] > 0)
+            {
+                Reduce(guestPool, death.Type, split[1]);
+                guestDeaths.Add(new UnitStack(death.Type, split[1]));
+            }
+        }
+
+        return (homeDeaths, guestDeaths);
+    }
+
+    /// <summary>Merges two stack lists into a new one, aggregated by type — never mutates either input.</summary>
+    private static List<UnitStack> MergeByType(IReadOnlyList<UnitStack> a, IReadOnlyList<UnitStack> b) =>
+        a.Concat(b)
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .ToList();
+
+    private static bool ApproximatelyEqual(ResourceAmounts a, ResourceAmounts b, double epsilon = 1e-9) =>
+        Math.Abs(a.Wood - b.Wood) < epsilon
+        && Math.Abs(a.Stone - b.Stone) < epsilon
+        && Math.Abs(a.Food - b.Food) < epsilon
+        && Math.Abs(a.Iron - b.Iron) < epsilon;
+
+    private static int CountOf(List<UnitStack> stacks, UnitType type) =>
+        stacks.FirstOrDefault(s => s.Type == type).Count;
+
+    /// <summary>Removes <paramref name="count"/> of <paramref name="type"/> from <paramref name="stacks"/> in place, dropping the entry if it reaches zero.</summary>
+    private static void Reduce(List<UnitStack> stacks, UnitType type, int count)
+    {
+        var index = stacks.FindIndex(s => s.Type == type);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var remaining = stacks[index].Count - count;
+        if (remaining <= 0)
+        {
+            stacks.RemoveAt(index);
+        }
+        else
+        {
+            stacks[index] = stacks[index] with { Count = remaining };
+        }
     }
 
     private static void AddToGarrison(List<UnitStack> garrison, UnitType type, int count)
@@ -285,13 +418,18 @@ public sealed record Settlement
         garrison.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
     /// <summary>
-    /// Folds garrison upkeep into gross building production as a food
-    /// subtraction, producing the net rate the settlement actually settles
-    /// by. See <see cref="ResourcePool"/>'s remarks on why the rate itself,
-    /// unlike the stock, is allowed to go negative.
+    /// Folds garrison (and, phase 4, guest) upkeep into gross building
+    /// production as a food subtraction, producing the net rate the
+    /// settlement actually settles by. See <see cref="ResourcePool"/>'s
+    /// remarks on why the rate itself, unlike the stock, is allowed to go
+    /// negative.
     /// </summary>
-    private static ResourceAmounts ApplyUpkeep(ResourceAmounts productionPerHour, IReadOnlyList<UnitStack> garrison) =>
-        productionPerHour with { Food = productionPerHour.Food - TotalUpkeepPerHour(garrison) };
+    private static ResourceAmounts ApplyUpkeep(
+        ResourceAmounts productionPerHour, IReadOnlyList<UnitStack> garrison, IReadOnlyList<UnitStack> guestStacks) =>
+        productionPerHour with
+        {
+            Food = productionPerHour.Food - TotalUpkeepPerHour(garrison) - TotalUpkeepPerHour(guestStacks),
+        };
 
     /// <summary>
     /// Decides whether <paramref name="type"/> may be built on
@@ -428,7 +566,8 @@ public sealed record Settlement
     /// itself follows per completed order.
     /// </remarks>
     public SetBuildingLevelResult SetBuildingLevel(
-        HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0, Func<HexCoord, Terrain>? terrainAt = null)
+        HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
         var buildings = Buildings.ToList();
         var index = buildings.FindIndex(b => b.Coord == coord);
@@ -446,17 +585,18 @@ public sealed record Settlement
         buildings[index] = buildings[index] with { Level = level };
 
         var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
-        var resources = Resources.WithRate(ApplyUpkeep(production * speedFactor, Garrison), capacity, now);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
         return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
     }
 
-    /// <summary>Net production (after garrison upkeep) and capacity implied by what currently stands.</summary>
+    /// <summary>Net production (after garrison and guest upkeep) and capacity implied by what currently stands.</summary>
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
-        double speedFactor = 1.0, Func<HexCoord, Terrain>? terrainAt = null)
+        double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
         var (production, capacity) = BuildingCatalogue.Totals(Buildings, terrainAt);
-        return (ApplyUpkeep(production * speedFactor, Garrison), capacity);
+        return (ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity);
     }
 
     /// <summary>
@@ -467,7 +607,17 @@ public sealed record Settlement
     /// Call on an already-settled settlement, so the queue and stock reflect
     /// <paramref name="now"/> — mirrors <see cref="PlanBuild"/>.
     /// </remarks>
-    public TrainDecision PlanTrain(UnitType type, int count, DateTimeOffset now, Guid orderId)
+    /// <param name="hasShoreline">
+    /// Whether this settlement's own claimed territory (<see cref="Claims"/>)
+    /// includes at least one <see cref="World.Shoreline.IsShoreline"/> hex —
+    /// computed by the caller (a real <c>TerrainSampler</c> in production),
+    /// exactly the way <see cref="PlanBuild"/>'s <c>isCoastalWater</c> is.
+    /// Only ever consulted for <see cref="UnitClass.Ship"/> unit types (issue
+    /// #40 phase 6, design doc §8: ship training needs a coastal settlement,
+    /// independent of any future Shipyard building); ignored for every other
+    /// class.
+    /// </param>
+    public TrainDecision PlanTrain(UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false)
     {
         if (count <= 0)
         {
@@ -477,6 +627,11 @@ public sealed record Settlement
         if (!UnitCatalogue.IsAvailable(type, LonghouseLevel))
         {
             return TrainDecision.Rejected(TrainRejection.UnitNotAvailable);
+        }
+
+        if (UnitCatalogue.Get(type).Class == UnitClass.Ship && !hasShoreline)
+        {
+            return TrainDecision.Rejected(TrainRejection.SettlementNotCoastal);
         }
 
         if (TrainingQueue.Count >= MaxTrainingQueueLength)
@@ -519,6 +674,83 @@ public sealed record Settlement
 
         return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, order] };
     }
+
+    /// <summary>
+    /// The settlement-side half of dispatching an army (issue #40 phase 2):
+    /// checks the garrison actually holds every requested unit type in the
+    /// requested count, that the requested provisions do not exceed what
+    /// those units could carry, and that Food covers them — and if so,
+    /// returns the settlement with those units and that food already
+    /// removed. Route/food-range validation happens one layer up, in
+    /// <see cref="Army.PlanDispatch"/>, which is what actually accepts or
+    /// rejects a dispatch end to end — call this directly only when
+    /// terrain/pathing is irrelevant (e.g. a unit test of the resource side
+    /// alone).
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement, so the garrison and stock
+    /// reflect <paramref name="now"/> — mirrors <see cref="PlanBuild"/> and
+    /// <see cref="PlanTrain"/>.
+    /// </remarks>
+    public SettlementDispatchDecision PlanDispatch(
+        IReadOnlyList<UnitStack> requestedUnits, double provisions, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(requestedUnits);
+
+        var normalised = requestedUnits
+            .Where(s => s.Count > 0)
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .ToList();
+
+        if (normalised.Count == 0)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
+        }
+
+        var garrison = Garrison.ToList();
+        foreach (var stack in normalised)
+        {
+            var index = garrison.FindIndex(g => g.Type == stack.Type);
+            if (index < 0 || garrison[index].Count < stack.Count)
+            {
+                return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
+            }
+        }
+
+        if (provisions < 0)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+        }
+
+        var carryCapacity = normalised.Sum(s => UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count);
+        if (provisions > carryCapacity)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+        }
+
+        if (!Resources.TrySpend(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
+        }
+
+        foreach (var stack in normalised)
+        {
+            var index = garrison.FindIndex(g => g.Type == stack.Type);
+            var remaining = garrison[index].Count - stack.Count;
+            if (remaining <= 0)
+            {
+                garrison.RemoveAt(index);
+            }
+            else
+            {
+                garrison[index] = garrison[index] with { Count = remaining };
+            }
+        }
+
+        var updated = this with { Garrison = garrison, Resources = paidResources };
+        return SettlementDispatchDecision.Accept(updated, normalised);
+    }
 }
 
 /// <param name="Changed">
@@ -528,13 +760,21 @@ public sealed record Settlement
 /// <param name="Completed">Build orders that finished during this settle.</param>
 /// <param name="TrainingCompleted">Training batches that finished during this settle.</param>
 /// <param name="Deaths">
-/// Units starvation killed during this settle (see
+/// Home-garrison units starvation killed during this settle (see
 /// <c>Settlement.ApplyStarvation</c>), grouped by type. Not surfaced via the
 /// API yet — a caller that wants to log or report it can from here.
+/// </param>
+/// <param name="GuestDeaths">
+/// The guest side's pooled per-type share of the same starvation pass (issue
+/// #40 phase 4 §2) — always empty when <c>SettleTo</c> was called with no
+/// <c>guestStacks</c>. Still pooled across every guest army hosted here; the
+/// service layer splits this further across the actual guest <c>ArmyEntity</c>
+/// rows present — see <c>Settlement.SettleTo</c>'s remarks.
 /// </param>
 public sealed record SettleResult(
     Settlement Settlement,
     bool Changed,
     IReadOnlyList<BuildOrder> Completed,
     IReadOnlyList<TrainingOrder> TrainingCompleted,
-    IReadOnlyList<UnitStack> Deaths);
+    IReadOnlyList<UnitStack> Deaths,
+    IReadOnlyList<UnitStack> GuestDeaths);

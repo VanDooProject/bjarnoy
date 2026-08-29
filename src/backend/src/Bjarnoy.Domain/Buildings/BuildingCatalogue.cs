@@ -148,6 +148,17 @@ public static class BuildingCatalogue
     /// </summary>
     public sealed record TerrainBoost(IReadOnlySet<Terrain> Matching, double PerTilePercent, double CapPercent);
 
+    /// <summary>
+    /// Percent added to a defending garrison's power for a given Tower level
+    /// (issue #40 phase 3), applied by <see cref="Bjarnoy.Domain.Combat.BattleResolver.Resolve"/>.
+    /// </summary>
+    /// <remarks>
+    /// A placeholder balance figure — flat 5% per level, no Tower at all
+    /// meaning no bonus — not a tuned number. Revisit alongside a real combat
+    /// balancing pass.
+    /// </remarks>
+    public static double TowerDefenseBonusPercent(int towerLevel) => Math.Max(0, towerLevel) * 5.0;
+
     private static readonly IReadOnlySet<Terrain> Forest = new HashSet<Terrain> { Terrain.Forest };
     private static readonly IReadOnlySet<Terrain> Ridge = new HashSet<Terrain> { Terrain.Mountain };
     private static readonly IReadOnlySet<Terrain> Grass = new HashSet<Terrain> { Terrain.Grass };

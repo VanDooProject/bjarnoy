@@ -708,6 +708,46 @@ public class SettlementTests
     }
 
     [Fact]
+    public void An_empty_settlement_scores_zero()
+    {
+        var settlement = Found() with { Buildings = [] };
+
+        Assert.Equal(0, settlement.Score);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 3)]
+    [InlineData(5, 15)]
+    [InlineData(10, 55)]
+    public void A_single_buildings_score_is_the_triangular_number_of_its_level(int level, int expected)
+    {
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, level)],
+        };
+
+        Assert.Equal(expected, settlement.Score);
+    }
+
+    [Fact]
+    public void Several_buildings_score_the_sum_of_their_triangular_numbers()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 5),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.Farm, 2),
+                new PlacedBuilding(new HexCoord(0, 1), BuildingType.Lumberjack, 10),
+            ],
+        };
+
+        // 15 + 3 + 55
+        Assert.Equal(73, settlement.Score);
+    }
+
+    [Fact]
     public void A_speed_change_never_rescales_output_already_accrued()
     {
         var settlement = Found();
