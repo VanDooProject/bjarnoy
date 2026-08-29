@@ -30,6 +30,9 @@ import type {
   SettlementResponse,
   SlotRuneRequest,
   SettlementSummary,
+  TrainingOrderResponse,
+  TrainUnitsRequest,
+  UnitDefinitionResponse,
   UpdateAdminUserRequest,
   UpdateBioRequest,
   UpdateWorldSettingsRequest,
@@ -121,6 +124,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
+    request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
   getProfileByName: (userName: string) =>
     request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
@@ -147,6 +155,9 @@ export const api = {
   // Public catalogue endpoint — no worldId, since the catalogue is currently
   // the same static data for every world (see `BuildingCatalogue.cs`).
   getBuildingCatalogue: () => request<BuildingDefinitionResponse[]>('/buildings'),
+  // Public catalogue endpoint, same reasoning as getBuildingCatalogue above —
+  // the unit roster (UnitCatalogue.cs) is static, not per-world data.
+  getUnitCatalogue: () => request<UnitDefinitionResponse[]>('/units'),
   adminListWorlds: () => request<AdminWorldResponse[]>('/admin/worlds'),
   adminUpdateWorldSettings: (worldId: string, body: UpdateWorldSettingsRequest) =>
     request<AdminWorldResponse>(`/admin/worlds/${worldId}/settings`, {

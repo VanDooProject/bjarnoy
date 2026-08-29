@@ -75,6 +75,27 @@ export interface BuildOrderResponse {
   completesInSeconds: number | null;
 }
 
+/** A garrison line: how many of one unit type currently stand at a settlement. */
+export interface UnitStackResponse {
+  unit: string;
+  count: number;
+}
+
+/**
+ * One queued training batch. `completedCount` is display-only — the whole
+ * batch lands in the garrison at once when it completes (see the backend's
+ * `TrainingOrder` remarks); `completesInSeconds` is null while the world is
+ * frozen, same as `BuildOrderResponse.completesInSeconds`.
+ */
+export interface TrainingOrderResponse {
+  id: string;
+  unit: string;
+  count: number;
+  completedCount: number;
+  completesAtGameTime: string;
+  completesInSeconds: number | null;
+}
+
 export interface WorldClockResponse {
   state: string;
   running: boolean;
@@ -104,6 +125,8 @@ export interface SettlementResponse {
   resources: ResourcesResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
+  garrison: UnitStackResponse[];
+  trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
   world: WorldClockResponse;
 }
@@ -150,6 +173,11 @@ export interface SlotRuneRequest {
 export interface GrantRuneRequest {
   type: string;
   rarity: string;
+}
+
+export interface TrainUnitsRequest {
+  unit: string;
+  count: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.
@@ -455,4 +483,26 @@ export interface BuildingDefinitionResponse {
   /** Placed on shallow (coastal) water instead of any land terrain — see BuildingDefinition.RequiresCoastalWater. */
   requiresCoastalWater: boolean;
   requiredLonghouseLevel: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's
+// UnitDefinitionResponse (issue #40 phase 1: unit catalogue, training queue).
+
+/** One unit type's stats and training prerequisites — see `GET /api/v1/units`. */
+export interface UnitDefinitionResponse {
+  type: string;
+  /** `infantry` | `cavalry` | `siege` | `ship` | `civilian` (`UnitClass`, lowercased on the wire). */
+  class: string;
+  attack: number;
+  defense: number;
+  /** Hexes per hour. Unused by anything this phase builds (army movement is a later phase). */
+  speed: number;
+  carryCapacity: number;
+  foodCarryCapacity: number;
+  upkeepPerHour: number;
+  trainingCost: ResourceLine;
+  trainingSeconds: number;
+  requiredLonghouseLevel: number;
+  /** Another unit type that must itself be available (a prerequisite chain), or null. */
+  requiredUnitType: string | null;
 }

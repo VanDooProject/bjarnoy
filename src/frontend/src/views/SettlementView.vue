@@ -7,8 +7,10 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
@@ -91,6 +93,10 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
+// Issue #40 phase 1: a separate modal from BuildingModal (train has no
+// per-hex build/upgrade action, it lists the whole unit roster at once) —
+// see the ring's 'train' action below.
+const trainModalOpen = ref(false);
 
 const modalMine = computed(
   () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
@@ -282,10 +288,13 @@ function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
       },
       { id: 'details', label: 'Details' },
     ];
-    // Building-specific actions (train/research): none of today's building
-    // types (hut/farm/tower/longhouse) expose one yet, so nothing is added
-    // here — the branch exists so a future barracks/academy building type
-    // has somewhere to plug in without restructuring the ring.
+    // Issue #40 phase 1: "build units in longhouse" — the longhouse is
+    // where training happens per the backend design (UnitDefinition's
+    // RequiredLonghouseLevel, TrainingOrder queued against the settlement),
+    // so it's the one building type that gets an extra ring action here.
+    if (tile.buildingType === 'longhouse') {
+      actions.push({ id: 'train', label: 'Train units' });
+    }
     return actions;
   }
   if (isMineTile.value) {
@@ -435,6 +444,12 @@ async function onRingSelect(i: number, id: string) {
       await upgrade();
       closeRing();
       return;
+    case 'train':
+      // Falls through to TrainingModal below, same pattern as
+      // 'details'/'info' handing off to BuildingModal.
+      ringScreen.value = null;
+      trainModalOpen.value = true;
+      return;
     case 'raze':
       if (world.selectedSettlementId && selectedCoord.value) {
         world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
@@ -449,6 +464,11 @@ async function onRingSelect(i: number, id: string) {
 function closeModal() {
   closeRing();
   modalBusy.value = false;
+}
+
+function closeTrainModal() {
+  closeRing();
+  trainModalOpen.value = false;
 }
 
 // Demo mode places the chosen building instantly; live mode queues that
@@ -525,6 +545,7 @@ async function upgrade() {
     </TopBar>
     <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
+    <TrainingQueuePanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <template v-if="selectedTile && ringScreen">
       <RingMenu
@@ -546,7 +567,7 @@ async function upgrade() {
       />
     </template>
     <BuildingModal
-      v-if="selectedTile && !ringScreen"
+      v-if="selectedTile && !ringScreen && !trainModalOpen"
       :tile="selectedTile"
       :mine="modalMine"
       :owner-label="modalOwnerLabel"
@@ -554,6 +575,11 @@ async function upgrade() {
       @close="closeModal"
       @build="build"
       @upgrade="upgrade"
+    />
+    <TrainingModal
+      v-if="selectedTile && trainModalOpen"
+      @close="closeTrainModal"
+      @trained="closeTrainModal"
     />
   </div>
 </template>

@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 import { ApiError, api } from '../api/client';
-import type { BuildOrderResponse, IslandResponse, RuneInstanceResponse } from '../api/types';
+import type {
+  BuildOrderResponse,
+  IslandResponse,
+  RuneInstanceResponse,
+  TrainingOrderResponse,
+  UnitStackResponse,
+} from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { WorldModel } from '../lib/map/WorldModel';
@@ -51,6 +57,13 @@ export const useWorldStore = defineStore('world', {
       // WorldModel places buildings instantly and has no queue to show.
       queue: [] as BuildOrderResponse[],
       queueFetchedAt: 0,
+      // Issue #40 phase 1: garrison (who's standing at this settlement) and
+      // the training queue, fetched/refreshed the same way as buildings/
+      // queue above. Always empty in demo mode — there is no local
+      // WorldModel concept of trained units yet, only the live backend's.
+      garrison: [] as UnitStackResponse[],
+      trainingQueue: [] as TrainingOrderResponse[],
+      trainingQueueFetchedAt: 0,
       // Issue #53: a settlement's rune inventory, refreshed the same way as
       // the build queue above — always empty in demo mode, since shrines and
       // runes have no local WorldModel simulation, only the live backend.
@@ -246,7 +259,18 @@ export const useWorldStore = defineStore('world', {
       await api.queueBuild(this.selectedSettlementId, { building, q: at.q, r: at.r });
       await this.refreshLiveSettlement();
     },
-    /** Pulls the settlement's current resources/level/buildings from the backend. No-op in demo mode. */
+    /**
+     * Live mode: queues a training batch against the backend, charging its
+     * cost immediately — mirrors `queueBuildLive` above. Throws `ApiError` on
+     * rejection (e.g. not enough resources, longhouse too low, training
+     * queue full); callers decide how to surface that.
+     */
+    async trainUnitsLive(unit: string, count: number) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.trainUnits(this.selectedSettlementId, { unit, count });
+      await this.refreshLiveSettlement();
+    },
+    /** Pulls the settlement's current resources/level/buildings/garrison/training queue from the backend. No-op in demo mode. */
     async refreshLiveSettlement() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const response = await api.getSettlement(this.selectedSettlementId);
@@ -258,6 +282,9 @@ export const useWorldStore = defineStore('world', {
       });
       this.hud.queue = response.queue;
       this.hud.queueFetchedAt = Date.now();
+      this.hud.garrison = response.garrison;
+      this.hud.trainingQueue = response.trainingQueue;
+      this.hud.trainingQueueFetchedAt = Date.now();
       this.hud.runes = response.runes;
       this.syncHud();
     },
