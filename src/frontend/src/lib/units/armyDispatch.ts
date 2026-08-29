@@ -51,12 +51,22 @@ export function buildMoveDispatchRequest(
  * it server-side to the target settlement's own hex (see
  * `ArmyService.DispatchAsync`), so every clicked hex here is just an
  * intermediate waypoint on the way to `targetSettlementId`.
+ *
+ * `targetBuildingCoord` (issue #40 phase 5): the coordinate of a building
+ * within the target settlement the player would prefer any surviving
+ * catapults hit on arrival — see `DispatchArmyRequest.targetBuildingCoord`'s
+ * own comment. Omit (or pass `null`/`undefined`) for "no preference", the
+ * same as never having picked one; `SiegeResolver` then falls back to a
+ * seeded random pick server-side. Not validated here against the target's
+ * actual layout — that can change before the army arrives — only forwarded
+ * as-is.
  */
 export function buildAttackDispatchRequest(
   unitCounts: Record<string, number>,
   route: AxialCoord[],
   provisions: number,
   targetSettlementId: string | null,
+  targetBuildingCoord?: HexPoint | null,
 ): DispatchArmyRequest | null {
   const units = Object.entries(unitCounts)
     .filter(([, count]) => count > 0)
@@ -70,7 +80,18 @@ export function buildAttackDispatchRequest(
     provisions,
     mission: 'attack',
     targetSettlementId,
+    targetBuildingCoord: targetBuildingCoord ?? undefined,
   };
+}
+
+/**
+ * True when `unitCounts` sends at least one Catapult — the gate `ArmyPanel.vue`
+ * uses to decide whether the "preferred target building" picker is even worth
+ * showing (issue #40 phase 5): a catapult-free attack does no siege damage
+ * regardless of what's requested, per `SiegeResolver.Resolve`.
+ */
+export function hasCatapultSelected(unitCounts: Record<string, number>): boolean {
+  return (unitCounts.catapult ?? 0) > 0;
 }
 
 /**

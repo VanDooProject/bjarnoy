@@ -13,7 +13,13 @@ import { computed, onMounted, ref } from 'vue';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
-import { armyStatusLabel, formatEta, maxAffordableProvisions } from '../../lib/units/armyDispatch';
+import {
+  armyStatusLabel,
+  formatEta,
+  hasCatapultSelected,
+  maxAffordableProvisions,
+} from '../../lib/units/armyDispatch';
+import { buildingLabel } from '../../lib/units/battleReports';
 
 const world = useWorldStore();
 const catalogue = useUnitCatalogueStore();
@@ -126,6 +132,40 @@ function pickTarget(settlementId: string) {
 }
 function clearTarget() {
   world.setDispatchTarget(null);
+}
+
+// Catapult target-building picker (issue #40 phase 5): only worth showing
+// once a target settlement is chosen *and* the selection actually includes a
+// Catapult — a catapult-free attack does no siege damage regardless of what's
+// requested (see `hasCatapultSelected`'s own comment), so there is nothing
+// for a preference to apply to. `GET /api/v1/settlements/{id}` carries no
+// ownership check (confirmed from SettlementEndpoints.cs — see the PR notes),
+// so the enemy's real layout can be fetched and offered as specific hexes to
+// pick from, rather than falling back to a mere building-type preference.
+const showBuildingPicker = computed(
+  () => draft.value?.mission === 'attack' && !!selectedTarget.value && hasCatapultSelected(draft.value.unitCounts),
+);
+const targetBuildingRows = computed(() => {
+  if (!draft.value?.targetSettlementId) return [];
+  if (world.dispatchTargetBuildingsFor !== draft.value.targetSettlementId) return [];
+  return (world.dispatchTargetBuildings ?? []).map((b) => ({
+    q: b.q,
+    r: b.r,
+    label: buildingLabel(b.type),
+    level: b.level,
+  }));
+});
+const selectedBuildingLabel = computed(() => {
+  const coord = draft.value?.targetBuildingCoord;
+  if (!coord) return null;
+  const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
+  return row ? `${row.label} (Lv ${row.level})` : `(${coord.q}, ${coord.r})`;
+});
+function pickBuildingTarget(q: number, r: number) {
+  world.setDispatchTargetBuilding({ q, r });
+}
+function clearBuildingTarget() {
+  world.setDispatchTargetBuilding(null);
 }
 
 async function confirm() {
@@ -304,6 +344,36 @@ async function recall(armyId: string) {
             Support needs less food than an attack or long march — the host
             feeds your troops once they arrive.
           </p>
+
+          <div v-if="showBuildingPicker" class="building-picker">
+            <p class="status-subtext building-picker-hint">
+              Preferred catapult target — may change if it's no longer there
+              by the time your army arrives.
+            </p>
+            <div v-if="selectedBuildingLabel" class="target-selected">
+              <span>Target: <strong>{{ selectedBuildingLabel }}</strong></span>
+              <button type="button" class="secondary change-target" @click="clearBuildingTarget">Clear</button>
+            </div>
+            <template v-else>
+              <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">Loading enemy layout…</p>
+              <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
+                Couldn't load this settlement's layout — target will be chosen at random on arrival.
+              </p>
+              <div v-else-if="targetBuildingRows.length" class="target-list building-list">
+                <button
+                  v-for="b in targetBuildingRows"
+                  :key="`${b.q},${b.r}`"
+                  type="button"
+                  class="target-row"
+                  @click="pickBuildingTarget(b.q, b.r)"
+                >
+                  <span class="target-name">{{ b.label }}</span>
+                  <span class="target-owner">Lv {{ b.level }} · ({{ b.q }}, {{ b.r }})</span>
+                </button>
+              </div>
+              <p v-else class="status-subtext">No preference — target will be chosen at random on arrival.</p>
+            </template>
+          </div>
         </template>
 
         <div class="unit-picker">
@@ -579,6 +649,17 @@ async function recall(armyId: string) {
 .target-owner {
   color: var(--muted);
   white-space: nowrap;
+}
+.building-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.building-picker-hint {
+  margin-top: 0;
+}
+.building-list {
+  max-height: 120px;
 }
 .unit-picker {
   display: flex;

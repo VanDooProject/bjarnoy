@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildingLabel,
   isUnread,
   isVictoryFor,
   missionLabel,
   outcomeLabel,
   reportSummaryLine,
+  siegeSummaryLine,
   sideFor,
   totalLoot,
   unreadCount,
@@ -77,6 +79,37 @@ describe('sideFor', () => {
   });
   it('returns null for an unrelated settlement', () => {
     expect(sideFor(baseReport, 'someone-else')).toBeNull();
+  });
+});
+
+describe('buildingLabel', () => {
+  it('labels a known building type', () => {
+    expect(buildingLabel('storagehouse')).toBe('Storehouse');
+    expect(buildingLabel('longhouse')).toBe('Longhouse');
+  });
+
+  it('falls back to the raw value for an unmapped type', () => {
+    expect(buildingLabel('mystery-shed')).toBe('mystery-shed');
+  });
+});
+
+describe('siegeSummaryLine', () => {
+  it('describes a damaged-but-standing building', () => {
+    expect(
+      siegeSummaryLine({ targetType: 'farm', levelBefore: 3, levelAfter: 1, settlementRazed: false }),
+    ).toBe('Crop farm damaged: level 3 → 1');
+  });
+
+  it('describes a destroyed non-longhouse building', () => {
+    expect(
+      siegeSummaryLine({ targetType: 'quarry', levelBefore: 1, levelAfter: 0, settlementRazed: false }),
+    ).toBe('Quarry destroyed');
+  });
+
+  it('calls out a razed settlement when the longhouse is destroyed', () => {
+    expect(
+      siegeSummaryLine({ targetType: 'longhouse', levelBefore: 1, levelAfter: 0, settlementRazed: true }),
+    ).toBe('Longhouse destroyed — settlement razed');
   });
 });
 

@@ -1,7 +1,29 @@
 // Issue #40 phase 3 (frontend): pure helpers behind the battle-reports
 // inbox/detail view (ReportsView.vue, stores/reports.ts) — kept dependency-
 // free and unit-testable, same reasoning as lib/units/armyDispatch.ts.
-import type { BattleReportAttackerLine, BattleReportDefenderLine, ResourceLine } from '../../api/types';
+import type { BattleReportAttackerLine, BattleReportDefenderLine, BattleReportSiege, ResourceLine } from '../../api/types';
+
+// Wire building-type names -> a readable label. Mirrors the catalogue in
+// `data/building-catalogue.json`/`BuildQueuePanel.vue`'s own `BUILDING_LABELS`
+// — duplicated rather than imported, same as every other panel that needs a
+// building label (each already keeps its own small map; see BuildQueuePanel.vue's
+// comment on why scoped styles/consts aren't shared across components here).
+const BUILDING_LABELS: Record<string, string> = {
+  longhouse: 'Longhouse',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
+  farm: 'Crop farm',
+  storagehouse: 'Storehouse',
+  tower: 'Watchtower',
+  fishinghut: 'Fishing hut',
+  magictower: 'Magic tower',
+  pumpkinfarm: 'Pumpkin farm',
+};
+
+/** A readable label for a wire building-type name, falling back to the raw value for anything unmapped. */
+export function buildingLabel(type: string): string {
+  return BUILDING_LABELS[type] ?? type;
+}
 
 /**
  * `"Attack"` or `"Raid"` — this phase's dispatch UI only ever sends
@@ -80,4 +102,20 @@ export function isUnread(report: { occurredAt: string }, lastSeenIso: string | n
 /** How many of `reports` are unread as of `lastSeenIso` — the HUD badge count. */
 export function unreadCount(reports: Array<{ occurredAt: string }>, lastSeenIso: string | null): number {
   return reports.filter((r) => isUnread(r, lastSeenIso)).length;
+}
+
+/**
+ * A one-line summary for a report's siege section (issue #40 phase 5),
+ * mirroring `reportSummaryLine`'s style — e.g. `"Storehouse destroyed"`,
+ * `"Longhouse destroyed — settlement razed"`, or `"Crop farm damaged: level
+ * 3 → 1"`. `levelAfter <= 0` means the building was removed entirely (see
+ * `BattleReportSiegeResponse`'s backend comment), so it reads as "destroyed"
+ * rather than "damaged to level 0".
+ */
+export function siegeSummaryLine(siege: Pick<BattleReportSiege, 'targetType' | 'levelBefore' | 'levelAfter' | 'settlementRazed'>): string {
+  const label = buildingLabel(siege.targetType);
+  if (siege.levelAfter <= 0) {
+    return siege.settlementRazed ? `${label} destroyed — settlement razed` : `${label} destroyed`;
+  }
+  return `${label} damaged: level ${siege.levelBefore} → ${siege.levelAfter}`;
 }
