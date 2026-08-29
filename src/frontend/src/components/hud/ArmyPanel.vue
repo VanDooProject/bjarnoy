@@ -1,0 +1,418 @@
+<script setup lang="ts">
+// Issue #40 phase 2: dispatching an army (move mission only) and tracking
+// armies already on the road. Deliberately separate from
+// TrainingQueuePanel.vue's garrison list: that panel shows "who's standing
+// at home" (Settlement.Garrison — never an Army record, see stores/world.ts's
+// `armies` comment), this one is specifically about dispatched bodies
+// (in transit / returning / supporting) plus the flow for creating a new one.
+//
+// Bottom-right HUD corner: BuildQueuePanel is top-left, TrainingQueuePanel
+// top-right, RealmPanel bottom-left (see each panel's own `position:
+// absolute` in their <style>) — this is the one open corner.
+import { computed, onMounted, ref } from 'vue';
+import { useWorldStore } from '../../stores/world';
+import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { DEMO_MODE } from '../../config';
+import { armyStatusLabel, formatEta, maxAffordableProvisions } from '../../lib/units/armyDispatch';
+
+const world = useWorldStore();
+const catalogue = useUnitCatalogueStore();
+
+onMounted(() => {
+  void catalogue.load();
+});
+
+const UNIT_LABELS: Record<string, string> = {
+  thrall: 'Thrall',
+  spearman: 'Spearman',
+  axeman: 'Axeman',
+  bowman: 'Bowman',
+  berserker: 'Berserker',
+  provisioner: 'Provisioner',
+  catapult: 'Catapult',
+  karve: 'Karve',
+  longship: 'Longship',
+};
+function unitLabel(unit: string): string {
+  return UNIT_LABELS[unit] ?? unit;
+}
+
+const draft = computed(() => world.dispatchDraft);
+
+// Only garrison units can be sent — the wire-name -> count map the quantity
+// inputs below read/write against, filtered to what's actually standing here.
+const garrisonRows = computed(() =>
+  world.hud.garrison
+    .filter((g) => g.count > 0)
+    .map((g) => ({ unit: g.unit, label: unitLabel(g.unit), available: g.count })),
+);
+
+function quantityFor(unit: string): number {
+  return draft.value?.unitCounts[unit] ?? 0;
+}
+function setQuantity(unit: string, value: string, max: number) {
+  const n = Math.floor(Number(value));
+  const clamped = Number.isFinite(n) ? Math.max(0, Math.min(n, max)) : 0;
+  world.setDispatchUnitCount(unit, clamped);
+  // Re-propose a default provisions amount whenever the selection changes,
+  // rather than leaving whatever was typed before a unit count changed the
+  // carry capacity out from under it — the player can still edit it after.
+  if (draft.value) {
+    world.setDispatchProvisions(
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.resources.food),
+    );
+  }
+}
+
+const routeLength = computed(() => draft.value?.route.length ?? 0);
+const hasUnitsSelected = computed(() =>
+  !!draft.value && Object.values(draft.value.unitCounts).some((c) => c > 0),
+);
+const canConfirm = computed(
+  () => hasUnitsSelected.value && routeLength.value > 0 && !draft.value?.submitting,
+);
+
+function beginDispatch() {
+  world.startDispatch();
+}
+
+async function confirm() {
+  await world.confirmDispatch();
+}
+
+// Armies already dispatched — never AtHome persistently (see stores/world.ts).
+const armyRows = computed(() => {
+  void world.hud.tick; // reactive dependency so ETA countdowns tick every second
+  const now = Date.now();
+  return world.armies.map((army) => {
+    const composition = army.stacks
+      .filter((s) => s.count > 0)
+      .map((s) => `${s.count}× ${unitLabel(s.unit)}`)
+      .join(', ');
+    const status = armyStatusLabel(army);
+    const eta = army.movement
+      ? formatEta(army.movement.isReturning ? army.movement.returnArrivesAt : army.movement.arrivesAt, now)
+      : null;
+    const canRecall = !army.atHome && !army.supporting && army.movement !== null && !army.movement.isReturning;
+    return {
+      id: army.id,
+      composition: composition || '—',
+      status,
+      eta,
+      canRecall,
+      selected: army.id === world.selectedArmyId,
+    };
+  });
+});
+
+function toggleSelect(armyId: string) {
+  if (world.selectedArmyId === armyId) {
+    world.clearSelectedArmy();
+  } else {
+    world.selectArmy(armyId);
+  }
+}
+
+const recallingId = ref<string | null>(null);
+const recalling = computed(() => (id: string) => recallingId.value === id);
+async function recall(armyId: string) {
+  recallingId.value = armyId;
+  try {
+    await world.recallArmyLive(armyId);
+  } finally {
+    recallingId.value = null;
+  }
+}
+</script>
+
+<template>
+  <div class="status-card army-panel">
+    <div class="status-card-header">
+      <span class="status-card-title">Armies</span>
+      <span class="status-card-count">{{ armyRows.length }}</span>
+    </div>
+
+    <p v-if="DEMO_MODE" class="status-subtext demo-note">
+      Dispatching armies requires the live backend and isn't wired up in demo mode yet.
+    </p>
+
+    <template v-if="!draft">
+      <div v-if="armyRows.length" class="army-list">
+        <div
+          v-for="row in armyRows"
+          :key="row.id"
+          class="status-row army-row"
+          :class="{ 'is-selected': row.selected }"
+          @click="toggleSelect(row.id)"
+        >
+          <div class="status-row-top">
+            <span class="status-row-name">{{ row.composition }}</span>
+            <span class="status-row-time">{{ row.eta ?? '—' }}</span>
+          </div>
+          <div class="status-subtext">
+            {{ row.status }}
+          </div>
+          <button
+            v-if="row.canRecall"
+            class="recall"
+            :disabled="recalling(row.id)"
+            @click.stop="recall(row.id)"
+          >
+            {{ recalling(row.id) ? 'Recalling…' : 'Recall' }}
+          </button>
+        </div>
+      </div>
+      <div v-else class="status-subtext garrison-empty">No armies on the road.</div>
+
+      <button
+        class="primary dispatch-btn"
+        :disabled="DEMO_MODE || garrisonRows.length === 0"
+        @click="beginDispatch"
+      >
+        Dispatch army
+      </button>
+    </template>
+
+    <template v-else>
+      <div class="dispatch-form">
+        <p v-if="draft.error" class="status-subtext error-note">{{ draft.error }}</p>
+        <p class="status-subtext instructions">
+          Click hexes on the map to plot a route — the last click is the
+          destination. {{ routeLength }} hex{{ routeLength === 1 ? '' : 'es' }} plotted.
+        </p>
+
+        <div class="unit-picker">
+          <div v-for="row in garrisonRows" :key="row.unit" class="unit-picker-row">
+            <span class="unit-picker-name">{{ row.label }}</span>
+            <input
+              type="number"
+              min="0"
+              :max="row.available"
+              class="qty"
+              :value="quantityFor(row.unit)"
+              @input="setQuantity(row.unit, ($event.target as HTMLInputElement).value, row.available)"
+            />
+            <span class="unit-picker-max">/ {{ row.available }}</span>
+          </div>
+          <div v-if="!garrisonRows.length" class="status-subtext">No units available to send.</div>
+        </div>
+
+        <label class="provisions-field">
+          <span>Provisions</span>
+          <input
+            type="number"
+            min="0"
+            :value="draft.provisions"
+            @input="world.setDispatchProvisions(Number(($event.target as HTMLInputElement).value))"
+          />
+        </label>
+
+        <div class="dispatch-actions">
+          <button class="secondary" @click="world.removeLastWaypoint()" :disabled="routeLength === 0">
+            Undo waypoint
+          </button>
+          <button class="secondary" @click="world.clearWaypoints()" :disabled="routeLength === 0">
+            Clear route
+          </button>
+        </div>
+        <div class="dispatch-actions">
+          <button class="secondary" @click="world.cancelDispatch()">Cancel</button>
+          <button class="primary" :disabled="!canConfirm" @click="confirm">
+            {{ draft.submitting ? 'Dispatching…' : 'Confirm dispatch' }}
+          </button>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+/* Mirrors TrainingQueuePanel.vue's `.status-card`/`.status-row` rules
+   (scoped styles don't leak across components — see that file's own comment
+   for why they're duplicated rather than shared). */
+.status-card {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+  width: 260px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 14px 15px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 0;
+}
+.status-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.status-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.status-card-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+.status-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--panel-border);
+}
+.status-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.status-row-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.status-row-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.status-subtext {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.demo-note {
+  margin-top: 0;
+}
+.error-note {
+  color: #e08a8a;
+}
+.garrison-empty {
+  margin-top: 8px;
+}
+
+.army-row {
+  cursor: pointer;
+}
+.army-row.is-selected {
+  background: rgba(255, 197, 92, 0.08);
+}
+.recall {
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: #e08a8a;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.recall:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dispatch-btn {
+  margin-top: 10px;
+  width: 100%;
+}
+.primary {
+  padding: 8px 14px;
+  background: var(--gold);
+  border: none;
+  border-radius: 8px;
+  color: #20160a;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.secondary {
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dispatch-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.instructions {
+  margin-top: 0;
+}
+.unit-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unit-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.unit-picker-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+}
+.unit-picker-max {
+  font-size: 11px;
+  color: var(--muted);
+}
+.qty {
+  width: 56px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+.provisions-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text);
+}
+.provisions-field input {
+  width: 90px;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+.dispatch-actions {
+  display: flex;
+  gap: 8px;
+}
+.dispatch-actions .secondary,
+.dispatch-actions .primary {
+  flex: 1;
+}
+</style>

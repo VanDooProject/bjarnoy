@@ -231,6 +231,34 @@ export interface HexMapRendererOptions {
 }
 
 /**
+ * Issue #40 phase 2: one army's marker on the settlement map — its current
+ * hex, and whether it's the one selected in `ArmyPanel.vue` (drawn bigger and
+ * gold rather than the muted blue every other army marker gets, same
+ * "selected reads as gold" convention as the settlement badge/labels above).
+ */
+export interface ArmyOverlayMarker {
+  id: string;
+  position: AxialCoord;
+  selected: boolean;
+  returning: boolean;
+}
+
+/**
+ * Everything `setArmyOverlay` needs to draw on the settlement map: every
+ * dispatched army's live marker, the selected army's full route (waypoints +
+ * computed path, both ends included — mirrors `MovementResponse.Path`), and
+ * an in-progress dispatch's waypoint pins/line (before anything has actually
+ * been sent to the backend). All three are independent — armies always show
+ * their own marker; `route` only has content while an army is selected;
+ * `draftWaypoints` only has content while a dispatch is being composed.
+ */
+export interface ArmyOverlayData {
+  armies: ArmyOverlayMarker[];
+  route: AxialCoord[];
+  draftWaypoints: AxialCoord[];
+}
+
+/**
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
  * (title + level, an output rate, a modifier line, worker count, "click to
@@ -503,6 +531,11 @@ export class HexMapRenderer {
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  // Issue #40 phase 2: see `setArmyOverlay` — drawn every tick alongside the
+  // settlement badge (rebuildMarkers), same "recomputed from hex coords on
+  // every rebuild" pattern as everything else in this layer, so it keeps up
+  // with pan/zoom for free.
+  private armyOverlay: ArmyOverlayData | null = null;
   // Fog (fogLayer + fogBlobCacheSprite) needs to draw *above* markerLayer's
   // island names/settlement badges/fleet ETAs — a label sitting right at the
   // edge of scouted territory should read as veiled by the mist, not float
@@ -1688,6 +1721,7 @@ export class HexMapRenderer {
     this.markerLayer.clear();
     if (this.options.mode === 'settlement') {
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
+      this.drawArmyOverlay();
       return;
     }
     if (this.options.mode !== 'world') {
@@ -1946,6 +1980,67 @@ export class HexMapRenderer {
    */
   setHighlight(coord: AxialCoord | undefined) {
     this.options = { ...this.options, highlightCoord: coord };
+  }
+
+  /**
+   * Issue #40 phase 2: hands the renderer everything it needs to draw
+   * dispatched armies, a selected army's route, and an in-progress dispatch's
+   * waypoints — see `ArmyOverlayData`. Pass `null` to clear it (e.g. leaving
+   * the settlement view). Like `setHighlight`, this only stores the data;
+   * `rebuildMarkers` (already running every tick — see `onTick`) picks it up
+   * on the very next frame without needing a forced rebuild here.
+   */
+  setArmyOverlay(data: ArmyOverlayData | null) {
+    this.armyOverlay = data;
+  }
+
+  private drawArmyOverlay() {
+    const overlay = this.armyOverlay;
+    if (!overlay) return;
+
+    // The selected army's full route (waypoints + computed path) — a
+    // muted blue line, distinct from the gold in-progress-dispatch line
+    // below so a player editing a *new* dispatch while another army is
+    // already selected can't confuse the two.
+    if (overlay.route.length > 1) {
+      const points = overlay.route.map((c) => this.hexCenterScreen(c));
+      this.markerLayer.moveTo(points[0].x, points[0].y);
+      for (const p of points.slice(1)) this.markerLayer.lineTo(p.x, p.y);
+      this.markerLayer.stroke({ width: 2, color: 0x5ab0e6, alpha: 0.8 });
+    }
+
+    // An in-progress dispatch's clicked waypoints, plus a numbered-order
+    // line connecting them — the "pins and a line" the design doc asks for,
+    // shown before anything has actually been sent to the backend.
+    if (overlay.draftWaypoints.length > 1) {
+      const points = overlay.draftWaypoints.map((c) => this.hexCenterScreen(c));
+      this.markerLayer.moveTo(points[0].x, points[0].y);
+      for (const p of points.slice(1)) this.markerLayer.lineTo(p.x, p.y);
+      this.markerLayer.stroke({ width: 2, color: GOLD, alpha: 0.9 });
+    }
+    overlay.draftWaypoints.forEach((c, i) => {
+      const p = this.hexCenterScreen(c);
+      const isDestination = i === overlay.draftWaypoints.length - 1;
+      this.markerLayer
+        .circle(p.x, p.y, isDestination ? 8 : 5)
+        .fill({ color: GOLD, alpha: isDestination ? 0.95 : 0.7 })
+        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.85 });
+    });
+
+    // Every dispatched army gets a small diamond marker at its live/last-
+    // reached position (ArmyResponse.Position — see stores/world.ts's
+    // refreshArmies) — gold and bigger for the one currently selected,
+    // muted blue for everything else, grey for one already turned around
+    // and heading home.
+    for (const army of overlay.armies) {
+      const p = this.hexCenterScreen(army.position);
+      const color = army.selected ? GOLD : army.returning ? 0x8fa3af : 0x5ab0e6;
+      const r = army.selected ? 9 : 7;
+      this.markerLayer
+        .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
+        .fill({ color })
+        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+    }
   }
 
   /**
