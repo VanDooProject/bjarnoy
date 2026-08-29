@@ -187,6 +187,7 @@ app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
 app.MapProfileEndpoints(versionSet);
+app.MapLeaderboardEndpoints(versionSet);
 app.MapArmyEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
