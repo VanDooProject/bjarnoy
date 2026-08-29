@@ -311,6 +311,18 @@ public sealed class TradeService(
         return [.. offers.OrderByDescending(o => o.PostedAt)];
     }
 
+    /// <summary>Completed trade reports touching this settlement either way, most recently completed first.</summary>
+    public async Task<IReadOnlyList<TradeReportEntity>> ListReportsAsync(
+        Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        // Ordered client-side: SQLite's EF provider doesn't support
+        // DateTimeOffset in ORDER BY — same workaround as ListMineAsync above.
+        var reports = await _dbContext.TradeReports
+            .Where(r => r.PosterSettlementId == settlementId || r.AcceptorSettlementId == settlementId)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return [.. reports.OrderByDescending(r => r.CompletedAt)];
+    }
+
     /// <summary>Shipments touching this settlement either way, most recently departed first.</summary>
     public async Task<IReadOnlyList<ShipmentEntity>> ListShipmentsAsync(
         Guid settlementId, CancellationToken cancellationToken = default)

@@ -66,6 +66,29 @@ export interface Fleet {
   etaAt: number;
 }
 
+/**
+ * A trade cart in transit between two settlements, interpolated on the
+ * world map exactly like `Fleet` above (same `{from,to}Q/R` +
+ * `departedAt`/`etaAt` shape, both wall-clock-comparable millisecond
+ * timestamps) — see `HexMapRenderer`'s cart-rendering loop, which shares
+ * that interpolation code rather than inventing a second scheme. Live mode
+ * populates this straight from `ShipmentResponse`'s own frozen path
+ * endpoints (`WorldModel.setCartShipments`, see `stores/world.ts`'s
+ * `refreshTradeAsync`); demo mode seeds one cosmetic cart per accepted
+ * offer (`WorldModel.acceptTradeOffer`).
+ */
+export interface CartShipment {
+  id: string;
+  fromQ: number;
+  fromR: number;
+  toQ: number;
+  toR: number;
+  departedAt: number;
+  etaAt: number;
+  cargoResource: ResourceKind;
+  cargoAmount: number;
+}
+
 /** An island's name and centre, as known from the backend (live mode) — for world-map labels. */
 export interface IslandLabel {
   id: string;

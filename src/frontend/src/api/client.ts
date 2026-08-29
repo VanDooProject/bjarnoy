@@ -54,8 +54,11 @@ import type {
   SettlementResponse,
   SettlementSummary,
   ShipmentResponse,
+  SimulatorRequest,
+  SimulatorResponse,
   TradeAcceptResponse,
   TradeOfferResponse,
+  TradeReportResponse,
   TrainingOrderResponse,
   TrainUnitsRequest,
   UnitDefinitionResponse,
@@ -151,6 +154,8 @@ export const api = {
     request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`),
   getShipments: (settlementId: string) =>
     request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`),
+  getSettlementTradeReports: (settlementId: string) =>
+    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`),
   acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
     request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
       method: 'POST',
@@ -370,4 +375,11 @@ export const api = {
     request<GuildTreatyResponse>(`/treaties/${treatyId}/reject`, { method: 'POST' }),
   breakGuildTreaty: (treatyId: string) =>
     request<GuildTreatyResponse>(`/treaties/${treatyId}/break`, { method: 'POST' }),
+  // Issue #40 phase 7: the premium fight simulator. `PremiumUserEndpointFilter`
+  // returns 401 (unauthenticated) or 403 `{ error: "premium_required" }`
+  // (authenticated but not premium) — both surface as an `ApiError` here,
+  // same as any other rejection; SimulatorView.vue is what gives the latter
+  // its own friendly copy instead of showing raw problem text.
+  simulate: (body: SimulatorRequest) =>
+    request<SimulatorResponse>('/simulator', { method: 'POST', body: JSON.stringify(body) }),
 };

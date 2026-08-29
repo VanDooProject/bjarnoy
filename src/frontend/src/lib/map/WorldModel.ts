@@ -9,6 +9,7 @@ import { validateTradeRatio } from '../trade/tradeRatio';
 import { generateTile } from './worldGenerator';
 import {
   emptyResources,
+  type CartShipment,
   type Fleet,
   type IslandLabel,
   type ResourceKind,
@@ -60,6 +61,22 @@ export class DemoTradeError extends Error {
 const DEMO_RIVAL_SETTLEMENT_ID = 'demo-rival';
 const DEMO_RIVAL_NAME = 'Ravenshold';
 
+// Issue #46 phase 3: demo mode has no real cart travel time to hang a
+// shipment's ETA off of (`acceptTradeOffer` settles instantly — see its own
+// doc comment) — but a purely cosmetic cart still needs *some* travel
+// window to be visible/testable on the map. 8s real time is long enough for
+// a marker + ETA label to actually render and be asserted on in an e2e
+// test, short enough not to linger once the (already-settled) trade is long
+// done.
+const DEMO_CART_TRAVEL_MS = 8000;
+// The seeded rival offer's poster (`DEMO_RIVAL_SETTLEMENT_ID`) is never
+// registered as a real settlement (see that constant's own comment), so it
+// has no hex position to depart a cart from. This fixed offset from the
+// accepting settlement gives its cart a plausible-looking origin purely for
+// the map animation — same "cosmetic, not a real place" spirit as the
+// rival's offer itself.
+const DEMO_RIVAL_CART_OFFSET: AxialCoord = { q: 6, r: -4 };
+
 const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
 // hexes are greyed out" — three distinct rings, not two. Ownership only ever
@@ -82,6 +99,8 @@ export class WorldModel {
   private tiles = new Map<string, Tile>();
   private settlements = new Map<string, Settlement>();
   private fleets = new Map<string, Fleet>();
+  /** Trade carts in transit — see `CartShipment`'s own doc comment. */
+  private cartShipments = new Map<string, CartShipment>();
   private explored = new Set<string>();
   private lastTick = performance.now();
   /** Islands known from the backend (live mode only) — id, name, and centre, for world-map labels. */
@@ -482,6 +501,32 @@ export class WorldModel {
     return [...this.fleets.values()];
   }
 
+  /** Demo mode: registers one cosmetic cart — see `acceptTradeOffer` and `CartShipment`'s own doc comment. */
+  addCartShipment(shipment: CartShipment) {
+    this.cartShipments.set(shipment.id, shipment);
+  }
+
+  /**
+   * Live mode: replaces the whole set of in-transit carts with a freshly
+   * fetched one — see `stores/world.ts`'s `refreshTradeAsync`. Unlike
+   * `addCartShipment`, this is a full swap rather than a merge: the backend
+   * response is already the complete, authoritative list for this
+   * settlement, so a cart that dropped out (delivered, or the request
+   * simply didn't include it) should disappear immediately rather than
+   * linger until its own `etaAt` expires.
+   */
+  setCartShipments(shipments: CartShipment[]) {
+    this.cartShipments = new Map(shipments.map((s) => [s.id, s]));
+  }
+
+  listCartShipments(): CartShipment[] {
+    const now = Date.now();
+    for (const [id, cart] of this.cartShipments) {
+      if (cart.etaAt < now - 5000) this.cartShipments.delete(id);
+    }
+    return [...this.cartShipments.values()];
+  }
+
   /**
    * Demo mode's client-only stand-in for `POST .../trade-offers`: validates
    * the same ratio corridor the backend enforces (`lib/trade/tradeRatio.ts`)
@@ -591,6 +636,24 @@ export class WorldModel {
     if (poster) poster.resources[offer.requestedResource] += offer.requestedAmount;
 
     offer.state = 'delivered';
+
+    // Issue #46 phase 3: the trade itself settles synchronously (see this
+    // method's own doc comment), but a cart still departs cosmetically so
+    // the map/e2e has something to render — see `DEMO_CART_TRAVEL_MS`.
+    const from = poster ?? { q: acceptor.q + DEMO_RIVAL_CART_OFFSET.q, r: acceptor.r + DEMO_RIVAL_CART_OFFSET.r };
+    const now = Date.now();
+    this.addCartShipment({
+      id: `cart_${offer.id}`,
+      fromQ: from.q,
+      fromR: from.r,
+      toQ: acceptor.q,
+      toR: acceptor.r,
+      departedAt: now,
+      etaAt: now + DEMO_CART_TRAVEL_MS,
+      cargoResource: offer.offeredResource,
+      cargoAmount: offer.offeredAmount,
+    });
+
     return offer;
   }
 

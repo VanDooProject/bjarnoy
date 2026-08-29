@@ -187,6 +187,21 @@ export interface TradeAcceptResponse {
   toPoster: ShipmentResponse;
 }
 
+/** Mirrors `TradeReportResponse` in TradeContracts.cs — a completed trade, visible to both settlements. */
+export interface TradeReportResponse {
+  id: string;
+  offerId: string;
+  completedAt: string;
+  posterSettlementId: string;
+  acceptorSettlementId: string;
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildTrade: boolean;
+  travelHours: number;
+}
+
 export interface CreateWorldRequest {
   name: string;
   seed?: number;
@@ -814,6 +829,49 @@ export interface BattleReportResponse {
   attackerArmyId: string;
   attackerSettlementId: string;
   defenderSettlementId: string;
+  mission: string;
+  winner: string;
+  attackPower: number;
+  defensePower: number;
+  seed: number;
+  lootTaken: ResourceLine;
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  siege: BattleReportSiege | null;
+}
+
+// Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors
+// `SimulatorRequest`/`SimulatorResponse` in SimulatorContracts.cs exactly.
+// `POST /simulator` is gated by `PremiumUserEndpointFilter` — see
+// `api/client.ts`'s `simulate` and `lib/units/simulator.ts` for how the
+// 401 (unauthenticated) / 403 `{ error: "premium_required" }` responses are
+// told apart from an ordinary error.
+
+/**
+ * `attackerStacks`: the hypothetical attacking force (at least one stack).
+ * `defenderStacks`: the hypothetical home garrison; omit/empty for an
+ * undefended settlement. `guestDefenderStacks`: optional Support-style
+ * guest stacks folded into the defense alongside `defenderStacks`, mirroring
+ * a real battle. `towerLevel` defaults to 0 (no Tower). `mission` is
+ * `'attack'` (default) or `'raid'`. `seed` lets a caller replay the exact
+ * same simulated outcome; omit to have the server pick one.
+ */
+export interface SimulatorRequest {
+  attackerStacks: UnitCountRequest[];
+  defenderStacks?: UnitCountRequest[];
+  guestDefenderStacks?: UnitCountRequest[];
+  towerLevel?: number;
+  mission?: string;
+  seed?: number;
+}
+
+/**
+ * Mirrors `SimulatorResponse` — deliberately the same field shape as
+ * `BattleReportResponse` minus the persistence-only identity fields no
+ * simulated battle has (no `id`, `occurredAt`, army/settlement ids), so the
+ * same report-rendering markup (`BattleReportCard.vue`) can display either.
+ */
+export interface SimulatorResponse {
   mission: string;
   winner: string;
   attackPower: number;
