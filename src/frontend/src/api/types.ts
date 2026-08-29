@@ -357,6 +357,56 @@ export interface ResolveProfileReportRequest {
   status: string;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminActivityContracts.cs.
+
+export interface ActivityBucket {
+  bucketStart: string;
+  activeUserCount: number;
+}
+
+/** `bucket`: one of `day`, `hour` (echoes the request, defaulting to `day`). */
+export interface ActivitySummaryResponse {
+  from: string;
+  to: string;
+  bucket: string;
+  buckets: ActivityBucket[];
+}
+
+/** `lastActiveAtUtc` is null for a user who has never been tracked — sorted after everyone with activity. */
+export interface AdminActivityUser {
+  userId: string;
+  userName: string;
+  displayName: string | null;
+  lastActiveAtUtc: string | null;
+}
+
+export interface PagedAdminActivityUsersResponse {
+  items: AdminActivityUser[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ActivitySessionWindow {
+  startedAtUtc: string;
+  lastSeenAtUtc: string;
+}
+
+/**
+ * `totalActiveDuration` is a .NET `TimeSpan` serialized by System.Text.Json's
+ * default converter — an ISO-8601-ish `"d.hh:mm:ss.fffffff"` string, NOT a
+ * plain number of seconds. Don't parse it as one; either parse the string
+ * format properly or derive a total from `sessions` client-side.
+ */
+export interface AdminUserActivityDetailResponse {
+  userId: string;
+  from: string;
+  to: string;
+  sessionCount: number;
+  totalActiveDuration: string;
+  sessions: ActivitySessionWindow[];
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;
