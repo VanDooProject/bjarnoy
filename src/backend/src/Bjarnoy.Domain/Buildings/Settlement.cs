@@ -73,6 +73,15 @@ public sealed record Settlement
     public bool Claims(HexCoord coord) => Centre.DistanceTo(coord) <= ClaimRadius;
 
     /// <summary>
+    /// This settlement's leaderboard score (issue #43): the triangular number
+    /// <c>L(L+1)/2</c> of each building's level, summed over <see cref="Buildings"/>.
+    /// Rewards tall building over wide spam and needs no catalogue lookup or
+    /// balance table — a per-<see cref="BuildingType"/> weight is the obvious
+    /// later refinement, not a v1 concern.
+    /// </summary>
+    public int Score => Buildings.Sum(b => b.Level * (b.Level + 1) / 2);
+
+    /// <summary>
     /// The settlement as of <paramref name="now"/>: every order whose time has
     /// come is applied, and production and capacity are recomputed from what is
     /// then standing.

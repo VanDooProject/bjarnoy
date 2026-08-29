@@ -35,6 +35,7 @@ builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<LeaderboardService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -111,6 +112,10 @@ if (migrationCommand == MigrationCommandKind.None)
     // trigger) — the migrator never serves requests, so it has no business
     // running this. See EndbossTriggerHostedService.
     builder.Services.AddHostedService<EndbossTriggerHostedService>();
+
+    // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
+    // migrator never serves requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<WeeklyAggregationHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
