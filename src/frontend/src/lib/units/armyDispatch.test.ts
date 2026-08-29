@@ -6,6 +6,7 @@ import {
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
   formatEta,
+  hasCatapultSelected,
   maxAffordableProvisions,
   routeToWaypointsAndDestination,
   totalUpkeepPerHour,
@@ -102,6 +103,36 @@ describe('buildAttackDispatchRequest', () => {
     const request = buildAttackDispatchRequest({ spearman: 3 }, route, 20, 'target-1');
     expect(request?.waypoints).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }]);
     expect(request?.destination).toBeUndefined();
+  });
+
+  it('omits targetBuildingCoord when no preferred target building was picked', () => {
+    const request = buildAttackDispatchRequest({ catapult: 3 }, [], 20, 'target-1');
+    expect(request?.targetBuildingCoord).toBeUndefined();
+  });
+
+  it('carries a preferred target building coordinate through when one was picked', () => {
+    const request = buildAttackDispatchRequest({ catapult: 3 }, [], 20, 'target-1', { q: 4, r: -2 });
+    expect(request?.targetBuildingCoord).toEqual({ q: 4, r: -2 });
+  });
+
+  it('treats an explicit null target building the same as "no preference"', () => {
+    const request = buildAttackDispatchRequest({ catapult: 3 }, [], 20, 'target-1', null);
+    expect(request?.targetBuildingCoord).toBeUndefined();
+  });
+});
+
+describe('hasCatapultSelected', () => {
+  it('is false when no catapults are in the selection', () => {
+    expect(hasCatapultSelected({ spearman: 5 })).toBe(false);
+    expect(hasCatapultSelected({})).toBe(false);
+  });
+
+  it('is false when catapult count is zero', () => {
+    expect(hasCatapultSelected({ spearman: 5, catapult: 0 })).toBe(false);
+  });
+
+  it('is true when at least one catapult is selected', () => {
+    expect(hasCatapultSelected({ spearman: 5, catapult: 2 })).toBe(true);
   });
 });
 

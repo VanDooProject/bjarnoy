@@ -18,6 +18,7 @@ import {
   missionLabel,
   outcomeLabel,
   reportSummaryLine,
+  siegeSummaryLine,
   sideFor,
   totalLoot,
 } from '../lib/units/battleReports';
@@ -75,6 +76,7 @@ const detail = computed(() => {
 const detailSide = computed(() => (detail.value ? sideOf(detail.value) : 'attacker'));
 const detailOutcome = computed(() => (detail.value ? outcomeLabel(detail.value, detailSide.value) : null));
 const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTaken) : 0));
+const detailSiegeSummary = computed(() => (detail.value?.siege ? siegeSummaryLine(detail.value.siege) : null));
 </script>
 
 <template>
@@ -169,12 +171,12 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
             </div>
           </div>
 
-          <div v-if="detail.siege" class="siege">
+          <div v-if="detail.siege" class="siege" :class="{ razed: detail.siege.settlementRazed }">
+            <div v-if="detail.siege.settlementRazed" class="razed-banner">Settlement razed</div>
             <h3>Siege</h3>
-            <p>
-              {{ detail.siege.targetType }} at ({{ detail.siege.targetCoord.q }}, {{ detail.siege.targetCoord.r }}):
-              level {{ detail.siege.levelBefore }} → {{ detail.siege.levelAfter }}
-              <span v-if="detail.siege.settlementRazed" class="razed">— settlement razed</span>
+            <p>{{ detailSiegeSummary }}</p>
+            <p class="siege-coord">
+              Hex ({{ detail.siege.targetCoord.q }}, {{ detail.siege.targetCoord.r }})
             </p>
           </div>
         </div>
@@ -408,13 +410,33 @@ const detailLoot = computed(() => (detail.value ? totalLoot(detail.value.lootTak
   gap: 16px;
   font-size: 13px;
 }
+.siege {
+  padding-top: 4px;
+}
 .siege p {
   font-size: 13px;
   margin: 0;
 }
-.razed {
+.siege-coord {
+  margin-top: 2px !important;
+  color: var(--muted);
+  font-size: 12px !important;
+}
+/* Reuses the outcome-banner visual language from `.card`/`.banner`
+   (win/loss, phase 3) for the one other "the state of this settlement just
+   changed" moment a report can carry: its Longhouse was destroyed. */
+.razed-banner {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  background: rgba(224, 138, 138, 0.12);
+  border: 1px solid #e08a8a;
+  border-radius: 4px;
   color: #e08a8a;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 640px) {
