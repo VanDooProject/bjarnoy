@@ -21,12 +21,22 @@ public sealed record HexPointRequest(int Q, int R)
 /// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
 /// <param name="Destination">
 /// Required for a <c>"move"</c> mission (the default); ignored for
-/// <c>"attack"</c>, whose destination is always the target settlement's own
-/// hex.
+/// <c>"attack"</c>/<c>"support"</c>, whose destination is always the target
+/// settlement's own hex.
 /// </param>
-/// <param name="Provisions">Food to load onto the army, capped by what its units can carry and what the settlement can afford.</param>
-/// <param name="Mission"><c>"move"</c> (default) or <c>"attack"</c> — see <see cref="ArmyMission"/>.</param>
-/// <param name="TargetSettlementId">Required when <paramref name="Mission"/> is <c>"attack"</c> — the settlement to fight on arrival.</param>
+/// <param name="Provisions">
+/// Food to load onto the army, capped by what its units can carry and what
+/// the settlement can afford. A <c>"support"</c> dispatch only needs to cover
+/// the one-way trip plus a small reserve (<see cref="Army.SupportReserveHours"/>)
+/// — the host feeds it from arrival — unlike <c>"move"</c>/<c>"attack"</c>,
+/// which both need the full round trip.
+/// </param>
+/// <param name="Mission"><c>"move"</c> (default), <c>"attack"</c>, or <c>"support"</c> — see <see cref="ArmyMission"/>.</param>
+/// <param name="TargetSettlementId">
+/// Required when <paramref name="Mission"/> is <c>"attack"</c> (the
+/// settlement to fight on arrival) or <c>"support"</c> (the settlement to
+/// garrison as a guest on arrival).
+/// </param>
 public sealed record DispatchArmyRequest(
     [property: Required, MinLength(1)] IReadOnlyList<UnitCountRequest> Units,
     IReadOnlyList<HexPointRequest>? Waypoints,
@@ -63,13 +73,24 @@ public sealed record MovementResponse(
 }
 
 /// <param name="AtHome">True when the army is standing in its home settlement — <paramref name="Movement"/> is then null.</param>
-/// <param name="Position">Current hex: the home settlement's centre while <paramref name="AtHome"/>, else the active leg's position as of now.</param>
+/// <param name="Supporting">
+/// True when the army is currently a guest garrison at
+/// <paramref name="TargetSettlementId"/> (issue #40 phase 4) — mutually
+/// exclusive with <paramref name="AtHome"/>; <paramref name="Movement"/> is
+/// null here too, since a guest is not travelling.
+/// </param>
+/// <param name="Position">
+/// Current hex: the home settlement's centre while <paramref name="AtHome"/>,
+/// the host settlement's centre while <paramref name="Supporting"/>, else the
+/// active leg's position as of now.
+/// </param>
 public sealed record ArmyResponse(
     Guid Id,
     Guid SettlementId,
     string Mission,
     Guid? TargetSettlementId,
     bool AtHome,
+    bool Supporting,
     HexPointResponse Position,
     double Provisions,
     double TotalSpeed,
@@ -85,7 +106,15 @@ public sealed record ArmyResponse(
         var domain = entity.ToDomain();
         var home = new HexCoord(entity.Settlement.CentreQ, entity.Settlement.CentreR);
         var atHome = domain.Location is ArmyLocation.AtHome;
+        var supporting = domain.Location is ArmyLocation.Supporting;
         var movement = domain.Location is ArmyLocation.InTransit inTransit ? inTransit.Movement : null;
+
+        var position = domain.Location switch
+        {
+            ArmyLocation.InTransit transitLeg => transitLeg.Movement.PositionAt(gameNow),
+            ArmyLocation.Supporting when entity.TargetSettlement is { } host => new HexCoord(host.CentreQ, host.CentreR),
+            _ => home,
+        };
 
         return new ArmyResponse(
             entity.Id,
@@ -93,7 +122,8 @@ public sealed record ArmyResponse(
             domain.Mission.ToString().ToLowerInvariant(),
             domain.TargetSettlementId,
             atHome,
-            HexPointResponse.From(domain.PositionAt(home, gameNow)),
+            supporting,
+            HexPointResponse.From(position),
             domain.ProvisionsAt(gameNow),
             domain.TotalSpeed,
             domain.TotalUpkeepPerHour,
@@ -103,7 +133,7 @@ public sealed record ArmyResponse(
 }
 
 /// <summary>An army as it appears in a settlement's army list.</summary>
-public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, HexPointResponse Position)
+public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, bool Supporting, HexPointResponse Position)
 {
     public static ArmySummary From(ArmyEntity entity, DateTimeOffset gameNow)
     {
@@ -113,10 +143,40 @@ public sealed record ArmySummary(Guid Id, string Mission, bool AtHome, HexPointR
         var domain = entity.ToDomain();
         var home = new HexCoord(entity.Settlement.CentreQ, entity.Settlement.CentreR);
         var atHome = domain.Location is ArmyLocation.AtHome;
+        var supporting = domain.Location is ArmyLocation.Supporting;
+
+        var position = domain.Location switch
+        {
+            ArmyLocation.InTransit inTransit => inTransit.Movement.PositionAt(gameNow),
+            ArmyLocation.Supporting when entity.TargetSettlement is { } host => new HexCoord(host.CentreQ, host.CentreR),
+            _ => home,
+        };
 
         return new ArmySummary(
-            entity.Id, domain.Mission.ToString().ToLowerInvariant(), atHome,
-            HexPointResponse.From(domain.PositionAt(home, gameNow)));
+            entity.Id, domain.Mission.ToString().ToLowerInvariant(), atHome, supporting,
+            HexPointResponse.From(position));
+    }
+}
+
+/// <summary>
+/// A guest (<see cref="ArmyMission.Support"/>) army as the host settlement
+/// sees it (issue #40 phase 4 §5) — counts only, since the host cannot
+/// command it; the owner's own view is the ordinary <see cref="ArmyResponse"/>
+/// via <see cref="ArmySummary"/> on their own settlement's army list.
+/// </summary>
+public sealed record GuestArmySummary(
+    Guid ArmyId, Guid OwnerSettlementId, double TotalUpkeepPerHour, IReadOnlyList<ArmyUnitStackResponse> Stacks)
+{
+    public static GuestArmySummary From(ArmyEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var domain = entity.ToDomain();
+        return new GuestArmySummary(
+            entity.Id,
+            entity.SettlementId,
+            domain.TotalUpkeepPerHour,
+            [.. domain.Stacks.Select(s => new ArmyUnitStackResponse(s.Type.ToWireName(), s.Count))]);
     }
 }
 

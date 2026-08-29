@@ -321,6 +321,107 @@ public class TrainingAndGarrisonTests
         Assert.Equal(0, result.Settlement.Resources.RatePerHour.Food, 6);
     }
 
+    [Fact]
+    public void Guest_upkeep_reduces_the_net_food_rate_just_like_home_garrison()
+    {
+        var settlement = Found(longhouseLevel: 6);
+        var guestStacks = new List<UnitStack> { new(UnitType.Spearman, 10) };
+        var expectedGuestUpkeep = UnitCatalogue.Get(UnitType.Spearman).UpkeepPerHour * 10;
+
+        var withoutGuests = settlement.SettleTo(T0.AddMinutes(1)); // no-op, but establishes a baseline rate
+        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 6)]);
+
+        var result = settlement.SettleTo(T0.AddMinutes(1), guestStacks: guestStacks);
+
+        Assert.True(result.Changed); // nothing built, but the guest-aware rate itself is a real change
+        Assert.Equal(production.Food - expectedGuestUpkeep, result.Settlement.Resources.RatePerHour.Food, 6);
+        Assert.False(withoutGuests.Changed);
+    }
+
+    [Fact]
+    public void Hosting_guests_alone_can_push_a_previously_self_sustaining_settlement_into_starvation()
+    {
+        var longhouseLevel = 1;
+        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
+
+        // A tiny home garrison the settlement can easily sustain on its own —
+        // production alone comfortably covers it.
+        var homeGarrison = new List<UnitStack> { new(UnitType.Thrall, 1) };
+        var homeUpkeep = UnitCatalogue.Get(UnitType.Thrall).UpkeepPerHour;
+        Assert.True(production.Food - homeUpkeep >= 0, "test setup expects the home garrison alone to be sustainable");
+
+        // A guest army heavy enough to flip the net rate negative purely by
+        // being hosted.
+        var guestStacks = new List<UnitStack> { new(UnitType.Berserker, 40) };
+        var guestUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour * 40;
+
+        var settlement = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = Centre,
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
+            Garrison = homeGarrison,
+            Resources = ResourcePool.Create(
+                new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
+                production with { Food = production.Food - homeUpkeep - guestUpkeep },
+                ResourceAmounts.Uniform(1_000_000),
+                T0),
+        };
+
+        var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
+
+        Assert.True(result.Changed);
+        Assert.NotEmpty(result.GuestDeaths); // the guest side starves...
+        Assert.Empty(result.Deaths); // ...well before the tiny, cheap home garrison would need to
+        Assert.Single(result.Settlement.Garrison); // home garrison untouched
+        Assert.True(result.Settlement.Resources.RatePerHour.Food >= 0);
+    }
+
+    [Fact]
+    public void A_mixed_home_and_guest_starvation_pass_splits_deaths_proportionally_by_pre_starvation_holding()
+    {
+        var longhouseLevel = 6;
+        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
+        var berserkerUpkeep = UnitCatalogue.Get(UnitType.Berserker).UpkeepPerHour;
+
+        // Same unit type on both sides so the pooled starvation pass has a
+        // single type to kill from, split 30 home / 10 guest — 3:1.
+        var homeGarrison = new List<UnitStack> { new(UnitType.Berserker, 30) };
+        var guestStacks = new List<UnitStack> { new(UnitType.Berserker, 10) };
+        var totalUpkeep = berserkerUpkeep * 40;
+        var netFoodRate = production.Food - totalUpkeep;
+
+        var settlement = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = Centre,
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
+            Garrison = homeGarrison,
+            Resources = ResourcePool.Create(
+                new ResourceAmounts(Wood: 1_000_000, Stone: 1_000_000, Food: 10, Iron: 1_000_000),
+                production with { Food = netFoodRate },
+                ResourceAmounts.Uniform(1_000_000),
+                T0),
+        };
+
+        var result = settlement.SettleTo(T0.AddHours(1), guestStacks: guestStacks);
+
+        Assert.True(result.Changed);
+        var homeDeaths = Assert.Single(result.Deaths).Count;
+        var guestDeaths = Assert.Single(result.GuestDeaths).Count;
+
+        // Pooled deaths killed some Berserkers; the 3:1 pre-starvation ratio
+        // must hold (within a unit, from largest-remainder rounding) and both
+        // sides must actually have lost something — this also proves guest
+        // units die from starvation, not just home garrison ones.
+        Assert.True(homeDeaths > 0);
+        Assert.True(guestDeaths > 0);
+        Assert.Equal(homeDeaths + guestDeaths, result.Deaths[0].Count + result.GuestDeaths[0].Count);
+        Assert.InRange((double)homeDeaths / guestDeaths, 2.0, 4.0); // roughly 3:1
+    }
+
     private static Settlement SettlementWith(
         int longhouseLevel, List<UnitStack> garrison, double netFoodRate, double foodStock)
     {

@@ -226,6 +226,83 @@ public class ArmyAttackTests
     }
 
     [Fact]
+    public void Guest_defenders_combine_their_defense_power_with_the_home_garrison()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 100, requested: [new UnitStack(UnitType.Axeman, 10)]);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 10)]);
+        var guestDefenders = new[] { new UnitStack(UnitType.Spearman, 10) };
+
+        var withoutGuests = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+        var withGuests = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1, guestDefenders);
+
+        Assert.True(withGuests.Battle!.DefensePower > withoutGuests.Battle!.DefensePower);
+    }
+
+    [Fact]
+    public void Defensive_battle_losses_are_split_between_home_and_guest_proportional_to_their_pre_battle_holding()
+    {
+        var settlement = Found();
+        // Strong enough attacker that the defense loses, but not everything —
+        // a partial loss actually exercises ProportionalAllocator's split
+        // rather than the trivial "100% to everyone" attacker-win case.
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 100, requested: [new UnitStack(UnitType.Axeman, 12)]);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        // 30 home Spearmen, 10 guest Spearmen — a 3:1 pre-battle split.
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 30)]);
+        var guestDefenders = new[] { new UnitStack(UnitType.Spearman, 10) };
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 42, guestDefenders);
+
+        Assert.True(arrival.Fought);
+        Assert.Equal(BattleWinner.Defender, arrival.Battle!.Winner);
+
+        var homeSurvivors = arrival.DefenderSettlement.Garrison.Sum(s => s.Count);
+        var homeLosses = 30 - homeSurvivors;
+        var guestLosses = arrival.GuestLosses.Sum(s => s.Count);
+
+        Assert.True(homeLosses > 0, "expected the home garrison to take some losses");
+        Assert.True(guestLosses > 0, "expected the guest to take some losses too — not just the home garrison");
+
+        // Losses split roughly 3:1 (home:guest), matching the 3:1 pre-battle
+        // holding — within a unit or two either way from largest-remainder
+        // rounding on small counts.
+        var ratio = (double)homeLosses / guestLosses;
+        Assert.InRange(ratio, 1.5, 6.0);
+
+        // The pooled total the resolver actually computed is fully accounted
+        // for between the two sides — nothing lost or double-counted.
+        var pooledDefenderLoss = arrival.Battle.DefenderLosses.Sum(s => s.Count);
+        Assert.Equal(pooledDefenderLoss, homeLosses + guestLosses);
+    }
+
+    [Fact]
+    public void An_attacker_win_wipes_out_both_home_and_guest_defenders_fully()
+    {
+        var settlement = Found();
+        var decision = DispatchAttack(settlement, Guid.CreateVersion7(), provisions: 100);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 5)]);
+        var guestDefenders = new[] { new UnitStack(UnitType.Spearman, 3) };
+
+        var arrival = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1, guestDefenders);
+
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.Empty(arrival.DefenderSettlement.Garrison); // home wiped
+        Assert.Equal(3, arrival.GuestLosses.Single().Count); // guest wiped, exactly its pre-battle count
+    }
+
+    [Fact]
     public void Tower_level_raises_the_defense_bonus_applied_in_battle()
     {
         var settlement = Found();

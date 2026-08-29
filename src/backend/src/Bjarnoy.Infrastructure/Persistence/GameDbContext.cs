@@ -244,6 +244,19 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             army.HasIndex(a => a.SettlementId);
 
+            // Same Restrict posture as the SettlementId FK above — an attack
+            // or support target/host settlement is never expected to vanish
+            // out from under a still-relevant army row.
+            army.HasOne(a => a.TargetSettlement)
+                .WithMany()
+                .HasForeignKey(a => a.TargetSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Guest-army lookups (issue #40 phase 4) filter on exactly this
+            // pair — "who is currently supporting settlement X" — see
+            // ArmyService/SettlementService's guest-loading helpers.
+            army.HasIndex(a => new { a.TargetSettlementId, a.IsSupporting });
+
             army.HasMany(a => a.Stacks)
                 .WithOne(s => s.Army!)
                 .HasForeignKey(s => s.ArmyId)

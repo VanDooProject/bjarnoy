@@ -30,7 +30,11 @@ public static class ArmyEndpoints
 
         settlements.MapGet("/{settlementId:guid}/armies", ListForSettlement)
             .WithName("ListSettlementArmies")
-            .WithSummary("Lists the armies belonging to a settlement, home and in transit.");
+            .WithSummary("Lists the armies belonging to a settlement — home, in transit, or currently supporting elsewhere.");
+
+        settlements.MapGet("/{settlementId:guid}/guests", ListGuestArmies)
+            .WithName("ListGuestArmies")
+            .WithSummary("Lists guest (support) armies currently stationed at a settlement — the host's view; counts only.");
 
         var armies = app.MapGroup("/api/v1/armies")
             .WithApiVersionSet(versionSet)
@@ -91,7 +95,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -165,6 +169,16 @@ public static class ArmyEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static async Task<Ok<IReadOnlyList<GuestArmySummary>>> ListGuestArmies(
+        Guid settlementId,
+        ArmyService armies,
+        CancellationToken cancellationToken)
+    {
+        var entities = await armies.GetGuestArmiesAsync(settlementId, cancellationToken);
+        IReadOnlyList<GuestArmySummary> response = [.. entities.Select(GuestArmySummary.From)];
+        return TypedResults.Ok(response);
+    }
+
     private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> Recall(
         Guid armyId,
         ArmyService armies,
@@ -234,6 +248,12 @@ public static class ArmyEndpoints
             return true;
         }
 
+        if (string.Equals(value, "support", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Support;
+            return true;
+        }
+
         mission = default;
         return false;
     }
@@ -270,9 +290,12 @@ public static class ArmyEndpoints
                 DispatchRejection.UnreachableLeg => "No land route exists for one or more legs of the journey.",
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
-                DispatchRejection.TargetSettlementRequired => "An attack mission requires a target settlement.",
+                DispatchRejection.InsufficientProvisionsForTrip =>
+                    "The loaded provisions would not cover the one-way trip plus the support reserve.",
+                DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",
                 DispatchRejection.TargetSettlementNotFound => "The target settlement does not exist.",
                 DispatchRejection.CannotAttackOwnSettlement => "An army cannot attack its own settlement.",
+                DispatchRejection.CannotSupportOwnSettlement => "An army cannot support its own settlement.",
                 DispatchRejection.DestinationRequired => "A move mission requires a destination.",
                 _ => "Refused.",
             },

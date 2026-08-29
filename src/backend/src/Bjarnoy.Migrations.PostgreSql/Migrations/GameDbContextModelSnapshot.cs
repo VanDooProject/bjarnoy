@@ -40,6 +40,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<bool>("IsReturning")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSupporting")
+                        .HasColumnType("boolean");
+
                     b.Property<double>("LootFood")
                         .HasColumnType("double precision");
 
@@ -82,6 +85,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SettlementId");
+
+                    b.HasIndex("TargetSettlementId", "IsSupporting");
 
                     b.ToTable("armies", (string)null);
                 });
@@ -762,7 +767,14 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "TargetSettlement")
+                        .WithMany()
+                        .HasForeignKey("TargetSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Settlement");
+
+                    b.Navigation("TargetSettlement");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyUnitStackEntity", b =>
