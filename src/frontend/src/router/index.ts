@@ -27,6 +27,19 @@ export const router = createRouter({
       component: () => import('../views/SettlementView.vue'),
     },
     {
+      // Own profile — needs a logged-in user to know whose it is.
+      path: '/profile',
+      name: 'own-profile',
+      component: () => import('../views/ProfileView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // Another player's public profile, by username.
+      path: '/profile/:userName',
+      name: 'profile',
+      component: () => import('../views/ProfileView.vue'),
+    },
+    {
       path: '/leaderboards',
       name: 'leaderboards',
       component: () => import('../views/LeaderboardView.vue'),
@@ -71,6 +84,11 @@ export const router = createRouter({
           path: 'settlements',
           name: 'admin-settlements',
           component: () => import('../views/admin/AdminSettlementsView.vue'),
+        },
+        {
+          path: 'reports',
+          name: 'admin-reports',
+          component: () => import('../views/admin/AdminReportsView.vue'),
         },
       ],
     },

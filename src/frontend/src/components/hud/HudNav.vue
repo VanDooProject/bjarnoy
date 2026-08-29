@@ -8,10 +8,12 @@
 // the plain nickname pill TopBar used to show.
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
 const player = usePlayerStore();
 
 const initials = computed(() => {
@@ -56,7 +58,17 @@ const initials = computed(() => {
     <button class="link" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
       Landing
     </button>
-    <span class="avatar" :title="player.nickname ?? 'Bjarnoy'">{{ initials }}</span>
+    <!-- Logged in, the avatar opens the player's own profile (issue #42). -->
+    <button
+      v-if="auth.isAuthenticated"
+      class="avatar avatar-button"
+      type="button"
+      title="Your profile"
+      @click="router.push('/profile')"
+    >
+      {{ initials }}
+    </button>
+    <span v-else class="avatar" :title="player.nickname ?? 'Bjarnoy'">{{ initials }}</span>
   </nav>
 </template>
 
@@ -90,6 +102,12 @@ const initials = computed(() => {
 .link.disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.avatar-button {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
 .avatar {
   width: 28px;
