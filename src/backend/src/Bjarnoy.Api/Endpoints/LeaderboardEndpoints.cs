@@ -42,6 +42,12 @@ public static class LeaderboardEndpoints
             .WithSummary("The caller's rank on one board, plus a window of entries around it.")
             .RequireAuthorization();
 
+        app.MapGet("/api/v1/worlds/{worldId:guid}/stats/users/{userId:guid}/weekly", GetWeeklyStats)
+            .WithApiVersionSet(versionSet)
+            .WithTags("Leaderboards")
+            .WithName("GetWeeklyStats")
+            .WithSummary("A user's weekly stat cards, newest window first.");
+
         return app;
     }
 
@@ -57,19 +63,18 @@ public static class LeaderboardEndpoints
         }
 
         var boards = await leaderboards.GetDirectoryAsync(worldId, cancellationToken);
-
-        // Issue #43 PR 4 populates this once window closing exists; PR 2 has
-        // no closed windows to report.
-        IReadOnlyList<WeeklyWindowResponse> weeklyWindows = [];
+        var windows = await leaderboards.GetClosedWindowsAsync(worldId, cancellationToken);
 
         return TypedResults.Ok(new LeaderboardDirectoryResponse(
-            [.. boards.Select(LeaderboardBoardInfoResponse.From)], weeklyWindows));
+            [.. boards.Select(LeaderboardBoardInfoResponse.From)],
+            [.. windows.Select(w => new WeeklyWindowResponse(w.PeriodStart, w.PeriodEnd))]));
     }
 
     private static async Task<Results<Ok<LeaderboardBoardResponse>, NotFound, BadRequest<ProblemDetails>>> GetBoard(
         Guid worldId,
         string scope,
         string category,
+        DateTimeOffset? periodStart,
         int? afterRank,
         int? pageSize,
         LeaderboardService leaderboards,
@@ -90,11 +95,32 @@ public static class LeaderboardEndpoints
             worldId,
             parsedScope,
             parsedCategory,
+            periodStart,
             Math.Max(0, afterRank ?? 0),
             Math.Clamp(pageSize ?? DefaultPageSize, 1, MaxPageSize),
             cancellationToken);
 
         return TypedResults.Ok(LeaderboardBoardResponse.From(parsedScope, parsedCategory, page));
+    }
+
+    private static async Task<Results<Ok<WeeklyStatsPageResponse>, NotFound>> GetWeeklyStats(
+        Guid worldId,
+        Guid userId,
+        Guid? cursor,
+        int? pageSize,
+        LeaderboardService leaderboards,
+        WorldService worlds,
+        CancellationToken cancellationToken)
+    {
+        if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var (items, nextCursor) = await leaderboards.GetWeeklyStatsAsync(
+            worldId, userId, cursor, Math.Clamp(pageSize ?? DefaultPageSize, 1, MaxPageSize), cancellationToken);
+
+        return TypedResults.Ok(new WeeklyStatsPageResponse([.. items.Select(WeeklyStatResponse.From)], nextCursor));
     }
 
     private static async Task<Results<Ok<LeaderboardMeResponse>, NotFound, ForbidHttpResult, BadRequest<ProblemDetails>>> GetMyRank(

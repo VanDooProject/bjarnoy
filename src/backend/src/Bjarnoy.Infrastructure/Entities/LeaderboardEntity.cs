@@ -116,3 +116,34 @@ public class LeaderboardWatermarkEntity
     /// </summary>
     public Guid? LastBattleReportId { get; set; }
 }
+
+/// <summary>
+/// One user's weekly stat card for one closed (or currently closing) game-time
+/// window (issue #43 §3). PR 4 populates only <see cref="ScoreGained"/> — the
+/// fights/loot columns in the issue's field table are PR 5's concern, folded
+/// from #40's <c>BattleReport</c>, and are added by that PR's own migration
+/// rather than reserved here unused.
+/// </summary>
+public class WeeklyStatEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+
+    public Guid WorldId { get; set; }
+
+    public WorldEntity? World { get; set; }
+
+    public Guid UserId { get; set; }
+
+    public UserEntity? User { get; set; }
+
+    /// <summary>Game time, window-aligned.</summary>
+    public DateTimeOffset PeriodStart { get; set; }
+
+    public DateTimeOffset PeriodEnd { get; set; }
+
+    /// <summary>End-of-window score minus start-of-window score.</summary>
+    public double ScoreGained { get; set; }
+
+    /// <summary>True once the window has closed; rows are only ever written final in PR 4 (no open-window recomputation yet).</summary>
+    public bool IsFinal { get; set; }
+}
