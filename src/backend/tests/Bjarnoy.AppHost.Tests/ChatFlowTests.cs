@@ -183,7 +183,18 @@ public class ChatFlowTests
             $"{frontendUrl}/login?redirect={Uri.EscapeDataString(redirectPath)}",
             new PageGotoOptions { Timeout = 120_000 });
 
-        await page.Locator("#userName").FillAsync(userName);
+        // GotoAsync's "load" event fires once the bare HTML/CSS/JS have
+        // arrived, not once Vue has actually mounted — on a cold Vite dev
+        // server that first module transpile-and-execute can still run well
+        // past Playwright's default 30s actionability wait (this is exactly
+        // why FoundingSettlementPersistenceTests waits on its canvas with an
+        // explicit long timeout instead of trusting the implicit one on its
+        // first interaction). Wait for the login form itself, explicitly,
+        // before touching it.
+        var userNameInput = page.Locator("#userName");
+        await userNameInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
+
+        await userNameInput.FillAsync(userName);
         await page.Locator("#password").FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Log in" }).ClickAsync();
 
