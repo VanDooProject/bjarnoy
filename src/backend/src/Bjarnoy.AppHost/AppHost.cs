@@ -30,7 +30,6 @@ var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
 // link added on the frontend resource below carries them.
 const string adminUserName = "admin";
 var adminPasswordValue = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
-var adminPassword = builder.AddParameter("admin-bootstrap-password", adminPasswordValue, secret: true);
 
 var postgres = builder.AddPostgres("postgres", password: postgresPassword)
     .WithDataVolume()
@@ -82,7 +81,12 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: nul
     // brings the schema forward itself.
     .WithEnvironment("Database__MigrateOnStartup", "true")
     .WithEnvironment("ADMIN_BOOTSTRAP_USERNAME", adminUserName)
-    .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPassword)
+    // The raw string, not an Aspire secret ParameterResource: that indirection
+    // (resolved lazily via an env-var callback rather than written straight
+    // through, unlike the fixed postgres-password above) turned up an actual
+    // login-rejection failure in CI that a direct string assignment doesn't
+    // leave room for.
+    .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPasswordValue)
     .WithHttpHealthCheck("/health");
 
 var frontend = builder.AddNpmApp("frontend", "../../../frontend", "dev")
