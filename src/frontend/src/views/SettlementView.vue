@@ -110,17 +110,22 @@ interface OpenRing {
 }
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringStack = ref<OpenRing[]>([]);
-// Matches RingMenu's own default RADIUS — kept in sync there too.
-const RING_BASE_RADIUS = 64;
-// Each ring's bubbles shrink a little further out (RingMenu's own default
-// is 60px at scale 1) — reads as "further away", and lets the next ring's
-// radius sit closer in without the two orbits' bubbles touching.
-const RING_BUBBLE_SIZES = [60, 52, 46];
+// Matches RingMenu's own default RADIUS — kept in sync there too. The root
+// ring only ever has 1-2 actions (see actionsForRing), so shrinking this
+// further doesn't risk crowding bubbles into each other the way an outer
+// 3-action ring would.
+const RING_BASE_RADIUS = 52;
+// Bigger than the previous pass (RingMenu's own default is 72px at scale
+// 1) — smaller bubbles were wrapping labels like "Watchtower" into an
+// awkward mid-word break. The radius/gap values here are pulled in tighter
+// to compensate, so the bigger bubbles don't just make the whole thing
+// bigger again.
+const RING_BUBBLE_SIZES = [72, 62, 54];
 // Gap between the outer edge of one ring's bubbles and the inner edge of
 // the next, rather than a flat centre-to-centre step — a flat step ignores
 // how much smaller the outer bubbles are, and ends up wasting space the
 // further out you go.
-const RING_GAP = 10;
+const RING_GAP = 6;
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
@@ -247,7 +252,7 @@ const ringsToRender = computed(() => {
   // it's carrying the "upgrade" badge (see RingMenu's own effectiveRadius)
   // — later rings' gap math needs to start from that real edge, not the
   // bare base radius, or ring 1 would crowd the badge.
-  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 24 : 0);
+  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 20 : 0);
   let radius = ring0Effective;
   let angleOffset = 0;
 
