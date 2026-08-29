@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -510,6 +511,83 @@ public sealed record Settlement
         }
 
         return this with { Resources = paid, TrainingQueue = [.. TrainingQueue, order] };
+    }
+
+    /// <summary>
+    /// The settlement-side half of dispatching an army (issue #40 phase 2):
+    /// checks the garrison actually holds every requested unit type in the
+    /// requested count, that the requested provisions do not exceed what
+    /// those units could carry, and that Food covers them — and if so,
+    /// returns the settlement with those units and that food already
+    /// removed. Route/food-range validation happens one layer up, in
+    /// <see cref="Army.PlanDispatch"/>, which is what actually accepts or
+    /// rejects a dispatch end to end — call this directly only when
+    /// terrain/pathing is irrelevant (e.g. a unit test of the resource side
+    /// alone).
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement, so the garrison and stock
+    /// reflect <paramref name="now"/> — mirrors <see cref="PlanBuild"/> and
+    /// <see cref="PlanTrain"/>.
+    /// </remarks>
+    public SettlementDispatchDecision PlanDispatch(
+        IReadOnlyList<UnitStack> requestedUnits, double provisions, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(requestedUnits);
+
+        var normalised = requestedUnits
+            .Where(s => s.Count > 0)
+            .GroupBy(s => s.Type)
+            .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
+            .ToList();
+
+        if (normalised.Count == 0)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.NoUnitsRequested);
+        }
+
+        var garrison = Garrison.ToList();
+        foreach (var stack in normalised)
+        {
+            var index = garrison.FindIndex(g => g.Type == stack.Type);
+            if (index < 0 || garrison[index].Count < stack.Count)
+            {
+                return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientGarrison);
+            }
+        }
+
+        if (provisions < 0)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+        }
+
+        var carryCapacity = normalised.Sum(s => UnitCatalogue.Get(s.Type).FoodCarryCapacity * s.Count);
+        if (provisions > carryCapacity)
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
+        }
+
+        if (!Resources.TrySpend(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
+        {
+            return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
+        }
+
+        foreach (var stack in normalised)
+        {
+            var index = garrison.FindIndex(g => g.Type == stack.Type);
+            var remaining = garrison[index].Count - stack.Count;
+            if (remaining <= 0)
+            {
+                garrison.RemoveAt(index);
+            }
+            else
+            {
+                garrison[index] = garrison[index] with { Count = remaining };
+            }
+        }
+
+        var updated = this with { Garrison = garrison, Resources = paidResources };
+        return SettlementDispatchDecision.Accept(updated, normalised);
     }
 }
 
