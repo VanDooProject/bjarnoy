@@ -130,6 +130,63 @@ export interface SettlementSummary {
   longhouseLevel: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see
+// TradeEndpoints for the endpoints these are used against.
+
+export interface PostTradeOfferRequest {
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildOnly?: boolean;
+}
+
+export interface AcceptTradeOfferRequest {
+  acceptorSettlementId: string;
+}
+
+export interface CancelTradeOfferRequest {
+  settlementId: string;
+}
+
+/** `state` is one of: 'open' | 'accepted' | 'delivered' | 'cancelled' | 'expired'. */
+export interface TradeOfferResponse {
+  id: string;
+  posterSettlementId: string;
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildOnly: boolean;
+  state: string;
+  postedAtGameTime: string;
+  expiresAtGameTime: string;
+}
+
+export interface ShipmentResponse {
+  id: string;
+  offerId: string;
+  fromSettlementId: string;
+  toSettlementId: string;
+  cargoResource: string;
+  cargoAmount: number;
+  carts: number;
+  fromQ: number;
+  fromR: number;
+  toQ: number;
+  toR: number;
+  departedAtGameTime: string;
+  arrivesAtGameTime: string;
+  returnArrivesAtGameTime: string;
+  delivered: boolean;
+}
+
+export interface TradeAcceptResponse {
+  offer: TradeOfferResponse;
+  toAcceptor: ShipmentResponse;
+  toPoster: ShipmentResponse;
+}
+
 export interface CreateWorldRequest {
   name: string;
   seed?: number;
@@ -307,6 +364,54 @@ export interface GrantResourcesRequest {
 
 export interface SetBuildingLevelRequest {
   level: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
+
+export interface SendMessageRequest {
+  recipientUserId: string;
+  body: string;
+}
+
+export interface MessageResponse {
+  id: string;
+  senderUserId: string;
+  recipientUserId: string;
+  body: string;
+  sentAt: string;
+  /** Only ever populated when `readReceiptVisible` is true. */
+  readAt: string | null;
+  /** Whether the sender is allowed to see `readAt` (sender and recipient in the same guild). */
+  readReceiptVisible: boolean;
+}
+
+export interface ConversationResponse {
+  otherUserId: string;
+  otherUserName: string;
+  otherDisplayName: string | null;
+  lastMessage: MessageResponse;
+  unreadCount: number;
+}
+
+export interface PagedMessagesResponse {
+  items: MessageResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PagedConversationsResponse {
+  items: ConversationResponse[];
+  page: number;
+  pageSize: number;
+}
+
+export interface MarkReadResponse {
+  markedRead: number;
+}
+
+export interface ReportMessageRequest {
+  reason: string;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ProfileContracts.cs.
@@ -566,6 +671,158 @@ export interface GuildTreatyResponse {
   status: PeaceTreatyStatus;
   proposedAt: string;
   respondedAt: string | null;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ArmyContracts.cs (issue #40
+// phase 2: dispatching an army on a "move" mission, waypoint editing, and
+// live position/path rendering). Only Move-mission fields are used by any
+// UI this phase builds, but the request/response shapes themselves already
+// cover attack/support/raid too (Mission/TargetSettlementId/TargetBuildingCoord)
+// so a later phase can add that UI without reshaping these types.
+
+export interface HexPoint {
+  q: number;
+  r: number;
+}
+
+export interface UnitCountRequest {
+  unit: string;
+  count: number;
+}
+
+/**
+ * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
+ * `destination`: required for `mission: 'move'` (the default); ignored for
+ * attack/support/raid, whose destination is always the target settlement's
+ * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * and what the settlement can afford.
+ */
+export interface DispatchArmyRequest {
+  units: UnitCountRequest[];
+  waypoints?: HexPoint[];
+  destination?: HexPoint;
+  provisions: number;
+  mission?: string;
+  targetSettlementId?: string;
+  targetBuildingCoord?: HexPoint;
+}
+
+/** Mirrors `MovementResponse` — the full outbound route, start and destination included. */
+export interface MovementResponse {
+  departedAt: string;
+  path: HexPoint[];
+  arrivesAt: string;
+  returnPath: HexPoint[];
+  turnAroundAt: string;
+  returnArrivesAt: string;
+  isReturning: boolean;
+}
+
+/**
+ * Mirrors `ArmyResponse`. `atHome`/`supporting` are mutually exclusive with
+ * `movement` being non-null (an army is either in transit, at home, or a
+ * guest garrison elsewhere). `position` is already resolved server-side
+ * (`Movement.PositionAt`) to the last hex actually reached — no client-side
+ * A* or interpolation needed to know "where is it now", though the frontend
+ * may still interpolate visually between `position` and the next `path`
+ * point for smoother rendering between polls (see `ArmyPanel.vue`).
+ */
+export interface ArmyResponse {
+  id: string;
+  settlementId: string;
+  mission: string;
+  targetSettlementId: string | null;
+  atHome: boolean;
+  supporting: boolean;
+  position: HexPoint;
+  provisions: number;
+  totalSpeed: number;
+  totalUpkeepPerHour: number;
+  stacks: ArmyUnitStackResponse[];
+  movement: MovementResponse | null;
+}
+
+export interface ArmyUnitStackResponse {
+  unit: string;
+  count: number;
+}
+
+/** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
+export interface ArmySummary {
+  id: string;
+  mission: string;
+  atHome: boolean;
+  supporting: boolean;
+  position: HexPoint;
+}
+
+/**
+ * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
+ * *host* settlement sees it: counts only, since the host cannot command a
+ * guest garrison (no recall/action buttons on this view — only the owner,
+ * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * is the guest's home, not its current location (which is always the
+ * settlement `getSettlementGuests` was asked about).
+ */
+export interface GuestArmySummary {
+  armyId: string;
+  ownerSettlementId: string;
+  totalUpkeepPerHour: number;
+  stacks: ArmyUnitStackResponse[];
+}
+
+// Issue #40 phase 3 (frontend): battle reports. Mirrors
+// `BattleReportAttackerLineResponse`/`BattleReportDefenderLineResponse`/
+// `BattleReportSiegeResponse`/`BattleReportResponse` in ArmyContracts.cs.
+
+export interface BattleReportAttackerLine {
+  unit: string;
+  sent: number;
+  lost: number;
+  survived: number;
+}
+
+export interface BattleReportDefenderLine {
+  unit: string;
+  lost: number;
+  survived: number;
+}
+
+/**
+ * The building-damage section of a report (backend phase 5) — present only
+ * when catapult damage actually happened. Passed through and displayed
+ * generically (this phase builds no catapult-targeting UI of its own).
+ */
+export interface BattleReportSiege {
+  targetCoord: HexPoint;
+  targetType: string;
+  levelBefore: number;
+  levelAfter: number;
+  settlementRazed: boolean;
+}
+
+/**
+ * Mirrors `BattleReportResponse`. `mission` is `'attack'` or `'raid'`
+ * (backend phase 7) — this phase's dispatch UI only offers Attack, but a
+ * report can still come back as a Raid (e.g. from another player), so it's
+ * rendered with its own label rather than assumed to always be an Attack.
+ * `winner` is `'attacker'` or `'defender'` (no draw).
+ */
+export interface BattleReportResponse {
+  id: string;
+  occurredAt: string;
+  attackerArmyId: string;
+  attackerSettlementId: string;
+  defenderSettlementId: string;
+  mission: string;
+  winner: string;
+  attackPower: number;
+  defensePower: number;
+  seed: number;
+  lootTaken: ResourceLine;
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  siege: BattleReportSiege | null;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's

@@ -121,7 +121,18 @@ public sealed record Settlement
     /// <c>SettlementService</c> for the second split, of the guest pool
     /// across the actual guest <c>ArmyEntity</c> rows.
     /// </param>
-    public SettleResult SettleTo(DateTimeOffset now, double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null)
+    /// <param name="terrainAt">
+    /// Terrain lookup for a terrain-bound producer's neighbour-adjacency
+    /// boost (<see cref="BuildingCatalogue.BoostMultiplier"/>).
+    /// <see langword="null"/> (the default) settles with no boost applied —
+    /// callers with no terrain source (e.g. tests exercising other rules)
+    /// still get a correct, if unboosted, total.
+    /// </param>
+    public SettleResult SettleTo(
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
         guestStacks ??= [];
 
@@ -171,12 +182,11 @@ public sealed record Settlement
             // Each completion changes the rate from its own instant, so a
             // building (or batch) finished an hour ago has applied for that
             // hour.
-            var (production, capacity) = BuildingCatalogue.Totals(
-                buildings.Select(b => (b.Type, b.Level)));
+            var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
             resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, time);
         }
 
-        var (finalProduction, finalCapacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var (finalProduction, finalCapacity) = BuildingCatalogue.Totals(buildings, terrainAt);
         finalProduction *= speedFactor;
 
         // Starvation is checked every settle, not only when something
@@ -557,7 +567,7 @@ public sealed record Settlement
     /// </remarks>
     public SetBuildingLevelResult SetBuildingLevel(
         HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0,
-        IReadOnlyList<UnitStack>? guestStacks = null)
+        IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
         var buildings = Buildings.ToList();
         var index = buildings.FindIndex(b => b.Coord == coord);
@@ -574,7 +584,7 @@ public sealed record Settlement
 
         buildings[index] = buildings[index] with { Level = level };
 
-        var (production, capacity) = BuildingCatalogue.Totals(buildings.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
@@ -583,9 +593,9 @@ public sealed record Settlement
 
     /// <summary>Net production (after garrison and guest upkeep) and capacity implied by what currently stands.</summary>
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
-        double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null)
+        double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
-        var (production, capacity) = BuildingCatalogue.Totals(Buildings.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BuildingCatalogue.Totals(Buildings, terrainAt);
         return (ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity);
     }
 
