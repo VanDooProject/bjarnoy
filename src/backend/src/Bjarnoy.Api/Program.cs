@@ -40,6 +40,13 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
 
+// The per-user write-throttle UserActivityService keeps in IMemoryCache.
+builder.Services.AddMemoryCache();
+builder.Services.AddOptions<UserActivityOptions>()
+    .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
