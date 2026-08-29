@@ -58,4 +58,23 @@ public class UnitCatalogueTests
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Longship, 7));
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Longship, 8));
     }
+
+    [Fact]
+    public void The_catapult_has_a_positive_siege_power_and_nothing_else_does()
+    {
+        // Only the Catapult contributes to SiegeResolver's building-damage
+        // math (issue #40 phase 5) — every other unit type is 0.
+        foreach (var type in UnitCatalogue.AllTypes)
+        {
+            var definition = UnitCatalogue.Get(type);
+            if (type == UnitType.Catapult)
+            {
+                Assert.True(definition.SiegePower > 0, "the Catapult must have a positive siege power");
+            }
+            else
+            {
+                Assert.Equal(0, definition.SiegePower);
+            }
+        }
+    }
 }

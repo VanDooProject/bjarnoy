@@ -105,7 +105,7 @@ public static class ArmyEndpoints
 
         var result = await armies.DispatchAsync(
             settlementId, unitStacks, waypoints, destination, request.Provisions,
-            mission, request.TargetSettlementId, cancellationToken);
+            mission, request.TargetSettlementId, request.TargetBuildingCoord?.ToHexCoord(), cancellationToken);
 
         if (result.WorldPaused)
         {
@@ -297,6 +297,8 @@ public static class ArmyEndpoints
                 DispatchRejection.CannotAttackOwnSettlement => "An army cannot attack its own settlement.",
                 DispatchRejection.CannotSupportOwnSettlement => "An army cannot support its own settlement.",
                 DispatchRejection.DestinationRequired => "A move mission requires a destination.",
+                DispatchRejection.TargetBuildingRequiresAttackMission =>
+                    "A target building may only be given for an attack mission.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

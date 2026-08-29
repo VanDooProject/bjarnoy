@@ -85,6 +85,21 @@ public sealed record Army
     public Guid? TargetSettlementId { get; init; }
 
     /// <summary>
+    /// The building this <see cref="ArmyMission.Attack"/> army was told to
+    /// hit with any surviving catapults (issue #40 phase 5) — a coordinate
+    /// within the target settlement, not an arbitrary hex. <see langword="null"/>
+    /// means "no preference": <see cref="Combat.SiegeResolver.Resolve"/>
+    /// picks uniformly at random among whatever buildings the defender
+    /// actually has standing when the army arrives. Only ever set for
+    /// <see cref="ArmyMission.Attack"/> — see <see cref="PlanDispatch"/>.
+    /// Deliberately unvalidated against the target's actual layout at
+    /// dispatch time (that layout can change before the army arrives — see
+    /// <see cref="PlanDispatch"/>'s remarks); <see cref="SettleArrival"/> is
+    /// what checks whether a building still stands there.
+    /// </summary>
+    public HexCoord? TargetBuildingCoord { get; init; }
+
+    /// <summary>
     /// Resources looted from a won <see cref="ArmyMission.Attack"/> battle,
     /// carried home alongside the surviving stacks and deposited into the
     /// home settlement's stock only once the army actually arrives (mirroring
@@ -157,7 +172,8 @@ public sealed record Army
         Guid armyId,
         Func<HexCoord, Terrain> terrainAt,
         ArmyMission mission = ArmyMission.Move,
-        Guid? targetSettlementId = null)
+        Guid? targetSettlementId = null,
+        HexCoord? targetBuildingCoord = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -177,6 +193,16 @@ public sealed record Army
                     ? DispatchRejection.CannotAttackOwnSettlement
                     : DispatchRejection.CannotSupportOwnSettlement);
             }
+        }
+
+        // Shape validation only — whether a building actually stands at this
+        // coordinate on the target settlement is checked at resolution time
+        // (see TargetBuildingCoord's remarks), since the layout can change
+        // before the army arrives. All this rejects is "a target building was
+        // named for a mission that has no battle to apply it in".
+        if (targetBuildingCoord is not null && mission != ArmyMission.Attack)
+        {
+            return DispatchDecision.Rejected(DispatchRejection.TargetBuildingRequiresAttackMission);
         }
 
         var settlementDecision = settlement.PlanDispatch(requestedUnits, provisions, now);
@@ -254,6 +280,7 @@ public sealed record Army
             Provisions = provisions,
             Mission = mission,
             TargetSettlementId = mission is ArmyMission.Attack or ArmyMission.Support ? targetSettlementId : null,
+            TargetBuildingCoord = mission == ArmyMission.Attack ? targetBuildingCoord : null,
         };
 
         return DispatchDecision.Accept(settlementDecision.Settlement!, army);
@@ -313,7 +340,7 @@ public sealed record Army
             || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             || now < inTransit.Movement.ArrivesAt)
         {
-            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: []);
+            return new ArmyArrivalResult(army, defenderSettlement, Fought: false, Battle: null, GuestLosses: [], Siege: null);
         }
 
         guestDefenderStacks ??= [];
@@ -373,12 +400,30 @@ public sealed record Army
         var homeSurvivors = SubtractStacks(settledDefender.Garrison, homeLosses);
 
         var defenderPostBattle = settledDefender with { Garrison = homeSurvivors, Resources = afterLoot };
+
+        // Catapult damage (issue #40 phase 5): only ever applied on an
+        // attacker win, against whatever survived the fight. Applied to
+        // Buildings before the forward SettleTo below, so the resulting
+        // production/capacity totals (and hence any starvation the loss of a
+        // Farm/FishingHut/PumpkinFarm triggers) already reflect the damage —
+        // Settlement.SettleTo recomputes both from Buildings on every call,
+        // nothing extra is needed here for that to fall out correctly.
+        var siege = plan.Winner == BattleWinner.Attacker
+            ? Combat.SiegeResolver.Resolve(
+                plan.AttackerSurvivors, defenderPostBattle.Buildings, army.TargetBuildingCoord, seed)
+            : Combat.SiegeOutcome.None;
+
+        if (siege.Applied)
+        {
+            defenderPostBattle = defenderPostBattle with { Buildings = siege.UpdatedBuildings! };
+        }
+
         var finalDefender = defenderPostBattle.SettleTo(now, defenderSpeedFactor).Settlement;
 
         var survivorCount = plan.AttackerSurvivors.Sum(s => s.Count);
         if (survivorCount == 0)
         {
-            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses);
+            return new ArmyArrivalResult(null, finalDefender, Fought: true, plan, guestLosses, siege);
         }
 
         // Rebase provisions to what the (pre-battle, full-strength) army had
@@ -406,7 +451,7 @@ public sealed record Army
             Loot = plan.LootTaken,
         };
 
-        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses);
+        return new ArmyArrivalResult(survivorArmy, finalDefender, Fought: true, plan, guestLosses, siege);
     }
 
     /// <summary>Merges two stack lists into one, aggregated by type.</summary>
@@ -655,9 +700,17 @@ public sealed record ArmySettleResult(Army Army, bool Changed, bool ArrivedHome)
 /// present (<see cref="Army.SettleArrival"/>'s remarks explain why that
 /// second split cannot happen here).
 /// </param>
+/// <param name="Siege">
+/// The catapult building-damage outcome (issue #40 phase 5) —
+/// <see cref="Combat.SiegeOutcome.None"/> when the attacker lost, no
+/// catapults survived to fire, or the defender had no buildings to hit, and
+/// <see langword="null"/> only when <paramref name="Fought"/> is
+/// <see langword="false"/> (no battle happened at all this call, so siege was
+/// never even attempted) — see <see cref="Combat.SiegeResolver.Resolve"/>.
+/// </param>
 public sealed record ArmyArrivalResult(
     Army? Army, Settlement DefenderSettlement, bool Fought, Combat.BattlePlan? Battle,
-    IReadOnlyList<UnitStack> GuestLosses);
+    IReadOnlyList<UnitStack> GuestLosses, Combat.SiegeOutcome? Siege);
 
 /// <param name="Arrived">
 /// True when this call actually brought the army to its host — the caller
@@ -703,6 +756,12 @@ public enum DispatchRejection
     /// one-way check, unlike <see cref="InsufficientProvisionsForRoundTrip"/>.
     /// </summary>
     InsufficientProvisionsForTrip,
+
+    /// <summary>
+    /// A target building coordinate was given for a mission other than
+    /// <see cref="ArmyMission.Attack"/> — see <see cref="Army.TargetBuildingCoord"/>.
+    /// </summary>
+    TargetBuildingRequiresAttackMission,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>
