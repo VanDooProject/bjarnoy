@@ -189,8 +189,8 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
 
 <style scoped>
 .reports-view {
-  width: 100vw;
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
   overflow: auto;
   background: var(--shell);
 }
