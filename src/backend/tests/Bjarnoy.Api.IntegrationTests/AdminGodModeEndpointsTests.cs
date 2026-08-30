@@ -234,26 +234,27 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
 
-        // A start position is grass with grass around it, so a farm always has
-        // somewhere legal to go within the claim.
-        var target = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
+        // Which building is legal depends on the hex's terrain, and a start
+        // position's neighbours are whatever the generator put there — so the
+        // test follows the terrain rather than assuming grass is on offer.
+        var (target, building) = FirstBuildableHex(layout!);
 
         var placed = await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{target.Q}/{target.R}",
-            new PlaceBuildingRequest("farm", 4), Ct);
+            new PlaceBuildingRequest(building, 4), Ct);
 
         Assert.Equal(HttpStatusCode.OK, placed.StatusCode);
-        var withFarm = await placed.ReadStrictAsync<SettlementResponse>(Ct);
-        var farm = withFarm.Buildings.Single(b => b.Q == target.Q && b.R == target.R);
-        Assert.Equal("farm", farm.Type);
-        Assert.Equal(4, farm.Level);
+        var withBuilding = await placed.ReadStrictAsync<SettlementResponse>(Ct);
+        var built = withBuilding.Buildings.Single(b => b.Q == target.Q && b.R == target.R);
+        Assert.Equal(building, built.Type);
+        Assert.Equal(4, built.Level);
 
         var razed = await client.DeleteAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{target.Q}/{target.R}", Ct);
 
         Assert.Equal(HttpStatusCode.OK, razed.StatusCode);
-        var withoutFarm = await razed.ReadStrictAsync<SettlementResponse>(Ct);
-        Assert.DoesNotContain(withoutFarm.Buildings, b => b.Q == target.Q && b.R == target.R);
+        var withoutBuilding = await razed.ReadStrictAsync<SettlementResponse>(Ct);
+        Assert.DoesNotContain(withoutBuilding.Buildings, b => b.Q == target.Q && b.R == target.R);
     }
 
     [Fact]
@@ -269,7 +270,9 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
 
         var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
             $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
-        var empty = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
+        // Terrain is irrelevant here: PlaceBuilding rejects a second longhouse
+        // before it ever looks at what the hex is made of.
+        var empty = layout!.Hexes.First(h => !h.IsCentre && h.Building is null);
 
         var second = await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{settlement.Id}/buildings/{empty.Q}/{empty.R}",
@@ -401,6 +404,39 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         var duplicate = await client.PostJsonAsync(
             "/api/v1/admin/worlds", new CreateWorldRequest(name, Seed: 22, Radius: 40), Ct);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+    }
+
+    /// <summary>
+    /// The first empty claimed hex something can actually be built on, and a
+    /// building type its terrain allows. A settlement's start position is
+    /// vetted land, but its neighbours are whatever the generator produced —
+    /// forest, ridge, sand or grass — so a test that hard-coded one terrain
+    /// would pass or fail on the world seed rather than on the rule it means
+    /// to check.
+    /// </summary>
+    private static (AdminSettlementHexResponse Hex, string Building) FirstBuildableHex(
+        AdminSettlementLayoutResponse layout)
+    {
+        // Mirrors BuildingCatalogue's terrain gates for one representative
+        // producer per land terrain.
+        var byTerrain = new Dictionary<string, string>
+        {
+            ["grass"] = "farm",
+            ["forest"] = "lumberjack",
+            ["mountain"] = "quarry",
+            ["sand"] = "tower",
+        };
+
+        foreach (var hex in layout.Hexes.Where(h => !h.IsCentre && h.Building is null))
+        {
+            if (byTerrain.TryGetValue(hex.Terrain, out var building))
+            {
+                return (hex, building);
+            }
+        }
+
+        Assert.Fail("No empty buildable hex inside the settlement's claim.");
+        throw new InvalidOperationException("unreachable");
     }
 
     /// <summary>
