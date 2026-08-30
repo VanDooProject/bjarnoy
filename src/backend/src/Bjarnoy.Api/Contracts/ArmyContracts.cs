@@ -72,11 +72,23 @@ public sealed record HexPointResponse(int Q, int R)
 }
 
 /// <param name="Path">Full outbound route, start and destination included — for a frontend to draw when the army is selected.</param>
+/// <param name="CumulativeHours">
+/// Game-hours elapsed to reach each hex of <paramref name="Path"/> from its
+/// start (<c>[0]</c> is always 0, same length as <paramref name="Path"/>) —
+/// see <see cref="Movement.CumulativeHours"/>. Exposed so a frontend can
+/// interpolate an army's live position <em>per leg</em> rather than assuming a
+/// uniform speed over the whole route: terrain makes legs cost wildly
+/// different amounts of time, so a uniform-speed guess drifts visibly away
+/// from the authoritative <c>Position</c> the backend reports (issue #94).
+/// </param>
+/// <param name="ReturnCumulativeHours">The same per-leg schedule for <paramref name="ReturnPath"/>, measured from <paramref name="TurnAroundAt"/>.</param>
 public sealed record MovementResponse(
     DateTimeOffset DepartedAt,
     IReadOnlyList<HexPointResponse> Path,
+    IReadOnlyList<double> CumulativeHours,
     DateTimeOffset ArrivesAt,
     IReadOnlyList<HexPointResponse> ReturnPath,
+    IReadOnlyList<double> ReturnCumulativeHours,
     DateTimeOffset TurnAroundAt,
     DateTimeOffset ReturnArrivesAt,
     bool IsReturning)
@@ -84,8 +96,10 @@ public sealed record MovementResponse(
     public static MovementResponse From(Movement movement) => new(
         movement.DepartedAt,
         [.. movement.Path.Select(HexPointResponse.From)],
+        [.. movement.CumulativeHours],
         movement.ArrivesAt,
         [.. movement.ReturnPath.Select(HexPointResponse.From)],
+        [.. movement.ReturnCumulativeHours],
         movement.TurnAroundAt,
         movement.ReturnArrivesAt,
         movement.IsReturning);
