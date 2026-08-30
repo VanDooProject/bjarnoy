@@ -3,20 +3,53 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminSettlementsView from './AdminSettlementsView.vue';
-import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
+import type {
+  AdminSettlementLayoutResponse,
+  AdminSettlementSummary,
+  SettlementResponse,
+  UnitDefinitionResponse,
+} from '../../api/types';
 
-const { adminSearchSettlements, adminGetSettlement, adminGrantResources, adminSetBuildingLevel } = vi.hoisted(() => ({
+const {
+  adminSearchSettlements,
+  adminGetSettlement,
+  adminGrantResources,
+  adminGetSettlementLayout,
+  adminPlaceBuilding,
+  adminRazeBuilding,
+  adminCompleteQueues,
+  adminAdjustGarrison,
+  adminListArmies,
+  getUnitCatalogue,
+} = vi.hoisted(() => ({
   adminSearchSettlements: vi.fn(),
   adminGetSettlement: vi.fn(),
   adminGrantResources: vi.fn(),
-  adminSetBuildingLevel: vi.fn(),
+  adminGetSettlementLayout: vi.fn(),
+  adminPlaceBuilding: vi.fn(),
+  adminRazeBuilding: vi.fn(),
+  adminCompleteQueues: vi.fn(),
+  adminAdjustGarrison: vi.fn(),
+  adminListArmies: vi.fn(),
+  getUnitCatalogue: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { adminSearchSettlements, adminGetSettlement, adminGrantResources, adminSetBuildingLevel },
+    api: {
+      adminSearchSettlements,
+      adminGetSettlement,
+      adminGrantResources,
+      adminGetSettlementLayout,
+      adminPlaceBuilding,
+      adminRazeBuilding,
+      adminCompleteQueues,
+      adminAdjustGarrison,
+      adminListArmies,
+      getUnitCatalogue,
+    },
   };
 });
 
@@ -44,19 +77,53 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
     q: 0,
     r: 0,
     longhouseLevel: 1,
-    claimRadius: 3,
+    claimRadius: 1,
     resources: {
       stock: { wood: 300, stone: 200, food: 150, iron: 50 },
       ratePerHour: { wood: 10, stone: 5, food: 8, iron: 2 },
       capacity: { wood: 1000, stone: 1000, food: 1000, iron: 1000 },
     },
-    buildings: [{ q: 0, r: 0, type: 'Longhouse', level: 1 }],
+    buildings: [{ q: 0, r: 0, type: 'longhouse', level: 1 }],
     queue: [],
     garrison: [],
     trainingQueue: [],
     world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
     ...overrides,
   };
+}
+
+function layout(overrides: Partial<AdminSettlementLayoutResponse> = {}): AdminSettlementLayoutResponse {
+  return {
+    settlementId: 'settlement-1',
+    claimRadius: 1,
+    hexes: [
+      { q: 0, r: 0, terrain: 'grass', isCoastalWater: false, building: 'longhouse', level: 1, isCentre: true },
+      { q: 1, r: 0, terrain: 'grass', isCoastalWater: false, building: null, level: null, isCentre: false },
+      { q: 0, r: 1, terrain: 'forest', isCoastalWater: false, building: null, level: null, isCentre: false },
+    ],
+    buildingTypes: ['longhouse', 'farm', 'lumberjack'],
+    maxLevel: 10,
+    ...overrides,
+  };
+}
+
+/** Opens the first row's management panel, with every child panel's fetch stubbed. */
+async function openDetail(detailResponse = detail()) {
+  adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
+  adminGetSettlement.mockResolvedValue(detailResponse);
+  adminGetSettlementLayout.mockResolvedValue(layout());
+  adminListArmies.mockResolvedValue([]);
+  getUnitCatalogue.mockResolvedValue([
+    { type: 'spearman' },
+    { type: 'thrall' },
+  ] as UnitDefinitionResponse[]);
+
+  const wrapper = mount(AdminSettlementsView);
+  await flushPromises();
+  await wrapper.findAll('button').find((b) => b.text() === 'Manage')!.trigger('click');
+  await flushPromises();
+
+  return wrapper;
 }
 
 beforeEach(() => {
@@ -76,33 +143,25 @@ describe('AdminSettlementsView', () => {
     expect(wrapper.text()).toContain('Midgard');
   });
 
-  it('expands a row into detail with the grant and set-level forms', async () => {
-    adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
-    adminGetSettlement.mockResolvedValue(detail());
-
-    const wrapper = mount(AdminSettlementsView);
-    await flushPromises();
-
-    await wrapper.findAll('button').find((b) => b.text() === 'Manage')!.trigger('click');
-    await flushPromises();
+  it('expands a row into the full god-mode panel', async () => {
+    const wrapper = await openDetail();
 
     expect(adminGetSettlement).toHaveBeenCalledWith('settlement-1');
     expect(wrapper.text()).toContain('Grant resources');
-    expect(wrapper.text()).toContain('Set building level');
+    expect(wrapper.text()).toContain('Create troops');
+    expect(wrapper.text()).toContain('Settlement editor');
+    expect(wrapper.text()).toContain('Armies');
     expect(wrapper.text()).toContain('Wood 300');
   });
 
   it('applies a resource grant and reflects the updated stock in the detail panel', async () => {
-    adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
-    adminGetSettlement.mockResolvedValue(detail());
-    adminGrantResources.mockResolvedValue(detail({ resources: { ...detail().resources, stock: { wood: 800, stone: 200, food: 150, iron: 50 } } }));
+    adminGrantResources.mockResolvedValue(
+      detail({ resources: { ...detail().resources, stock: { wood: 800, stone: 200, food: 150, iron: 50 } } }),
+    );
 
-    const wrapper = mount(AdminSettlementsView);
-    await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text() === 'Manage')!.trigger('click');
-    await flushPromises();
+    const wrapper = await openDetail();
 
-    const woodInput = wrapper.findAll('input[type="number"]')[0]!;
+    const woodInput = wrapper.find('.grant-form').findAll('input[type="number"]')[0]!;
     await woodInput.setValue(500);
     await wrapper.find('.grant-form').trigger('submit');
     await flushPromises();
@@ -111,23 +170,79 @@ describe('AdminSettlementsView', () => {
     expect(wrapper.text()).toContain('Wood 800');
   });
 
-  it('sets a building level and reflects the updated longhouse level in the row', async () => {
-    adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
-    adminGetSettlement.mockResolvedValue(detail());
-    adminSetBuildingLevel.mockResolvedValue(detail({ longhouseLevel: 4 }));
+  it('creates troops straight into the garrison', async () => {
+    adminAdjustGarrison.mockResolvedValue(detail({ garrison: [{ unit: 'spearman', count: 10 }] }));
 
-    const wrapper = mount(AdminSettlementsView);
-    await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text() === 'Manage')!.trigger('click');
-    await flushPromises();
+    const wrapper = await openDetail();
 
-    const levelInput = wrapper.find('.level-form input[type="number"]');
-    await levelInput.setValue(4);
-    await wrapper.find('.level-form').trigger('submit');
+    await wrapper.find('.garrison-form select').setValue('spearman');
+    await wrapper.find('.garrison-form').trigger('submit');
     await flushPromises();
 
-    expect(adminSetBuildingLevel).toHaveBeenCalledWith('settlement-1', 0, 0, { level: 4 });
-    const row = wrapper.findAll('tbody tr')[0]!;
-    expect(row.text()).toContain('4');
+    expect(adminAdjustGarrison).toHaveBeenCalledWith('settlement-1', { unit: 'spearman', count: 10 });
+    expect(wrapper.text()).toContain('spearman 10');
+  });
+
+  it('places a building on a clicked hex and updates the row', async () => {
+    adminPlaceBuilding.mockResolvedValue(
+      detail({ buildings: [...detail().buildings, { q: 1, r: 0, type: 'farm', level: 5 }] }),
+    );
+
+    const wrapper = await openDetail();
+
+    await wrapper.find('polygon[data-hex="1,0"]').trigger('click');
+    await wrapper.find('.hex-form select').setValue('farm');
+    await wrapper.find('.hex-form input[type="number"]').setValue(5);
+    await wrapper.findAll('.hex-form button').find((b) => b.text() === 'Apply')!.trigger('click');
+    await flushPromises();
+
+    expect(adminPlaceBuilding).toHaveBeenCalledWith('settlement-1', 1, 0, { building: 'farm', level: 5 });
+  });
+
+  it('razes the building standing on a clicked hex', async () => {
+    adminRazeBuilding.mockResolvedValue(detail());
+
+    const wrapper = await openDetail();
+
+    await wrapper.find('polygon[data-hex="0,0"]').trigger('click');
+    await wrapper.findAll('.hex-form button').find((b) => b.text() === 'Raze')!.trigger('click');
+    await flushPromises();
+
+    expect(adminRazeBuilding).toHaveBeenCalledWith('settlement-1', 0, 0);
+  });
+
+  it('finishes the queue instantly and reports what it built', async () => {
+    const queued = detail({
+      queue: [{
+        id: 'order-1',
+        q: 1,
+        r: 0,
+        building: 'farm',
+        targetLevel: 1,
+        completesAtGameTime: '2026-01-01T01:00:00Z',
+        completesInSeconds: 3600,
+      }],
+    });
+    adminCompleteQueues.mockResolvedValue({
+      completedBuilds: 1,
+      completedTraining: 0,
+      settlement: detail({ buildings: [...detail().buildings, { q: 1, r: 0, type: 'farm', level: 1 }] }),
+    });
+
+    const wrapper = await openDetail(queued);
+
+    await wrapper.find('button.insta').trigger('click');
+    await flushPromises();
+
+    expect(adminCompleteQueues).toHaveBeenCalledWith('settlement-1', { builds: true, training: true });
+    expect(wrapper.text()).toContain('Finished 1 build(s)');
+  });
+
+  it('leaves the instant-build button disabled when nothing is queued', async () => {
+    const wrapper = await openDetail();
+
+    const button = wrapper.find('button.insta');
+    expect(button.text()).toContain('Nothing queued');
+    expect(button.attributes('disabled')).toBeDefined();
   });
 });

@@ -2,8 +2,10 @@
 import { onMounted, ref } from 'vue';
 import { api, ApiError } from '../../api/client';
 import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
+import ArmyEditor from './ArmyEditor.vue';
+import GarrisonForm from './GarrisonForm.vue';
 import GrantResourcesForm from './GrantResourcesForm.vue';
-import SetBuildingLevelForm from './SetBuildingLevelForm.vue';
+import SettlementLayoutEditor from './SettlementLayoutEditor.vue';
 
 const settlements = ref<AdminSettlementSummary[]>([]);
 const totalCount = ref(0);
@@ -143,12 +145,18 @@ function onChanged(updated: SettlementResponse) {
                   </div>
                   <div class="forms">
                     <GrantResourcesForm :settlement-id="detail.id" @granted="onChanged" />
-                    <SetBuildingLevelForm
+                    <GarrisonForm
                       :settlement-id="detail.id"
-                      :buildings="detail.buildings"
-                      @updated="onChanged"
+                      :garrison="detail.garrison"
+                      @changed="onChanged"
                     />
                   </div>
+                  <SettlementLayoutEditor
+                    :settlement-id="detail.id"
+                    :settlement="detail"
+                    @changed="onChanged"
+                  />
+                  <ArmyEditor :settlement-id="detail.id" />
                 </div>
               </td>
             </tr>
@@ -207,6 +215,10 @@ function onChanged(updated: SettlementResponse) {
   display: flex;
   gap: 32px;
   flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.detail > * + * {
+  margin-top: 20px;
 }
 .pager {
   display: flex;

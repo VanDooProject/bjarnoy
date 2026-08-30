@@ -591,6 +591,224 @@ public sealed record Settlement
         return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
     }
 
+    /// <summary>
+    /// Admin god-mode "instant build": rewrites every still-pending order's
+    /// <see cref="BuildOrder.CompletesAt"/> (and/or
+    /// <see cref="TrainingOrder.CompletesAt"/>) to <paramref name="now"/>, so
+    /// the very next <see cref="SettleTo"/> applies them through the ordinary
+    /// completion path.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does <em>not</em> settle or apply anything itself: the
+    /// whole point is that an insta-built building lands through exactly the
+    /// same code a naturally finished one does, including the per-completion
+    /// rate recalculation and the chronological merge with training
+    /// completions. Ties are broken by queue order, because
+    /// <see cref="SettleTo"/>'s <c>OrderBy</c> is stable — so three queued
+    /// levels on one hex still land 1, 2, 3 rather than in an arbitrary order.
+    /// Orders already due are left alone (their real completion instant is
+    /// what the rate history should keep).
+    /// </remarks>
+    public Settlement WithQueuesDueAt(DateTimeOffset now, bool builds = true, bool training = true) => this with
+    {
+        Queue = builds
+            ? [.. Queue.Select(o => o.IsComplete(now) ? o : o with { CompletesAt = now })]
+            : Queue,
+        // A TrainingOrder's CompletesAt is derived, not stored (StartedAt plus
+        // per-unit duration times count), so "due now" is expressed by
+        // restarting the batch at now with no per-unit duration left to serve
+        // — which also makes its live CompletedCount read as the full batch.
+        TrainingQueue = training
+            ? [.. TrainingQueue.Select(o => o.IsComplete(now)
+                ? o
+                : o with { StartedAt = now, PerUnitDuration = TimeSpan.Zero })]
+            : TrainingQueue,
+    };
+
+    /// <summary>
+    /// Admin god-mode: puts a building of <paramref name="type"/> at
+    /// <paramref name="level"/> on <paramref name="coord"/>, whether or not
+    /// anything already stands there, bypassing cost, queue and longhouse
+    /// prerequisites — but not the rules that would leave the settlement in a
+    /// shape the rest of the game cannot represent: the hex must be claimed,
+    /// the level must exist in the catalogue, the terrain must suit the
+    /// building, and the single longhouse can neither be duplicated nor moved.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement — same reasoning as
+    /// <see cref="SetBuildingLevel"/>, which this generalises (that one only
+    /// re-levels what already stands; this also places and re-types).
+    /// </remarks>
+    public AdminBuildingEditResult PlaceBuilding(
+        HexCoord coord,
+        BuildingType type,
+        int level,
+        Terrain terrain,
+        bool isCoastalWater,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        if (!Claims(coord))
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexNotInSettlement);
+        }
+
+        var definition = BuildingCatalogue.TryGet(type, level);
+        if (definition is null)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.InvalidLevel);
+        }
+
+        var buildings = Buildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        var standingHere = index >= 0 ? buildings[index].Type : (BuildingType?)null;
+
+        // The longhouse is the settlement's anchor: its level drives the claim
+        // radius every other rule reads, and founding places exactly one. So a
+        // second one cannot be placed, and the one that exists cannot be
+        // re-typed away or moved to another hex — only re-levelled in place.
+        if ((type == BuildingType.Longhouse && standingHere != BuildingType.Longhouse)
+            || (standingHere == BuildingType.Longhouse && type != BuildingType.Longhouse))
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
+        }
+
+        var terrainOk = definition.RequiresCoastalWater ? isCoastalWater : definition.AllowsTerrain(terrain);
+        if (!terrainOk)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.TerrainNotAllowed);
+        }
+
+        var placed = new PlacedBuilding(coord, type, level);
+        if (index >= 0)
+        {
+            buildings[index] = placed;
+        }
+        else
+        {
+            buildings.Add(placed);
+        }
+
+        return AdminBuildingEditResult.Accept(WithBuildings(buildings, coord, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Admin god-mode: removes whatever stands on <paramref name="coord"/> —
+    /// the counterpart to <see cref="PlaceBuilding"/>. The longhouse cannot be
+    /// razed (see that method's remarks).
+    /// </summary>
+    public AdminBuildingEditResult RazeBuilding(
+        HexCoord coord,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        var buildings = Buildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        if (index < 0)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.BuildingNotFound);
+        }
+
+        if (buildings[index].Type == BuildingType.Longhouse)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
+        }
+
+        buildings.RemoveAt(index);
+
+        return AdminBuildingEditResult.Accept(WithBuildings(buildings, coord, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Admin god-mode: adds <paramref name="delta"/> units of
+    /// <paramref name="type"/> to the garrison (or removes them, when
+    /// negative), free of cost and training time, and re-rates food upkeep
+    /// from <paramref name="now"/> onward exactly as a finished training batch
+    /// would.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement, so the upkeep change applies
+    /// from now rather than retroactively — the same rule
+    /// <see cref="SetBuildingLevel"/> follows.
+    /// </remarks>
+    public AdminGarrisonEditResult AdjustGarrison(
+        UnitType type,
+        int delta,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        if (delta == 0)
+        {
+            return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.InvalidCount);
+        }
+
+        var garrison = Garrison.ToList();
+        var index = garrison.FindIndex(s => s.Type == type);
+        var standing = index >= 0 ? garrison[index].Count : 0;
+
+        if (standing + delta < 0)
+        {
+            return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.NotEnoughUnits);
+        }
+
+        if (index >= 0)
+        {
+            var remaining = standing + delta;
+            if (remaining == 0)
+            {
+                garrison.RemoveAt(index);
+            }
+            else
+            {
+                garrison[index] = garrison[index] with { Count = remaining };
+            }
+        }
+        else
+        {
+            garrison.Add(new UnitStack(type, delta));
+        }
+
+        var (production, capacity) = BuildingCatalogue.Totals(Buildings, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, garrison, guestStacks ?? []), capacity, now);
+
+        return AdminGarrisonEditResult.Accept(this with { Garrison = garrison, Resources = resources });
+    }
+
+    /// <summary>
+    /// Swaps in a new building list and re-rates production/capacity from
+    /// <paramref name="now"/> — the shared tail of <see cref="PlaceBuilding"/>
+    /// and <see cref="RazeBuilding"/>. Any queued order still aimed at
+    /// <paramref name="editedCoord"/> is dropped: it was planned against a
+    /// building that is no longer the one standing there, so letting it
+    /// complete would silently overwrite the admin's edit.
+    /// </summary>
+    private Settlement WithBuildings(
+        List<PlacedBuilding> buildings,
+        HexCoord editedCoord,
+        DateTimeOffset now,
+        double speedFactor,
+        IReadOnlyList<UnitStack>? guestStacks,
+        Func<HexCoord, Terrain>? terrainAt)
+    {
+        var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
+
+        return this with
+        {
+            Buildings = buildings,
+            Queue = [.. Queue.Where(o => o.Coord != editedCoord)],
+            Resources = resources,
+        };
+    }
+
     /// <summary>Net production (after garrison and guest upkeep) and capacity implied by what currently stands.</summary>
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
         double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
