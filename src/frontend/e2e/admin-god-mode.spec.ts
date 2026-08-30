@@ -104,8 +104,10 @@ function armyEntry(overrides: { stacks?: { unit: string; count: number }[]; posi
       movement: {
         departedAt: '2026-01-01T00:00:00Z',
         path: [],
+        cumulativeHours: [],
         arrivesAt: '2026-01-01T10:00:00Z',
         returnPath: [],
+        returnCumulativeHours: [],
         turnAroundAt: '2026-01-01T20:00:00Z',
         returnArrivesAt: '2026-01-02T06:00:00Z',
         isReturning: false,

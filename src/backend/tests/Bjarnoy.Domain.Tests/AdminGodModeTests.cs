@@ -3,7 +3,7 @@ using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
-using Movement = Bjarnoy.Domain.Movement.Movement;
+using ArmyMovement = Bjarnoy.Domain.Movement.Movement;
 
 namespace Bjarnoy.Domain.Tests;
 
@@ -260,11 +260,11 @@ public sealed class AdminGodModeTests
     }
 
     /// <summary>A five-thrall army ten hours into a journey, with plenty of food aboard.</summary>
-    private static Army TravellingArmy(out Movement movement)
+    private static Army TravellingArmy(out ArmyMovement movement)
     {
         var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
 
-        movement = new Movement
+        movement = new ArmyMovement
         {
             DepartedAt = Start,
             Path = path,
