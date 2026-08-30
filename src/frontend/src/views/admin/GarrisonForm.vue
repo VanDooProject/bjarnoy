@@ -83,11 +83,12 @@ async function submit(sign: 1 | -1) {
     </div>
 
     <div class="actions">
-      <button type="submit" :disabled="saving">{{ saving ? 'Working…' : 'Create' }}</button>
-      <button type="button" class="danger" :disabled="saving" @click="submit(-1)">Remove</button>
+      <button type="submit" :disabled="saving || !unit">{{ saving ? 'Working…' : 'Create' }}</button>
+      <button type="button" class="danger" :disabled="saving || !unit" @click="submit(-1)">Remove</button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
+    <p v-else-if="options.length === 0" class="hint">Loading the unit roster…</p>
   </form>
 </template>
 
@@ -152,6 +153,11 @@ button:disabled {
 }
 .error {
   color: var(--rival);
+  font-size: 13px;
+  margin-top: 8px;
+}
+.hint {
+  color: var(--muted);
   font-size: 13px;
   margin-top: 8px;
 }

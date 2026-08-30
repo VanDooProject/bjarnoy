@@ -175,6 +175,13 @@ describe('AdminSettlementsView', () => {
 
     const wrapper = await openDetail();
 
+    // The unit roster is fetched asynchronously, so wait for the option to
+    // actually exist rather than assuming a fixed number of ticks — that
+    // assumption held locally and lost the race on CI.
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.garrison-form option').length).toBeGreaterThan(0);
+    });
+
     await wrapper.find('.garrison-form select').setValue('spearman');
     await wrapper.find('.garrison-form').trigger('submit');
     await flushPromises();
