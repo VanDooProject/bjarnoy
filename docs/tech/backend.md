@@ -357,7 +357,14 @@ session's.
 World creation (`POST /api/v1/worlds`) and most read endpoints (a settlement's
 full resources/garrison/queue, its battle reports) are still unauthenticated —
 closing those is a separate, larger pass across the test suite's world-creation
-fixtures, not folded into the ownership work above.
+fixtures, not folded into the ownership work above. A self-migrating app
+instance (`Database:MigrateOnStartup` true — a fresh local run, or
+`Bjarnoy.AppHost`) does now seed one default world if none exists at all
+(`WorldService.SeedDefaultWorldIfNoneAsync`, called right after
+`DatabaseMigrator.MigrateAsync()` in `Program.cs`) — that's a bootstrap
+convenience so there's something to join on a brand-new database now that the
+frontend no longer creates a world itself, not a step toward locking the
+endpoint down.
 
 Combat, fleets and caravans. Razing and capturing a settlement — the border
 rules assume a settlement's buildings only ever appear, never disappear.
