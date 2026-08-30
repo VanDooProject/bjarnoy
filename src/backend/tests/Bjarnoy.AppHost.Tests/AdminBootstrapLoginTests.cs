@@ -79,7 +79,14 @@ public class AdminBootstrapLoginTests
                 ex);
         }
         await Assertions.Expect(page.GetByText("Wrong username or password.")).Not.ToBeVisibleAsync();
-        await Assertions.Expect(page.GetByRole(AriaRole.Heading)).ToBeVisibleAsync();
+
+        // A generic AriaRole.Heading locator is ambiguous here: AdminWorldsView
+        // (the default /admin landing page) renders an <h1>Worlds</h1> *and* an
+        // <h2> per seeded world (e.g. its name), which Playwright's strict mode
+        // rejects as multiple matches. Assert on the page's own "Worlds" heading
+        // specifically instead of "any heading".
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Worlds" }))
+            .ToBeVisibleAsync();
 
         Assert.Empty(consoleErrors);
     }
