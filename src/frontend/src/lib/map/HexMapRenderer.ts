@@ -945,6 +945,16 @@ export class HexMapRenderer {
       this.setHoveredCoord(null);
       return;
     }
+    // Issue #91: a bounding-rect test alone can't tell the canvas apart from
+    // a HUD panel floating on top of it (both cover the same rect, since the
+    // canvas is absolutely positioned to fill the viewport) — so hovering an
+    // interactive side pane (training, armies, ...) was still resolving a
+    // hex underneath and painting the tooltip over the panel. Ask the DOM
+    // what's actually under the pointer instead.
+    if (document.elementFromPoint(e.clientX, e.clientY) !== canvas) {
+      this.setHoveredCoord(null);
+      return;
+    }
     const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const world = screenToWorld(this.camera, screen, this.viewport);
     this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
@@ -1020,17 +1030,17 @@ export class HexMapRenderer {
       // Output/modifier/workers are only for the viewer's own buildings —
       // scouting a rival's tile shows the building and its level, but the
       // stats themselves are gated behind Premium (see HoverInfo.premiumLocked).
-      const stats = mine ? this.buildingStats(tile, level) : {};
+      const stats = mine && !tile.underConstruction ? this.buildingStats(tile, level) : {};
       return {
         screenX: screen.x,
         screenY: screen.y,
         title,
         subtitle,
-        stat: `Level ${level}`,
+        stat: tile.underConstruction ? 'Under construction' : `Level ${level}`,
         level,
         ...stats,
         premiumLocked: !mine,
-        cta: mine ? 'Click to open' : undefined,
+        cta: mine && !tile.underConstruction ? 'Click to open' : undefined,
       };
     }
     if (owner) {
