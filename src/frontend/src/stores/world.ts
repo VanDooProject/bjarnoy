@@ -679,6 +679,27 @@ export const useWorldStore = defineStore('world', {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.route.push(coord);
     },
+    /**
+     * Issue #93: repositions an already-plotted waypoint — the map's own
+     * drag-a-pin gesture (HexMapRenderer's `onWaypointMove`), and the only
+     * way to correct a mis-clicked hex in the middle of a route without
+     * undoing every waypoint placed after it.
+     *
+     * Silently ignores an out-of-range index rather than throwing: the drag
+     * is driven by a renderer that holds an index across frames, and a draft
+     * can be cleared (or shortened via `removeWaypoint`) underneath it.
+     */
+    moveWaypoint(index: number, coord: AxialCoord) {
+      const route = this.dispatchDraft?.route;
+      if (!route || index < 0 || index >= route.length) return;
+      route[index] = { q: coord.q, r: coord.r };
+    },
+    /** Issue #93: drops one waypoint by index — `removeLastWaypoint` can only ever pop the newest. */
+    removeWaypoint(index: number) {
+      const route = this.dispatchDraft?.route;
+      if (!route || index < 0 || index >= route.length) return;
+      route.splice(index, 1);
+    },
     removeLastWaypoint() {
       if (!this.dispatchDraft) return;
       this.dispatchDraft.route.pop();

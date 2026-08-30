@@ -101,6 +101,17 @@ function setQuantity(unit: string, value: string, max: number) {
 }
 
 const routeLength = computed(() => draft.value?.route.length ?? 0);
+// Issue #93: the plotted route as an editable list. "Undo waypoint" can only
+// ever pop the newest one, so a mis-clicked hex in the middle of a route
+// previously meant clearing everything after it and re-plotting; this (plus
+// dragging the pin on the map itself) makes any waypoint editable in place.
+const routeRows = computed(() =>
+  (draft.value?.route ?? []).map((c, i) => ({
+    index: i,
+    label: `${i + 1}. (${c.q}, ${c.r})`,
+    isDestination: draft.value?.mission === 'move' && i === (draft.value?.route.length ?? 0) - 1,
+  })),
+);
 const hasUnitsSelected = computed(() =>
   !!draft.value && Object.values(draft.value.unitCounts).some((c) => c > 0),
 );
@@ -396,6 +407,23 @@ async function recall(armyId: string) {
             </template>
           </div>
         </template>
+
+        <div v-if="routeRows.length" class="waypoint-list">
+          <p class="status-subtext waypoint-hint">Drag a pin on the map to move a waypoint.</p>
+          <div v-for="row in routeRows" :key="row.index" class="waypoint-row">
+            <span class="waypoint-label">
+              {{ row.label }}<span v-if="row.isDestination" class="waypoint-tag"> · destination</span>
+            </span>
+            <button
+              type="button"
+              class="waypoint-remove"
+              :aria-label="`Remove waypoint ${row.index + 1}`"
+              @click="world.removeWaypoint(row.index)"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">
           {{ selectionKind === 'fleet' ? 'Ships' : 'Land units' }} only — ships and land
@@ -695,6 +723,41 @@ async function recall(armyId: string) {
 .fleet-note {
   margin-top: 0;
   color: #e0b25a;
+}
+/* Issue #93: the plotted route, one editable row per waypoint. */
+.waypoint-list {
+  margin: 8px 0;
+  border-top: 1px solid var(--panel-border);
+}
+.waypoint-hint {
+  margin: 6px 0;
+}
+.waypoint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+.waypoint-label {
+  font-size: 11px;
+  color: var(--text);
+}
+.waypoint-tag {
+  color: var(--gold);
+}
+.waypoint-remove {
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.waypoint-remove:hover {
+  color: #e08a8a;
 }
 .unit-picker {
   display: flex;

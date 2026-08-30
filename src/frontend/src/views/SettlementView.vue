@@ -89,6 +89,21 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     position: a.position,
     selected: a.id === world.selectedArmyId,
     returning: !!a.movement?.isReturning,
+    // Issue #94: hand the renderer the whole frozen leg, not a position —
+    // it interpolates along it every frame (see HexMapRenderer's
+    // `resolveArmyPoint`). An `atHome`/`supporting` army has no movement at
+    // all and keeps sitting on its authoritative hex. `movement.path` is
+    // always the *active* leg, outbound or return (the backend rebuilds
+    // Movement on turn-around — see Movement.cs's own remarks), so there's
+    // no leg-picking to do here.
+    movement: a.movement
+      ? {
+          path: a.movement.path.map((p) => ({ q: p.q, r: p.r })),
+          cumulativeHours: a.movement.cumulativeHours ?? [],
+          departedAtMs: Date.parse(a.movement.departedAt),
+          arrivesAtMs: Date.parse(a.movement.arrivesAt),
+        }
+      : undefined,
   }));
   const selected = world.armies.find((a) => a.id === world.selectedArmyId);
   const route = selected?.movement
@@ -97,8 +112,35 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
       : selected.movement.path
     : [];
   const draftWaypoints = world.dispatchDraft?.route ?? [];
-  return { armies, route, draftWaypoints };
+  return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
 });
+
+// Issue #93 "attack/raid target indicator": the settlement an attack/support
+// is aimed at, marked on its own hex. Two sources, deliberately both: the
+// dispatch being composed right now (the player picked it from a text list
+// and otherwise gets no confirmation of *where* it is), and the selected
+// in-transit army's target (so a march already under way still shows what
+// it's marching at). A settlement the local WorldModel doesn't know yet
+// (`refreshWorldSettlements` hasn't registered it) simply isn't marked.
+function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined) {
+  const targets: NonNullable<ArmyOverlayData['targets']> = [];
+  const add = (settlementId: string | null | undefined, mission: string) => {
+    if (!settlementId || (mission !== 'attack' && mission !== 'support' && mission !== 'raid')) return;
+    const settlement = world.model.getSettlement(settlementId);
+    if (!settlement) return;
+    // Raids are attacks as far as the map is concerned — the marker says
+    // "someone is coming for this place", not which flavour of order it is.
+    const kind = mission === 'support' ? 'support' : 'attack';
+    if (targets.some((t) => t.coord.q === settlement.q && t.coord.r === settlement.r && t.kind === kind)) return;
+    targets.push({ coord: { q: settlement.q, r: settlement.r }, kind });
+  };
+  const draft = world.dispatchDraft;
+  if (draft) add(draft.targetSettlementId, draft.mission);
+  if (selectedArmy && !selectedArmy.movement?.isReturning) {
+    add(selectedArmy.targetSettlementId, selectedArmy.mission);
+  }
+  return targets;
+}
 watch(
   [() => canvasRef.value?.renderer, armyOverlayData],
   ([renderer, data]) => {
@@ -411,6 +453,13 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   ringStack.value = [{ level: 'root' }];
 }
 
+// Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
+// the pin was dragged onto (snapping happens there, against the same
+// isoPixelToAxial a click uses); this just writes it into the draft.
+function onWaypointMove(index: number, coord: AxialCoord) {
+  world.moveWaypoint(index, coord);
+}
+
 function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
@@ -554,6 +603,7 @@ async function upgrade() {
       :settlement-id="world.selectedSettlementId"
       @hex-click="onHexClick"
       @hover="onHover"
+      @waypoint-move="onWaypointMove"
     />
     <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is

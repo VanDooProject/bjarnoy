@@ -94,3 +94,52 @@ describe('useWorldStore refreshArmies (guest armies)', () => {
     expect(getSettlementGuests).not.toHaveBeenCalled();
   });
 });
+
+// Issue #93: editing an arbitrary waypoint of a plotted route, not just
+// popping the newest one — the map's drag-a-pin gesture and the panel's
+// per-waypoint remove button both go through these.
+describe('useWorldStore waypoint editing', () => {
+  it('moves a waypoint by index, leaving the rest of the route alone', async () => {
+    const store = await loadStoreModule(true);
+    store.startDispatch();
+    store.addWaypoint({ q: 1, r: 0 });
+    store.addWaypoint({ q: 2, r: 0 });
+    store.addWaypoint({ q: 3, r: 0 });
+
+    store.moveWaypoint(1, { q: 9, r: 9 });
+
+    expect(store.dispatchDraft!.route).toEqual([
+      { q: 1, r: 0 },
+      { q: 9, r: 9 },
+      { q: 3, r: 0 },
+    ]);
+  });
+
+  it('removes a waypoint by index, unlike removeLastWaypoint', async () => {
+    const store = await loadStoreModule(true);
+    store.startDispatch();
+    store.addWaypoint({ q: 1, r: 0 });
+    store.addWaypoint({ q: 2, r: 0 });
+    store.addWaypoint({ q: 3, r: 0 });
+
+    store.removeWaypoint(0);
+
+    expect(store.dispatchDraft!.route).toEqual([{ q: 2, r: 0 }, { q: 3, r: 0 }]);
+  });
+
+  it('ignores an out-of-range index or a draft that is already gone', async () => {
+    const store = await loadStoreModule(true);
+    store.startDispatch();
+    store.addWaypoint({ q: 1, r: 0 });
+
+    store.moveWaypoint(5, { q: 9, r: 9 });
+    store.removeWaypoint(-1);
+    expect(store.dispatchDraft!.route).toEqual([{ q: 1, r: 0 }]);
+
+    // A drag can still be in flight in the renderer when the draft is
+    // cancelled underneath it.
+    store.cancelDispatch();
+    expect(() => store.moveWaypoint(0, { q: 4, r: 4 })).not.toThrow();
+    expect(() => store.removeWaypoint(0)).not.toThrow();
+  });
+});
