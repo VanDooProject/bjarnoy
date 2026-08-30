@@ -33,7 +33,19 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
     private static string Unique(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..20];
 
-    /// <summary>Creates a world and founds a settlement on its first usable plot.</summary>
+    /// <summary>This suite's one client-local id — see FoundAsync's own X-Owner-Id remark.</summary>
+    private const string OwnerId = "ulf-player";
+
+    /// <summary>
+    /// Creates a world and founds a settlement on its first usable plot.
+    /// Also sets <paramref name="client"/>'s default <c>X-Owner-Id</c> header
+    /// to <see cref="OwnerId"/> — the id the settlement was just founded
+    /// under — so every other test in this file that goes on to mutate the
+    /// settlement (build, train) needs no ownership boilerplate of its own;
+    /// see SettlementOwnershipEndpointFilter. Tests that specifically probe
+    /// the ownership boundary (the "ownership" region below) override or
+    /// remove this header themselves afterwards.
+    /// </summary>
     private async Task<(Guid WorldId, SettlementResponse Settlement)> FoundAsync(
         HttpClient client, int seed = 21, int radius = 60)
     {
@@ -49,10 +61,14 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", "ulf-player"),
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", OwnerId),
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
+
         return (world.Id, await response.ReadStrictAsync<SettlementResponse>(Ct));
     }
 
@@ -353,9 +369,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{world.Id}/settlements",
             new FoundSettlementRequest(
                 islands!.First(i => i.StartPositions.Contains(foundStart)).Id,
-                foundStart.Q, foundStart.R, "Sjostad", "Ulf", "ulf-player"),
+                foundStart.Q, foundStart.R, "Sjostad", "Ulf", OwnerId),
             Ct);
         Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
         var settlement = await founded.ReadStrictAsync<SettlementResponse>(Ct);
         var centre = new HexCoord(settlement.Q, settlement.R);
 
@@ -603,6 +620,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         using var client = Client();
         var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
 
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
@@ -617,6 +635,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         using var client = Client();
         var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
 
         var response = await client.PostJsonAsync(
@@ -632,9 +651,8 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         using var client = Client();
         var (_, settlement) = await FoundAsync(client);
-        // "ulf-player" is FoundAsync's own OwnerId — the founding browser's
-        // client-local id.
-        client.DefaultRequestHeaders.Add("X-Owner-Id", "ulf-player");
+        // FoundAsync already set X-Owner-Id to its own OwnerId — the
+        // founding browser's client-local id — so nothing more to arrange.
 
         Assert.NotNull(await QueueFarmAsync(client, settlement));
     }
@@ -644,6 +662,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     {
         using var client = Client();
         var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
 
         var response = await client.PostJsonAsync(
