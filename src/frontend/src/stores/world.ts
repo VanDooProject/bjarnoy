@@ -259,32 +259,60 @@ export const useWorldStore = defineStore('world', {
       return worlds.length > 0 ? worlds[worlds.length - 1] : null;
     },
     /**
-     * Nearest island start position to `near` that nobody has founded on (or
-     * too close to) yet, for founding via the API.
-     *
-     * Start positions are precomputed once at world generation and never
-     * shrink as players settle, so without this check every new player on a
-     * shared world converges on the exact same nearest plot — which the
-     * backend then refuses with `PlotTaken` (an exact match) or
-     * `TooCloseToNeighbour` (see `SettlementService.MinimumSpacing`) once
-     * it's taken, rather than the client ever finding out until it tries.
+     * Every island start position nobody has founded on (or too close to)
+     * yet — the shared base for `nearestStartPosition`, `startPositionAt`
+     * and `nearbyStartPositions` below.
      */
-    nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {
+    unclaimedStartPositions(): { islandId: string; at: AxialCoord }[] {
       const settlements = this.model.listSettlements();
-      let best: { islandId: string; at: AxialCoord; distance: number } | null = null;
+      const result: { islandId: string; at: AxialCoord }[] = [];
       for (const island of this.islands) {
         for (const pos of island.startPositions) {
           const tooCloseToExisting = settlements.some(
             (s) => hexDistance(pos, { q: s.q, r: s.r }) < MINIMUM_SETTLEMENT_SPACING,
           );
           if (tooCloseToExisting) continue;
-          const distance = hexDistance(near, pos);
-          if (!best || distance < best.distance) {
-            best = { islandId: island.id, at: pos, distance };
-          }
+          result.push({ islandId: island.id, at: pos });
+        }
+      }
+      return result;
+    },
+    /**
+     * Nearest island start position to `near` that nobody has founded on (or
+     * too close to) yet — used only to centre/preview the landing page's
+     * camera, never to decide where a click actually founds a settlement
+     * (see `startPositionAt`).
+     */
+    nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {
+      let best: { islandId: string; at: AxialCoord; distance: number } | null = null;
+      for (const pos of this.unclaimedStartPositions()) {
+        const distance = hexDistance(near, pos.at);
+        if (!best || distance < best.distance) {
+          best = { ...pos, distance };
         }
       }
       return best;
+    },
+    /**
+     * Up to `limit` unclaimed start positions nearest to `near`, sorted
+     * closest-first — what the landing page highlights as clickable plots
+     * now that founding only ever targets an exact match (`startPositionAt`).
+     */
+    nearbyStartPositions(near: AxialCoord, limit = 6): { islandId: string; at: AxialCoord }[] {
+      return this.unclaimedStartPositions()
+        .map((pos) => ({ ...pos, distance: hexDistance(near, pos.at) }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, limit);
+    },
+    /**
+     * The unclaimed start position exactly at `at`, or `null` if that hex
+     * isn't a valid (or is an already-claimed) start position. Founding must
+     * use this, not `nearestStartPosition` — snapping a click to the nearest
+     * start position instead of the one actually clicked founds the
+     * settlement somewhere the player never chose (see issue #96).
+     */
+    startPositionAt(at: AxialCoord): { islandId: string; at: AxialCoord } | null {
+      return this.unclaimedStartPositions().find((pos) => pos.at.q === at.q && pos.at.r === at.r) ?? null;
     },
     /** Demo mode: found instantly in the local `WorldModel`, no server round trip. */
     foundStartingSettlement(ownerId: string, ownerName: string, name: string, near: AxialCoord) {
@@ -311,11 +339,16 @@ export const useWorldStore = defineStore('world', {
       this.ownerId = ownerId;
       // Bootstrap's own snapshot can be stale by the time the player
       // actually clicks — re-sync who else has founded here first so
-      // nearestStartPosition doesn't send this request at a plot someone
-      // else claimed in the meantime.
+      // startPositionAt doesn't send this request for a plot someone else
+      // claimed in the meantime.
       await this.refreshWorldSettlements();
-      const start = this.nearestStartPosition(near);
-      if (!start) throw new Error('No unclaimed start positions in this world yet');
+      // Exact match only: `near` is the hex the player actually clicked, and
+      // founding must land there, not on whichever start position happens to
+      // be nearest to it (see issue #96). The landing page only lets the
+      // player click a hex this returns non-null for, so `null` here means
+      // someone else claimed it in the race window above.
+      const start = this.startPositionAt(near);
+      if (!start) throw new Error('That plot is no longer available — pick another one');
 
       const response = await api.foundSettlement(this.worldId, {
         islandId: start.islandId,

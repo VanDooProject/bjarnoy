@@ -206,6 +206,13 @@ export interface HexMapRendererOptions {
    */
   highlightCoord?: AxialCoord;
   /**
+   * Multiple hexes to keep highlighted every frame alongside
+   * `highlightCoord` — the landing page's live-mode start plots, since
+   * founding only ever lands exactly where clicked (issue #96) and there can
+   * be several unclaimed start positions worth showing at once.
+   */
+  highlightCoords?: AxialCoord[];
+  /**
    * Fraction of the viewport width to shift the camera's subject to the
    * right of screen centre (0 = centred) — the landing page composes the
    * village against hero text on the left, so the island itself needs to
@@ -818,16 +825,21 @@ export class HexMapRenderer {
 
   private drawHighlight() {
     this.highlightLayer.clear();
-    const at = this.options.highlightCoord;
-    if (!at) return;
-    const grid = isoGridPosition(at, TILE_W, TILE_H);
-    const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-    const flat = top.flatMap((p) => [p.x, p.y]);
+    const coords = [
+      ...(this.options.highlightCoord ? [this.options.highlightCoord] : []),
+      ...(this.options.highlightCoords ?? []),
+    ];
+    if (coords.length === 0) return;
     const pulse = (Math.sin(performance.now() / 420) + 1) / 2; // 0..1
-    this.highlightLayer
-      .poly(flat)
-      .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
-      .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+    for (const at of coords) {
+      const grid = isoGridPosition(at, TILE_W, TILE_H);
+      const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+      const flat = top.flatMap((p) => [p.x, p.y]);
+      this.highlightLayer
+        .poly(flat)
+        .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
+        .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+    }
   }
 
   // Eases fogBlobCacheSprite's (and, for the founding reveal, fogLayer's)
