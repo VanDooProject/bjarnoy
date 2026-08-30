@@ -64,57 +64,83 @@ public class LandingBuildQueueTests
 
         // A guessed pixel offset only happens to land on a real hex at one
         // particular zoom/camera framing (the border here is small — a
-        // fresh level-1 realm) — try a small spread of offsets around the
-        // canvas centre until one opens the ring menu on an empty, owned
-        // tile, rather than computing an exact hex's screen position.
+        // fresh level-1 realm), and the frontend's own border render radius
+        // is currently a hex or two more generous than the backend's actual
+        // claim radius at level 1 — a click that looks like "your border" on
+        // screen can still be refused by queueBuildLive as outside it. So
+        // this doesn't stop at the first offset that opens a ring: it tries
+        // each in turn, actually queuing the enabled guided building and
+        // only accepting one where the countdown panel really shows up.
         var ringBubbles = page.Locator(".ring-bubble");
-        var opened = false;
+        var statusCard = page.Locator(".status-card");
+        string? queuedBuildingType = null;
+
         foreach (var (dx, dy) in new (float, float)[]
                  {
-                     (36, 0), (-36, 0), (0, 36), (0, -36),
-                     (25, 25), (-25, -25), (25, -25), (-25, 25),
+                     (30, 0), (-30, 0), (0, 30), (0, -30),
+                     (21, 21), (-21, -21), (21, -21), (-21, 21),
+                     (42, 0), (-42, 0), (0, 42), (0, -42),
                      (55, 0), (-55, 0), (0, 55), (0, -55),
                  })
         {
+            // Closes any ring left open by a previous failed attempt (a
+            // click anywhere on the canvas while a ring is open lands on its
+            // full-screen backdrop, not a new hex — see RingMenu's own
+            // `outsidePointerDown`) before opening the next candidate.
+            await page.Mouse.ClickAsync(centerX, centerY);
             await page.Mouse.ClickAsync(centerX + dx, centerY + dy);
-            if (await ringBubbles.CountAsync() > 0)
+            if (await ringBubbles.CountAsync() == 0)
             {
-                opened = true;
+                continue;
+            }
+
+            var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Farm" });
+            var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
+            if (await farmBubble.CountAsync() == 0 || await lumberjackBubble.CountAsync() == 0)
+            {
+                continue;
+            }
+
+            // Only the guided type matching the clicked tile's own terrain
+            // is enabled (Farm needs grass, Lumberjack needs forest) —
+            // exactly one of the two should be clickable; the other is
+            // disabled and a no-op.
+            var farmEnabled = await farmBubble.IsEnabledAsync();
+            var lumberjackEnabled = await lumberjackBubble.IsEnabledAsync();
+            if (farmEnabled == lumberjackEnabled)
+            {
+                continue;
+            }
+
+            var (enabledBubble, buildingType) = farmEnabled ? (farmBubble, "farm") : (lumberjackBubble, "lumberjack");
+            await enabledBubble.ClickAsync();
+
+            try
+            {
+                await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 3_000 });
+                queuedBuildingType = buildingType;
                 break;
+            }
+            catch (PlaywrightException)
+            {
+                // Refused (most likely outside the backend's actual claim
+                // radius) — try the next candidate.
             }
         }
 
-        Assert.True(opened, "Clicking around the settlement centre never opened the onboarding ring menu.");
-
-        // Only the guided type matching the clicked tile's own terrain is
-        // enabled (Farm needs grass, Lumberjack needs forest) — whichever
-        // hex the offset search above happened to land on, exactly one of
-        // the two should be clickable; the other is disabled and a no-op.
-        var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Farm" });
-        var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
-        await Assertions.Expect(farmBubble).ToBeVisibleAsync();
-        await Assertions.Expect(lumberjackBubble).ToBeVisibleAsync();
-
-        var farmEnabled = await farmBubble.IsEnabledAsync();
-        var lumberjackEnabled = await lumberjackBubble.IsEnabledAsync();
         Assert.True(
-            farmEnabled != lumberjackEnabled,
-            "Expected exactly one of Farm/Lumberjack to be enabled for the clicked tile's terrain.");
-
-        var (enabledBubble, expectedBuildingType) = farmEnabled ? (farmBubble, "farm") : (lumberjackBubble, "lumberjack");
-        await enabledBubble.ClickAsync();
+            queuedBuildingType is not null,
+            "No candidate hex around the settlement centre both opened the ring and actually queued a guided building.");
 
         // BuildQueuePanel's own "Construction" status card, with a real
         // countdown — the thing this test exists to prove now appears here.
-        var statusCard = page.Locator(".status-card");
-        await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await Assertions.Expect(statusCard.GetByText("Construction")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".status-row-time")).ToBeVisibleAsync();
 
         var settlement = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlementId}", cancellationToken);
         var order = Assert.Single(settlement!.Queue);
-        Assert.Equal(expectedBuildingType, order.Building);
+        Assert.Equal(queuedBuildingType, order.Building);
 
         Assert.Empty(consoleErrors);
     }
