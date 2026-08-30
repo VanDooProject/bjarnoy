@@ -45,6 +45,11 @@ export const router = createRouter({
       component: () => import('../views/LeaderboardView.vue'),
     },
     {
+      path: '/guild',
+      name: 'guild',
+      component: () => import('../views/GuildView.vue'),
+    },
+    {
       // Issue #40 phase 3: battle-reports inbox, and the same view's detail
       // mode when a report id is in the URL (so a report can be deep-linked/
       // shared, e.g. from a future notification) — see ReportsView.vue.

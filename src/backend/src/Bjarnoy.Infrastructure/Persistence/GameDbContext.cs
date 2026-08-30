@@ -44,6 +44,16 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
+    public DbSet<GuildEntity> Guilds => Set<GuildEntity>();
+
+    public DbSet<GuildMembershipEntity> GuildMemberships => Set<GuildMembershipEntity>();
+
+    public DbSet<GuildBoardTopicEntity> GuildBoardTopics => Set<GuildBoardTopicEntity>();
+
+    public DbSet<GuildBoardPostEntity> GuildBoardPosts => Set<GuildBoardPostEntity>();
+
+    public DbSet<GuildPeaceTreatyEntity> GuildPeaceTreaties => Set<GuildPeaceTreatyEntity>();
+
     public DbSet<TradeOfferEntity> TradeOffers => Set<TradeOfferEntity>();
 
     public DbSet<ShipmentEntity> Shipments => Set<ShipmentEntity>();
@@ -409,6 +419,113 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Looked up by hash on every refresh/logout call.
             token.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<GuildEntity>(guild =>
+        {
+            guild.ToTable("guilds");
+            guild.HasKey(g => g.Id);
+            guild.Property(g => g.Id).ValueGeneratedNever();
+            guild.Property(g => g.Name).HasMaxLength(50).IsRequired();
+            guild.Property(g => g.Tag).HasMaxLength(5).IsRequired();
+            guild.Property(g => g.Description).HasMaxLength(500);
+            guild.Property(g => g.FeeTier).HasConversion<int>();
+
+            // Names and tags are unique within a world, not globally — each
+            // world is its own playthrough (MECHANICS.md: a sea/world holds
+            // its own islands and players).
+            guild.HasIndex(g => new { g.WorldId, g.Name }).IsUnique();
+            guild.HasIndex(g => new { g.WorldId, g.Tag }).IsUnique();
+
+            // No inverse collection on WorldEntity yet — nothing needs
+            // "world.Guilds" today, so this stays a one-way reference.
+            guild.HasOne(g => g.World)
+                .WithMany()
+                .HasForeignKey(g => g.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            guild.HasMany(g => g.Memberships)
+                .WithOne(m => m.Guild!)
+                .HasForeignKey(m => m.GuildId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            guild.HasMany(g => g.Topics)
+                .WithOne(t => t.Guild!)
+                .HasForeignKey(t => t.GuildId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GuildMembershipEntity>(membership =>
+        {
+            membership.ToTable("guild_memberships");
+            membership.HasKey(m => m.Id);
+            membership.Property(m => m.Id).ValueGeneratedNever();
+            membership.Property(m => m.Role).HasConversion<int>();
+
+            // One active guild per account at a time, game-wide — the
+            // "no multi-guild membership" rule from the design doc, enforced
+            // at the database rather than only checked in the service.
+            membership.HasIndex(m => m.UserId).IsUnique();
+            membership.HasIndex(m => m.GuildId);
+
+            // Restrict, not cascade: a user account going away should not
+            // silently empty a guild's roster (same reasoning as
+            // SettlementEntity.Owner).
+            membership.HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GuildBoardTopicEntity>(topic =>
+        {
+            topic.ToTable("guild_board_topics");
+            topic.HasKey(t => t.Id);
+            topic.Property(t => t.Id).ValueGeneratedNever();
+            topic.Property(t => t.Title).HasMaxLength(120).IsRequired();
+            topic.Property(t => t.Kind).HasConversion<int>();
+
+            topic.HasIndex(t => t.GuildId);
+
+            topic.HasMany(t => t.Posts)
+                .WithOne(p => p.Topic!)
+                .HasForeignKey(p => p.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GuildBoardPostEntity>(post =>
+        {
+            post.ToTable("guild_board_posts");
+            post.HasKey(p => p.Id);
+            post.Property(p => p.Id).ValueGeneratedNever();
+            post.Property(p => p.Body).HasMaxLength(4000).IsRequired();
+
+            post.HasIndex(p => p.TopicId);
+        });
+
+        modelBuilder.Entity<GuildPeaceTreatyEntity>(treaty =>
+        {
+            treaty.ToTable("guild_peace_treaties");
+            treaty.HasKey(t => t.Id);
+            treaty.Property(t => t.Id).ValueGeneratedNever();
+            treaty.Property(t => t.Status).HasConversion<int>();
+
+            treaty.HasIndex(t => new { t.ProposerGuildId, t.TargetGuildId });
+            treaty.HasIndex(t => t.TargetGuildId);
+
+            // Restrict on both sides: a guild is never hard-deleted (disbanding
+            // is the soft DisbandedAt above), so this only guards against ever
+            // adding a hard delete later without also deciding what happens to
+            // its treaty history.
+            treaty.HasOne(t => t.ProposerGuild)
+                .WithMany()
+                .HasForeignKey(t => t.ProposerGuildId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            treaty.HasOne(t => t.TargetGuild)
+                .WithMany()
+                .HasForeignKey(t => t.TargetGuildId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Trade offers and shipments are not a nested aggregate under
