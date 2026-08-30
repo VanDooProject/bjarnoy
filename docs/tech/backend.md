@@ -346,8 +346,25 @@ that pattern would earn real immutable caching.
 
 ## Not in here yet
 
-Auth — the legacy JWT + rotating refresh token design is worth porting as
-designed. Until it lands, a settlement has no real owner.
+Auth has landed (JWT access tokens + rotating refresh tokens, `Bjarnoy.Api.Auth`),
+and a settlement's mutating endpoints (build, train, dispatch, recall) now
+enforce real ownership — see `SettlementOwnershipEndpointFilter`/
+`ArmyOwnershipEndpointFilter` in `Bjarnoy.Api.Auth`. Still missing from the
+legacy design: email verification, password reset, and a `logout-all` that
+revokes every refresh token (e.g. on ban/lock) rather than just the current
+session's.
+
+World creation (`POST /api/v1/worlds`) and most read endpoints (a settlement's
+full resources/garrison/queue, its battle reports) are still unauthenticated —
+closing those is a separate, larger pass across the test suite's world-creation
+fixtures, not folded into the ownership work above. A self-migrating app
+instance (`Database:MigrateOnStartup` true — a fresh local run, or
+`Bjarnoy.AppHost`) does now seed one default world if none exists at all
+(`WorldService.SeedDefaultWorldIfNoneAsync`, called right after
+`DatabaseMigrator.MigrateAsync()` in `Program.cs`) — that's a bootstrap
+convenience so there's something to join on a brand-new database now that the
+frontend no longer creates a world itself, not a step toward locking the
+endpoint down.
 
 Combat, fleets and caravans. Razing and capturing a settlement — the border
 rules assume a settlement's buildings only ever appear, never disappear.

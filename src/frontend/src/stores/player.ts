@@ -1,8 +1,15 @@
 import { defineStore } from 'pinia';
 import { DEMO_MODE } from '../config';
 
+// Now also sent as the `X-Owner-Id` header proving ownership of an
+// anonymously-founded settlement (see SettlementOwnershipEndpointFilter on
+// the backend and api/client.ts's `ownerHeader`) — so this needs to be an
+// unguessable bearer id, not just a display-stable one. `crypto.randomUUID`
+// (122 bits, CSPRNG-backed) is what every supported browser offers today;
+// `Math.random`, used previously, is neither cryptographically random nor
+// wide enough (~41 bits) to serve as a credential, only as a display id.
 function newPlayerId(): string {
-  return `player_${Math.random().toString(36).slice(2, 10)}`;
+  return `player_${crypto.randomUUID()}`;
 }
 
 // Stable id survives reloads: generated once and written back immediately
