@@ -18,7 +18,7 @@ import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
 import type { AxialCoord } from '../lib/hex/coords';
-import type { Tile } from '../lib/map/types';
+import type { Terrain, Tile } from '../lib/map/types';
 
 // Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
 const ONBOARDING_TARGET_BUILDINGS = 3;
@@ -30,9 +30,16 @@ const ONBOARDING_TARGET_BUILDINGS = 3;
 // only console.error'd) with the modal just sitting there — "can't actually
 // select the correct building". Ring menu, same as SettlementView's, fixes
 // that: a flat ring (no nested categories — this is the "simplified" version)
-// with the two guided types enabled and everything else visibly disabled.
+// with only the guided type matching the *clicked tile's own terrain*
+// enabled (Farm needs grass, Lumberjack needs forest — BuildingCatalogue),
+// everything else visibly disabled. Enabling both regardless of terrain
+// would just reintroduce the same silent-failure bug for whichever one
+// doesn't fit the tile actually clicked.
 type OnboardingBuildType = 'farm' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
-const GUIDED_BUILD_TYPES: readonly OnboardingBuildType[] = ['farm', 'lumberjack'];
+const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
+  farm: 'grass',
+  lumberjack: 'forest',
+};
 const ONBOARDING_BUILD_RING: { type: OnboardingBuildType; label: string }[] = [
   { type: 'farm', label: 'Farm' },
   { type: 'lumberjack', label: 'Lumberjack' },
@@ -129,6 +136,7 @@ watch(onboardingComplete, (complete) => {
 // types, so there's no need for that hierarchy here.
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
+const ringTerrain = ref<Terrain | null>(null);
 
 watch(ringScreen, (screen) => {
   canvasRef.value?.renderer?.setInteractionLocked(!!screen);
@@ -136,12 +144,18 @@ watch(ringScreen, (screen) => {
 
 const ringActions = computed<RingAction[]>(() =>
   ONBOARDING_BUILD_RING.map(({ type, label }) => {
-    const guided = GUIDED_BUILD_TYPES.includes(type);
+    const requiredTerrain = GUIDED_BUILD_TERRAIN[type];
+    const guided = requiredTerrain !== undefined;
+    const fitsTile = guided && requiredTerrain === ringTerrain.value;
     return {
       id: type,
       label,
-      disabled: !guided,
-      hint: guided ? undefined : 'Finish the guided buildings first',
+      disabled: !fitsTile,
+      hint: !guided
+        ? 'Finish the guided buildings first'
+        : !fitsTile
+          ? `Needs ${requiredTerrain} terrain — try a different hex`
+          : undefined,
     };
   }),
 );
@@ -149,6 +163,7 @@ const ringActions = computed<RingAction[]>(() =>
 function closeRing() {
   ringScreen.value = null;
   ringCoord.value = null;
+  ringTerrain.value = null;
 }
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
@@ -175,6 +190,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
     ringCoord.value = coord;
     ringScreen.value = screen;
+    ringTerrain.value = tile.terrain;
     return;
   }
   closeRing();

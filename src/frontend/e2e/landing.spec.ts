@@ -17,14 +17,16 @@ test('landing page is the village view, not a marketing page in front of it', as
   await expect(page).toHaveURL(/\/settlement$/);
 });
 
-test('onboarding build step offers a ring menu with the guided buildings enabled and everything else disabled', async ({ page }) => {
+test('onboarding build step offers a ring menu with the tile-appropriate guided building enabled and everything else disabled', async ({ page }) => {
   // Regression coverage: the onboarding build step used to pop a
   // BuildingModal with a single "Build here" button hardcoded to a type
   // ('farm') that fails outside grass terrain — "can't actually select the
   // correct building". It now opens the same kind of RingMenu the full
   // settlement view uses, simplified to one flat ring (no build-category
-  // drill-down): the two guided types (Farm, Lumberjack) enabled, everything
-  // else visibly disabled.
+  // drill-down): only the guided type matching the *clicked tile's own
+  // terrain* is enabled (Farm needs grass, Lumberjack needs forest) —
+  // enabling both regardless of terrain would just reintroduce the same
+  // silent-failure bug for whichever one doesn't fit.
   test.setTimeout(90_000);
   await page.goto('/');
   await waitForMapReady(page);
@@ -42,8 +44,9 @@ test('onboarding build step offers a ring menu with the guided buildings enabled
   );
 
   // A guessed pixel offset only happens to land on a real hex at one
-  // particular zoom/camera framing — ask the model for a real empty hex
-  // inside the just-founded realm, then the renderer's own camera math
+  // particular zoom/camera framing — ask the model for a real empty *grass*
+  // hex inside the just-founded realm (deterministically exercising Farm's
+  // own terrain requirement), then the renderer's own camera math
   // (__settlementRenderer's hexCenterScreen) for that hex's exact screen
   // position. Same technique settlement-interactions.spec.ts uses for the
   // full settlement view's own ring menu.
@@ -60,12 +63,12 @@ test('onboarding build step offers a ring menu with the guided buildings enabled
         if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
         const at = { q: settlement.q + dq, r: settlement.r + dr };
         const tile = world.model.getTile(at.q, at.r);
-        if (tile.ownerId === world.selectedSettlementId && tile.terrain !== 'sea' && !tile.buildingType) {
+        if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
           return win.__settlementRenderer().hexCenterScreen(at);
         }
       }
     }
-    throw new Error('no empty buildable hex found inside the realm');
+    throw new Error('no empty grass hex found inside the realm');
   });
 
   await page.mouse.click(box.x + target.x, box.y + target.y);
@@ -77,7 +80,7 @@ test('onboarding build step offers a ring menu with the guided buildings enabled
   await expect(lumberjack).toBeVisible();
   await expect(quarry).toBeVisible();
   await expect(farm).toBeEnabled();
-  await expect(lumberjack).toBeEnabled();
+  await expect(lumberjack).toBeDisabled();
   await expect(quarry).toBeDisabled();
 
   const countBuildings = () =>

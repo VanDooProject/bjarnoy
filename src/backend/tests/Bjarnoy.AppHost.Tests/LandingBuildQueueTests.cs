@@ -86,10 +86,23 @@ public class LandingBuildQueueTests
 
         Assert.True(opened, "Clicking around the settlement centre never opened the onboarding ring menu.");
 
+        // Only the guided type matching the clicked tile's own terrain is
+        // enabled (Farm needs grass, Lumberjack needs forest) — whichever
+        // hex the offset search above happened to land on, exactly one of
+        // the two should be clickable; the other is disabled and a no-op.
         var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Farm" });
+        var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
         await Assertions.Expect(farmBubble).ToBeVisibleAsync();
-        await Assertions.Expect(farmBubble).ToBeEnabledAsync();
-        await farmBubble.ClickAsync();
+        await Assertions.Expect(lumberjackBubble).ToBeVisibleAsync();
+
+        var farmEnabled = await farmBubble.IsEnabledAsync();
+        var lumberjackEnabled = await lumberjackBubble.IsEnabledAsync();
+        Assert.True(
+            farmEnabled != lumberjackEnabled,
+            "Expected exactly one of Farm/Lumberjack to be enabled for the clicked tile's terrain.");
+
+        var (enabledBubble, expectedBuildingType) = farmEnabled ? (farmBubble, "farm") : (lumberjackBubble, "lumberjack");
+        await enabledBubble.ClickAsync();
 
         // BuildQueuePanel's own "Construction" status card, with a real
         // countdown — the thing this test exists to prove now appears here.
@@ -101,7 +114,7 @@ public class LandingBuildQueueTests
         var settlement = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlementId}", cancellationToken);
         var order = Assert.Single(settlement!.Queue);
-        Assert.Equal("farm", order.Building);
+        Assert.Equal(expectedBuildingType, order.Building);
 
         Assert.Empty(consoleErrors);
     }
