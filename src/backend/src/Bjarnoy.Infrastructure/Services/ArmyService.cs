@@ -442,7 +442,12 @@ public sealed class ArmyService(
             var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
             var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
-            var teleported = domain.TeleportTo(destination, home, now, sampler.TerrainAt);
+            // An explicit provisions value is the admin's final word, so it is
+            // carried into the new leg rather than being re-burned against the
+            // leg this teleport is throwing away.
+            var teleported = domain.TeleportTo(
+                destination, home, now, sampler.TerrainAt,
+                provisions is { } given ? Math.Max(0, given) : null);
             if (teleported is null)
             {
                 return await RejectAsync(AdminArmyEditOutcome.UnreachableHex).ConfigureAwait(false);

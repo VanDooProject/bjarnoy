@@ -824,8 +824,19 @@ public sealed record Army
     /// provisions by the same formula every dispatched army uses — a
     /// teleported army is fed, and starves, like any other.
     /// </remarks>
+    /// <param name="provisions">
+    /// Food the army should stand there with. <see langword="null"/> (the
+    /// default) carries over what it has actually got left right now
+    /// (<see cref="ProvisionsAt"/>) — the leg it flew so far really was
+    /// eaten. Pass a value to override that, which is what an admin setting
+    /// provisions and repositioning in one edit means: the number given is the
+    /// army's food, and the standing window before it turns for home is
+    /// derived from that same number rather than from a figure the override
+    /// has already replaced.
+    /// </param>
     public Army? TeleportTo(
-        HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt)
+        HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
+        double? provisions = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -845,7 +856,7 @@ public sealed record Army
         }
 
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit);
-        var provisionsNow = ProvisionsAt(now);
+        var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(
             now, [coord], [0d], returnPath, returnCumulativeHours, provisionsNow, TotalUpkeepPerHour);

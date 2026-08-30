@@ -252,6 +252,26 @@ public sealed class AdminGodModeTests
     }
 
     [Fact]
+    public void Teleporting_charges_the_leg_already_flown_unless_provisions_are_overridden()
+    {
+        var army = TravellingArmy(out _);
+        var home = new HexCoord(0, 0);
+        var tenHoursIn = Start + TimeSpan.FromHours(10);
+
+        // Ten hours of upkeep really were eaten, so a plain teleport carries
+        // over what is left rather than refunding the trip.
+        var carried = army.TeleportTo(new HexCoord(2, 0), home, tenHoursIn, Grass);
+        Assert.NotNull(carried);
+        Assert.Equal(army.Provisions - (army.TotalUpkeepPerHour * 10), carried!.Provisions, 3);
+
+        // An explicit value replaces it outright — the admin said "you have
+        // this much food", and the standing window follows from that number.
+        var overridden = army.TeleportTo(new HexCoord(2, 0), home, tenHoursIn, Grass, provisions: 500);
+        Assert.NotNull(overridden);
+        Assert.Equal(500, overridden!.Provisions, 3);
+    }
+
+    [Fact]
     public void Teleporting_a_land_army_onto_water_is_refused()
     {
         var army = TravellingArmy(out _);
