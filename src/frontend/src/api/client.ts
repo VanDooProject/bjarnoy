@@ -1,6 +1,8 @@
 import { API_BASE_URL } from '../config';
 import type {
   AcceptTradeOfferRequest,
+  ActivitySummaryResponse,
+  AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
@@ -16,6 +18,7 @@ import type {
   GuestArmySummary,
   IslandResponse,
   LeaderboardBoardResponse,
+  PagedAdminActivityUsersResponse,
   LeaderboardCategory,
   LeaderboardDirectoryResponse,
   LeaderboardMeResponse,
@@ -280,6 +283,23 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  adminGetActivitySummary: (params: { from: string; to: string; bucket?: 'day' | 'hour' }) => {
+    const query = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.bucket) query.set('bucket', params.bucket);
+    return request<ActivitySummaryResponse>(`/admin/activity/summary?${query.toString()}`);
+  },
+  adminListActivityUsers: (params?: { page?: number; pageSize?: number; sort?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    if (params?.sort) query.set('sort', params.sort);
+    const qs = query.toString();
+    return request<PagedAdminActivityUsersResponse>(`/admin/activity/users${qs ? `?${qs}` : ''}`);
+  },
+  adminGetUserActivityDetail: (userId: string, params: { from: string; to: string }) => {
+    const query = new URLSearchParams({ from: params.from, to: params.to });
+    return request<AdminUserActivityDetailResponse>(`/admin/activity/users/${userId}?${query.toString()}`);
+  },
   getLeaderboardDirectory: (worldId: string) =>
     request<LeaderboardDirectoryResponse>(`/worlds/${worldId}/leaderboards`),
   getLeaderboardBoard: (
