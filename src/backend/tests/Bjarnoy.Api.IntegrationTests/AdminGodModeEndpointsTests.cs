@@ -69,6 +69,15 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         return (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
     }
 
+    /// <summary>
+    /// Creates a world and founds a settlement on its first usable plot, then
+    /// sets <paramref name="client"/>'s default <c>X-Owner-Id</c> header to the
+    /// id it was founded under — the two insta-build tests drive the ordinary
+    /// player build/train endpoints first, and those sit behind
+    /// <c>SettlementOwnershipEndpointFilter</c>, which for an anonymously
+    /// founded settlement is satisfied by that header rather than by the
+    /// admin's own token. Mirrors SettlementEndpointsTests.FoundAsync.
+    /// </summary>
     private async Task<(Guid WorldId, SettlementResponse Settlement)> FoundAsync(
         HttpClient client, string ownerName = "Ulf", int seed = 21, int radius = 60)
     {
@@ -88,6 +97,10 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", $"{ownerName}-player");
+
         return (world.Id, await response.ReadStrictAsync<SettlementResponse>(Ct));
     }
 
