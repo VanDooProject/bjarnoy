@@ -1,11 +1,10 @@
 <script setup lang="ts">
 // Issue #16 "header": "nav links WORLD MAP / REPORTS / ALLIANCE, and a
-// round avatar badge" — World map is the one nav destination that actually
-// exists today; Reports and Alliance have no feature behind them yet, so
-// they render as disabled placeholders (visually matching the mockup)
-// rather than linking somewhere fake. The avatar carries the player's
-// nickname initials (or the game's own initials as a fallback), replacing
-// the plain nickname pill TopBar used to show.
+// round avatar badge" — Alliance now links to GuildView (the guild/alliance
+// system) and Reports to ReportsView (issue #41's moderation-report inbox),
+// both real features now. The avatar carries the player's nickname initials
+// (or the game's own initials as a fallback), replacing the plain nickname
+// pill TopBar used to show.
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
@@ -81,7 +80,9 @@ const initials = computed(() => {
       Reports
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
     </button>
-    <button class="link disabled" type="button" disabled title="Not implemented yet">Alliance</button>
+    <button class="link" :class="{ active: route.name === 'guild' }" @click="router.push('/guild')">
+      Alliance
+    </button>
     <button
       class="link"
       :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }"

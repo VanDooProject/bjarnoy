@@ -11,11 +11,19 @@ import type {
   BattleReportResponse,
   BuildingDefinitionResponse,
   CancelTradeOfferRequest,
+  CreateGuildPostRequest,
+  CreateGuildRequest,
+  CreateGuildTopicRequest,
   CreateWorldRequest,
   DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
   GuestArmySummary,
+  GuildBoardTopicResponse,
+  GuildMemberResponse,
+  GuildPerksResponse,
+  GuildResponse,
+  GuildTreatyResponse,
   IslandResponse,
   LeaderboardBoardResponse,
   PagedAdminActivityUsersResponse,
@@ -34,6 +42,7 @@ import type {
   PostTradeOfferRequest,
   ProblemDetails,
   ProfileResponse,
+  ProposeTreatyRequest,
   QueueBuildRequest,
   ReportMessageRequest,
   ReportProfileRequest,
@@ -41,6 +50,8 @@ import type {
   ResolveReportRequest,
   SendMessageRequest,
   SetBuildingLevelRequest,
+  SetGuildFeeTierRequest,
+  SetGuildMemberRoleRequest,
   SetUserPremiumRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
@@ -368,6 +379,47 @@ export const api = {
       `/worlds/${worldId}/leaderboards/${scope}/${category}/me${qs ? `?${qs}` : ''}`,
     );
   },
+  listWorldGuilds: (worldId: string) => request<GuildResponse[]>(`/worlds/${worldId}/guilds`),
+  createGuild: (worldId: string, body: CreateGuildRequest) =>
+    request<GuildResponse>(`/worlds/${worldId}/guilds`, { method: 'POST', body: JSON.stringify(body) }),
+  getGuild: (guildId: string) => request<GuildResponse>(`/guilds/${guildId}`),
+  getGuildPerks: (guildId: string) => request<GuildPerksResponse>(`/guilds/${guildId}/perks`),
+  joinGuild: (guildId: string) =>
+    request<GuildMemberResponse>(`/guilds/${guildId}/join`, { method: 'POST' }),
+  leaveGuild: (guildId: string) => request<unknown>(`/guilds/${guildId}/leave`, { method: 'POST' }),
+  kickGuildMember: (guildId: string, userId: string) =>
+    request<unknown>(`/guilds/${guildId}/members/${userId}/kick`, { method: 'POST' }),
+  setGuildMemberRole: (guildId: string, userId: string, body: SetGuildMemberRoleRequest) =>
+    request<GuildMemberResponse>(`/guilds/${guildId}/members/${userId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  setGuildFeeTier: (guildId: string, body: SetGuildFeeTierRequest) =>
+    request<GuildResponse>(`/guilds/${guildId}/fee-tier`, { method: 'PUT', body: JSON.stringify(body) }),
+  payGuildFee: (guildId: string) =>
+    request<GuildMemberResponse>(`/guilds/${guildId}/fee-payment`, { method: 'POST' }),
+  listGuildTopics: (guildId: string) => request<GuildBoardTopicResponse[]>(`/guilds/${guildId}/board/topics`),
+  createGuildTopic: (guildId: string, body: CreateGuildTopicRequest) =>
+    request<GuildBoardTopicResponse>(`/guilds/${guildId}/board/topics`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getGuildTopic: (guildId: string, topicId: string) =>
+    request<GuildBoardTopicResponse>(`/guilds/${guildId}/board/topics/${topicId}`),
+  replyToGuildTopic: (guildId: string, topicId: string, body: CreateGuildPostRequest) =>
+    request<unknown>(`/guilds/${guildId}/board/topics/${topicId}/posts`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listGuildTreaties: (guildId: string) => request<GuildTreatyResponse[]>(`/guilds/${guildId}/treaties`),
+  proposeGuildTreaty: (guildId: string, body: ProposeTreatyRequest) =>
+    request<GuildTreatyResponse>(`/guilds/${guildId}/treaties`, { method: 'POST', body: JSON.stringify(body) }),
+  acceptGuildTreaty: (treatyId: string) =>
+    request<GuildTreatyResponse>(`/treaties/${treatyId}/accept`, { method: 'POST' }),
+  rejectGuildTreaty: (treatyId: string) =>
+    request<GuildTreatyResponse>(`/treaties/${treatyId}/reject`, { method: 'POST' }),
+  breakGuildTreaty: (treatyId: string) =>
+    request<GuildTreatyResponse>(`/treaties/${treatyId}/break`, { method: 'POST' }),
   // Issue #40 phase 7: the premium fight simulator. `PremiumUserEndpointFilter`
   // returns 401 (unauthenticated) or 403 `{ error: "premium_required" }`
   // (authenticated but not premium) — both surface as an `ApiError` here,
