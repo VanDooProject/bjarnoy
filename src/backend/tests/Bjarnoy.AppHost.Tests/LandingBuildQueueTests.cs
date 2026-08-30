@@ -3,6 +3,7 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.World;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 
@@ -13,15 +14,29 @@ namespace Bjarnoy.AppHost.Tests;
 /// queued a building against the real backend (<c>queueBuildLive</c>) but
 /// never showed the same construction countdown <c>BuildQueuePanel</c> gives
 /// the full settlement view — the player had no way to see the order was
-/// actually in progress. Drives the real onboarding flow (found, then pick a
-/// guided building through the ring menu) and asserts the countdown panel
-/// appears, backed by a real queued <see cref="BuildOrderResponse"/> the
-/// backend persisted.
+/// actually in progress. Founds the starting settlement through the real UI,
+/// then queues a building the same way the ring menu's <c>onRingSelect</c>
+/// does (a direct <c>POST /settlements/{id}/builds</c>, the same request
+/// <c>queueBuildLive</c> sends) and asserts the landing page's own poll
+/// (<c>startHudSync</c>'s <c>LIVE_POLL_MS</c> interval) picks it up and shows
+/// the countdown panel.
 /// </summary>
+/// <remarks>
+/// Deliberately doesn't drive the ring menu's click-to-open UI here — a
+/// clicked hex only reliably lands inside the frontend's own rendered
+/// border, which (<c>WorldModel.borderRadius</c>) is currently a hex or two
+/// more generous than the backend's actual claim radius
+/// (<c>Settlement.ClaimRadius</c>) at level 1, so a pixel-accurate click
+/// without the renderer's own camera math (not exposed outside demo mode —
+/// see <c>main.ts</c>) can't reliably target a hex the backend will actually
+/// accept. The ring's own enabled/disabled terrain gating is covered by the
+/// demo-mode e2e suite instead (<c>landing.spec.ts</c>), where that camera
+/// math *is* available.
+/// </remarks>
 public class LandingBuildQueueTests
 {
     [Fact]
-    public async Task PickingAGuidedBuildingOnTheLandingPageShowsItsConstructionCountdown()
+    public async Task QueuingAGuidedBuildingShowsItsConstructionCountdownOnTheLandingPage()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
@@ -45,102 +60,50 @@ public class LandingBuildQueueTests
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
-        var worlds = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
-        var world = Assert.Single(worlds!);
+        var world = Assert.Single(
+            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
-        var settlementId = Assert.Single(settlements!).Id;
+        var settlement = Assert.Single(settlements!);
 
-        var canvas = page.Locator("canvas");
-        var box = await canvas.BoundingBoxAsync()
-            ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
-        var centerX = box.X + box.Width / 2f;
-        var centerY = box.Y + box.Height / 2f;
+        // The frontend generates and remembers its own anonymous player id
+        // client-side (usePlayerStore, localStorage key "bjarnoy.playerId")
+        // — it's what founding sent as the settlement's OwnerId, and the
+        // same id X-Owner-Id proves ownership with.
+        var ownerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
 
-        // The post-founding camera re-centres on the settlement over
-        // HexMapRenderer's CAMERA_TRANSITION_MS (1400ms) — wait for it to
-        // settle rather than racing it.
-        await page.WaitForTimeoutAsync(1800);
+        // A grass neighbour of the settlement's own centre — guaranteed to
+        // exist (WorldGenerator only picks a start position with at least
+        // one adjacent forest and two more adjacent grass hexes) and within
+        // ClaimRadius 1 at level 1, so the backend accepts a Farm there.
+        var centre = new HexCoord(settlement.Q, settlement.R);
+        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
+            $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"
+            + $"&rMin={centre.R - 1}&rMax={centre.R + 1}",
+            cancellationToken);
+        var grassTile = chunk!.Tiles.Single(t =>
+            t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
 
-        // A guessed pixel offset only happens to land on a real hex at one
-        // particular zoom/camera framing (the border here is small — a
-        // fresh level-1 realm), and the frontend's own border render radius
-        // is currently a hex or two more generous than the backend's actual
-        // claim radius at level 1 — a click that looks like "your border" on
-        // screen can still be refused by queueBuildLive as outside it. So
-        // this doesn't stop at the first offset that opens a ring: it tries
-        // each in turn, actually queuing the enabled guided building and
-        // only accepting one where the countdown panel really shows up.
-        var ringBubbles = page.Locator(".ring-bubble");
+        apiClient.DefaultRequestHeaders.Remove("X-Owner-Id");
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+        var queued = await apiClient.PostAsJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", grassTile.Q, grassTile.R),
+            cancellationToken);
+        queued.EnsureSuccessStatusCode();
+
+        // startHudSync()'s own LIVE_POLL_MS (4s) poll — already running on
+        // the landing page since founding — is what's expected to pick this
+        // up and mount BuildQueuePanel; no page reload, no extra click.
         var statusCard = page.Locator(".status-card");
-        string? queuedBuildingType = null;
-
-        foreach (var (dx, dy) in new (float, float)[]
-                 {
-                     (30, 0), (-30, 0), (0, 30), (0, -30),
-                     (21, 21), (-21, -21), (21, -21), (-21, 21),
-                     (42, 0), (-42, 0), (0, 42), (0, -42),
-                     (55, 0), (-55, 0), (0, 55), (0, -55),
-                 })
-        {
-            // Closes any ring left open by a previous failed attempt (a
-            // click anywhere on the canvas while a ring is open lands on its
-            // full-screen backdrop, not a new hex — see RingMenu's own
-            // `outsidePointerDown`) before opening the next candidate.
-            await page.Mouse.ClickAsync(centerX, centerY);
-            await page.Mouse.ClickAsync(centerX + dx, centerY + dy);
-            if (await ringBubbles.CountAsync() == 0)
-            {
-                continue;
-            }
-
-            var farmBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Farm" });
-            var lumberjackBubble = page.Locator(".ring-bubble", new PageLocatorOptions { HasText = "Lumberjack" });
-            if (await farmBubble.CountAsync() == 0 || await lumberjackBubble.CountAsync() == 0)
-            {
-                continue;
-            }
-
-            // Only the guided type matching the clicked tile's own terrain
-            // is enabled (Farm needs grass, Lumberjack needs forest) —
-            // exactly one of the two should be clickable; the other is
-            // disabled and a no-op.
-            var farmEnabled = await farmBubble.IsEnabledAsync();
-            var lumberjackEnabled = await lumberjackBubble.IsEnabledAsync();
-            if (farmEnabled == lumberjackEnabled)
-            {
-                continue;
-            }
-
-            var (enabledBubble, buildingType) = farmEnabled ? (farmBubble, "farm") : (lumberjackBubble, "lumberjack");
-            await enabledBubble.ClickAsync();
-
-            try
-            {
-                await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 3_000 });
-                queuedBuildingType = buildingType;
-                break;
-            }
-            catch (PlaywrightException)
-            {
-                // Refused (most likely outside the backend's actual claim
-                // radius) — try the next candidate.
-            }
-        }
-
-        Assert.True(
-            queuedBuildingType is not null,
-            "No candidate hex around the settlement centre both opened the ring and actually queued a guided building.");
-
-        // BuildQueuePanel's own "Construction" status card, with a real
-        // countdown — the thing this test exists to prove now appears here.
+        await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await Assertions.Expect(statusCard.GetByText("Construction")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator(".status-row-time")).ToBeVisibleAsync();
 
-        var settlement = await apiClient.GetFromJsonAsync<SettlementResponse>(
-            $"/api/v1/settlements/{settlementId}", cancellationToken);
-        var order = Assert.Single(settlement!.Queue);
-        Assert.Equal(queuedBuildingType, order.Building);
+        var settlementAfterQueue = await apiClient.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", cancellationToken);
+        var order = Assert.Single(settlementAfterQueue!.Queue);
+        Assert.Equal("farm", order.Building);
 
         Assert.Empty(consoleErrors);
     }
