@@ -21,15 +21,41 @@ var postgresPassword = builder.AddParameter("postgres-password", "bjarnoy-dev-on
 var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
            Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
 
-// A fresh random admin password every run — unlike postgres-password above,
-// there's no persisted state to desync from, since AuthService.SeedAdminIfConfiguredAsync
-// (called from Program.cs on every startup) is a no-op once any Admin already
-// exists, so re-seeding with a new password each run only matters for a
-// clean database. This means a dev never has to invent, remember, or type
-// admin credentials for local Aspire runs: the "Log in as admin" dashboard
-// link added on the frontend resource below carries them.
+// On CI the Postgres volume above is never persisted (see the isCI branch),
+// so every run's database — and any Admin seeded into it — is genuinely
+// fresh, and a new random password each run is fine. Locally, though,
+// Postgres *is* persisted (WithDataVolume + Persistent lifetime), and
+// AuthService.SeedAdminIfConfiguredAsync (called from Program.cs on every
+// startup) is a no-op once any Admin already exists — so after the first
+// local run, the Admin's real password stays fixed to whatever was
+// generated that first time, while a fresh random value here would get
+// baked into the dashboard link and no longer match it. Reusing the same
+// value across local runs (persisted next to the volume's own state, same
+// idea as the fixed postgres-password above) keeps the "Log in as admin"
+// dashboard link working for as long as that volume — and its seeded Admin
+// — exists, instead of only on the very first run.
 const string adminUserName = "admin";
-var adminPasswordValue = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
+var adminPasswordValue = isCI
+    ? Convert.ToHexString(RandomNumberGenerator.GetBytes(9))
+    : GetOrCreatePersistedDevAdminPassword();
+
+static string GetOrCreatePersistedDevAdminPassword()
+{
+    var dir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "bjarnoy");
+    Directory.CreateDirectory(dir);
+    var path = Path.Combine(dir, "aspire-admin-password");
+
+    var existing = File.Exists(path) ? File.ReadAllText(path).Trim() : "";
+    if (!string.IsNullOrEmpty(existing))
+    {
+        return existing;
+    }
+
+    var generated = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
+    File.WriteAllText(path, generated);
+    return generated;
+}
 
 var postgres = builder.AddPostgres("postgres", password: postgresPassword);
 
