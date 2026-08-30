@@ -81,7 +81,7 @@ public class LandingBuildQueueTests
             $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"
             + $"&rMin={centre.R - 1}&rMax={centre.R + 1}",
             cancellationToken);
-        var grassTile = chunk!.Tiles.Single(t =>
+        var grassTile = chunk!.Tiles.First(t =>
             t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
 
         apiClient.DefaultRequestHeaders.Remove("X-Owner-Id");
