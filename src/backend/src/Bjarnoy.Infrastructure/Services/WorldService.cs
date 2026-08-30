@@ -85,7 +85,23 @@ public sealed class WorldService(
         }
 
         _dbContext.Worlds.Add(world);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // The AnyAsync check above is a courtesy, not a lock: two callers
+            // racing to create a world with the same name both pass it, and
+            // only the unique index on Name actually decides. Without this
+            // catch the loser gets a raw 500 instead of the same
+            // WorldCreationException (409) the earlier check already
+            // promises — see SettlementService.FoundAsync's identical
+            // PlotTaken race for the same reasoning.
+            _dbContext.Entry(world).State = EntityState.Detached;
+            throw new WorldCreationException($"A world named '{name}' already exists.");
+        }
 
         _logger.LogInformation(
             "World {World} ({WorldId}) created with {Islands} islands and {Land} land hexes.",

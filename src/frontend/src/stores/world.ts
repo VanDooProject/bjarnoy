@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { ApiError, api } from '../api/client';
+import { api } from '../api/client';
 import type { BuildOrderResponse, IslandResponse, TrainingOrderResponse, UnitStackResponse } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
@@ -67,6 +67,12 @@ export const useWorldStore = defineStore('world', {
     // the start positions a settlement may be founded on. Unused in demo
     // mode, where `WorldModel` is the entire source of truth.
     worldId: localStorage.getItem('bjarnoy.worldId'),
+    // The founding/restoring browser's stable local id (`usePlayerStore().id`),
+    // remembered here once known so `queueBuildLive`/`trainUnitsLive` can send
+    // it as the `X-Owner-Id` header the backend's ownership check reads for an
+    // anonymous (unclaimed) settlement — see SettlementOwnershipEndpointFilter
+    // and docs/codebase-gap-analysis.md. Unused in demo mode.
+    ownerId: null as string | null,
     islands: [] as IslandResponse[],
     liveReady: false,
     // Whether the world currently accepts a new player, and why not if it
@@ -91,27 +97,29 @@ export const useWorldStore = defineStore('world', {
 
       let world = this.worldId ? await api.getWorld(this.worldId).catch(() => null) : null;
       // Worlds are shared and meant to be created by an admin, not by
-      // whichever browser tab happens to land here first — so join
-      // whatever exists rather than filtering by status. (There used to be
-      // a `status === 'running'` filter here, but WorldResponse's `status`
+      // whichever browser tab happens to land here first — so join whatever
+      // exists rather than filtering by status. (There used to be a
+      // `status === 'running'` filter here, but WorldResponse's `status`
       // never actually takes that value — see WorldEntity's WorldStatus —
-      // so it silently matched nothing and fell through to createWorld()
-      // below on every visit, racing every other tab that did the same and
-      // 409-ing on the shared 'Kettil Sea' name.)
+      // so it silently matched nothing and fell through to a client-side
+      // createWorld() call on every visit, racing every other tab that did
+      // the same. That call has been removed entirely, not just the dead
+      // filter: an anonymous client creating shared, costly-to-generate
+      // world state was the underlying architectural issue, not just its
+      // symptom — see docs/codebase-gap-analysis.md. `POST /worlds` itself
+      // is still open to any caller today; closing that is a separate,
+      // larger backend pass, called out in docs/tech/backend.md's "Not in
+      // here yet" — this only removes the client's own contribution to the
+      // race. A fresh deployment with no worlds yet is now reported the same
+      // way as any other "can't join right now" state below, rather than
+      // silently self-served.)
       if (!world) {
         world = await this.newestWorld();
       }
       if (!world) {
-        // Nobody has created a world yet (e.g. a fresh dev database) — seed
-        // one so there's something to join. If another tab won that race,
-        // join what it created instead of failing on the name conflict.
-        try {
-          world = await api.createWorld({ name: 'Kettil Sea' });
-        } catch (err) {
-          if (!(err instanceof ApiError) || err.status !== 409) throw err;
-          world = await this.newestWorld();
-          if (!world) throw err;
-        }
+        this.worldJoinable = false;
+        this.worldJoinableReason = 'NoWorldYet';
+        return;
       }
 
       this.worldId = world.id;
@@ -201,6 +209,7 @@ export const useWorldStore = defineStore('world', {
      */
     async foundStartingSettlementLive(ownerId: string, ownerName: string, realmName: string, near: AxialCoord) {
       if (!this.worldId) throw new Error('bootstrapLiveWorld() must run before founding a settlement');
+      this.ownerId = ownerId;
       // Bootstrap's own snapshot can be stale by the time the player
       // actually clicks — re-sync who else has founded here first so
       // nearestStartPosition doesn't send this request at a plot someone
@@ -241,23 +250,27 @@ export const useWorldStore = defineStore('world', {
      * only appears once its build order completes and the next poll
      * (`refreshLiveSettlement`) picks it up — matching how the backend's
      * build queue actually works (docs/tech/backend.md, "Everything is
-     * lazy"). Throws `ApiError` on rejection (e.g. not enough resources);
-     * callers decide how to surface that.
+     * lazy"). Throws `ApiError` on rejection (e.g. not enough resources, or
+     * 403 if `this.ownerId` doesn't match the settlement's owner — see
+     * SettlementOwnershipEndpointFilter); callers decide how to surface that.
      */
     async queueBuildLive(building: string, at: AxialCoord) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.queueBuild(this.selectedSettlementId, { building, q: at.q, r: at.r });
+      await api.queueBuild(
+        this.selectedSettlementId, { building, q: at.q, r: at.r }, this.ownerId ?? undefined,
+      );
       await this.refreshLiveSettlement();
     },
     /**
      * Live mode: queues a training batch against the backend, charging its
-     * cost immediately — mirrors `queueBuildLive` above. Throws `ApiError` on
-     * rejection (e.g. not enough resources, longhouse too low, training
-     * queue full); callers decide how to surface that.
+     * cost immediately — mirrors `queueBuildLive` above, including the
+     * ownership header. Throws `ApiError` on rejection (e.g. not enough
+     * resources, longhouse too low, training queue full); callers decide how
+     * to surface that.
      */
     async trainUnitsLive(unit: string, count: number) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.trainUnits(this.selectedSettlementId, { unit, count });
+      await api.trainUnits(this.selectedSettlementId, { unit, count }, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
     /** Pulls the settlement's current resources/level/buildings/garrison/training queue from the backend. No-op in demo mode. */
@@ -288,6 +301,7 @@ export const useWorldStore = defineStore('world', {
      */
     async restoreLiveSettlement(ownerId: string, settlementId: string) {
       if (DEMO_MODE || this.selectedSettlementId === settlementId) return;
+      this.ownerId = ownerId;
       await this.bootstrapLiveWorld();
       const response = await api.getSettlement(settlementId);
       this.model.registerSettlement({

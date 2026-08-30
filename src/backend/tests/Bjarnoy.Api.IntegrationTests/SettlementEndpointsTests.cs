@@ -1,10 +1,13 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -538,9 +541,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(TimeSpan.FromHours(1));
 
         // Resume crediting two extra hours on top of the hour of downtime.
-        var resumed = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/state",
-            new SetWorldStateRequest("running", GraceSeconds: 2 * 3600),
+        using var adminClient = await AdminClientAsync();
+        var resumed = await adminClient.PostJsonAsync(
+            $"/api/v1/admin/worlds/{worldId}/run-state",
+            new SetWorldRunStateRequest("resume", GraceMinutes: 2 * 60),
             Ct);
         Assert.Equal(HttpStatusCode.OK, resumed.StatusCode);
 
@@ -570,8 +574,9 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, _) = await FoundAsync(client);
 
-        var response = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/state", new SetWorldStateRequest("banana"), Ct);
+        using var adminClient = await AdminClientAsync();
+        var response = await adminClient.PostJsonAsync(
+            $"/api/v1/admin/worlds/{worldId}/run-state", new SetWorldRunStateRequest("banana"), Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -589,6 +594,95 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(settlement.Id, only.Id);
         Assert.Equal("Ulf", only.OwnerName);
         Assert.Equal(1, only.LonghouseLevel);
+    }
+
+    // ------------------------------------------------------------- ownership
+
+    [Fact]
+    public async Task Build_is_refused_with_no_owner_header()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Build_is_refused_with_someone_elses_owner_header()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Build_succeeds_with_the_founding_browsers_own_owner_header()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        // "ulf-player" is FoundAsync's own OwnerId — the founding browser's
+        // client-local id.
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "ulf-player");
+
+        Assert.NotNull(await QueueFarmAsync(client, settlement));
+    }
+
+    [Fact]
+    public async Task Train_units_is_refused_for_a_settlement_with_a_different_owner()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/units",
+            new TrainUnitsRequest("thrall", 1),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_claimed_settlement_refuses_a_build_from_a_different_account()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        await ClaimAsync(client, "ulf-player");
+
+        // A different, unrelated account — proves the settlement's specific
+        // claim is what's checked, not merely "any authenticated caller".
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await RegisterAsync(client, Unique("rival")));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_claimed_settlement_accepts_a_build_from_its_own_account()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var ownerToken = await ClaimAsync(client, "ulf-player");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        Assert.NotNull(await QueueFarmAsync(client, settlement));
     }
 
     // ---------------------------------------------------------------- helpers
@@ -613,12 +707,84 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         return null;
     }
 
+    /// <summary>
+    /// World pause/lock/maintenance/resume, as a test fixture rather than the
+    /// thing under test — routed through the real admin surface
+    /// (<c>POST /api/v1/admin/worlds/{id}/run-state</c>) since the endpoint
+    /// this used to hit (an unauthenticated duplicate at
+    /// <c>POST /api/v1/worlds/{id}/state</c>) was removed as a bypass of the
+    /// Admin policy the real one enforces — see
+    /// docs/codebase-gap-analysis.md.
+    /// </summary>
     private async Task PauseAsync(HttpClient client, Guid worldId, string state)
     {
-        var response = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/state", new SetWorldStateRequest(state), Ct);
+        var action = state switch
+        {
+            "paused" => "pause",
+            "running" => "resume",
+            "locked" => "lock",
+            "maintenance" => "maintenance",
+            _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown world state."),
+        };
+
+        using var adminClient = await AdminClientAsync();
+        var response = await adminClient.PostJsonAsync(
+            $"/api/v1/admin/worlds/{worldId}/run-state", new SetWorldRunStateRequest(action), Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>Registers a fresh account, with no settlement claim, returning its access token.</summary>
+    private async Task<string> RegisterAsync(HttpClient client, string userName)
+    {
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        return (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+    }
+
+    /// <summary>
+    /// Registers a fresh account claiming every unclaimed settlement founded
+    /// under the client-local <paramref name="ownerId"/> (see
+    /// <c>AuthService.RegisterAsync</c>'s <c>existingOwnerId</c>), returning
+    /// its access token.
+    /// </summary>
+    private async Task<string> ClaimAsync(HttpClient client, string ownerId)
+    {
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register",
+            new RegisterRequest(Unique("owner"), "correct-horse-battery", ownerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        return (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+    }
+
+    /// <summary>An HTTP client already carrying a fresh admin's access token.</summary>
+    private async Task<HttpClient> AdminClientAsync()
+    {
+        var client = _factory.CreateClient();
+
+        var userName = Unique("admin");
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var auth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == auth.User.Id, Ct);
+            user.Role = UserRole.Admin;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var loggedIn = await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
+        var token = (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
     }
 
     private async Task<DateTimeOffset> ReadSettledAtAsync(Guid settlementId)

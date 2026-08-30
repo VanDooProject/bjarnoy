@@ -62,6 +62,10 @@ export const authHooks: {
   onAccountLocked: () => {},
 };
 
+function ownerHeader(ownerId?: string): HeadersInit | undefined {
+  return ownerId ? { 'X-Owner-Id': ownerId } : undefined;
+}
+
 async function request<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
   const accessToken = authHooks.getAccessToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -107,15 +111,23 @@ export const api = {
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`),
   getSettlement: (settlementId: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}`),
-  queueBuild: (settlementId: string, body: QueueBuildRequest) =>
+  // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
+  // filter reads for an anonymous (unclaimed) settlement — see
+  // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
+  // claimed settlement: the backend only consults it while the settlement
+  // is still owned by the anonymous-play system account, and trusts the
+  // caller's JWT once it's claimed.
+  queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
-  trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
+  trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
   getProfileByName: (userName: string) =>

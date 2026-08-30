@@ -27,17 +27,16 @@ public static class SettlementEndpoints
             .WithName("FoundSettlement")
             .WithSummary("Founds a settlement on one of an island's start positions.")
             // Mutating: a Locked/Banned authenticated caller is refused, but
-            // anonymous play (no owner-auth yet) is unaffected — see
-            // ActiveUserEndpointFilter.
+            // anonymous play is unaffected — see ActiveUserEndpointFilter.
+            // No SettlementOwnershipEndpointFilter here: founding is what
+            // *establishes* ownership (OwnerId/OwnerName in the request
+            // body), so there is nothing to own yet at this point — see
+            // QueueBuild/TrainUnits below for where that filter applies.
             .AddEndpointFilter<ActiveUserEndpointFilter>();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
             .WithSummary("Lists the settlements in a world.");
-
-        worlds.MapPost("/{worldId:guid}/state", SetState)
-            .WithName("SetWorldRunState")
-            .WithSummary("Pauses, locks, puts into maintenance, or resumes a world.");
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
@@ -50,12 +49,14 @@ public static class SettlementEndpoints
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>();
 
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)
@@ -256,38 +257,6 @@ public static class SettlementEndpoints
         };
 
         return TypedResults.Conflict(problem);
-    }
-
-    private static async Task<Results<Ok<WorldClockResponse>, NotFound, BadRequest<ProblemDetails>>> SetState(
-        Guid worldId,
-        SetWorldStateRequest request,
-        SettlementService settlements,
-        TimeProvider time,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (!Enum.TryParse<WorldRunState>(request.State, ignoreCase: true, out var state))
-        {
-            return TypedResults.BadRequest(new ProblemDetails
-            {
-                Title = "Unknown world state.",
-                Detail = $"Valid: {string.Join(", ", Enum.GetNames<WorldRunState>()).ToLowerInvariant()}.",
-                Status = StatusCodes.Status400BadRequest,
-            });
-        }
-
-        var world = await settlements.SetRunStateAsync(
-            worldId, state, TimeSpan.FromSeconds(request.GraceSeconds), cancellationToken);
-
-        if (world is null)
-        {
-            return TypedResults.NotFound();
-        }
-
-        var clock = world.ToClock();
-        return TypedResults.Ok(
-            WorldClockResponse.From(clock, clock.ToGameTime(time.GetUtcNow())));
     }
 
     private static Ok<IReadOnlyList<BuildingDefinitionResponse>> Catalogue(int? level)
