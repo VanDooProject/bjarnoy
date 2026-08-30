@@ -75,6 +75,9 @@ const joinBlockedMessage = computed(() => {
   if (world.worldJoinableReason === 'JoinsClosed') {
     return 'This world is no longer accepting new players.';
   }
+  if (world.worldJoinableReason === 'NoWorldYet') {
+    return 'No world has been created yet — check back soon.';
+  }
   return 'This world is not accepting new players right now.';
 });
 

@@ -38,6 +38,7 @@ import type {
   ResolveReportRequest,
   SendMessageRequest,
   SetBuildingLevelRequest,
+  SetUserPremiumRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
@@ -81,6 +82,10 @@ export const authHooks: {
   refreshAccessToken: async () => false,
   onAccountLocked: () => {},
 };
+
+function ownerHeader(ownerId?: string): HeadersInit | undefined {
+  return ownerId ? { 'X-Owner-Id': ownerId } : undefined;
+}
 
 async function request<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
   const accessToken = authHooks.getAccessToken();
@@ -127,10 +132,17 @@ export const api = {
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`),
   getSettlement: (settlementId: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}`),
-  queueBuild: (settlementId: string, body: QueueBuildRequest) =>
+  // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
+  // filter reads for an anonymous (unclaimed) settlement — see
+  // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
+  // claimed settlement: the backend only consults it while the settlement
+  // is still owned by the anonymous-play system account, and trusts the
+  // caller's JWT once it's claimed.
+  queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
     request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
@@ -155,10 +167,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
+  trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   sendMessage: (body: SendMessageRequest) =>
     request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
@@ -241,6 +254,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminSetUserPremium: (userId: string, body: SetUserPremiumRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}/premium`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   adminSearchSettlements: (params?: { worldId?: string; owner?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.worldId) query.set('worldId', params.worldId);
@@ -288,15 +306,20 @@ export const api = {
   },
   // Issue #40 phase 2: dispatching/tracking armies. Mirrors ArmyEndpoints.cs's
   // routes exactly (`/settlements/{id}/armies`, `/armies/{id}`, `/armies/{id}/recall`).
-  dispatchArmy: (settlementId: string, body: DispatchArmyRequest) =>
+  // `ownerId` is the same X-Owner-Id ownership proof queueBuild/trainUnits
+  // send — ArmyEndpoints.Dispatch/Recall are gated by
+  // SettlementOwnershipEndpointFilter/ArmyOwnershipEndpointFilter too.
+  dispatchArmy: (settlementId: string, body: DispatchArmyRequest, ownerId?: string) =>
     request<ArmyResponse>(`/settlements/${settlementId}/armies`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   getSettlementArmies: (settlementId: string) =>
     request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
   getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
-  recallArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST' }),
+  recallArmy: (armyId: string, ownerId?: string) =>
+    request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
   // Issue #40 phase 4: the host's read-only view of who is currently
   // supporting this settlement. Mirrors ArmyEndpoints.cs's
   // `/settlements/{id}/guests`.

@@ -193,6 +193,28 @@ public sealed class ArmyService(
     }
 
     /// <summary>
+    /// An army's home settlement id (<see cref="ArmyEntity.SettlementId"/>) —
+    /// unlike <see cref="GetAsync"/>, this is a bare id lookup with no
+    /// settling, for the ownership-authorization endpoint filter
+    /// (<c>Bjarnoy.Api.Auth.ArmyOwnershipEndpointFilter</c>): an army has no
+    /// owner of its own, only the settlement it was dispatched from, which
+    /// stays the same for its whole life regardless of where it currently is
+    /// or whether it has already folded home. Null if no such army row
+    /// exists (including one already folded back and deleted).
+    /// </summary>
+    public async Task<Guid?> GetOwningSettlementIdAsync(
+        Guid armyId, CancellationToken cancellationToken = default)
+    {
+        // SettlementId is never Guid.Empty (ArmyEntity.Id/SettlementId are
+        // both real generated ids), so a plain FirstOrDefaultAsync default
+        // (Guid?)null unambiguously means "no such army row".
+        return await _dbContext.Armies
+            .Where(a => a.Id == armyId)
+            .Select(a => (Guid?)a.SettlementId)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Loads an army as of now: past its turn-around it is put onto its
     /// return leg, and past that it is folded back into its home
     /// settlement's garrison and its row deleted — in which case this
@@ -223,6 +245,7 @@ public sealed class ArmyService(
     public Task<List<ArmyEntity>> GetForSettlementAsync(Guid settlementId, CancellationToken cancellationToken = default) =>
         _dbContext.Armies
             .AsNoTracking()
+            .Include(a => a.Settlement)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Where(a => a.SettlementId == settlementId)

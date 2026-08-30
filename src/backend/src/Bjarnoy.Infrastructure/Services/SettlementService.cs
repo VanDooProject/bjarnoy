@@ -289,6 +289,24 @@ public sealed class SettlementService(
         return (settlement, clock);
     }
 
+    /// <summary>
+    /// A settlement's real owner (<see cref="SettlementEntity.UserId"/>) and
+    /// client-local owner id (<see cref="SettlementEntity.OwnerId"/>) — a
+    /// lightweight projection for the ownership-authorization endpoint
+    /// filters (<c>Bjarnoy.Api.Auth.OwnershipGate</c>), not a full load. Null
+    /// if no such settlement exists.
+    /// </summary>
+    public async Task<(Guid UserId, string OwnerId)?> GetOwnershipAsync(
+        Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var ownership = await _dbContext.Settlements
+            .Where(s => s.Id == settlementId)
+            .Select(s => new { s.UserId, s.OwnerId })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+        return ownership is null ? null : (ownership.UserId, ownership.OwnerId);
+    }
+
     /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
     public async Task<SettlementsPage> SearchAsync(
         Guid? worldId,
@@ -497,7 +515,7 @@ public sealed class SettlementService(
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
-        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline);
+        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {

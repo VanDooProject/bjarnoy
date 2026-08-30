@@ -154,6 +154,19 @@ if (databaseOptions.MigrateOnStartup)
 {
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<DatabaseMigrator>().MigrateAsync();
+
+    // Seeds one default world if the server has none at all — only reachable
+    // here, where the schema is guaranteed to actually exist yet (an app
+    // instance that does *not* migrate itself — MigrateOnStartup false, e.g.
+    // every test host in this repo, or a deployment using the separate
+    // migrator container/CLI — cannot assume that at this point in startup).
+    // Unconditional otherwise, unlike the admin bootstrap below: a client no
+    // longer creates a world itself (see
+    // WorldService.SeedDefaultWorldIfNoneAsync), so an empty server with
+    // nothing to join is never a state anyone wants.
+    var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
+    var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await worldService.SeedDefaultWorldIfNoneAsync("Kettil Sea", worldSeedLogger);
 }
 
 // Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD

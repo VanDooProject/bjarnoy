@@ -127,6 +127,25 @@ async function setStatus(user: AdminUserResponse, status: string) {
     draft.saving = false;
   }
 }
+
+// Issue #40 phase 7: the fight simulator's `PremiumUserEndpointFilter` gate
+// had no admin control to flip — this is that control, mirroring `setStatus`
+// above exactly (same per-row draft/saving/error plumbing).
+async function togglePremium(user: AdminUserResponse) {
+  const draft = drafts[user.id];
+  if (!draft || draft.saving) return;
+
+  draft.saving = true;
+  draft.error = null;
+  try {
+    const updated = await api.adminSetUserPremium(user.id, { isPremium: !user.isPremium });
+    applyUpdated(updated);
+  } catch (err) {
+    draft.error = err instanceof ApiError ? err.message : 'Could not update premium status.';
+  } finally {
+    draft.saving = false;
+  }
+}
 </script>
 
 <template>
@@ -155,6 +174,7 @@ async function setStatus(user: AdminUserResponse, status: string) {
             <th>Display name</th>
             <th>Role</th>
             <th>Status</th>
+            <th>Premium</th>
             <th>Settlements</th>
             <th>Created</th>
             <th>Last login</th>
@@ -175,6 +195,16 @@ async function setStatus(user: AdminUserResponse, status: string) {
             </td>
             <td>
               <span :class="['status', user.status]">{{ user.status }}</span>
+            </td>
+            <td>
+              <button
+                type="button"
+                class="premium-toggle"
+                :disabled="drafts[user.id]?.saving"
+                @click="togglePremium(user)"
+              >
+                {{ user.isPremium ? 'Revoke premium' : 'Grant premium' }}
+              </button>
             </td>
             <td>{{ user.settlementCount }}</td>
             <td>{{ new Date(user.createdAt).toLocaleDateString() }}</td>

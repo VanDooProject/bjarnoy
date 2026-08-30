@@ -184,10 +184,6 @@ public sealed record WorldClockResponse(
         gameNow);
 }
 
-public sealed record SetWorldStateRequest(
-    [property: Required] string State,
-    [property: Range(0, 365 * 24 * 3600)] double GraceSeconds = 0);
-
 /// <param name="AllowedTerrain">
 /// Empty both for "any land" and for a <paramref name="RequiresCoastalWater"/>
 /// building — check that flag first; it means <em>land</em> terrain plays no
