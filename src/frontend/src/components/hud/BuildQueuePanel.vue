@@ -51,19 +51,19 @@ const orders = computed(() => {
   const elapsed = (Date.now() - world.hud.queueFetchedAt) / 1000;
   return world.hud.queue.map((q) => {
     const label = BUILDING_LABELS[q.building] ?? q.building;
-    // Neither the backend's BuildOrder nor this snapshot carries when an
-    // order actually started, so "percent complete" can't be computed
-    // exactly — this treats the remaining time *at the moment it was
-    // fetched* as a stand-in for the order's total duration, which reads
-    // right for anything that started around when the HUD last polled but
-    // undercounts an order that was already well underway before that.
-    // Good enough for a progress bar, not a real accounting number.
+    // Issue #91: progress used to be derived from the remaining time *at the
+    // moment of the last poll*, standing in for the order's total duration —
+    // that resets to "just started" (progress 0) on every refetch, which is
+    // exactly why the bar visibly jumped backward every ~4s poll interval.
+    // The backend now sends the order's real total duration, so progress can
+    // be an absolute, poll-invariant fraction instead.
+    const totalSeconds = q.totalSeconds;
     const remainingAtFetch = q.completesInSeconds;
     const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
     const progress =
-      remainingAtFetch === null || remainingAtFetch <= 0
+      remainingAtFetch === null || totalSeconds === null || totalSeconds <= 0
         ? 1
-        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / remainingAtFetch));
+        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
     const done = remainingNow !== null && remainingNow <= 0.5;
     return {
       key: q.id,

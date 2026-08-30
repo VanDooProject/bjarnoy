@@ -73,6 +73,8 @@ export interface BuildOrderResponse {
   targetLevel: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
+  /** The order's full duration, so progress can be shown as an absolute fraction instead of one re-derived from whatever was left at the last poll. Null under the same freeze condition as `completesInSeconds`. */
+  totalSeconds: number | null;
 }
 
 /** A garrison line: how many of one unit type currently stand at a settlement. */
@@ -94,6 +96,8 @@ export interface TrainingOrderResponse {
   completedCount: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
+  /** The batch's full duration — see `BuildOrderResponse.totalSeconds`. */
+  totalSeconds: number | null;
 }
 
 export interface WorldClockResponse {

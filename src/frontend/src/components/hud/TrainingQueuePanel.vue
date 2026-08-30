@@ -52,15 +52,17 @@ const orders = computed(() => {
   void world.hud.tick; // reactive dependency so the countdown ticks every second
   const elapsed = (Date.now() - world.hud.trainingQueueFetchedAt) / 1000;
   return world.hud.trainingQueue.map((o) => {
-    // Same "remaining-at-fetch stands in for total duration" approximation
-    // BuildQueuePanel uses — see its own comment for why an exact percentage
-    // isn't available from the snapshot alone.
+    // Issue #91: progress is now an absolute fraction of the batch's real
+    // total duration (poll-invariant) instead of being re-derived from
+    // whatever was left at the last poll — see BuildQueuePanel's comment for
+    // why the old approximation made the bar jump backward on every refetch.
+    const totalSeconds = o.totalSeconds;
     const remainingAtFetch = o.completesInSeconds;
     const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
     const progress =
-      remainingAtFetch === null || remainingAtFetch <= 0
+      remainingAtFetch === null || totalSeconds === null || totalSeconds <= 0
         ? 1
-        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / remainingAtFetch));
+        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
     const done = remainingNow !== null && remainingNow <= 0.5;
     return {
       key: o.id,
