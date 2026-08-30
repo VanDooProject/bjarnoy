@@ -777,12 +777,25 @@ export interface DispatchArmyRequest {
   targetBuildingCoord?: HexPoint;
 }
 
-/** Mirrors `MovementResponse` — the full outbound route, start and destination included. */
+/**
+ * Mirrors `MovementResponse` — the full outbound route, start and destination
+ * included.
+ *
+ * `cumulativeHours` is the per-hex schedule for `path` (`[0]` is always 0,
+ * same length as `path`), and `returnCumulativeHours` the same for
+ * `returnPath` measured from `turnAroundAt`. Issue #94 exposed them so the
+ * map can interpolate an army's live position per leg (see
+ * `lib/units/armyProgress.ts`) — legs cost wildly different amounts of time
+ * on mixed terrain, so spreading the trip evenly over the path drifts away
+ * from the authoritative `position` the backend reports.
+ */
 export interface MovementResponse {
   departedAt: string;
   path: HexPoint[];
+  cumulativeHours: number[];
   arrivesAt: string;
   returnPath: HexPoint[];
+  returnCumulativeHours: number[];
   turnAroundAt: string;
   returnArrivesAt: string;
   isReturning: boolean;

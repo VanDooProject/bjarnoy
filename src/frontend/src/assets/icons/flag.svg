@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Banner on a pole, flying to the right (+x) — the marching army's
+       marker (issue #94). The pole's foot sits at the sprite's bottom
+       centre so it reads as planted on the hex it is placed at. -->
+  <rect x="20" y="4" width="5" height="56" rx="2" fill="#cbd6dd"/>
+  <circle cx="22" cy="4" r="4" fill="#fff"/>
+  <path d="M25 8 L56 14 L46 24 L56 34 L25 40 Z" fill="#fff"/>
+  <path d="M31 16 L44 19 L38 24 L44 29 L31 32 Z" fill="#9fb2bd"/>
+</svg>
