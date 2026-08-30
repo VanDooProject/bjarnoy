@@ -365,7 +365,7 @@ public sealed class ArmyService(
     /// zero are dropped). The army's movement is <em>not</em> re-pathed: a
     /// stack change alters speed and upkeep from now on, but the leg it is
     /// already flying keeps the timing it was dispatched with — use
-    /// <paramref name="arrivesAt"/> to retime it deliberately rather than
+    /// <paramref name="arriveIn"/> to retime it deliberately rather than
     /// having it shift as a side effect.
     /// </param>
     /// <param name="provisions">Absolute food load, not a delta.</param>
@@ -437,11 +437,11 @@ public sealed class ArmyService(
             domain = domain with { Provisions = Math.Max(0, food) };
         }
 
-        var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
-        var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
-
         if (teleportTo is { } destination)
         {
+            var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+            var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+
             var teleported = domain.TeleportTo(destination, home, now, sampler.TerrainAt);
             if (teleported is null)
             {
