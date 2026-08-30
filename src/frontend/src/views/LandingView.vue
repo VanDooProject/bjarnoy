@@ -11,6 +11,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
@@ -104,6 +105,21 @@ const modalOwnerLabel = computed(() => {
   if (!owner) return null;
   return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
 });
+
+// Mirrors SettlementView.vue's onQueueSelect — pans to and briefly flashes
+// a queued order's hex when clicked from the construction status card.
+let queueFlashTimeout: ReturnType<typeof setTimeout> | null = null;
+function onQueueSelect(coord: AxialCoord) {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return;
+  renderer.panTo(coord);
+  renderer.setHighlight(coord);
+  if (queueFlashTimeout) clearTimeout(queueFlashTimeout);
+  queueFlashTimeout = setTimeout(() => {
+    renderer.setHighlight(undefined);
+    queueFlashTimeout = null;
+  }, 2200);
+}
 
 function onHexClick(coord: AxialCoord, tile: Tile) {
   if (!player.hasFoundedSettlement) {
@@ -223,6 +239,7 @@ function closePrompt() {
     <TopBar>
       <HudNav />
     </TopBar>
+    <BuildQueuePanel @select="onQueueSelect" />
 
     <!-- Once a settlement exists, fog is on screen and the camera is
          mid-transition — the hero copy would either sit unreadably over
