@@ -233,3 +233,62 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     expect(foundSettlement).not.toHaveBeenCalled();
   });
 });
+
+// Regression coverage for scoping MINIMUM_SETTLEMENT_SPACING to the same
+// island (mirrors the backend's FoundAsync): a start position on a
+// *different* island must stay available no matter how close it is by raw
+// hex distance to an existing settlement — separate islands are always
+// divided by open sea, so their claim discs can never actually overlap any
+// land either could claim.
+describe('useWorldStore unclaimedStartPositions (spacing is per-island)', () => {
+  const HOME_ISLAND = 'island-home';
+  const OTHER_ISLAND = 'island-other';
+  // Well within MINIMUM_SETTLEMENT_SPACING (13) of the existing settlement
+  // at {0,0} on both islands below.
+  const CLOSE_ON_HOME = { q: 2, r: 0 };
+  const CLOSE_ON_OTHER = { q: 0, r: 2 };
+
+  it('excludes a close start position on the same island but keeps one just as close on a different island', async () => {
+    const store = await loadStoreModule(false);
+    store.islands = [
+      {
+        id: HOME_ISLAND,
+        index: 0,
+        name: 'Home',
+        q: 0,
+        r: 0,
+        tileCount: 10,
+        startPositions: [CLOSE_ON_HOME],
+        riverTiles: [],
+      },
+      {
+        id: OTHER_ISLAND,
+        index: 1,
+        name: 'Other',
+        q: 0,
+        r: 2,
+        tileCount: 10,
+        startPositions: [CLOSE_ON_OTHER],
+        riverTiles: [],
+      },
+    ];
+    store.model.registerSettlement({
+      id: 'settlement-home',
+      ownerId: 'owner-1',
+      ownerName: 'Ulf',
+      name: "Ulf's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: HOME_ISLAND,
+    });
+
+    const available = store.unclaimedStartPositions().map((p) => p.islandId);
+
+    expect(available).not.toContain(HOME_ISLAND);
+    expect(available).toContain(OTHER_ISLAND);
+  });
+});
