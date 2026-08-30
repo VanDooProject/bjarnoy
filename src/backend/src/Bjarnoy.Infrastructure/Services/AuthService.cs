@@ -44,13 +44,19 @@ public sealed record RefreshResult(RefreshOutcome Outcome, UserEntity? User, str
 /// package the API host already references, rather than adding another
 /// package reference to this project.
 /// </remarks>
-public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvider)
+public sealed class AuthService(
+    GameDbContext dbContext,
+    TimeProvider timeProvider,
+    IUserActivityTracker activityTracker,
+    ILogger<AuthService> logger)
 {
     /// <summary>How long a refresh token is good for before it must be rotated by use.</summary>
     public static readonly TimeSpan RefreshTokenLifetime = TimeSpan.FromDays(30);
 
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly IUserActivityTracker _activityTracker = activityTracker;
+    private readonly ILogger<AuthService> _logger = logger;
     private readonly PasswordHasher<UserEntity> _hasher = new();
 
     /// <param name="existingOwnerId">
@@ -191,6 +197,23 @@ public sealed class AuthService(GameDbContext dbContext, TimeProvider timeProvid
         _dbContext.RefreshTokens.Add(token);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // POST /api/v1/auth/refresh is not JWT-authenticated (there is no
+        // access token to validate — that's the whole point of a refresh
+        // call), so UserActivityEndpointFilter never sees it. The user is
+        // only known here, once the DB-backed refresh token itself resolves
+        // one, so this is the one place that must track activity directly
+        // rather than relying on the filter. Same "never fail the real
+        // request over this" posture as the filter: caught and logged, not
+        // rethrown.
+        try
+        {
+            await _activityTracker.TrackAsync(stored.UserId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to record user activity for {UserId} on token refresh.", stored.UserId);
+        }
 
         return new RefreshResult(RefreshOutcome.Success, stored.User, raw);
     }

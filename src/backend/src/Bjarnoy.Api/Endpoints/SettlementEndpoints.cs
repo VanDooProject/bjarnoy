@@ -32,7 +32,8 @@ public static class SettlementEndpoints
             // *establishes* ownership (OwnerId/OwnerName in the request
             // body), so there is nothing to own yet at this point — see
             // QueueBuild/TrainUnits below for where that filter applies.
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
@@ -50,13 +51,15 @@ public static class SettlementEndpoints
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>();
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>();
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)

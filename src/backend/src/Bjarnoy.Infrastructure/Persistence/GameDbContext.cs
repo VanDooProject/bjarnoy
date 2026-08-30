@@ -64,6 +64,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<WeeklyStatEntity> WeeklyStats => Set<WeeklyStatEntity>();
 
+    public DbSet<UserActivityEntity> UserActivities => Set<UserActivityEntity>();
+
+    public DbSet<UserActivitySessionEntity> UserActivitySessions => Set<UserActivitySessionEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -635,6 +639,47 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Recomputation is an upsert keyed on this triple.
             stat.HasIndex(s => new { s.WorldId, s.UserId, s.PeriodStart }).IsUnique();
+        });
+
+        modelBuilder.Entity<UserActivityEntity>(activity =>
+        {
+            activity.ToTable("user_activity");
+
+            // UserId is the primary key, not a separately-generated one: this
+            // is a one-row-per-user upsert target, not an append log. Same
+            // ValueGeneratedNever reasoning as every other key in this model —
+            // it is always assigned by application code (the user's own id),
+            // never the database.
+            activity.HasKey(a => a.UserId);
+            activity.Property(a => a.UserId).ValueGeneratedNever();
+
+            // Cascade: an activity summary has no meaning once its user is
+            // gone, unlike SettlementEntity.Owner or WeeklyStatEntity.User,
+            // which deliberately outlive the account.
+            activity.HasOne(a => a.User)
+                .WithOne()
+                .HasForeignKey<UserActivityEntity>(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserActivitySessionEntity>(session =>
+        {
+            session.ToTable("user_activity_sessions");
+            session.HasKey(s => s.Id);
+            session.Property(s => s.Id).ValueGeneratedNever();
+
+            session.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // UserActivityService.TrackAsync's hot lookup: "this user's most
+            // recent session, by LastSeenAtUtc desc" — the composite index
+            // covers it directly.
+            session.HasIndex(s => new { s.UserId, s.LastSeenAtUtc });
+
+            // Retention (a later PR) sweeps by age.
+            session.HasIndex(s => s.StartedAtUtc);
         });
     }
 }
