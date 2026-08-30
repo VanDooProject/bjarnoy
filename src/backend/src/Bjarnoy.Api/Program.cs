@@ -49,6 +49,8 @@ builder.Services.AddOptions<UserActivityOptions>()
     .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
+builder.Services.AddScoped<UserActivityQueryService>();
+builder.Services.AddScoped<UserActivityRetentionService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -129,6 +131,10 @@ if (migrationCommand == MigrationCommandKind.None)
     // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
     builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+
+    // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
+    // migrator never serves requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<UserActivityRetentionHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
@@ -220,6 +226,7 @@ app.MapAdminUserEndpoints(versionSet);
 app.MapAdminSettlementEndpoints(versionSet);
 app.MapChatEndpoints(versionSet);
 app.MapAdminReportEndpoints(versionSet);
+app.MapAdminActivityEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot
