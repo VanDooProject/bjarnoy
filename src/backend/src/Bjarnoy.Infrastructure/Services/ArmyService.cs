@@ -245,6 +245,7 @@ public sealed class ArmyService(
     public Task<List<ArmyEntity>> GetForSettlementAsync(Guid settlementId, CancellationToken cancellationToken = default) =>
         _dbContext.Armies
             .AsNoTracking()
+            .Include(a => a.Settlement)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Where(a => a.SettlementId == settlementId)

@@ -78,10 +78,31 @@ const garrison = computed(() =>
     .filter((g) => g.count > 0)
     .map((g) => ({ key: g.unit, label: unitLabel(g.unit), count: g.count })),
 );
+
+// Issue #40 phase 4: guest (Support) armies currently stationed at this
+// settlement — the host's read-only view (`GET /settlements/{id}/guests`,
+// fetched alongside `world.armies` — see world.ts's `refreshArmies`). Shown
+// as a small section under Garrison rather than a separate HUD panel: every
+// screen corner is already taken (BuildQueuePanel top-left, this panel
+// top-right, RealmPanel bottom-left, ArmyPanel bottom-right — see each
+// panel's own `position: absolute`), and a guest garrison is conceptually
+// close kin to "who's standing at home" already shown just above it. No
+// recall/action buttons here — the host cannot command a guest army, only
+// its owner can (via their own settlement's ArmyPanel).
+const guests = computed(() =>
+  world.guestArmies.map((g) => ({
+    key: g.armyId,
+    ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? 'Unknown settlement',
+    composition: g.stacks
+      .filter((s) => s.count > 0)
+      .map((s) => `${s.count}× ${unitLabel(s.unit)}`)
+      .join(', ') || '—',
+  })),
+);
 </script>
 
 <template>
-  <div v-if="orders.length || garrison.length" class="status-card training-queue-panel">
+  <div v-if="orders.length || garrison.length || guests.length" class="status-card training-queue-panel">
     <template v-if="orders.length">
       <div class="status-card-header">
         <span class="status-card-title">Training</span>
@@ -114,6 +135,19 @@ const garrison = computed(() =>
         </div>
       </div>
       <div v-else class="status-subtext garrison-empty">No units standing here yet.</div>
+    </div>
+
+    <div v-if="guests.length" class="guests has-orders-above">
+      <div class="status-card-header">
+        <span class="status-card-title">Guests</span>
+        <span class="status-card-count">{{ guests.length }}</span>
+      </div>
+      <div class="guests-grid">
+        <div v-for="g in guests" :key="g.key" class="guest-row">
+          <span class="guest-owner">{{ g.ownerName }}</span>
+          <span class="guest-composition">{{ g.composition }}</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -220,5 +254,28 @@ const garrison = computed(() =>
 }
 .garrison-empty {
   margin-top: 0;
+}
+
+.guests.has-orders-above {
+  margin-top: 12px;
+}
+.guests-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.guest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+}
+.guest-owner {
+  color: var(--text);
+  font-weight: 600;
+}
+.guest-composition {
+  color: var(--muted);
+  font-size: 11px;
 }
 </style>

@@ -7,7 +7,9 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import TradePanel from '../components/hud/TradePanel.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
+import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
@@ -18,7 +20,7 @@ import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
-import type { HoverInfo } from '../lib/map/HexMapRenderer';
+import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -74,6 +76,36 @@ onUnmounted(() => {
   world.stopHudSync();
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
+
+// Issue #40 phase 2: pushes armies/route/draft-waypoints into the renderer's
+// own overlay layer (HexMapRenderer.setArmyOverlay) whenever any of them
+// change, or as soon as the renderer itself becomes available — watching
+// both together (rather than assuming the renderer is already mounted the
+// first time this fires) covers the ordering race between the canvas
+// mounting and this store data arriving.
+const armyOverlayData = computed<ArmyOverlayData>(() => {
+  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+    id: a.id,
+    position: a.position,
+    selected: a.id === world.selectedArmyId,
+    returning: !!a.movement?.isReturning,
+  }));
+  const selected = world.armies.find((a) => a.id === world.selectedArmyId);
+  const route = selected?.movement
+    ? selected.movement.isReturning
+      ? selected.movement.returnPath
+      : selected.movement.path
+    : [];
+  const draftWaypoints = world.dispatchDraft?.route ?? [];
+  return { armies, route, draftWaypoints };
+});
+watch(
+  [() => canvasRef.value?.renderer, armyOverlayData],
+  ([renderer, data]) => {
+    renderer?.setArmyOverlay(data ?? null);
+  },
+  { immediate: true },
+);
 
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
@@ -364,6 +396,14 @@ const ringBadge = computed(() => {
 });
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+  // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
+  // "Dispatch army" flow), a click plots the next waypoint instead of
+  // opening the usual ring menu — the two interaction modes are mutually
+  // exclusive on this same canvas, per the design doc.
+  if (world.dispatchDraft) {
+    world.addWaypoint(coord);
+    return;
+  }
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
@@ -529,7 +569,9 @@ async function upgrade() {
     </TopBar>
     <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
+    <TradePanel />
     <TrainingQueuePanel />
+    <ArmyPanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <template v-if="selectedTile && ringScreen">
       <RingMenu

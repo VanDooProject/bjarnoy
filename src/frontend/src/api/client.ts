@@ -1,12 +1,19 @@
 import { API_BASE_URL } from '../config';
 import type {
+  AcceptTradeOfferRequest,
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
+  ArmyResponse,
+  ArmySummary,
+  BattleReportResponse,
   BuildingDefinitionResponse,
+  CancelTradeOfferRequest,
   CreateWorldRequest,
+  DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
+  GuestArmySummary,
   IslandResponse,
   LeaderboardBoardResponse,
   LeaderboardCategory,
@@ -14,20 +21,34 @@ import type {
   LeaderboardMeResponse,
   LeaderboardScope,
   WeeklyStatsPageResponse,
+  MarkReadResponse,
+  MessageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
+  PagedConversationsResponse,
+  PagedMessagesResponse,
   PagedReportsResponse,
+  PostTradeOfferRequest,
   ProblemDetails,
   ProfileResponse,
   QueueBuildRequest,
+  ReportMessageRequest,
   ReportProfileRequest,
   ReportResponse,
   ResolveReportRequest,
+  SendMessageRequest,
   SetBuildingLevelRequest,
+  SetUserPremiumRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
   SettlementSummary,
+  ShipmentResponse,
+  SimulatorRequest,
+  SimulatorResponse,
+  TradeAcceptResponse,
+  TradeOfferResponse,
+  TradeReportResponse,
   TrainingOrderResponse,
   TrainUnitsRequest,
   UnitDefinitionResponse,
@@ -123,11 +144,57 @@ export const api = {
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
     }),
+  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
+    request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getTradeBoard: (settlementId: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/board`),
+  getMyTradeOffers: (settlementId: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`),
+  getShipments: (settlementId: string) =>
+    request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`),
+  getSettlementTradeReports: (settlementId: string) =>
+    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`),
+  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
+    request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest) =>
+    request<TradeOfferResponse>(`/trade-offers/${offerId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
       method: 'POST',
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
+    }),
+  sendMessage: (body: SendMessageRequest) =>
+    request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
+  listConversations: (params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedConversationsResponse>(`/messages/conversations${qs ? `?${qs}` : ''}`);
+  },
+  getConversation: (otherUserId: string, params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedMessagesResponse>(`/messages/conversations/${otherUserId}${qs ? `?${qs}` : ''}`);
+  },
+  markConversationRead: (otherUserId: string) =>
+    request<MarkReadResponse>(`/messages/conversations/${otherUserId}/read`, { method: 'POST' }),
+  reportMessage: (messageId: string, body: ReportMessageRequest) =>
+    request<ReportResponse>(`/messages/${messageId}/report`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
   getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
   getProfileByName: (userName: string) =>
@@ -187,6 +254,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminSetUserPremium: (userId: string, body: SetUserPremiumRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}/premium`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   adminSearchSettlements: (params?: { worldId?: string; owner?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.worldId) query.set('worldId', params.worldId);
@@ -232,6 +304,34 @@ export const api = {
     const qs = query.toString();
     return request<WeeklyStatsPageResponse>(`/worlds/${worldId}/stats/users/${userId}/weekly${qs ? `?${qs}` : ''}`);
   },
+  // Issue #40 phase 2: dispatching/tracking armies. Mirrors ArmyEndpoints.cs's
+  // routes exactly (`/settlements/{id}/armies`, `/armies/{id}`, `/armies/{id}/recall`).
+  // `ownerId` is the same X-Owner-Id ownership proof queueBuild/trainUnits
+  // send — ArmyEndpoints.Dispatch/Recall are gated by
+  // SettlementOwnershipEndpointFilter/ArmyOwnershipEndpointFilter too.
+  dispatchArmy: (settlementId: string, body: DispatchArmyRequest, ownerId?: string) =>
+    request<ArmyResponse>(`/settlements/${settlementId}/armies`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  getSettlementArmies: (settlementId: string) =>
+    request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
+  getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
+  recallArmy: (armyId: string, ownerId?: string) =>
+    request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // Issue #40 phase 4: the host's read-only view of who is currently
+  // supporting this settlement. Mirrors ArmyEndpoints.cs's
+  // `/settlements/{id}/guests`.
+  getSettlementGuests: (settlementId: string) =>
+    request<GuestArmySummary[]>(`/settlements/${settlementId}/guests`),
+  // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
+  // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
+  // latter is a flat newest-first list, not paged (BattleReportService has
+  // no pagination), so the reports store just holds it as-is.
+  getReport: (reportId: string) => request<BattleReportResponse>(`/reports/${reportId}`),
+  getSettlementReports: (settlementId: string) =>
+    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,
@@ -246,4 +346,11 @@ export const api = {
       `/worlds/${worldId}/leaderboards/${scope}/${category}/me${qs ? `?${qs}` : ''}`,
     );
   },
+  // Issue #40 phase 7: the premium fight simulator. `PremiumUserEndpointFilter`
+  // returns 401 (unauthenticated) or 403 `{ error: "premium_required" }`
+  // (authenticated but not premium) — both surface as an `ApiError` here,
+  // same as any other rejection; SimulatorView.vue is what gives the latter
+  // its own friendly copy instead of showing raw problem text.
+  simulate: (body: SimulatorRequest) =>
+    request<SimulatorResponse>('/simulator', { method: 'POST', body: JSON.stringify(body) }),
 };

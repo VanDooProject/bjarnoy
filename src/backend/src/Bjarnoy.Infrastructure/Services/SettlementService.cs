@@ -515,7 +515,7 @@ public sealed class SettlementService(
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
-        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline);
+        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {

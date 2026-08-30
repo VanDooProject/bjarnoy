@@ -7,17 +7,18 @@ import { ApiError } from '../../api/client';
 import type { AdminUserResponse } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
 
-const { adminListUsers, adminUpdateUser, adminSetUserStatus } = vi.hoisted(() => ({
+const { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium } = vi.hoisted(() => ({
   adminListUsers: vi.fn(),
   adminUpdateUser: vi.fn(),
   adminSetUserStatus: vi.fn(),
+  adminSetUserPremium: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { adminListUsers, adminUpdateUser, adminSetUserStatus },
+    api: { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium },
   };
 });
 
@@ -33,6 +34,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     settlementCount: 0,
     createdAt: '2026-01-01T00:00:00Z',
     lastLoginAt: null,
+    isPremium: false,
     ...overrides,
   };
 }

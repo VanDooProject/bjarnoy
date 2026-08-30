@@ -30,16 +30,27 @@ var isCI = Environment.GetEnvironmentVariable("CI") == "true" ||
 // link added on the frontend resource below carries them.
 const string adminUserName = "admin";
 var adminPasswordValue = Convert.ToHexString(RandomNumberGenerator.GetBytes(9));
-var adminPassword = builder.AddParameter("admin-bootstrap-password", adminPasswordValue, secret: true);
 
-var postgres = builder.AddPostgres("postgres", password: postgresPassword)
-    .WithDataVolume()
-    // Keeps a restart from wiping the world you were testing against.
-    .WithLifetime(ContainerLifetime.Persistent);
+var postgres = builder.AddPostgres("postgres", password: postgresPassword);
 
+// Bjarnoy.AppHost.Tests builds and starts this whole AppHost fresh for every
+// [Fact] — several independent instances in the same CI job, one after
+// another. WithDataVolume()'s volume name comes from this resource alone,
+// with nothing distinguishing one test's instance from the next, so a
+// persistent volume here would carry Postgres state (including whichever
+// test's admin account got seeded first, and *its* password) from one test
+// straight into the next's supposedly-fresh database — exactly the bug that
+// made AdminBootstrapLoginTests intermittently 401 with "wrong password"
+// despite generating a correct one every time. Session-lifetime, volume-less
+// Postgres (the default) gives every test run its own genuinely empty
+// database instead; only interactive local dev gets the persistent one.
 if (!isCI)
 {
-    postgres.WithPgAdmin();
+    postgres = postgres
+        .WithDataVolume()
+        // Keeps a restart from wiping the world you were testing against.
+        .WithLifetime(ContainerLifetime.Persistent)
+        .WithPgAdmin();
 }
 
 var gamedb = postgres.AddDatabase("gamedb");
@@ -82,7 +93,12 @@ var api = builder.AddProject<Projects.Bjarnoy_Api>("api", launchProfileName: nul
     // brings the schema forward itself.
     .WithEnvironment("Database__MigrateOnStartup", "true")
     .WithEnvironment("ADMIN_BOOTSTRAP_USERNAME", adminUserName)
-    .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPassword)
+    // The raw string, not an Aspire secret ParameterResource: that indirection
+    // (resolved lazily via an env-var callback rather than written straight
+    // through, unlike the fixed postgres-password above) turned up an actual
+    // login-rejection failure in CI that a direct string assignment doesn't
+    // leave room for.
+    .WithEnvironment("ADMIN_BOOTSTRAP_PASSWORD", adminPasswordValue)
     .WithHttpHealthCheck("/health");
 
 var frontend = builder.AddNpmApp("frontend", "../../../frontend", "dev")
@@ -126,7 +142,11 @@ frontend.WithUrls(context =>
     context.Urls.Add(new ResourceUrlAnnotation
     {
         Url = $"{baseUrl}/login?username={Uri.EscapeDataString(adminUserName)}" +
-              $"&password={Uri.EscapeDataString(adminPasswordValue)}",
+              $"&password={Uri.EscapeDataString(adminPasswordValue)}" +
+              // Without this, LoginView.vue's post-login redirect falls back
+              // to its default of '/' (see its onSubmit) rather than landing
+              // in the admin area this link exists to reach.
+              $"&redirect={Uri.EscapeDataString("/admin")}",
         DisplayText = "Log in as admin",
     });
 });
