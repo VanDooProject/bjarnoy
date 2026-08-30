@@ -82,6 +82,99 @@ describe('WorldModel applyServerSnapshot renders every backend building type', (
   });
 });
 
+describe('WorldModel applyServerSnapshot renders queued (under-construction) orders — issue #91', () => {
+  it('renders a queued new building at level 0, then promotes it once completed, then clears it if cancelled', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const farmCoord = { q: at.q + 1, r: at.r };
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      buildings: [],
+      queue: [{ q: farmCoord.q, r: farmCoord.r, building: 'farm', targetLevel: 1 }],
+    });
+    let tile = model.getTile(farmCoord.q, farmCoord.r);
+    expect(tile.buildingType).toBe('farm');
+    expect(tile.buildingLevel).toBe(0);
+    expect(tile.underConstruction).toBe(true);
+
+    // Completed: the buildings loop should overwrite level 0 -> 1 and clear the flag.
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      buildings: [{ q: farmCoord.q, r: farmCoord.r, type: 'farm', level: 1 }],
+      queue: [],
+    });
+    tile = model.getTile(farmCoord.q, farmCoord.r);
+    expect(tile.buildingType).toBe('farm');
+    expect(tile.buildingLevel).toBe(1);
+    expect(tile.underConstruction).toBe(false);
+  });
+
+  it('clears a phantom under-construction tile if its order is cancelled before completing', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const farmCoord = { q: at.q + 1, r: at.r };
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      buildings: [],
+      queue: [{ q: farmCoord.q, r: farmCoord.r, building: 'farm', targetLevel: 1 }],
+    });
+    expect(model.getTile(farmCoord.q, farmCoord.r).buildingType).toBe('farm');
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      buildings: [],
+      queue: [],
+    });
+    const tile = model.getTile(farmCoord.q, farmCoord.r);
+    expect(tile.buildingType).toBeUndefined();
+    expect(tile.buildingLevel).toBeUndefined();
+    expect(tile.underConstruction).toBeFalsy();
+  });
+
+  it('leaves an in-progress upgrade tile alone rather than downgrading it to level 0', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const farmCoord = { q: at.q + 1, r: at.r };
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      buildings: [{ q: farmCoord.q, r: farmCoord.r, type: 'farm', level: 2 }],
+      queue: [{ q: farmCoord.q, r: farmCoord.r, building: 'farm', targetLevel: 3 }],
+    });
+    const tile = model.getTile(farmCoord.q, farmCoord.r);
+    expect(tile.buildingLevel).toBe(2);
+  });
+});
+
+describe('WorldModel storageCapFor — issue #91', () => {
+  it('uses the settlement capacity from the backend snapshot rather than a client-derived guess, once one is known', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: { wood: 750, stone: 750, food: 750, iron: 750 },
+      buildings: [],
+    });
+
+    expect(model.storageCapFor(settlement.id)).toEqual({ wood: 750, stone: 750, food: 750, iron: 750 });
+  });
+});
+
 describe('WorldModel longhouse placement', () => {
   it('refuses to place a longhouse on an otherwise-buildable owned hex — founding is the only source of one', () => {
     const model = new WorldModel(20260825);

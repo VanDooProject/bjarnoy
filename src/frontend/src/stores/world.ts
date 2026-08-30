@@ -381,7 +381,9 @@ export const useWorldStore = defineStore('world', {
         level: response.longhouseLevel,
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
+        capacity: { ...response.resources.capacity },
         buildings: response.buildings,
+        queue: response.queue,
       });
       this.hud.queue = response.queue;
       this.hud.queueFetchedAt = Date.now();

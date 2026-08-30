@@ -37,6 +37,8 @@ export interface Tile {
     | 'lumberjack'
     | 'quarry';
   buildingLevel?: number;
+  /** True while `buildingType`/`buildingLevel` reflect a queued-but-not-yet-completed order (rendered at level 0, the foundation graphic) rather than a finished building. */
+  underConstruction?: boolean;
 }
 
 export interface Settlement {
@@ -50,6 +52,8 @@ export interface Settlement {
   level: number;
   resources: Resources;
   rates: Resources;
+  /** Live mode only — the backend's real per-resource storage cap (`ResourcesResponse.capacity`). Undefined in demo mode, where `WorldModel.storageCapFor` remains the fallback. */
+  capacity?: Resources;
   foundedAt: number;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;

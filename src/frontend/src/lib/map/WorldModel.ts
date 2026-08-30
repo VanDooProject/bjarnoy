@@ -322,18 +322,16 @@ export class WorldModel {
 
   /**
    * Issue #16 header: the reference shows each resource pill with a
-   * "current / cap" and a fill-progress underline, but no storage-cap field
-   * exists anywhere in the data model (`Resources`, `Settlement`, the
-   * backend) — same gap `populationFor` hit for population. Rather than
-   * leave the pills capless, this derives a plausible per-resource cap the
-   * same way: purely client-side, from the longhouse level, using a
-   * different base per resource so the caps read as varied (as in the
-   * reference: wood/stone/food/iron aren't all the same number) rather than
-   * one flat value repeated four times.
+   * "current / cap" and a fill-progress underline. Live mode now gets its
+   * real cap from the backend (`Settlement.capacity`, set in
+   * `applyServerSnapshot` from `ResourcesResponse.capacity` — see
+   * `stores/world.ts`'s `refreshLiveSettlement`); this purely-derived
+   * fallback exists only for demo mode, which has no backend to ask.
    */
   storageCapFor(settlementId: string): Resources {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return emptyResources();
+    if (settlement.capacity) return settlement.capacity;
     const growth = 1 + settlement.level * 0.5;
     return {
       wood: Math.round(2000 * growth),
@@ -403,7 +401,18 @@ export class WorldModel {
       level: number;
       resources: Resources;
       rates: Resources;
+      capacity?: Resources;
       buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
+      /**
+       * Issue #91: queued-but-not-yet-completed build orders. A `targetLevel`
+       * of 1 (a brand-new building, not an upgrade) whose hex has no
+       * building yet is drawn at level 0 — the foundation/"under
+       * construction" graphic (`textures.ts`'s `_level000` art) — so the
+       * player sees their order took effect instead of bare terrain until it
+       * completes. An in-progress *upgrade* is left alone: the hex already
+       * shows its current (pre-upgrade) level, which is correct.
+       */
+      queue?: { q: number; r: number; building: string; targetLevel: number }[];
     },
   ) {
     const settlement = this.settlements.get(settlementId);
@@ -421,6 +430,7 @@ export class WorldModel {
     }
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
+    if (snapshot.capacity) settlement.capacity = snapshot.capacity;
 
     const RENDERABLE_TYPES = new Set([
       'longhouse',
@@ -432,17 +442,40 @@ export class WorldModel {
       'lumberjack',
       'quarry',
     ]);
+    // Coords this settlement previously showed as under-construction — any
+    // still-under-construction coord gets re-marked below; anything left in
+    // this set afterwards had its order cancelled or completed elsewhere and
+    // needs clearing, so a cancelled order doesn't leave a phantom building.
+    const stillUnderConstruction = new Set<string>();
     for (const building of snapshot.buildings) {
       if (!RENDERABLE_TYPES.has(building.type)) continue;
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = settlementId;
       tile.buildingType = building.type as Tile['buildingType'];
       tile.buildingLevel = building.level;
+      tile.underConstruction = false;
       // The fishing hut is the only building with its own orientation (a
       // dock that has to face this settlement's shore, not whatever a bare
       // coastal-water tile would default to) — see PlacedBuildingResponse.
       if (building.orientation) {
         tile.orientation = building.orientation as Tile['orientation'];
+      }
+    }
+    for (const order of snapshot.queue ?? []) {
+      if (order.targetLevel !== 1 || !RENDERABLE_TYPES.has(order.building)) continue;
+      const tile = this.getTile(order.q, order.r);
+      if (tile.buildingType) continue; // already completed/placed this poll
+      tile.ownerId = settlementId;
+      tile.buildingType = order.building as Tile['buildingType'];
+      tile.buildingLevel = 0;
+      tile.underConstruction = true;
+      stillUnderConstruction.add(coordKey({ q: order.q, r: order.r }));
+    }
+    for (const tile of this.tiles.values()) {
+      if (tile.underConstruction && tile.ownerId === settlementId && !stillUnderConstruction.has(coordKey(tile))) {
+        tile.buildingType = undefined;
+        tile.buildingLevel = undefined;
+        tile.underConstruction = false;
       }
     }
   }
