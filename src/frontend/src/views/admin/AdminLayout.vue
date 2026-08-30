@@ -23,6 +23,7 @@ async function onLogout() {
         <router-link to="/admin/users" class="tab">Users</router-link>
         <router-link to="/admin/settlements" class="tab">Settlements</router-link>
         <router-link to="/admin/reports" class="tab">Reports</router-link>
+        <router-link to="/admin/activity" class="tab">Activity</router-link>
       </nav>
       <div class="account">
         <span class="who">{{ auth.user?.displayName ?? auth.user?.userName }}</span>
