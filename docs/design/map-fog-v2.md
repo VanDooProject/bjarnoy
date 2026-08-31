@@ -215,11 +215,50 @@ bug in it.
 Consequence for this design: the fog mask endpoint itself (§3) must still
 be properly authenticated and player/guild-scoped — that was always the
 plan and doesn't change — but it doesn't need to defend terrain geometry,
-only the settlement/army-derived signal layered on top of it. One
-separate, pre-existing question this doc does **not** resolve and treats
-as out of scope: whether the settlement-listing endpoints that *do* carry
-current state (ownership, level) are properly scoped today. Worth a
-dedicated look, but it's an existing-endpoint audit, not part of fog v2.
+only the settlement/army-derived signal layered on top of it.
+
+**Found while checking this: the landing page is exactly the leak §1f
+warns about, today, in scope for this doc.** `unclaimedStartPositions()`
+(`stores/world.ts:269`) calls `this.model.listSettlements()` — the
+*entire* world's settlement list — purely to compute which start plots
+are free, and that list (`SettlementSummary(Id, Name, OwnerName, Q, R,
+LonghouseLevel, IslandId)`, `SettlementContracts.cs:236`) hands over
+every established player's real name, position, and level, before that
+player has even logged in, with no auth gate. This isn't a hypothetical
+future risk — it's the current landing-page implementation.
+
+**Fix: a dedicated, minimal landing/founding-availability endpoint that
+returns only availability, never who or what.** `GET
+/api/v1/worlds/{worldId}/start-positions` (or similar), response shape
+along the lines of `{ islandId, availablePositions: [{q, r}] }[]` — no
+`OwnerName`, no `LonghouseLevel`, no established player's `Q`/`R`. The
+server computes the same filtering `unclaimedStartPositions()` does
+client-side today (spacing check against existing settlements per
+island), but returns only the yes/no result per start position, not the
+settlement data that filtering was derived from. This replaces the
+client-side computation entirely — the landing page stops fetching
+`listSettlements()` at all.
+
+**Also folds in beginners' protection, currently unimplemented.** An
+island should only appear available if it has no settlements at all, or
+only settlements still within a beginner-protection window after
+founding (a new concept — needs a `ProtectionEndsAt` or similar on
+`SettlementEntity`, set at founding time). The same endpoint is the
+natural place to apply that filter: an island whose only settlements are
+past protection simply doesn't appear in the response, with no
+distinction exposed between "occupied by an established player" and
+"never available" — the landing page never needs to tell those apart, it
+only needs "here is where you can click." This is the first concrete
+consumer of "current state" in the codebase that fog v2's security
+framing (start of this section) needs to hold for, so it belongs in this
+doc rather than deferred as unrelated cleanup.
+
+One separate, pre-existing question this doc still does **not** resolve
+and treats as out of scope: whether the settlement-listing endpoints
+*other* callers use (world map view, guild rosters, etc., for an
+authenticated player who has already founded) are properly scoped. That's
+an existing-endpoint audit; the landing-page fix above is scoped narrowly
+to the one genuinely pre-authentication, current-state-exposing path.
 
 ## 2. Rendering mechanics — inlined (closes the "original plan" gap)
 
@@ -346,6 +385,48 @@ Pixi is `^8.20.0`; `app.init()` currently defaults to WebGL, so a
 preference is ever switched to WebGPU, a parallel `GpuProgram` (WGSL)
 source is required — Pixi v8 does not auto-translate one to the other.
 Flagged here so it's a deliberate decision at that point, not a surprise.
+
+### 2.8 Debug/perf panels must be rebuilt, not just left running
+
+`FogDebugPanel.vue`/`FogPerfPanel.vue` and the `FogDebugFlags`/
+`FogPerfStats` interfaces they drive (`HexMapRenderer.ts:137-220+`) are a
+genuinely good existing tool — 12 flags, ~16 measured fields — but every
+one of them instruments the per-hex loop and blob cache this doc deletes.
+Left as-is after the cutover, the panel would silently go stale: flags
+like `distJitter`, `terrainCullJitter`, `scoutedTintFade`, `flatFillOnly`
+and stats like `bordersFogMs`, `blobCacheMs`, `deepFogOnly`,
+`*HexCount` all name mechanisms (jitter constants, the blob cache, the
+per-hex branch) that no longer exist once §2.4's shader replaces them.
+This needs deliberate replacement, not deletion-by-neglect:
+
+**Flags → shader-era equivalents**, each toggling a real, still-existing
+knob rather than a deleted one: `maskUnknown`/`maskOutOfSight` (isolate
+each tier, same purpose as today's `unexploredFog`/`scoutedFog`), `warp`
+(the §2.4 UV warp on/off — direct successor to `distJitter`), `drift`
+(the §1c-adjacent wind uniform on/off), `showRawMask` (bypass the warp
+entirely, render the mask texture unmodified — useful for debugging chunk
+stitching seams, §3), `halfResPass` (force full-res, for comparing
+against §2.5's mandatory half-res pass when diagnosing a visual
+difference). `realmBorders` survives unchanged — §5 doesn't touch what it
+gates, only when it redraws.
+
+**Stats → what's actually happening now**: `maskFetchMs` (network,
+per chunk), `stitchMs` (client-side texture assembly, §3), `shaderPassMs`
+(the §2.5 half-res fog draw — this is the number that needs measuring on
+software-rendered CI before Phase 4 ships, per §2.5's own open gap),
+`cacheHitRate` (surfaced from the server via a response header or the
+`/meta` endpoint, not measured client-side — this is where B/C's whole
+caching design either pays off or doesn't, and it should be visible),
+`chunksInFlight`, `maskVersion`. The old per-branch hex counters
+(`unexploredHexCount`, `scoutedHexCount`, `borderedHexCount`) have no
+replacement — there is no per-hex branch left to count — and shouldn't be
+faked; their absence is itself informative (the whole point of the
+rewrite is that this stops being a per-hex cost).
+
+This is Phase 6 work in the original phased breakdown (cut over once v1
+is fully deleted, not before — a mid-cutover panel showing half-real,
+half-stale data is worse than the old one), but it's listed here as a
+concrete requirement so it doesn't fall through as "obviously implied."
 
 ## 3. Chunked mask delivery — adopted, not deferred
 
