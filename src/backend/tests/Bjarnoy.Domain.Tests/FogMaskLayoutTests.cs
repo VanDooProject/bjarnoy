@@ -56,7 +56,7 @@ public class FogMaskLayoutTests
 
         Assert.Equal(4, neighbours.Count);
         Assert.Equal(4, neighbours.Distinct().Count());
-        Assert.All(neighbours, FogMaskLayout.IsHexTexel);
+        Assert.All(neighbours, n => Assert.True(FogMaskLayout.IsHexTexel(n)));
     }
 
     [Fact]
