@@ -1166,11 +1166,19 @@ export class HexMapRenderer {
   private updateHover(e: PointerEvent) {
     const canvas = this.app?.canvas;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+    // Pointer tracking is window-level (see the class-level listeners above)
+    // so drags survive leaving the canvas, but that means a plain bounding-
+    // rect test always passes for HUD panels absolutely-positioned on top of
+    // the canvas (e.g. the training queue, army panel) — the rect covers the
+    // whole viewport regardless of what's actually under the cursor. A real
+    // hit test against the element under the pointer is what those overlays
+    // need; panels with `pointer-events: none` (tooltip, non-interactive
+    // header/panel regions) still fall through to the canvas correctly.
+    if (document.elementFromPoint(e.clientX, e.clientY) !== canvas) {
       this.setHoveredCoord(null);
       return;
     }
+    const rect = canvas.getBoundingClientRect();
     const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const world = screenToWorld(this.camera, screen, this.viewport);
     this.setHoveredCoord(isoPixelToAxial(world, TILE_W, TILE_H));
