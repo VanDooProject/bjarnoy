@@ -548,7 +548,9 @@ public sealed class SettlementService(
 
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var result = settled.SlotRune(runeId, shrineCoord);
+        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+        var result = settled.SlotRune(
+            runeId, shrineCoord, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
 
         if (!result.Accepted)
         {
@@ -589,7 +591,9 @@ public sealed class SettlementService(
 
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
-        var result = settled.UnslotRune(runeId);
+        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+        var result = settled.UnslotRune(
+            runeId, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
 
         if (!result.Accepted)
         {

@@ -914,15 +914,25 @@ public sealed record Settlement
 
     /// <summary>
     /// Slots an unslotted rune into the shrine standing on
-    /// <paramref name="shrineCoord"/>.
+    /// <paramref name="shrineCoord"/>, and re-rates production/capacity from
+    /// <paramref name="now"/> exactly as a normal build completion would —
+    /// a slotted rune's boost must show up immediately, not only on the next
+    /// unrelated settle.
     /// </summary>
     /// <remarks>
     /// v1 does not restrict which rune fits which god's shrine (issue #53's
     /// "Odin accepts any rune" rule is, for now, every shrine's rule) —
     /// domain-matching is deferred until there are enough gods for the choice
-    /// to matter.
+    /// to matter. Call on an already-settled settlement, same as
+    /// <see cref="SetBuildingLevel"/>.
     /// </remarks>
-    public SlotRuneResult SlotRune(Guid runeId, HexCoord shrineCoord)
+    public SlotRuneResult SlotRune(
+        Guid runeId,
+        HexCoord shrineCoord,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
         var rune = Runes.FirstOrDefault(r => r.Id == runeId);
         if (rune is null)
@@ -953,11 +963,19 @@ public sealed record Settlement
             .Select(r => r.Id == runeId ? r with { SlottedAt = shrineCoord } : r)
             .ToList();
 
-        return SlotRuneResult.Accept(this with { Runes = runes });
+        return SlotRuneResult.Accept(WithRunes(runes, now, speedFactor, guestStacks, terrainAt));
     }
 
-    /// <summary>Returns a slotted rune to storage.</summary>
-    public UnslotRuneResult UnslotRune(Guid runeId)
+    /// <summary>
+    /// Returns a slotted rune to storage, and re-rates production/capacity
+    /// from <paramref name="now"/> — the counterpart to <see cref="SlotRune"/>.
+    /// </summary>
+    public UnslotRuneResult UnslotRune(
+        Guid runeId,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
         var rune = Runes.FirstOrDefault(r => r.Id == runeId);
         if (rune is null)
@@ -974,7 +992,26 @@ public sealed record Settlement
             .Select(r => r.Id == runeId ? r with { SlottedAt = null } : r)
             .ToList();
 
-        return UnslotRuneResult.Accept(this with { Runes = runes });
+        return UnslotRuneResult.Accept(WithRunes(runes, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Swaps in a new rune list and re-rates production/capacity from
+    /// <paramref name="now"/> — the shared tail of <see cref="SlotRune"/> and
+    /// <see cref="UnslotRune"/>, mirroring <see cref="WithBuildings"/>.
+    /// </summary>
+    private Settlement WithRunes(
+        List<RuneInstance> runes,
+        DateTimeOffset now,
+        double speedFactor,
+        IReadOnlyList<UnitStack>? guestStacks,
+        Func<HexCoord, Terrain>? terrainAt)
+    {
+        var (production, capacity) = BoostedTotals(Buildings, runes, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
+
+        return this with { Runes = runes, Resources = resources };
     }
 
     /// <summary>

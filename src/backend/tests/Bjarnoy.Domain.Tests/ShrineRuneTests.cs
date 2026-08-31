@@ -127,7 +127,7 @@ public class SettlementShrineTests
         var rune = NewRune(RuneType.Fehu, RuneRarity.Carved);
         settlement = settlement.GrantRune(rune);
 
-        var result = settlement.SlotRune(rune.Id, ShrineHex);
+        var result = settlement.SlotRune(rune.Id, ShrineHex, T0);
         Assert.True(result.Accepted);
 
         var (baseProduction, _) = BuildingCatalogue.Totals(
@@ -151,9 +151,9 @@ public class SettlementShrineTests
     {
         var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
         var rune = NewRune(RuneType.Fehu, RuneRarity.Carved);
-        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex).Settlement!;
+        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex, T0).Settlement!;
 
-        var result = settlement.UnslotRune(rune.Id);
+        var result = settlement.UnslotRune(rune.Id, T0);
         Assert.True(result.Accepted);
 
         var unslotted = result.Settlement!;
@@ -169,7 +169,7 @@ public class SettlementShrineTests
     {
         var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
 
-        var result = settlement.SlotRune(Guid.NewGuid(), ShrineHex);
+        var result = settlement.SlotRune(Guid.NewGuid(), ShrineHex, T0);
 
         Assert.False(result.Accepted);
         Assert.Equal(SlotRuneRejection.RuneNotFound, result.Rejection);
@@ -180,9 +180,9 @@ public class SettlementShrineTests
     {
         var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
         var rune = NewRune(RuneType.Fehu, RuneRarity.Carved);
-        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex).Settlement!;
+        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex, T0).Settlement!;
 
-        var result = settlement.SlotRune(rune.Id, ShrineHex);
+        var result = settlement.SlotRune(rune.Id, ShrineHex, T0);
 
         Assert.False(result.Accepted);
         Assert.Equal(SlotRuneRejection.RuneAlreadySlotted, result.Rejection);
@@ -196,11 +196,11 @@ public class SettlementShrineTests
         var runeId = granted.Runes[0].Id;
 
         // The Longhouse's hex holds a building, but not a shrine.
-        var onLonghouse = granted.SlotRune(runeId, Centre);
+        var onLonghouse = granted.SlotRune(runeId, Centre, T0);
         Assert.Equal(SlotRuneRejection.NoShrineOnHex, onLonghouse.Rejection);
 
         // An empty hex holds no building at all.
-        var onEmptyHex = granted.SlotRune(runeId, new HexCoord(9, 9));
+        var onEmptyHex = granted.SlotRune(runeId, new HexCoord(9, 9), T0);
         Assert.Equal(SlotRuneRejection.NoShrineOnHex, onEmptyHex.Rejection);
     }
 
@@ -211,9 +211,9 @@ public class SettlementShrineTests
         var first = NewRune(RuneType.Fehu, RuneRarity.Carved);
         var second = NewRune(RuneType.Fehu, RuneRarity.Carved);
         settlement = settlement.GrantRune(first).GrantRune(second);
-        settlement = settlement.SlotRune(first.Id, ShrineHex).Settlement!;
+        settlement = settlement.SlotRune(first.Id, ShrineHex, T0).Settlement!;
 
-        var result = settlement.SlotRune(second.Id, ShrineHex);
+        var result = settlement.SlotRune(second.Id, ShrineHex, T0);
 
         Assert.False(result.Accepted);
         Assert.Equal(SlotRuneRejection.ShrineSlotsFull, result.Rejection);
@@ -224,7 +224,7 @@ public class SettlementShrineTests
     {
         var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
 
-        var result = settlement.UnslotRune(Guid.NewGuid());
+        var result = settlement.UnslotRune(Guid.NewGuid(), T0);
 
         Assert.Equal(UnslotRuneRejection.RuneNotFound, result.Rejection);
     }
@@ -236,7 +236,7 @@ public class SettlementShrineTests
         var rune = NewRune(RuneType.Fehu, RuneRarity.Carved);
         settlement = settlement.GrantRune(rune);
 
-        var result = settlement.UnslotRune(rune.Id);
+        var result = settlement.UnslotRune(rune.Id, T0);
 
         Assert.Equal(UnslotRuneRejection.RuneNotSlotted, result.Rejection);
     }
@@ -259,7 +259,7 @@ public class SettlementShrineTests
 
         foreach (var rune in runes)
         {
-            var result = settlement.SlotRune(rune.Id, ShrineHex);
+            var result = settlement.SlotRune(rune.Id, ShrineHex, T0);
             Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
             settlement = result.Settlement!;
         }
@@ -280,7 +280,7 @@ public class SettlementShrineTests
     {
         var settlement = FoundWithShrine(BuildingType.ShrineOfFreyja, 1);
         var rune = NewRune(RuneType.Othala, RuneRarity.Carved);
-        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex).Settlement!;
+        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex, T0).Settlement!;
 
         var (baseProduction, baseCapacity) = BuildingCatalogue.Totals(
         [
