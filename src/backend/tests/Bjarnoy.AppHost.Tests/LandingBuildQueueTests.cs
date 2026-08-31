@@ -95,11 +95,18 @@ public class LandingBuildQueueTests
         // timer (BuildingCatalogue.Producer, level 1) resolves in seconds —
         // otherwise there'd be no practical way to observe the onboarding
         // tray actually flip to "Placed" once construction finishes. Same
-        // technique (and the same reasoning for why a fixed, moderate
-        // factor rather than an extreme one) as
-        // TroopTrainingAndDispatchTests's own SpeedFactor bump. Set before
-        // queuing: PlanBuild divides the definition's BuildDuration by the
-        // world's SpeedFactor at the moment the order is planned, not later.
+        // technique as TroopTrainingAndDispatchTests's own SpeedFactor bump,
+        // but a much more modest factor: that test only needs the order to
+        // finish quickly, while this one first asserts the order is *still
+        // queued* (the countdown panel showing "Construction") before
+        // waiting for it to complete — too high a factor (50 was tried
+        // first) let the order finish before that first assertion's own API
+        // round trip, since GetSettlementAsync lazily completes any queued
+        // build that's due whenever it's read. 24s (SpeedFactor 10) leaves
+        // comfortable room for that first check while still resolving well
+        // inside this test's overall budget. Set before queuing: PlanBuild
+        // divides the definition's BuildDuration by the world's SpeedFactor
+        // at the moment the order is planned, not later.
         var frontendEvent = await resourceNotifications.WaitForResourceAsync(
             "frontend",
             evt => evt.Snapshot.Urls.Any(u => u.DisplayProperties?.DisplayName == "Log in as admin"),
@@ -123,7 +130,7 @@ public class LandingBuildQueueTests
 
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 50.0),
+            new UpdateWorldSettingsRequest(SpeedFactor: 10.0),
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
@@ -156,7 +163,7 @@ public class LandingBuildQueueTests
         // doesn't move on" would look like if it regressed: the card stays
         // up forever and the tray never advances even though the backend
         // finished the build.
-        await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 30_000 });
+        await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 45_000 });
         await Assertions.Expect(page.Locator(".tray-item .sub").Nth(1)).ToHaveTextAsync("Placed");
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
