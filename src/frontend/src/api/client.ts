@@ -162,6 +162,14 @@ export const api = {
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
     }),
+  // Refunds the order's cost and, for a brand-new building, clears its
+  // level-0 foundation stub (see Settlement.CancelBuild) — same ownership
+  // proof as queueBuild.
+  cancelBuild: (settlementId: string, orderId: string, ownerId?: string) =>
+    request<unknown>(`/settlements/${settlementId}/builds/${orderId}/cancel`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
   postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
     request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
       method: 'POST',

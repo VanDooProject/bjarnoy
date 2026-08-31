@@ -36,6 +36,11 @@ public sealed record BuildResult(BuildRejection Rejection, BuildOrder? Order = n
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 }
 
+public sealed record CancelBuildResult(CancelBuildRejection Rejection, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == CancelBuildRejection.None && !WorldPaused;
+}
+
 public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == TrainRejection.None && Order is not null;
@@ -501,6 +506,49 @@ public sealed class SettlementService(
             settlementId, type, decision.Order!.TargetLevel, coord, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
+    /// <summary>Cancels a still-queued build order, refunding its cost.</summary>
+    public async Task<CancelBuildResult> CancelBuildAsync(
+        Guid settlementId,
+        Guid orderId,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new CancelBuildResult(CancelBuildRejection.OrderNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        if (!clock.AllowsCommands)
+        {
+            return new CancelBuildResult(CancelBuildRejection.None, WorldPaused: true);
+        }
+
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first so the cancel sees the queue and stock as of now: an
+        // order that finished a minute ago is no longer cancellable — same
+        // reasoning as QueueBuildAsync.
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var decision = settled.CancelBuild(orderId, now);
+        if (!decision.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
+                .ConfigureAwait(false);
+            return new CancelBuildResult(decision.Rejection);
+        }
+
+        settlement.ApplyDomain(decision.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} cancelled build order {OrderId}.", settlementId, orderId);
+
+        return new CancelBuildResult(CancelBuildRejection.None);
     }
 
     /// <summary>Queues training a batch of units, charging for it up front.</summary>

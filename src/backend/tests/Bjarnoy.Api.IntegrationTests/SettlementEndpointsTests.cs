@@ -320,7 +320,9 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var duringBuild = await GetAsync(client, settlement.Id);
         Assert.Single(duringBuild!.Queue);
-        Assert.DoesNotContain(duringBuild.Buildings, b => b.Type == "farm");
+        // Issue #97: a brand-new building already stakes its level-0
+        // foundation the instant it's queued, not just once it completes.
+        Assert.Contains(duringBuild.Buildings, b => b.Type == "farm" && b.Level == 0);
 
         _factory.Time.Advance(TimeSpan.FromHours(2));
         var afterBuild = await GetAsync(client, settlement.Id);
@@ -341,6 +343,52 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var after = await GetAsync(client, settlement.Id);
         Assert.True(after!.Resources.Stock.Wood < before);
+    }
+
+    [Fact]
+    public async Task A_freshly_queued_building_already_shows_as_a_level_zero_foundation()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var order = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(order);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Contains(
+            after!.Buildings, b => b.Q == order!.Q && b.R == order.R && b.Type == "farm" && b.Level == 0);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_new_buildings_order_refunds_it_and_clears_the_foundation()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var before = settlement.Resources.Stock.Wood;
+
+        var order = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(order);
+
+        var response = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{order!.Id}/cancel", content: null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Empty(after!.Queue);
+        Assert.DoesNotContain(after.Buildings, b => b.Q == order.Q && b.R == order.R);
+        Assert.Equal(before, after.Resources.Stock.Wood, 0);
+    }
+
+    [Fact]
+    public async Task Cancelling_an_unknown_order_is_a_404()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var response = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{Guid.CreateVersion7()}/cancel", content: null, Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]

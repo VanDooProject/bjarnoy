@@ -14,11 +14,26 @@
 // card (this issue's other two status-box examples; their *content* is
 // illustrative, not built here) could reuse the same classes with a
 // different accent color, without wiring their data yet.
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useWorldStore } from '../../stores/world';
 
 const world = useWorldStore();
 const emit = defineEmits<{ select: [coord: { q: number; r: number }] }>();
+
+const cancelling = ref<string | null>(null);
+const error = ref('');
+
+async function cancel(orderId: string) {
+  error.value = '';
+  cancelling.value = orderId;
+  try {
+    await world.cancelBuildLive(orderId);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Could not cancel the order.';
+  } finally {
+    cancelling.value = null;
+  }
+}
 
 const BUILDING_LABELS: Record<string, string> = {
   longhouse: 'Longhouse',
@@ -84,26 +99,31 @@ const orders = computed(() => {
       <span class="status-card-title">Construction</span>
       <span class="status-card-count">{{ orders.length }} / {{ TOTAL_SLOTS }} slots</span>
     </div>
-    <button
-      v-for="o in orders"
-      :key="o.key"
-      type="button"
-      class="status-row"
-      @click="emit('select', o.coord)"
-    >
-      <div class="status-row-top">
-        <span class="status-row-name">{{ o.name }}</span>
-        <span class="status-row-time">{{ o.remaining }}</span>
-      </div>
-      <div class="status-progress">
-        <div
-          class="status-progress-fill"
-          :class="{ 'is-done': o.done }"
-          :style="{ width: `${Math.round(o.progress * 100)}%` }"
-        />
-      </div>
-      <div class="status-subtext">{{ o.subtext }}</div>
-    </button>
+    <div v-for="o in orders" :key="o.key" class="status-row">
+      <button type="button" class="status-row-click" @click="emit('select', o.coord)">
+        <div class="status-row-top">
+          <span class="status-row-name">{{ o.name }}</span>
+          <span class="status-row-time">{{ o.remaining }}</span>
+        </div>
+        <div class="status-progress">
+          <div
+            class="status-progress-fill"
+            :class="{ 'is-done': o.done }"
+            :style="{ width: `${Math.round(o.progress * 100)}%` }"
+          />
+        </div>
+        <div class="status-subtext">{{ o.subtext }}</div>
+      </button>
+      <button
+        type="button"
+        class="cancel-button"
+        :disabled="cancelling === o.key"
+        @click.stop="cancel(o.key)"
+      >
+        ✕
+      </button>
+    </div>
+    <div v-if="error" class="status-subtext error">{{ error }}</div>
   </div>
 </template>
 
@@ -147,6 +167,17 @@ const orders = computed(() => {
   color: var(--muted);
 }
 .status-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 0;
+}
+.status-row + .status-row {
+  margin-top: 2px;
+}
+.status-row-click {
+  flex: 1;
+  min-width: 0;
   display: block;
   width: 100%;
   text-align: left;
@@ -154,11 +185,29 @@ const orders = computed(() => {
   border: none;
   color: inherit;
   font: inherit;
-  padding: 8px 0;
+  padding: 0;
   cursor: pointer;
 }
-.status-row + .status-row {
-  margin-top: 2px;
+.cancel-button {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.cancel-button:hover {
+  color: var(--text);
+}
+.cancel-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.status-subtext.error {
+  color: #e05a5a;
+  margin-top: 8px;
 }
 .status-row-top {
   display: flex;

@@ -54,6 +54,13 @@ public static class SettlementEndpoints
             .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
+        settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
+            .WithName("CancelBuild")
+            .WithSummary("Cancels a still-queued build order, refunding its cost.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
@@ -209,6 +216,30 @@ public static class SettlementEndpoints
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
             : TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> CancelBuild(
+        Guid settlementId,
+        Guid orderId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.CancelBuildAsync(settlementId, orderId, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world is not accepting commands.",
+                Detail = "It is paused, locked or under maintenance.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        // OrderNotFound is CancelBuildRejection's only other value — either
+        // the order was never there, or it already completed and left the
+        // queue (SettleTo ran first — see CancelBuildAsync).
+        return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
     private static async Task<Results<Accepted<TrainingOrderResponse>, NotFound,
