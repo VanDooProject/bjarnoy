@@ -46,24 +46,35 @@ function fmt(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
+// Issue #99: progress must be poll-invariant. The backend now sends the
+// order's true total duration (`totalSeconds`), so progress is `1 -
+// remainingNow / totalSeconds` rather than relative to whenever the HUD
+// last polled. `lastProgress` is a defensive fallback for a missing/stale
+// `totalSeconds` (or any other surprise): it clamps each order's displayed
+// progress to never go backward, keyed by order id so a genuinely new order
+// starts fresh.
+const lastProgress = new Map<string, number>();
+
 const orders = computed(() => {
   void world.hud.tick; // reactive dependency so the countdown ticks every second
   const elapsed = (Date.now() - world.hud.queueFetchedAt) / 1000;
+  const liveIds = new Set(world.hud.queue.map((q) => q.id));
+  for (const id of lastProgress.keys()) {
+    if (!liveIds.has(id)) {
+      lastProgress.delete(id);
+    }
+  }
   return world.hud.queue.map((q) => {
     const label = BUILDING_LABELS[q.building] ?? q.building;
-    // Neither the backend's BuildOrder nor this snapshot carries when an
-    // order actually started, so "percent complete" can't be computed
-    // exactly — this treats the remaining time *at the moment it was
-    // fetched* as a stand-in for the order's total duration, which reads
-    // right for anything that started around when the HUD last polled but
-    // undercounts an order that was already well underway before that.
-    // Good enough for a progress bar, not a real accounting number.
     const remainingAtFetch = q.completesInSeconds;
     const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
-    const progress =
-      remainingAtFetch === null || remainingAtFetch <= 0
+    const totalSeconds = q.totalSeconds;
+    let progress =
+      remainingAtFetch === null || totalSeconds <= 0
         ? 1
-        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / remainingAtFetch));
+        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
+    progress = Math.max(progress, lastProgress.get(q.id) ?? 0);
+    lastProgress.set(q.id, progress);
     const done = remainingNow !== null && remainingNow <= 0.5;
     return {
       key: q.id,

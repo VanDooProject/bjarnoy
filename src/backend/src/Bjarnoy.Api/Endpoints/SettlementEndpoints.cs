@@ -195,6 +195,7 @@ public static class SettlementEndpoints
                 new BuildOrderResponse(
                     order.Id, order.Coord.Q, order.Coord.R, order.Type.ToWireName(),
                     order.TargetLevel, order.CompletesAt,
+                    (order.CompletesAt - order.StartedAt).TotalSeconds,
                     (order.CompletesAt - order.StartedAt).TotalSeconds));
         }
 
@@ -249,7 +250,8 @@ public static class SettlementEndpoints
                 $"/api/v1/settlements/{settlementId}",
                 new TrainingOrderResponse(
                     order.Id, order.UnitType.ToWireName(), order.Count, 0,
-                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds));
+                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds,
+                    (order.CompletesAt - order.StartedAt).TotalSeconds));
         }
 
         var problem = new ProblemDetails
