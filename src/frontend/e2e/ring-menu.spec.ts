@@ -208,4 +208,19 @@ test.describe('ring menu drill-down', () => {
     await page.waitForTimeout(300);
     await expect(page.locator('.ring-bubble')).toHaveCount(0);
   });
+
+  // Issue #141: Escape had never been wired up anywhere the ring menu is
+  // used — only an outside click/right-click on the backdrop closed it.
+  test('pressing Escape closes the ring menu', async ({ page }) => {
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForSelector('.ring-bubble');
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ring-bubble')).toHaveCount(0);
+  });
 });

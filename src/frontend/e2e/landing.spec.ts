@@ -95,6 +95,62 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
 });
 
+test('onboarding ring menu closes on an outside click and on Escape', async ({ page }) => {
+  // Issue #141: LandingView's RingMenu never passed `:backdrop`, and Vue
+  // implicitly defaults an unset, optional `boolean` prop to `false` — so
+  // the ring's backdrop rendered with `pointer-events: none`, silently
+  // disabling the outside-click close (and right-click) that
+  // SettlementView's own ring already had. Escape had never been wired up
+  // anywhere the ring menu is used.
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await waitForMapReady(page);
+
+  const canvas = page.locator('canvas');
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.click(box.x + box.width * (0.5 + 0.16), box.y + box.height / 2);
+  await page.waitForFunction(
+    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
+      ?.selectedSettlementId,
+    undefined,
+    { timeout: 15_000 },
+  );
+
+  const target = await page.evaluate(() => {
+    const win = window as unknown as {
+      __demoWorld: () => { model: any; selectedSettlementId: string };
+      __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+    };
+    const world = win.__demoWorld();
+    const settlement = world.model.getSettlement(world.selectedSettlementId);
+    const radius = world.model.borderRadius(settlement);
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = -radius; dr <= radius; dr++) {
+        if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+        const at = { q: settlement.q + dq, r: settlement.r + dr };
+        const tile = world.model.getTile(at.q, at.r);
+        if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
+          return win.__settlementRenderer().hexCenterScreen(at);
+        }
+      }
+    }
+    throw new Error('no empty own hex found inside the realm');
+  });
+
+  await page.mouse.click(box.x + target.x, box.y + target.y);
+  await expect(page.locator('.ring-bubble').first()).toBeVisible();
+
+  // Well clear of the ring's own bubbles, elsewhere on the landing page.
+  await page.mouse.click(20, 20);
+  await expect(page.locator('.ring-bubble')).toHaveCount(0);
+
+  await page.mouse.click(box.x + target.x, box.y + target.y);
+  await expect(page.locator('.ring-bubble').first()).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.ring-bubble')).toHaveCount(0);
+});
+
 test('impressum page is reachable and links back', async ({ page }) => {
   await page.goto('/impressum');
   await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();

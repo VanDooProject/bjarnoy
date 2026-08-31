@@ -365,6 +365,7 @@ function closePrompt() {
       :x="ringScreen.x"
       :y="ringScreen.y"
       :actions="ringActions"
+      backdrop
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"

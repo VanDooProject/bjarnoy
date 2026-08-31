@@ -7,7 +7,7 @@
 // given tile's state (own empty tile, own building, enemy tile, unclaimed
 // hex) and passes them in; this component only lays them out and reports a
 // selection back.
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 
 export interface RingAction {
   id: string;
@@ -161,6 +161,19 @@ function onBackdropContextMenu() {
   if (props.backdrop === false) return;
   emit('close');
 }
+
+// Issue #141: Escape should close the ring menu wherever it's used (landing
+// page, settlement view, any future map), not just an outside click/
+// right-click on the backdrop — wired here once so every caller gets it for
+// free instead of each page adding its own keydown listener. Listens on
+// `window` rather than the backdrop element itself: a bubble/badge button
+// can hold keyboard focus, and a component-local listener would only ever
+// see the event if the backdrop div itself were focused.
+function onWindowKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') emit('close');
+}
+onMounted(() => window.addEventListener('keydown', onWindowKeydown));
+onUnmounted(() => window.removeEventListener('keydown', onWindowKeydown));
 
 // Issue #16 "build (which opens another ring outside with available
 // buildings on this spot)": the outer build-category/build-building rings
