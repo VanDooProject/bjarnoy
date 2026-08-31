@@ -66,6 +66,13 @@ public sealed record PlacedBuildingResponse(int Q, int R, string Type, int Level
 /// Remaining game time. Null while the world is frozen, because the countdown
 /// is suspended rather than merely postponed.
 /// </param>
+/// <param name="TotalSeconds">
+/// The order's full build duration (from <c>StartedAt</c> to
+/// <c>CompletesAt</c>), so the client can compute progress as an absolute
+/// fraction of the whole order instead of relative to whenever it last
+/// polled — see issue #99. Unaffected by the world clock freezing, since it
+/// doesn't depend on "now".
+/// </param>
 public sealed record BuildOrderResponse(
     Guid Id,
     int Q,
@@ -73,7 +80,8 @@ public sealed record BuildOrderResponse(
     string Building,
     int TargetLevel,
     DateTimeOffset CompletesAtGameTime,
-    double? CompletesInSeconds);
+    double? CompletesInSeconds,
+    double TotalSeconds);
 
 public sealed record UnitStackResponse(string Unit, int Count);
 
@@ -86,13 +94,18 @@ public sealed record UnitStackResponse(string Unit, int Count);
 /// Remaining game time until the last unit in the batch finishes. Null while
 /// the world is frozen — same reasoning as <see cref="BuildOrderResponse"/>.
 /// </param>
+/// <param name="TotalSeconds">
+/// The batch's full duration (<c>PerUnitDuration * Count</c>), for the same
+/// absolute-progress reason as <see cref="BuildOrderResponse.TotalSeconds"/>.
+/// </param>
 public sealed record TrainingOrderResponse(
     Guid Id,
     string Unit,
     int Count,
     int CompletedCount,
     DateTimeOffset CompletesAtGameTime,
-    double? CompletesInSeconds);
+    double? CompletesInSeconds,
+    double TotalSeconds);
 
 public sealed record SettlementResponse(
     Guid Id,
@@ -156,7 +169,8 @@ public sealed record SettlementResponse(
                 o.Type.ToWireName(),
                 o.TargetLevel,
                 o.CompletesAt,
-                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds))],
+                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
+                (o.CompletesAt - o.StartedAt).TotalSeconds))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
             [.. domain.TrainingQueue.Select(o => new TrainingOrderResponse(
                 o.Id,
@@ -164,7 +178,8 @@ public sealed record SettlementResponse(
                 o.Count,
                 o.CompletedCount(gameNow),
                 o.CompletesAt,
-                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds))],
+                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
+                o.PerUnitDuration.TotalSeconds * o.Count))],
             WorldClockResponse.From(clock, gameNow));
     }
 }

@@ -73,6 +73,8 @@ export interface BuildOrderResponse {
   targetLevel: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
+  /** The order's full build duration, poll-invariant — see issue #99. */
+  totalSeconds: number;
 }
 
 /** A garrison line: how many of one unit type currently stand at a settlement. */
@@ -94,6 +96,8 @@ export interface TrainingOrderResponse {
   completedCount: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
+  /** The batch's full duration, poll-invariant — see issue #99. */
+  totalSeconds: number;
 }
 
 export interface WorldClockResponse {

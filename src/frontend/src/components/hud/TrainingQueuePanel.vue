@@ -48,19 +48,29 @@ function fmt(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
+// Issue #99: same poll-invariant progress + monotonic-clamp fallback as
+// BuildQueuePanel.vue — see its own comment for the reasoning.
+const lastProgress = new Map<string, number>();
+
 const orders = computed(() => {
   void world.hud.tick; // reactive dependency so the countdown ticks every second
   const elapsed = (Date.now() - world.hud.trainingQueueFetchedAt) / 1000;
+  const liveIds = new Set(world.hud.trainingQueue.map((o) => o.id));
+  for (const id of lastProgress.keys()) {
+    if (!liveIds.has(id)) {
+      lastProgress.delete(id);
+    }
+  }
   return world.hud.trainingQueue.map((o) => {
-    // Same "remaining-at-fetch stands in for total duration" approximation
-    // BuildQueuePanel uses — see its own comment for why an exact percentage
-    // isn't available from the snapshot alone.
     const remainingAtFetch = o.completesInSeconds;
     const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
-    const progress =
-      remainingAtFetch === null || remainingAtFetch <= 0
+    const totalSeconds = o.totalSeconds;
+    let progress =
+      remainingAtFetch === null || totalSeconds <= 0
         ? 1
-        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / remainingAtFetch));
+        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
+    progress = Math.max(progress, lastProgress.get(o.id) ?? 0);
+    lastProgress.set(o.id, progress);
     const done = remainingNow !== null && remainingNow <= 0.5;
     return {
       key: o.id,
