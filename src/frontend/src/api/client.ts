@@ -2,6 +2,10 @@ import { API_BASE_URL } from '../config';
 import type {
   AcceptTradeOfferRequest,
   ActivitySummaryResponse,
+  AdjustGarrisonRequest,
+  AdminArmyResponse,
+  AdminEditArmyRequest,
+  AdminSettlementLayoutResponse,
   AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
   AdminUserResponse,
@@ -11,6 +15,8 @@ import type {
   BattleReportResponse,
   BuildingDefinitionResponse,
   CancelTradeOfferRequest,
+  CompleteQueuesRequest,
+  CompleteQueuesResponse,
   CreateGuildPostRequest,
   CreateGuildRequest,
   CreateGuildTopicRequest,
@@ -43,6 +49,7 @@ import type {
   PagedConversationsResponse,
   PagedMessagesResponse,
   PagedReportsResponse,
+  PlaceBuildingRequest,
   PostTradeOfferRequest,
   ProblemDetails,
   ProfileResponse,
@@ -310,6 +317,40 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  adminCompleteQueues: (settlementId: string, body: CompleteQueuesRequest = {}) =>
+    request<CompleteQueuesResponse>(`/admin/settlements/${settlementId}/queue/complete`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminGetSettlementLayout: (settlementId: string) =>
+    request<AdminSettlementLayoutResponse>(`/admin/settlements/${settlementId}/layout`),
+  adminPlaceBuilding: (settlementId: string, q: number, r: number, body: PlaceBuildingRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  adminRazeBuilding: (settlementId: string, q: number, r: number) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}`, {
+      method: 'DELETE',
+    }),
+  adminAdjustGarrison: (settlementId: string, body: AdjustGarrisonRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/garrison`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListArmies: (params: { worldId?: string; settlementId?: string }) => {
+    const query = new URLSearchParams();
+    if (params.worldId) query.set('worldId', params.worldId);
+    if (params.settlementId) query.set('settlementId', params.settlementId);
+    return request<AdminArmyResponse[]>(`/admin/armies?${query.toString()}`);
+  },
+  adminEditArmy: (armyId: string, body: AdminEditArmyRequest) =>
+    request<AdminArmyResponse>(`/admin/armies/${armyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminCreateWorld: (body: CreateWorldRequest) =>
+    request<AdminWorldResponse>('/admin/worlds', { method: 'POST', body: JSON.stringify(body) }),
   adminGetActivitySummary: (params: { from: string; to: string; bucket?: 'day' | 'hour' }) => {
     const query = new URLSearchParams({ from: params.from, to: params.to });
     if (params.bucket) query.set('bucket', params.bucket);

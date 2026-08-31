@@ -765,6 +765,104 @@ public sealed record Army
 
         return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow };
     }
+
+    /// <summary>
+    /// Admin god-mode "speed up": slides the whole active leg along the time
+    /// axis so it arrives at <paramref name="arrivesAt"/> instead of
+    /// <see cref="Movement.ArrivesAt"/>, keeping the route, the standing time
+    /// after arrival and the provisions burn-rate exactly as they were.
+    /// <see langword="null"/> when the army is not travelling at all (at home,
+    /// or a guest), since there is no arrival to move.
+    /// </summary>
+    /// <remarks>
+    /// Shifting <see cref="Movement.DepartedAt"/> rather than shortening the
+    /// route is what keeps every other rule intact:
+    /// <see cref="Movement.PositionAt"/>, the turn-around instant and
+    /// <see cref="ProvisionsAt"/> are all measured from departure, so the army
+    /// simply behaves as though it had set out earlier (or later). A negative
+    /// shift into the past is allowed and is exactly what "arrive now" means
+    /// for a long journey.
+    /// </remarks>
+    public Army? ShiftArrivalTo(DateTimeOffset arrivesAt)
+    {
+        if (Location is not ArmyLocation.InTransit inTransit)
+        {
+            return null;
+        }
+
+        var movement = inTransit.Movement;
+        var shift = arrivesAt - movement.ArrivesAt;
+        if (shift == TimeSpan.Zero)
+        {
+            return this;
+        }
+
+        return this with
+        {
+            Location = new ArmyLocation.InTransit(movement with
+            {
+                DepartedAt = movement.DepartedAt + shift,
+                TurnAroundAt = movement.TurnAroundAt + shift,
+            }),
+        };
+    }
+
+    /// <summary>
+    /// Admin god-mode "put it over there": drops the army onto
+    /// <paramref name="coord"/> as of <paramref name="now"/>, standing at the
+    /// end of a zero-length outbound leg with a freshly pathfound route home.
+    /// <see langword="null"/> when no route from <paramref name="coord"/> back
+    /// to <paramref name="home"/> exists for this army's unit class.
+    /// </summary>
+    /// <remarks>
+    /// A one-hex <see cref="Movement.Path"/> is a legitimate movement, not a
+    /// special case: <see cref="Movement.PositionAt"/> reports
+    /// <c>Path[0]</c> and <see cref="Movement.ArrivesAt"/> equals
+    /// <see cref="Movement.DepartedAt"/>, so the army reads as "arrived, now
+    /// standing here". Building it through <see cref="Movement.Create"/> means
+    /// the standing time before it heads home is derived from its remaining
+    /// provisions by the same formula every dispatched army uses — a
+    /// teleported army is fed, and starves, like any other.
+    /// </remarks>
+    /// <param name="provisions">
+    /// Food the army should stand there with. <see langword="null"/> (the
+    /// default) carries over what it has actually got left right now
+    /// (<see cref="ProvisionsAt"/>) — the leg it flew so far really was
+    /// eaten. Pass a value to override that, which is what an admin setting
+    /// provisions and repositioning in one edit means: the number given is the
+    /// army's food, and the standing window before it turns for home is
+    /// derived from that same number rather than from a figure the override
+    /// has already replaced.
+    /// </param>
+    public Army? TeleportTo(
+        HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
+        double? provisions = null)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        // Same exhaustive read of the army's unit class Recall uses — stacks
+        // are never mixed (PlanDispatch guarantees it at dispatch time).
+        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+
+        if (terrainAt(coord).IsLand() != isLandUnit)
+        {
+            return null;
+        }
+
+        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit);
+        if (returnPath is null || returnPath.Count == 0)
+        {
+            return null;
+        }
+
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit);
+        var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
+
+        var movement = Movement.Movement.Create(
+            now, [coord], [0d], returnPath, returnCumulativeHours, provisionsNow, TotalUpkeepPerHour);
+
+        return this with { Location = new ArmyLocation.InTransit(movement), Provisions = provisionsNow };
+    }
 }
 
 /// <param name="ArrivedHome">

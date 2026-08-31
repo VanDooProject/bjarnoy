@@ -72,6 +72,44 @@ public sealed record AdminSetBuildingLevelResult(
     public bool Accepted => Outcome == SetBuildingLevelOutcome.Applied && Settlement is not null;
 }
 
+/// <summary>How an admin god-mode edit ended.</summary>
+public enum AdminEditOutcome
+{
+    Applied,
+    SettlementNotFound,
+
+    /// <summary>The settlement exists but the edit itself was refused; see the accompanying rejection.</summary>
+    Rejected,
+}
+
+public sealed record AdminBuildingEditServiceResult(
+    AdminEditOutcome Outcome,
+    AdminBuildingEditRejection Rejection = AdminBuildingEditRejection.None,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == AdminEditOutcome.Applied && Settlement is not null;
+}
+
+public sealed record AdminGarrisonEditServiceResult(
+    AdminEditOutcome Outcome,
+    AdminGarrisonEditRejection Rejection = AdminGarrisonEditRejection.None,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == AdminEditOutcome.Applied && Settlement is not null;
+}
+
+/// <summary>Outcome of an admin's "finish everything queued, now".</summary>
+public sealed record CompleteQueuesResult(
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null,
+    int CompletedBuilds = 0,
+    int CompletedTraining = 0)
+{
+    public bool Accepted => Settlement is not null;
+}
+
 /// <summary>
 /// Settlements: founding them, reading them, and queueing builds in them.
 /// </summary>
@@ -438,6 +476,202 @@ public sealed class SettlementService(
             "Admin set building at {Coord} in settlement {Id} to level {Level}.", coord, settlementId, level);
 
         return new AdminSetBuildingLevelResult(SetBuildingLevelOutcome.Applied, settlement, clock);
+    }
+
+    /// <summary>
+    /// Admin god-mode "instant build": marks every still-pending build (and,
+    /// optionally, training) order as due right now and then settles, so the
+    /// completions land through the ordinary
+    /// <see cref="Settlement.SettleTo"/> path — same rate recalculation, same
+    /// chronological merge, same starvation pass.
+    /// </summary>
+    public async Task<CompleteQueuesResult> CompleteQueuesAsync(
+        Guid settlementId,
+        bool builds = true,
+        bool training = true,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new CompleteQueuesResult();
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var guestArmies = await _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Where(a => a.IsSupporting && a.TargetSettlementId == settlement.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var guestStacks = AggregateStacks(
+            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+
+        var result = settlement.ToDomain()
+            .WithQueuesDueAt(now, builds, training)
+            .SettleTo(now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (result.Changed)
+        {
+            settlement.ApplyDomain(result.Settlement);
+            ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        _logger.LogInformation(
+            "Admin insta-completed {Builds} build(s) and {Training} training batch(es) in settlement {Id}.",
+            result.Completed.Count, result.TrainingCompleted.Count, settlementId);
+
+        return new CompleteQueuesResult(settlement, clock, result.Completed.Count, result.TrainingCompleted.Count);
+    }
+
+    /// <summary>
+    /// Admin god-mode: places (or re-types/re-levels) a building on a hex —
+    /// the write half of the graphical settlement editor. See
+    /// <see cref="Settlement.PlaceBuilding"/> for which rules still apply.
+    /// </summary>
+    public async Task<AdminBuildingEditServiceResult> PlaceBuildingAsync(
+        Guid settlementId,
+        HexCoord coord,
+        BuildingType type,
+        int level,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (loaded is null)
+        {
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.SettlementNotFound);
+        }
+
+        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
+        var sampler = new TerrainSampler(settlement.World!.ToGenerationOptions());
+
+        var result = settled.PlaceBuilding(
+            coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
+            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt);
+
+        if (!result.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin placed {Type} level {Level} at {Coord} in settlement {Id}.", type, level, coord, settlementId);
+
+        return new AdminBuildingEditServiceResult(
+            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, settlement, clock);
+    }
+
+    /// <summary>Admin god-mode: razes whatever stands on a hex — <see cref="PlaceBuildingAsync"/>'s counterpart.</summary>
+    public async Task<AdminBuildingEditServiceResult> RazeBuildingAsync(
+        Guid settlementId,
+        HexCoord coord,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (loaded is null)
+        {
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.SettlementNotFound);
+        }
+
+        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
+
+        var result = settled.RazeBuilding(
+            coord, now, settlement.World!.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (!result.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Admin razed the building at {Coord} in settlement {Id}.", coord, settlementId);
+
+        return new AdminBuildingEditServiceResult(
+            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, settlement, clock);
+    }
+
+    /// <summary>
+    /// Admin god-mode "troop creation": adds units of one type straight into a
+    /// settlement's garrison (or, with a negative count, removes them), free
+    /// of cost and training time. The units are ordinary garrison units from
+    /// there on — dispatchable, feedable, starvable.
+    /// </summary>
+    public async Task<AdminGarrisonEditServiceResult> AdjustGarrisonAsync(
+        Guid settlementId,
+        UnitType unitType,
+        int delta,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (loaded is null)
+        {
+            return new AdminGarrisonEditServiceResult(AdminEditOutcome.SettlementNotFound);
+        }
+
+        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
+
+        var result = settled.AdjustGarrison(
+            unitType, delta, now, settlement.World!.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (!result.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new AdminGarrisonEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin adjusted settlement {Id}'s garrison by {Delta}x {Unit}.", settlementId, delta, unitType);
+
+        return new AdminGarrisonEditServiceResult(
+            AdminEditOutcome.Applied, AdminGarrisonEditRejection.None, settlement, clock);
+    }
+
+    /// <summary>
+    /// The shared prologue of every admin god-mode edit: load the settlement
+    /// with its world, convert wall time to game time, and settle it (with its
+    /// guests) to now, so the edit itself is decided against the settlement as
+    /// it stands this instant. Null when there is no such settlement.
+    /// </summary>
+    private async Task<(SettlementEntity Settlement,
+        GameClock Clock,
+        DateTimeOffset Now,
+        Settlement Settled,
+        SettleResult SettleResult,
+        List<ArmyEntity> GuestArmies,
+        List<UnitStack> GuestStacks)?> LoadForEditAsync(
+        Guid settlementId, CancellationToken cancellationToken)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return null;
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var guestStacks = AggregateStacks(
+            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+
+        return (settlement, clock, now, settled, settleResult, guestArmies, guestStacks);
     }
 
     public Task<List<SettlementEntity>> GetForWorldAsync(
