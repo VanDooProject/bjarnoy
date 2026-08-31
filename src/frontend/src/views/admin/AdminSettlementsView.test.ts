@@ -263,6 +263,7 @@ describe('AdminSettlementsView', () => {
         targetLevel: 1,
         completesAtGameTime: '2026-01-01T01:00:00Z',
         completesInSeconds: 3600,
+        totalSeconds: 3600,
       }],
     });
     adminCompleteQueues.mockResolvedValue({
