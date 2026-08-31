@@ -191,26 +191,45 @@ secondary, benefits of the same design.
   information — the stitched texture can be rendered before every chunk
   in view has arrived, filled in progressively as chunks land.
 
-### Backend cache control
+### Backend cache control — compute cache, not HTTP cache
 
-Two distinct caching layers, both need explicit policy, not just the ETag
-already noted in §1d:
+This is an SPA: the client already knows exactly when to ask for a new
+chunk (a `fogVersion`/guild-membership bump from the existing settlement
+poll drives the refetch), so a browser-level `Cache-Control: max-age`
+telling it to skip requests for a window is redundant with logic the
+store already owns, and risks actively fighting it (the browser serving a
+locally-stale response after the SPA's own state already knows to
+refetch). Not adopting HTTP-cache timers — what actually needs caching is
+the **expensive computation itself**, server-side, independent of how the
+client's HTTP layer behaves:
 
-- **HTTP-level (`Cache-Control` on the chunk response).** Guild-scoped
-  data, so `private` (never a shared/CDN cache) is mandatory. Pair a short
-  `max-age` (order of tens of seconds) with `must-revalidate`: fog data
-  changes rarely enough that this lets a client skip the request
-  entirely for a window, rather than always paying a round trip for a
-  304. `ETag` stays set regardless, so revalidation after `max-age`
-  expires is still cheap.
-- **Server-side (`IMemoryCache` per chunk).** Needs an explicit eviction
-  policy, not just "cache forever" — the number of
-  `(guildId-or-playerId × chunk)` combinations grows with active guilds
-  and world size, and is otherwise unbounded over a long-running server.
-  Sliding expiration (evict a chunk cache entry after N minutes unused)
-  plus a total size cap is the standard shape; exact numbers are a
-  Phase 2 tuning question, not a Phase 0 one, but the policy needs to
-  exist from the first implementation, not be added after an incident.
+- **What's cached.** Two tiers per chunk, both keyed by
+  `(chunkCoord, sourceSetVersion)`:
+  1. The per-player raw distance buffer (Option B, §1a) — pre-merge, the
+     output of the BFS over that chunk's (bounds + source-halo) sources.
+  2. The guild-facing merged-and-ramped **PNG bytes** — the max-merge of
+     its members' buffers, ramped, encoded. This is what the endpoint
+     actually serves.
+- **Where.** Server-side `IMemoryCache` (or equivalent) in
+  `FogMaskService`/`FogChunkService`, not a response-header instruction to
+  the browser. A request that hits both cache tiers costs a dictionary
+  lookup and a byte-array response — no BFS, no merge, no PNG encode.
+- **Invalidation.** A settlement change bumps that *player's* buffer
+  version for the handful of chunks its (radius + halo) touches (§ above)
+  — nothing else recomputes. A guild-mask cache entry for an affected
+  chunk is invalidated lazily (recomputed from the still-cached per-player
+  buffers on next request) rather than eagerly pushed, so a settlement
+  change that nobody immediately looks at costs nothing until it's asked
+  for.
+- **Eviction.** Still needs an explicit policy — the number of
+  `(guildId-or-playerId × chunk)` entries grows with active guilds and
+  world size and is otherwise unbounded on a long-running server. Sliding
+  expiration (evict an entry after N minutes unused) plus a total size
+  cap is the standard shape; exact numbers are a Phase 2 tuning question,
+  but the policy must exist from the first implementation.
+- **`ETag` stays**, but purely as a conditional-GET optimization for
+  requests the SPA has already decided to make (§1d) — it avoids
+  re-transferring unchanged bytes, it does not decide *whether* to ask.
 
 ### The seam problem, and why it doesn't reach the shader
 
