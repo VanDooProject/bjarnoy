@@ -50,6 +50,13 @@ export interface Settlement {
   level: number;
   resources: Resources;
   rates: Resources;
+  /**
+   * Per-resource storage cap, live mode only (from `ResourcesResponse.Capacity`
+   * — see `SettlementService.GrantResourcesAsync`/`ResourcePool.Adjust`, which
+   * actually enforce it server-side). Demo settlements leave this unset;
+   * `WorldModel.storageCapFor` derives a synthetic cap for them instead.
+   */
+  capacity?: Resources;
   foundedAt: number;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;

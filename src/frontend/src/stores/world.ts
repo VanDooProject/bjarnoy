@@ -55,7 +55,7 @@ export const useWorldStore = defineStore('world', {
       rates: emptyResources() as Resources,
       // Issue #16 header: storage cap per resource, so each pill can show a
       // "current / cap" and a fill-progress bar like the reference — see
-      // `WorldModel.storageCapFor`.
+      // `WorldModel.storageCapForDisplay`.
       storageCap: emptyResources() as Resources,
       settlementName: '',
       level: 1,
@@ -414,6 +414,7 @@ export const useWorldStore = defineStore('world', {
         level: response.longhouseLevel,
         resources: { ...response.resources.stock },
         rates: { ...response.resources.ratePerHour },
+        capacity: { ...response.resources.capacity },
         buildings: response.buildings,
       });
       this.hud.queue = response.queue;
@@ -801,7 +802,7 @@ export const useWorldStore = defineStore('world', {
       if (!settlement) return;
       this.hud.resources = { ...settlement.resources };
       this.hud.rates = { ...settlement.rates };
-      this.hud.storageCap = this.model.storageCapFor(settlement.id);
+      this.hud.storageCap = this.model.storageCapForDisplay(settlement.id);
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);

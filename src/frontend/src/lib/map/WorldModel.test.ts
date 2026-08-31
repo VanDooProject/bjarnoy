@@ -71,6 +71,7 @@ describe('WorldModel applyServerSnapshot renders every backend building type', (
       level: settlement.level,
       resources: settlement.resources,
       rates: settlement.rates,
+      capacity: settlement.resources,
       buildings: [
         { q: lumberjackCoord.q, r: lumberjackCoord.r, type: 'lumberjack', level: 1 },
         { q: quarryCoord.q, r: quarryCoord.r, type: 'quarry', level: 1 },

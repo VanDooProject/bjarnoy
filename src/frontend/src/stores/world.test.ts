@@ -16,6 +16,7 @@ const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
+const getSettlement = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -40,6 +41,7 @@ async function loadStoreModule(demoMode: boolean) {
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
       getShipments: (...args: unknown[]) => getShipments(...args),
+      getSettlement: (...args: unknown[]) => getSettlement(...args),
     },
     ApiError: class ApiError extends Error {},
   }));
@@ -231,5 +233,49 @@ describe('useWorldStore founding a settlement (live mode)', () => {
       store.foundStartingSettlementLive('player-1', 'Astrid', "Astrid's realm", { q: 9, r: 9 }),
     ).rejects.toThrow();
     expect(foundSettlement).not.toHaveBeenCalled();
+  });
+});
+
+// Issue #98: the header's storage cap must reflect the backend's real
+// per-resource capacity (`ResourcesResponse.Capacity`, the same cap
+// `ResourcePool.Adjust` enforces server-side) instead of a synthetic
+// longhouse-level-derived guess — otherwise a fully-clamped admin grant
+// (e.g. 3000 clamped to a 750 cap) makes the header read "750 / 3,000" and
+// look like most of the grant vanished.
+describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
+  it('uses the backend capacity for hud.storageCap, not the synthetic longhouse-level guess', async () => {
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      longhouseLevel: 1,
+      resources: {
+        stock: { wood: 750, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+      },
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+    });
+
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+
+    await store.refreshLiveSettlement();
+
+    expect(store.hud.storageCap).toEqual({ wood: 750, stone: 750, food: 900, iron: 375 });
+    expect(store.hud.resources.wood).toBe(750);
   });
 });
