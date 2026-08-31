@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminSettlementsView from './AdminSettlementsView.vue';
+import { useAdminWorldStore } from '../../stores/adminWorld';
 import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
 
 const { adminSearchSettlements, adminGetSettlement, adminGrantResources, adminSetBuildingLevel } = vi.hoisted(() => ({
@@ -62,18 +63,52 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
 beforeEach(() => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
+  // AdminSettlementsView only searches once a world is selected — normally
+  // set by AdminLayout's header selector, which this view is mounted without
+  // here. Seed it directly, same as a returning admin's persisted selection.
+  useAdminWorldStore().selectedWorldId = 'world-1';
 });
 
 describe('AdminSettlementsView', () => {
-  it('lists settlements from a search', async () => {
+  it('lists settlements from a search scoped to the selected world', async () => {
     adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
 
     const wrapper = mount(AdminSettlementsView);
     await flushPromises();
 
+    expect(adminSearchSettlements).toHaveBeenCalledWith(
+      expect.objectContaining({ worldId: 'world-1' }),
+    );
     expect(wrapper.text()).toContain('Bjornstad');
     expect(wrapper.text()).toContain('Ragnar');
     expect(wrapper.text()).toContain('Midgard');
+  });
+
+  it('shows a hint instead of searching when no world is selected', async () => {
+    useAdminWorldStore().selectedWorldId = null;
+
+    const wrapper = mount(AdminSettlementsView);
+    await flushPromises();
+
+    expect(adminSearchSettlements).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Select a world above');
+  });
+
+  it('re-searches when the selected world changes', async () => {
+    adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
+    const adminWorld = useAdminWorldStore();
+
+    mount(AdminSettlementsView);
+    await flushPromises();
+    expect(adminSearchSettlements).toHaveBeenCalledTimes(1);
+
+    adminWorld.selectedWorldId = 'world-2';
+    await flushPromises();
+
+    expect(adminSearchSettlements).toHaveBeenCalledTimes(2);
+    expect(adminSearchSettlements).toHaveBeenLastCalledWith(
+      expect.objectContaining({ worldId: 'world-2' }),
+    );
   });
 
   it('expands a row into detail with the grant and set-level forms', async () => {
