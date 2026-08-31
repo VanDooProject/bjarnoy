@@ -142,6 +142,33 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
   return (await res.json()) as T;
 }
 
+/**
+ * Fetches a binary (non-JSON) response and decodes it as an `ImageBitmap` —
+ * the fog mask endpoint's `image/png` body, per `map-fog-v2.md` §2.2/§3.
+ * `createImageBitmap` decodes off the main thread, same reasoning §1d gives
+ * for picking PNG over JSON in the first place. No 401-refresh retry (unlike
+ * `request<T>`): the fog mask endpoint doesn't require a JWT — anonymous play
+ * proves ownership via `ownerId` the same way the mutating endpoints do — so
+ * there is no access token whose expiry this call needs to react to.
+ */
+async function requestImageBitmap(path: string, ownerId?: string): Promise<ImageBitmap> {
+  const accessToken = authHooks.getAccessToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...ownerHeader(ownerId),
+    },
+  });
+
+  if (!res.ok) {
+    const problem = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, problem);
+  }
+
+  const blob = await res.blob();
+  return createImageBitmap(blob);
+}
+
 export const api = {
   listWorlds: () => request<WorldResponse[]>('/worlds'),
   createWorld: (body: CreateWorldRequest) =>
@@ -492,4 +519,9 @@ export const api = {
   // its own friendly copy instead of showing raw problem text.
   simulate: (body: SimulatorRequest) =>
     request<SimulatorResponse>('/simulator', { method: 'POST', body: JSON.stringify(body) }),
+  // The requesting player's fog-of-war mask (map-fog-v2.md §2.2/§3) as a
+  // decoded ImageBitmap. `ownerId` is required, not optional like the
+  // mutating endpoints' — GetWorldFogMask 400s without it, since there is no
+  // "public" fog mask the way there's a public settlement list.
+  getFogMask: (worldId: string, ownerId: string) => requestImageBitmap(`/worlds/${worldId}/fog-mask`, ownerId),
 };

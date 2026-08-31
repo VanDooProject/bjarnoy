@@ -184,6 +184,12 @@ export const useWorldStore = defineStore('world', {
     worldJoinable: true,
     worldJoinableReason: 'None',
     worldStartsAt: null as string | null,
+    // The requesting player's fog-of-war mask (map-fog-v2.md §2.2/§3),
+    // fetched via `fetchFogMask`. `markRaw` like `model` above: an
+    // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
+    // needs to proxy. Not yet consumed by the renderer — see
+    // `fetchFogMask`'s own remarks.
+    fogMaskBitmap: null as ImageBitmap | null,
   }),
   actions: {
     /**
@@ -857,6 +863,32 @@ export const useWorldStore = defineStore('world', {
       this.livePollHandle = null;
       if (this.armyPollHandle) clearInterval(this.armyPollHandle);
       this.armyPollHandle = null;
+    },
+    /**
+     * Fetches and decodes the current player's fog mask (map-fog-v2.md
+     * §2.2/§3), stashing it on `fogMaskBitmap`. A no-op in demo mode (there
+     * is no backend to ask) or before a world/owner is known. Purely
+     * additive for now — nothing in `HexMapRenderer.ts` reads
+     * `fogMaskBitmap` yet; wiring it into the fog shader is a follow-up
+     * slice (§2.4/§4), same "fetch first, render later" split the backend
+     * side already went through.
+     */
+    async fetchFogMask() {
+      if (DEMO_MODE || !this.worldId || !this.ownerId) return;
+
+      try {
+        const bitmap = markRaw(await api.getFogMask(this.worldId, this.ownerId));
+        // Close the previous bitmap only once the new one is actually in
+        // hand — closing it eagerly before the fetch settles would leave a
+        // failed request having discarded the one usable bitmap this store
+        // had.
+        this.fogMaskBitmap?.close();
+        this.fogMaskBitmap = bitmap;
+      } catch {
+        // Best-effort: a failed fetch just leaves the previous bitmap (or
+        // null) in place, same as any other poll in this store that doesn't
+        // want a transient network blip to surface as a hard error.
+      }
     },
   },
 });
