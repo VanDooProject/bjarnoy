@@ -30,15 +30,15 @@ namespace Bjarnoy.AppHost.Tests;
 /// </summary>
 /// <remarks>
 /// Deliberately doesn't drive the ring menu's click-to-open UI here — a
-/// clicked hex only reliably lands inside the frontend's own rendered
-/// border, which (<c>WorldModel.borderRadius</c>) is currently a hex or two
-/// more generous than the backend's actual claim radius
-/// (<c>Settlement.ClaimRadius</c>) at level 1, so a pixel-accurate click
-/// without the renderer's own camera math (not exposed outside demo mode —
-/// see <c>main.ts</c>) can't reliably target a hex the backend will actually
-/// accept. The ring's own enabled/disabled terrain gating is covered by the
-/// demo-mode e2e suite instead (<c>landing.spec.ts</c>), where that camera
-/// math *is* available.
+/// pixel-accurate click needs the renderer's own camera math, which isn't
+/// exposed outside demo mode (see <c>main.ts</c>), so there's no reliable
+/// way from here to land exactly on a given hex. (LandingView.vue also now
+/// refuses to open the ring at all on a hex outside <c>Settlement.ClaimRadius</c>,
+/// even though <c>WorldModel.borderRadius</c> — what actually marks a
+/// tile's <c>ownerId</c> — still renders territory a hex or two more
+/// generous than that; see <c>withinBuildableRange</c>.) The ring's own
+/// enabled/disabled terrain gating is covered by the demo-mode e2e suite
+/// instead (<c>landing.spec.ts</c>), where that camera math *is* available.
 /// </remarks>
 public class LandingBuildQueueTests
 {

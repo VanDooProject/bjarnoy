@@ -123,11 +123,18 @@ public class SettlementEntity
         Name = Name,
         Centre = new HexCoord(CentreQ, CentreR),
         Resources = ResourcePool.Create(Stock, Rate, Capacity, SettledAt),
+        // Every write path (PlaceBuildingAsync, SetBuildingLevelAsync, PlanBuild's
+        // own leveling) already clamps a level to BuildingCatalogue's 1..MaxLevel
+        // via TryGet before it ever reaches storage — this Math.Min is a second,
+        // defensive clamp purely against a raw DB row (a manual edit, a future
+        // write path that bypasses those methods), so ClaimRadius/LonghouseLevel
+        // can never read an out-of-range value here even if one somehow lands in
+        // the column.
         Buildings =
         [
             .. Buildings
                 .OrderBy(b => b.Q).ThenBy(b => b.R)
-                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)),
+                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, Math.Min(b.Level, BuildingCatalogue.MaxLevel))),
         ],
         Queue =
         [

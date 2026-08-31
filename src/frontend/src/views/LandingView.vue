@@ -17,7 +17,8 @@ import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
-import type { AxialCoord } from '../lib/hex/coords';
+import { hexDistance, type AxialCoord } from '../lib/hex/coords';
+import { claimRadiusForLevel } from '../lib/map/shoreline';
 import type { Terrain, Tile } from '../lib/map/types';
 
 // Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
@@ -166,6 +167,29 @@ function closeRing() {
   ringTerrain.value = null;
 }
 
+function showInvalidClickMessage(message: string) {
+  clearTimeout(invalidClickTimer);
+  invalidClickMessage.value = message;
+  invalidClickTimer = setTimeout(() => (invalidClickMessage.value = null), 2500);
+}
+
+// Live mode only: `WorldModel.borderRadius` (what marks a tile's `ownerId`,
+// and thus what reads as "your territory" on screen) is deliberately more
+// generous than the backend's actual buildable range
+// (`Settlement.ClaimRadius`, mirrored here via `claimRadiusForLevel`) — see
+// `WorldModel.borderRadius`'s own comment. Without this extra check, the
+// tutorial ring opened on hexes the backend would always reject with
+// `HexNotInSettlement`, which is exactly the "ring 2 fails to close"
+// symptom `onRingSelect` used to hit below. Demo mode has no backend to
+// disagree with, so its own `tile.ownerId` (bounded by the same
+// `borderRadius`) is already the full truth.
+function withinBuildableRange(coord: AxialCoord): boolean {
+  if (DEMO_MODE || !world.selectedSettlementId) return true;
+  const settlement = world.model.getSettlement(world.selectedSettlementId);
+  if (!settlement) return false;
+  return hexDistance({ q: settlement.q, r: settlement.r }, coord) <= claimRadiusForLevel(settlement.level);
+}
+
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   if (!player.hasFoundedSettlement) {
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
@@ -174,9 +198,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     // found on the nearest one instead; now it just tells the player to
     // pick one of the highlighted plots.
     if (!DEMO_MODE && !world.startPositionAt(coord)) {
-      clearTimeout(invalidClickTimer);
-      invalidClickMessage.value = "You can't found there — pick one of the glowing plots.";
-      invalidClickTimer = setTimeout(() => (invalidClickMessage.value = null), 2500);
+      showInvalidClickMessage("You can't found there — pick one of the glowing plots.");
       return;
     }
     void foundHere(coord);
@@ -188,6 +210,11 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // other click (the longhouse, a rival's tile, open water) just closes
   // whatever ring is open rather than opening some other UI for it.
   if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
+    if (!withinBuildableRange(coord)) {
+      showInvalidClickMessage("That hex is beyond your longhouse's claim — build closer to home.");
+      closeRing();
+      return;
+    }
     ringCoord.value = coord;
     ringScreen.value = screen;
     ringTerrain.value = tile.terrain;
@@ -205,11 +232,16 @@ async function onRingSelect(type: string) {
     closeRing();
     return;
   }
+  // Always close, win or lose — matching SettlementView's own onRingSelect
+  // (see its `buildType` call). A failed order used to leave the ring open
+  // with only a console.error, which is the "ring fails to close" bug: the
+  // player had no way to tell the click did anything at all.
+  closeRing();
   try {
     await world.queueBuildLive(type, coord);
-    closeRing();
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
+    showInvalidClickMessage("That order didn't go through — try a different hex.");
   }
 }
 
@@ -452,6 +484,22 @@ h1 {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Issue #95: a completed step used to only dim (`.tray-item.done`'s
+   opacity) — nothing on the row itself said "done" versus "not started
+   yet", so progress never visibly ticked off as buildings queued.  A
+   checkmark on the dot gives each row its own explicit done state. */
+.tray-item.done .dot {
+  background: var(--gold);
+  color: #20160a;
+  font-size: 15px;
+  font-weight: 700;
+}
+.tray-item.done .dot::after {
+  content: '✓';
 }
 .name {
   font-size: 14px;
