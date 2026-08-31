@@ -367,38 +367,6 @@ public static class SettlementEndpoints
         _ => "The rune action was refused.",
     };
 
-    private static async Task<Results<Ok<WorldClockResponse>, NotFound, BadRequest<ProblemDetails>>> SetState(
-        Guid worldId,
-        SetWorldStateRequest request,
-        SettlementService settlements,
-        TimeProvider time,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (!Enum.TryParse<WorldRunState>(request.State, ignoreCase: true, out var state))
-        {
-            return TypedResults.BadRequest(new ProblemDetails
-            {
-                Title = "Unknown world state.",
-                Detail = $"Valid: {string.Join(", ", Enum.GetNames<WorldRunState>()).ToLowerInvariant()}.",
-                Status = StatusCodes.Status400BadRequest,
-            });
-        }
-
-        var world = await settlements.SetRunStateAsync(
-            worldId, state, TimeSpan.FromSeconds(request.GraceSeconds), cancellationToken);
-
-        if (world is null)
-        {
-            return TypedResults.NotFound();
-        }
-
-        var clock = world.ToClock();
-        return TypedResults.Ok(
-            WorldClockResponse.From(clock, clock.ToGameTime(time.GetUtcNow())));
-    }
-
     private static Ok<IReadOnlyList<BuildingDefinitionResponse>> Catalogue(int? level)
     {
         var levels = level is { } requested
