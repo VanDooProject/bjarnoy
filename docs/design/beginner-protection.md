@@ -191,14 +191,27 @@ something already built; this issue is where that gets designed:
   ring has `openPlots == 0` (or is disqualified) does the query fall
   through to the next ring out.
 
-  **Fallback when every ring is exhausted:** if no ring anywhere has an
-  open, qualifying plot (a small or very active world can run through all
-  of them), the query falls back to today's behaviour — the plain
-  nearest-open-start-position search over every island, beginner filter
-  dropped — rather than refusing to suggest anywhere. Founding must never
-  hard-fail just because the beginner/ring feature couldn't find a
-  beginner-shaped spot; worst case, a new player lands next to a graduated
-  neighbour exactly as they would today, without this feature.
+  **A single exhausted ring just moves the walk one ring further out** —
+  that's the normal case, not a fallback: `ringOf` is unbounded arithmetic
+  (`distance / ringWidth`), not capped at some fixed `ringCount`, so "ring 6
+  is exhausted" simply means try ring 7, same as ring 0 exhausted means try
+  ring 1. The walk only ever stops for real once it has covered every ring
+  that actually contains an island — bounded by the map edge (`world.Radius
+  / ringWidth`), not by an arbitrary ring limit — so a beginner-safe
+  candidate keeps getting looked for out to the literal edge of the world
+  before anything gives up.
+  **Only genuine total exhaustion falls back**, and that's a materially
+  different, much rarer case than "one ring filled up": every island in the
+  entire world either has a graduate on it or zero open plots. At that
+  point there is no beginner-shaped spot left anywhere, not just in the
+  inner rings, and the query falls back to today's plain
+  nearest-open-start-position search with the beginner filter dropped
+  (rather than refusing to suggest anywhere) — worst case a new player
+  lands next to a graduated neighbour exactly as they would today, without
+  this feature. This same state is close to (or coincides with) the
+  existing `WorldFull` condition `FoundAsync` already has a rejection
+  for — it isn't a new kind of failure this feature introduces, just the
+  point where there's nothing beginner-specific left to offer.
 
   This is a tie-break/ordering rule layered on top of the
   existing-vs-graduated filter above, not a separate mechanism — the same
@@ -244,46 +257,60 @@ doing:
   mechanic where "cache for hours" undersells it; it can be cached until
   the world is reseeded or torn down, full stop.
 
-**Fill state (which rings currently have spare beginner capacity) changes on
-every founding and every shield expiry**, so — to be clear, this is about an
-in-process/application cache (an `IMemoryCache` entry per world, not an HTTP
+**Fill state changes on every founding and every shield expiry** — but those
+are two different fields with two different causes, and each is cheap
+enough to cache *per island*, not just per world, so the ring walk never
+has to re-check individual islands against the database at request time.
+To be clear throughout, this is an in-process/application cache (one
+`IMemoryCache` entry per world holding these small maps, not an HTTP
 cache-control header — nothing about this suggestion is client-cacheable,
-it has to be re-decided server-side on every landing-page load), not a
-time-based TTL guessed at from "how fresh does this feel." Two different
-things actually change it, and the right invalidation is event-driven for
-each:
+it's re-decided server-side on every landing-page load), not a time-based
+TTL guessed at from "how fresh does this feel":
 
-- **A founding invalidates it directly and can be caught exactly**:
-  `FoundAsync` is the one place a `SettlementEntity` gets inserted
-  (`SettlementService.cs`), so it's the one place that needs to drop the
-  cached fill-state for `(worldId, that island's ring)` (or just the whole
-  world's cache — a single `IMemoryCache` entry per world is cheap enough
-  that invalidating the whole thing on every founding is simpler than
-  tracking which ring changed, and foundings are not so frequent that this
-  matters). No polling, no TTL needed for this half — "cached until a new
-  settlement is founded" is exactly right, and it's an explicit
-  `cache.Remove(worldId)` call at the end of `FoundAsync`, not a timer.
-- **A shield expiry changes fill state with no founding involved at all** —
-  an island can flip from "beginner-only" to "has a graduate" purely
-  because `ShieldExpiresAtUtc` passed, while nobody founded anything. A
-  cache invalidated only on founding would miss this and keep offering a
-  now-graduated island as beginner-safe. This doesn't need a poll either:
-  since every shielded settlement's `ShieldExpiresAtUtc` is already a known
-  timestamp, the cache entry's own expiry can be set to the **earliest**
-  `ShieldExpiresAtUtc` among the settlements it counted as still-shielded
-  (`IMemoryCache`'s `AbsoluteExpiration` takes a `DateTimeOffset` directly)
-  — the cache self-invalidates at the exact moment its answer could first
-  be wrong, rather than on a guessed interval. Combined with the
-  founding-triggered removal above, the cached fill-state is correct until
-  one of the two things that can actually change it happens — not stale
-  for "hours," and not recomputed on every request either.
+- **`Dictionary<IslandId, int> openPlots`** — `StartPositions.Count -
+  SettledCount(island)`, per island. Only ever changes by founding a
+  settlement, and `FoundAsync` (`SettlementService.cs`) already knows
+  exactly which island that was, so this doesn't need an expiry or a
+  requery at all: on a successful founding, decrement that one island's
+  entry by one, in place. No DB round trip, no invalidation logic — it's
+  a running counter, not a cache with a staleness question.
+- **`Dictionary<IslandId, DateTimeOffset> earliestGraduationRisk`** — per
+  island, the earliest `ShieldExpiresAtUtc` among its currently-shielded
+  settlements (or "already has a graduate" as a distinct, permanent state
+  once true — a graduated island never un-graduates). This is the one
+  piece that changes by clock rather than by event, so it's the one piece
+  that needs an actual expiry: cache each island's entry with
+  `AbsoluteExpiration` set to that island's own earliest timestamp
+  (`IMemoryCache` takes a `DateTimeOffset` directly), so only islands
+  whose shield window is actually about to lapse ever get recomputed —
+  not the whole world's islands on every request, and not on a guessed
+  poll interval either.
+- **`Dictionary<IslandId, int> ringOf`** — the static half from above,
+  cached without an expiry (or none at all, since it's cheap regardless),
+  invalidated only by a reseed.
 
-Net: no new table, no new index, no background job. The static half (ring
-number) is cheap enough to skip caching or, if wanted, cache without an
-expiry at all; the dynamic half (fill state) is an `IMemoryCache` entry per
-world, invalidated by the two events that can actually change it —
-`FoundAsync` inserting a settlement, and the earliest `ShieldExpiresAtUtc`
-among the settlements it counted — not by a guessed TTL.
+With all three warm, the ring walk at request time is pure in-memory
+dictionary lookups and grouping — zero database queries. A cache miss on
+any one island (first request after a reseed, or the specific island whose
+shield timer just lapsed) recomputes only that island's row, not the
+world's.
+
+**Is this too much caching?** No — it's proportionate, not layered
+complexity. All three maps together are bounded by island count, which is
+itself bounded (a few hundred, worst case, per §"How many islands a world
+actually has" above) and each entry is one or two primitives, so total
+size per world is a few KB, not a meaningful memory concern even across
+many concurrent worlds. It isn't three independent caching *decisions*
+either — it's one payload (the same islands-plus-settlements data the
+beginner query already has to look at) split into the three fields that
+actually have different lifetimes, so each can be invalidated exactly
+right instead of the whole thing being re-fetched or guessed-at with a
+TTL. That's less work than the single whole-world-cache approach from the
+first pass at this section — `openPlots` updates in place with no
+recomputation at all, and `earliestGraduationRisk` only ever recomputes
+the one island whose window lapsed, rather than treating every founding
+or every clock tick as a reason to throw away everything cached and start
+over.
 
 ## Scope
 
