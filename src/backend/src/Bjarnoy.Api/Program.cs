@@ -7,6 +7,7 @@ using Bjarnoy.Api.Json;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.World;
 using Bjarnoy.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
@@ -44,8 +45,10 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
 
-// The per-user write-throttle UserActivityService keeps in IMemoryCache.
+// The per-user write-throttle UserActivityService keeps in IMemoryCache, and
+// FogMaskService's computed-mask cache (map-fog-v2.md §3) shares the same one.
 builder.Services.AddMemoryCache();
+builder.Services.AddScoped<FogMaskService>();
 builder.Services.AddOptions<UserActivityOptions>()
     .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
     .ValidateOnStart();
