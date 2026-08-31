@@ -124,8 +124,16 @@ public sealed class SettlementService(
     TimeProvider timeProvider,
     ILogger<SettlementService> logger)
 {
-    /// <summary>Minimum hex distance between two settlements' centres.</summary>
-    public const int MinimumSpacing = 3;
+    /// <summary>
+    /// Minimum hex distance between two settlements' centres, enforced at
+    /// founding. Sized so that even if both eventually reach
+    /// <see cref="BuildingCatalogue.MaxLevel"/> their borders (see
+    /// <see cref="Settlement.ClaimRadius"/>/<see cref="Settlement.MaxClaimRadius"/>)
+    /// can never overlap — a level-up itself is not blocked from overlapping
+    /// a neighbour (first-claim-wins on any contested hex), so this is the
+    /// only thing keeping that from happening in practice.
+    /// </summary>
+    public const int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
 
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
@@ -205,10 +213,18 @@ public sealed class SettlementService(
             });
         }
 
-        // Spacing is checked in memory against this world's centres: the
+        // Spacing is checked in memory against this island's centres: the
         // distance is hex distance, which SQL cannot express portably.
+        // Scoped to the same island, not the whole world — two settlements
+        // on different islands are always separated by open sea, so their
+        // claim discs (see Settlement.ClaimRadius) can never actually
+        // overlap any land either could claim no matter how far apart (or
+        // close) the islands themselves happen to be. Checking world-wide
+        // would reject perfectly fine foundings on two nearby-but-separate
+        // islands purely because MinimumSpacing is sized for the same-island,
+        // worst-case-level overlap case (see that constant's own comment).
         var centres = await _dbContext.Settlements
-            .Where(s => s.WorldId == worldId)
+            .Where(s => s.WorldId == worldId && s.IslandId == islandId)
             .Select(s => new { s.CentreQ, s.CentreR })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 

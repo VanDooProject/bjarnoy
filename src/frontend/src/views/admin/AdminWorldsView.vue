@@ -264,6 +264,12 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           </label>
           <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'resume')">Resume</button>
         </span>
+
+        <!-- Issue #133. Its own route, not a button here: regenerating the map
+             is previewed full-screen before it can be committed, and unlike
+             everything else on this panel it deletes every settlement in the
+             world. -->
+        <router-link class="reseed-link" :to="`/admin/worlds/${world.id}/reseed`">Reseed map…</router-link>
       </div>
     </section>
   </div>
@@ -366,6 +372,13 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 .error {
   color: var(--rival);
   font-size: 13px;
+}
+.reseed-link {
+  color: var(--rival);
+  font-size: 13px;
+  text-decoration: none;
+  padding-left: 16px;
+  border-left: 1px solid var(--panel-border);
 }
 button {
   background: var(--gold);

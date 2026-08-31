@@ -161,13 +161,17 @@ function onChanged(updated: SettlementResponse) {
                 <p v-else-if="detailError" class="error">{{ detailError }}</p>
                 <div v-else-if="detail" class="detail">
                   <div class="stocks">
-                    <span>Wood {{ Math.floor(detail.resources.stock.wood) }}</span>
-                    <span>Stone {{ Math.floor(detail.resources.stock.stone) }}</span>
-                    <span>Food {{ Math.floor(detail.resources.stock.food) }}</span>
-                    <span>Iron {{ Math.floor(detail.resources.stock.iron) }}</span>
+                    <span>Wood {{ Math.floor(detail.resources.stock.wood) }} / {{ Math.floor(detail.resources.capacity.wood) }}</span>
+                    <span>Stone {{ Math.floor(detail.resources.stock.stone) }} / {{ Math.floor(detail.resources.capacity.stone) }}</span>
+                    <span>Food {{ Math.floor(detail.resources.stock.food) }} / {{ Math.floor(detail.resources.capacity.food) }}</span>
+                    <span>Iron {{ Math.floor(detail.resources.stock.iron) }} / {{ Math.floor(detail.resources.capacity.iron) }}</span>
                   </div>
                   <div class="forms">
-                    <GrantResourcesForm :settlement-id="detail.id" @granted="onChanged" />
+                    <GrantResourcesForm
+                      :settlement-id="detail.id"
+                      :before="detail.resources.stock"
+                      @granted="onChanged"
+                    />
                     <GarrisonForm
                       :settlement-id="detail.id"
                       :garrison="detail.garrison"

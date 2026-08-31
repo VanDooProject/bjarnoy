@@ -15,7 +15,8 @@ namespace Bjarnoy.Api.IntegrationTests;
 /// <summary>
 /// The admin world-management surface (issue #27): the 401/403 matrix, the
 /// settings PATCH, and the run-state POST that wires the existing
-/// <see cref="Bjarnoy.Domain.Economy.GameClock"/> machine to HTTP.
+/// <see cref="Bjarnoy.Domain.Economy.GameClock"/> machine to HTTP — plus the
+/// seed preview and map reseed added by issue #133.
 /// </summary>
 public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassFixture<SqliteApiFixture>
 {
@@ -54,7 +55,16 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
     }
 
     /// <summary>Registers a fresh player, promotes it to Admin in the DB, then logs in to mint a token carrying the role.</summary>
-    private async Task<string> CreateAdminTokenAsync(HttpClient client)
+    private async Task<string> CreateAdminTokenAsync(HttpClient client) =>
+        (await CreateAdminAsync(client)).AccessToken;
+
+    /// <summary>
+    /// <see cref="CreateAdminTokenAsync"/>, but also handing back the admin's
+    /// own user id — the reseed guard (issue #133) treats that admin's own
+    /// settlements differently from everyone else's, so its tests need to know
+    /// who it is.
+    /// </summary>
+    private async Task<(string AccessToken, Guid UserId)> CreateAdminAsync(HttpClient client)
     {
         var userName = UniqueName("admin");
         var registered = await client.PostJsonAsync(
@@ -73,7 +83,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var loggedIn = await client.PostJsonAsync(
             "/api/v1/auth/login", new LoginRequest(userName, "correct-horse-battery"), Ct);
         Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
-        return (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+        return ((await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken, auth.User.Id);
     }
 
     private static void Authorize(HttpClient client, string accessToken) =>
@@ -367,6 +377,240 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         // Out of scope for #27, but must not regress: joins stay open.
         await FoundSettlementAsync(client, world);
+    }
+
+    // ---- Seed preview and reseed (issue #133) ----
+
+    /// <summary>The stored facts a reseed is supposed to change, read straight from the database.</summary>
+    private async Task<(int Seed, List<Guid> IslandIds, int Settlements)> ReadWorldStateAsync(Guid worldId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var world = await db.Worlds.AsNoTracking().SingleAsync(w => w.Id == worldId, Ct);
+        var islands = await db.Islands.AsNoTracking()
+            .Where(i => i.WorldId == worldId).OrderBy(i => i.Index).Select(i => i.Id).ToListAsync(Ct);
+        var settlements = await db.Settlements.AsNoTracking().CountAsync(s => s.WorldId == worldId, Ct);
+        return (world.Seed, islands, settlements);
+    }
+
+    /// <summary>
+    /// Hands a settlement to a real account. Founding always starts a settlement
+    /// out on <see cref="SystemUserIds.Abandoned"/> (see SettlementService) —
+    /// real ownership is only ever assigned later, at registration — so a test
+    /// that needs a real owner has to do what registration would.
+    /// </summary>
+    private async Task AssignSettlementOwnerAsync(Guid settlementId, Guid userId)
+    {
+        await using var scope = _fixture.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var settlement = await db.Settlements.SingleAsync(s => s.Id == settlementId, Ct);
+        settlement.UserId = userId;
+        await db.SaveChangesAsync(Ct);
+    }
+
+    [Fact]
+    public async Task Previewing_a_seed_returns_a_map_and_changes_nothing_in_the_database()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        await FoundSettlementAsync(client, world);
+        var before = await ReadWorldStateAsync(world.Id);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed",
+            new PreviewWorldSeedRequest(Seed: 9001),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var preview = await response.ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+
+        Assert.Equal(9001, preview.Seed);
+        Assert.Equal(world.Radius, preview.Radius);
+        Assert.NotEmpty(preview.Islands);
+        Assert.Equal(preview.Islands.Count, preview.IslandCount);
+        Assert.True(preview.LandTileCount > 0);
+        // A preview is not the live map: it must differ from what is stored,
+        // which is the whole point of looking at it before committing.
+        Assert.NotEqual(before.Seed, preview.Seed);
+
+        var after = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(before.Seed, after.Seed);
+        Assert.Equal(before.IslandIds, after.IslandIds);
+        Assert.Equal(before.Settlements, after.Settlements);
+    }
+
+    [Fact]
+    public async Task Previewing_the_same_seed_twice_returns_the_same_map()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        async Task<WorldSeedPreviewResponse> PreviewAsync(int seed)
+        {
+            var response = await client.PostJsonAsync(
+                $"/api/v1/admin/worlds/{world.Id}/preview-seed", new PreviewWorldSeedRequest(Seed: seed), Ct);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return await response.ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+        }
+
+        var first = await PreviewAsync(31337);
+        var second = await PreviewAsync(31337);
+
+        Assert.Equal(
+            first.Islands.Select(i => (i.Index, i.Name, i.Q, i.R, i.TileCount)),
+            second.Islands.Select(i => (i.Index, i.Name, i.Q, i.R, i.TileCount)));
+    }
+
+    [Fact]
+    public async Task Reseeding_replaces_the_map_and_deletes_every_settlement_in_the_world()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var settlement = await FoundSettlementAsync(client, world);
+        var before = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(1, before.Settlements);
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed",
+            new ReseedWorldRequest(world.Name, Seed: 9001),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var reseeded = await response.ReadStrictAsync<ReseedWorldResponse>(Ct);
+
+        Assert.Equal(9001, reseeded.Seed);
+        Assert.Equal(1, reseeded.DeletedSettlements);
+        Assert.True(reseeded.IslandCount > 0);
+        Assert.Equal(0, reseeded.World.PlayerCount);
+        Assert.Equal(world.Name, reseeded.World.Name);
+
+        var after = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(9001, after.Seed);
+        Assert.Equal(0, after.Settlements);
+        Assert.Equal(reseeded.IslandCount, after.IslandIds.Count);
+        // Fresh island rows, not the old ones re-pointed: settlements referenced
+        // those by id, which is exactly why they cannot survive a reseed.
+        Assert.Empty(after.IslandIds.Intersect(before.IslandIds));
+
+        var gone = await client.GetAsync($"/api/v1/settlements/{settlement.Id}", Ct);
+        Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reseeding_is_refused_while_another_players_settlement_stands()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var settlement = await FoundSettlementAsync(client, world);
+
+        // A real, non-admin account owning a settlement in this world — the one
+        // thing the guard exists to protect.
+        using var player = _fixture.CreateClient();
+        var registered = await player.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(UniqueName("player"), "correct-horse-battery"), Ct);
+        var playerAuth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+        await AssignSettlementOwnerAsync(settlement.Id, playerAuth.User.Id);
+
+        var before = await ReadWorldStateAsync(world.Id);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed",
+            new ReseedWorldRequest(world.Name, Seed: 9001),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        var after = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(before.Seed, after.Seed);
+        Assert.Equal(before.IslandIds, after.IslandIds);
+        Assert.Equal(1, after.Settlements);
+    }
+
+    [Fact]
+    public async Task Reseeding_goes_ahead_over_the_acting_admins_own_settlement()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        var adminSettlement = await FoundSettlementAsync(client, world);
+        var admin = await CreateAdminAsync(client);
+
+        // The acting admin's own settlement: their own test play, not a real
+        // player's progress, so it does not block the reseed — it is simply
+        // deleted along with it. (The abandoned-owner case is the one
+        // Reseeding_replaces_the_map... above already covers, since founding
+        // always starts a settlement out on SystemUserIds.Abandoned.)
+        await AssignSettlementOwnerAsync(adminSettlement.Id, admin.UserId);
+        Assert.Equal(1, (await ReadWorldStateAsync(world.Id)).Settlements);
+
+        Authorize(client, admin.AccessToken);
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed",
+            new ReseedWorldRequest(world.Name, Seed: 9001),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var reseeded = await response.ReadStrictAsync<ReseedWorldResponse>(Ct);
+        Assert.Equal(1, reseeded.DeletedSettlements);
+
+        var after = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(0, after.Settlements);
+        Assert.Equal(9001, after.Seed);
+
+        var gone = await client.GetAsync($"/api/v1/settlements/{adminSettlement.Id}", Ct);
+        Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reseeding_without_retyping_the_worlds_name_is_rejected()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed",
+            new ReseedWorldRequest("not-the-world's-name", Seed: 9001),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(world.Seed, (await ReadWorldStateAsync(world.Id)).Seed);
+    }
+
+    [Fact]
+    public async Task The_preview_and_reseed_endpoints_are_admin_only_and_404_for_an_unknown_world()
+    {
+        using var anonymous = _fixture.CreateClient();
+        var world = await CreateWorldAsync(anonymous);
+
+        var unauthorized = await anonymous.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed", new PreviewWorldSeedRequest(Seed: 1), Ct);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        using var player = _fixture.CreateClient();
+        var registered = await player.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(UniqueName("player"), "correct-horse-battery"), Ct);
+        Authorize(player, (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken);
+        var forbidden = await player.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed", new ReseedWorldRequest(world.Name, Seed: 1), Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var client = _fixture.CreateClient();
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var missing = Guid.CreateVersion7();
+
+        var previewMissing = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{missing}/preview-seed", new PreviewWorldSeedRequest(Seed: 1), Ct);
+        Assert.Equal(HttpStatusCode.NotFound, previewMissing.StatusCode);
+
+        var reseedMissing = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{missing}/reseed", new ReseedWorldRequest("whatever", Seed: 1), Ct);
+        Assert.Equal(HttpStatusCode.NotFound, reseedMissing.StatusCode);
     }
 
     private async Task<IReadOnlyList<Guid>> TriggerDueEndbossesAsync()

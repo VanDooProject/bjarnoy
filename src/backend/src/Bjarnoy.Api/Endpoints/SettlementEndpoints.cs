@@ -148,7 +148,8 @@ public static class SettlementEndpoints
         [
             .. entities.Select(s => new SettlementSummary(
                 s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0)),
+                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+                s.IslandId)),
         ];
 
         return TypedResults.Ok(response);

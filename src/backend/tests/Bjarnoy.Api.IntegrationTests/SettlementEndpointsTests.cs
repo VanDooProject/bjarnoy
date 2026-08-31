@@ -6,6 +6,7 @@ using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -184,6 +185,95 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, again.StatusCode);
+    }
+
+    /// <summary>
+    /// Regression coverage for the fix scoping <c>MinimumSpacing</c> to the
+    /// same island: raising that constant to cover the worst-case border
+    /// overlap (two max-level longhouses — see <c>Settlement.MaxClaimRadius</c>)
+    /// used to reject foundings on two separate, unrelated islands purely
+    /// because their start positions happened to be within that many hexes
+    /// of each other — even though separate islands are always divided by
+    /// open sea and their claim discs can never overlap any real land.
+    /// </summary>
+    [Fact]
+    public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
+    {
+        using var client = Client();
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        // Two start positions on the very same island, closer together than
+        // MinimumSpacing — with an island's start positions this dense
+        // (FindStartPositions places one on every qualifying grass hex),
+        // any pair within a real island is essentially guaranteed to have
+        // at least one such pair.
+        (Guid IslandId, TileCoordinate First, TileCoordinate Second)? sameIsland = null;
+        foreach (var island in islands!)
+        {
+            for (var i = 0; i < island.StartPositions.Count && sameIsland is null; i++)
+            {
+                for (var j = i + 1; j < island.StartPositions.Count; j++)
+                {
+                    var a = new HexCoord(island.StartPositions[i].Q, island.StartPositions[i].R);
+                    var b = new HexCoord(island.StartPositions[j].Q, island.StartPositions[j].R);
+                    if (a.DistanceTo(b) < SettlementService.MinimumSpacing)
+                    {
+                        sameIsland = (island.Id, island.StartPositions[i], island.StartPositions[j]);
+                        break;
+                    }
+                }
+            }
+
+            if (sameIsland is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.True(sameIsland is not null, "Seed 21/radius 60 no longer has an island dense enough to exercise same-island spacing.");
+        var (islandId, first, second) = sameIsland!.Value;
+
+        var founded = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(islandId, first.Q, first.R, "First realm", "Ulf", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+
+        var rejected = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(islandId, second.Q, second.R, "Second realm", "Sigrid", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        Assert.Equal("TooCloseToNeighbour", await rejected.RejectionAsync(Ct));
+
+        // A start position on a *different* island, just as close to the
+        // first settlement by raw hex distance, must still found cleanly.
+        var firstCentre = new HexCoord(first.Q, first.R);
+        (Guid IslandId, TileCoordinate Plot)? crossIsland = null;
+        foreach (var island in islands.Where(i => i.Id != islandId))
+        {
+            var close = island.StartPositions.FirstOrDefault(
+                p => new HexCoord(p.Q, p.R).DistanceTo(firstCentre) < SettlementService.MinimumSpacing);
+            if (close is not null)
+            {
+                crossIsland = (island.Id, close);
+                break;
+            }
+        }
+
+        Assert.True(crossIsland is not null, "Seed 21/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
+        var (crossIslandId, crossPlot) = crossIsland!.Value;
+
+        var crossFounded = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(crossIslandId, crossPlot.Q, crossPlot.R, "Third realm", "Astrid", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, crossFounded.StatusCode);
     }
 
     [Fact]

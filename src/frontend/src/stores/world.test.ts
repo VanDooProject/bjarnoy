@@ -16,6 +16,7 @@ const foundSettlement = vi.fn();
 const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
+const getSettlement = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -40,6 +41,7 @@ async function loadStoreModule(demoMode: boolean) {
       getTradeBoard: (...args: unknown[]) => getTradeBoard(...args),
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
       getShipments: (...args: unknown[]) => getShipments(...args),
+      getSettlement: (...args: unknown[]) => getSettlement(...args),
     },
     ApiError: class ApiError extends Error {},
   }));
@@ -231,5 +233,136 @@ describe('useWorldStore founding a settlement (live mode)', () => {
       store.foundStartingSettlementLive('player-1', 'Astrid', "Astrid's realm", { q: 9, r: 9 }),
     ).rejects.toThrow();
     expect(foundSettlement).not.toHaveBeenCalled();
+  });
+
+  // Regression: refreshWorldSettlements() used to register another player's
+  // settlement into the local WorldModel without an islandId, so the
+  // per-island spacing check in unclaimedStartPositions() never actually
+  // excluded it — a second player's client kept treating an already-founded
+  // start position as free and repeatedly got 409'd by the backend.
+  it('refuses to found on a start position someone else already claimed on the same island, without calling the API', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      {
+        id: 'settlement-1',
+        name: "Astrid's realm",
+        ownerName: 'Astrid',
+        q: NEAR_ISLAND.at.q,
+        r: NEAR_ISLAND.at.r,
+        longhouseLevel: 1,
+        islandId: NEAR_ISLAND.islandId,
+      },
+    ]);
+    foundSettlement.mockReset();
+
+    const store = await loadStoreModule(false);
+    withIslands(store);
+
+    await expect(
+      store.foundStartingSettlementLive('player-2', 'Bjorn', "Bjorn's realm", NEAR_ISLAND.at),
+    ).rejects.toThrow();
+    expect(foundSettlement).not.toHaveBeenCalled();
+  });
+});
+
+// Regression coverage for scoping MINIMUM_SETTLEMENT_SPACING to the same
+// island (mirrors the backend's FoundAsync): a start position on a
+// *different* island must stay available no matter how close it is by raw
+// hex distance to an existing settlement — separate islands are always
+// divided by open sea, so their claim discs can never actually overlap any
+// land either could claim.
+describe('useWorldStore unclaimedStartPositions (spacing is per-island)', () => {
+  const HOME_ISLAND = 'island-home';
+  const OTHER_ISLAND = 'island-other';
+  // Well within MINIMUM_SETTLEMENT_SPACING (13) of the existing settlement
+  // at {0,0} on both islands below.
+  const CLOSE_ON_HOME = { q: 2, r: 0 };
+  const CLOSE_ON_OTHER = { q: 0, r: 2 };
+
+  it('excludes a close start position on the same island but keeps one just as close on a different island', async () => {
+    const store = await loadStoreModule(false);
+    store.islands = [
+      {
+        id: HOME_ISLAND,
+        index: 0,
+        name: 'Home',
+        q: 0,
+        r: 0,
+        tileCount: 10,
+        startPositions: [CLOSE_ON_HOME],
+        riverTiles: [],
+      },
+      {
+        id: OTHER_ISLAND,
+        index: 1,
+        name: 'Other',
+        q: 0,
+        r: 2,
+        tileCount: 10,
+        startPositions: [CLOSE_ON_OTHER],
+        riverTiles: [],
+      },
+    ];
+    store.model.registerSettlement({
+      id: 'settlement-home',
+      ownerId: 'owner-1',
+      ownerName: 'Ulf',
+      name: "Ulf's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: HOME_ISLAND,
+    });
+
+    const available = store.unclaimedStartPositions().map((p) => p.islandId);
+
+    expect(available).not.toContain(HOME_ISLAND);
+    expect(available).toContain(OTHER_ISLAND);
+  });
+});
+
+// Issue #98: the header's storage cap must reflect the backend's real
+// per-resource capacity (`ResourcesResponse.Capacity`, the same cap
+// `ResourcePool.Adjust` enforces server-side) instead of a synthetic
+// longhouse-level-derived guess — otherwise a fully-clamped admin grant
+// (e.g. 3000 clamped to a 750 cap) makes the header read "750 / 3,000" and
+// look like most of the grant vanished.
+describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
+  it('uses the backend capacity for hud.storageCap, not the synthetic longhouse-level guess', async () => {
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      longhouseLevel: 1,
+      resources: {
+        stock: { wood: 750, stone: 0, food: 0, iron: 0 },
+        ratePerHour: { wood: 0, stone: 0, food: 0, iron: 0 },
+        capacity: { wood: 750, stone: 750, food: 900, iron: 375 },
+      },
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+    });
+
+    const store = await loadStoreModule(false);
+    store.model.registerSettlement({
+      id: 'settlement-1',
+      ownerId: 'player-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: Date.now(),
+    });
+    store.selectedSettlementId = 'settlement-1';
+
+    await store.refreshLiveSettlement();
+
+    expect(store.hud.storageCap).toEqual({ wood: 750, stone: 750, food: 900, iron: 375 });
+    expect(store.hud.resources.wood).toBe(750);
   });
 });

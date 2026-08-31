@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -15,21 +14,23 @@ import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
+import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
+import { useFogDebug } from '../composables/useFogDebug';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
-const route = useRoute();
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
 // but clickable, and not gated to demo mode: these are pure client-side
-// rendering toggles, nothing about game state.
-const showFogDebug = computed(() => route.query.debug === '1');
+// rendering toggles, nothing about game state. See useFogDebug for why this
+// is a shared composable rather than a local computed().
+const showFogDebug = useFogDebug();
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
@@ -605,7 +606,10 @@ async function upgrade() {
       @hover="onHover"
       @waypoint-move="onWaypointMove"
     />
-    <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
+    <div v-if="showFogDebug" class="fog-debug-stack">
+      <FogDebugPanel @change="onFogDebugChange" />
+      <FogPerfPanel />
+    </div>
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
          much lighter than the old backdrop this HUD chrome was designed
          against, and can sit right behind the top bar depending on where
@@ -675,5 +679,15 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+.fog-debug-stack {
+  position: absolute;
+  /* Clears TopBar (top:16px) and ResourceBar (top:66px, right:16px). */
+  top: 120px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

@@ -3,7 +3,7 @@
 // diamonds), and population wired up as a fifth pill exactly like the other
 // four (current/max stock + a rate) instead of being unimplemented — see
 // `WorldModel.populationFor` / `stores/world.ts`'s `hud.population`. Each
-// pill also carries a cap (`WorldModel.storageCapFor`) and a fill-progress
+// pill also carries a cap (`WorldModel.storageCapForDisplay`) and a fill-progress
 // underline, matching the reference's "4,965 / 12,000" + green bar.
 import { computed } from 'vue';
 import { useWorldStore } from '../../stores/world';

@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -43,6 +45,14 @@ public static class AdminWorldEndpoints
         worlds.MapPost("/{worldId:guid}/run-state", SetRunState)
             .WithName("AdminSetWorldRunState")
             .WithSummary("Pauses, enters maintenance on, locks, or resumes a world.");
+
+        worlds.MapPost("/{worldId:guid}/preview-seed", PreviewSeed)
+            .WithName("AdminPreviewWorldSeed")
+            .WithSummary("Generates a candidate map in memory and returns its islands. Persists nothing.");
+
+        worlds.MapPost("/{worldId:guid}/reseed", Reseed)
+            .WithName("AdminReseedWorld")
+            .WithSummary("Regenerates a world's map from a new seed, destroying every settlement in it.");
 
         return app;
     }
@@ -180,6 +190,144 @@ public static class AdminWorldEndpoints
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
         return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount));
+    }
+
+    /// <summary>
+    /// Generates a candidate map and hands it straight back. Nothing is written:
+    /// the world named in the route is only read, for its current radius and to
+    /// answer 404 for an id that names nothing.
+    /// </summary>
+    private static async Task<Results<Ok<WorldSeedPreviewResponse>, NotFound, ValidationProblem>> PreviewSeed(
+        Guid worldId,
+        PreviewWorldSeedRequest request,
+        WorldService worlds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!TryBuildOptions(world, request.Seed, request.Radius, out var options, out var errors))
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var generated = await WorldService.PreviewAsync(options, cancellationToken);
+
+        return TypedResults.Ok(new WorldSeedPreviewResponse(
+            worldId,
+            options.Seed,
+            options.Radius,
+            generated.Islands.Count,
+            generated.LandTileCount,
+            [.. generated.Islands.Select(PreviewIslandResponse.From)]));
+    }
+
+    /// <summary>
+    /// Commits a candidate map. The point of no return: every settlement in the
+    /// world goes with the islands it was founded on (issue #133), which is why
+    /// the request has to re-type the world's name and why a world holding any
+    /// other real player's settlement is refused outright.
+    /// </summary>
+    private static async Task<Results<Ok<ReseedWorldResponse>, NotFound, ValidationProblem, Conflict<ProblemDetails>>>
+        Reseed(
+            Guid worldId,
+            ReseedWorldRequest request,
+            ClaimsPrincipal principal,
+            WorldService worlds,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var world = await worlds.GetWorldAsync(worldId, cancellationToken);
+        if (world is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!string.Equals(request.ConfirmWorldName?.Trim(), world.Name, StringComparison.Ordinal))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.ConfirmWorldName)] = [$"Type the world's exact name ('{world.Name}') to confirm."],
+            });
+        }
+
+        if (!TryBuildOptions(world, request.Seed, request.Radius, out var options, out var errors))
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var actingUserId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var result = await worlds.ReseedAsync(worldId, options, actingUserId, cancellationToken);
+
+        switch (result.Outcome)
+        {
+            case ReseedOutcome.WorldNotFound:
+                return TypedResults.NotFound();
+
+            case ReseedOutcome.RealPlayersPresent:
+                return TypedResults.Conflict(new ProblemDetails
+                {
+                    Title = "The world has real players in it.",
+                    Detail =
+                        $"{result.BlockingPlayers} settlement(s) belong to players other than you. " +
+                        "Reseeding would delete them, so it is refused.",
+                    Status = StatusCodes.Status409Conflict,
+                });
+
+            case ReseedOutcome.NoIslands:
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    [nameof(request.Seed)] =
+                        [$"Seed {options.Seed} at radius {options.Radius} produced no islands. Try another seed."],
+                });
+
+            default:
+                var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
+                return TypedResults.Ok(new ReseedWorldResponse(
+                    AdminWorldResponse.From(result.World!, playerCount),
+                    options.Seed,
+                    result.IslandCount,
+                    result.DeletedSettlements));
+        }
+    }
+
+    /// <summary>
+    /// The generation options a preview/reseed request asks for: the world's own
+    /// parameters, with the seed and radius the admin chose laid over them.
+    /// </summary>
+    private static bool TryBuildOptions(
+        WorldEntity world,
+        int? seed,
+        int? radius,
+        out WorldGenerationOptions options,
+        out Dictionary<string, string[]> errors)
+    {
+        options = world.ToGenerationOptions() with
+        {
+            Seed = seed ?? Random.Shared.Next(),
+            Radius = radius ?? world.Radius,
+        };
+
+        try
+        {
+            options.Validate();
+            errors = new Dictionary<string, string[]>();
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            errors = new Dictionary<string, string[]>
+            {
+                [ex.ParamName ?? nameof(radius)] = [ex.Message],
+            };
+            return false;
+        }
     }
 
     private static async Task<Results<Ok<AdminWorldResponse>, NotFound, ValidationProblem>> SetRunState(

@@ -96,6 +96,18 @@ public sealed record RiverTileResponse(
 {
     private static readonly string[] ShapeNames = ["spring", "straight", "bend", "confluence", "mouth"];
 
+    /// <summary>
+    /// The domain's own <see cref="RiverTile"/>, for a map that was generated
+    /// but never stored (the admin seed preview, issue #133) and so has no
+    /// <see cref="RiverTileRecord"/> row to read from.
+    /// </summary>
+    public static RiverTileResponse FromDomain(RiverTile tile) => new(
+        tile.Coord.Q,
+        tile.Coord.R,
+        ShapeNames[(int)tile.Shape],
+        [.. tile.InDirections.Select(d => d.ToWireName())],
+        tile.OutDirection?.ToWireName());
+
     public static RiverTileResponse From(RiverTileRecord tile) => new(
         tile.Q,
         tile.R,
