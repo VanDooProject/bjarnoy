@@ -222,4 +222,17 @@ public class HexPathfinderTests
         Assert.Equal(0.5, hours[1], 6); // grass: 1.0 / 2.0
         Assert.Equal(0.5 + 1.0, hours[2], 6); // + mountain: 2.0 / 2.0
     }
+
+    [Fact]
+    public void Cumulative_hours_scale_down_with_the_world_speed_factor()
+    {
+        var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
+        Terrain TerrainAt(HexCoord c) => c == new HexCoord(2, 0) ? Terrain.Mountain : Terrain.Grass;
+
+        var normal = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 2.0);
+        var doubled = HexPathfinder.CumulativeHours(path, TerrainAt, hexesPerHour: 2.0, speedFactor: 2.0);
+
+        Assert.Equal(normal[1] / 2.0, doubled[1], 6);
+        Assert.Equal(normal[2] / 2.0, doubled[2], 6);
+    }
 }
