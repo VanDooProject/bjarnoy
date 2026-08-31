@@ -1,5 +1,7 @@
 # Settlement expansion — settlers and colonisation
 
+> **Status: implemented.** This issue (#55) was designed and built directly from its issue body in [PR #72](https://github.com/VanDooProject/bjarnoy/pull/72) before this doc's branch was merged, so the two were written independently. They landed on the same shape — Settler Crew as a Civilian unit, 3-crew founding, overland A* vs. sea-convoy routes, an escalating (`×2^n`) settler cost, and a never-decaying account-level Renown stat gating settlement count only — which is a good sign the design was sound. The tables below have been corrected to PR #72's actual shipped numbers where they differ from this doc's original proposal; the reasoning and prior-art sections are unchanged and still apply. Treat this file as the historical rationale, and `Bjarnoy.Domain.Settlers.Founding`/`Renown`/`RenownThresholds` as the source of truth for exact figures going forward.
+
 Extends §3 of MECHANICS.md ("New settlements are founded by loading a settler crew on a longship…"). That sentence stays true; this doc defines the unit, both founding routes, the cap that stops sprawl, and the edge cases.
 
 ---
@@ -8,15 +10,15 @@ Extends §3 of MECHANICS.md ("New settlements are founded by loading a settler c
 
 One new `UnitDefinition`, **Settler Crew**, in the existing **Civilian** class alongside the Provisioner. No new class: settlers fight like civilians (barely), move like civilians, and die like civilians. What makes them special is a single flag — *can found a settlement* — not a new taxonomy.
 
-| Stat | Value | Note |
+| Stat | Value (as shipped, `UnitCatalogue`) | Note |
 | --- | --- | --- |
 | Class | Civilian | Same as Provisioner |
-| Attack / Defence | 0 / 10 | They run, they don't fight |
-| Speed | 3 hex/h | Slower than a Spearman (4); a colonisation march is an event |
-| Upkeep | 3 food/h each | Heavy — carrying a village on their backs |
-| Food carry | High | Range is upkeep-gated like every unit; settlers carry enough to cross a sea, not to loiter |
+| Attack / Defence | 0 / 3 | They run, they don't fight |
+| Speed | 4 hex/h | Same pace as Spearman/Axeman/Bowman/Provisioner, so an overland escort neither bottlenecks nor outruns the crews; a sea convoy travels at the (faster) carrying ship's speed instead |
+| Upkeep | 1 food/h each | |
+| Food carry | 40 | Range is upkeep-gated like every unit |
 | Training cost | See §3 — scales with settlement count | |
-| Training time | 4 h base | Trained at the **Longhouse**, not the barracks; expansion is a decision of the hall |
+| Required Longhouse level | 4 | Trained at the **Longhouse**, not the barracks; expansion is a decision of the hall |
 | To found | **3 crews on the same hex** | |
 
 **Why three, not one.** Three crews is the Travian pattern and it earns its place here: it triples the raidable investment in transit, it forces a real convoy (one Karve can't carry all three — see §2), and it makes losing *part* of an expedition a meaningful partial failure instead of all-or-nothing. A single-unit colonist (the Die Stämme noble shape) fits conquest, not colonisation — if we later add settlement capture, that's where a solo unit belongs.
@@ -54,13 +56,13 @@ New account-level stat: **Renown** — the culture-points equivalent, and the on
 - **Never decays, never spent.** It's a threshold stat, not a currency. Spending it (Travian celebrations) is deferred — see open questions.
 - **Gates settlement slots only.** Claim radius stays gated by Longhouse level; keeping the two growth axes on separate stats means "wide" and "tall" remain distinct strategies instead of one number ruling both.
 
-| Settlement # | Renown required |
+| Settlement # | Renown required (as shipped, `RenownThresholds`) |
 | --- | --- |
-| 2nd | 2 000 |
-| 3rd | 8 000 |
-| 4th | 20 000 |
-| 5th | 40 000 |
-| n-th | roughly ×2.2 the previous step |
+| 2nd | 500 |
+| 3rd | 1 000 |
+| 4th | 2 000 |
+| 5th | 4 000 |
+| n-th | `500 × 2^(n-2)` — doubles each step |
 
 ### Scaling settler cost
 
@@ -77,8 +79,8 @@ Cost is fixed at training time. Distance costs nothing extra in resources — it
 
 ### Other prerequisites
 
-- Longhouse **Lv 6** in the training settlement (first expansion lands mid-game, not week one).
-- Target hex must be unclaimed, buildable land, **≥ 3 hexes** from any existing claim border — a new settlement needs room for its own starting radius without instant border contact.
+- Longhouse **Lv 4** in the training settlement to train Settler Crews at all (as shipped — the design doc originally proposed Lv 6; the shipped value matches the existing minimum-required-Longhouse-level pattern used by other high-tier units).
+- Target hex must be unclaimed, buildable land, and clear the world's minimum-spacing rule against **every** already-claimed settlement's own claim border (not just its centre) — the same `SettlementService.MinimumSpacing` rule founding already enforces (widened by #110 to `2 × MaxClaimRadius + 1`, so two fully-leveled neighbours' claim discs can never end up touching).
 - No per-island settlement quota. Islands crowd naturally; contested islands are content, not a bug. Clans holding islands jointly (§8 of MECHANICS.md) is the intended counterplay.
 
 ## 4. What happens on founding
@@ -86,7 +88,7 @@ Cost is fixed at training time. Distance costs nothing extra in resources — it
 When 3 Settler Crews stand on a valid hex:
 
 - The crews are **consumed** — they become the population.
-- **Longhouse Lv 1** appears on the target hex; claim radius **7 hexes** (the Lv 1 value, consistent with the existing Lv 4 = 12 curve).
+- **Longhouse Lv 1** appears on the target hex; claim radius starts at the standard Lv 1 value from `Settlement.ClaimRadius` (`1 + level / 2`, i.e. 1 hex — MECHANICS.md's illustrative "Lv 4 = 12 hexes" figure was aspirational flavour text, not the shipped formula).
 - Starting stocks: a nominal boot-strap (200 of each resource) plus **whatever unspent food the convoy still carried** — provisioning well for the journey is provisioning the colony.
 - No garrison, no wall. The settlement starts **undefended**; escort units that travelled with the convoy remain as its first garrison, which makes escorting a real choice rather than paranoia.
 - The founding player's border, banner and name render on the island immediately. Everyone with vision of that island sees a new neighbour.
@@ -96,7 +98,7 @@ When 3 Settler Crews stand on a valid hex:
 | Case | Resolution |
 | --- | --- |
 | Target hex claimed while convoy in transit | Founding fails on arrival. Convoy holds position; owner may retarget any valid hex (new frozen path from current position) or recall. Settlers are not lost — arriving second costs time, not the expedition. |
-| Target hex still unclaimed but now within 3 hexes of a new claim | Same as above: fail, hold, retarget or recall. |
+| Target hex still unclaimed but now within the minimum-spacing rule of a new claim | Same as above: fail, hold, retarget or recall. |
 | Convoy attacked in transit | Settlers fight (badly) with whatever escort they have. Dead crews are dead — replacements must be trained at current (scaled) cost and sail out to join survivors, or the survivors recalled. 1–2 surviving crews on the target hex just stand there; founding requires 3. |
 | Ships sunk at sea | Crews aboard are lost with the ship. Splitting three crews across three Karves is diversification; two-on-a-Longship is efficiency. Player's choice. |
 | Recall mid-journey | Allowed any time. Path re-freezes from the interpolated current position back home; sea recall requires the fleet, land units walk. Food-gating still applies — a convoy recalled at the edge of its provisioning can starve on the way back. Recall is safe-ish, not free. |
@@ -116,9 +118,14 @@ When 3 Settler Crews stand on a valid hex:
 
 ## 7. Open questions
 
-- All numbers above (Renown curve, cost doubling, speeds, carry counts) are shaped, not balanced. First-expansion timing target: day 10–14 of a server?
-- Can clan-mates contribute — escort a founding convoy (yes, falls out of stacking), carry another player's settlers on their ships, or gift an unclaimed hex reservation inside clan-held territory?
-- Does razing your own settlement refund Renown standing (does settlement #4 become #3 again for cost purposes)? Proposal: count is *concurrent* settlements for cost, lifetime-max for nothing — but this is exploitable at the margin and needs a decision.
-- Should the 3-hex spacing rule apply to your own borders too, or may a player found adjacent to themselves to weld territories?
-- Do surviving partial convoys (2 crews on target) time out and desert, or wait indefinitely at 3 food/h each until starvation resolves it? Starvation is the elegant answer; confirm it reads as fair.
+Resolved by PR #72's v1, listed here for the record: escorting is allowed (falls out of ordinary stacking, no special-casing needed); the dispatch-time renown/spacing check is never re-invalidated for an in-flight convoy; the spacing rule is checked against **every** claimed settlement in the world, yours included, so it also applies to your own borders.
+
+Still open, not addressed by the shipped v1:
+
+- All numbers above (Renown curve, cost doubling) are explicitly documented in `RenownThresholds`/`Founding` as "a reasonable v1 curve, not a tuned economy figure" — still need real balancing.
+- Convoy-attacked-in-transit combat is a documented TODO in PR #72 — there's no existing "attack an in-transit army" mechanism yet for it to reuse.
+- Can clan-mates contribute — carry another player's settlers on their ships, or gift an unclaimed hex reservation inside clan-held territory? Not addressed.
+- Does razing your own settlement refund Renown standing (does settlement #4 become #3 again for cost purposes)? Renown itself never decays and the settlement-count check only reads current holdings at dispatch time, but whether cost-scaling should treat count as concurrent-vs-lifetime is still a real question.
+- Do surviving partial convoys (fewer than 3 crews on target) time out and desert, or wait indefinitely until starvation resolves it? Still to confirm against the shipped upkeep numbers (1 food/h/crew, 40 food carry).
 - Renown visibility: public on profile (rank ladder pressure) or private?
+- Renown/settlement cap are scoped **per-world**, not summed across every world a player plays in — a deliberate v1 choice documented in `RenownService`, worth revisiting if cross-world accounts become a thing.
