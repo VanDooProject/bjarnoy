@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref, watch } from 'vue';
 import { api, ApiError } from '../../api/client';
 import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
+import { useAdminWorldStore } from '../../stores/adminWorld';
 import ArmyEditor from './ArmyEditor.vue';
 import GarrisonForm from './GarrisonForm.vue';
 import GrantResourcesForm from './GrantResourcesForm.vue';
 import SettlementLayoutEditor from './SettlementLayoutEditor.vue';
+
+const adminWorld = useAdminWorldStore();
 
 const settlements = ref<AdminSettlementSummary[]>([]);
 const totalCount = ref(0);
@@ -14,7 +17,6 @@ const pageSize = 25;
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 
-const worldId = ref('');
 const owner = ref('');
 
 // The settlement currently expanded for management (grant/level forms), and
@@ -25,11 +27,20 @@ const detailLoading = ref(false);
 const detailError = ref<string | null>(null);
 
 async function load() {
+  // No world selected yet (worlds still loading, or none exist) — nothing to
+  // search; the template shows a placeholder instead of an empty table.
+  if (!adminWorld.selectedWorldId) {
+    settlements.value = [];
+    totalCount.value = 0;
+    loading.value = false;
+    return;
+  }
+
   loading.value = true;
   loadError.value = null;
   try {
     const result = await api.adminSearchSettlements({
-      worldId: worldId.value || undefined,
+      worldId: adminWorld.selectedWorldId,
       owner: owner.value || undefined,
       page: page.value,
       pageSize,
@@ -43,7 +54,17 @@ async function load() {
   }
 }
 
-onMounted(load);
+// Reloads whenever the header's world selector changes — including its
+// first resolution from AdminLayout's onMounted loadWorlds(), which this
+// view's own onMounted can race ahead of.
+watch(
+  () => adminWorld.selectedWorldId,
+  () => {
+    page.value = 1;
+    void load();
+  },
+  { immediate: true },
+);
 
 function onSearch() {
   page.value = 1;
@@ -98,12 +119,14 @@ function onChanged(updated: SettlementResponse) {
     <h1>Settlements</h1>
 
     <div class="filters">
-      <input v-model="worldId" type="text" placeholder="World id" @keyup.enter="onSearch" />
       <input v-model="owner" type="text" placeholder="Owner name" @keyup.enter="onSearch" />
       <button @click="onSearch">Search</button>
     </div>
 
-    <p v-if="loading">Loading…</p>
+    <p v-if="!adminWorld.selectedWorldId" class="hint">
+      Select a world above to search its settlements.
+    </p>
+    <p v-else-if="loading">Loading…</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else>
@@ -229,6 +252,10 @@ function onChanged(updated: SettlementResponse) {
 }
 .error {
   color: var(--rival);
+  font-size: 13px;
+}
+.hint {
+  color: var(--muted);
   font-size: 13px;
 }
 input {
