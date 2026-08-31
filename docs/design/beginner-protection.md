@@ -156,10 +156,19 @@ something already built; this issue is where that gets designed:
 
   using the `HexCoord.Distance` helper that already exists
   (`HexCoord.cs:37-41`) and each island's already-persisted `CentreQ`/
-  `CentreR`. `ringWidth` is a config constant (or derived once from
-  `world.Radius / ringCount` for a fixed number of rings regardless of world
-  size) — either way it's arithmetic over already-stored fields, computed
-  where the beginner-suggestion query runs, never written back anywhere.
+  `CentreR`. `ringWidth = world.Radius / ringCount`, for a small fixed
+  `ringCount` (e.g. 6-8) rather than a flat hex constant — a flat constant
+  either wastes most of a large `Radius` world on one giant ring 0 (a
+  100-hex-wide ring 0 on a `Radius: 1000` world is most of the map, not a
+  starter cluster) or slices a small world into more rings than it has room
+  for. `world.Radius` already exists per world (`WorldEntity`), so
+  `ringWidth` is one division, done once per beginner-suggestion query, not
+  per island. At the default `Radius: 60` and `ringCount: 6`, ring 0 is
+  hexes 0-9 from the origin — genuinely the innermost sliver of the map,
+  not "most of it" — with five more rings stepping outward before the map
+  edge. Bigger/smaller worlds keep the same *number* of rings and the
+  expansion just scales with them, so the mechanic behaves the same way
+  regardless of `Radius`.
 
   **Selection:** the beginner-suggestion query (§ above) walks rings
   innermost-first and returns islands from the first ring that still has
@@ -172,41 +181,55 @@ something already built; this issue is where that gets designed:
 
 ## Ring fill-state cost
 
-Cheap, and for the same reason the shield filter above is cheap: it rides
-the one query the beginner-suggestion endpoint already has to run, it
-doesn't add a second one.
+The two halves of "which ring is this island in, and is that ring still
+open to beginners" have very different lifetimes, so they get different
+caching treatment rather than one blanket answer.
 
-- **The ring number itself costs nothing to compute.** It's one
-  `HexCoord.Distance` call (a handful of integer subtractions/`Math.Max`,
-  `HexCoord.cs:37-41`) per island, against fields (`CentreQ`/`CentreR`)
-  already sitting in memory from the islands-for-this-world fetch. No query,
-  no index, no storage.
-- **Fill state is the same join the shield filter already needs** —
-  `Settlements` joined to `Islands` on `IslandId`/`WorldId`, counted per
-  island against that island's `StartPositions.Count`. EF Core creates an
-  index on the `Settlements.IslandId` FK by convention (`GameDbContext.cs`'s
-  `settlement.HasOne(s => s.Island)...HasForeignKey(s => s.IslandId)`), so
-  the count-per-island grouping is index-backed, not a table scan. Bucketing
-  those per-island counts by ring afterward is just grouping already-fetched
-  rows a second way in memory — no extra round trip.
-- **The walk is short-circuiting, not exhaustive.** Because rings are
-  checked innermost-first and the query stops at the first ring with spare
-  capacity, a healthy, mostly-empty world only ever touches ring 0's
-  handful of islands; a long-running, densely-settled world touches more
-  rings, but each ring is still a small slice of the total island count, not
-  a scan of every settlement in the world. Total server-side work is
-  bounded by "islands in the rings actually inspected", never by total
-  player count.
-- **How many islands a world actually has** bounds this further: `Radius`
-  is capped at 1000 (`CreateWorldRequest.cs:14`) and island count is a
-  fraction of hex count at that radius (most hexes are sea or fail
-  `MinimumIslandTiles`), so even a maximal world has, at most, a few hundred
-  islands total to ever bucket — not thousands.
+**Ring assignment (island → ring number) is static and cheap enough not to
+need caching at all**, but is safe to cache indefinitely if it's ever worth
+doing:
 
-Net: no new table, no new index, no background job, no per-tick or
-per-request recomputation stored anywhere — a ring is a label computed at
-query time from two integers, and fill state is the same settlement/island
-join the shield-based filter already has to do.
+- It's a pure function of `world.Radius` (fixed at world creation) and each
+  island's `Centre` (fixed at world generation, `WorldGenerator.cs:64-72`)
+  — neither ever changes for the life of a world, short of an admin
+  force-reseed (`AdminWorldEndpoints`'s reseed flow, which already replaces
+  the island rows wholesale). One `HexCoord.Distance` call per island
+  (`HexCoord.cs:37-41`) against numbers already in memory from the
+  islands-for-this-world fetch — no query, no index, no storage either way.
+- If it's ever measured as worth avoiding even that per-request loop, an
+  in-memory `Dictionary<IslandId, int>` cached per world for the process
+  lifetime (invalidated only on reseed, the one event that changes
+  `Centre`) is correct and never goes stale — this is the one part of the
+  mechanic where "cache for hours" undersells it; it can be cached until
+  the world is reseeded or torn down, full stop.
+
+**Fill state (which rings currently have spare beginner capacity) is the
+opposite: it changes on every founding and every shield expiry**, so it
+needs to stay close to live, not sit for hours:
+
+- It rides the same `Settlements`-joined-to-`Islands` query the
+  shield-based filter (the bullet above) already runs — index-backed via
+  the FK EF creates on `Settlements.IslandId` by convention
+  (`GameDbContext.cs`'s `settlement.HasOne(s => s.Island)...`), grouped by
+  ring in memory after the fetch. That query is cheap on its own (bounded
+  by island/settlement counts, not by scanning the world), which is the
+  point — it doesn't *need* an hours-long cache to be affordable.
+- A multi-hour cache would actively misbehave here: it would keep
+  suggesting a ring as "open" for hours after its last slot filled (or,
+  worse, keep a ring marked full long after a shield expired and vacated
+  it — shields expire on their own schedule from §1, not in response to
+  anyone founding), pushing new players out to the wrong ring or stacking
+  them past capacity. If a cache is added at all, it should sit in the
+  seconds range — the existing `UserActivityService.ThrottleInterval`
+  (60s, `UserActivityService.cs:32`) and the frontend's 4s rival-refresh
+  poll are this codebase's precedent for "how fresh does live-ish state
+  need to stay," and either is a closer fit than hours.
+
+Net: no new table, no new index, no background job. The static half (ring
+number) is cheap enough to skip caching or, if wanted, cache without an
+expiry at all; the dynamic half (fill state) is cheap enough on its own
+that it doesn't need caching to be affordable, and specifically shouldn't be
+cached for hours if it is.
 
 ## Scope
 
