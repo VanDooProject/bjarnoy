@@ -6,6 +6,12 @@ open findings from Phase 0 before any code lands. See
 does — several of its constants (`FOG_MARGIN_HEXES`, `FOG_VISIBLE_MARGIN_HEXES`,
 `FOG_VISIBLE_RADIUS_BONUS_HEXES`) survive as generator inputs in v2.
 
+**Terminology note.** "Border" is overloaded in this codebase — §4 below
+means *realm borders* (political ownership polygons, `borderLayer`). Where
+this doc talks about the edge of the fog/vision mask itself (where visible
+turns to fogged), it says **fog boundary** or **vision edge**, never
+"border," to keep the two concepts apart.
+
 ## 1. Layer semantics — confirmed
 
 - **Black fog** (`FOG_SCOUTED`, dark, near-black) = explored, but no realm
@@ -36,7 +42,7 @@ Consequences for the plan:
 - Leaving/joining a guild must force a mask refetch (bump `fogVersion` in
   the store) even though the player's own settlements didn't change.
 
-**Caching, corrected.** A guild-wide BFS re-run on every single member's
+**Option B — per-player cache, cheap merge.** A guild-wide BFS re-run on every single member's
 level-up is wasteful — the expensive step (the distance transform) doesn't
 need to redo for every member just because one of them changed. Instead:
 
@@ -63,7 +69,9 @@ never touches the cache at all (C). Doing only B still re-bakes a texture
 on every army step; doing only C still over-invalidates the static layer
 on every member's settlement change. Both are needed.
 
-### 1c. Live army-granted vision — not implemented today, design for it anyway
+### 1c. Option C — live layer, never cached, composited in the shader
+
+Live army-granted vision — not implemented today, design for it anyway.
 
 Checked: nothing in `WorldModel.ts` currently derives visibility from army
 position — `explored`/`visibleHexes` are purely settlement-derived. But
@@ -121,7 +129,7 @@ renderer already computes army position this way every frame
 (`lerpPoint`/`routeProgressAt` in `armyProgress.ts`, plus a `resyncFrom`
 easing transition), specifically to avoid visible jumps; reusing that
 float position for vision is free and snapping it would reintroduce
-exactly the popping the interpolation exists to prevent — the fog edge
+exactly the popping the interpolation exists to prevent — the vision edge
 would jump hex-to-hex as an army crosses a boundary instead of sliding.
 
 This doesn't conflict with hex-granular consumers (`isExplored(q, r)`,
@@ -132,7 +140,74 @@ than requiring the army's position itself to be discretized. The source
 stays float and smooth; only the answer, when a hex-shaped answer is
 asked for, is hex-shaped.
 
-## 2. Layer stack — resolves the `fogWorld` hack
+## 2. Chunked mask delivery — adopted, not deferred
+
+The original plan (§2.3, before this doc) shipped one whole-world texture
+and left an axial-rectangle query on the endpoint as a future escape hatch
+if a world ever got too big. Upgrading this to genuinely chunked delivery
+from the start, for two reasons that both hold even at the default world
+size:
+
+- **Bandwidth scales with what the client actually looks at**, not with
+  total world size. A player looking at one corner of a large world
+  shouldn't fetch mask data for the whole map.
+- **World growth stays additive.** If a world's playable radius expands
+  later (the backend contract already allows up to radius 1000, well past
+  the default 60), a monolithic whole-world texture means every existing
+  client re-fetches a bigger resource on every future growth event. Chunks
+  mean growth only adds new chunks — nothing already cached needs to
+  change.
+
+### Mechanics
+
+- Fixed-size chunks (e.g. 32×32 or 64×64 texels) addressed by chunk
+  coordinates, aligned to the doubled-row affine layout (§2.2 of the
+  original plan) so chunk boundaries fall on that grid's integer lines and
+  chunks tile without gaps.
+- Each chunk independently PNG-encoded, cached, and ETag'd — same §1a/§1d
+  mechanics, just scoped per chunk instead of per world. This also shrinks
+  **invalidation scope**, not just fetch size: a settlement's level-up
+  only dirties the handful of chunks within its (radius + margin), so
+  Option B's per-player buffers can be cached and merged per-chunk too,
+  rather than the whole per-player field being touched on every change.
+- Chunk generation needs a **source halo**: a settlement just outside a
+  chunk's bounds can still shade pixels near that chunk's edge if it's
+  within vision range, so the generator's per-chunk source query expands
+  by the max vision radius before computing that chunk's distance field —
+  the same "expand by margin" pattern `visibleCoords`' `TILE_W*2` margin
+  already uses in the current renderer.
+- **Client fetches only chunks intersecting its viewport + margin**,
+  batched in one request (mirroring the existing
+  `GET .../tiles?qMin&qMax&rMin&rMax` rectangle-query pattern already on
+  `WorldEndpoints.cs`), not N separate round trips per chunk.
+
+### The seam problem, and why it doesn't reach the shader
+
+Fog v2's shader design (§2.5 of the original plan) relies on hardware
+bilinear filtering across **one** texture. Naively sampling multiple
+independently-fetched chunk textures in the shader would reintroduce
+exactly the seam-filtering problem the doubled-row layout was designed to
+avoid, plus classic tile-atlas bleeding at chunk edges.
+
+Fix: chunking is a **network/cache-granularity** concept only, not a
+GPU-sampling one. As chunks arrive, the client stitches them into one
+contiguous `RenderTexture`/canvas covering the current viewport + margin —
+the same "assembled virtual texture" pattern any tile-based map client
+uses — and the shader keeps sampling that single assembled texture exactly
+as designed. Each chunk carries a small (1–2 texel) overlap border when
+stitched, so bilinear sampling right at a chunk boundary doesn't bleed
+into unfetched territory.
+
+### Sequencing
+
+Phase 1–4 (original plan) don't need to pay this complexity up front: at
+the default world radius (60), the chunk grid is 1×1 anyway — one chunk,
+one fetch, no stitching. Design the endpoint contract as chunk-addressed
+from day one (chunk coordinate + per-chunk version, not a single
+whole-world version), so enabling multiple chunks later is a tuning change
+to chunk size, not an API break or a client rewrite.
+
+## 3. Layer stack — resolves the `fogWorld` hack
 
 Current stage order (`HexMapRenderer.mount()`):
 
@@ -173,7 +248,7 @@ exactly "never been there → nothing to show." No `fogWorld`, no per-frame
 `copyFrom` transform sync, no ordering hack — delete that whole subsystem
 in the same phase the mask layers land, rather than carrying it forward.
 
-## 3. Splitting `world` into tiles / borders / buildings — adopted
+## 4. Splitting `world` into tiles / borders / buildings — adopted
 
 Currently `world` is one container holding terrain sprites, `borderLayer`,
 and (implicitly, undifferentiated from tiles) buildings — see
@@ -235,7 +310,7 @@ pass. This is a `HexMapRenderer.ts` refactor independent of the fog mask
 work; sequence it either just before or just after Phase 4 (shader layer),
 since fog v2 already touches paint order in `mount()`.
 
-## 4. Performance findings (write-down only — not scheduled)
+## 5. Performance findings (write-down only — not scheduled)
 
 From reading `HexMapRenderer.ts` while planning fog v2:
 
@@ -257,7 +332,7 @@ From reading `HexMapRenderer.ts` while planning fog v2:
   polygons are redrawn via `Graphics.poly().fill()` on every
   `rebuildBordersAndFog()` call, i.e. on every camera move — same rebuild
   cadence fog v1 pays for its blob layer. Once borders are decoupled from
-  tiles (§3) and only rebuilt on actual ownership/level changes rather than
+  tiles (§4) and only rebuilt on actual ownership/level changes rather than
   camera movement, this mostly resolves itself; if not, `generateTexture`
   caching (the same pattern `createFogBlobTexture`/`fogBlobCacheTexture`
   already use) is the fallback.
