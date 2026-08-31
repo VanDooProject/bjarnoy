@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
@@ -19,7 +20,13 @@ namespace Bjarnoy.AppHost.Tests;
 /// does (a direct <c>POST /settlements/{id}/builds</c>, the same request
 /// <c>queueBuildLive</c> sends) and asserts the landing page's own poll
 /// (<c>startHudSync</c>'s <c>LIVE_POLL_MS</c> interval) picks it up and shows
-/// the countdown panel.
+/// the countdown panel. Issue #95's own test plan asked for more than that,
+/// though: showing a countdown that never resolves is its own kind of
+/// "stuck" onboarding, so this also speeds the order up (see the SpeedFactor
+/// bump below) and asserts the panel clears and the onboarding tray's
+/// "Building 2" step actually flips to "Placed" once construction finishes —
+/// proving the landing page's progress genuinely moves on, not just that it
+/// shows a number that counts down.
 /// </summary>
 /// <remarks>
 /// Deliberately doesn't drive the ring menu's click-to-open UI here — a
@@ -84,6 +91,42 @@ public class LandingBuildQueueTests
         var grassTile = chunk!.Tiles.First(t =>
             t.Terrain == "grass" && centre.DistanceTo(new HexCoord(t.Q, t.R)) == 1);
 
+        // --- Admin: speed the world way up so a real Farm's 4-minute build
+        // timer (BuildingCatalogue.Producer, level 1) resolves in seconds —
+        // otherwise there'd be no practical way to observe the onboarding
+        // tray actually flip to "Placed" once construction finishes. Same
+        // technique (and the same reasoning for why a fixed, moderate
+        // factor rather than an extreme one) as
+        // TroopTrainingAndDispatchTests's own SpeedFactor bump. Set before
+        // queuing: PlanBuild divides the definition's BuildDuration by the
+        // world's SpeedFactor at the moment the order is planned, not later.
+        var frontendEvent = await resourceNotifications.WaitForResourceAsync(
+            "frontend",
+            evt => evt.Snapshot.Urls.Any(u => u.DisplayProperties?.DisplayName == "Log in as admin"),
+            cancellationToken);
+        var adminLoginUrl = frontendEvent.Snapshot.Urls
+            .First(u => u.DisplayProperties?.DisplayName == "Log in as admin").Url;
+        var adminQuery = new Uri(adminLoginUrl).Query.TrimStart('?')
+            .Split('&')
+            .Select(pair => pair.Split('=', 2))
+            .ToDictionary(pair => pair[0], pair => Uri.UnescapeDataString(pair[1]));
+
+        using var adminHttpClient = app.CreateHttpClient("api");
+        var adminLogin = await adminHttpClient.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LoginRequest(adminQuery["username"], adminQuery["password"]),
+            cancellationToken);
+        adminLogin.EnsureSuccessStatusCode();
+        var adminAuth = (await adminLogin.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken))!;
+        adminHttpClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminAuth.AccessToken);
+
+        var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: 50.0),
+            cancellationToken);
+        speedUpResponse.EnsureSuccessStatusCode();
+
         apiClient.DefaultRequestHeaders.Remove("X-Owner-Id");
         apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
         var queued = await apiClient.PostAsJsonAsync(
@@ -104,6 +147,22 @@ public class LandingBuildQueueTests
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
         var order = Assert.Single(settlementAfterQueue!.Queue);
         Assert.Equal("farm", order.Building);
+
+        // Issue #95's own test plan: showing the countdown isn't the whole
+        // story — the onboarding tray's "Building 2" step must actually
+        // flip to "Placed" once the order completes, and the construction
+        // panel must clear itself, purely from the landing page's existing
+        // poll (no reload, no extra click). This is what "the progress
+        // doesn't move on" would look like if it regressed: the card stays
+        // up forever and the tray never advances even though the backend
+        // finished the build.
+        await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 30_000 });
+        await Assertions.Expect(page.Locator(".tray-item .sub").Nth(1)).ToHaveTextAsync("Placed");
+
+        var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{settlement.Id}", cancellationToken);
+        Assert.Empty(settlementAfterCompletion!.Queue);
+        Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "farm");
 
         Assert.Empty(consoleErrors);
     }
