@@ -30,14 +30,65 @@ Consequences for the plan:
 
 - `FogMaskService`'s query changes from "settlements where `ownerId == playerId`"
   to "settlements where `ownerId` is a member of `player`'s guild."
-- The mask's cache/version key becomes guild-shaped, not player-shaped:
-  `(worldId, guildId ?? playerId, sorted [settlementId, q, r, level])` — a
-  player with no guild falls back to just their own settlements.
 - The version hash must invalidate when **any** guild member's settlement
   changes (founded, leveled, lost), not just the requesting player's own —
   a materially bigger fan-in than a single-player cache key.
 - Leaving/joining a guild must force a mask refetch (bump `fogVersion` in
   the store) even though the player's own settlements didn't change.
+
+**Caching, corrected.** A guild-wide BFS re-run on every single member's
+level-up is wasteful — the expensive step (the distance transform) doesn't
+need to redo for every member just because one of them changed. Instead:
+
+1. **Per-player static buffer, cached individually.** Each player's own
+   settlement-derived distance values (not yet ramped/PNG-encoded), keyed by
+   `(playerId, sorted [settlementId, q, r, level])`. Invalidates only when
+   *that player's own* settlements change — small, rare, cheap.
+2. **Guild-facing mask = elementwise max-merge of its members' cached
+   buffers**, then ramped/encoded once. `O(width × height × guildSize)`,
+   trivial next to re-running the BFS. Cache this composite too, keyed by
+   `(guildId, sorted memberVersions)`, so repeat requests still hit cache —
+   but on a cache miss (any one member changed), only the merge reruns, not
+   the transform.
+3. A player with no guild skips the merge step entirely — their "guild
+   mask" is just their own per-player buffer, ramped directly.
+
+### 1b. Live army-granted vision — not implemented today, design for it anyway
+
+Checked: nothing in `WorldModel.ts` currently derives visibility from army
+position — `explored`/`visibleHexes` are purely settlement-derived. But
+army-granted vision (see troops seeing what they're standing near) is a
+natural next feature, and there's already a live-position channel for it
+("Waypoint arrows + live troop movement visualization"). If it lands inside
+the *same* mask/cache as settlements, it's a correctness trap: a busy guild
+with several armies in transit would bust the cached mask on every movement
+tick, defeating the ETag/304 scheme entirely — the opposite problem from
+§1a's guild fan-in, and worse, because movement ticks far more often than
+settlement level-ups.
+
+**Keep it out of the cached texture entirely.** Ship live army positions as
+a small uniform array (`vec3[] armyVisionSources`, a handful of entries —
+current armies in transit, well within any reasonable uniform array size),
+updated per-frame like the camera or wind-drift uniforms, and composited
+**in the fragment shader** against the static cached mask — a few cheap
+distance checks per fragment, same cost class as the noise warp
+(sub-0.1&nbsp;ms). This is the same principle as §2.8 of the original plan
+(wind drift is a uniform update, not a mask regen) applied to a second
+input: merging is only cheap when it happens per-fragment at render time,
+not by re-baking a texture, so movement never touches the cache at all.
+
+**Snap live vision to the hex grid, not raw float position.** Not for GPU
+cost — the shader-side check is trivially cheap either way. It's for
+consistency: every other visibility concept in this system (`isExplored`,
+terrain culling, settlement radii) is hex-granular, answering "is this
+*hex* visible," not "is this *point* visible." Granting vision from an
+army's raw float position would mean two incompatible visibility models
+side by side, and CPU-side consumers (`isPastTerrainCull`, hover) would
+need a second, continuous-distance code path just for armies. Floor the
+army's live position to its containing axial coord and grant vision from
+that hex (plus whatever radius design wants) — it only changes discretely
+when an army crosses a hex boundary, and it reuses the same integer
+hex-set membership check everything else already uses.
 
 ## 2. Layer stack — resolves the `fogWorld` hack
 
@@ -80,12 +131,44 @@ exactly "never been there → nothing to show." No `fogWorld`, no per-frame
 `copyFrom` transform sync, no ordering hack — delete that whole subsystem
 in the same phase the mask layers land, rather than carrying it forward.
 
-## 3. Splitting `world` into tiles / borders / buildings
+## 3. Splitting `world` into tiles / borders / buildings — adopted
 
 Currently `world` is one container holding terrain sprites, `borderLayer`,
 and (implicitly, undifferentiated from tiles) buildings — see
-`HexMapRenderer.ts:1258-1268`. Worth splitting into three containers with
-different invalidation cadences, mirroring the fog mask split:
+`HexMapRenderer.ts:1258-1268`. This split is settled, not just proposed:
+into three containers with different invalidation cadences, mirroring the
+fog mask split.
+
+### Why borders redraw on every camera move today — traced, not assumed
+
+This isn't old code carrying debt — `HexMapRenderer.ts` and the fog fixes
+in it are two days old (first commit 2026-08-29, this plan written
+2026-08-31). The coupling was there from the start and got patched with
+throttling instead of being decoupled:
+
+- Border stroke widths are **world-space units** (`width: 7`, `width: 2.5`
+  at `HexMapRenderer.ts:2702,2706`), drawn into `borderLayer` inside
+  `world`. `world` is scaled as a whole by the camera transform, so a pure
+  zoom already rescales existing strokes for free — no redraw needed for
+  that.
+- The actual cause: `rebuildBordersAndFog` computes borders *and* fog in
+  one loop over `visibleCoords()` (viewport-culled), and Pixi's
+  `Graphics.clear()` has no partial-update API — it wipes every path. Any
+  camera change past `cameraMovedEnough()`'s threshold (`> TILE_W*0.4` pan,
+  or `|Δzoom|/zoom > 8%`) forces a full clear-and-redraw of every border
+  edge on screen, even when no border actually changed.
+- Zoom crossing that 8% threshold triggers the same full rebuild as pan,
+  even though `visibleCoords`' own margin (`TILE_W*2` past the viewport
+  edge) often already covers the new zoom level without a single new hex
+  entering view — a zoom-only gesture frequently pays for a full
+  border+fog rebuild it doesn't need, purely because both are computed in
+  the same viewport-scoped pass.
+
+Splitting borders into their own container, invalidated only by
+ownership/level events (not `cameraMovedEnough()`), removes this class of
+redraw entirely — zoom relies on the free transform rescale, and pan only
+touches borders when a hex with different ownership actually enters the
+margin.
 
 - **tiles** — terrain sprites. Changes only when new hexes come into view or
   (rarely) terrain itself changes. Cheapest to leave untouched across
