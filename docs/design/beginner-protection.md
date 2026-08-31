@@ -140,17 +140,73 @@ something already built; this issue is where that gets designed:
   for new foundings; existing settlements on it are unaffected, and
   `FoundAsync` itself is unchanged — the filtering happens before a start
   position is ever offered, not as a new rejection reason at founding time.
-- **Ring mechanic (future work, not this issue's scope):** as beginner
-  islands near the world's spawn origin fill up, new foundings should be
-  pushed progressively further out — spawning in expanding rings around the
-  origin over time, rather than always contesting the same starter cluster.
-  This needs its own design pass (how a "ring" maps onto the existing
-  hex/island generation in `WorldGenerator`/`GeneratedWorld`, and whether
-  rings are precomputed at world-generation time like `StartPositions`
-  already are, or computed lazily as islands fill) — recorded here as a
-  known follow-up so the island-suggestion filter above isn't built in a way
-  that forecloses it (e.g., don't hardcode "always prefer the island nearest
-  origin" as the tie-break once multiple qualifying islands exist).
+- **Ring mechanic.** As beginner islands near the world's spawn origin fill
+  up, new foundings get pushed progressively further out — expanding rings
+  around the origin, rather than always contesting the same starter cluster.
+  This is a **read-time bucketing of data that already exists**, not a
+  change to world generation: `WorldGenerator` keeps generating the whole
+  map up front exactly as it does today (`WorldGenerator.cs:39-81`,
+  `Radius`/`Centre`/`StartPositions` all unchanged), and no new column is
+  added to `IslandEntity` or `WorldEntity`. A ring number is derived,
+  on the fly, from data already persisted:
+
+  ```
+  ringOf(island) = HexCoord.Distance(HexCoord.Origin, island.Centre) / ringWidth
+  ```
+
+  using the `HexCoord.Distance` helper that already exists
+  (`HexCoord.cs:37-41`) and each island's already-persisted `CentreQ`/
+  `CentreR`. `ringWidth` is a config constant (or derived once from
+  `world.Radius / ringCount` for a fixed number of rings regardless of world
+  size) — either way it's arithmetic over already-stored fields, computed
+  where the beginner-suggestion query runs, never written back anywhere.
+
+  **Selection:** the beginner-suggestion query (§ above) walks rings
+  innermost-first and returns islands from the first ring that still has
+  spare beginner capacity (a threshold on unfilled `StartPositions` across
+  that ring's qualifying islands — e.g. at least one open, un-graduated
+  plot). Only once a ring is exhausted does the query fall through to the
+  next ring out. This is a tie-break/ordering rule layered on top of the
+  existing-vs-graduated filter above, not a separate mechanism — the same
+  query, same data, one more `GroupBy`.
+
+## Ring fill-state cost
+
+Cheap, and for the same reason the shield filter above is cheap: it rides
+the one query the beginner-suggestion endpoint already has to run, it
+doesn't add a second one.
+
+- **The ring number itself costs nothing to compute.** It's one
+  `HexCoord.Distance` call (a handful of integer subtractions/`Math.Max`,
+  `HexCoord.cs:37-41`) per island, against fields (`CentreQ`/`CentreR`)
+  already sitting in memory from the islands-for-this-world fetch. No query,
+  no index, no storage.
+- **Fill state is the same join the shield filter already needs** —
+  `Settlements` joined to `Islands` on `IslandId`/`WorldId`, counted per
+  island against that island's `StartPositions.Count`. EF Core creates an
+  index on the `Settlements.IslandId` FK by convention (`GameDbContext.cs`'s
+  `settlement.HasOne(s => s.Island)...HasForeignKey(s => s.IslandId)`), so
+  the count-per-island grouping is index-backed, not a table scan. Bucketing
+  those per-island counts by ring afterward is just grouping already-fetched
+  rows a second way in memory — no extra round trip.
+- **The walk is short-circuiting, not exhaustive.** Because rings are
+  checked innermost-first and the query stops at the first ring with spare
+  capacity, a healthy, mostly-empty world only ever touches ring 0's
+  handful of islands; a long-running, densely-settled world touches more
+  rings, but each ring is still a small slice of the total island count, not
+  a scan of every settlement in the world. Total server-side work is
+  bounded by "islands in the rings actually inspected", never by total
+  player count.
+- **How many islands a world actually has** bounds this further: `Radius`
+  is capped at 1000 (`CreateWorldRequest.cs:14`) and island count is a
+  fraction of hex count at that radius (most hexes are sea or fail
+  `MinimumIslandTiles`), so even a maximal world has, at most, a few hundred
+  islands total to ever bucket — not thousands.
+
+Net: no new table, no new index, no background job, no per-tick or
+per-request recomputation stored anywhere — a ring is a label computed at
+query time from two integers, and fill state is the same settlement/island
+join the shield-based filter already has to do.
 
 ## Scope
 
