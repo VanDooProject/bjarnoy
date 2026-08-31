@@ -213,13 +213,19 @@ public static class HexPathfinder
     /// <summary>
     /// Cumulative game-hours to reach each hex of <paramref name="path"/> from
     /// <c>path[0]</c> (always 0), travelling at <paramref name="hexesPerHour"/>
-    /// (an army's <see cref="Armies.Army.TotalSpeed"/>).
+    /// (an army's <see cref="Armies.Army.TotalSpeed"/>) scaled by
+    /// <paramref name="speedFactor"/> (the world's speed multiplier).
     /// </summary>
     /// <param name="isLandUnit">
     /// Which terrain-cost table to charge each step against — must match
     /// whatever <see cref="FindPath"/> call produced <paramref name="path"/>.
     /// Defaults to <see langword="true"/> (land), matching this method's
     /// signature before fleets existed (issue #40 phase 6).
+    /// </param>
+    /// <param name="speedFactor">
+    /// The world's speed multiplier — mirrors how build/training durations
+    /// are scaled in <see cref="Buildings.Settlement.PlanBuild"/>. Defaults to
+    /// <c>1.0</c> (no scaling) for callers that have no world in hand.
     /// </param>
     /// <remarks>
     /// Reuses the exact per-terrain cost table (<see cref="LandTerrainCost"/>
@@ -229,7 +235,8 @@ public static class HexPathfinder
     /// distance/speed estimate.
     /// </remarks>
     public static IReadOnlyList<double> CumulativeHours(
-        IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true)
+        IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
+        double speedFactor = 1.0)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -243,7 +250,13 @@ public static class HexPathfinder
             throw new ArgumentOutOfRangeException(nameof(hexesPerHour), hexesPerHour, "Speed must be positive.");
         }
 
+        if (speedFactor <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(speedFactor), speedFactor, "Speed factor must be positive.");
+        }
+
         var costTable = CostTable(isLandUnit);
+        var effectiveHexesPerHour = hexesPerHour * speedFactor;
         var hours = new double[path.Count];
         for (var i = 1; i < path.Count; i++)
         {
@@ -256,7 +269,7 @@ public static class HexPathfinder
             var stepCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
                 ? cost
                 : !isLandUnit && i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
-            hours[i] = hours[i - 1] + (stepCost / hexesPerHour);
+            hours[i] = hours[i - 1] + (stepCost / effectiveHexesPerHour);
         }
 
         return hours;

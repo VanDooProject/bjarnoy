@@ -188,7 +188,8 @@ public sealed class ArmyService(
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-            mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimRadius);
+            mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimRadius,
+            settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {
@@ -334,7 +335,7 @@ public sealed class ArmyService(
             }
         }
 
-        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex);
+        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor);
 
         if (recalled is null)
         {
@@ -447,7 +448,7 @@ public sealed class ArmyService(
             // leg this teleport is throwing away.
             var teleported = domain.TeleportTo(
                 destination, home, now, sampler.TerrainAt,
-                provisions is { } given ? Math.Max(0, given) : null);
+                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor);
             if (teleported is null)
             {
                 return await RejectAsync(AdminArmyEditOutcome.UnreachableHex).ConfigureAwait(false);
