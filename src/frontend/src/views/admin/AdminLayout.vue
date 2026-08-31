@@ -59,8 +59,9 @@ async function onLogout() {
 
 <style scoped>
 .admin {
-  width: 100vw;
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
+  overflow: auto;
   background: var(--shell);
   color: var(--text);
 }
