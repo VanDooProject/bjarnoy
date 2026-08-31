@@ -36,6 +36,10 @@ import type {
   MessageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
+  PreviewWorldSeedRequest,
+  ReseedWorldRequest,
+  ReseedWorldResponse,
+  WorldSeedPreviewResponse,
   PagedConversationsResponse,
   PagedMessagesResponse,
   PagedReportsResponse,
@@ -248,6 +252,18 @@ export const api = {
     }),
   adminSetWorldRunState: (worldId: string, body: SetWorldRunStateRequest) =>
     request<AdminWorldResponse>(`/admin/worlds/${worldId}/run-state`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  // Issue #133. Preview persists nothing; reseed destroys every settlement in
+  // the world, which is why its body carries the re-typed world name.
+  adminPreviewWorldSeed: (worldId: string, body: PreviewWorldSeedRequest) =>
+    request<WorldSeedPreviewResponse>(`/admin/worlds/${worldId}/preview-seed`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminReseedWorld: (worldId: string, body: ReseedWorldRequest) =>
+    request<ReseedWorldResponse>(`/admin/worlds/${worldId}/reseed`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),

@@ -10,6 +10,44 @@ namespace Bjarnoy.Infrastructure.Services;
 /// <summary>Raised when a world cannot be created as asked.</summary>
 public sealed class WorldCreationException(string message) : Exception(message);
 
+/// <summary>Why <see cref="WorldService.ReseedAsync"/> did or did not reseed a world.</summary>
+public enum ReseedOutcome
+{
+    /// <summary>The world was regenerated; its old islands and settlements are gone.</summary>
+    Reseeded = 0,
+
+    /// <summary>No world with that id.</summary>
+    WorldNotFound,
+
+    /// <summary>
+    /// The world holds at least one settlement owned by a real player who is
+    /// not the acting admin. Reseeding would destroy their progress, so it is
+    /// refused outright rather than confirmed away — see issue #133.
+    /// </summary>
+    RealPlayersPresent,
+
+    /// <summary>The candidate seed produced no islands at all, so it is not a usable map.</summary>
+    NoIslands,
+}
+
+/// <param name="Outcome">Whether the reseed happened, and why not if it didn't.</param>
+/// <param name="World">The reseeded world; null unless <paramref name="Outcome"/> is <see cref="ReseedOutcome.Reseeded"/>.</param>
+/// <param name="IslandCount">Islands the new seed produced.</param>
+/// <param name="DeletedSettlements">
+/// Settlements destroyed by the reseed — the acting admin's own and abandoned
+/// ones only, since anything else would have blocked it.
+/// </param>
+/// <param name="BlockingPlayers">
+/// Distinct real, non-acting-admin owners standing in the way, when
+/// <paramref name="Outcome"/> is <see cref="ReseedOutcome.RealPlayersPresent"/>.
+/// </param>
+public sealed record ReseedResult(
+    ReseedOutcome Outcome,
+    WorldEntity? World = null,
+    int IslandCount = 0,
+    int DeletedSettlements = 0,
+    int BlockingPlayers = 0);
+
 /// <summary>
 /// Creates and reads worlds: runs the generator, stores what the client cannot
 /// derive, and answers terrain queries from the stored seed.
@@ -71,17 +109,7 @@ public sealed class WorldService(
 
         foreach (var island in generated.Islands)
         {
-            world.Islands.Add(new IslandEntity
-            {
-                WorldId = world.Id,
-                Index = island.Index,
-                Name = island.Name,
-                CentreQ = island.Centre.Q,
-                CentreR = island.Centre.R,
-                TileCount = island.TileCount,
-                StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
-                RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
-            });
+            world.Islands.Add(ToIslandEntity(world.Id, island));
         }
 
         _dbContext.Worlds.Add(world);
@@ -109,6 +137,219 @@ public sealed class WorldService(
 
         return world;
     }
+
+    /// <summary>
+    /// Runs the generator against <paramref name="options"/> and hands back the
+    /// result without touching the database at all — the "what would this seed
+    /// look like?" query behind the admin seed preview (issue #133).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately static and DB-free: nothing here may create, mutate or even
+    /// read a row, so an admin can flip through candidate seeds as freely as
+    /// they like. Generation is CPU-bound, so it runs off the request thread the
+    /// same way <see cref="CreateWorldAsync"/> runs it.
+    /// </remarks>
+    public static Task<GeneratedWorld> PreviewAsync(
+        WorldGenerationOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+
+        return Task.Run(() => new WorldGenerator(options).Generate(cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Settlements in <paramref name="worldId"/> owned by a real player other
+    /// than <paramref name="actingUserId"/>.
+    /// </summary>
+    /// <remarks>
+    /// The reseed guard (issue #133). Distinct from
+    /// <see cref="GetPlayerCountAsync"/>, which counts settlement rows
+    /// regardless of who owns them: anonymous/abandoned play (owned by the
+    /// reserved <see cref="SystemUserIds.Abandoned"/> user) and the acting
+    /// admin's own test settlements are not real players' progress and do not
+    /// block a reseed.
+    /// </remarks>
+    public Task<int> CountRealPlayerSettlementsAsync(
+        Guid worldId,
+        Guid actingUserId,
+        CancellationToken cancellationToken = default) =>
+        _dbContext.Settlements
+            .AsNoTracking()
+            .CountAsync(
+                s => s.WorldId == worldId
+                    && s.UserId != SystemUserIds.Abandoned
+                    && s.UserId != actingUserId,
+                cancellationToken);
+
+    /// <summary>
+    /// Regenerates an existing world's map from a new seed: replaces its
+    /// generation parameters and its islands, and destroys every settlement in
+    /// it (issue #133).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Islands are the reason this is destructive rather than a settings
+    /// change: <see cref="SettlementEntity.IslandId"/> points at an island row
+    /// that a new seed simply does not have an equivalent of, so every
+    /// settlement in the world goes with it. Guarded by
+    /// <see cref="CountRealPlayerSettlementsAsync"/> — only a world whose
+    /// settlements all belong to the acting admin or to
+    /// <see cref="SystemUserIds.Abandoned"/> may be reseeded.
+    /// </para>
+    /// <para>
+    /// Everything hanging off a settlement is deleted explicitly here rather
+    /// than left to the database. Settlements' own children (buildings, build
+    /// orders, garrison stacks, training orders) do cascade, but armies,
+    /// trades and shipments are deliberately <c>Restrict</c> — "nothing should
+    /// delete a settlement out from under an army still travelling", see
+    /// <c>GameDbContext</c> — precisely because no ordinary code path deletes a
+    /// settlement. That posture is left as-is: this one admin path names the
+    /// rows it destroys instead of loosening a constraint that protects every
+    /// other path.
+    /// </para>
+    /// </remarks>
+    /// <param name="worldId">The world to regenerate.</param>
+    /// <param name="options">The candidate generation options, including the new seed.</param>
+    /// <param name="actingUserId">The admin performing the reseed; their own settlements do not block it.</param>
+    public async Task<ReseedResult> ReseedAsync(
+        Guid worldId,
+        WorldGenerationOptions options,
+        Guid actingUserId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+
+        var world = await _dbContext.Worlds
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+
+        if (world is null)
+        {
+            return new ReseedResult(ReseedOutcome.WorldNotFound);
+        }
+
+        var blocking = await CountRealPlayerSettlementsAsync(worldId, actingUserId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (blocking > 0)
+        {
+            _logger.LogInformation(
+                "Refused to reseed world {WorldId}: {Blocking} settlement(s) belong to real players.",
+                worldId, blocking);
+            return new ReseedResult(ReseedOutcome.RealPlayersPresent, BlockingPlayers: blocking);
+        }
+
+        var generated = await PreviewAsync(options, cancellationToken).ConfigureAwait(false);
+        if (generated.Islands.Count == 0)
+        {
+            return new ReseedResult(ReseedOutcome.NoIslands);
+        }
+
+        var settlementIds = await _dbContext.Settlements
+            .Where(s => s.WorldId == worldId)
+            .Select(s => s.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        // The one place in this backend that needs an explicit transaction:
+        // the deletes below and the new islands are several statements that
+        // must not be observable — or survivable — half-done.
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        var deletedSettlements = await DeleteSettlementsAsync(worldId, settlementIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        await _dbContext.Islands
+            .Where(i => i.WorldId == worldId)
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+        world.ApplyGenerationOptions(options);
+        foreach (var island in generated.Islands)
+        {
+            _dbContext.Islands.Add(ToIslandEntity(worldId, island));
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogWarning(
+            "World {WorldId} ({Name}) reseeded to seed {Seed} by admin {AdminId}: " +
+            "{Islands} islands, {Deleted} settlement(s) destroyed.",
+            worldId, world.Name, options.Seed, actingUserId, generated.Islands.Count, deletedSettlements);
+
+        return new ReseedResult(
+            ReseedOutcome.Reseeded,
+            world,
+            generated.Islands.Count,
+            deletedSettlements);
+    }
+
+    /// <summary>
+    /// Deletes every settlement in <paramref name="worldId"/> together with the
+    /// rows that reference one but do not cascade from it. See
+    /// <see cref="ReseedAsync"/> for why those are deleted by hand.
+    /// </summary>
+    private async Task<int> DeleteSettlementsAsync(
+        Guid worldId,
+        List<Guid> settlementIds,
+        CancellationToken cancellationToken)
+    {
+        if (settlementIds.Count == 0)
+        {
+            return 0;
+        }
+
+        // Order matters: each step clears the references the next one would
+        // otherwise trip over. Shipments and reports before the offers they
+        // hang off, everything before the settlements themselves.
+        await _dbContext.Shipments
+            .Where(s => settlementIds.Contains(s.FromSettlementId) || settlementIds.Contains(s.ToSettlementId))
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+        await _dbContext.TradeReports
+            .Where(r => settlementIds.Contains(r.PosterSettlementId)
+                || settlementIds.Contains(r.AcceptorSettlementId))
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+        await _dbContext.TradeOffers
+            .Where(o => o.WorldId == worldId || settlementIds.Contains(o.PosterSettlementId))
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+        // Both ends: an army sent *at* one of these settlements is as dangling
+        // as one sent *from* it.
+        await _dbContext.Armies
+            .Where(a => settlementIds.Contains(a.SettlementId)
+                || (a.TargetSettlementId != null && settlementIds.Contains(a.TargetSettlementId.Value)))
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+        // No FK to settlements at all (only indexes — see GameDbContext), so
+        // these would survive as unreadable orphans rather than fail loudly.
+        await _dbContext.BattleReports
+            .Where(r => settlementIds.Contains(r.AttackerSettlementId)
+                || settlementIds.Contains(r.DefenderSettlementId))
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+        // The settlements themselves last; their own children (buildings,
+        // build orders, garrison stacks, training orders) cascade.
+        return await _dbContext.Settlements
+            .Where(s => s.WorldId == worldId)
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A generated island, as the row that stores it.</summary>
+    private static IslandEntity ToIslandEntity(Guid worldId, GeneratedIsland island) => new()
+    {
+        WorldId = worldId,
+        Index = island.Index,
+        Name = island.Name,
+        CentreQ = island.Centre.Q,
+        CentreR = island.Centre.R,
+        TileCount = island.TileCount,
+        StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
+        RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
+    };
 
     /// <summary>
     /// Creates <paramref name="name"/> if — and only if — no world exists yet

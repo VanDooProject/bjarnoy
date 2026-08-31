@@ -296,6 +296,53 @@ export interface SetWorldRunStateRequest {
   graceMinutes?: number;
 }
 
+/** Issue #133: a candidate map to look at. `seed` omitted means "draw one at random". */
+export interface PreviewWorldSeedRequest {
+  seed?: number;
+  radius?: number;
+}
+
+/**
+ * A generated-but-not-stored island. Deliberately has no `id`, unlike
+ * `IslandResponse`: nothing was persisted, so there is nothing to have one.
+ */
+export interface PreviewIslandResponse {
+  index: number;
+  name: string;
+  q: number;
+  r: number;
+  tileCount: number;
+  startPositions: TileCoordinate[];
+  riverTiles: RiverTileResponse[];
+}
+
+export interface WorldSeedPreviewResponse {
+  worldId: string;
+  seed: number;
+  radius: number;
+  islandCount: number;
+  landTileCount: number;
+  islands: PreviewIslandResponse[];
+}
+
+/**
+ * Regenerates a world's map, destroying every settlement in it.
+ * `confirmWorldName` must be the world's exact name, re-typed by the admin —
+ * the backend refuses the request otherwise.
+ */
+export interface ReseedWorldRequest {
+  confirmWorldName: string;
+  seed?: number;
+  radius?: number;
+}
+
+export interface ReseedWorldResponse {
+  world: AdminWorldResponse;
+  seed: number;
+  islandCount: number;
+  deletedSettlements: number;
+}
+
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminUserContracts.cs.
 
 export interface AdminUserResponse {

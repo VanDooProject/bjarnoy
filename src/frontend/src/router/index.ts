@@ -118,6 +118,14 @@ export const router = createRouter({
           component: () => import('../views/admin/AdminWorldsView.vue'),
         },
         {
+          // Issue #133: pick a seed, preview the map it generates full-screen,
+          // then commit it. Its own route rather than a panel in the worlds
+          // list because the preview wants the whole viewport.
+          path: 'worlds/:worldId/reseed',
+          name: 'admin-world-reseed',
+          component: () => import('../views/admin/AdminWorldReseedView.vue'),
+        },
+        {
           path: 'users',
           name: 'admin-users',
           component: () => import('../views/admin/AdminUsersView.vue'),
