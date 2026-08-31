@@ -16,6 +16,10 @@
 
     <!-- UserActivityService's per-user write-throttle. -->
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
+
+    <!-- FogMaskPngEncoder's RGBA8 -> PNG encode. -->
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
   </ItemGroup>
 
   <ItemGroup>
