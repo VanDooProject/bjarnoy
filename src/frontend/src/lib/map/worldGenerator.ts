@@ -158,17 +158,39 @@ const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
 };
 
 /**
+ * Coastal water (`coastalwatertile_*`) has its own plain image plus
+ * `variant000`-`variant001` (3) — a different art family from open
+ * `watertile_*` sea, which has no variants at all, so this can't live in
+ * `VARIANT_COUNTS` (keyed by `Terrain`, not by coastal-ness). Unlike the
+ * other variant families, its picks aren't uniform: the plain (no-suffix)
+ * image should dominate the coastline, with the two numbered variants only
+ * an occasional accent, so each entry here is a weight rather than an
+ * equal-odds slot — see `weightedIndex`.
+ */
+const COASTAL_WATER_VARIANT_WEIGHTS = [0.8, 0.1, 0.1];
+
+/** Picks an index from `weights` (assumed to sum to ~1) using a `[0, 1)` roll `h`. */
+function weightedIndex(h: number, weights: number[]): number {
+  let acc = 0;
+  for (let i = 0; i < weights.length; i++) {
+    acc += weights[i];
+    if (h < acc) return i;
+  }
+  return weights.length - 1;
+}
+
+/**
  * Seed-stable variant index for a hex, in `[0, N)` where `N` is however many
- * variants `VARIANT_COUNTS` knows the art pack has for that terrain (1 —
- * i.e. always variant 0 — for anything not listed). Capping the range this
- * way *is* the fallback: a terrain with fewer variants than the pack's
- * richest one never gets asked for a variant it doesn't have.
+ * variants the art pack has for that terrain (1 — i.e. always variant 0 —
+ * for anything not listed). Capping the range this way *is* the fallback: a
+ * terrain with fewer variants than the pack's richest one never gets asked
+ * for a variant it doesn't have.
  */
 export function variantAt(q: number, r: number, world: WorldSeed): number {
-  const terrain = terrainAt(q, r, world);
-  const count = VARIANT_COUNTS[terrain] ?? 1;
-  if (count <= 1) return 0;
   const h = hash2(q, r, world.seed + 31);
+  if (isCoastalWater(q, r, world)) return weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
+  const count = VARIANT_COUNTS[terrainAt(q, r, world)] ?? 1;
+  if (count <= 1) return 0;
   const index = Math.floor(h * count);
   return index >= count ? count - 1 : index;
 }

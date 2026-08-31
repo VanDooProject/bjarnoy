@@ -27,8 +27,8 @@
 // orientation/variant/level combination (100+ once every family is
 // covered), each asset *family* actually used — e.g. every `grasstile_*`
 // file — is pulled in with one `import.meta.glob`, scoped to that family's
-// filename prefix so unused families (fishing hut, magic tower, pumpkin
-// farm, rivers, ...) are still never bundled.
+// filename prefix so unused families (of which the pack has a few — no
+// lumberjack/quarry art exists, for instance) are still never bundled.
 import { Assets, Texture } from 'pixi.js';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import { TILE_ORIENTATIONS } from './types';
@@ -60,6 +60,12 @@ const ROOT_TERRAIN = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/{watertile,coastalwatertile,sandtile,mountaintile}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
+// Single composited image per orientation, no levels, no base/top split —
+// same shape as the plain root terrains above.
+const ROOT_BUILDING_PLAIN = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/{fishinghutbuilding,magictower}_*.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
 const SPLIT_TERRAIN_BASE = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/base/{grasstile,foresttile}_*_base.png',
   { eager: true, import: 'default' },
@@ -73,11 +79,11 @@ const ROOT_BUILDING_LEVELED = import.meta.glob(
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,farm_crop}_*_base.png',
+  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,farm_crop,farm_pumpkin}_*_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop}_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop,farm_pumpkin}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 // One glob per river shape (not a single `rivertile_*` prefix glob): the
@@ -217,9 +223,22 @@ const SOURCES = {
     hut: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
+    pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
+    // Unlike towerbuilding, the pack draws the fishing hut with a real
+    // per-orientation sprite (its dock visibly points a different way in
+    // each of the six files) rather than one image reused at every
+    // rotation — see `TerrainSampler.FishingHutOrientation` on the backend
+    // for why that orientation has to be computed per building instead of
+    // read off the coastal-water tile it stands on.
+    fishinghut: buildPlain(ROOT_BUILDING_PLAIN, 'fishinghutbuilding_'),
+    magictower: buildPlain(ROOT_BUILDING_PLAIN, 'magictower_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string>>>,
-  /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own. */
-  coastalBase: buildPlain(ROOT_TERRAIN, 'coastalwatertile_'),
+  /**
+   * Coastal water is a rendering variant of `sea`, not a `TextureKey` of its
+   * own — and the pack gives it 3 variants per orientation (plain +
+   * `variant000`/`variant001`), same shape as grass/forest's top layer.
+   */
+  coastalBase: buildIndexed(ROOT_TERRAIN, 'coastalwatertile_'),
   /** Tower isn't base/top split, so its level swap replaces the *base* texture. */
   baseIndexed: {
     tower: buildIndexed(ROOT_BUILDING_LEVELED, 'towerbuilding_'),
@@ -230,6 +249,7 @@ const SOURCES = {
     hut: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),
+    pumpkinfarm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_pumpkin_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   /**
    * The art pack's four river shapes — a `RiverTileShape.Mouth` (see
@@ -255,7 +275,7 @@ type RiverArtShape = 'straight' | 'bend' | 'spring' | 'confluence';
 
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
-  coastalBase: OrientationMap<Texture>;
+  coastalBase: OrientationMap<Texture[]>;
   baseIndexed: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
   top: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
   riverBase: Record<RiverArtShape, OrientationMap<Texture>>;
@@ -279,7 +299,7 @@ export function loadTileTextures(): Promise<TileTextures> {
   for (const [key, map] of Object.entries(SOURCES.base)) {
     aliasedBase[key as TextureKey] = mapOrientations(map, (o, url) => record(`base:${key}:${o}`, url));
   }
-  const aliasedCoastalBase = mapOrientations(SOURCES.coastalBase, (o, url) => record(`coastal:${o}`, url));
+  const aliasedCoastalBase = mapOrientationArrays(SOURCES.coastalBase, (o, i, url) => record(`coastal:${o}:${i}`, url));
   const aliasedBaseIndexed: Partial<Record<TextureKey, OrientationMap<string[]>>> = {};
   for (const [key, map] of Object.entries(SOURCES.baseIndexed)) {
     aliasedBaseIndexed[key as TextureKey] = mapOrientationArrays(map, (o, i, url) =>
@@ -306,7 +326,7 @@ export function loadTileTextures(): Promise<TileTextures> {
       for (const [key, map] of Object.entries(aliasedBase)) {
         base[key as TextureKey] = mapOrientations(map, (_o, alias) => resolve(alias));
       }
-      const coastalBase = mapOrientations(aliasedCoastalBase, (_o, alias) => resolve(alias));
+      const coastalBase = mapOrientationArrays(aliasedCoastalBase, (_o, _i, alias) => resolve(alias));
       const baseIndexed: TileTextures['baseIndexed'] = {};
       for (const [key, map] of Object.entries(aliasedBaseIndexed)) {
         baseIndexed[key as TextureKey] = mapOrientationArrays(map, (_o, _i, alias) => resolve(alias));
@@ -363,12 +383,17 @@ function clampIndex(index: number, length: number): number {
 /**
  * The base (ground) layer texture for a tile — coastal water overrides the
  * plain sea texture, and a leveled-but-unsplit building (tower) swaps its
- * whole base texture by level instead of layering a top.
+ * whole base texture by level instead of layering a top. A building on the
+ * water (the fishing hut) takes priority over both: its own texture
+ * (below, via `textureKeyFor`) replaces the water tile entirely rather than
+ * layering on top of it, since the pack draws the hut with its own base
+ * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
   const orientation = tile.orientation ?? 'SE';
-  if (tile.terrain === 'sea' && tile.isCoastalWater) {
-    return textures.coastalBase[orientation];
+  if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
+    const arr = textures.coastalBase[orientation];
+    return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
   const key = textureKeyFor(tile);
   const indexed = textures.baseIndexed[key];
@@ -376,7 +401,11 @@ export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
     const arr = indexed[orientation];
     return arr[clampIndex(tile.buildingLevel ?? 1, arr.length)];
   }
-  return textures.base[key]![orientation];
+  // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —
+  // see the module doc comment above) renders as its bare terrain instead of
+  // throwing; BuildingModal.vue's own `art` computed falls back the same way.
+  const base = textures.base[key] ?? textures.base[tile.terrain];
+  return base![orientation];
 }
 
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */

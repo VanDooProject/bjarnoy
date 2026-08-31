@@ -27,6 +27,9 @@ const BUILDING_LABELS: Record<string, string> = {
   farm: 'Crop farm',
   storagehouse: 'Storehouse',
   tower: 'Watchtower',
+  fishinghut: 'Fishing hut',
+  magictower: 'Magic tower',
+  pumpkinfarm: 'Pumpkin farm',
 };
 
 // No backend concept of "how many build slots does this settlement have"

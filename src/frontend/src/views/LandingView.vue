@@ -28,8 +28,15 @@ const router = useRouter();
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 const previewCoord = ref<AxialCoord | null>(null);
+// Live mode only: every unclaimed start position worth showing near the
+// preview centre. Founding now only ever lands on the exact hex clicked
+// (see `startPositionAt`, issue #96), so the player needs to see every
+// plot that's actually clickable, not just a single suggested one.
+const nearbyStartCoords = ref<AxialCoord[]>([]);
 const founding = ref(false);
 const showPrompt = ref(false);
+const invalidClickMessage = ref<string | null>(null);
+let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 
 onMounted(async () => {
   await world.bootstrapLiveWorld();
@@ -41,24 +48,22 @@ onMounted(async () => {
   // Deterministic starter plot: same island every time, near the world's
   // own origin — not chosen by panning a world map (there is none here).
   //
-  // Live mode must highlight the exact hex foundStartingSettlementLive will
-  // actually found on (nearestStartPosition), not just any nearby land tile
-  // (model.findLandfall) — those are two different coordinate systems (an
-  // arbitrary walkable hex vs. one of the island's precomputed start
-  // positions) that usually don't agree. Previewing the wrong one used to
-  // mean the settlement "landed" somewhere else the instant it was founded,
-  // which then made the very next build click fail as outside its borders
-  // — the player was still clicking near where the preview told them their
-  // village was, not where it actually ended up. Demo mode has no start
-  // positions at all, so it keeps using findLandfall, which
-  // foundStartingSettlement (demo's own founder) also seeds `near` from —
-  // the two already agree there.
+  // Demo mode has no start positions at all, so it previews/founds via
+  // `findLandfall`, an arbitrary walkable hex — the two already agree there.
+  // Live mode previews the nearest start position purely to centre the
+  // camera; `nearbyStartCoords` below is what's actually clickable.
   previewCoord.value = DEMO_MODE
     ? (world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 })
     : (world.nearestStartPosition({ q: 0, r: 0 })?.at ??
       world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 });
+  if (!DEMO_MODE) {
+    nearbyStartCoords.value = world.nearbyStartPositions({ q: 0, r: 0 }).map((pos) => pos.at);
+  }
 });
-onUnmounted(() => world.stopHudSync());
+onUnmounted(() => {
+  world.stopHudSync();
+  clearTimeout(invalidClickTimer);
+});
 
 // Admin-set gates (issue #27): a world that hasn't started yet, or has had
 // joins closed, still renders (existing players restore fine) but refuses a
@@ -74,6 +79,9 @@ const joinBlockedMessage = computed(() => {
   }
   if (world.worldJoinableReason === 'JoinsClosed') {
     return 'This world is no longer accepting new players.';
+  }
+  if (world.worldJoinableReason === 'NoWorldYet') {
+    return 'No world has been created yet — check back soon.';
   }
   return 'This world is not accepting new players right now.';
 });
@@ -105,6 +113,16 @@ const modalOwnerLabel = computed(() => {
 function onHexClick(coord: AxialCoord, tile: Tile) {
   if (!player.hasFoundedSettlement) {
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
+    // Live mode only founds on an exact, unclaimed start position (see
+    // `startPositionAt`, issue #96) — a click elsewhere used to silently
+    // found on the nearest one instead; now it just tells the player to
+    // pick one of the highlighted plots.
+    if (!DEMO_MODE && !world.startPositionAt(coord)) {
+      clearTimeout(invalidClickTimer);
+      invalidClickMessage.value = "You can't found there — pick one of the glowing plots.";
+      invalidClickTimer = setTimeout(() => (invalidClickMessage.value = null), 2500);
+      return;
+    }
     void foundHere(coord);
     return;
   }
@@ -133,6 +151,7 @@ async function foundHere(coord: AxialCoord) {
       settlementId: settlement.id,
       previewCenter: undefined,
       highlightCoord: undefined,
+      highlightCoords: undefined,
       screenBiasX: 0,
     });
   } catch (err) {
@@ -211,7 +230,10 @@ function closePrompt() {
       :player-id="player.id"
       :settlement-id="player.hasFoundedSettlement ? (world.selectedSettlementId ?? undefined) : undefined"
       :preview-center="player.hasFoundedSettlement ? undefined : (previewCoord ?? undefined)"
-      :highlight-coord="player.hasFoundedSettlement ? undefined : (previewCoord ?? undefined)"
+      :highlight-coord="
+        player.hasFoundedSettlement || !DEMO_MODE ? undefined : (previewCoord ?? undefined)
+      "
+      :highlight-coords="player.hasFoundedSettlement || DEMO_MODE ? undefined : nearbyStartCoords"
       :screen-bias-x="0.16"
       hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
@@ -239,6 +261,7 @@ function closePrompt() {
         Nobody asks your name until you have something worth naming.
       </p>
       <p v-if="founding" class="status">Making landfall…</p>
+      <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
 
     <div v-if="!joinBlocked" class="tray panel">

@@ -6,6 +6,16 @@ import { useRouter } from 'vue-router';
 const world = useWorldStore();
 const router = useRouter();
 
+const props = defineProps<{
+  // Issue #16 "ring menu": this panel's own "← World map" button sits below
+  // the ring's full-screen backdrop (z-index 30 vs. this panel's 10), so
+  // it's already unreachable while a ring is open — same layering the
+  // header nav bug came from. Rather than raise it above the backdrop like
+  // the header (this panel isn't primary nav), it's shown visibly disabled
+  // instead, so it doesn't look clickable when it isn't.
+  ringOpen?: boolean;
+}>();
+
 const settlement = computed(() =>
   world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined,
 );
@@ -15,13 +25,13 @@ const claimedHexes = computed(() =>
 </script>
 
 <template>
-  <div v-if="settlement" class="realm-panel panel">
+  <div v-if="settlement" class="realm-panel panel" :class="{ disabled: props.ringOpen }">
     <div class="title">
       <span class="name">{{ settlement.name }}</span>
       <span class="level pill">Lv {{ settlement.level }}</span>
     </div>
     <p class="sub">Longhouse claims a border-{{ claimedHexes }} realm</p>
-    <button class="back" @click="router.push('/world')">← World map</button>
+    <button class="back" :disabled="props.ringOpen" @click="router.push('/world')">← World map</button>
   </div>
 </template>
 
@@ -33,6 +43,16 @@ const claimedHexes = computed(() =>
   z-index: 10;
   padding: 14px 18px;
   min-width: 220px;
+  transition: opacity 0.15s ease;
+}
+.realm-panel.disabled {
+  opacity: 0.35;
+  filter: grayscale(0.7);
+  pointer-events: none;
+}
+.realm-panel.disabled .level {
+  background: var(--muted);
+  color: #1a1a1a;
 }
 .title {
   display: flex;

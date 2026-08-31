@@ -33,7 +33,25 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
+builder.Services.AddScoped<TradeService>();
+builder.Services.AddScoped<ArmyService>();
+builder.Services.AddScoped<BattleReportService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<GuildService>();
+builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<ReportService>();
+builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<LeaderboardService>();
+
+// The per-user write-throttle UserActivityService keeps in IMemoryCache.
+builder.Services.AddMemoryCache();
+builder.Services.AddOptions<UserActivityOptions>()
+    .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
+builder.Services.AddScoped<UserActivityQueryService>();
+builder.Services.AddScoped<UserActivityRetentionService>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -110,6 +128,14 @@ if (migrationCommand == MigrationCommandKind.None)
     // trigger) — the migrator never serves requests, so it has no business
     // running this. See EndbossTriggerHostedService.
     builder.Services.AddHostedService<EndbossTriggerHostedService>();
+
+    // The leaderboard/weekly-stats aggregation job (issue #43) — same "the
+    // migrator never serves requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<WeeklyAggregationHostedService>();
+
+    // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
+    // migrator never serves requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<UserActivityRetentionHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
@@ -141,6 +167,19 @@ if (databaseOptions.MigrateOnStartup)
 {
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<DatabaseMigrator>().MigrateAsync();
+
+    // Seeds one default world if the server has none at all — only reachable
+    // here, where the schema is guaranteed to actually exist yet (an app
+    // instance that does *not* migrate itself — MigrateOnStartup false, e.g.
+    // every test host in this repo, or a deployment using the separate
+    // migrator container/CLI — cannot assume that at this point in startup).
+    // Unconditional otherwise, unlike the admin bootstrap below: a client no
+    // longer creates a world itself (see
+    // WorldService.SeedDefaultWorldIfNoneAsync), so an empty server with
+    // nothing to join is never a state anyone wants.
+    var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
+    var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await worldService.SeedDefaultWorldIfNoneAsync("Kettil Sea", worldSeedLogger);
 }
 
 // Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD
@@ -178,7 +217,19 @@ app.MapDefaultEndpoints();
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
+app.MapGuildEndpoints(versionSet);
+app.MapTradeEndpoints(versionSet);
+app.MapProfileEndpoints(versionSet);
+app.MapLeaderboardEndpoints(versionSet);
+app.MapArmyEndpoints(versionSet);
+app.MapActivityEndpoints(versionSet);
+app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
+app.MapAdminUserEndpoints(versionSet);
+app.MapAdminSettlementEndpoints(versionSet);
+app.MapChatEndpoints(versionSet);
+app.MapAdminReportEndpoints(versionSet);
+app.MapAdminActivityEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot

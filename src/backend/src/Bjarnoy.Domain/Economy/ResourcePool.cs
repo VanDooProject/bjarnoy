@@ -29,6 +29,14 @@ namespace Bjarnoy.Domain.Economy;
 /// Here a single <c>now</c> is threaded through. And accrual is clamped to
 /// capacity but never below zero.
 /// </para>
+/// <para>
+/// <see cref="RatePerHour"/> may be net-negative: a garrison's upkeep (issue
+/// #40 phase 1) is folded into the settlement's food rate as a subtraction
+/// rather than modelled as a separate drain, so a settlement that is not
+/// producing enough food to feed its own units simply has a negative food
+/// rate. <see cref="Capacity"/> still may not be negative, and the stock
+/// itself is still floored at zero either way — see <see cref="At"/>.
+/// </para>
 /// </remarks>
 public readonly record struct ResourcePool
 {
@@ -67,13 +75,6 @@ public readonly record struct ResourcePool
             throw new ArgumentException("Capacity cannot be negative.", nameof(capacity));
         }
 
-        if (!ratePerHour.IsNonNegative)
-        {
-            throw new ArgumentException(
-                "Production rates cannot be negative; upkeep is modelled as a lower rate, not a drain.",
-                nameof(ratePerHour));
-        }
-
         return new ResourcePool(
             stock.ClampToZero().ClampTo(capacity), ratePerHour, capacity, settledAt);
     }
@@ -94,7 +95,11 @@ public readonly record struct ResourcePool
             return Stock;
         }
 
-        return (Stock + (RatePerHour * hours)).ClampTo(Capacity);
+        // Rate can be net-negative once upkeep outweighs production (see
+        // WithRate), so accrual must clamp the lower bound too, not just the
+        // upper — a garrison eating more food than it makes floors at zero
+        // rather than going into debt.
+        return (Stock + (RatePerHour * hours)).ClampToZero().ClampTo(Capacity);
     }
 
     /// <summary>
@@ -143,20 +148,37 @@ public readonly record struct ResourcePool
     }
 
     /// <summary>
-    /// Changes production and/or capacity — what finishing a building does.
+    /// Applies a signed delta — an admin grant or removal — settling to
+    /// <paramref name="now"/> first and clamping the result to
+    /// <c>[0, Capacity]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="Deposit"/>, <paramref name="delta"/> may be negative:
+    /// an admin correcting a settlement's stock needs to be able to take
+    /// resources away, not just add them. The result still cannot go negative
+    /// or above capacity — a removal larger than the current stock simply
+    /// floors at zero rather than going into debt.
+    /// </remarks>
+    public ResourcePool Adjust(ResourceAmounts delta, DateTimeOffset now)
+    {
+        var settled = SettledTo(now);
+        return settled with { Stock = (settled.Stock + delta).ClampToZero().ClampTo(Capacity) };
+    }
+
+    /// <summary>
+    /// Changes production and/or capacity — what finishing a building does,
+    /// or what a garrison's upkeep changing (a unit trained or starved) does
+    /// to the net rate.
     /// </summary>
     /// <remarks>
     /// Settling first is essential: the hours already elapsed must accrue at the
     /// <em>old</em> rate, or a rate increase would retroactively apply to time
-    /// the new building did not exist for.
+    /// the new building did not exist for. <paramref name="ratePerHour"/> may be
+    /// negative — see the type-level remarks — only <paramref name="capacity"/>
+    /// is still required to be non-negative.
     /// </remarks>
     public ResourcePool WithRate(ResourceAmounts ratePerHour, ResourceAmounts capacity, DateTimeOffset now)
     {
-        if (!ratePerHour.IsNonNegative)
-        {
-            throw new ArgumentException("Production rates cannot be negative.", nameof(ratePerHour));
-        }
-
         if (!capacity.IsNonNegative)
         {
             throw new ArgumentException("Capacity cannot be negative.", nameof(capacity));

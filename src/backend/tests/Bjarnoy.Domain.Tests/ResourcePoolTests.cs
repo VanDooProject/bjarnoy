@@ -208,6 +208,48 @@ public class ResourcePoolTests
     }
 
     [Fact]
+    public void Adjust_settles_first_so_no_production_is_lost()
+    {
+        var pool = Pool(stock: 100, rate: 60, capacity: 10_000);
+
+        // 100 + 60 accrued over the hour, then a +20 admin grant.
+        var after = pool.Adjust(ResourceAmounts.Uniform(20), T0.AddHours(1));
+
+        Assert.Equal(180, after.Stock.Wood, 6);
+        Assert.Equal(T0.AddHours(1), after.SettledAt);
+    }
+
+    [Fact]
+    public void Adjust_accepts_a_negative_delta_to_remove_resources()
+    {
+        var pool = Pool(stock: 100, rate: 0);
+
+        var after = pool.Adjust(ResourceAmounts.Uniform(-40), T0);
+
+        Assert.Equal(60, after.Stock.Wood, 6);
+    }
+
+    [Fact]
+    public void Adjust_floors_a_removal_larger_than_the_current_stock_at_zero()
+    {
+        var pool = Pool(stock: 30, rate: 0);
+
+        var after = pool.Adjust(ResourceAmounts.Uniform(-1000), T0);
+
+        Assert.Equal(0, after.Stock.Wood, 6);
+    }
+
+    [Fact]
+    public void Adjust_clamps_a_grant_to_capacity()
+    {
+        var pool = Pool(stock: 100, rate: 0, capacity: 150);
+
+        var after = pool.Adjust(ResourceAmounts.Uniform(1000), T0);
+
+        Assert.Equal(150, after.Stock.Wood, 6);
+    }
+
+    [Fact]
     public void Raising_the_rate_does_not_apply_retroactively()
     {
         var pool = Pool(stock: 0, rate: 10, capacity: 100_000);
@@ -244,12 +286,51 @@ public class ResourcePoolTests
     }
 
     [Fact]
-    public void Create_rejects_a_negative_rate_or_capacity()
+    public void Create_rejects_a_negative_capacity()
     {
         Assert.Throws<ArgumentException>(() => ResourcePool.Create(
-            ResourceAmounts.Zero, ResourceAmounts.Uniform(-1), ResourceAmounts.Uniform(10), T0));
-        Assert.Throws<ArgumentException>(() => ResourcePool.Create(
             ResourceAmounts.Zero, ResourceAmounts.Zero, ResourceAmounts.Uniform(-10), T0));
+    }
+
+    [Fact]
+    public void Create_allows_a_negative_rate_since_upkeep_can_outweigh_production()
+    {
+        // Issue #40 phase 1: a garrison's food upkeep is folded into the net
+        // rate rather than modelled as a separate drain, so the rate alone can
+        // go negative even though the stock itself never does.
+        var pool = ResourcePool.Create(
+            ResourceAmounts.Uniform(100),
+            new ResourceAmounts(Wood: 0, Stone: 0, Food: -5, Iron: 0),
+            ResourceAmounts.Uniform(1000),
+            T0);
+
+        Assert.Equal(-5, pool.RatePerHour.Food, 6);
+    }
+
+    [Fact]
+    public void A_net_negative_rate_never_takes_the_stock_below_zero()
+    {
+        var pool = ResourcePool.Create(
+            new ResourceAmounts(Wood: 0, Stone: 0, Food: 10, Iron: 0),
+            new ResourceAmounts(Wood: 0, Stone: 0, Food: -5, Iron: 0),
+            ResourceAmounts.Uniform(1000),
+            T0);
+
+        // At -5/h, food would go negative after two hours if unclamped.
+        Assert.Equal(0, pool.At(T0.AddHours(5)).Food, 6);
+    }
+
+    [Fact]
+    public void WithRate_allows_a_negative_net_rate_but_still_rejects_a_negative_capacity()
+    {
+        var pool = Pool(stock: 100, rate: 10);
+
+        var upkeepHeavy = pool.WithRate(
+            new ResourceAmounts(Wood: 0, Stone: 0, Food: -3, Iron: 0), ResourceAmounts.Uniform(1000), T0);
+        Assert.Equal(-3, upkeepHeavy.RatePerHour.Food, 6);
+
+        Assert.Throws<ArgumentException>(
+            () => pool.WithRate(ResourceAmounts.Zero, ResourceAmounts.Uniform(-1), T0));
     }
 
     [Fact]

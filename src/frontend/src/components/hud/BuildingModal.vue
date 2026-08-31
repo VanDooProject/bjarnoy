@@ -6,15 +6,25 @@
 // name/level/description/action on the right.
 import { computed } from 'vue';
 import type { Tile } from '../../lib/map/types';
+import type { ResourceLine } from '../../api/types';
+import { useWorldStore } from '../../stores/world';
+import {
+  BOOST_TERRAIN,
+  buildingStatsFor,
+  buildingUpgradeCost,
+  isNearAnyOf,
+  matchingNeighbourCount,
+  type BuildingKind,
+} from '../../lib/map/buildingEconomy';
 
-import hutUrl from '../../../vendor/bg_assets_hextile/hextiles/vikinghut_SE_level000.png';
-import farmUrl from '../../../vendor/bg_assets_hextile/hextiles/farm_crop_SE_level001.png';
-import towerUrl from '../../../vendor/bg_assets_hextile/hextiles/towerbuilding_SE_level000.png';
-import longhouseUrl from '../../../vendor/bg_assets_hextile/hextiles/vikinghut_SE_level004.png';
+const world = useWorldStore();
+
 import grassUrl from '../../../vendor/bg_assets_hextile/hextiles/grasstile_SE.png';
 import forestUrl from '../../../vendor/bg_assets_hextile/hextiles/foresttile_SE.png';
 import mountainUrl from '../../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
 import sandUrl from '../../../vendor/bg_assets_hextile/hextiles/sandtile_SE.png';
+import fishinghutUrl from '../../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
+import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 
 const props = defineProps<{
   tile: Tile;
@@ -24,11 +34,48 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
 
-const ART: Record<string, string> = {
-  hut: hutUrl,
-  farm: farmUrl,
-  tower: towerUrl,
-  longhouse: longhouseUrl,
+// Each building's art family ships one composited (base+props already
+// merged) image per level, e.g. `vikinghut_SE_level000.png` ..
+// `vikinghut_SE_level004.png` — always the `_SE` rotation, matching the
+// fixed camera angle this modal has always rendered at. Indexed by level
+// number so the art actually changes as a building is upgraded, instead of
+// pinning one hardcoded level per building type (the previous bug: every
+// building — longhouse included, which reused hut art — always showed
+// whichever single level had been hand-picked as its import).
+const BUILDING_ART_FAMILIES: Record<string, string> = {
+  hut: 'vikinghut',
+  longhouse: 'vikinghut',
+  farm: 'farm_crop',
+  tower: 'towerbuilding',
+  pumpkinfarm: 'farm_pumpkin',
+};
+
+// fishinghut/magictower have no level suffix at all — a single composited
+// image per building, unlike the families above.
+const SINGLE_LEVEL_ART: Record<string, string> = {
+  fishinghut: fishinghutUrl,
+  magictower: magictowerUrl,
+};
+
+const LEVEL_RE = /_level(\d{3})\.png$/;
+const buildingArtModules = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,farm_crop,towerbuilding,farm_pumpkin}_SE_level*.png',
+  { eager: true, import: 'default' },
+) as Record<string, string>;
+
+const artByPrefix: Record<string, string[]> = {};
+for (const [path, url] of Object.entries(buildingArtModules)) {
+  const level = LEVEL_RE.exec(path);
+  if (!level) continue;
+  const prefix = path.slice(path.lastIndexOf('/') + 1, path.indexOf('_SE_level'));
+  (artByPrefix[prefix] ??= [])[Number(level[1])] = url;
+}
+const BUILDING_ART_BY_LEVEL: Record<string, string[]> = {};
+for (const [key, prefix] of Object.entries(BUILDING_ART_FAMILIES)) {
+  BUILDING_ART_BY_LEVEL[key] = artByPrefix[prefix] ?? [];
+}
+
+const TERRAIN_ART: Record<string, string> = {
   grass: grassUrl,
   forest: forestUrl,
   mountain: mountainUrl,
@@ -40,6 +87,11 @@ const BUILDING_NAMES: Record<string, string> = {
   farm: 'Farm',
   tower: 'Watchtower',
   longhouse: 'Longhouse',
+  fishinghut: 'Fishing Hut',
+  magictower: 'Magic Tower',
+  pumpkinfarm: 'Pumpkin Farm',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
 };
 
 const TERRAIN_NAMES: Record<string, string> = {
@@ -50,8 +102,27 @@ const TERRAIN_NAMES: Record<string, string> = {
   sea: 'Open water',
 };
 
-const art = computed(() => ART[props.tile.buildingType ?? props.tile.terrain] ?? grassUrl);
-const buildable = computed(() => props.tile.terrain !== 'sea');
+/** Same fallback as `textures.ts`'s `clampIndex`: a level beyond this building's art rungs renders at the richest one it has. */
+function artForLevel(levels: string[], level: number): string {
+  const clamped = Math.min(Math.max(level, 0), levels.length - 1);
+  return levels[clamped];
+}
+
+const art = computed(() => {
+  const { buildingType, buildingLevel, terrain } = props.tile;
+  if (buildingType) {
+    if (SINGLE_LEVEL_ART[buildingType]) return SINGLE_LEVEL_ART[buildingType];
+    const levels = BUILDING_ART_BY_LEVEL[buildingType];
+    if (levels?.length) return artForLevel(levels, buildingLevel ?? 1);
+  }
+  return TERRAIN_ART[terrain] ?? grassUrl;
+});
+// Open water is otherwise unbuildable, but a fishing hut already standing
+// on a coastal-water tile still has to be inspectable/upgradeable here —
+// this only ever sees such a tile with a building on it already (nothing in
+// this modal's own `build` flow offers water as a target), so it can't be
+// mistaken for turning open water buildable from empty.
+const buildable = computed(() => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut');
 
 const name = computed(() =>
   props.tile.buildingType ? BUILDING_NAMES[props.tile.buildingType] : TERRAIN_NAMES[props.tile.terrain],
@@ -61,6 +132,44 @@ const sub = computed(() => {
   return props.ownerLabel ?? 'Wild ruin';
 });
 const level = computed(() => props.tile.buildingLevel ?? 0);
+
+// Same terrain-adjacency helpers hoverInfoFor/buildingStats uses in
+// HexMapRenderer.ts, so the modal's "current stats" match whatever the hover
+// tooltip just showed.
+const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
+const nearWater = computed(() => isNearAnyOf(props.tile, ['sea', 'sand'], getTile));
+const matchingNeighbours = computed(() => {
+  const boostTerrain = props.tile.buildingType ? BOOST_TERRAIN[props.tile.buildingType] : undefined;
+  return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
+});
+
+// The existing building's current-level output/modifier/workers — undefined
+// (and hidden) for an empty tile, since there's nothing standing yet.
+const currentStats = computed(() =>
+  props.tile.buildingType
+    ? buildingStatsFor(props.tile.buildingType, level.value, nearWater.value, matchingNeighbours.value)
+    : undefined,
+);
+
+// "hut" is the fixed default a fresh build here places (see
+// SettlementView.vue's build()); an existing building instead costs its own
+// next level.
+const upgradeType = computed<BuildingKind>(() => props.tile.buildingType ?? 'hut');
+const upgradeLevel = computed(() => level.value + 1);
+const upgradeCost = computed<ResourceLine>(() => buildingUpgradeCost(upgradeType.value, upgradeLevel.value));
+
+const RESOURCE_LABELS: Record<keyof ResourceLine, string> = {
+  wood: 'Wood',
+  stone: 'Stone',
+  food: 'Food',
+  iron: 'Iron',
+};
+const costLine = computed(() =>
+  (Object.keys(upgradeCost.value) as (keyof ResourceLine)[])
+    .filter((key) => upgradeCost.value[key] > 0)
+    .map((key) => `${upgradeCost.value[key]} ${RESOURCE_LABELS[key]}`)
+    .join(' · '),
+);
 </script>
 
 <template>
@@ -92,7 +201,23 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
           }}
         </p>
 
+        <dl v-if="currentStats && (currentStats.output || currentStats.modifier || currentStats.workers)" class="stats">
+          <template v-if="currentStats.output">
+            <dt>Output</dt>
+            <dd>{{ currentStats.output }}</dd>
+          </template>
+          <template v-if="currentStats.modifier">
+            <dt>Modifier</dt>
+            <dd>{{ currentStats.modifier }}</dd>
+          </template>
+          <template v-if="currentStats.workers">
+            <dt>Workers</dt>
+            <dd>{{ currentStats.workers }}</dd>
+          </template>
+        </dl>
+
         <div v-if="mine && buildable" class="actions">
+          <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
           <button v-if="tile.buildingType" class="primary" :disabled="busy" @click="emit('upgrade')">
             {{ busy ? 'Queuing…' : `Upgrade to level ${level + 1}` }}
           </button>
@@ -186,8 +311,31 @@ const level = computed(() => props.tile.buildingLevel ?? 0);
   color: var(--muted);
   max-width: 380px;
 }
+.stats {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 14px;
+  row-gap: 4px;
+  font-size: 13px;
+  max-width: 380px;
+}
+.stats dt {
+  color: var(--muted);
+}
+.stats dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+}
 .actions {
   margin-top: 22px;
+}
+.cost {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--gold);
 }
 .primary {
   padding: 12px 22px;

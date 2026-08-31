@@ -131,9 +131,19 @@ test.describe('settlement view interactions', () => {
     // "Build"'s own list starts with Hut too), so hovering the first
     // category bubble and clicking the first building bubble always reaches
     // a real, placeable building regardless of which terrain was picked.
-    const categoryBubble = page.locator('.ring-bubble').first();
+    // Issue #16 follow-up "concentric rings": the root ring's own bubbles
+    // are still on screen at this point (a plain `.ring-bubble` locator
+    // would grab one of those instead) — the category ring is specifically
+    // the one *without* its own backdrop (see RingMenu's `backdrop` prop,
+    // false for every ring but the innermost), so scope through that rather
+    // than by label text, which the "other"-terrain category can share
+    // with the root "Build" bubble ("Build" is reused as both).
+    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
     await expect(categoryBubble).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+    // Issue #16 follow-up "concentric rings": drilling into the category
+    // ring opens a new, wider ring around the same tile rather than
+    // replacing the root ring — "Details" (a root-ring action) stays put.
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(1);
     const categoryBox = (await categoryBubble.boundingBox())!;
     await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
       steps: 6,
@@ -144,6 +154,74 @@ test.describe('settlement view interactions', () => {
     await hutBubble.click();
 
     await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
+  });
+
+  test('placing a lumberjack on a forest hex is a real, terrain-gated building', async ({ page }) => {
+    // Same reasoning as the other tests here: foundSettlement() plus driving
+    // a real click through the render runs close to the global 45s budget.
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    // Lumberjack/Quarry only recently gained frontend support (they were
+    // previously silently dropped by WorldModel.applyServerSnapshot's
+    // RENDERABLE_TYPES whitelist, and had no entry in Tile['buildingType']
+    // at all) — this test is the regression guard for that, so it
+    // deliberately targets a Forest hex rather than accepting whatever the
+    // first buildable hex happens to be (the other placement test's job).
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'forest' && !tile.buildingType) {
+            const screen = win.__settlementRenderer().hexCenterScreen(at);
+            return { at, screen };
+          }
+        }
+      }
+      throw new Error('no empty forest hex found inside the realm — pick a different demo seed');
+    });
+
+    const getBuildingTypeAtTarget = () =>
+      page.evaluate((coord) => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        return world.model.getTile(coord.q, coord.r).buildingType as string | undefined;
+      }, target.at);
+    expect(await getBuildingTypeAtTarget()).toBeUndefined();
+
+    await page.mouse.click(box.x + target.screen.x, box.y + target.screen.y);
+
+    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
+    await expect(buildBubble).toBeVisible();
+    const buildBox = (await buildBubble.boundingBox())!;
+    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+
+    // Forest is non-grass terrain, so it gets the single "Build" category
+    // (BUILD_CATEGORIES' `other` bucket) rather than grass's three-category
+    // spread — see SettlementView's categoriesFor.
+    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
+    await expect(categoryBubble).toBeVisible();
+    const categoryBox = (await categoryBubble.boundingBox())!;
+    await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
+      steps: 6,
+    });
+
+    const lumberjackBubble = page.locator('.ring-bubble', { hasText: 'Lumberjack' }).first();
+    await expect(lumberjackBubble).toBeVisible();
+    await lumberjackBubble.click();
+
+    await expect.poll(getBuildingTypeAtTarget, { timeout: 5_000 }).toBe('lumberjack');
   });
 
   test('panning the settlement view does not error', async ({ page }) => {

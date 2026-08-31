@@ -27,11 +27,20 @@ public enum BuildingType
     /// <summary>Food, on grass.</summary>
     Farm = 3,
 
-    /// <summary>Storage capacity. Placed anywhere buildable.</summary>
+    /// <summary>Storage capacity. Placed on grass.</summary>
     StorageHouse = 4,
 
-    /// <summary>Extends the claimed border. Placed on a border hex.</summary>
+    /// <summary>Extends the claimed border. Placed on grass.</summary>
     Tower = 5,
+
+    /// <summary>Food, from shallow (coastal) water rather than land.</summary>
+    FishingHut = 6,
+
+    /// <summary>Iron, from arcane means. Placed on grass only.</summary>
+    MagicTower = 7,
+
+    /// <summary>Food, on grass. A second farm variant (issue #24).</summary>
+    PumpkinFarm = 8,
 }
 
 public static class BuildingTypeExtensions
@@ -44,6 +53,9 @@ public static class BuildingTypeExtensions
         BuildingType.Farm => "farm",
         BuildingType.StorageHouse => "storagehouse",
         BuildingType.Tower => "tower",
+        BuildingType.FishingHut => "fishinghut",
+        BuildingType.MagicTower => "magictower",
+        BuildingType.PumpkinFarm => "pumpkinfarm",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

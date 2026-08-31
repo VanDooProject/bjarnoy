@@ -51,6 +51,9 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { Settlement, Terrain, Tile } from './types';
+import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
+import { lerpPoint, routeProgressAt } from '../units/armyProgress';
+import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -67,6 +70,10 @@ export type RenderMode = 'world' | 'settlement';
 
 const GOLD = 0xffc55c;
 const RIVAL = 0xe2705f;
+// Distinct from GOLD (own settlements) / RIVAL (rival settlements) — trade
+// carts belong to neither ownership axis, so they get their own color
+// rather than borrowing one that would otherwise read as an owner cue.
+const CART_COLOR = 0x8fd19e;
 const FOG_SCOUTED = 0x0b1116;
 // zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
 // the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
@@ -306,6 +313,13 @@ export interface HexMapRendererOptions {
    */
   highlightCoord?: AxialCoord;
   /**
+   * Multiple hexes to keep highlighted every frame alongside
+   * `highlightCoord` — the landing page's live-mode start plots, since
+   * founding only ever lands exactly where clicked (issue #96) and there can
+   * be several unclaimed start positions worth showing at once.
+   */
+  highlightCoords?: AxialCoord[];
+  /**
    * Fraction of the viewport width to shift the camera's subject to the
    * right of screen centre (0 = centred) — the landing page composes the
    * village against hero text on the left, so the island itself needs to
@@ -332,6 +346,98 @@ export interface HexMapRendererOptions {
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
+  /**
+   * Issue #93: a draft waypoint pin (`ArmyOverlayData.draftWaypoints`) was
+   * dragged onto a different hex. Fired continuously while dragging — once
+   * per hex the pointer crosses, not once per pointer move — so the route
+   * redraws under the finger; the store action behind it
+   * (`world.moveWaypoint`) is idempotent for the same coordinate.
+   */
+  onWaypointMove?: (index: number, coord: AxialCoord) => void;
+}
+
+/**
+ * Issue #94: the active leg an in-transit army is travelling, as the renderer
+ * needs it — enough to place the marker at a fractional point between two hex
+ * centres on every frame (see `routeProgressAt`), not just on the last hex
+ * the backend says it reached.
+ *
+ * Everything here is frozen at dispatch server-side, so it stays valid
+ * between polls and a `refreshArmies()` that returns the same leg produces
+ * the exact same interpolation — no jump on re-sync (see `resolveArmyPoint`).
+ */
+export interface ArmyOverlayMovement {
+  /** The active leg's route, start hex included (`MovementResponse.path`, or `returnPath` while returning). */
+  path: AxialCoord[];
+  /** Game-hours to reach each hex of `path` — `MovementResponse.cumulativeHours`. Empty falls back to uniform legs. */
+  cumulativeHours: number[];
+  departedAtMs: number;
+  arrivesAtMs: number;
+}
+
+/**
+ * Issue #40 phase 2: one army's marker on the settlement map — its current
+ * position, and whether it's the one selected in `ArmyPanel.vue` (drawn
+ * bigger and gold rather than the muted blue every other army marker gets,
+ * same "selected reads as gold" convention as the settlement badge/labels
+ * above).
+ */
+export interface ArmyOverlayMarker {
+  id: string;
+  /**
+   * The authoritative hex the backend reports (`ArmyResponse.position`, the
+   * last hex actually reached): where a stationary (`atHome`/`supporting`)
+   * army stands, and the fallback for an in-transit one whose `movement` is
+   * missing or unusable.
+   */
+  position: AxialCoord;
+  selected: boolean;
+  returning: boolean;
+  /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */
+  movement?: ArmyOverlayMovement;
+}
+
+/** Issue #93: what an army is being sent *at*, marked on the target settlement's own hex. */
+export interface ArmyOverlayTarget {
+  coord: AxialCoord;
+  /** `attack` draws crossed sword and axe; `support` a shield. */
+  kind: 'attack' | 'support';
+}
+
+/**
+ * Everything `setArmyOverlay` needs to draw on the settlement map: every
+ * dispatched army's live marker, the selected army's full route (waypoints +
+ * computed path, both ends included — mirrors `MovementResponse.Path`), an
+ * in-progress dispatch's waypoint pins/line (before anything has actually
+ * been sent to the backend), and any attack/support target settlement's hex.
+ * All are independent — armies always show their own marker; `route` only has
+ * content while an army is selected; `draftWaypoints` only has content while
+ * a dispatch is being composed.
+ */
+export interface ArmyOverlayData {
+  armies: ArmyOverlayMarker[];
+  route: AxialCoord[];
+  draftWaypoints: AxialCoord[];
+  /** Issue #93: attack/support target indicators. Optional — an empty list draws nothing. */
+  targets?: ArmyOverlayTarget[];
+}
+
+/**
+ * What `drawArmyOverlay` actually placed on screen on its most recent frame
+ * — read back via `lastArmyOverlayFrame()`.
+ *
+ * Not a test-only hook (nothing in the draw path branches on whether anyone
+ * reads it): it is the same "ask the renderer where it really put things"
+ * accessor `hexCenterScreen` already is, and it is the only honest way to
+ * assert on a marker that lives inside a WebGL canvas — in particular that an
+ * in-transit army sits *between* two hex centres rather than snapped to one.
+ */
+export interface ArmyOverlayFrame {
+  armies: { id: string; x: number; y: number; interpolated: boolean }[];
+  waypoints: { index: number; x: number; y: number }[];
+  targets: { kind: ArmyOverlayTarget['kind']; x: number; y: number }[];
+  /** Whether the SVG marker icon set finished loading — false means the fallback shapes are being drawn. */
+  iconsReady: boolean;
 }
 
 /**
@@ -370,6 +476,11 @@ const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   hut: 'Hut',
   farm: 'Farm',
   tower: 'Watchtower',
+  fishinghut: 'Fishing Hut',
+  magictower: 'Magic Tower',
+  pumpkinfarm: 'Pumpkin Farm',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
 };
 
 const TERRAIN_LABELS: Record<Terrain, string> = {
@@ -807,6 +918,28 @@ const DRAG_CLICK_SLOP_PX = 6;
 // enough that the settled view sharpens up immediately to the eye.
 const WHEEL_IDLE_MS = 180;
 
+// --- Army/route overlay (issues #40 phase 2, #93, #94) ---
+/** The selected army's own route colour — muted blue, distinct from the gold a draft route gets. */
+const ROUTE_COLOR = 0x5ab0e6;
+/** An army already turned around and heading home. */
+const RETURNING_COLOR = 0x8fa3af;
+/** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
+const ATTACK_COLOR = 0xe2705f;
+/** Support target indicator (shield) — friendly, so it borrows neither the attack red nor the draft gold. */
+const SUPPORT_COLOR = 0x8fd19e;
+/** On-screen pixel size of a route segment's direction arrow. */
+const ROUTE_ARROW_PX = 13;
+/**
+ * Minimum on-screen length a route segment needs before it gets its own
+ * direction arrow. Zoomed far out, neighbouring hex centres are only a few
+ * pixels apart, and an arrow per segment there collapses into a smear.
+ */
+const ROUTE_ARROW_MIN_SEGMENT_PX = 26;
+/** Pointer distance (screen px) within which a pointerdown counts as grabbing a draft waypoint pin. */
+const WAYPOINT_GRAB_RADIUS_PX = 16;
+/** How long an army marker takes to ease across when its leg is replaced (recall/turn-around) — see `armyPoints`. */
+const ARMY_RESYNC_MS = 450;
+
 export class HexMapRenderer {
   private app: Application | null = null;
   private world = new Container();
@@ -872,6 +1005,39 @@ export class HexMapRenderer {
   private markerLayer = new Graphics();
   private labelPool: Text[] = [];
   private labelsUsed = 0;
+  // Issue #40 phase 2: see `setArmyOverlay` — drawn every tick alongside the
+  // settlement badge (rebuildMarkers), same "recomputed from hex coords on
+  // every rebuild" pattern as everything else in this layer, so it keeps up
+  // with pan/zoom for free.
+  private armyOverlay: ArmyOverlayData | null = null;
+  // Issue #93/#94: the SVG marker icon set (see markerIcons.ts), drawn as
+  // pooled Sprites parented to markerLayer — `Graphics` is a `Container`, so
+  // they pan/zoom and fade with the rest of the marker chrome for free.
+  // Null until the load resolves (and if it ever fails), which the overlay
+  // draws plain vector shapes through instead of showing nothing.
+  private icons: MarkerIcons | null = null;
+  private iconPool: Sprite[] = [];
+  private iconsUsed = 0;
+  // Read back by `lastArmyOverlayFrame()` — recorded by drawArmyOverlay as it
+  // draws, so it always describes the frame actually on screen.
+  private armyOverlayFrame: ArmyOverlayFrame = { armies: [], waypoints: [], targets: [], iconsReady: false };
+  // Issue #94 "keep it poll-tolerant": per army, the world-space point its
+  // marker is currently drawn at, plus which leg produced it. Interpolating a
+  // frozen leg is already jump-free across polls (same inputs, same answer),
+  // so this only matters when the leg itself is *replaced* — a recall, a
+  // turn-around, an army arriving — where the authoritative position can move
+  // several hexes at once. Then the marker eases from where it was to where
+  // it now belongs (ARMY_RESYNC_MS) instead of teleporting.
+  private armyPoints = new Map<
+    string,
+    { x: number; y: number; leg: string; resyncFrom: { x: number; y: number } | null; resyncStartedAt: number }
+  >();
+  // Issue #93: which draft waypoint pin (index into
+  // `ArmyOverlayData.draftWaypoints`) the pointer grabbed, if any — set on
+  // pointerdown over a pin instead of starting a camera pan, cleared on
+  // pointerup. `lastCoordKey` suppresses repeat callbacks while the pointer
+  // moves within one hex.
+  private waypointDrag: { index: number; lastCoordKey: string } | null = null;
   // Fog (fogLayer + fogBlobCacheSprite) needs to draw *above* markerLayer's
   // island names/settlement badges/fleet ETAs — a label sitting right at the
   // edge of scouted territory should read as veiled by the mist, not float
@@ -901,6 +1067,13 @@ export class HexMapRenderer {
   // same expensive rebuild work a drag already de-prioritises.
   private wheeling = false;
   private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Issue #16 "clicking elsewhere on the map with a ring open should close
+  // it, not open a new one": beginDragFrom's synthetic drag (started to
+  // dismiss a ring on backdrop mousedown, see beginDragFrom below) ends in
+  // onPointerUp exactly like a real click when the pointer never moved —
+  // this flag tells onPointerUp that particular click is the same gesture
+  // that already closed the ring, so it shouldn't also reopen one.
+  private suppressNextClick = false;
   private lastPointer = { x: 0, y: 0 };
   private hoveredKey: string | null = null;
   // Issue #16 "ring menu": while a RingMenu is open, its DOM overlay sits on
@@ -1036,8 +1209,29 @@ export class HexMapRenderer {
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large, submodule-backed) texture
-    // pack at all — only settlement mode loads it.
-    this.textures = this.options.mode === 'settlement' ? await loadTileTextures() : null;
+    // pack at all — only settlement mode loads it. The army/route marker
+    // icons (issues #93/#94) are settlement-only too (the world map never
+    // gets an army overlay), and load alongside rather than after it: six
+    // small SVGs against ~150 tile PNGs is no reason to lengthen the mount.
+    if (this.options.mode === 'settlement') {
+      const [textures, icons] = await Promise.all([
+        loadTileTextures(),
+        // The whole map failing to mount because a marker icon didn't
+        // decode would be a wildly disproportionate outcome — the overlay
+        // draws plain vector shapes when `icons` is null (see
+        // drawArmyOverlay), so a failure here costs the icon art and
+        // nothing else. Reported as a warning rather than swallowed, and
+        // `lastArmyOverlayFrame().iconsReady` says so too.
+        loadMarkerIcons().catch((err) => {
+          console.warn('Map marker icons failed to load; falling back to plain shapes', err);
+          return null;
+        }),
+      ]);
+      this.textures = textures;
+      this.icons = icons;
+    } else {
+      this.textures = null;
+    }
     if (this.destroyed) return;
 
     // One soft-circle texture, generated once and reused (tinted, resized,
@@ -1109,6 +1303,15 @@ export class HexMapRenderer {
   private onTick = () => {
     this.options.worldModel.tick();
     this.rebuildMarkers();
+    // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
+    // below) floats right where the ring's own bubbles/track need to sit — it
+    // stays fully opaque otherwise since it's PixiJS-rendered, not DOM, so the
+    // ring's CSS z-index/opacity tricks can't touch it. `interactionLocked` is
+    // already the "a ring is open" signal (see setInteractionLocked); ease the
+    // whole marker layer's alpha toward hidden/shown off that same flag rather
+    // than snapping, matching the fog fade's feel elsewhere in this renderer.
+    const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
+    this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
     if (this.options.mode === 'world' && !this.deepFogOnly) this.drawWaves();
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
@@ -1156,16 +1359,21 @@ export class HexMapRenderer {
 
   private drawHighlight() {
     this.highlightLayer.clear();
-    const at = this.options.highlightCoord;
-    if (!at) return;
-    const grid = isoGridPosition(at, TILE_W, TILE_H);
-    const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-    const flat = top.flatMap((p) => [p.x, p.y]);
+    const coords = [
+      ...(this.options.highlightCoord ? [this.options.highlightCoord] : []),
+      ...(this.options.highlightCoords ?? []),
+    ];
+    if (coords.length === 0) return;
     const pulse = (Math.sin(performance.now() / 420) + 1) / 2; // 0..1
-    this.highlightLayer
-      .poly(flat)
-      .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
-      .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+    for (const at of coords) {
+      const grid = isoGridPosition(at, TILE_W, TILE_H);
+      const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+      const flat = top.flatMap((p) => [p.x, p.y]);
+      this.highlightLayer
+        .poly(flat)
+        .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
+        .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+    }
   }
 
   // Eases fogBlobCacheSprite's (and, for the founding reveal, fogLayer's)
@@ -1189,16 +1397,67 @@ export class HexMapRenderer {
     // backdrop's own handler instead of this canvas-scoped listener — but
     // kept as a defensive guard rather than relying on that DOM layering.
     if (this.interactionLocked) return;
+    // Issue #93 "drag to move a placed waypoint": a pointerdown that lands on
+    // a draft pin grabs *that pin* rather than starting a camera pan — the
+    // two gestures are the same input, so the pin has to win the hit-test
+    // first or there is no way to correct a mis-clicked hex except undoing
+    // back to it.
+    const grabbed = this.draftWaypointAt(this.pointerScreen(e));
+    if (grabbed !== null) {
+      this.idleDrift = false;
+      this.waypointDrag = { index: grabbed, lastCoordKey: coordKey(this.armyOverlay!.draftWaypoints[grabbed]) };
+      this.setHoveredCoord(null);
+      this.setCursor('grabbing');
+      return;
+    }
     this.startDrag(e);
   };
+
+  /** Pointer position relative to the canvas — the space `hexCenterScreen`/`toScreen` report in. */
+  private pointerScreen(e: PointerEvent): { x: number; y: number } | null {
+    const canvas = this.app?.canvas;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  /**
+   * Index of the draft waypoint pin under a screen point, or null. Hit-tested
+   * against the pins' own drawn screen positions (a fixed-size marker, like
+   * everything else in `markerLayer`) rather than against the hexes under
+   * them, so grabbing a pin stays equally easy at every zoom level.
+   */
+  private draftWaypointAt(screen: { x: number; y: number } | null): number | null {
+    const waypoints = this.armyOverlay?.draftWaypoints;
+    if (!screen || !waypoints?.length || this.options.mode !== 'settlement') return null;
+    let best: number | null = null;
+    let bestDistance = WAYPOINT_GRAB_RADIUS_PX;
+    waypoints.forEach((c, i) => {
+      const p = this.hexCenterScreen(c);
+      const distance = Math.hypot(p.x - screen.x, p.y - screen.y);
+      // `<=` so a later pin wins a tie: pins are drawn in route order, so the
+      // last one drawn is the one visually on top where two overlap.
+      if (distance <= bestDistance) {
+        best = i;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  }
+
+  private setCursor(cursor: string) {
+    const canvas = this.app?.canvas;
+    if (canvas && canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+  }
 
   // Issue #16 "ring menu": a mousedown on the ring's own backdrop (i.e.
   // outside any bubble) closes the ring — see RingMenu.vue's
   // outsidePointerDown emit — and the caller re-fires that same PointerEvent
   // in here so the drag it started keeps going, instead of the player
   // needing a second, separate mousedown to start panning the map.
-  beginDragFrom(e: PointerEvent) {
+  beginDragFrom(e: PointerEvent, opts: { suppressClick?: boolean } = {}) {
     this.interactionLocked = false;
+    this.suppressNextClick = !!opts.suppressClick;
     this.startDrag(e);
   }
 
@@ -1230,8 +1489,27 @@ export class HexMapRenderer {
   }
 
   private onPointerMove = (e: PointerEvent) => {
+    // Issue #93: a pin drag repositions that waypoint instead of panning —
+    // the hex under the pointer, resolved the same way a click is
+    // (isoPixelToAxial), so the pin snaps to hexes rather than floating
+    // between them. Reported only when the pointer actually crosses into a
+    // different hex, so a jittery pointer doesn't fire a store write a frame.
+    if (this.waypointDrag) {
+      const screen = this.pointerScreen(e);
+      if (!screen) return;
+      const world = screenToWorld(this.camera, screen, this.viewport);
+      const coord = isoPixelToAxial(world, TILE_W, TILE_H);
+      if (coordKey(coord) === this.waypointDrag.lastCoordKey) return;
+      this.waypointDrag.lastCoordKey = coordKey(coord);
+      this.options.onWaypointMove?.(this.waypointDrag.index, coord);
+      return;
+    }
     if (!this.dragging) {
       if (this.interactionLocked) return;
+      // "This pin is draggable" affordance, off the same hit-test the drag
+      // itself uses. Cleared back to the canvas's own CSS `grab` (see
+      // SettlementCanvas.vue) rather than hard-coded here.
+      this.setCursor(this.draftWaypointAt(this.pointerScreen(e)) !== null ? 'pointer' : '');
       this.updateHover(e);
       return;
     }
@@ -1249,9 +1527,18 @@ export class HexMapRenderer {
   };
 
   private onPointerUp = (e: PointerEvent) => {
-    if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX) {
+    // A pin drag never became a camera drag (see onPointerDown), so it also
+    // must not fall through to handleClick — releasing a dragged waypoint
+    // would otherwise *append* a second one on the hex it was dropped on.
+    if (this.waypointDrag) {
+      this.waypointDrag = null;
+      this.setCursor('');
+      return;
+    }
+    if (this.dragging && this.dragMoved < DRAG_CLICK_SLOP_PX && !this.suppressNextClick) {
       this.handleClick(e);
     }
+    this.suppressNextClick = false;
     // `dragging` is true for *any* pointerdown, a stationary click included,
     // so it alone doesn't say whether the camera actually moved. Gate the
     // rebuild/fade below on the same slop threshold the click check above
@@ -1409,38 +1696,24 @@ export class HexMapRenderer {
    * building's own type/level (and, for the irrigation modifier, whether a
    * neighbouring hex is shore/water) purely so the hover card has something
    * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
-   * yes (+10%) / Workers 8/8" for a farm.
+   * yes (+10%) / Workers 8/8" for a farm. The formulas themselves live in
+   * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(
     tile: Tile,
     level: number,
   ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
-    const { worldModel } = this.options;
-    const nearWater = hexesInRadius({ q: tile.q, r: tile.r }, 1).some((c) => {
-      const t = worldModel.getTile(c.q, c.r);
-      return t.terrain === 'sea' || t.terrain === 'sand';
-    });
-    switch (tile.buildingType) {
-      case 'farm': {
-        const irrigated = nearWater;
-        const base = level * 120;
-        const workersCap = level * 4;
-        return {
-          output: `+${irrigated ? Math.round(base * 1.1) : base} food/h`,
-          modifier: irrigated ? 'Irrigated (+10%)' : undefined,
-          workers: `${workersCap}/${workersCap}`,
-        };
-      }
-      case 'hut':
-        return { output: `+${level * 5} population capacity` };
-      case 'tower':
-        return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
-      case 'longhouse':
-        return { output: `+${level * 100} storage capacity` };
-      default:
-        return {};
-    }
+    if (!tile.buildingType) return {};
+    const boostTerrain = BOOST_TERRAIN[tile.buildingType];
+    const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
+    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile), matchingNeighbours);
   }
+
+  private nearWater(tile: Tile): boolean {
+    return isNearAnyOf(tile, ['sea', 'sand'], this.getTile);
+  }
+
+  private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -2465,10 +2738,17 @@ export class HexMapRenderer {
 
   private rebuildMarkers() {
     this.markerLayer.clear();
+    // markerLayer.clear() only wipes the Graphics geometry, not the pooled
+    // Sprite/Text children parented to it — each pass counts what it used and
+    // hides the rest, same bookkeeping labels already do (labelsUsed).
+    this.iconsUsed = 0;
     if (this.options.mode === 'settlement') {
       if (!this.options.hideSettlementBadge) this.rebuildSettlementLabels();
+      this.drawArmyOverlay();
+      this.hideUnusedIcons();
       return;
     }
+    this.hideUnusedIcons();
     if (this.options.mode !== 'world') {
       this.labelPool.forEach((l) => (l.visible = false));
       return;
@@ -2564,6 +2844,40 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
       label.style.fill = 0xe8f0f5;
+      label.style.fontWeight = 'normal';
+      label.style.fontSize = 11;
+      label.style.letterSpacing = 0;
+      label.style.dropShadow = false;
+      label.anchor.set(0, 0);
+      label.position.set(screen.x + 8, screen.y - 8);
+      label.visible = true;
+    }
+
+    // Issue #46 phase 3: trade carts in transit — same interpolation +
+    // fog-gating as the fleet loop just above (do not invent a second
+    // scheme), plus an actual marker dot since a cart, unlike a fleet, has
+    // no ship sprite of its own yet to carry the eye to its ETA label.
+    for (const cart of worldModel.listCartShipments()) {
+      const t = Math.min(1, Math.max(0, (now - cart.departedAt) / (cart.etaAt - cart.departedAt || 1)));
+      const fromGrid = isoGridPosition({ q: cart.fromQ, r: cart.fromR }, TILE_W, TILE_H);
+      const toGrid = isoGridPosition({ q: cart.toQ, r: cart.toR }, TILE_W, TILE_H);
+      const world = {
+        x: fromGrid.x + (toGrid.x - fromGrid.x) * t,
+        y: fromGrid.y + (toGrid.y - fromGrid.y) * t,
+      };
+      const cartCoord = isoPixelToAxial(world, TILE_W, TILE_H);
+      if (fogActive && !worldModel.isExplored(cartCoord.q, cartCoord.r)) continue;
+      const screen = this.toScreen(world);
+
+      this.markerLayer
+        .circle(screen.x, screen.y, 4 * this.camera.zoom + 2)
+        .fill({ color: CART_COLOR })
+        .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
+
+      const remainingMs = Math.max(0, cart.etaAt - now);
+      const label = this.acquireLabel();
+      label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
+      label.style.fill = CART_COLOR;
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;
@@ -2680,8 +2994,59 @@ export class HexMapRenderer {
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
   }
 
+  private hideUnusedIcons() {
+    for (let i = this.iconsUsed; i < this.iconPool.length; i++) this.iconPool[i].visible = false;
+  }
+
   private toScreen(world: { x: number; y: number }) {
     return worldToScreen(this.camera, world, this.viewport);
+  }
+
+  /**
+   * One pooled marker-icon Sprite, positioned in screen space (markerLayer is
+   * a sibling of the camera-scaled `world` container, so everything in it is
+   * already in screen pixels — see rebuildSettlementLabels' own note).
+   *
+   * `size` is the icon's on-screen height in pixels: markers are HUD chrome
+   * and keep a constant size as the camera zooms, like the settlement badge.
+   * Pooled for the same reason labels are — the overlay is redrawn from
+   * scratch every frame, and allocating a Sprite per marker per frame would
+   * churn the GPU's batcher for no reason.
+   */
+  private drawIcon(
+    name: MarkerIconName,
+    x: number,
+    y: number,
+    opts: {
+      size: number;
+      color: number;
+      alpha?: number;
+      rotation?: number;
+      /** Mirrors the icon horizontally — directional icons are authored pointing right (+x). */
+      flipX?: boolean;
+      anchorX?: number;
+      anchorY?: number;
+    },
+  ): boolean {
+    const texture = this.icons?.[name];
+    if (!texture) return false;
+    let sprite = this.iconPool[this.iconsUsed];
+    if (!sprite) {
+      sprite = new Sprite();
+      this.iconPool.push(sprite);
+      this.markerLayer.addChild(sprite);
+    }
+    this.iconsUsed++;
+    sprite.texture = texture;
+    sprite.anchor.set(opts.anchorX ?? 0.5, opts.anchorY ?? 0.5);
+    const scale = opts.size / texture.height;
+    sprite.scale.set(opts.flipX ? -scale : scale, scale);
+    sprite.rotation = opts.rotation ?? 0;
+    sprite.tint = opts.color;
+    sprite.alpha = opts.alpha ?? 1;
+    sprite.position.set(x, y);
+    sprite.visible = true;
+    return true;
   }
 
   private acquireLabel(): Text {
@@ -2725,6 +3090,300 @@ export class HexMapRenderer {
    */
   setHighlight(coord: AxialCoord | undefined) {
     this.options = { ...this.options, highlightCoord: coord };
+  }
+
+  /**
+   * Issue #40 phase 2: hands the renderer everything it needs to draw
+   * dispatched armies, a selected army's route, and an in-progress dispatch's
+   * waypoints — see `ArmyOverlayData`. Pass `null` to clear it (e.g. leaving
+   * the settlement view). Like `setHighlight`, this only stores the data;
+   * `rebuildMarkers` (already running every tick — see `onTick`) picks it up
+   * on the very next frame without needing a forced rebuild here.
+   */
+  setArmyOverlay(data: ArmyOverlayData | null) {
+    this.armyOverlay = data;
+    // Nothing to drag once the draft is gone (dispatch confirmed/cancelled)
+    // or the pin count shrank under the index being held.
+    if (this.waypointDrag && this.waypointDrag.index >= (data?.draftWaypoints.length ?? 0)) {
+      this.waypointDrag = null;
+    }
+  }
+
+  /** What `drawArmyOverlay` placed on screen on the most recent frame — see `ArmyOverlayFrame`. */
+  lastArmyOverlayFrame(): ArmyOverlayFrame {
+    return this.armyOverlayFrame;
+  }
+
+  /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */
+  private hexCenterWorld(coord: AxialCoord): { x: number; y: number } {
+    const grid = isoGridPosition(coord, TILE_W, TILE_H);
+    return { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+  }
+
+  /**
+   * Where an army's marker belongs this frame, in world space, and whether
+   * that is an interpolated point rather than a hex centre.
+   *
+   * In transit, the answer comes from the frozen leg (`routeProgressAt`), so
+   * two consecutive polls returning the same leg produce the exact same
+   * point — a re-sync is invisible by construction. When the *leg itself*
+   * changes (recall, turn-around, arrival) the marker eases across from
+   * wherever it was rather than snapping, which is the one case polling can
+   * actually make jump. A stationary army (at home, or a guest garrison) has
+   * no movement at all and simply sits on its authoritative hex.
+   */
+  private resolveArmyPoint(
+    army: ArmyOverlayMarker,
+    nowMs: number,
+  ): { x: number; y: number; interpolated: boolean; heading: { x: number; y: number } | null } {
+    const movement = army.movement;
+    const progress = movement
+      ? routeProgressAt(
+          movement.path,
+          movement.cumulativeHours,
+          movement.departedAtMs,
+          movement.arrivesAtMs,
+          nowMs,
+        )
+      : null;
+
+    let target: { x: number; y: number };
+    let interpolated = false;
+    let heading: { x: number; y: number } | null = null;
+    if (progress && !progress.arrived) {
+      const from = this.hexCenterWorld(progress.from);
+      const to = this.hexCenterWorld(progress.to);
+      target = lerpPoint(from, to, progress.t);
+      interpolated = progress.t > 0;
+      heading = { x: to.x - from.x, y: to.y - from.y };
+    } else {
+      target = this.hexCenterWorld(army.position);
+    }
+
+    // `leg` identifies the schedule the point above was computed from — a new
+    // one means the authoritative position may have moved discontinuously.
+    const leg = movement ? `${movement.departedAtMs}:${movement.arrivesAtMs}:${movement.path.length}` : 'static';
+    const previous = this.armyPoints.get(army.id);
+    let point = target;
+    if (previous && previous.leg !== leg) {
+      previous.resyncFrom = { x: previous.x, y: previous.y };
+      previous.resyncStartedAt = nowMs;
+    }
+    const state = previous ?? { x: target.x, y: target.y, leg, resyncFrom: null, resyncStartedAt: 0 };
+    if (state.resyncFrom) {
+      const t = Math.min(1, (nowMs - state.resyncStartedAt) / ARMY_RESYNC_MS);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic, matching tickCameraAnim's feel
+      point = lerpPoint(state.resyncFrom, target, eased);
+      if (t >= 1) state.resyncFrom = null;
+    }
+    state.leg = leg;
+    state.x = point.x;
+    state.y = point.y;
+    this.armyPoints.set(army.id, state);
+
+    return { ...point, interpolated, heading };
+  }
+
+  /**
+   * Draws a route polyline with per-segment direction arrows (issue #93) —
+   * a plain line reads the same in both directions and gives no clue which
+   * end is the destination.
+   */
+  private drawRoute(points: { x: number; y: number }[], style: { color: number; alpha: number; width: number }) {
+    if (points.length < 2) return;
+    this.markerLayer.moveTo(points[0].x, points[0].y);
+    for (const p of points.slice(1)) this.markerLayer.lineTo(p.x, p.y);
+    this.markerLayer.stroke({ width: style.width, color: style.color, alpha: style.alpha, cap: 'round' });
+
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      if (Math.hypot(dx, dy) < ROUTE_ARROW_MIN_SEGMENT_PX) continue;
+      const mid = lerpPoint(a, b, 0.5);
+      const rotation = Math.atan2(dy, dx);
+      if (
+        !this.drawIcon('arrowhead', mid.x, mid.y, {
+          size: ROUTE_ARROW_PX,
+          color: style.color,
+          alpha: style.alpha,
+          rotation,
+        })
+      ) {
+        // Icon-less fallback: the same triangle the sprite draws, so a
+        // failed icon load costs polish rather than the direction cue itself.
+        const size = ROUTE_ARROW_PX / 2;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
+        const point = (fx: number, fy: number) => [mid.x + fx * cos - fy * sin, mid.y + fx * sin + fy * cos];
+        this.markerLayer
+          .poly([...point(size, 0), ...point(-size, size * 0.8), ...point(-size, -size * 0.8)])
+          .fill({ color: style.color, alpha: style.alpha });
+      }
+    }
+  }
+
+  private drawArmyOverlay() {
+    const overlay = this.armyOverlay;
+    const frame: ArmyOverlayFrame = {
+      armies: [],
+      waypoints: [],
+      targets: [],
+      iconsReady: this.icons !== null,
+    };
+    this.armyOverlayFrame = frame;
+    if (!overlay) return;
+
+    const now = Date.now();
+
+    // The selected army's full route (waypoints + computed path) — a muted
+    // blue line, distinct from the gold in-progress-dispatch line below so a
+    // player editing a *new* dispatch while another army is already selected
+    // can't confuse the two. Issue #94: the part already marched is dimmed
+    // and the part still ahead drawn at full strength, split at the same
+    // interpolated point the marker itself sits at.
+    if (overlay.route.length > 1) {
+      const points = overlay.route.map((c) => this.hexCenterScreen(c));
+      const selected = overlay.armies.find((a) => a.selected);
+      const progress = selected?.movement
+        ? routeProgressAt(
+            selected.movement.path,
+            selected.movement.cumulativeHours,
+            selected.movement.departedAtMs,
+            selected.movement.arrivesAtMs,
+            now,
+          )
+        : null;
+      // Only split when the drawn route really is the leg being travelled —
+      // `route` is whichever path the caller chose to show, and a mismatched
+      // length means it is not the one `progress` was measured against.
+      const splitAt =
+        progress && !progress.arrived && selected!.movement!.path.length === points.length ? progress : null;
+      if (splitAt) {
+        const marker = lerpPoint(points[splitAt.legIndex], points[splitAt.legIndex + 1], splitAt.t);
+        this.drawRoute([...points.slice(0, splitAt.legIndex + 1), marker], {
+          color: ROUTE_COLOR,
+          alpha: 0.3,
+          width: 2,
+        });
+        this.drawRoute([marker, ...points.slice(splitAt.legIndex + 1)], {
+          color: ROUTE_COLOR,
+          alpha: 0.85,
+          width: 2,
+        });
+      } else {
+        this.drawRoute(points, { color: ROUTE_COLOR, alpha: 0.8, width: 2 });
+      }
+    }
+
+    // An in-progress dispatch's clicked waypoints, plus an arrowed line
+    // connecting them — the "pins and a line" the design doc asks for, shown
+    // before anything has actually been sent to the backend. Each pin is
+    // draggable (see onPointerDown/draftWaypointAt).
+    if (overlay.draftWaypoints.length > 1) {
+      this.drawRoute(
+        overlay.draftWaypoints.map((c) => this.hexCenterScreen(c)),
+        { color: GOLD, alpha: 0.9, width: 2 },
+      );
+    }
+    const draggedIndex = this.waypointDrag?.index ?? null;
+    overlay.draftWaypoints.forEach((c, i) => {
+      const p = this.hexCenterScreen(c);
+      const isDestination = i === overlay.draftWaypoints.length - 1;
+      const size = isDestination ? 30 : 24;
+      frame.waypoints.push({ index: i, x: p.x, y: p.y });
+      if (
+        !this.drawIcon('waypoint-pin', p.x, p.y, {
+          size: i === draggedIndex ? size * 1.15 : size,
+          color: GOLD,
+          alpha: isDestination ? 1 : 0.85,
+        })
+      ) {
+        this.markerLayer
+          .circle(p.x, p.y, isDestination ? 8 : 5)
+          .fill({ color: GOLD, alpha: isDestination ? 0.95 : 0.7 })
+          .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.85 });
+      }
+    });
+
+    // Issue #93: what this dispatch (or the selected army) is being sent at —
+    // crossed sword and axe on an attack target's hex, a shield on a
+    // support target's, so the settlement picked from a text list has a place
+    // on the map rather than existing only as a name in the panel.
+    for (const target of overlay.targets ?? []) {
+      const p = this.hexCenterScreen(target.coord);
+      frame.targets.push({ kind: target.kind, x: p.x, y: p.y });
+      const color = target.kind === 'attack' ? ATTACK_COLOR : SUPPORT_COLOR;
+      const drawn =
+        target.kind === 'attack'
+          ? this.drawIcon('sword', p.x, p.y, { size: 30, color, rotation: -Math.PI / 4 }) &&
+            this.drawIcon('axe', p.x, p.y, { size: 30, color, rotation: Math.PI / 4, flipX: true })
+          : this.drawIcon('shield', p.x, p.y, { size: 30, color });
+      if (!drawn) {
+        // Icon-less fallback: a cross for attack, a ring for support.
+        if (target.kind === 'attack') {
+          this.markerLayer
+            .moveTo(p.x - 10, p.y - 10)
+            .lineTo(p.x + 10, p.y + 10)
+            .moveTo(p.x + 10, p.y - 10)
+            .lineTo(p.x - 10, p.y + 10)
+            .stroke({ width: 3, color, cap: 'round' });
+        } else {
+          this.markerLayer.circle(p.x, p.y, 10).stroke({ width: 3, color });
+        }
+      }
+      // A ring under the marker so it reads as "this hex", not "something
+      // floating near here" — the marker itself is deliberately bigger than
+      // the hex it sits on at low zoom.
+      this.markerLayer.circle(p.x, p.y, 18).stroke({ width: 1.5, color, alpha: 0.55 });
+    }
+
+    // Every dispatched army gets a banner marker (issue #94) at its live
+    // position — interpolated along the current leg while marching, on its
+    // authoritative hex while standing. Gold for the one currently selected,
+    // muted blue for everything else, grey for one already turned around and
+    // heading home.
+    for (const army of overlay.armies) {
+      const point = this.resolveArmyPoint(army, now);
+      const p = this.toScreen(point);
+      frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
+      const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
+      const size = army.selected ? 40 : 32;
+      // The banner flies the way the army is marching (the icon is authored
+      // pointing right — see the icon set's README), so a column's direction
+      // is readable from the marker alone, without following the route line.
+      const flipX = (point.heading?.x ?? 0) < 0;
+      if (
+        !this.drawIcon('flag', p.x, p.y, {
+          size,
+          color,
+          // The pole's foot, not the sprite's centre, is what stands on the
+          // army's position (see flag.svg's own geometry).
+          anchorX: flipX ? 1 - 22.5 / 64 : 22.5 / 64,
+          anchorY: 60 / 64,
+          flipX,
+        })
+      ) {
+        const r = army.selected ? 9 : 7;
+        this.markerLayer
+          .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
+          .fill({ color })
+          .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+      }
+      // A small ground shadow anchors the banner to its point — without it a
+      // pole drawn upward from the position reads as hovering above the map.
+      this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
+    }
+
+    // Armies that have gone away (arrived home and been folded back) would
+    // otherwise keep their easing state forever.
+    if (this.armyPoints.size > overlay.armies.length) {
+      const live = new Set(overlay.armies.map((a) => a.id));
+      for (const id of [...this.armyPoints.keys()]) {
+        if (!live.has(id)) this.armyPoints.delete(id);
+      }
+    }
   }
 
   /**

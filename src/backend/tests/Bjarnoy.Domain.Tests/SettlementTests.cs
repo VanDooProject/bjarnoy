@@ -42,6 +42,13 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry, Terrain.Forest, false)]
     [InlineData(BuildingType.Farm, Terrain.Grass, true)]
     [InlineData(BuildingType.Farm, Terrain.Mountain, false)]
+    [InlineData(BuildingType.MagicTower, Terrain.Grass, true)]
+    [InlineData(BuildingType.MagicTower, Terrain.Sand, false)]
+    [InlineData(BuildingType.PumpkinFarm, Terrain.Grass, true)]
+    [InlineData(BuildingType.PumpkinFarm, Terrain.Mountain, false)]
+    [InlineData(BuildingType.Tower, Terrain.Sand, true)]
+    [InlineData(BuildingType.Tower, Terrain.Grass, true)]
+    [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -49,15 +56,38 @@ public class BuildingCatalogueTests
         Assert.Equal(allowed, BuildingCatalogue.Get(type, 1).AllowsTerrain(terrain));
     }
 
-    [Fact]
-    public void Unrestricted_buildings_go_on_any_land_but_never_on_water()
+    [Theory]
+    [InlineData(BuildingType.Longhouse)]
+    [InlineData(BuildingType.StorageHouse)]
+    public void Anchor_and_support_buildings_are_gated_to_grass(BuildingType type)
     {
-        var storageHouse = BuildingCatalogue.Get(BuildingType.StorageHouse, 1);
+        var definition = BuildingCatalogue.Get(type, 1);
 
-        Assert.True(storageHouse.AllowsTerrain(Terrain.Grass));
-        Assert.True(storageHouse.AllowsTerrain(Terrain.Sand));
-        Assert.True(storageHouse.AllowsTerrain(Terrain.Mountain));
-        Assert.False(storageHouse.AllowsTerrain(Terrain.Sea));
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.False(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Sea));
+    }
+
+    [Fact]
+    public void The_tower_is_gated_to_grass_or_sand()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Tower, 1);
+
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.True(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Sea));
+    }
+
+    [Fact]
+    public void The_fishing_hut_requires_coastal_water_instead_of_a_land_terrain()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.FishingHut, 1);
+
+        Assert.True(definition.RequiresCoastalWater);
     }
 
     [Fact]
@@ -116,6 +146,75 @@ public class BuildingCatalogueTests
 
         Assert.Equal(expectedWood, production.Wood, 6);
         Assert.True(capacity.Wood > BuildingCatalogue.BaseStorageCapacity.Wood);
+    }
+
+    private static readonly HexCoord Origin = new(0, 0);
+
+    /// <summary>A terrain lookup returning <paramref name="matching"/> for the first <paramref name="count"/> of Origin's six neighbours, and Grass for the rest and everywhere else.</summary>
+    private static Func<HexCoord, Terrain> TerrainWithMatchingNeighbours(Terrain matching, int count)
+    {
+        var boosted = Origin.Neighbours().Take(count).ToHashSet();
+        return coord => boosted.Contains(coord) ? matching : Terrain.Grass;
+    }
+
+    [Fact]
+    public void BoostMultiplier_is_neutral_when_terrainAt_is_null()
+    {
+        Assert.Equal(1.0, BuildingCatalogue.BoostMultiplier(BuildingType.Lumberjack, Origin, terrainAt: null));
+    }
+
+    [Fact]
+    public void BoostMultiplier_is_neutral_for_a_building_with_no_boost_entry()
+    {
+        var allForest = TerrainWithMatchingNeighbours(Terrain.Forest, 6);
+
+        Assert.Equal(1.0, BuildingCatalogue.BoostMultiplier(BuildingType.Farm, Origin, allForest));
+    }
+
+    [Theory]
+    [InlineData(0, 1.0)]
+    [InlineData(1, 1.10)]
+    [InlineData(3, 1.30)]
+    [InlineData(5, 1.50)]
+    [InlineData(6, 1.50)] // capped at 5 matching neighbours' worth
+    public void BoostMultiplier_scales_10_percent_per_matching_neighbour_up_to_the_cap(
+        int matchingNeighbours, double expected)
+    {
+        var terrainAt = TerrainWithMatchingNeighbours(Terrain.Forest, matchingNeighbours);
+
+        Assert.Equal(expected, BuildingCatalogue.BoostMultiplier(BuildingType.Lumberjack, Origin, terrainAt), 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Lumberjack, Terrain.Forest)]
+    [InlineData(BuildingType.Quarry, Terrain.Mountain)]
+    [InlineData(BuildingType.FishingHut, Terrain.Sea)]
+    public void BoostMultiplier_only_counts_each_buildings_own_matching_terrain(BuildingType type, Terrain matching)
+    {
+        var terrainAt = TerrainWithMatchingNeighbours(matching, 6);
+
+        Assert.Equal(1.50, BuildingCatalogue.BoostMultiplier(type, Origin, terrainAt), 6);
+
+        // A different terrain than the one this building matches gives no boost at all.
+        var wrongTerrain = matching == Terrain.Forest ? Terrain.Mountain : Terrain.Forest;
+        var noMatch = TerrainWithMatchingNeighbours(wrongTerrain, 6);
+        Assert.Equal(1.0, BuildingCatalogue.BoostMultiplier(type, Origin, noMatch), 6);
+    }
+
+    [Fact]
+    public void Totals_with_terrain_applies_the_boost_to_the_matching_producer_only()
+    {
+        var allForest = TerrainWithMatchingNeighbours(Terrain.Forest, 6);
+        var lumberjack = new PlacedBuilding(Origin, BuildingType.Lumberjack, 2);
+        var farm = new PlacedBuilding(new HexCoord(5, 5), BuildingType.Farm, 2);
+
+        var (production, _) = BuildingCatalogue.Totals([lumberjack, farm], allForest);
+
+        var expectedWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 2).ProductionPerHour.Wood * 1.50;
+        var expectedFood = BuildingCatalogue.Get(BuildingType.Farm, 2).ProductionPerHour.Food; // unboosted
+
+        Assert.Equal(expectedWood, production.Wood, 6);
+        Assert.Equal(expectedFood, production.Food, 6);
     }
 }
 
@@ -195,6 +294,43 @@ public class SettlementTests
             BuildingType.Lumberjack, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_is_refused_on_land_even_when_affordable()
+    {
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_is_refused_on_open_sea_that_is_not_coastal()
+    {
+        var settlement = Found();
+
+        // Terrain.Sea alone can't distinguish coastal water from open
+        // sea — isCoastalWater is what actually gates a fishing hut.
+        var decision = settlement.PlanBuild(
+            BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: false);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fishing_hut_may_be_built_on_coastal_water()
+    {
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FishingHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: true);
+
+        Assert.True(decision.Accepted);
     }
 
     [Fact]
@@ -310,6 +446,47 @@ public class SettlementTests
     }
 
     [Fact]
+    public void SettleTo_applies_a_lumberjacks_forest_adjacency_boost_when_a_terrain_lookup_is_given()
+    {
+        var settlement = Found();
+        var coord = new HexCoord(1, 0);
+        var order = Plan(settlement, BuildingType.Lumberjack, coord, Terrain.Forest, T0);
+        var queued = settlement.Enqueue(order, T0);
+
+        // Every neighbour of the lumberjack's hex is Forest, so the boost caps at +50%.
+        Func<HexCoord, Terrain> allForest = _ => Terrain.Forest;
+
+        var boosted = queued.SettleTo(order.CompletesAt, terrainAt: allForest).Settlement;
+        var unboosted = queued.SettleTo(order.CompletesAt).Settlement;
+
+        // Only the lumberjack's own share of the wood rate is boosted; the
+        // longhouse's flat contribution is unaffected — so the two rates
+        // don't simply differ by a flat 1.5x.
+        var longhouseWood = BuildingCatalogue.Get(BuildingType.Longhouse, 1).ProductionPerHour.Wood;
+        var lumberjackWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 1).ProductionPerHour.Wood;
+
+        Assert.Equal(longhouseWood + lumberjackWood, unboosted.Resources.RatePerHour.Wood, 6);
+        Assert.Equal(longhouseWood + (lumberjackWood * 1.50), boosted.Resources.RatePerHour.Wood, 6);
+    }
+
+    [Fact]
+    public void SetBuildingLevel_applies_the_same_terrain_boost_as_SettleTo()
+    {
+        var settlement = Found();
+        var coord = new HexCoord(1, 0);
+        var order = Plan(settlement, BuildingType.Lumberjack, coord, Terrain.Forest, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        Func<HexCoord, Terrain> allForest = _ => Terrain.Forest;
+        var result = built.SetBuildingLevel(coord, level: 2, order.CompletesAt, terrainAt: allForest);
+
+        Assert.True(result.Accepted);
+        var expectedWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 2).ProductionPerHour.Wood * 1.50
+            + BuildingCatalogue.Get(BuildingType.Longhouse, 1).ProductionPerHour.Wood;
+        Assert.Equal(expectedWood, result.Settlement!.Resources.RatePerHour.Wood, 6);
+    }
+
+    [Fact]
     public void Several_orders_complete_in_time_order_in_one_settle()
     {
         var settlement = Found();
@@ -402,6 +579,32 @@ public class SettlementTests
     }
 
     [Fact]
+    public void A_second_longhouse_cannot_be_queued_through_the_build_menu()
+    {
+        // Founding (SettlementService.FoundAsync) is the only place a
+        // longhouse comes from today; the build queue must refuse one on an
+        // empty hex even though it is otherwise a perfectly buildable plot.
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Longhouse, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.LonghousePlacementNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void The_existing_longhouse_can_still_be_levelled_up_through_the_build_menu()
+    {
+        var settlement = Found();
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Longhouse, Centre, Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted);
+        Assert.Equal(2, decision.Order!.TargetLevel);
+    }
+
+    [Fact]
     public void Enqueueing_an_unaffordable_order_throws_rather_than_going_into_debt()
     {
         var settlement = Found();
@@ -413,6 +616,66 @@ public class SettlementTests
         };
 
         Assert.Throws<InvalidOperationException>(() => broke.Enqueue(order, T0));
+    }
+
+    [Fact]
+    public void Admin_setting_a_buildings_level_recomputes_rates_like_a_normal_completion()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 3, order.CompletesAt);
+
+        Assert.True(result.Accepted);
+        var farm = result.Settlement!.Buildings.Single(b => b.Type == BuildingType.Farm);
+        Assert.Equal(3, farm.Level);
+
+        var (expectedProduction, expectedCapacity) = BuildingCatalogue.Totals(
+            result.Settlement.Buildings.Select(b => (b.Type, b.Level)));
+        Assert.Equal(expectedProduction.Food, result.Settlement.Resources.RatePerHour.Food, 6);
+        Assert.Equal(expectedCapacity.Wood, result.Settlement.Resources.Capacity.Wood, 6);
+    }
+
+    [Fact]
+    public void Admin_setting_a_buildings_level_settles_first_so_no_production_is_lost()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        // Two hours of accrued production at the level-1 rate must survive the
+        // level-set, exactly like a normal SettleTo would preserve it.
+        var now = order.CompletesAt.AddHours(2);
+        var stockJustBefore = built.Resources.At(now);
+
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 2, now);
+
+        Assert.True(result.Accepted);
+        Assert.Equal(stockJustBefore.Food, result.Settlement!.Resources.At(now).Food, 6);
+        Assert.Equal(now, result.Settlement.Resources.SettledAt);
+    }
+
+    [Fact]
+    public void Setting_the_level_of_a_hex_with_no_building_is_refused()
+    {
+        var settlement = Found();
+
+        var result = settlement.SetBuildingLevel(new HexCoord(5, 5), level: 1, T0);
+
+        Assert.Equal(SetBuildingLevelRejection.BuildingNotFound, result.Rejection);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    public void Setting_a_level_outside_the_catalogues_range_is_refused(int level)
+    {
+        var settlement = Found();
+
+        var result = settlement.SetBuildingLevel(Centre, level, T0);
+
+        Assert.Equal(SetBuildingLevelRejection.InvalidLevel, result.Rejection);
     }
 
     [Fact]
@@ -442,6 +705,46 @@ public class SettlementTests
         var doubled = queued.SettleTo(order.CompletesAt, speedFactor: 2.0).Settlement;
 
         Assert.Equal(normal.Resources.RatePerHour.Food * 2, doubled.Resources.RatePerHour.Food, 6);
+    }
+
+    [Fact]
+    public void An_empty_settlement_scores_zero()
+    {
+        var settlement = Found() with { Buildings = [] };
+
+        Assert.Equal(0, settlement.Score);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 3)]
+    [InlineData(5, 15)]
+    [InlineData(10, 55)]
+    public void A_single_buildings_score_is_the_triangular_number_of_its_level(int level, int expected)
+    {
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, level)],
+        };
+
+        Assert.Equal(expected, settlement.Score);
+    }
+
+    [Fact]
+    public void Several_buildings_score_the_sum_of_their_triangular_numbers()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 5),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.Farm, 2),
+                new PlacedBuilding(new HexCoord(0, 1), BuildingType.Lumberjack, 10),
+            ],
+        };
+
+        // 15 + 3 + 55
+        Assert.Equal(73, settlement.Score);
     }
 
     [Fact]

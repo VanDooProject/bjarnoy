@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Teardrop pin. Deliberately centred in the box like every other icon
+       in this set (see the README) rather than tip-anchored: the renderer
+       anchors all markers at 0.5/0.5, and a drag hit-test that has to know
+       about a per-icon anchor is exactly the kind of drift this set avoids. -->
+  <path d="M32 8 C22 8 14 16 14 26 C14 38 32 56 32 56 C32 56 50 38 50 26 C50 16 42 8 32 8 Z" fill="#fff"/>
+  <circle cx="32" cy="26" r="8" fill="#5a6b76"/>
+</svg>
