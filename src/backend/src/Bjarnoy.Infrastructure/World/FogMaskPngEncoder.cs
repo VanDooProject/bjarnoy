@@ -1,7 +1,5 @@
 using Bjarnoy.Domain.World;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace Bjarnoy.Infrastructure.World;
 
@@ -17,25 +15,22 @@ public static class FogMaskPngEncoder
 {
     public static byte[] Encode(FogMaskBuffer buffer)
     {
-        using var image = new Image<Rgba32>(buffer.Bounds.Width, buffer.Bounds.Height);
+        using var bitmap = new SKBitmap(
+            buffer.Bounds.Width, buffer.Bounds.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
 
-        image.ProcessPixelRows(accessor =>
+        for (var row = 0; row < buffer.Bounds.Height; row++)
         {
-            for (var row = 0; row < accessor.Height; row++)
+            var v = buffer.Bounds.MinV + row;
+            for (var col = 0; col < buffer.Bounds.Width; col++)
             {
-                var pixelRow = accessor.GetRowSpan(row);
-                var v = buffer.Bounds.MinV + row;
-                for (var col = 0; col < pixelRow.Length; col++)
-                {
-                    var u = buffer.Bounds.MinU + col;
-                    var cell = buffer[new MaskTexel(u, v)];
-                    pixelRow[col] = new Rgba32(cell.Unknown, cell.OutOfSight, cell.NoiseSeed, byte.MaxValue);
-                }
+                var u = buffer.Bounds.MinU + col;
+                var cell = buffer[new MaskTexel(u, v)];
+                bitmap.SetPixel(col, row, new SKColor(cell.Unknown, cell.OutOfSight, cell.NoiseSeed, byte.MaxValue));
             }
-        });
+        }
 
-        using var stream = new MemoryStream();
-        image.Save(stream, new PngEncoder { ColorType = PngColorType.RgbWithAlpha });
-        return stream.ToArray();
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, quality: 100);
+        return data.ToArray();
     }
 }

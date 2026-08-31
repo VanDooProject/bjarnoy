@@ -1,7 +1,6 @@
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.World;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace Bjarnoy.Infrastructure.Tests.World;
 
@@ -15,9 +14,9 @@ public class FogMaskPngEncoderTests
 
         var png = FogMaskPngEncoder.Encode(mask);
 
-        using var image = Image.Load<Rgba32>(png);
-        Assert.Equal(bounds.Width, image.Width);
-        Assert.Equal(bounds.Height, image.Height);
+        using var bitmap = SKBitmap.Decode(png);
+        Assert.Equal(bounds.Width, bitmap.Width);
+        Assert.Equal(bounds.Height, bitmap.Height);
     }
 
     [Fact]
@@ -30,15 +29,15 @@ public class FogMaskPngEncoderTests
 
         var png = FogMaskPngEncoder.Encode(mask);
 
-        using var image = Image.Load<Rgba32>(png);
+        using var bitmap = SKBitmap.Decode(png);
         var originTexel = FogMaskLayout.ToTexel(HexCoord.Origin);
         var originCell = mask[originTexel];
-        var pixel = image[originTexel.U - bounds.MinU, originTexel.V - bounds.MinV];
+        var pixel = bitmap.GetPixel(originTexel.U - bounds.MinU, originTexel.V - bounds.MinV);
 
-        Assert.Equal(originCell.Unknown, pixel.R);
-        Assert.Equal(originCell.OutOfSight, pixel.G);
-        Assert.Equal(originCell.NoiseSeed, pixel.B);
-        Assert.Equal(byte.MaxValue, pixel.A);
+        Assert.Equal(originCell.Unknown, pixel.Red);
+        Assert.Equal(originCell.OutOfSight, pixel.Green);
+        Assert.Equal(originCell.NoiseSeed, pixel.Blue);
+        Assert.Equal(byte.MaxValue, pixel.Alpha);
     }
 
     [Fact]

@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
     <Using Include="Xunit" />
   </ItemGroup>
 
