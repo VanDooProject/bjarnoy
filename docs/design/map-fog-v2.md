@@ -145,18 +145,20 @@ asked for, is hex-shaped.
 The original plan (§2.3, before this doc) shipped one whole-world texture
 and left an axial-rectangle query on the endpoint as a future escape hatch
 if a world ever got too big. Upgrading this to genuinely chunked delivery
-from the start, for two reasons that both hold even at the default world
-size:
+from the start.
 
-- **Bandwidth scales with what the client actually looks at**, not with
-  total world size. A player looking at one corner of a large world
-  shouldn't fetch mask data for the whole map.
-- **World growth stays additive.** If a world's playable radius expands
-  later (the backend contract already allows up to radius 1000, well past
-  the default 60), a monolithic whole-world texture means every existing
-  client re-fetches a bigger resource on every future growth event. Chunks
-  mean growth only adds new chunks — nothing already cached needs to
-  change.
+**The primary driver is server-side, not client bandwidth.** Client-side
+stitching (§ below) is cheap — well under the cost of the network fetch it
+rides on — so it was never the bottleneck being solved. The real saving is
+on the server: with a monolithic whole-world mask, one settlement changing
+on one edge of the map still means re-running the merge (Option B) and
+re-encoding a PNG over the *entire* world, and touches the *entire*
+per-guild cache entry. With chunks, only the handful of chunks near that
+settlement need their DB query, merge, and encode redone — the DB read and
+compute scale with the size of the change, not the size of the world.
+Client bandwidth savings (only fetching what's in view) and painless world
+growth (chunks are additive, a monolithic texture isn't) are real, but
+secondary, benefits of the same design.
 
 ### Mechanics
 
@@ -180,6 +182,35 @@ size:
   batched in one request (mirroring the existing
   `GET .../tiles?qMin&qMax&rMin&rMax` rectangle-query pattern already on
   `WorldEndpoints.cs`), not N separate round trips per chunk.
+- **Missing/not-yet-fetched chunks default to fully-unknown** (`unknown
+  ramp = 1.0`, `outOfSight = 0`) — the same value a chunk with no sources
+  at all would compute anyway, so it needs no special-casing in the
+  shader or the stitcher. A chunk that hasn't arrived yet, or one the
+  server has never had reason to generate (no source ever queried it),
+  reads as "never scouted," which is always correct and never leaks
+  information — the stitched texture can be rendered before every chunk
+  in view has arrived, filled in progressively as chunks land.
+
+### Backend cache control
+
+Two distinct caching layers, both need explicit policy, not just the ETag
+already noted in §1d:
+
+- **HTTP-level (`Cache-Control` on the chunk response).** Guild-scoped
+  data, so `private` (never a shared/CDN cache) is mandatory. Pair a short
+  `max-age` (order of tens of seconds) with `must-revalidate`: fog data
+  changes rarely enough that this lets a client skip the request
+  entirely for a window, rather than always paying a round trip for a
+  304. `ETag` stays set regardless, so revalidation after `max-age`
+  expires is still cheap.
+- **Server-side (`IMemoryCache` per chunk).** Needs an explicit eviction
+  policy, not just "cache forever" — the number of
+  `(guildId-or-playerId × chunk)` combinations grows with active guilds
+  and world size, and is otherwise unbounded over a long-running server.
+  Sliding expiration (evict a chunk cache entry after N minutes unused)
+  plus a total size cap is the standard shape; exact numbers are a
+  Phase 2 tuning question, not a Phase 0 one, but the policy needs to
+  exist from the first implementation, not be added after an incident.
 
 ### The seam problem, and why it doesn't reach the shader
 
@@ -198,14 +229,23 @@ as designed. Each chunk carries a small (1–2 texel) overlap border when
 stitched, so bilinear sampling right at a chunk boundary doesn't bleed
 into unfetched territory.
 
-### Sequencing
+### Sequencing — dynamic chunking, not a deferred 1×1 shortcut
 
-Phase 1–4 (original plan) don't need to pay this complexity up front: at
-the default world radius (60), the chunk grid is 1×1 anyway — one chunk,
-one fetch, no stitching. Design the endpoint contract as chunk-addressed
-from day one (chunk coordinate + per-chunk version, not a single
-whole-world version), so enabling multiple chunks later is a tuning change
-to chunk size, not an API break or a client rewrite.
+Both ends implement real multi-chunk support in Phase 1–4, not a
+single-chunk special case with multi-chunk added later. A "ship 1×1 now,
+generalize later" shortcut means the N-chunk path (fetch batching, client
+stitching, per-chunk cache/invalidation, the source halo) stays
+unexercised until someone raises the world radius — exactly the kind of
+path that's untested when it's finally needed.
+
+**Pick chunk size independent of default world size**, small enough that
+the *default* world (radius 60) already spans multiple chunks — e.g. a
+fixed 32×32-texel chunk against the default world's ~121×242 texel
+bounding box (§2.3 of the original plan) lands around 4×8 chunks, not 1.
+That means the multi-chunk fetch/stitch/merge/cache path is the one and
+only path exercised from Phase 1 on, by every world, by default — there
+is no separate "big world" mode to forget to test. World-radius growth
+later just changes how many chunks exist, not which code path runs.
 
 ## 3. Layer stack — resolves the `fogWorld` hack
 
