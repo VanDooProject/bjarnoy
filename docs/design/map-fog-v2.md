@@ -53,7 +53,17 @@ need to redo for every member just because one of them changed. Instead:
 3. A player with no guild skips the merge step entirely — their "guild
    mask" is just their own per-player buffer, ramped directly.
 
-### 1b. Live army-granted vision — not implemented today, design for it anyway
+### 1b. Static-layer caching (B) + live-layer isolation (C) compose
+
+B answers "how is the *static*, settlement-derived layer cached cheaply
+across a guild." C (below) answers "how do we stop the *live*, army-derived
+layer from invalidating that cache." Together: the static mask stays
+cheap and rarely invalidates (B), while the thing that changes every frame
+never touches the cache at all (C). Doing only B still re-bakes a texture
+on every army step; doing only C still over-invalidates the static layer
+on every member's settlement change. Both are needed.
+
+### 1c. Live army-granted vision — not implemented today, design for it anyway
 
 Checked: nothing in `WorldModel.ts` currently derives visibility from army
 position — `explored`/`visibleHexes` are purely settlement-derived. But
@@ -76,19 +86,51 @@ distance checks per fragment, same cost class as the noise warp
 (wind drift is a uniform update, not a mask regen) applied to a second
 input: merging is only cheap when it happens per-fragment at render time,
 not by re-baking a texture, so movement never touches the cache at all.
+Army position itself needs no new backend computation — it's computed
+client-side today via continuous interpolation
+(`lerpPoint`/`routeProgressAt` in `armyProgress.ts`, plus a `resyncFrom`
+easing transition on re-sync), which vision reuses directly.
 
-**Snap live vision to the hex grid, not raw float position.** Not for GPU
-cost — the shader-side check is trivially cheap either way. It's for
-consistency: every other visibility concept in this system (`isExplored`,
-terrain culling, settlement radii) is hex-granular, answering "is this
-*hex* visible," not "is this *point* visible." Granting vision from an
-army's raw float position would mean two incompatible visibility models
-side by side, and CPU-side consumers (`isPastTerrainCull`, hover) would
-need a second, continuous-distance code path just for armies. Floor the
-army's live position to its containing axial coord and grant vision from
-that hex (plus whatever radius design wants) — it only changes discretely
-when an army crosses a hex boundary, and it reuses the same integer
-hex-set membership check everything else already uses.
+### 1d. Why PNG, not JSON, for the static mask
+
+Only the *static* layer is ever image-encoded, and only on a real cache
+miss (§1b) — not per request, never per frame. Worth confirming PNG is
+actually cheaper than the obvious alternative (a JSON array of distance
+values) rather than assuming it:
+
+- **Wire size.** A dense per-texel field (~30K values for a typical world)
+  as JSON numbers costs several bytes per value even for small integers.
+  PNG's filter+DEFLATE crushes the mask's large uniform runs (most of a
+  world is either fully-explored or fully-unknown) to a few KB. A raw
+  octet-stream + gzip fallback (already noted as an alternative in the
+  original plan) compresses similarly without needing an image codec
+  dependency, and is also far smaller than JSON.
+- **Decode cost.** `JSON.parse` over tens of thousands of numbers runs on
+  the main thread and is slower than PNG decode via `createImageBitmap`,
+  which the browser does off the main thread.
+- **Encode cost.** PNG-encoding a ~120×242 image that's mostly uniform is
+  low-single-digit milliseconds with a reasonable encoder — and this only
+  runs on a cache miss, which §1b's memoization already keeps rare.
+
+JSON would only win if the mask were sparse (a short list of "these hexes
+changed"), which it isn't — it's a dense field over the whole world, so an
+image/binary format beats a text format on every axis here.
+
+**Keep the vision source as a continuous float — do not snap it.** The
+renderer already computes army position this way every frame
+(`lerpPoint`/`routeProgressAt` in `armyProgress.ts`, plus a `resyncFrom`
+easing transition), specifically to avoid visible jumps; reusing that
+float position for vision is free and snapping it would reintroduce
+exactly the popping the interpolation exists to prevent — the fog edge
+would jump hex-to-hex as an army crosses a boundary instead of sliding.
+
+This doesn't conflict with hex-granular consumers (`isExplored(q, r)`,
+`isPastTerrainCull`) needing a boolean per hex — that's a question of
+**query granularity**, not source granularity. Those consumers evaluate
+the *same continuous distance formula* at the hex's center point rather
+than requiring the army's position itself to be discretized. The source
+stays float and smooth; only the answer, when a hex-shaped answer is
+asked for, is hex-shaped.
 
 ## 2. Layer stack — resolves the `fogWorld` hack
 
