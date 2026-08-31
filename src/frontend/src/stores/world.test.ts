@@ -232,6 +232,34 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     ).rejects.toThrow();
     expect(foundSettlement).not.toHaveBeenCalled();
   });
+
+  // Regression: refreshWorldSettlements() used to register another player's
+  // settlement into the local WorldModel without an islandId, so the
+  // per-island spacing check in unclaimedStartPositions() never actually
+  // excluded it — a second player's client kept treating an already-founded
+  // start position as free and repeatedly got 409'd by the backend.
+  it('refuses to found on a start position someone else already claimed on the same island, without calling the API', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      {
+        id: 'settlement-1',
+        name: "Astrid's realm",
+        ownerName: 'Astrid',
+        q: NEAR_ISLAND.at.q,
+        r: NEAR_ISLAND.at.r,
+        longhouseLevel: 1,
+        islandId: NEAR_ISLAND.islandId,
+      },
+    ]);
+    foundSettlement.mockReset();
+
+    const store = await loadStoreModule(false);
+    withIslands(store);
+
+    await expect(
+      store.foundStartingSettlementLive('player-2', 'Bjorn', "Bjorn's realm", NEAR_ISLAND.at),
+    ).rejects.toThrow();
+    expect(foundSettlement).not.toHaveBeenCalled();
+  });
 });
 
 // Regression coverage for scoping MINIMUM_SETTLEMENT_SPACING to the same
