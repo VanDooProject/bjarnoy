@@ -4,7 +4,7 @@
 // tile map that can span thousands of hexes as the camera roams. The
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
-import { coordKey, hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import { generateTile } from './worldGenerator';
 import {
@@ -111,6 +111,13 @@ export class WorldModel {
   private riverTiles = new Map<string, RiverTile>();
   /** Demo mode's client-only trade offers — see `postTradeOffer` and friends. */
   private demoTradeOffers = new Map<string, DemoTradeOffer>();
+  /**
+   * Per-settlement coord keys `applyServerSnapshot` last rendered onto a
+   * tile, so a building gone from the next snapshot (a cancelled order's
+   * level-0 foundation, or a razed building) can be told apart from a hex
+   * this settlement simply never reported — see `applyServerSnapshot`.
+   */
+  private renderedBuildingCoords = new Map<string, Set<string>>();
 
   constructor(seed = 1) {
     this.seed = seed;
@@ -449,8 +456,13 @@ export class WorldModel {
       'lumberjack',
       'quarry',
     ]);
+
+    const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
+    const nowRendered = new Set<string>();
     for (const building of snapshot.buildings) {
       if (!RENDERABLE_TYPES.has(building.type)) continue;
+      const key = coordKey({ q: building.q, r: building.r });
+      nowRendered.add(key);
       const tile = this.getTile(building.q, building.r);
       tile.ownerId = settlementId;
       tile.buildingType = building.type as Tile['buildingType'];
@@ -462,6 +474,22 @@ export class WorldModel {
         tile.orientation = building.orientation as Tile['orientation'];
       }
     }
+
+    // A coordinate this settlement rendered last poll but no longer reports
+    // (a cancelled order's level-0 foundation removed, or a building razed)
+    // must be cleared, or the tile would keep showing a building that no
+    // longer exists.
+    if (previouslyRendered) {
+      for (const key of previouslyRendered) {
+        if (nowRendered.has(key)) continue;
+        const { q, r } = parseKey(key);
+        const tile = this.getTile(q, r);
+        if (tile.ownerId !== settlementId) continue;
+        tile.buildingType = undefined;
+        tile.buildingLevel = undefined;
+      }
+    }
+    this.renderedBuildingCoords.set(settlementId, nowRendered);
   }
 
   placeBuilding(settlementId: string, at: AxialCoord, type: Tile['buildingType']): boolean {

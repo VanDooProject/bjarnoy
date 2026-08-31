@@ -190,6 +190,11 @@ public sealed record Army
     /// <see cref="Settlement.Claims"/> without needing the target's whole
     /// aggregate here. Ignored for land armies and for every other mission.
     /// </param>
+    /// <param name="speedFactor">
+    /// The world's speed multiplier, mirroring how build/training durations
+    /// are scaled in <see cref="Buildings.Settlement.PlanBuild"/>. Defaults to
+    /// <c>1.0</c> (no scaling) for callers that have no world in hand.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -202,7 +207,8 @@ public sealed record Army
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
         HexCoord? targetBuildingCoord = null,
-        int targetSettlementClaimRadius = 0)
+        int targetSettlementClaimRadius = 0,
+        double speedFactor = 1.0)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -327,7 +333,7 @@ public sealed record Army
         var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor);
 
         var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit);
         if (returnPath is null || returnPath.Count == 0)
@@ -335,7 +341,7 @@ public sealed record Army
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor);
 
         // Support only needs a one-way trip plus a small reserve — see
         // SupportReserveHours — everything else still needs the full round
@@ -711,7 +717,9 @@ public sealed record Army
     /// return (<see cref="Movement.IsReturning"/> is set immediately, same as
     /// a mid-journey <see cref="ArmyMission.Move"/> recall).
     /// </param>
-    public Army? Recall(DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null)
+    public Army? Recall(
+        DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null,
+        double speedFactor = 1.0)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -743,7 +751,7 @@ public sealed record Army
         }
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -836,7 +844,7 @@ public sealed record Army
     /// </param>
     public Army? TeleportTo(
         HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
-        double? provisions = null)
+        double? provisions = null, double speedFactor = 1.0)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -855,7 +863,7 @@ public sealed record Army
             return null;
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor);
         var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(

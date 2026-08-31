@@ -554,6 +554,19 @@ public sealed record Settlement
     /// <summary>
     /// Pays for <paramref name="order"/> and appends it to the queue.
     /// </summary>
+    /// <remarks>
+    /// A brand-new building (<paramref name="order"/> targets a hex nothing
+    /// stands on yet) is staked out in <see cref="Buildings"/> immediately,
+    /// at level 0 — the foundation. This is what lets any reader of the
+    /// settlement's buildings (not just this settlement's own queue) already
+    /// see it under construction, and is why <see cref="SettleTo"/>'s
+    /// completion pass finds an existing entry at <c>order.Coord</c> to raise
+    /// to <c>order.TargetLevel</c> rather than adding a new one. An upgrade
+    /// order (the hex already holds the building at a lower level) gets no
+    /// stub — the standing building already shows its current level.
+    /// <see cref="CancelBuild"/> removes the stub again if the order never
+    /// completes.
+    /// </remarks>
     public Settlement Enqueue(BuildOrder order, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(order);
@@ -565,7 +578,51 @@ public sealed record Settlement
                 "Cannot enqueue a build that is not affordable; call PlanBuild first.");
         }
 
-        return this with { Resources = paid, Queue = [.. Queue, order] };
+        var buildings = Buildings;
+        if (!buildings.Any(b => b.Coord == order.Coord))
+        {
+            buildings = [.. buildings, new PlacedBuilding(order.Coord, order.Type, Level: 0)];
+        }
+
+        return this with { Resources = paid, Queue = [.. Queue, order], Buildings = buildings };
+    }
+
+    /// <summary>
+    /// Refunds and removes a still-queued build order.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement (see <see cref="SettleTo"/>) —
+    /// mirrors <see cref="PlanBuild"/>/<see cref="Enqueue"/>. A completed
+    /// order is no longer in <see cref="Queue"/> by then, so this simply
+    /// reports <see cref="CancelBuildRejection.OrderNotFound"/> rather than
+    /// ever undoing a finished build. If <paramref name="orderId"/> was a
+    /// brand-new building (<see cref="Enqueue"/>'s level-0 stub), that stub
+    /// is removed from <see cref="Buildings"/> too; an upgrade order simply
+    /// leaves the building at whatever level it already stands.
+    /// </remarks>
+    public CancelBuildResult CancelBuild(Guid orderId, DateTimeOffset now)
+    {
+        var order = Queue.FirstOrDefault(o => o.Id == orderId);
+        if (order is null)
+        {
+            return CancelBuildResult.Rejected(CancelBuildRejection.OrderNotFound);
+        }
+
+        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+        var refunded = Resources.Deposit(definition.Cost, now);
+
+        var buildings = order.TargetLevel == 1
+            ? Buildings.Where(b => b.Coord != order.Coord).ToList()
+            : Buildings;
+
+        var settled = this with
+        {
+            Resources = refunded,
+            Queue = [.. Queue.Where(o => o.Id != orderId)],
+            Buildings = buildings,
+        };
+
+        return CancelBuildResult.Accept(settled);
     }
 
     /// <summary>

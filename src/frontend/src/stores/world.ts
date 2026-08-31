@@ -403,6 +403,18 @@ export const useWorldStore = defineStore('world', {
       await this.refreshLiveSettlement();
     },
     /**
+     * Live mode: cancels a still-queued build order, refunding its cost. For
+     * a brand-new building this also clears the level-0 foundation stub the
+     * backend placed on `Enqueue` — `refreshLiveSettlement`'s reconciliation
+     * against the new (shorter) `buildings` list removes the tile. Throws
+     * `ApiError` on rejection (e.g. the order already completed).
+     */
+    async cancelBuildLive(orderId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.cancelBuild(this.selectedSettlementId, orderId, this.ownerId ?? undefined);
+      await this.refreshLiveSettlement();
+    },
+    /**
      * Live mode: queues a training batch against the backend, charging its
      * cost immediately — mirrors `queueBuildLive` above, including the
      * ownership header. Throws `ApiError` on rejection (e.g. not enough

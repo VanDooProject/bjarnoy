@@ -163,6 +163,28 @@ public class ArmyTests
     }
 
     [Fact]
+    public void Travel_time_scales_down_with_the_world_speed_factor()
+    {
+        var settlement = Found();
+        var destination = new HexCoord(4, 0);
+
+        var normal = Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Spearman, 5)], provisions: 40, [], destination, T0,
+            Guid.CreateVersion7(), AllGrass());
+        var doubled = Army.PlanDispatch(
+            settlement, [new UnitStack(UnitType.Spearman, 5)], provisions: 40, [], destination, T0,
+            Guid.CreateVersion7(), AllGrass(), speedFactor: 2.0);
+
+        Assert.True(normal.Accepted, $"expected accept, got {normal.Rejection}");
+        Assert.True(doubled.Accepted, $"expected accept, got {doubled.Rejection}");
+
+        var normalMovement = ((ArmyLocation.InTransit)normal.Army!.Location).Movement;
+        var doubledMovement = ((ArmyLocation.InTransit)doubled.Army!.Location).Movement;
+
+        Assert.Equal(normalMovement.CumulativeHours[^1] / 2.0, doubledMovement.CumulativeHours[^1], precision: 9);
+    }
+
+    [Fact]
     public void PositionAt_reports_start_hex_before_departure_and_destination_after_arrival()
     {
         var settlement = Found();

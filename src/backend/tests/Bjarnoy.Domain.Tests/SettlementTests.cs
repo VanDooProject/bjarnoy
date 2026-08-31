@@ -379,6 +379,35 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Enqueueing_a_new_building_stakes_a_level_zero_foundation_immediately()
+    {
+        var settlement = Found();
+        var coord = new HexCoord(1, 0);
+        var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+
+        var queued = settlement.Enqueue(order, T0);
+
+        var stub = Assert.Single(queued.Buildings, b => b.Coord == coord);
+        Assert.Equal(BuildingType.Farm, stub.Type);
+        Assert.Equal(0, stub.Level);
+    }
+
+    [Fact]
+    public void Enqueueing_an_upgrade_adds_no_second_entry_for_the_hex()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Longhouse, Centre, Terrain.Grass, T0);
+
+        var queued = settlement.Enqueue(order, T0);
+
+        // The longhouse already stands there at level 1 — an upgrade order
+        // must not stake a level-0 stub alongside it.
+        var atCentre = queued.Buildings.Where(b => b.Coord == Centre).ToList();
+        var only = Assert.Single(atCentre);
+        Assert.Equal(1, only.Level);
+    }
+
+    [Fact]
     public void A_queued_build_does_not_produce_until_it_completes()
     {
         var settlement = Found();
@@ -619,6 +648,60 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Cancelling_a_new_buildings_order_refunds_the_cost_and_removes_the_foundation()
+    {
+        var settlement = Found();
+        var coord = new HexCoord(1, 0);
+        var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
+        var queued = settlement.Enqueue(order, T0);
+
+        var result = queued.CancelBuild(order.Id, T0);
+
+        Assert.True(result.Accepted);
+        Assert.Empty(result.Settlement!.Queue);
+        Assert.DoesNotContain(result.Settlement.Buildings, b => b.Coord == coord);
+        Assert.Equal(settlement.Resources.At(T0).Wood, result.Settlement.Resources.At(T0).Wood, 6);
+    }
+
+    [Fact]
+    public void Cancelling_an_upgrade_order_refunds_the_cost_but_leaves_the_building_standing()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Longhouse, Centre, Terrain.Grass, T0);
+        var queued = settlement.Enqueue(order, T0);
+
+        var result = queued.CancelBuild(order.Id, T0);
+
+        Assert.True(result.Accepted);
+        Assert.Empty(result.Settlement!.Queue);
+        var longhouse = Assert.Single(result.Settlement.Buildings, b => b.Coord == Centre);
+        Assert.Equal(1, longhouse.Level);
+    }
+
+    [Fact]
+    public void Cancelling_an_unknown_order_is_refused()
+    {
+        var settlement = Found();
+
+        var result = settlement.CancelBuild(Guid.CreateVersion7(), T0);
+
+        Assert.False(result.Accepted);
+        Assert.Equal(CancelBuildRejection.OrderNotFound, result.Rejection);
+    }
+
+    [Fact]
+    public void Cancelling_an_already_completed_order_is_refused()
+    {
+        var settlement = Found();
+        var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+
+        var result = built.CancelBuild(order.Id, order.CompletesAt);
+
+        Assert.Equal(CancelBuildRejection.OrderNotFound, result.Rejection);
+    }
+
+    [Fact]
     public void Admin_setting_a_buildings_level_recomputes_rates_like_a_normal_completion()
     {
         var settlement = Found();
@@ -775,7 +858,11 @@ public class SettlementTests
 
 internal static class SettlementTestExtensions
 {
-    /// <summary>Buildings other than the founding longhouse.</summary>
+    /// <summary>
+    /// Buildings other than the founding longhouse that have actually
+    /// completed (level ≥ 1) — a queued-but-unfinished order's level-0
+    /// foundation (see <see cref="Settlement.Enqueue"/>) does not count.
+    /// </summary>
     public static IReadOnlyList<PlacedBuilding> Completed(this Settlement settlement) =>
-        [.. settlement.Buildings.Where(b => b.Type != BuildingType.Longhouse)];
+        [.. settlement.Buildings.Where(b => b.Type != BuildingType.Longhouse && b.Level >= 1)];
 }
