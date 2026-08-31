@@ -177,8 +177,19 @@ something already built; this issue is where that gets designed:
   conditions and both have to hold for an island to be offered:
   - **Qualifies at all** (§ above): no *graduated* (unshielded) settlement
     on the island.
-  - **Has capacity**: `openPlots(island) = StartPositions.Count -
-    SettledCount(island) > 0`.
+  - **Has capacity**: at least one of the island's `StartPositions` is
+    both unfounded *and* not within `SettlementService.MinimumSpacing` of
+    any settlement already on the island — not simply
+    `StartPositions.Count - SettledCount(island) > 0`. `FoundAsync`
+    already rejects a candidate hex within `MinimumSpacing` of an existing
+    settlement as `TooCloseToNeighbour` (`SettlementService.cs:244-247`),
+    same-island only per its own comment, and `MinimumSpacing = 2 *
+    Settlement.MaxClaimRadius + 1` (`:141`) is deliberately sized so a
+    settlement's claim disc can never physically reach another
+    settlement's centre — so **one founding can silently take out several
+    nearby `StartPositions` at once**, not just the exact hex clicked.
+    `openPlots` has to reflect that, or it would keep advertising a
+    position that a founding attempt would immediately reject.
 
   An island can qualify without having capacity — every one of its
   `StartPositions` can already be taken by *other beginners*, all still
@@ -267,13 +278,22 @@ cache-control header — nothing about this suggestion is client-cacheable,
 it's re-decided server-side on every landing-page load), not a time-based
 TTL guessed at from "how fresh does this feel":
 
-- **`Dictionary<IslandId, int> openPlots`** — `StartPositions.Count -
-  SettledCount(island)`, per island. Only ever changes by founding a
-  settlement, and `FoundAsync` (`SettlementService.cs`) already knows
-  exactly which island that was, so this doesn't need an expiry or a
-  requery at all: on a successful founding, decrement that one island's
-  entry by one, in place. No DB round trip, no invalidation logic — it's
-  a running counter, not a cache with a staleness question.
+- **`Dictionary<IslandId, int> openPlots`** — the corrected count from
+  above (unfounded *and* clear of `MinimumSpacing`), per island. It only
+  ever changes by founding a settlement — no other player action moves
+  it (buildings, including towers, are placed only within a settlement's
+  own already-established `Claims(coord)` disc, i.e. `ClaimRadius` hexes
+  of its own centre; `ClaimRadius` tracks `LonghouseLevel` alone, and
+  `MinimumSpacing`'s `2 * MaxClaimRadius + 1` sizing is exactly what
+  guarantees that disc can never reach a neighbour's `StartPositions` —
+  so there's no path from "someone built a tower" to a plot disappearing,
+  today). But because one founding can invalidate several `StartPositions`
+  at once (previous bullet), this isn't a plain decrement-by-one: on a
+  successful founding, recompute *that one island's* entry by re-walking
+  its own (small, fixed-size) `StartPositions` list against its (now one
+  larger) settlement set — still no DB round trip beyond what `FoundAsync`
+  already did to insert the settlement, and still scoped to a single
+  island, just not a bare `-1`.
 - **`Dictionary<IslandId, DateTimeOffset> earliestGraduationRisk`** — per
   island, the earliest `ShieldExpiresAtUtc` among its currently-shielded
   settlements (or "already has a graduate" as a distinct, permanent state
@@ -306,11 +326,42 @@ beginner query already has to look at) split into the three fields that
 actually have different lifetimes, so each can be invalidated exactly
 right instead of the whole thing being re-fetched or guessed-at with a
 TTL. That's less work than the single whole-world-cache approach from the
-first pass at this section — `openPlots` updates in place with no
-recomputation at all, and `earliestGraduationRisk` only ever recomputes
-the one island whose window lapsed, rather than treating every founding
-or every clock tick as a reason to throw away everything cached and start
-over.
+first pass at this section — `openPlots` only ever recomputes the one
+island a founding just happened on, and `earliestGraduationRisk` only ever
+recomputes the one island whose window lapsed, rather than treating every
+founding or every clock tick as a reason to throw away everything cached
+and start over.
+
+## 7. Admin visibility
+
+Both the fill picture and the total-exhaustion fallback state need to be
+visible to an admin, not just live inside the suggestion query's own
+in-memory cache. `AdminWorldsView.vue`'s world table already surfaces
+per-world live state this way — `Players`, `Joinable`, `Endboss`
+columns, each backed by a field `WorldResponse`/`AdminWorldEndpoints`
+computes server-side (`WorldContracts.cs`) — so this extends that existing
+table rather than inventing a new admin surface:
+
+- **A "Beginner rings" column**, summarizing the same `openPlots`/
+  `earliestGraduationRisk` state the suggestion query already caches per
+  world — e.g. how many rings currently have spare beginner capacity out
+  of how many contain any island at all, so an admin can see at a glance
+  whether new players are still landing near the origin or have already
+  been pushed several rings out.
+- **A visible flag for the fallback state itself**: when a world has hit
+  genuine total exhaustion (§ above — every island either graduated or at
+  zero `openPlots`, the point where the suggestion query stops filtering
+  by beginner status at all), that's exactly the kind of thing an admin
+  needs to notice on its own, not discover from player complaints about
+  landing next to a graduated neighbour. Surfacing it as its own column
+  (or folded into the existing `Joinable`/`Endboss`-style status cell) is
+  the same "is this world healthy" signal those columns already give for
+  other conditions — this is one more.
+- Both read straight off the same `IMemoryCache` state described above
+  (or a fresh computation if that world's cache happens to be cold) — no
+  new persistence, no new job; it's the existing admin-worlds list making
+  one more already-computed fact visible, the same way it does for player
+  count and joinability today.
 
 ## Scope
 
