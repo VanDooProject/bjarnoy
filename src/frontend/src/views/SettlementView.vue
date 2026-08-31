@@ -7,8 +7,12 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import TradePanel from '../components/hud/TradePanel.vue';
+import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
+import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
+import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
@@ -16,7 +20,7 @@ import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
-import type { HoverInfo } from '../lib/map/HexMapRenderer';
+import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -73,6 +77,78 @@ onUnmounted(() => {
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
 
+// Issue #40 phase 2: pushes armies/route/draft-waypoints into the renderer's
+// own overlay layer (HexMapRenderer.setArmyOverlay) whenever any of them
+// change, or as soon as the renderer itself becomes available — watching
+// both together (rather than assuming the renderer is already mounted the
+// first time this fires) covers the ordering race between the canvas
+// mounting and this store data arriving.
+const armyOverlayData = computed<ArmyOverlayData>(() => {
+  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+    id: a.id,
+    position: a.position,
+    selected: a.id === world.selectedArmyId,
+    returning: !!a.movement?.isReturning,
+    // Issue #94: hand the renderer the whole frozen leg, not a position —
+    // it interpolates along it every frame (see HexMapRenderer's
+    // `resolveArmyPoint`). An `atHome`/`supporting` army has no movement at
+    // all and keeps sitting on its authoritative hex. `movement.path` is
+    // always the *active* leg, outbound or return (the backend rebuilds
+    // Movement on turn-around — see Movement.cs's own remarks), so there's
+    // no leg-picking to do here.
+    movement: a.movement
+      ? {
+          path: a.movement.path.map((p) => ({ q: p.q, r: p.r })),
+          cumulativeHours: a.movement.cumulativeHours ?? [],
+          departedAtMs: Date.parse(a.movement.departedAt),
+          arrivesAtMs: Date.parse(a.movement.arrivesAt),
+        }
+      : undefined,
+  }));
+  const selected = world.armies.find((a) => a.id === world.selectedArmyId);
+  const route = selected?.movement
+    ? selected.movement.isReturning
+      ? selected.movement.returnPath
+      : selected.movement.path
+    : [];
+  const draftWaypoints = world.dispatchDraft?.route ?? [];
+  return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
+});
+
+// Issue #93 "attack/raid target indicator": the settlement an attack/support
+// is aimed at, marked on its own hex. Two sources, deliberately both: the
+// dispatch being composed right now (the player picked it from a text list
+// and otherwise gets no confirmation of *where* it is), and the selected
+// in-transit army's target (so a march already under way still shows what
+// it's marching at). A settlement the local WorldModel doesn't know yet
+// (`refreshWorldSettlements` hasn't registered it) simply isn't marked.
+function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined) {
+  const targets: NonNullable<ArmyOverlayData['targets']> = [];
+  const add = (settlementId: string | null | undefined, mission: string) => {
+    if (!settlementId || (mission !== 'attack' && mission !== 'support' && mission !== 'raid')) return;
+    const settlement = world.model.getSettlement(settlementId);
+    if (!settlement) return;
+    // Raids are attacks as far as the map is concerned — the marker says
+    // "someone is coming for this place", not which flavour of order it is.
+    const kind = mission === 'support' ? 'support' : 'attack';
+    if (targets.some((t) => t.coord.q === settlement.q && t.coord.r === settlement.r && t.kind === kind)) return;
+    targets.push({ coord: { q: settlement.q, r: settlement.r }, kind });
+  };
+  const draft = world.dispatchDraft;
+  if (draft) add(draft.targetSettlementId, draft.mission);
+  if (selectedArmy && !selectedArmy.movement?.isReturning) {
+    add(selectedArmy.targetSettlementId, selectedArmy.mission);
+  }
+  return targets;
+}
+watch(
+  [() => canvasRef.value?.renderer, armyOverlayData],
+  ([renderer, data]) => {
+    renderer?.setArmyOverlay(data ?? null);
+  },
+  { immediate: true },
+);
+
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
@@ -91,6 +167,10 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
+// Issue #40 phase 1: a separate modal from BuildingModal (train has no
+// per-hex build/upgrade action, it lists the whole unit roster at once) —
+// see the ring's 'train' action below.
+const trainModalOpen = ref(false);
 
 const modalMine = computed(
   () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
@@ -161,7 +241,7 @@ function onRingOutsidePointerDown(e: PointerEvent) {
   canvasRef.value?.renderer?.beginDragFrom(e, { suppressClick: true });
 }
 
-type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm';
+type BuildableType = 'hut' | 'farm' | 'tower' | 'fishinghut' | 'magictower' | 'pumpkinfarm' | 'lumberjack' | 'quarry';
 
 interface BuildCategory {
   id: string;
@@ -205,6 +285,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'farm', label: 'Farm' },
         { type: 'tower', label: 'Watchtower' },
         { type: 'fishinghut', label: 'Fishing Hut' },
+        { type: 'lumberjack', label: 'Lumberjack' },
+        { type: 'quarry', label: 'Quarry' },
       ],
     },
   ],
@@ -264,10 +346,13 @@ function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
       },
       { id: 'details', label: 'Details' },
     ];
-    // Building-specific actions (train/research): none of today's building
-    // types (hut/farm/tower/longhouse) expose one yet, so nothing is added
-    // here — the branch exists so a future barracks/academy building type
-    // has somewhere to plug in without restructuring the ring.
+    // Issue #40 phase 1: "build units in longhouse" — the longhouse is
+    // where training happens per the backend design (UnitDefinition's
+    // RequiredLonghouseLevel, TrainingOrder queued against the settlement),
+    // so it's the one building type that gets an extra ring action here.
+    if (tile.buildingType === 'longhouse') {
+      actions.push({ id: 'train', label: 'Train units' });
+    }
     return actions;
   }
   if (isMineTile.value) {
@@ -353,11 +438,26 @@ const ringBadge = computed(() => {
 });
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+  // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
+  // "Dispatch army" flow), a click plots the next waypoint instead of
+  // opening the usual ring menu — the two interaction modes are mutually
+  // exclusive on this same canvas, per the design doc.
+  if (world.dispatchDraft) {
+    world.addWaypoint(coord);
+    return;
+  }
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
   ringScreen.value = screen;
   ringStack.value = [{ level: 'root' }];
+}
+
+// Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
+// the pin was dragged onto (snapping happens there, against the same
+// isoPixelToAxial a click uses); this just writes it into the draft.
+function onWaypointMove(index: number, coord: AxialCoord) {
+  world.moveWaypoint(index, coord);
 }
 
 function closeRing() {
@@ -417,6 +517,12 @@ async function onRingSelect(i: number, id: string) {
       await upgrade();
       closeRing();
       return;
+    case 'train':
+      // Falls through to TrainingModal below, same pattern as
+      // 'details'/'info' handing off to BuildingModal.
+      ringScreen.value = null;
+      trainModalOpen.value = true;
+      return;
     case 'raze':
       if (world.selectedSettlementId && selectedCoord.value) {
         world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
@@ -431,6 +537,11 @@ async function onRingSelect(i: number, id: string) {
 function closeModal() {
   closeRing();
   modalBusy.value = false;
+}
+
+function closeTrainModal() {
+  closeRing();
+  trainModalOpen.value = false;
 }
 
 // Demo mode places the chosen building instantly; live mode queues that
@@ -492,6 +603,7 @@ async function upgrade() {
       :settlement-id="world.selectedSettlementId"
       @hex-click="onHexClick"
       @hover="onHover"
+      @waypoint-move="onWaypointMove"
     />
     <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
@@ -507,6 +619,9 @@ async function upgrade() {
     </TopBar>
     <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
+    <TradePanel />
+    <TrainingQueuePanel />
+    <ArmyPanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <template v-if="selectedTile && ringScreen">
       <RingMenu
@@ -528,7 +643,7 @@ async function upgrade() {
       />
     </template>
     <BuildingModal
-      v-if="selectedTile && !ringScreen"
+      v-if="selectedTile && !ringScreen && !trainModalOpen"
       :tile="selectedTile"
       :mine="modalMine"
       :owner-label="modalOwnerLabel"
@@ -536,6 +651,11 @@ async function upgrade() {
       @close="closeModal"
       @build="build"
       @upgrade="upgrade"
+    />
+    <TrainingModal
+      v-if="selectedTile && trainModalOpen"
+      @close="closeTrainModal"
+      @trained="closeTrainModal"
     />
   </div>
 </template>

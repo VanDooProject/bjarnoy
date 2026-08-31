@@ -61,6 +61,8 @@ export interface PlacedBuildingResponse {
   r: number;
   type: string;
   level: number;
+  /** Which art-pack rotation to render with — set only for a building whose art has a fixed connection to something around it (e.g. the fishing hut's dock). */
+  orientation?: string | null;
 }
 
 export interface BuildOrderResponse {
@@ -69,6 +71,27 @@ export interface BuildOrderResponse {
   r: number;
   building: string;
   targetLevel: number;
+  completesAtGameTime: string;
+  completesInSeconds: number | null;
+}
+
+/** A garrison line: how many of one unit type currently stand at a settlement. */
+export interface UnitStackResponse {
+  unit: string;
+  count: number;
+}
+
+/**
+ * One queued training batch. `completedCount` is display-only — the whole
+ * batch lands in the garrison at once when it completes (see the backend's
+ * `TrainingOrder` remarks); `completesInSeconds` is null while the world is
+ * frozen, same as `BuildOrderResponse.completesInSeconds`.
+ */
+export interface TrainingOrderResponse {
+  id: string;
+  unit: string;
+  count: number;
+  completedCount: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
 }
@@ -93,6 +116,8 @@ export interface SettlementResponse {
   resources: ResourcesResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
+  garrison: UnitStackResponse[];
+  trainingQueue: TrainingOrderResponse[];
   world: WorldClockResponse;
 }
 
@@ -103,6 +128,78 @@ export interface SettlementSummary {
   q: number;
   r: number;
   longhouseLevel: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see
+// TradeEndpoints for the endpoints these are used against.
+
+export interface PostTradeOfferRequest {
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildOnly?: boolean;
+}
+
+export interface AcceptTradeOfferRequest {
+  acceptorSettlementId: string;
+}
+
+export interface CancelTradeOfferRequest {
+  settlementId: string;
+}
+
+/** `state` is one of: 'open' | 'accepted' | 'delivered' | 'cancelled' | 'expired'. */
+export interface TradeOfferResponse {
+  id: string;
+  posterSettlementId: string;
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildOnly: boolean;
+  state: string;
+  postedAtGameTime: string;
+  expiresAtGameTime: string;
+}
+
+export interface ShipmentResponse {
+  id: string;
+  offerId: string;
+  fromSettlementId: string;
+  toSettlementId: string;
+  cargoResource: string;
+  cargoAmount: number;
+  carts: number;
+  fromQ: number;
+  fromR: number;
+  toQ: number;
+  toR: number;
+  departedAtGameTime: string;
+  arrivesAtGameTime: string;
+  returnArrivesAtGameTime: string;
+  delivered: boolean;
+}
+
+export interface TradeAcceptResponse {
+  offer: TradeOfferResponse;
+  toAcceptor: ShipmentResponse;
+  toPoster: ShipmentResponse;
+}
+
+/** Mirrors `TradeReportResponse` in TradeContracts.cs — a completed trade, visible to both settlements. */
+export interface TradeReportResponse {
+  id: string;
+  offerId: string;
+  completedAt: string;
+  posterSettlementId: string;
+  acceptorSettlementId: string;
+  offeredResource: string;
+  offeredAmount: number;
+  requestedResource: string;
+  requestedAmount: number;
+  guildTrade: boolean;
+  travelHours: number;
 }
 
 export interface CreateWorldRequest {
@@ -126,6 +223,11 @@ export interface QueueBuildRequest {
   building: string;
   q: number;
   r: number;
+}
+
+export interface TrainUnitsRequest {
+  unit: string;
+  count: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AuthContracts.cs.
@@ -206,6 +308,7 @@ export interface AdminUserResponse {
   settlementCount: number;
   createdAt: string;
   lastLoginAt: string | null;
+  isPremium: boolean;
 }
 
 export interface AdminUserSettlementSummary {
@@ -247,6 +350,10 @@ export interface SetUserStatusRequest {
   reason?: string;
 }
 
+export interface SetUserPremiumRequest {
+  isPremium: boolean;
+}
+
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminSettlementContracts.cs.
 
 export interface AdminSettlementSummary {
@@ -279,6 +386,163 @@ export interface SetBuildingLevelRequest {
   level: number;
 }
 
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
+
+export interface SendMessageRequest {
+  recipientUserId: string;
+  body: string;
+}
+
+export interface MessageResponse {
+  id: string;
+  senderUserId: string;
+  recipientUserId: string;
+  body: string;
+  sentAt: string;
+  /** Only ever populated when `readReceiptVisible` is true. */
+  readAt: string | null;
+  /** Whether the sender is allowed to see `readAt` (sender and recipient in the same guild). */
+  readReceiptVisible: boolean;
+}
+
+export interface ConversationResponse {
+  otherUserId: string;
+  otherUserName: string;
+  otherDisplayName: string | null;
+  lastMessage: MessageResponse;
+  unreadCount: number;
+}
+
+export interface PagedMessagesResponse {
+  items: MessageResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PagedConversationsResponse {
+  items: ConversationResponse[];
+  page: number;
+  pageSize: number;
+}
+
+export interface MarkReadResponse {
+  markedRead: number;
+}
+
+export interface ReportMessageRequest {
+  reason: string;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ProfileContracts.cs.
+
+export interface ProfileResponse {
+  id: string;
+  userName: string;
+  displayName: string | null;
+  /** Plain text with significant whitespace (ASCII art) — render escaped, `white-space: pre`. */
+  bio: string | null;
+  createdAt: string;
+  settlementCount: number;
+}
+
+/** `bio: null` (or empty) clears the bio. */
+export interface UpdateBioRequest {
+  bio: string | null;
+}
+
+export interface ReportProfileRequest {
+  reason: string;
+  note?: string | null;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs — the
+// generic moderation queue behind both chat message reports and profile
+// reports (previously a separate ProfileReportResponse/profile_reports
+// system, unified onto this one queue).
+
+export interface ReportResponse {
+  id: string;
+  reporterUserId: string;
+  reporterUserName: string;
+  reportedUserId: string;
+  reportedUserName: string;
+  /** One of `chatMessage`, `profileBio`. */
+  sourceType: string;
+  sourceId: string;
+  contextSnapshot: string;
+  reason: string;
+  note: string | null;
+  createdAt: string;
+  /** One of `pending`, `resolved`, `dismissed`, `actioned`. */
+  status: string;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+}
+
+export interface PagedReportsResponse {
+  items: ReportResponse[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+/** `outcome`: one of `resolved`, `dismissed`, `actioned`. */
+export interface ResolveReportRequest {
+  outcome: string;
+  note?: string | null;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminActivityContracts.cs.
+
+export interface ActivityBucket {
+  bucketStart: string;
+  activeUserCount: number;
+}
+
+/** `bucket`: one of `day`, `hour` (echoes the request, defaulting to `day`). */
+export interface ActivitySummaryResponse {
+  from: string;
+  to: string;
+  bucket: string;
+  buckets: ActivityBucket[];
+}
+
+/** `lastActiveAtUtc` is null for a user who has never been tracked — sorted after everyone with activity. */
+export interface AdminActivityUser {
+  userId: string;
+  userName: string;
+  displayName: string | null;
+  lastActiveAtUtc: string | null;
+}
+
+export interface PagedAdminActivityUsersResponse {
+  items: AdminActivityUser[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ActivitySessionWindow {
+  startedAtUtc: string;
+  lastSeenAtUtc: string;
+}
+
+/**
+ * `totalActiveDuration` is a .NET `TimeSpan` serialized by System.Text.Json's
+ * default converter — an ISO-8601-ish `"d.hh:mm:ss.fffffff"` string, NOT a
+ * plain number of seconds. Don't parse it as one; either parse the string
+ * format properly or derive a total from `sessions` client-side.
+ */
+export interface AdminUserActivityDetailResponse {
+  userId: string;
+  from: string;
+  to: string;
+  sessionCount: number;
+  totalActiveDuration: string;
+  sessions: ActivitySessionWindow[];
+}
+
 export interface ProblemDetails {
   title?: string;
   detail?: string;
@@ -291,4 +555,420 @@ export interface ProblemDetails {
    * this is what actually distinguishes them.
    */
   rejection?: string;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/LeaderboardContracts.cs.
+
+export type LeaderboardScope = 'user' | 'settlement' | 'guild';
+
+export type LeaderboardCategory =
+  | 'score'
+  | 'biggestSettlement'
+  | 'weeklyScoreGained'
+  | 'weeklyFightsWon'
+  | 'weeklyFightsLost'
+  | 'weeklyResourcesLooted'
+  | 'biggestArmy';
+
+/**
+ * `reason` is set only when `available` is false — one of `noBattleSystemYet`,
+ * `noArmySystemYet`, `noGuildSystemYet`, `noWeeklyWindowsYet`, `notComputedYet`,
+ * or `unknownBoard` (issue #43 §5).
+ */
+export interface LeaderboardBoardInfoResponse {
+  scope: LeaderboardScope;
+  category: LeaderboardCategory;
+  available: boolean;
+  reason: string | null;
+  computedAt: string | null;
+  entryCount: number | null;
+}
+
+export interface WeeklyWindowResponse {
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface LeaderboardDirectoryResponse {
+  boards: LeaderboardBoardInfoResponse[];
+  weeklyWindows: WeeklyWindowResponse[];
+}
+
+/** `delta`: `previousRank` minus `rank` — positive means the subject moved up. `null` for a new entrant. */
+export interface LeaderboardEntryResponse {
+  rank: number;
+  subjectId: string;
+  subjectName: string;
+  value: number;
+  previousRank: number | null;
+  delta: number | null;
+}
+
+export interface LeaderboardBoardResponse {
+  scope: LeaderboardScope;
+  category: LeaderboardCategory;
+  available: boolean;
+  reason: string | null;
+  isFinal: boolean;
+  periodStart: string | null;
+  periodEnd: string | null;
+  computedAt: string | null;
+  items: LeaderboardEntryResponse[];
+  nextAfterRank: number | null;
+}
+
+export interface WeeklyStatResponse {
+  periodStart: string;
+  periodEnd: string;
+  isFinal: boolean;
+  scoreGained: number;
+}
+
+export interface WeeklyStatsPageResponse {
+  items: WeeklyStatResponse[];
+  nextCursor: string | null;
+}
+
+export interface LeaderboardMeResponse {
+  myRank: number;
+  items: LeaderboardEntryResponse[];
+}
+
+/** A single (building type, level) entry from the tech-tree catalogue — see `GET /api/v1/buildings`. */
+export interface BuildingDefinitionResponse {
+  type: string;
+  level: number;
+  cost: ResourceLine;
+  buildSeconds: number;
+  productionPerHour: ResourceLine;
+  storageCapacity: ResourceLine;
+  /** Empty both for "any land" and for a requiresCoastalWater building — check that flag first. */
+  allowedTerrain: string[];
+  /** Placed on shallow (coastal) water instead of any land terrain — see BuildingDefinition.RequiresCoastalWater. */
+  requiresCoastalWater: boolean;
+  requiredLonghouseLevel: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
+
+export type GuildFeeTier = 'copper' | 'silver' | 'gold';
+
+export type GuildRole = 'leader' | 'officer' | 'member';
+
+export type GuildBoardTopicKind = 'discussion' | 'announcement' | 'report';
+
+export type PeaceTreatyStatus = 'proposed' | 'active' | 'rejected' | 'withdrawn' | 'broken';
+
+export interface CreateGuildRequest {
+  name: string;
+  tag: string;
+  description?: string | null;
+}
+
+export interface SetGuildFeeTierRequest {
+  feeTier: GuildFeeTier;
+}
+
+export interface SetGuildMemberRoleRequest {
+  role: GuildRole;
+}
+
+export interface CreateGuildTopicRequest {
+  title: string;
+  kind: GuildBoardTopicKind;
+  body: string;
+}
+
+export interface CreateGuildPostRequest {
+  body: string;
+}
+
+export interface ProposeTreatyRequest {
+  targetGuildId: string;
+}
+
+export interface GuildMemberResponse {
+  userId: string;
+  role: GuildRole;
+  joinedAt: string;
+  feeOverdue: boolean;
+}
+
+/** The member cap, treaty cap and perks a guild's current fee tier unlocks — see `GuildRules` on the backend. */
+export interface GuildPerksResponse {
+  tradeCapacityBonus: number;
+  allowUnitSupport: boolean;
+  memberCap: number;
+  maxActivePeaceTreaties: number;
+}
+
+export interface GuildResponse {
+  id: string;
+  worldId: string;
+  name: string;
+  tag: string;
+  description: string | null;
+  feeTier: GuildFeeTier;
+  memberCount: number;
+  createdAt: string;
+  members: GuildMemberResponse[];
+}
+
+export interface GuildBoardPostResponse {
+  id: string;
+  authorUserId: string;
+  body: string;
+  createdAt: string;
+}
+
+/** `kind: 'report'` flags this topic for a future game-event-reports feature — not implemented yet. */
+export interface GuildBoardTopicResponse {
+  id: string;
+  guildId: string;
+  authorUserId: string;
+  title: string;
+  kind: GuildBoardTopicKind;
+  pinned: boolean;
+  locked: boolean;
+  createdAt: string;
+  posts: GuildBoardPostResponse[];
+}
+
+export interface GuildTreatyResponse {
+  id: string;
+  proposerGuildId: string;
+  targetGuildId: string;
+  status: PeaceTreatyStatus;
+  proposedAt: string;
+  respondedAt: string | null;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/ArmyContracts.cs (issue #40
+// phase 2: dispatching an army on a "move" mission, waypoint editing, and
+// live position/path rendering). Only Move-mission fields are used by any
+// UI this phase builds, but the request/response shapes themselves already
+// cover attack/support/raid too (Mission/TargetSettlementId/TargetBuildingCoord)
+// so a later phase can add that UI without reshaping these types.
+
+export interface HexPoint {
+  q: number;
+  r: number;
+}
+
+export interface UnitCountRequest {
+  unit: string;
+  count: number;
+}
+
+/**
+ * `waypoints`: ordered intermediate hexes, empty/omitted for a direct route.
+ * `destination`: required for `mission: 'move'` (the default); ignored for
+ * attack/support/raid, whose destination is always the target settlement's
+ * own hex. `provisions`: food loaded onto the army, capped by carry capacity
+ * and what the settlement can afford.
+ */
+export interface DispatchArmyRequest {
+  units: UnitCountRequest[];
+  waypoints?: HexPoint[];
+  destination?: HexPoint;
+  provisions: number;
+  mission?: string;
+  targetSettlementId?: string;
+  targetBuildingCoord?: HexPoint;
+}
+
+/**
+ * Mirrors `MovementResponse` — the full outbound route, start and destination
+ * included.
+ *
+ * `cumulativeHours` is the per-hex schedule for `path` (`[0]` is always 0,
+ * same length as `path`), and `returnCumulativeHours` the same for
+ * `returnPath` measured from `turnAroundAt`. Issue #94 exposed them so the
+ * map can interpolate an army's live position per leg (see
+ * `lib/units/armyProgress.ts`) — legs cost wildly different amounts of time
+ * on mixed terrain, so spreading the trip evenly over the path drifts away
+ * from the authoritative `position` the backend reports.
+ */
+export interface MovementResponse {
+  departedAt: string;
+  path: HexPoint[];
+  cumulativeHours: number[];
+  arrivesAt: string;
+  returnPath: HexPoint[];
+  returnCumulativeHours: number[];
+  turnAroundAt: string;
+  returnArrivesAt: string;
+  isReturning: boolean;
+}
+
+/**
+ * Mirrors `ArmyResponse`. `atHome`/`supporting` are mutually exclusive with
+ * `movement` being non-null (an army is either in transit, at home, or a
+ * guest garrison elsewhere). `position` is already resolved server-side
+ * (`Movement.PositionAt`) to the last hex actually reached — no client-side
+ * A* or interpolation needed to know "where is it now", though the frontend
+ * may still interpolate visually between `position` and the next `path`
+ * point for smoother rendering between polls (see `ArmyPanel.vue`).
+ */
+export interface ArmyResponse {
+  id: string;
+  settlementId: string;
+  mission: string;
+  targetSettlementId: string | null;
+  atHome: boolean;
+  supporting: boolean;
+  position: HexPoint;
+  provisions: number;
+  totalSpeed: number;
+  totalUpkeepPerHour: number;
+  stacks: ArmyUnitStackResponse[];
+  movement: MovementResponse | null;
+}
+
+export interface ArmyUnitStackResponse {
+  unit: string;
+  count: number;
+}
+
+/** An army as it appears in a settlement's army list — lighter than `ArmyResponse`. */
+export interface ArmySummary {
+  id: string;
+  mission: string;
+  atHome: boolean;
+  supporting: boolean;
+  position: HexPoint;
+}
+
+/**
+ * Mirrors `GuestArmySummary` (issue #40 phase 4) — a Support army as its
+ * *host* settlement sees it: counts only, since the host cannot command a
+ * guest garrison (no recall/action buttons on this view — only the owner,
+ * reading their own settlement's `armies`, can recall it). `ownerSettlementId`
+ * is the guest's home, not its current location (which is always the
+ * settlement `getSettlementGuests` was asked about).
+ */
+export interface GuestArmySummary {
+  armyId: string;
+  ownerSettlementId: string;
+  totalUpkeepPerHour: number;
+  stacks: ArmyUnitStackResponse[];
+}
+
+// Issue #40 phase 3 (frontend): battle reports. Mirrors
+// `BattleReportAttackerLineResponse`/`BattleReportDefenderLineResponse`/
+// `BattleReportSiegeResponse`/`BattleReportResponse` in ArmyContracts.cs.
+
+export interface BattleReportAttackerLine {
+  unit: string;
+  sent: number;
+  lost: number;
+  survived: number;
+}
+
+export interface BattleReportDefenderLine {
+  unit: string;
+  lost: number;
+  survived: number;
+}
+
+/**
+ * The building-damage section of a report (backend phase 5) — present only
+ * when catapult damage actually happened. Passed through and displayed
+ * generically (this phase builds no catapult-targeting UI of its own).
+ */
+export interface BattleReportSiege {
+  targetCoord: HexPoint;
+  targetType: string;
+  levelBefore: number;
+  levelAfter: number;
+  settlementRazed: boolean;
+}
+
+/**
+ * Mirrors `BattleReportResponse`. `mission` is `'attack'` or `'raid'`
+ * (backend phase 7) — this phase's dispatch UI only offers Attack, but a
+ * report can still come back as a Raid (e.g. from another player), so it's
+ * rendered with its own label rather than assumed to always be an Attack.
+ * `winner` is `'attacker'` or `'defender'` (no draw).
+ */
+export interface BattleReportResponse {
+  id: string;
+  occurredAt: string;
+  attackerArmyId: string;
+  attackerSettlementId: string;
+  defenderSettlementId: string;
+  mission: string;
+  winner: string;
+  attackPower: number;
+  defensePower: number;
+  seed: number;
+  lootTaken: ResourceLine;
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  siege: BattleReportSiege | null;
+}
+
+// Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors
+// `SimulatorRequest`/`SimulatorResponse` in SimulatorContracts.cs exactly.
+// `POST /simulator` is gated by `PremiumUserEndpointFilter` — see
+// `api/client.ts`'s `simulate` and `lib/units/simulator.ts` for how the
+// 401 (unauthenticated) / 403 `{ error: "premium_required" }` responses are
+// told apart from an ordinary error.
+
+/**
+ * `attackerStacks`: the hypothetical attacking force (at least one stack).
+ * `defenderStacks`: the hypothetical home garrison; omit/empty for an
+ * undefended settlement. `guestDefenderStacks`: optional Support-style
+ * guest stacks folded into the defense alongside `defenderStacks`, mirroring
+ * a real battle. `towerLevel` defaults to 0 (no Tower). `mission` is
+ * `'attack'` (default) or `'raid'`. `seed` lets a caller replay the exact
+ * same simulated outcome; omit to have the server pick one.
+ */
+export interface SimulatorRequest {
+  attackerStacks: UnitCountRequest[];
+  defenderStacks?: UnitCountRequest[];
+  guestDefenderStacks?: UnitCountRequest[];
+  towerLevel?: number;
+  mission?: string;
+  seed?: number;
+}
+
+/**
+ * Mirrors `SimulatorResponse` — deliberately the same field shape as
+ * `BattleReportResponse` minus the persistence-only identity fields no
+ * simulated battle has (no `id`, `occurredAt`, army/settlement ids), so the
+ * same report-rendering markup (`BattleReportCard.vue`) can display either.
+ */
+export interface SimulatorResponse {
+  mission: string;
+  winner: string;
+  attackPower: number;
+  defensePower: number;
+  seed: number;
+  lootTaken: ResourceLine;
+  attackerLines: BattleReportAttackerLine[];
+  defenderLines: BattleReportDefenderLine[];
+  siege: BattleReportSiege | null;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/SettlementContracts.cs's
+// UnitDefinitionResponse (issue #40 phase 1: unit catalogue, training queue).
+
+/** One unit type's stats and training prerequisites — see `GET /api/v1/units`. */
+export interface UnitDefinitionResponse {
+  type: string;
+  /** `infantry` | `cavalry` | `siege` | `ship` | `civilian` (`UnitClass`, lowercased on the wire). */
+  class: string;
+  attack: number;
+  defense: number;
+  /** Hexes per hour. Unused by anything this phase builds (army movement is a later phase). */
+  speed: number;
+  carryCapacity: number;
+  foodCarryCapacity: number;
+  upkeepPerHour: number;
+  trainingCost: ResourceLine;
+  trainingSeconds: number;
+  requiredLonghouseLevel: number;
+  /** Another unit type that must itself be available (a prerequisite chain), or null. */
+  requiredUnitType: string | null;
 }

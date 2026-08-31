@@ -3,6 +3,7 @@ using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -26,17 +27,17 @@ public static class SettlementEndpoints
             .WithName("FoundSettlement")
             .WithSummary("Founds a settlement on one of an island's start positions.")
             // Mutating: a Locked/Banned authenticated caller is refused, but
-            // anonymous play (no owner-auth yet) is unaffected — see
-            // ActiveUserEndpointFilter.
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            // anonymous play is unaffected — see ActiveUserEndpointFilter.
+            // No SettlementOwnershipEndpointFilter here: founding is what
+            // *establishes* ownership (OwnerId/OwnerName in the request
+            // body), so there is nothing to own yet at this point — see
+            // QueueBuild/TrainUnits below for where that filter applies.
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
             .WithSummary("Lists the settlements in a world.");
-
-        worlds.MapPost("/{worldId:guid}/state", SetState)
-            .WithName("SetWorldRunState")
-            .WithSummary("Pauses, locks, puts into maintenance, or resumes a world.");
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
@@ -49,13 +50,28 @@ public static class SettlementEndpoints
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
+        settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
+            .WithName("TrainUnits")
+            .WithSummary("Queues training a batch of units, charging their cost immediately.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)
             .WithTags("Settlements")
             .WithName("GetBuildingCatalogue")
             .WithSummary("The build options: costs, durations, and the terrain each may stand on.");
+
+        app.MapGet("/api/v1/units", UnitsCatalogue)
+            .WithApiVersionSet(versionSet)
+            .WithTags("Settlements")
+            .WithName("GetUnitCatalogue")
+            .WithSummary("The unit roster: stats, training costs, and prerequisites.");
 
         return app;
     }
@@ -194,36 +210,56 @@ public static class SettlementEndpoints
             : TypedResults.Conflict(problem);
     }
 
-    private static async Task<Results<Ok<WorldClockResponse>, NotFound, BadRequest<ProblemDetails>>> SetState(
-        Guid worldId,
-        SetWorldStateRequest request,
+    private static async Task<Results<Accepted<TrainingOrderResponse>, NotFound,
+        Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> TrainUnits(
+        Guid settlementId,
+        TrainUnitsRequest request,
         SettlementService settlements,
-        TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (!Enum.TryParse<WorldRunState>(request.State, ignoreCase: true, out var state))
+        if (!TryParseUnit(request.Unit, out var type))
         {
             return TypedResults.BadRequest(new ProblemDetails
             {
-                Title = "Unknown world state.",
-                Detail = $"Valid: {string.Join(", ", Enum.GetNames<WorldRunState>()).ToLowerInvariant()}.",
+                Title = "Unknown unit.",
+                Detail = $"'{request.Unit}' is not a unit. "
+                    + $"Valid: {string.Join(", ", UnitCatalogue.AllTypes.Select(t => t.ToWireName()))}.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
 
-        var world = await settlements.SetRunStateAsync(
-            worldId, state, TimeSpan.FromSeconds(request.GraceSeconds), cancellationToken);
+        var result = await settlements.TrainUnitsAsync(settlementId, type, request.Count, cancellationToken);
 
-        if (world is null)
+        if (result.WorldPaused)
         {
-            return TypedResults.NotFound();
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world is not accepting commands.",
+                Detail = "It is paused, locked or under maintenance.",
+                Status = StatusCodes.Status409Conflict,
+            });
         }
 
-        var clock = world.ToClock();
-        return TypedResults.Ok(
-            WorldClockResponse.From(clock, clock.ToGameTime(time.GetUtcNow())));
+        if (result.Accepted)
+        {
+            var order = result.Order!;
+            return TypedResults.Accepted(
+                $"/api/v1/settlements/{settlementId}",
+                new TrainingOrderResponse(
+                    order.Id, order.UnitType.ToWireName(), order.Count, 0,
+                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds));
+        }
+
+        var problem = new ProblemDetails
+        {
+            Title = "The training request was refused.",
+            Detail = DescribeTrain(result.Rejection),
+            Status = StatusCodes.Status409Conflict,
+        };
+
+        return TypedResults.Conflict(problem);
     }
 
     private static Ok<IReadOnlyList<BuildingDefinitionResponse>> Catalogue(int? level)
@@ -244,9 +280,35 @@ public static class SettlementEndpoints
         return TypedResults.Ok(response);
     }
 
+    private static Ok<IReadOnlyList<UnitDefinitionResponse>> UnitsCatalogue()
+    {
+        IReadOnlyList<UnitDefinitionResponse> response =
+        [
+            .. UnitCatalogue.AllTypes.Select(t => UnitDefinitionResponse.From(UnitCatalogue.Get(t))),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
     private static bool TryParseBuilding(string value, out BuildingType type)
     {
         foreach (var candidate in BuildingCatalogue.AllTypes)
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                type = candidate;
+                return true;
+            }
+        }
+
+        type = default;
+        return false;
+    }
+
+    private static bool TryParseUnit(string value, out UnitType type)
+    {
+        foreach (var candidate in UnitCatalogue.AllTypes)
         {
             if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
@@ -307,6 +369,19 @@ public static class SettlementEndpoints
         BuildRejection.AlreadyQueuedOnHex => "Something is already queued on that hex.",
         BuildRejection.MaxLevelReached => "That building is already at its maximum level.",
         BuildRejection.LevelSkipped => "Levels must be built in order.",
+        BuildRejection.LonghousePlacementNotAllowed =>
+            "A settlement gets its longhouse from founding, not from the build queue.",
+        _ => "Refused.",
+    };
+
+    private static string DescribeTrain(TrainRejection rejection) => rejection switch
+    {
+        TrainRejection.UnitNotAvailable => "That unit is not available at this longhouse level yet.",
+        TrainRejection.TrainingQueueFull =>
+            $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
+        TrainRejection.NotEnoughResources => "Not enough resources.",
+        TrainRejection.InvalidCount => "Count must be at least 1.",
+        TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
         _ => "Refused.",
     };
 }

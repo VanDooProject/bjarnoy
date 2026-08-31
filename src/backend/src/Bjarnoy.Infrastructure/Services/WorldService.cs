@@ -85,13 +85,80 @@ public sealed class WorldService(
         }
 
         _dbContext.Worlds.Add(world);
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // The AnyAsync check above is a courtesy, not a lock: two callers
+            // racing to create a world with the same name both pass it, and
+            // only the unique index on Name actually decides. Without this
+            // catch the loser gets a raw 500 instead of the same
+            // WorldCreationException (409) the earlier check already
+            // promises — see SettlementService.FoundAsync's identical
+            // PlotTaken race for the same reasoning.
+            _dbContext.Entry(world).State = EntityState.Detached;
+            throw new WorldCreationException($"A world named '{name}' already exists.");
+        }
 
         _logger.LogInformation(
             "World {World} ({WorldId}) created with {Islands} islands and {Land} land hexes.",
             name, world.Id, generated.Islands.Count, generated.LandTileCount);
 
         return world;
+    }
+
+    /// <summary>
+    /// Creates <paramref name="name"/> if — and only if — no world exists yet
+    /// anywhere on this server. A no-op otherwise, including when
+    /// <paramref name="name"/> specifically is already taken by something
+    /// else (this is a bootstrap convenience, not a guarantee about that one
+    /// name).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Frontend clients no longer create a world themselves — see
+    /// <c>docs/codebase-gap-analysis.md</c>, "world-creation race handled
+    /// client-side by any anonymous visitor" — so a freshly migrated database
+    /// (a first local run, a fresh CI database, a new environment) needs
+    /// something to seed the one it now expects to simply find and join.
+    /// Called unconditionally at startup (see <c>Program.cs</c>), the same
+    /// way <c>AuthService.SeedAdminIfConfiguredAsync</c> seeds the first
+    /// admin — except this one needs no configuration to opt into, since an
+    /// empty server with literally no world to join is never a state anyone
+    /// wants, unlike an unconfigured bootstrap admin.
+    /// </para>
+    /// <para>
+    /// Race-safe the same way <see cref="CreateWorldAsync"/> already is: if
+    /// two replicas start at once and both pass the emptiness check, only one
+    /// insert wins and the other's resulting <see cref="WorldCreationException"/>
+    /// is swallowed here rather than crashing that replica's startup.
+    /// </para>
+    /// </remarks>
+    public async Task SeedDefaultWorldIfNoneAsync(
+        string name, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        if (await _dbContext.Worlds.AnyAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        try
+        {
+            await CreateWorldAsync(
+                name, WorldGenerationOptions.ForSeed(Random.Shared.Next()), maxPlayers: 500, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (WorldCreationException ex)
+        {
+            logger.LogInformation(
+                ex, "Skipped seeding a default world — one already exists (likely another replica's race).");
+        }
     }
 
     /// <summary>Worlds in creation order.</summary>

@@ -224,6 +224,12 @@ const SOURCES = {
     longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
     farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
     pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
+    // Unlike towerbuilding, the pack draws the fishing hut with a real
+    // per-orientation sprite (its dock visibly points a different way in
+    // each of the six files) rather than one image reused at every
+    // rotation — see `TerrainSampler.FishingHutOrientation` on the backend
+    // for why that orientation has to be computed per building instead of
+    // read off the coastal-water tile it stands on.
     fishinghut: buildPlain(ROOT_BUILDING_PLAIN, 'fishinghutbuilding_'),
     magictower: buildPlain(ROOT_BUILDING_PLAIN, 'magictower_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string>>>,
@@ -377,11 +383,15 @@ function clampIndex(index: number, length: number): number {
 /**
  * The base (ground) layer texture for a tile — coastal water overrides the
  * plain sea texture, and a leveled-but-unsplit building (tower) swaps its
- * whole base texture by level instead of layering a top.
+ * whole base texture by level instead of layering a top. A building on the
+ * water (the fishing hut) takes priority over both: its own texture
+ * (below, via `textureKeyFor`) replaces the water tile entirely rather than
+ * layering on top of it, since the pack draws the hut with its own base
+ * already included.
  */
 export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
   const orientation = tile.orientation ?? 'SE';
-  if (tile.terrain === 'sea' && tile.isCoastalWater) {
+  if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
@@ -391,7 +401,11 @@ export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
     const arr = indexed[orientation];
     return arr[clampIndex(tile.buildingLevel ?? 1, arr.length)];
   }
-  return textures.base[key]![orientation];
+  // A building with no art of its own in the pack (e.g. Lumberjack/Quarry —
+  // see the module doc comment above) renders as its bare terrain instead of
+  // throwing; BuildingModal.vue's own `art` computed falls back the same way.
+  const base = textures.base[key] ?? textures.base[tile.terrain];
+  return base![orientation];
 }
 
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
