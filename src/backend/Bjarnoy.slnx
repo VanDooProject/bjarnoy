@@ -12,5 +12,6 @@
     <Project Path="tests/Bjarnoy.Api.IntegrationTests/Bjarnoy.Api.IntegrationTests.csproj" />
     <Project Path="tests/Bjarnoy.AppHost.Tests/Bjarnoy.AppHost.Tests.csproj" />
     <Project Path="tests/Bjarnoy.Domain.Tests/Bjarnoy.Domain.Tests.csproj" />
+    <Project Path="tests/Bjarnoy.Infrastructure.Tests/Bjarnoy.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>

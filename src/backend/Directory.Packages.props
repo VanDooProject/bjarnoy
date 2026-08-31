@@ -52,6 +52,16 @@
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="$(DotNetVersion)" />
   </ItemGroup>
 
+  <ItemGroup Label="Imaging">
+    <!--
+      FogMaskPngEncoder's RGBA8 -> PNG encode (map-fog-v2.md §2.2/§3). Under
+      the Six Labors Split License (Apache 2.0 below the org's revenue
+      threshold, commercial license above it, or a Community/OSS grant) —
+      confirm which applies before shipping this to production.
+    -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Api">
     <PackageVersion Include="Asp.Versioning.Http" Version="10.2.3" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="$(DotNetVersion)" />
