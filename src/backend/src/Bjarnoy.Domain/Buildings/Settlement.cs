@@ -71,6 +71,20 @@ public sealed record Settlement
     /// </summary>
     public int ClaimRadius => 1 + (LonghouseLevel / 2);
 
+    /// <summary>
+    /// The largest <see cref="ClaimRadius"/> any settlement can ever reach
+    /// (longhouse at <see cref="BuildingCatalogue.MaxLevel"/>). Two
+    /// settlements' borders can never overlap, at any level either reaches,
+    /// once their centres are more than twice this apart — see
+    /// <c>SettlementService.MinimumSpacing</c>, which founding enforces at
+    /// this worst case rather than against each neighbour's *current* level
+    /// (borders overlapping after a level-up is otherwise allowed —
+    /// first-claim-wins, per MECHANICS.md §2 — so keeping new settlements
+    /// spaced out this generously is what actually avoids the collision in
+    /// practice).
+    /// </summary>
+    public const int MaxClaimRadius = 1 + (BuildingCatalogue.MaxLevel / 2);
+
     /// <summary>Hexes this settlement has claimed.</summary>
     public bool Claims(HexCoord coord) => Centre.DistanceTo(coord) <= ClaimRadius;
 

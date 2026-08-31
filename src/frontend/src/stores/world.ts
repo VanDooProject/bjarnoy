@@ -37,10 +37,13 @@ const LIVE_POLL_MS = 4000;
 const ARMY_POLL_MS = 2000;
 
 // Mirrors the backend's SettlementService.MinimumSpacing: the minimum hex
-// distance the API enforces between two settlements' centres. Kept in sync
-// here so nearestStartPosition can skip a plot the backend would reject
-// instead of finding out only after the founding request fails.
-const MINIMUM_SETTLEMENT_SPACING = 3;
+// distance the API enforces between two settlements' centres, sized so two
+// settlements can never have overlapping borders no matter how high either
+// one's longhouse levels up (see Settlement.MaxClaimRadius's own comment on
+// the backend). Kept in sync here so nearestStartPosition/nearbyStartPositions
+// can skip a plot the backend would reject instead of finding out only after
+// the founding request fails.
+const MINIMUM_SETTLEMENT_SPACING = 13;
 
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's
@@ -267,8 +270,13 @@ export const useWorldStore = defineStore('world', {
       const settlements = this.model.listSettlements();
       const result: { islandId: string; at: AxialCoord }[] = [];
       for (const island of this.islands) {
+        // Scoped to the same island, mirroring the backend's FoundAsync:
+        // separate islands are always divided by open sea, so their claim
+        // discs can never actually overlap any land regardless of hex
+        // distance — see SettlementService.MinimumSpacing's own comment.
+        const onThisIsland = settlements.filter((s) => s.islandId === island.id);
         for (const pos of island.startPositions) {
-          const tooCloseToExisting = settlements.some(
+          const tooCloseToExisting = onThisIsland.some(
             (s) => hexDistance(pos, { q: s.q, r: s.r }) < MINIMUM_SETTLEMENT_SPACING,
           );
           if (tooCloseToExisting) continue;
@@ -565,6 +573,7 @@ export const useWorldStore = defineStore('world', {
           resources: emptyResources(),
           rates: emptyResources(),
           foundedAt: Date.now(),
+          islandId: summary.islandId,
         });
       }
     },

@@ -128,6 +128,7 @@ export interface SettlementSummary {
   q: number;
   r: number;
   longhouseLevel: number;
+  islandId: string;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see
