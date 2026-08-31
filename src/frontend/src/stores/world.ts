@@ -572,6 +572,7 @@ export const useWorldStore = defineStore('world', {
           resources: emptyResources(),
           rates: emptyResources(),
           foundedAt: Date.now(),
+          islandId: summary.islandId,
         });
       }
     },

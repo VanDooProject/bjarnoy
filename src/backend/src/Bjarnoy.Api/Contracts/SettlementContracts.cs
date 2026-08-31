@@ -219,7 +219,7 @@ public sealed record BuildingDefinitionResponse(
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel);
+    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
 
 public sealed record UnitDefinitionResponse(
     string Type,
