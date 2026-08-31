@@ -11,12 +11,18 @@ const emit = defineEmits<{ 'hex-click': [coord: AxialCoord, tile: Tile, screen: 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-useHexMapRenderer(canvas, container, {
+const { renderer } = useHexMapRenderer(canvas, container, {
   mode: 'world',
   worldModel: props.worldModel,
   playerId: props.playerId,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
 });
+
+// FogDebugPanel (WorldMapView.vue, ?debug=1) needs to force a rebuild after
+// flipping a fogDebugFlags toggle — nothing else would make the change
+// visible until the next real camera pan/zoom. Same wiring as
+// SettlementCanvas.vue's own expose.
+defineExpose({ renderer });
 </script>
 
 <template>
