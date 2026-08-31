@@ -125,6 +125,33 @@ function armyEntry(overrides: { stacks?: { unit: string; count: number }[]; posi
 async function mockSettlementsApi(page: Page) {
   const state = { placed: [] as { q: number; r: number; building: string; level: number }[], longhouseLevel: 1 };
 
+  // AdminLayout's header world selector fetches this on every admin page
+  // load and the settlements view won't search until a world is selected
+  // (see stores/adminWorld.ts) — without a world here, "world-1" (this
+  // fixture's settlement) never gets picked and the Manage button never
+  // appears.
+  await page.route('**/api/v1/admin/worlds', (route: Route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'world-1',
+          name: 'Midgard',
+          status: 'active',
+          maxPlayers: 500,
+          playerCount: 3,
+          speedFactor: 1,
+          startsAt: null,
+          joinsClosed: false,
+          endbossAt: null,
+          endbossTriggeredAt: null,
+          runState: 'running',
+          runStateSince: '2026-01-01T00:00:00Z',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    }),
+  );
+
   await page.route('**/api/v1/admin/settlements?*', (route: Route) =>
     route.fulfill({
       json: {
