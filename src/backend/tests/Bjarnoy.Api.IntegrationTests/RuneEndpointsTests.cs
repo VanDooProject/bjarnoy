@@ -61,7 +61,7 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
     private async Task<SettlementResponse> FoundWithLonghouseLevelThreeAsync(HttpClient client)
     {
         var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), seed: 21, radius: 60), Ct))
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), Seed: 21, Radius: 60), Ct))
             .ReadStrictAsync<WorldResponse>(Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
