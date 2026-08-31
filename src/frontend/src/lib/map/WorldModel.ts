@@ -322,14 +322,15 @@ export class WorldModel {
 
   /**
    * Issue #16 header: the reference shows each resource pill with a
-   * "current / cap" and a fill-progress underline, but no storage-cap field
-   * exists anywhere in the data model (`Resources`, `Settlement`, the
-   * backend) — same gap `populationFor` hit for population. Rather than
-   * leave the pills capless, this derives a plausible per-resource cap the
-   * same way: purely client-side, from the longhouse level, using a
-   * different base per resource so the caps read as varied (as in the
-   * reference: wood/stone/food/iron aren't all the same number) rather than
-   * one flat value repeated four times.
+   * "current / cap" and a fill-progress underline. Live mode now has a real
+   * per-resource cap from the backend (`Settlement.capacity`, populated from
+   * `ResourcesResponse.Capacity` — see `applyServerSnapshot`), which is the
+   * cap `ResourcePool.Adjust` actually enforces server-side. This purely
+   * client-side derivation (from the longhouse level, with a different base
+   * per resource so the caps read as varied rather than one flat value
+   * repeated four times) only remains as the demo-mode fallback, since demo
+   * has no backend to report a real capacity. Use `storageCapForDisplay`
+   * rather than calling this directly, so live settlements get their real cap.
    */
   storageCapFor(settlementId: string): Resources {
     const settlement = this.settlements.get(settlementId);
@@ -341,6 +342,20 @@ export class WorldModel {
       food: Math.round(2400 * growth),
       iron: Math.round(1000 * growth),
     };
+  }
+
+  /**
+   * Issue #98: the header must show the settlement's true storage cap, not
+   * a synthetic one — a live settlement's real cap (`Settlement.capacity`,
+   * from `ResourcesResponse.Capacity`) can be much lower than
+   * `storageCapFor`'s guess (e.g. a fresh level-1 settlement's real 750 vs.
+   * the guess's 3000), which made a fully-clamped admin grant look like
+   * most of it had vanished. Falls back to `storageCapFor` only when no
+   * server capacity is known (demo mode).
+   */
+  storageCapForDisplay(settlementId: string): Resources {
+    const settlement = this.settlements.get(settlementId);
+    return settlement?.capacity ?? this.storageCapFor(settlementId);
   }
 
   borderRadius(settlement: Settlement): number {
@@ -403,6 +418,7 @@ export class WorldModel {
       level: number;
       resources: Resources;
       rates: Resources;
+      capacity: Resources;
       buildings: { q: number; r: number; type: string; level: number; orientation?: string | null }[];
     },
   ) {
@@ -421,6 +437,7 @@ export class WorldModel {
     }
     settlement.resources = snapshot.resources;
     settlement.rates = snapshot.rates;
+    settlement.capacity = snapshot.capacity;
 
     const RENDERABLE_TYPES = new Set([
       'longhouse',
