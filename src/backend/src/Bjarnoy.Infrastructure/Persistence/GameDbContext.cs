@@ -46,7 +46,27 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
-    public DbSet<ProfileReportEntity> ProfileReports => Set<ProfileReportEntity>();
+    public DbSet<GuildEntity> Guilds => Set<GuildEntity>();
+
+    public DbSet<GuildMembershipEntity> GuildMemberships => Set<GuildMembershipEntity>();
+
+    public DbSet<GuildBoardTopicEntity> GuildBoardTopics => Set<GuildBoardTopicEntity>();
+
+    public DbSet<GuildBoardPostEntity> GuildBoardPosts => Set<GuildBoardPostEntity>();
+
+    public DbSet<GuildPeaceTreatyEntity> GuildPeaceTreaties => Set<GuildPeaceTreatyEntity>();
+
+    public DbSet<TradeOfferEntity> TradeOffers => Set<TradeOfferEntity>();
+
+    public DbSet<ShipmentEntity> Shipments => Set<ShipmentEntity>();
+
+    public DbSet<TradeReportEntity> TradeReports => Set<TradeReportEntity>();
+
+    public DbSet<MessageEntity> Messages => Set<MessageEntity>();
+
+    public DbSet<MessageRecipientEntity> MessageRecipients => Set<MessageRecipientEntity>();
+
+    public DbSet<ReportEntity> Reports => Set<ReportEntity>();
 
     public DbSet<LeaderboardSnapshotEntity> LeaderboardSnapshots => Set<LeaderboardSnapshotEntity>();
 
@@ -55,6 +75,10 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
     public DbSet<LeaderboardWatermarkEntity> LeaderboardWatermarks => Set<LeaderboardWatermarkEntity>();
 
     public DbSet<WeeklyStatEntity> WeeklyStats => Set<WeeklyStatEntity>();
+
+    public DbSet<UserActivityEntity> UserActivities => Set<UserActivityEntity>();
+
+    public DbSet<UserActivitySessionEntity> UserActivitySessions => Set<UserActivitySessionEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -346,6 +370,9 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.Bio).HasMaxLength(2000);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 
+            // No FK: there is no guild table yet — see UserEntity.GuildId.
+            user.HasIndex(u => u.GuildId);
+
             // Case-insensitive uniqueness, enforced on the normalized column —
             // see UserEntity.NormalizedUserName.
             user.HasIndex(u => u.NormalizedUserName).IsUnique();
@@ -412,32 +439,259 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             token.HasIndex(t => t.TokenHash).IsUnique();
         });
 
-        modelBuilder.Entity<ProfileReportEntity>(report =>
+        modelBuilder.Entity<GuildEntity>(guild =>
         {
-            report.ToTable("profile_reports");
+            guild.ToTable("guilds");
+            guild.HasKey(g => g.Id);
+            guild.Property(g => g.Id).ValueGeneratedNever();
+            guild.Property(g => g.Name).HasMaxLength(50).IsRequired();
+            guild.Property(g => g.Tag).HasMaxLength(5).IsRequired();
+            guild.Property(g => g.Description).HasMaxLength(500);
+            guild.Property(g => g.FeeTier).HasConversion<int>();
+
+            // Names and tags are unique within a world, not globally — each
+            // world is its own playthrough (MECHANICS.md: a sea/world holds
+            // its own islands and players).
+            guild.HasIndex(g => new { g.WorldId, g.Name }).IsUnique();
+            guild.HasIndex(g => new { g.WorldId, g.Tag }).IsUnique();
+
+            // No inverse collection on WorldEntity yet — nothing needs
+            // "world.Guilds" today, so this stays a one-way reference.
+            guild.HasOne(g => g.World)
+                .WithMany()
+                .HasForeignKey(g => g.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            guild.HasMany(g => g.Memberships)
+                .WithOne(m => m.Guild!)
+                .HasForeignKey(m => m.GuildId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            guild.HasMany(g => g.Topics)
+                .WithOne(t => t.Guild!)
+                .HasForeignKey(t => t.GuildId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GuildMembershipEntity>(membership =>
+        {
+            membership.ToTable("guild_memberships");
+            membership.HasKey(m => m.Id);
+            membership.Property(m => m.Id).ValueGeneratedNever();
+            membership.Property(m => m.Role).HasConversion<int>();
+
+            // One active guild per account at a time, game-wide — the
+            // "no multi-guild membership" rule from the design doc, enforced
+            // at the database rather than only checked in the service.
+            membership.HasIndex(m => m.UserId).IsUnique();
+            membership.HasIndex(m => m.GuildId);
+
+            // Restrict, not cascade: a user account going away should not
+            // silently empty a guild's roster (same reasoning as
+            // SettlementEntity.Owner).
+            membership.HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GuildBoardTopicEntity>(topic =>
+        {
+            topic.ToTable("guild_board_topics");
+            topic.HasKey(t => t.Id);
+            topic.Property(t => t.Id).ValueGeneratedNever();
+            topic.Property(t => t.Title).HasMaxLength(120).IsRequired();
+            topic.Property(t => t.Kind).HasConversion<int>();
+
+            topic.HasIndex(t => t.GuildId);
+
+            topic.HasMany(t => t.Posts)
+                .WithOne(p => p.Topic!)
+                .HasForeignKey(p => p.TopicId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GuildBoardPostEntity>(post =>
+        {
+            post.ToTable("guild_board_posts");
+            post.HasKey(p => p.Id);
+            post.Property(p => p.Id).ValueGeneratedNever();
+            post.Property(p => p.Body).HasMaxLength(4000).IsRequired();
+
+            post.HasIndex(p => p.TopicId);
+        });
+
+        modelBuilder.Entity<GuildPeaceTreatyEntity>(treaty =>
+        {
+            treaty.ToTable("guild_peace_treaties");
+            treaty.HasKey(t => t.Id);
+            treaty.Property(t => t.Id).ValueGeneratedNever();
+            treaty.Property(t => t.Status).HasConversion<int>();
+
+            treaty.HasIndex(t => new { t.ProposerGuildId, t.TargetGuildId });
+            treaty.HasIndex(t => t.TargetGuildId);
+
+            // Restrict on both sides: a guild is never hard-deleted (disbanding
+            // is the soft DisbandedAt above), so this only guards against ever
+            // adding a hard delete later without also deciding what happens to
+            // its treaty history.
+            treaty.HasOne(t => t.ProposerGuild)
+                .WithMany()
+                .HasForeignKey(t => t.ProposerGuildId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            treaty.HasOne(t => t.TargetGuild)
+                .WithMany()
+                .HasForeignKey(t => t.TargetGuildId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Trade offers and shipments are not a nested aggregate under
+        // SettlementEntity the way Buildings/Queue are — a trade always
+        // spans two settlements, so each is its own table, queried directly
+        // off this context rather than synced through Settlement.ApplyDomain.
+        // No navigation properties onto SettlementEntity: `.WithMany()`
+        // below creates the foreign key without requiring a back-collection
+        // on the settlement side, so SettlementEntity stays untouched.
+        modelBuilder.Entity<TradeOfferEntity>(offer =>
+        {
+            offer.ToTable("trade_offers");
+            offer.HasKey(o => o.Id);
+            offer.Property(o => o.Id).ValueGeneratedNever();
+            offer.Property(o => o.OfferedResource).HasConversion<int>();
+            offer.Property(o => o.RequestedResource).HasConversion<int>();
+            offer.Property(o => o.State).HasConversion<int>();
+
+            offer.HasOne<SettlementEntity>().WithMany()
+                .HasForeignKey(o => o.PosterSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // The trade board's query: open, unexpired offers in a world,
+            // excluding the caller's own.
+            offer.HasIndex(o => new { o.WorldId, o.State, o.ExpiresAt });
+            offer.HasIndex(o => o.PosterSettlementId);
+        });
+
+        modelBuilder.Entity<ShipmentEntity>(shipment =>
+        {
+            shipment.ToTable("shipments");
+            shipment.HasKey(s => s.Id);
+            shipment.Property(s => s.Id).ValueGeneratedNever();
+            shipment.Property(s => s.CargoResource).HasConversion<int>();
+
+            shipment.HasOne<TradeOfferEntity>().WithMany()
+                .HasForeignKey(s => s.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            shipment.HasOne<SettlementEntity>().WithMany()
+                .HasForeignKey(s => s.FromSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            shipment.HasOne<SettlementEntity>().WithMany()
+                .HasForeignKey(s => s.ToSettlementId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            shipment.HasIndex(s => s.OfferId);
+            shipment.HasIndex(s => new { s.ToSettlementId, s.DeliveredAt, s.ArrivesAt });
+            shipment.HasIndex(s => s.FromSettlementId);
+        });
+
+        modelBuilder.Entity<TradeReportEntity>(report =>
+        {
+            report.ToTable("trade_reports");
             report.HasKey(r => r.Id);
             report.Property(r => r.Id).ValueGeneratedNever();
-            report.Property(r => r.Reason).HasMaxLength(200).IsRequired();
-            report.Property(r => r.Note).HasMaxLength(2000);
-            report.Property(r => r.Status).HasConversion<int>();
+            report.Property(r => r.OfferedResource).HasConversion<int>();
+            report.Property(r => r.RequestedResource).HasConversion<int>();
 
-            // A user account going away must not silently delete the
-            // moderation record either way round — same reasoning as
-            // settlements' Restrict above. (Users are never deleted today.)
+            report.HasOne<TradeOfferEntity>().WithMany()
+                .HasForeignKey(r => r.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            report.HasIndex(r => r.OfferId).IsUnique();
+            report.HasIndex(r => r.PosterSettlementId);
+            report.HasIndex(r => r.AcceptorSettlementId);
+        });
+
+        modelBuilder.Entity<MessageEntity>(message =>
+        {
+            message.ToTable("messages");
+            message.HasKey(m => m.Id);
+            message.Property(m => m.Id).ValueGeneratedNever();
+            message.Property(m => m.Body).HasMaxLength(2000).IsRequired();
+
+            message.HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            message.HasIndex(m => m.SenderUserId);
+
+            message.HasMany(m => m.Recipients)
+                .WithOne(r => r.Message!)
+                .HasForeignKey(r => r.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MessageRecipientEntity>(recipient =>
+        {
+            recipient.ToTable("message_recipients");
+            recipient.HasKey(r => r.Id);
+            recipient.Property(r => r.Id).ValueGeneratedNever();
+
+            recipient.HasOne(r => r.Recipient)
+                .WithMany()
+                .HasForeignKey(r => r.RecipientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // One delivery per recipient per message.
+            recipient.HasIndex(r => new { r.MessageId, r.RecipientUserId }).IsUnique();
+
+            // Inbox paging: a recipient's messages, newest first.
+            recipient.HasIndex(r => new { r.RecipientUserId, r.MessageId });
+
+            // Unread counts: ReadAt is null.
+            recipient.HasIndex(r => new { r.RecipientUserId, r.ReadAt });
+        });
+
+        // A generic moderation report — issue #41 (chat) unified with issue
+        // #42's profile reports (previously a separate ProfileReportEntity/
+        // profile_reports table) onto one queue via SourceType/SourceId.
+        modelBuilder.Entity<ReportEntity>(report =>
+        {
+            report.ToTable("reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.SourceType).HasConversion<int>();
+            report.Property(r => r.Status).HasConversion<int>();
+            report.Property(r => r.ContextSnapshot).HasMaxLength(2200).IsRequired();
+            report.Property(r => r.Reason).HasMaxLength(500).IsRequired();
+            report.Property(r => r.Note).HasMaxLength(2000);
+            report.Property(r => r.ResolutionNote).HasMaxLength(500);
+
             report.HasOne(r => r.Reporter)
                 .WithMany()
                 .HasForeignKey(r => r.ReporterUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // A user account going away must not silently delete the
+            // moderation record either way round — same reasoning as
+            // settlements' Restrict above. (Users are never deleted today.)
             report.HasOne(r => r.ReportedUser)
                 .WithMany()
                 .HasForeignKey(r => r.ReportedUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            report.HasOne(r => r.ResolvedBy)
+                .WithMany()
+                .HasForeignKey(r => r.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // The admin queue lists by status; the duplicate-pending guard
-            // looks up (reporter, reported) pairs.
-            report.HasIndex(r => r.Status);
-            report.HasIndex(r => new { r.ReporterUserId, r.ReportedUserId });
+            // (only one Pending report per reporter+source at a time — see
+            // ReportService.CreateAsync) looks up (reporter, source) pairs.
+            report.HasIndex(r => new { r.Status, r.Id });
+            report.HasIndex(r => new { r.ReporterUserId, r.SourceType, r.SourceId });
         });
 
         modelBuilder.Entity<LeaderboardSnapshotEntity>(snapshot =>
@@ -520,6 +774,47 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Recomputation is an upsert keyed on this triple.
             stat.HasIndex(s => new { s.WorldId, s.UserId, s.PeriodStart }).IsUnique();
+        });
+
+        modelBuilder.Entity<UserActivityEntity>(activity =>
+        {
+            activity.ToTable("user_activity");
+
+            // UserId is the primary key, not a separately-generated one: this
+            // is a one-row-per-user upsert target, not an append log. Same
+            // ValueGeneratedNever reasoning as every other key in this model —
+            // it is always assigned by application code (the user's own id),
+            // never the database.
+            activity.HasKey(a => a.UserId);
+            activity.Property(a => a.UserId).ValueGeneratedNever();
+
+            // Cascade: an activity summary has no meaning once its user is
+            // gone, unlike SettlementEntity.Owner or WeeklyStatEntity.User,
+            // which deliberately outlive the account.
+            activity.HasOne(a => a.User)
+                .WithOne()
+                .HasForeignKey<UserActivityEntity>(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserActivitySessionEntity>(session =>
+        {
+            session.ToTable("user_activity_sessions");
+            session.HasKey(s => s.Id);
+            session.Property(s => s.Id).ValueGeneratedNever();
+
+            session.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // UserActivityService.TrackAsync's hot lookup: "this user's most
+            // recent session, by LastSeenAtUtc desc" — the composite index
+            // covers it directly.
+            session.HasIndex(s => new { s.UserId, s.LastSeenAtUtc });
+
+            // Retention (a later PR) sweeps by age.
+            session.HasIndex(s => s.StartedAtUtc);
         });
     }
 }

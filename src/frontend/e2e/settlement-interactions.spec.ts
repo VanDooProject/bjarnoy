@@ -156,6 +156,114 @@ test.describe('settlement view interactions', () => {
     await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
   });
 
+  test('placing a lumberjack on a forest hex is a real, terrain-gated building', async ({ page }) => {
+    // Same reasoning as the other tests here: foundSettlement() plus driving
+    // a real click through the render runs close to the global 45s budget.
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    // Lumberjack/Quarry only recently gained frontend support (they were
+    // previously silently dropped by WorldModel.applyServerSnapshot's
+    // RENDERABLE_TYPES whitelist, and had no entry in Tile['buildingType']
+    // at all) — this test is the regression guard for that, so it
+    // deliberately targets a Forest hex rather than accepting whatever the
+    // first buildable hex happens to be (the other placement test's job).
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'forest' && !tile.buildingType) {
+            const screen = win.__settlementRenderer().hexCenterScreen(at);
+            return { at, screen };
+          }
+        }
+      }
+      throw new Error('no empty forest hex found inside the realm — pick a different demo seed');
+    });
+
+    const getBuildingTypeAtTarget = () =>
+      page.evaluate((coord) => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        return world.model.getTile(coord.q, coord.r).buildingType as string | undefined;
+      }, target.at);
+    expect(await getBuildingTypeAtTarget()).toBeUndefined();
+
+    await page.mouse.click(box.x + target.screen.x, box.y + target.screen.y);
+
+    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
+    await expect(buildBubble).toBeVisible();
+    const buildBox = (await buildBubble.boundingBox())!;
+    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+
+    // Forest is non-grass terrain, so it gets the single "Build" category
+    // (BUILD_CATEGORIES' `other` bucket) rather than grass's three-category
+    // spread — see SettlementView's categoriesFor.
+    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
+    await expect(categoryBubble).toBeVisible();
+    const categoryBox = (await categoryBubble.boundingBox())!;
+    await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
+      steps: 6,
+    });
+
+    const lumberjackBubble = page.locator('.ring-bubble', { hasText: 'Lumberjack' }).first();
+    await expect(lumberjackBubble).toBeVisible();
+    await lumberjackBubble.click();
+
+    await expect.poll(getBuildingTypeAtTarget, { timeout: 5_000 }).toBe('lumberjack');
+  });
+
+  test('the hex tooltip hides while hovering a HUD panel on top of the canvas', async ({ page }) => {
+    // Issue #100: the canvas is `position: absolute; inset: 0`, covering the
+    // whole viewport, so a bounding-rect test in updateHover always passes
+    // even when the cursor is actually over an absolutely-positioned HUD
+    // overlay like ArmyPanel's `.status-card` (bottom-right corner, z-index
+    // above the canvas but below the tooltip) — the tooltip used to keep
+    // rendering (and painting over the panel) while the player worked inside
+    // it. This is the regression guard for the real hit-test fix
+    // (`document.elementFromPoint` in updateHover).
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const tooltip = page.locator('.hex-tooltip');
+
+    // Establish the tooltip actually shows for a plain hex hover first, so
+    // the panel check below is a real "it hides" signal rather than the
+    // tooltip just never having appeared.
+    await page.mouse.move(cx, cy - 60, { steps: 6 });
+    await expect(tooltip).toBeVisible();
+
+    // Move onto ArmyPanel's status card, which sits on top of the canvas in
+    // the bottom-right corner — the tile "under" it (per the old rect test)
+    // would still resolve to a real hex, so this is exactly the panel the
+    // bug report calls out.
+    const statusCard = page.locator('.status-card');
+    await expect(statusCard).toBeVisible();
+    const panelBox = (await statusCard.boundingBox())!;
+    await page.mouse.move(panelBox.x + panelBox.width / 2, panelBox.y + 20, { steps: 6 });
+    await expect(tooltip).toBeHidden();
+
+    // Moving back onto the map re-shows it — this isn't a one-way "hover
+    // broke" state, the hit test just tracks the real element under the
+    // cursor each move.
+    await page.mouse.move(cx, cy - 60, { steps: 6 });
+    await expect(tooltip).toBeVisible();
+  });
+
   test('panning the settlement view does not error', async ({ page }) => {
     // This test's own footprint is small (a 10-step drag plus two full
     // canvas screenshots), but foundSettlement() plus a real drag through

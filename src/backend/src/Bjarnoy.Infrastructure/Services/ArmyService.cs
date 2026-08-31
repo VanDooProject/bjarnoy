@@ -33,6 +33,28 @@ public sealed record RecallResult(RecallOutcome Outcome, ArmyEntity? Army = null
     public bool Accepted => Outcome == RecallOutcome.Recalled && Army is not null;
 }
 
+/// <summary>Why an admin's direct army edit was refused.</summary>
+public enum AdminArmyEditOutcome
+{
+    Applied,
+    ArmyNotFound,
+
+    /// <summary>An empty stack list, or one that would leave the army with no units at all.</summary>
+    NoUnitsLeft,
+
+    /// <summary>The army is at home or a guest, so it has no journey whose arrival could be moved.</summary>
+    NotTravelling,
+
+    /// <summary>No route home exists from the requested hex for this army's unit class (or the hex itself is the wrong terrain for it).</summary>
+    UnreachableHex,
+}
+
+public sealed record AdminArmyEditResult(
+    AdminArmyEditOutcome Outcome, ArmyEntity? Army = null, GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == AdminArmyEditOutcome.Applied && Army is not null;
+}
+
 /// <summary>
 /// Armies: dispatching them from a settlement's garrison, reading them
 /// (settling to now, folding a finished journey back into the garrison), and
@@ -166,7 +188,8 @@ public sealed class ArmyService(
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
-            mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimRadius);
+            mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimRadius,
+            settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {
@@ -190,6 +213,28 @@ public sealed class ArmyService(
             ((ArmyLocation.InTransit)decision.Army.Location).Movement.ArrivesAt);
 
         return new ArmyDispatchResult(DispatchRejection.None, armyEntity);
+    }
+
+    /// <summary>
+    /// An army's home settlement id (<see cref="ArmyEntity.SettlementId"/>) —
+    /// unlike <see cref="GetAsync"/>, this is a bare id lookup with no
+    /// settling, for the ownership-authorization endpoint filter
+    /// (<c>Bjarnoy.Api.Auth.ArmyOwnershipEndpointFilter</c>): an army has no
+    /// owner of its own, only the settlement it was dispatched from, which
+    /// stays the same for its whole life regardless of where it currently is
+    /// or whether it has already folded home. Null if no such army row
+    /// exists (including one already folded back and deleted).
+    /// </summary>
+    public async Task<Guid?> GetOwningSettlementIdAsync(
+        Guid armyId, CancellationToken cancellationToken = default)
+    {
+        // SettlementId is never Guid.Empty (ArmyEntity.Id/SettlementId are
+        // both real generated ids), so a plain FirstOrDefaultAsync default
+        // (Guid?)null unambiguously means "no such army row".
+        return await _dbContext.Armies
+            .Where(a => a.Id == armyId)
+            .Select(a => (Guid?)a.SettlementId)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -223,6 +268,7 @@ public sealed class ArmyService(
     public Task<List<ArmyEntity>> GetForSettlementAsync(Guid settlementId, CancellationToken cancellationToken = default) =>
         _dbContext.Armies
             .AsNoTracking()
+            .Include(a => a.Settlement)
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Where(a => a.SettlementId == settlementId)
@@ -289,7 +335,7 @@ public sealed class ArmyService(
             }
         }
 
-        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex);
+        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor);
 
         if (recalled is null)
         {
@@ -308,6 +354,144 @@ public sealed class ArmyService(
 
         return new RecallResult(RecallOutcome.Recalled, army);
     }
+
+    /// <summary>
+    /// Admin god-mode: edits a live army in place — its unit stacks, its
+    /// provisions, when its current journey arrives, and where on the map it
+    /// stands. Every part is optional; whatever is supplied is applied in that
+    /// order, on an army first settled to now like every other read path.
+    /// </summary>
+    /// <param name="stacks">
+    /// Full replacement for the army's unit stacks (entries with a count of
+    /// zero are dropped). The army's movement is <em>not</em> re-pathed: a
+    /// stack change alters speed and upkeep from now on, but the leg it is
+    /// already flying keeps the timing it was dispatched with — use
+    /// <paramref name="arriveIn"/> to retime it deliberately rather than
+    /// having it shift as a side effect.
+    /// </param>
+    /// <param name="provisions">Absolute food load, not a delta.</param>
+    /// <param name="arriveIn">
+    /// How far from game-now this army's active leg should arrive — the "speed
+    /// up" control; pass <see cref="TimeSpan.Zero"/> to land it immediately.
+    /// Refused with <see cref="AdminArmyEditOutcome.NotTravelling"/> for an
+    /// army at home or standing as a guest. Relative rather than absolute so
+    /// the caller need not resolve the world's <see cref="GameClock"/> itself.
+    /// </param>
+    /// <param name="teleportTo">
+    /// Hex to drop the army onto, standing there as of now with a fresh route
+    /// home — see <see cref="Army.TeleportTo"/>.
+    /// </param>
+    public async Task<AdminArmyEditResult> AdminEditAsync(
+        Guid armyId,
+        IReadOnlyList<UnitStack>? stacks = null,
+        double? provisions = null,
+        TimeSpan? arriveIn = null,
+        HexCoord? teleportTo = null,
+        CancellationToken cancellationToken = default)
+    {
+        var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
+        if (army?.Settlement?.World is null)
+        {
+            return new AdminArmyEditResult(AdminArmyEditOutcome.ArmyNotFound);
+        }
+
+        var clock = army.Settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first, exactly as GetAsync does: an army that has already
+        // arrived home is gone, and there is nothing left to edit.
+        var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
+        if (outcome == ArmySettleOutcome.FoldedHome)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new AdminArmyEditResult(AdminArmyEditOutcome.ArmyNotFound);
+        }
+
+        // A refused edit may still have advanced the army's own journey while
+        // settling above, and that is a real change worth keeping — the same
+        // rule every rejected write path in SettlementService follows.
+        async Task<AdminArmyEditResult> RejectAsync(AdminArmyEditOutcome reason)
+        {
+            if (outcome == ArmySettleOutcome.Updated)
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new AdminArmyEditResult(reason);
+        }
+
+        var domain = army.ToDomain();
+
+        if (stacks is not null)
+        {
+            var kept = stacks.Where(s => s.Count > 0).ToList();
+            if (kept.Count == 0)
+            {
+                return await RejectAsync(AdminArmyEditOutcome.NoUnitsLeft).ConfigureAwait(false);
+            }
+
+            domain = domain with { Stacks = kept };
+        }
+
+        if (provisions is { } food)
+        {
+            domain = domain with { Provisions = Math.Max(0, food) };
+        }
+
+        if (teleportTo is { } destination)
+        {
+            var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+            var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+
+            // An explicit provisions value is the admin's final word, so it is
+            // carried into the new leg rather than being re-burned against the
+            // leg this teleport is throwing away.
+            var teleported = domain.TeleportTo(
+                destination, home, now, sampler.TerrainAt,
+                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor);
+            if (teleported is null)
+            {
+                return await RejectAsync(AdminArmyEditOutcome.UnreachableHex).ConfigureAwait(false);
+            }
+
+            domain = teleported;
+        }
+
+        if (arriveIn is { } arrival)
+        {
+            var shifted = domain.ShiftArrivalTo(now + arrival);
+            if (shifted is null)
+            {
+                return await RejectAsync(AdminArmyEditOutcome.NotTravelling).ConfigureAwait(false);
+            }
+
+            domain = shifted;
+        }
+
+        army.ApplyDomain(domain);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin edited army {ArmyId} (stacks: {Stacks}, provisions: {Provisions}, arrival in: {Arrival}, hex: {Hex}).",
+            armyId, stacks is not null, provisions is not null, arriveIn, teleportTo);
+
+        return new AdminArmyEditResult(AdminArmyEditOutcome.Applied, army, clock);
+    }
+
+    /// <summary>
+    /// Every army whose home settlement is in <paramref name="worldId"/> —
+    /// the admin troop browser's listing. Not settled on read, for the same
+    /// reason <see cref="GetForSettlementAsync"/> is not.
+    /// </summary>
+    public Task<List<ArmyEntity>> GetForWorldAsync(Guid worldId, CancellationToken cancellationToken = default) =>
+        _dbContext.Armies
+            .AsNoTracking()
+            .Include(a => a.Settlement)
+            .Include(a => a.Stacks)
+            .Include(a => a.TargetSettlement)
+            .Where(a => a.Settlement!.WorldId == worldId)
+            .OrderBy(a => a.Id)
+            .ToListAsync(cancellationToken);
 
     private enum ArmySettleOutcome
     {

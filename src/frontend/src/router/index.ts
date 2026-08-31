@@ -45,6 +45,48 @@ export const router = createRouter({
       component: () => import('../views/LeaderboardView.vue'),
     },
     {
+      path: '/guild',
+      name: 'guild',
+      component: () => import('../views/GuildView.vue'),
+    },
+    {
+      // Issue #40 phase 3: battle-reports inbox, and the same view's detail
+      // mode when a report id is in the URL (so a report can be deep-linked/
+      // shared, e.g. from a future notification) — see ReportsView.vue.
+      path: '/reports',
+      name: 'reports',
+      component: () => import('../views/ReportsView.vue'),
+    },
+    {
+      path: '/reports/:reportId',
+      name: 'report-detail',
+      component: () => import('../views/ReportsView.vue'),
+    },
+    {
+      // Issue #40 phase 7: the premium fight simulator — the one endpoint in
+      // this game that actually requires login (every other troop endpoint
+      // works anonymously), so it needs `requiresAuth` even though most
+      // routes here don't. Being logged in doesn't mean being premium
+      // though — SimulatorView.vue itself handles the 403 for that, since
+      // there's no client-side premium flag to gate on ahead of time.
+      path: '/simulator',
+      name: 'simulator',
+      component: () => import('../views/SimulatorView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/messages',
+      name: 'messages',
+      component: () => import('../views/MessagesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/messages/:userId',
+      name: 'conversation',
+      component: () => import('../views/ConversationView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/impressum',
       name: 'impressum',
       component: () => import('../views/ImpressumView.vue'),
@@ -76,6 +118,14 @@ export const router = createRouter({
           component: () => import('../views/admin/AdminWorldsView.vue'),
         },
         {
+          // Issue #133: pick a seed, preview the map it generates full-screen,
+          // then commit it. Its own route rather than a panel in the worlds
+          // list because the preview wants the whole viewport.
+          path: 'worlds/:worldId/reseed',
+          name: 'admin-world-reseed',
+          component: () => import('../views/admin/AdminWorldReseedView.vue'),
+        },
+        {
           path: 'users',
           name: 'admin-users',
           component: () => import('../views/admin/AdminUsersView.vue'),
@@ -89,6 +139,11 @@ export const router = createRouter({
           path: 'reports',
           name: 'admin-reports',
           component: () => import('../views/admin/AdminReportsView.vue'),
+        },
+        {
+          path: 'activity',
+          name: 'admin-activity',
+          component: () => import('../views/admin/AdminActivityView.vue'),
         },
       ],
     },

@@ -16,6 +16,7 @@ import {
   isUnitAvailable,
   totalTrainingCost,
 } from '../../lib/units/trainingEconomy';
+import { claimRadiusForLevel, hasShoreline } from '../../lib/map/shoreline';
 
 const emit = defineEmits<{ close: []; trained: [] }>();
 
@@ -39,11 +40,30 @@ function setQuantity(type: string, value: string) {
 
 const longhouseLevel = computed(() => world.hud.level);
 
+// Issue #40 phase 6 §4: whether this settlement's own claimed territory
+// touches the sea — Ship-class units (Karve, Longship) need it, mirroring
+// `Settlement.PlanTrain`'s `hasShoreline` gate (`TrainRejection.SettlementNotCoastal`).
+// Computed client-side from the same deterministic terrain the map already
+// renders (see `lib/map/shoreline.ts`'s own comment on why that's safe)
+// rather than a new backend flag. `null` (no settlement selected yet, e.g.
+// demo mode's landing page) reads as "unknown" — treated as available below
+// so a Ship row isn't wrongly greyed out before there's anything to check
+// against; the Train button still enforces the real rule server-side either way.
+const isCoastal = computed<boolean | null>(() => {
+  const settlement = world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined;
+  if (!settlement) return null;
+  const claimRadius = claimRadiusForLevel(longhouseLevel.value);
+  return hasShoreline({ q: settlement.q, r: settlement.r }, claimRadius, world.model);
+});
+
 const rows = computed(() =>
   catalogue.definitions.map((definition) => {
     const count = quantityFor(definition.type);
     const cost = totalTrainingCost(definition, count);
-    const available = isUnitAvailable(definition.type, longhouseLevel.value, catalogue.byType);
+    const meetsLevel = isUnitAvailable(definition.type, longhouseLevel.value, catalogue.byType);
+    const needsCoast = definition.class === 'ship';
+    const coastal = isCoastal.value !== false; // unknown (null) treated as coastal, see isCoastal's comment
+    const available = meetsLevel && (!needsCoast || coastal);
     const affordable = canAfford(cost, world.hud.resources);
     return {
       definition,
@@ -52,6 +72,10 @@ const rows = computed(() =>
       costText: formatCostLine(cost),
       durationText: formatTrainingDuration(definition.trainingSeconds, count),
       available,
+      // Only true once the *other* requirements are already met — no point
+      // telling the player "also, no shoreline" on a unit whose longhouse
+      // level they haven't reached yet either.
+      needsCoastReason: meetsLevel && needsCoast && !coastal,
       affordable,
       // Training only works against the live backend; demo mode has no
       // TrainingOrder/garrison concept in the local WorldModel yet.
@@ -107,7 +131,8 @@ async function train(type: string, count: number) {
             <div class="unit-name">{{ row.definition.type }}</div>
             <div class="unit-stats">
               Atk {{ row.definition.attack }} · Def {{ row.definition.defense }}
-              <span v-if="!row.available"> · requires longhouse {{ row.definition.requiredLonghouseLevel }}<template v-if="row.definition.requiredUnitType"> and {{ row.definition.requiredUnitType }}</template></span>
+              <span v-if="row.needsCoastReason"> · requires a coastal settlement</span>
+              <span v-else-if="!row.available"> · requires longhouse {{ row.definition.requiredLonghouseLevel }}<template v-if="row.definition.requiredUnitType"> and {{ row.definition.requiredUnitType }}</template></span>
             </div>
             <div class="unit-cost" :class="{ unaffordable: row.available && !row.affordable }">
               {{ row.costText }} · {{ row.durationText }}

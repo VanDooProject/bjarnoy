@@ -10,17 +10,44 @@ import { useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
-import BuildingModal from '../components/hud/BuildingModal.vue';
+import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
-import type { AxialCoord } from '../lib/hex/coords';
-import type { Tile } from '../lib/map/types';
+import { hexDistance, type AxialCoord } from '../lib/hex/coords';
+import { claimRadiusForLevel } from '../lib/map/shoreline';
+import type { Terrain, Tile } from '../lib/map/types';
 
 // Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
 const ONBOARDING_TARGET_BUILDINGS = 3;
+
+// Issue: the onboarding build step used to pop BuildingModal — a single
+// "Build here" button with no type picker, hardcoded to 'farm' (live) or
+// 'hut' (demo). Farm requires grass (BuildingCatalogue), so a click on any
+// forest/mountain tile in the fresh border silently failed (TerrainNotAllowed,
+// only console.error'd) with the modal just sitting there — "can't actually
+// select the correct building". Ring menu, same as SettlementView's, fixes
+// that: a flat ring (no nested categories — this is the "simplified" version)
+// with only the guided type matching the *clicked tile's own terrain*
+// enabled (Farm needs grass, Lumberjack needs forest — BuildingCatalogue),
+// everything else visibly disabled. Enabling both regardless of terrain
+// would just reintroduce the same silent-failure bug for whichever one
+// doesn't fit the tile actually clicked.
+type OnboardingBuildType = 'farm' | 'lumberjack' | 'tower' | 'fishinghut' | 'quarry';
+const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
+  farm: 'grass',
+  lumberjack: 'forest',
+};
+const ONBOARDING_BUILD_RING: { type: OnboardingBuildType; label: string }[] = [
+  { type: 'farm', label: 'Farm' },
+  { type: 'lumberjack', label: 'Lumberjack' },
+  { type: 'quarry', label: 'Quarry' },
+  { type: 'tower', label: 'Watchtower' },
+  { type: 'fishinghut', label: 'Fishing Hut' },
+];
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -28,8 +55,15 @@ const router = useRouter();
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 const previewCoord = ref<AxialCoord | null>(null);
+// Live mode only: every unclaimed start position worth showing near the
+// preview centre. Founding now only ever lands on the exact hex clicked
+// (see `startPositionAt`, issue #96), so the player needs to see every
+// plot that's actually clickable, not just a single suggested one.
+const nearbyStartCoords = ref<AxialCoord[]>([]);
 const founding = ref(false);
 const showPrompt = ref(false);
+const invalidClickMessage = ref<string | null>(null);
+let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 
 onMounted(async () => {
   await world.bootstrapLiveWorld();
@@ -41,24 +75,31 @@ onMounted(async () => {
   // Deterministic starter plot: same island every time, near the world's
   // own origin — not chosen by panning a world map (there is none here).
   //
-  // Live mode must highlight the exact hex foundStartingSettlementLive will
-  // actually found on (nearestStartPosition), not just any nearby land tile
-  // (model.findLandfall) — those are two different coordinate systems (an
-  // arbitrary walkable hex vs. one of the island's precomputed start
-  // positions) that usually don't agree. Previewing the wrong one used to
-  // mean the settlement "landed" somewhere else the instant it was founded,
-  // which then made the very next build click fail as outside its borders
-  // — the player was still clicking near where the preview told them their
-  // village was, not where it actually ended up. Demo mode has no start
-  // positions at all, so it keeps using findLandfall, which
-  // foundStartingSettlement (demo's own founder) also seeds `near` from —
-  // the two already agree there.
+  // Demo mode has no start positions at all, so it previews/founds via
+  // `findLandfall`, an arbitrary walkable hex — the two already agree there.
+  // Live mode previews the nearest start position purely to centre the
+  // camera; `nearbyStartCoords` below is what's actually clickable.
   previewCoord.value = DEMO_MODE
     ? (world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 })
     : (world.nearestStartPosition({ q: 0, r: 0 })?.at ??
       world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 });
+  if (!DEMO_MODE) {
+    nearbyStartCoords.value = world.nearbyStartPositions({ q: 0, r: 0 }).map((pos) => pos.at);
+  }
+  // Same test/debug-hook idea as SettlementView's own __settlementRenderer:
+  // lets an e2e test convert a real hex coordinate to an exact click point
+  // via the renderer's own camera math, instead of guessing pixel offsets
+  // that only happen to land right at one particular zoom/camera framing.
+  if (DEMO_MODE) {
+    (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
+      canvasRef.value?.renderer;
+  }
 });
-onUnmounted(() => world.stopHudSync());
+onUnmounted(() => {
+  world.stopHudSync();
+  clearTimeout(invalidClickTimer);
+  if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
+});
 
 // Admin-set gates (issue #27): a world that hasn't started yet, or has had
 // joins closed, still renders (existing players restore fine) but refuses a
@@ -75,6 +116,9 @@ const joinBlockedMessage = computed(() => {
   if (world.worldJoinableReason === 'JoinsClosed') {
     return 'This world is no longer accepting new players.';
   }
+  if (world.worldJoinableReason === 'NoWorldYet') {
+    return 'No world has been created yet — check back soon.';
+  }
   return 'This world is not accepting new players right now.';
 });
 
@@ -87,29 +131,136 @@ watch(onboardingComplete, (complete) => {
   if (complete) showPrompt.value = true;
 }, { immediate: true });
 
-const selectedCoord = ref<AxialCoord | null>(null);
-const selectedTile = ref<Tile | null>(null);
-const modalBusy = ref(false);
+// Ring menu state for the onboarding build step — mirrors SettlementView's
+// own ringScreen/selectedCoord, but flat (one ring, no build-categories /
+// build-buildings drill-down): onboarding only ever offers a handful of
+// types, so there's no need for that hierarchy here.
+const ringScreen = ref<{ x: number; y: number } | null>(null);
+const ringCoord = ref<AxialCoord | null>(null);
+const ringTerrain = ref<Terrain | null>(null);
 
-const modalMine = computed(
-  () => !!selectedTile.value && selectedTile.value.ownerId === world.selectedSettlementId,
-);
-const modalOwnerLabel = computed(() => {
-  const tile = selectedTile.value;
-  if (!tile?.ownerId) return null;
-  const owner = world.model.getSettlement(tile.ownerId);
-  if (!owner) return null;
-  return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
+watch(ringScreen, (screen) => {
+  canvasRef.value?.renderer?.setInteractionLocked(!!screen);
 });
 
-function onHexClick(coord: AxialCoord, tile: Tile) {
+const ringActions = computed<RingAction[]>(() =>
+  ONBOARDING_BUILD_RING.map(({ type, label }) => {
+    const requiredTerrain = GUIDED_BUILD_TERRAIN[type];
+    const guided = requiredTerrain !== undefined;
+    const fitsTile = guided && requiredTerrain === ringTerrain.value;
+    return {
+      id: type,
+      label,
+      disabled: !fitsTile,
+      hint: !guided
+        ? 'Finish the guided buildings first'
+        : !fitsTile
+          ? `Needs ${requiredTerrain} terrain — try a different hex`
+          : undefined,
+    };
+  }),
+);
+
+function closeRing() {
+  ringScreen.value = null;
+  ringCoord.value = null;
+  ringTerrain.value = null;
+}
+
+function showInvalidClickMessage(message: string) {
+  clearTimeout(invalidClickTimer);
+  invalidClickMessage.value = message;
+  invalidClickTimer = setTimeout(() => (invalidClickMessage.value = null), 2500);
+}
+
+// Live mode only: `WorldModel.borderRadius` (what marks a tile's `ownerId`,
+// and thus what reads as "your territory" on screen) is deliberately more
+// generous than the backend's actual buildable range
+// (`Settlement.ClaimRadius`, mirrored here via `claimRadiusForLevel`) — see
+// `WorldModel.borderRadius`'s own comment. Without this extra check, the
+// tutorial ring opened on hexes the backend would always reject with
+// `HexNotInSettlement`, which is exactly the "ring 2 fails to close"
+// symptom `onRingSelect` used to hit below. Demo mode has no backend to
+// disagree with, so its own `tile.ownerId` (bounded by the same
+// `borderRadius`) is already the full truth.
+function withinBuildableRange(coord: AxialCoord): boolean {
+  if (DEMO_MODE || !world.selectedSettlementId) return true;
+  const settlement = world.model.getSettlement(world.selectedSettlementId);
+  if (!settlement) return false;
+  return hexDistance({ q: settlement.q, r: settlement.r }, coord) <= claimRadiusForLevel(settlement.level);
+}
+
+function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   if (!player.hasFoundedSettlement) {
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
+    // Live mode only founds on an exact, unclaimed start position (see
+    // `startPositionAt`, issue #96) — a click elsewhere used to silently
+    // found on the nearest one instead; now it just tells the player to
+    // pick one of the highlighted plots.
+    if (!DEMO_MODE && !world.startPositionAt(coord)) {
+      showInvalidClickMessage("You can't found there — pick one of the glowing plots.");
+      return;
+    }
     void foundHere(coord);
     return;
   }
-  selectedCoord.value = coord;
-  selectedTile.value = tile;
+  // Onboarding only ever needs to place a new building on an empty tile in
+  // your own border — there's no upgrade/raze/info flow here (that's the
+  // full settlement view's job once onboarding hands off to it), so any
+  // other click (the longhouse, a rival's tile, open water) just closes
+  // whatever ring is open rather than opening some other UI for it.
+  if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
+    if (!withinBuildableRange(coord)) {
+      showInvalidClickMessage("That hex is beyond your longhouse's claim — build closer to home.");
+      closeRing();
+      return;
+    }
+    ringCoord.value = coord;
+    ringScreen.value = screen;
+    ringTerrain.value = tile.terrain;
+    return;
+  }
+  closeRing();
+}
+
+async function onRingSelect(type: string) {
+  const coord = ringCoord.value;
+  if (!world.selectedSettlementId || !coord) return;
+  if (DEMO_MODE) {
+    world.model.placeBuilding(world.selectedSettlementId, coord, type as OnboardingBuildType);
+    world.syncHud();
+    closeRing();
+    return;
+  }
+  // Always close, win or lose — matching SettlementView's own onRingSelect
+  // (see its `buildType` call). A failed order used to leave the ring open
+  // with only a console.error, which is the "ring fails to close" bug: the
+  // player had no way to tell the click did anything at all.
+  closeRing();
+  try {
+    await world.queueBuildLive(type, coord);
+  } catch (err) {
+    console.error('Failed to queue building against the backend', err);
+    showInvalidClickMessage("That order didn't go through — try a different hex.");
+  }
+}
+
+// Issue: "the build countdowns like in settlement view should appear" —
+// BuildQueuePanel already reads world.hud.queue (populated by the
+// startHudSync() call in foundHere/onMounted below); it just wasn't
+// mounted here. Selecting a queued order pans/flashes it, same as
+// SettlementView's own onQueueSelect.
+let queueFlashTimeout: ReturnType<typeof setTimeout> | null = null;
+function onQueueSelect(coord: { q: number; r: number }) {
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return;
+  renderer.panTo(coord);
+  renderer.setHighlight(coord);
+  if (queueFlashTimeout) clearTimeout(queueFlashTimeout);
+  queueFlashTimeout = setTimeout(() => {
+    renderer.setHighlight(undefined);
+    queueFlashTimeout = null;
+  }, 2200);
 }
 
 async function foundHere(coord: AxialCoord) {
@@ -133,6 +284,7 @@ async function foundHere(coord: AxialCoord) {
       settlementId: settlement.id,
       previewCenter: undefined,
       highlightCoord: undefined,
+      highlightCoords: undefined,
       screenBiasX: 0,
     });
   } catch (err) {
@@ -153,48 +305,6 @@ async function foundHere(coord: AxialCoord) {
   }
 }
 
-function closeModal() {
-  selectedCoord.value = null;
-  selectedTile.value = null;
-  modalBusy.value = false;
-}
-
-async function build() {
-  if (!world.selectedSettlementId || !selectedCoord.value) return;
-  if (DEMO_MODE) {
-    world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, 'hut');
-    world.syncHud();
-    closeModal();
-    return;
-  }
-  modalBusy.value = true;
-  try {
-    await world.queueBuildLive('farm', selectedCoord.value);
-    closeModal();
-  } catch (err) {
-    console.error('Failed to queue building against the backend', err);
-    modalBusy.value = false;
-  }
-}
-
-async function upgrade() {
-  if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
-  if (DEMO_MODE) {
-    const tile = world.model.getTile(selectedCoord.value.q, selectedCoord.value.r);
-    tile.buildingLevel = (selectedTile.value.buildingLevel ?? 1) + 1;
-    closeModal();
-    return;
-  }
-  modalBusy.value = true;
-  try {
-    await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
-    closeModal();
-  } catch (err) {
-    console.error('Failed to queue upgrade against the backend', err);
-    modalBusy.value = false;
-  }
-}
-
 function closePrompt() {
   showPrompt.value = false;
   player.completeOnboarding();
@@ -211,7 +321,10 @@ function closePrompt() {
       :player-id="player.id"
       :settlement-id="player.hasFoundedSettlement ? (world.selectedSettlementId ?? undefined) : undefined"
       :preview-center="player.hasFoundedSettlement ? undefined : (previewCoord ?? undefined)"
-      :highlight-coord="player.hasFoundedSettlement ? undefined : (previewCoord ?? undefined)"
+      :highlight-coord="
+        player.hasFoundedSettlement || !DEMO_MODE ? undefined : (previewCoord ?? undefined)
+      "
+      :highlight-coords="player.hasFoundedSettlement || DEMO_MODE ? undefined : nearbyStartCoords"
       :screen-bias-x="0.16"
       hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
@@ -239,6 +352,7 @@ function closePrompt() {
         Nobody asks your name until you have something worth naming.
       </p>
       <p v-if="founding" class="status">Making landfall…</p>
+      <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
 
     <div v-if="!joinBlocked" class="tray panel">
@@ -277,15 +391,16 @@ function closePrompt() {
       <span>Nothing to install</span>
     </div>
 
-    <BuildingModal
-      v-if="selectedTile"
-      :tile="selectedTile"
-      :mine="modalMine"
-      :owner-label="modalOwnerLabel"
-      :busy="modalBusy"
-      @close="closeModal"
-      @build="build"
-      @upgrade="upgrade"
+    <BuildQueuePanel v-if="player.hasFoundedSettlement" @select="onQueueSelect" />
+    <RingMenu
+      v-if="ringScreen"
+      :x="ringScreen.x"
+      :y="ringScreen.y"
+      :actions="ringActions"
+      backdrop
+      @select="onRingSelect"
+      @close="closeRing"
+      @outside-pointer-down="closeRing"
     />
     <NicknamePrompt v-if="showPrompt" @close="closePrompt" />
   </div>
@@ -369,6 +484,22 @@ h1 {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Issue #95: a completed step used to only dim (`.tray-item.done`'s
+   opacity) — nothing on the row itself said "done" versus "not started
+   yet", so progress never visibly ticked off as buildings queued.  A
+   checkmark on the dot gives each row its own explicit done state. */
+.tray-item.done .dot {
+  background: var(--gold);
+  color: #20160a;
+  font-size: 15px;
+  font-weight: 700;
+}
+.tray-item.done .dot::after {
+  content: '✓';
 }
 .name {
   font-size: 14px;

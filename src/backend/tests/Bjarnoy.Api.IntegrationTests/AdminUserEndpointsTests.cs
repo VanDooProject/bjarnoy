@@ -250,5 +250,37 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
         var statusResponse = await client.PostJsonAsync(
             $"/api/v1/admin/users/{missing}/status", new SetUserStatusRequest("locked"), Ct);
         Assert.Equal(HttpStatusCode.NotFound, statusResponse.StatusCode);
+
+        var premiumResponse = await client.PostJsonAsync(
+            $"/api/v1/admin/users/{missing}/premium", new SetUserPremiumRequest(true), Ct);
+        Assert.Equal(HttpStatusCode.NotFound, premiumResponse.StatusCode);
+    }
+
+    /// <summary>
+    /// Regression coverage for the gap the troop-system e2e wave (issue #40's
+    /// premium fight simulator) surfaced: nothing in the API could ever set
+    /// <see cref="UserEntity.IsPremium"/> before this endpoint existed, so the
+    /// simulator's <c>PremiumUserEndpointFilter</c> gate was unreachable in
+    /// its "premium granted" branch from outside a raw DB write.
+    /// </summary>
+    [Fact]
+    public async Task Admin_can_grant_and_revoke_a_users_premium_flag()
+    {
+        using var client = _fixture.CreateClient();
+        var (_, _, userId) = await CreatePlayerAsync(client);
+        var (adminToken, _) = await CreateAdminAsync(client);
+        Authorize(client, adminToken);
+
+        var granted = await client.PostJsonAsync(
+            $"/api/v1/admin/users/{userId}/premium", new SetUserPremiumRequest(true), Ct);
+        Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
+        var grantedUser = await granted.ReadStrictAsync<AdminUserResponse>(Ct);
+        Assert.True(grantedUser.IsPremium);
+
+        var revoked = await client.PostJsonAsync(
+            $"/api/v1/admin/users/{userId}/premium", new SetUserPremiumRequest(false), Ct);
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        var revokedUser = await revoked.ReadStrictAsync<AdminUserResponse>(Ct);
+        Assert.False(revokedUser.IsPremium);
     }
 }

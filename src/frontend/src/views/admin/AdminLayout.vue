@@ -1,12 +1,19 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
+import { useAdminWorldStore } from '../../stores/adminWorld';
 
 // Shared shell for every /admin/* tab (issue #27; #29 and #30 add their own
 // tabs to the same nav). Access itself is enforced by the router's
 // `requiresAdmin` guard — this component only renders the chrome around it.
 const auth = useAuthStore();
 const router = useRouter();
+const adminWorld = useAdminWorldStore();
+
+onMounted(() => {
+  void adminWorld.loadWorlds();
+});
 
 async function onLogout() {
   await auth.logout();
@@ -23,7 +30,22 @@ async function onLogout() {
         <router-link to="/admin/users" class="tab">Users</router-link>
         <router-link to="/admin/settlements" class="tab">Settlements</router-link>
         <router-link to="/admin/reports" class="tab">Reports</router-link>
+        <router-link to="/admin/activity" class="tab">Activity</router-link>
       </nav>
+      <div class="world-select">
+        <select
+          v-if="adminWorld.worlds.length > 0"
+          :value="adminWorld.selectedWorldId ?? ''"
+          @change="adminWorld.selectWorld(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="world in adminWorld.worlds" :key="world.id" :value="world.id">
+            {{ world.name }}
+          </option>
+        </select>
+        <router-link v-else-if="!adminWorld.loading" to="/admin/worlds" class="no-worlds">
+          No worlds yet — create one
+        </router-link>
+      </div>
       <div class="account">
         <span class="who">{{ auth.user?.displayName ?? auth.user?.userName }}</span>
         <button class="logout" @click="onLogout">Log out</button>
@@ -37,8 +59,9 @@ async function onLogout() {
 
 <style scoped>
 .admin {
-  width: 100vw;
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
+  overflow: auto;
   background: var(--shell);
   color: var(--text);
 }
@@ -72,6 +95,18 @@ async function onLogout() {
 .tab.disabled {
   opacity: 0.4;
   cursor: default;
+}
+.world-select select {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+.no-worlds {
+  color: var(--muted);
+  font-size: 14px;
 }
 .account {
   display: flex;

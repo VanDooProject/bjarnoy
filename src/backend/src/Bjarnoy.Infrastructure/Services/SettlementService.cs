@@ -37,6 +37,11 @@ public sealed record BuildResult(BuildRejection Rejection, BuildOrder? Order = n
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 }
 
+public sealed record CancelBuildResult(CancelBuildRejection Rejection, bool WorldPaused = false)
+{
+    public bool Accepted => Rejection == CancelBuildRejection.None && !WorldPaused;
+}
+
 public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order = null, bool WorldPaused = false)
 {
     public bool Accepted => Rejection == TrainRejection.None && Order is not null;
@@ -90,6 +95,44 @@ public sealed record RuneResult(RuneOutcome Outcome, SettlementEntity? Settlemen
     public bool Accepted => Outcome == RuneOutcome.Applied && Settlement is not null;
 }
 
+/// <summary>How an admin god-mode edit ended.</summary>
+public enum AdminEditOutcome
+{
+    Applied,
+    SettlementNotFound,
+
+    /// <summary>The settlement exists but the edit itself was refused; see the accompanying rejection.</summary>
+    Rejected,
+}
+
+public sealed record AdminBuildingEditServiceResult(
+    AdminEditOutcome Outcome,
+    AdminBuildingEditRejection Rejection = AdminBuildingEditRejection.None,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == AdminEditOutcome.Applied && Settlement is not null;
+}
+
+public sealed record AdminGarrisonEditServiceResult(
+    AdminEditOutcome Outcome,
+    AdminGarrisonEditRejection Rejection = AdminGarrisonEditRejection.None,
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == AdminEditOutcome.Applied && Settlement is not null;
+}
+
+/// <summary>Outcome of an admin's "finish everything queued, now".</summary>
+public sealed record CompleteQueuesResult(
+    SettlementEntity? Settlement = null,
+    GameClock? Clock = null,
+    int CompletedBuilds = 0,
+    int CompletedTraining = 0)
+{
+    public bool Accepted => Settlement is not null;
+}
+
 /// <summary>
 /// Settlements: founding them, reading them, and queueing builds in them.
 /// </summary>
@@ -104,8 +147,16 @@ public sealed class SettlementService(
     TimeProvider timeProvider,
     ILogger<SettlementService> logger)
 {
-    /// <summary>Minimum hex distance between two settlements' centres.</summary>
-    public const int MinimumSpacing = 3;
+    /// <summary>
+    /// Minimum hex distance between two settlements' centres, enforced at
+    /// founding. Sized so that even if both eventually reach
+    /// <see cref="BuildingCatalogue.MaxLevel"/> their borders (see
+    /// <see cref="Settlement.ClaimRadius"/>/<see cref="Settlement.MaxClaimRadius"/>)
+    /// can never overlap — a level-up itself is not blocked from overlapping
+    /// a neighbour (first-claim-wins on any contested hex), so this is the
+    /// only thing keeping that from happening in practice.
+    /// </summary>
+    public const int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
 
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
@@ -185,10 +236,18 @@ public sealed class SettlementService(
             });
         }
 
-        // Spacing is checked in memory against this world's centres: the
+        // Spacing is checked in memory against this island's centres: the
         // distance is hex distance, which SQL cannot express portably.
+        // Scoped to the same island, not the whole world — two settlements
+        // on different islands are always separated by open sea, so their
+        // claim discs (see Settlement.ClaimRadius) can never actually
+        // overlap any land either could claim no matter how far apart (or
+        // close) the islands themselves happen to be. Checking world-wide
+        // would reject perfectly fine foundings on two nearby-but-separate
+        // islands purely because MinimumSpacing is sized for the same-island,
+        // worst-case-level overlap case (see that constant's own comment).
         var centres = await _dbContext.Settlements
-            .Where(s => s.WorldId == worldId)
+            .Where(s => s.WorldId == worldId && s.IslandId == islandId)
             .Select(s => new { s.CentreQ, s.CentreR })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
@@ -307,6 +366,24 @@ public sealed class SettlementService(
         return (settlement, clock);
     }
 
+    /// <summary>
+    /// A settlement's real owner (<see cref="SettlementEntity.UserId"/>) and
+    /// client-local owner id (<see cref="SettlementEntity.OwnerId"/>) — a
+    /// lightweight projection for the ownership-authorization endpoint
+    /// filters (<c>Bjarnoy.Api.Auth.OwnershipGate</c>), not a full load. Null
+    /// if no such settlement exists.
+    /// </summary>
+    public async Task<(Guid UserId, string OwnerId)?> GetOwnershipAsync(
+        Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var ownership = await _dbContext.Settlements
+            .Where(s => s.Id == settlementId)
+            .Select(s => new { s.UserId, s.OwnerId })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+        return ownership is null ? null : (ownership.UserId, ownership.OwnerId);
+    }
+
     /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
     public async Task<SettlementsPage> SearchAsync(
         Guid? worldId,
@@ -396,7 +473,8 @@ public sealed class SettlementService(
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
         var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
-        var result = settled.SetBuildingLevel(coord, level, now, settlement.World.SpeedFactor, guestStacks);
+        var result = settled.SetBuildingLevel(
+            coord, level, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
 
         if (!result.Accepted)
         {
@@ -533,6 +611,201 @@ public sealed class SettlementService(
         return new RuneResult(RuneOutcome.Applied, settlement, clock);
     }
 
+    /// <summary>
+    /// Admin god-mode "instant build": marks every still-pending build (and,
+    /// optionally, training) order as due right now and then settles, so the
+    /// completions land through the ordinary
+    /// <see cref="Settlement.SettleTo"/> path — same rate recalculation, same
+    /// chronological merge, same starvation pass.
+    /// </summary>
+    public async Task<CompleteQueuesResult> CompleteQueuesAsync(
+        Guid settlementId,
+        bool builds = true,
+        bool training = true,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new CompleteQueuesResult();
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var guestArmies = await _dbContext.Armies
+            .Include(a => a.Stacks)
+            .Where(a => a.IsSupporting && a.TargetSettlementId == settlement.Id)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var guestStacks = AggregateStacks(
+            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+
+        var result = settlement.ToDomain()
+            .WithQueuesDueAt(now, builds, training)
+            .SettleTo(now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (result.Changed)
+        {
+            settlement.ApplyDomain(result.Settlement);
+            ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        _logger.LogInformation(
+            "Admin insta-completed {Builds} build(s) and {Training} training batch(es) in settlement {Id}.",
+            result.Completed.Count, result.TrainingCompleted.Count, settlementId);
+
+        return new CompleteQueuesResult(settlement, clock, result.Completed.Count, result.TrainingCompleted.Count);
+    }
+
+    /// <summary>
+    /// Admin god-mode: places (or re-types/re-levels) a building on a hex —
+    /// the write half of the graphical settlement editor. See
+    /// <see cref="Settlement.PlaceBuilding"/> for which rules still apply.
+    /// </summary>
+    public async Task<AdminBuildingEditServiceResult> PlaceBuildingAsync(
+        Guid settlementId,
+        HexCoord coord,
+        BuildingType type,
+        int level,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (loaded is null)
+        {
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.SettlementNotFound);
+        }
+
+        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
+        var sampler = new TerrainSampler(settlement.World!.ToGenerationOptions());
+
+        var result = settled.PlaceBuilding(
+            coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
+            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt);
+
+        if (!result.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin placed {Type} level {Level} at {Coord} in settlement {Id}.", type, level, coord, settlementId);
+
+        return new AdminBuildingEditServiceResult(
+            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, settlement, clock);
+    }
+
+    /// <summary>Admin god-mode: razes whatever stands on a hex — <see cref="PlaceBuildingAsync"/>'s counterpart.</summary>
+    public async Task<AdminBuildingEditServiceResult> RazeBuildingAsync(
+        Guid settlementId,
+        HexCoord coord,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (loaded is null)
+        {
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.SettlementNotFound);
+        }
+
+        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
+
+        var result = settled.RazeBuilding(
+            coord, now, settlement.World!.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (!result.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new AdminBuildingEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Admin razed the building at {Coord} in settlement {Id}.", coord, settlementId);
+
+        return new AdminBuildingEditServiceResult(
+            AdminEditOutcome.Applied, AdminBuildingEditRejection.None, settlement, clock);
+    }
+
+    /// <summary>
+    /// Admin god-mode "troop creation": adds units of one type straight into a
+    /// settlement's garrison (or, with a negative count, removes them), free
+    /// of cost and training time. The units are ordinary garrison units from
+    /// there on — dispatchable, feedable, starvable.
+    /// </summary>
+    public async Task<AdminGarrisonEditServiceResult> AdjustGarrisonAsync(
+        Guid settlementId,
+        UnitType unitType,
+        int delta,
+        CancellationToken cancellationToken = default)
+    {
+        var loaded = await LoadForEditAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (loaded is null)
+        {
+            return new AdminGarrisonEditServiceResult(AdminEditOutcome.SettlementNotFound);
+        }
+
+        var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
+
+        var result = settled.AdjustGarrison(
+            unitType, delta, now, settlement.World!.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (!result.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new AdminGarrisonEditServiceResult(AdminEditOutcome.Rejected, result.Rejection);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Admin adjusted settlement {Id}'s garrison by {Delta}x {Unit}.", settlementId, delta, unitType);
+
+        return new AdminGarrisonEditServiceResult(
+            AdminEditOutcome.Applied, AdminGarrisonEditRejection.None, settlement, clock);
+    }
+
+    /// <summary>
+    /// The shared prologue of every admin god-mode edit: load the settlement
+    /// with its world, convert wall time to game time, and settle it (with its
+    /// guests) to now, so the edit itself is decided against the settlement as
+    /// it stands this instant. Null when there is no such settlement.
+    /// </summary>
+    private async Task<(SettlementEntity Settlement,
+        GameClock Clock,
+        DateTimeOffset Now,
+        Settlement Settled,
+        SettleResult SettleResult,
+        List<ArmyEntity> GuestArmies,
+        List<UnitStack> GuestStacks)?> LoadForEditAsync(
+        Guid settlementId, CancellationToken cancellationToken)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return null;
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var guestStacks = AggregateStacks(
+            guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+
+        return (settlement, clock, now, settled, settleResult, guestArmies, guestStacks);
+    }
     public Task<List<SettlementEntity>> GetForWorldAsync(
         Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Settlements
@@ -563,13 +836,14 @@ public sealed class SettlementService(
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
 
+        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+
         // Settle first so the decision sees the queue and stock as of now: a
         // build that finished a minute ago must free its slot and count towards
         // production.
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
-        var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var terrain = sampler.TerrainAt(coord);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
@@ -593,6 +867,49 @@ public sealed class SettlementService(
             settlementId, type, decision.Order!.TargetLevel, coord, decision.Order.CompletesAt);
 
         return new BuildResult(BuildRejection.None, decision.Order);
+    }
+
+    /// <summary>Cancels a still-queued build order, refunding its cost.</summary>
+    public async Task<CancelBuildResult> CancelBuildAsync(
+        Guid settlementId,
+        Guid orderId,
+        CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new CancelBuildResult(CancelBuildRejection.OrderNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        if (!clock.AllowsCommands)
+        {
+            return new CancelBuildResult(CancelBuildRejection.None, WorldPaused: true);
+        }
+
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        // Settle first so the cancel sees the queue and stock as of now: an
+        // order that finished a minute ago is no longer cancellable — same
+        // reasoning as QueueBuildAsync.
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        var decision = settled.CancelBuild(orderId, now);
+        if (!decision.Accepted)
+        {
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
+                .ConfigureAwait(false);
+            return new CancelBuildResult(decision.Rejection);
+        }
+
+        settlement.ApplyDomain(decision.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} cancelled build order {OrderId}.", settlementId, orderId);
+
+        return new CancelBuildResult(CancelBuildRejection.None);
     }
 
     /// <summary>Queues training a batch of units, charging for it up front.</summary>
@@ -623,7 +940,7 @@ public sealed class SettlementService(
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
-        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline);
+        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {
@@ -685,6 +1002,8 @@ public sealed class SettlementService(
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
+        var terrainAt = TerrainAt(world);
+
         var settlementIds = settlements.Select(s => s.Id).ToHashSet();
         var guestArmies = await _dbContext.Armies
             .Include(a => a.Stacks)
@@ -698,11 +1017,11 @@ public sealed class SettlementService(
             var guestStacks = AggregateStacks(
                 hostGuestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-            var result = entity.ToDomain().SettleTo(now, oldFactor, guestStacks);
+            var result = entity.ToDomain().SettleTo(now, oldFactor, guestStacks, terrainAt);
             var settled = result.Settlement;
             ApplyGuestDeaths(hostGuestArmies, result.GuestDeaths);
 
-            var (production, capacity) = settled.CurrentTotals(newFactor, guestStacks);
+            var (production, capacity) = settled.CurrentTotals(newFactor, guestStacks, terrainAt);
             entity.ApplyDomain(settled with { Resources = settled.Resources.WithRate(production, capacity, now) });
         }
 
@@ -744,6 +1063,15 @@ public sealed class SettlementService(
         return world;
     }
 
+    /// <summary>
+    /// The terrain lookup <see cref="Settlement.SettleTo"/> and friends need
+    /// for a terrain-bound producer's neighbour-adjacency boost — built fresh
+    /// per call since a <see cref="TerrainSampler"/> is cheap (no state, no
+    /// I/O) and a world's generation options can differ per request.
+    /// </summary>
+    private static Func<HexCoord, Terrain> TerrainAt(WorldEntity world) =>
+        new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
+
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements
             .Include(s => s.World)
@@ -757,11 +1085,14 @@ public sealed class SettlementService(
     /// <summary>
     /// Loads every guest (<see cref="Bjarnoy.Domain.Armies.ArmyMission.Support"/>)
     /// army currently hosted at <paramref name="settlementId"/> (issue #40
-    /// phase 4 §2) and settles the settlement against their pooled upkeep in
-    /// one step — <see cref="Settlement.SettleTo"/>'s <c>guestStacks</c>
-    /// parameter. Tracked (not <c>AsNoTracking</c>): a starvation pass may
-    /// need to write guest deaths back onto these same entities — see
-    /// <see cref="ApplyGuestDeaths"/>.
+    /// phase 4 §2) and settles the settlement against their pooled upkeep and
+    /// its terrain-bound producers' adjacency boost in one step —
+    /// <see cref="Settlement.SettleTo"/>'s <c>guestStacks</c> and
+    /// <c>terrainAt</c> parameters. Tracked (not <c>AsNoTracking</c>): a
+    /// starvation pass may need to write guest deaths back onto these same
+    /// entities — see <see cref="ApplyGuestDeaths"/>. Requires
+    /// <paramref name="entity"/>.World to already be loaded (every caller
+    /// checks this before calling in).
     /// </summary>
     private async Task<(Settlement Settled, SettleResult Result, List<ArmyEntity> GuestArmies)> SettleWithGuestsAsync(
         SettlementEntity entity, DateTimeOffset now, double speedFactor, CancellationToken cancellationToken)
@@ -774,7 +1105,7 @@ public sealed class SettlementService(
         var guestStacks = AggregateStacks(
             guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
 
-        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks);
+        var result = entity.ToDomain().SettleTo(now, speedFactor, guestStacks, TerrainAt(entity.World!));
         return (result.Settlement, result, guestArmies);
     }
 

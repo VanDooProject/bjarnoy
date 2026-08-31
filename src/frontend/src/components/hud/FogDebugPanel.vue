@@ -17,13 +17,22 @@ const emit = defineEmits<{ change: [] }>();
 // two stay in sync without HexMapRenderer.ts importing Vue at all.
 const flags = reactive(fogDebugFlags);
 
+// Labelled to match FogPerfPanel's row/sub-row names ("Terrain", "Unexplored
+// (white) fog", "Realm borders", "Scouted (dark) fog", "Blob cache") so a
+// toggle here and the number it moves there are easy to line up.
 const LABELS: Record<keyof FogDebugFlags, string> = {
-  distJitter: 'Distance jitter (outer ramp/cull)',
-  visibleRamp: 'Visible→scouted fade',
-  blobJitter: 'Blob position/size jitter',
-  terrainCull: 'Cull terrain past fog cutoff',
+  distJitter: 'Distance jitter (fog ramp)',
+  terrainCull: 'Terrain: cull past fog cutoff',
+  terrainCullJitter: 'Terrain: cull distance jitter (off by default)',
+  unexploredFog: 'Unexplored (white) fog enabled',
+  realmBorders: 'Realm borders enabled',
+  scoutedFog: 'Scouted (dark) fog enabled',
+  scoutedTintFade: 'Scouted (dark) fog: tint fade (sight edge, off by default)',
+  blobJitter: 'Blob cache: position/size jitter',
   flatFillOnly: 'Skip blob/flat-fill overlap',
   blobsOnly: 'Blob-only mist (no flat fill)',
+  dragFade: 'Fade fog back in after drag (off by default)',
+  cullThresholdDebug: 'Debug: highlight hard fog-cliff hexes (magenta)',
 };
 
 watch(
@@ -45,11 +54,10 @@ watch(
 
 <style scoped>
 .fog-debug {
-  position: absolute;
-  /* Clears the full-width hud-bar (64px tall) above it. */
-  top: 80px;
-  right: 16px;
-  z-index: 20;
+  /* Positioned by the caller — both SettlementView and WorldMapView place
+     this inside a `.fog-debug-stack` flex column alongside FogPerfPanel
+     (that wrapper carries the position: absolute), so this stays a normal
+     flex child rather than positioning itself. */
   padding: 12px 14px;
   min-width: 230px;
 }

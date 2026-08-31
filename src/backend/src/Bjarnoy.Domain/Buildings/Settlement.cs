@@ -84,6 +84,20 @@ public sealed record Settlement
     /// </summary>
     public int ClaimRadius => 1 + (LonghouseLevel / 2);
 
+    /// <summary>
+    /// The largest <see cref="ClaimRadius"/> any settlement can ever reach
+    /// (longhouse at <see cref="BuildingCatalogue.MaxLevel"/>). Two
+    /// settlements' borders can never overlap, at any level either reaches,
+    /// once their centres are more than twice this apart — see
+    /// <c>SettlementService.MinimumSpacing</c>, which founding enforces at
+    /// this worst case rather than against each neighbour's *current* level
+    /// (borders overlapping after a level-up is otherwise allowed —
+    /// first-claim-wins, per MECHANICS.md §2 — so keeping new settlements
+    /// spaced out this generously is what actually avoids the collision in
+    /// practice).
+    /// </summary>
+    public const int MaxClaimRadius = 1 + (BuildingCatalogue.MaxLevel / 2);
+
     /// <summary>Hexes this settlement has claimed.</summary>
     public bool Claims(HexCoord coord) => Centre.DistanceTo(coord) <= ClaimRadius;
 
@@ -134,7 +148,18 @@ public sealed record Settlement
     /// <c>SettlementService</c> for the second split, of the guest pool
     /// across the actual guest <c>ArmyEntity</c> rows.
     /// </param>
-    public SettleResult SettleTo(DateTimeOffset now, double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null)
+    /// <param name="terrainAt">
+    /// Terrain lookup for a terrain-bound producer's neighbour-adjacency
+    /// boost (<see cref="BuildingCatalogue.BoostMultiplier"/>).
+    /// <see langword="null"/> (the default) settles with no boost applied —
+    /// callers with no terrain source (e.g. tests exercising other rules)
+    /// still get a correct, if unboosted, total.
+    /// </param>
+    public SettleResult SettleTo(
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
     {
         guestStacks ??= [];
 
@@ -184,11 +209,11 @@ public sealed record Settlement
             // Each completion changes the rate from its own instant, so a
             // building (or batch) finished an hour ago has applied for that
             // hour.
-            var (production, capacity) = BoostedTotals(buildings, Runes);
+            var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
             resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, time);
         }
 
-        var (finalProduction, finalCapacity) = BoostedTotals(buildings, Runes);
+        var (finalProduction, finalCapacity) = BoostedTotals(buildings, Runes, terrainAt);
         finalProduction *= speedFactor;
 
         // Starvation is checked every settle, not only when something
@@ -542,6 +567,19 @@ public sealed record Settlement
     /// <summary>
     /// Pays for <paramref name="order"/> and appends it to the queue.
     /// </summary>
+    /// <remarks>
+    /// A brand-new building (<paramref name="order"/> targets a hex nothing
+    /// stands on yet) is staked out in <see cref="Buildings"/> immediately,
+    /// at level 0 — the foundation. This is what lets any reader of the
+    /// settlement's buildings (not just this settlement's own queue) already
+    /// see it under construction, and is why <see cref="SettleTo"/>'s
+    /// completion pass finds an existing entry at <c>order.Coord</c> to raise
+    /// to <c>order.TargetLevel</c> rather than adding a new one. An upgrade
+    /// order (the hex already holds the building at a lower level) gets no
+    /// stub — the standing building already shows its current level.
+    /// <see cref="CancelBuild"/> removes the stub again if the order never
+    /// completes.
+    /// </remarks>
     public Settlement Enqueue(BuildOrder order, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(order);
@@ -553,7 +591,51 @@ public sealed record Settlement
                 "Cannot enqueue a build that is not affordable; call PlanBuild first.");
         }
 
-        return this with { Resources = paid, Queue = [.. Queue, order] };
+        var buildings = Buildings;
+        if (!buildings.Any(b => b.Coord == order.Coord))
+        {
+            buildings = [.. buildings, new PlacedBuilding(order.Coord, order.Type, Level: 0)];
+        }
+
+        return this with { Resources = paid, Queue = [.. Queue, order], Buildings = buildings };
+    }
+
+    /// <summary>
+    /// Refunds and removes a still-queued build order.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement (see <see cref="SettleTo"/>) —
+    /// mirrors <see cref="PlanBuild"/>/<see cref="Enqueue"/>. A completed
+    /// order is no longer in <see cref="Queue"/> by then, so this simply
+    /// reports <see cref="CancelBuildRejection.OrderNotFound"/> rather than
+    /// ever undoing a finished build. If <paramref name="orderId"/> was a
+    /// brand-new building (<see cref="Enqueue"/>'s level-0 stub), that stub
+    /// is removed from <see cref="Buildings"/> too; an upgrade order simply
+    /// leaves the building at whatever level it already stands.
+    /// </remarks>
+    public CancelBuildResult CancelBuild(Guid orderId, DateTimeOffset now)
+    {
+        var order = Queue.FirstOrDefault(o => o.Id == orderId);
+        if (order is null)
+        {
+            return CancelBuildResult.Rejected(CancelBuildRejection.OrderNotFound);
+        }
+
+        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+        var refunded = Resources.Deposit(definition.Cost, now);
+
+        var buildings = order.TargetLevel == 1
+            ? Buildings.Where(b => b.Coord != order.Coord).ToList()
+            : Buildings;
+
+        var settled = this with
+        {
+            Resources = refunded,
+            Queue = [.. Queue.Where(o => o.Id != orderId)],
+            Buildings = buildings,
+        };
+
+        return CancelBuildResult.Accept(settled);
     }
 
     /// <summary>
@@ -569,7 +651,7 @@ public sealed record Settlement
     /// </remarks>
     public SetBuildingLevelResult SetBuildingLevel(
         HexCoord coord, int level, DateTimeOffset now, double speedFactor = 1.0,
-        IReadOnlyList<UnitStack>? guestStacks = null)
+        IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
         var buildings = Buildings.ToList();
         var index = buildings.FindIndex(b => b.Coord == coord);
@@ -586,18 +668,239 @@ public sealed record Settlement
 
         buildings[index] = buildings[index] with { Level = level };
 
-        var (production, capacity) = BoostedTotals(buildings, Runes);
+        var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
         return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
     }
 
-    /// <summary>Net production (after garrison and guest upkeep) and capacity implied by what currently stands, shrine favour and slotted runes included.</summary>
-    public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
-        double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null)
+    /// <summary>
+    /// Admin god-mode "instant build": rewrites every still-pending order's
+    /// <see cref="BuildOrder.CompletesAt"/> (and/or
+    /// <see cref="TrainingOrder.CompletesAt"/>) to <paramref name="now"/>, so
+    /// the very next <see cref="SettleTo"/> applies them through the ordinary
+    /// completion path.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does <em>not</em> settle or apply anything itself: the
+    /// whole point is that an insta-built building lands through exactly the
+    /// same code a naturally finished one does, including the per-completion
+    /// rate recalculation and the chronological merge with training
+    /// completions. Ties are broken by queue order, because
+    /// <see cref="SettleTo"/>'s <c>OrderBy</c> is stable — so three queued
+    /// levels on one hex still land 1, 2, 3 rather than in an arbitrary order.
+    /// Orders already due are left alone (their real completion instant is
+    /// what the rate history should keep).
+    /// </remarks>
+    public Settlement WithQueuesDueAt(DateTimeOffset now, bool builds = true, bool training = true) => this with
     {
-        var (production, capacity) = BoostedTotals(Buildings, Runes);
+        Queue = builds
+            ? [.. Queue.Select(o => o.IsComplete(now) ? o : o with { CompletesAt = now })]
+            : Queue,
+        // A TrainingOrder's CompletesAt is derived, not stored (StartedAt plus
+        // per-unit duration times count), so "due now" is expressed by
+        // restarting the batch at now with no per-unit duration left to serve
+        // — which also makes its live CompletedCount read as the full batch.
+        TrainingQueue = training
+            ? [.. TrainingQueue.Select(o => o.IsComplete(now)
+                ? o
+                : o with { StartedAt = now, PerUnitDuration = TimeSpan.Zero })]
+            : TrainingQueue,
+    };
+
+    /// <summary>
+    /// Admin god-mode: puts a building of <paramref name="type"/> at
+    /// <paramref name="level"/> on <paramref name="coord"/>, whether or not
+    /// anything already stands there, bypassing cost, queue and longhouse
+    /// prerequisites — but not the rules that would leave the settlement in a
+    /// shape the rest of the game cannot represent: the hex must be claimed,
+    /// the level must exist in the catalogue, the terrain must suit the
+    /// building, and the single longhouse can neither be duplicated nor moved.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement — same reasoning as
+    /// <see cref="SetBuildingLevel"/>, which this generalises (that one only
+    /// re-levels what already stands; this also places and re-types).
+    /// </remarks>
+    public AdminBuildingEditResult PlaceBuilding(
+        HexCoord coord,
+        BuildingType type,
+        int level,
+        Terrain terrain,
+        bool isCoastalWater,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        if (!Claims(coord))
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexNotInSettlement);
+        }
+
+        var definition = BuildingCatalogue.TryGet(type, level);
+        if (definition is null)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.InvalidLevel);
+        }
+
+        var buildings = Buildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        var standingHere = index >= 0 ? buildings[index].Type : (BuildingType?)null;
+
+        // The longhouse is the settlement's anchor: its level drives the claim
+        // radius every other rule reads, and founding places exactly one. So a
+        // second one cannot be placed, and the one that exists cannot be
+        // re-typed away or moved to another hex — only re-levelled in place.
+        if ((type == BuildingType.Longhouse && standingHere != BuildingType.Longhouse)
+            || (standingHere == BuildingType.Longhouse && type != BuildingType.Longhouse))
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
+        }
+
+        var terrainOk = definition.RequiresCoastalWater ? isCoastalWater : definition.AllowsTerrain(terrain);
+        if (!terrainOk)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.TerrainNotAllowed);
+        }
+
+        var placed = new PlacedBuilding(coord, type, level);
+        if (index >= 0)
+        {
+            buildings[index] = placed;
+        }
+        else
+        {
+            buildings.Add(placed);
+        }
+
+        return AdminBuildingEditResult.Accept(WithBuildings(buildings, coord, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Admin god-mode: removes whatever stands on <paramref name="coord"/> —
+    /// the counterpart to <see cref="PlaceBuilding"/>. The longhouse cannot be
+    /// razed (see that method's remarks).
+    /// </summary>
+    public AdminBuildingEditResult RazeBuilding(
+        HexCoord coord,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        var buildings = Buildings.ToList();
+        var index = buildings.FindIndex(b => b.Coord == coord);
+        if (index < 0)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.BuildingNotFound);
+        }
+
+        if (buildings[index].Type == BuildingType.Longhouse)
+        {
+            return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.LonghouseIsFixed);
+        }
+
+        buildings.RemoveAt(index);
+
+        return AdminBuildingEditResult.Accept(WithBuildings(buildings, coord, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Admin god-mode: adds <paramref name="delta"/> units of
+    /// <paramref name="type"/> to the garrison (or removes them, when
+    /// negative), free of cost and training time, and re-rates food upkeep
+    /// from <paramref name="now"/> onward exactly as a finished training batch
+    /// would.
+    /// </summary>
+    /// <remarks>
+    /// Call on an already-settled settlement, so the upkeep change applies
+    /// from now rather than retroactively — the same rule
+    /// <see cref="SetBuildingLevel"/> follows.
+    /// </remarks>
+    public AdminGarrisonEditResult AdjustGarrison(
+        UnitType type,
+        int delta,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        if (delta == 0)
+        {
+            return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.InvalidCount);
+        }
+
+        var garrison = Garrison.ToList();
+        var index = garrison.FindIndex(s => s.Type == type);
+        var standing = index >= 0 ? garrison[index].Count : 0;
+
+        if (standing + delta < 0)
+        {
+            return AdminGarrisonEditResult.Rejected(AdminGarrisonEditRejection.NotEnoughUnits);
+        }
+
+        if (index >= 0)
+        {
+            var remaining = standing + delta;
+            if (remaining == 0)
+            {
+                garrison.RemoveAt(index);
+            }
+            else
+            {
+                garrison[index] = garrison[index] with { Count = remaining };
+            }
+        }
+        else
+        {
+            garrison.Add(new UnitStack(type, delta));
+        }
+
+        var (production, capacity) = BoostedTotals(Buildings, Runes, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, garrison, guestStacks ?? []), capacity, now);
+
+        return AdminGarrisonEditResult.Accept(this with { Garrison = garrison, Resources = resources });
+    }
+
+    /// <summary>
+    /// Swaps in a new building list and re-rates production/capacity from
+    /// <paramref name="now"/> — the shared tail of <see cref="PlaceBuilding"/>
+    /// and <see cref="RazeBuilding"/>. Any queued order still aimed at
+    /// <paramref name="editedCoord"/> is dropped: it was planned against a
+    /// building that is no longer the one standing there, so letting it
+    /// complete would silently overwrite the admin's edit.
+    /// </summary>
+    private Settlement WithBuildings(
+        List<PlacedBuilding> buildings,
+        HexCoord editedCoord,
+        DateTimeOffset now,
+        double speedFactor,
+        IReadOnlyList<UnitStack>? guestStacks,
+        Func<HexCoord, Terrain>? terrainAt)
+    {
+        var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
+
+        return this with
+        {
+            Buildings = buildings,
+            Queue = [.. Queue.Where(o => o.Coord != editedCoord)],
+            Resources = resources,
+        };
+    }
+
+    /// <summary>
+    /// Net production (after garrison and guest upkeep) and capacity implied
+    /// by what currently stands, shrine favour and slotted runes included.
+    /// </summary>
+    public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
+        double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        var (production, capacity) = BoostedTotals(Buildings, Runes, terrainAt);
         return (ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity);
     }
 
@@ -703,15 +1006,16 @@ public sealed record Settlement
     }
 
     /// <summary>
-    /// <see cref="BuildingCatalogue.Totals(IEnumerable{ValueTuple{BuildingType, int}})"/>,
+    /// <see cref="BuildingCatalogue.Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>,
     /// with shrine favour and slotted runes applied as a percentage on top —
-    /// the multiplicative layer.
+    /// the multiplicative layer, evaluated after that method's own
+    /// terrain-adjacency boost.
     /// </summary>
     private static (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) BoostedTotals(
-        IEnumerable<PlacedBuilding> buildings, IReadOnlyList<RuneInstance> runes)
+        IEnumerable<PlacedBuilding> buildings, IReadOnlyList<RuneInstance> runes, Func<HexCoord, Terrain>? terrainAt)
     {
         var placed = buildings as IReadOnlyCollection<PlacedBuilding> ?? buildings.ToList();
-        var (production, capacity) = BuildingCatalogue.Totals(placed.Select(b => (b.Type, b.Level)));
+        var (production, capacity) = BuildingCatalogue.Totals(placed, terrainAt);
         var effect = ActiveEffect(placed, runes);
 
         var boostedProduction = new ResourceAmounts(
@@ -741,7 +1045,15 @@ public sealed record Settlement
     /// independent of any future Shipyard building); ignored for every other
     /// class.
     /// </param>
-    public TrainDecision PlanTrain(UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false)
+    /// <param name="speedFactor">
+    /// The world's current <c>SpeedFactor</c> — divides per-unit training
+    /// duration, the same way <see cref="PlanBuild"/> already divides build
+    /// duration. Previously not applied here at all, which meant a world
+    /// sped up for testing/admin purposes still trained units at the
+    /// unscaled rate while every building finished faster.
+    /// </param>
+    public TrainDecision PlanTrain(
+        UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false, double speedFactor = 1.0)
     {
         if (count <= 0)
         {
@@ -770,13 +1082,17 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.NotEnoughResources);
         }
 
+        var perUnitDuration = speedFactor == 1.0
+            ? definition.TrainingDuration
+            : TimeSpan.FromTicks((long)(definition.TrainingDuration.Ticks / speedFactor));
+
         return TrainDecision.Accept(new TrainingOrder
         {
             Id = orderId,
             UnitType = type,
             Count = count,
             StartedAt = now,
-            PerUnitDuration = definition.TrainingDuration,
+            PerUnitDuration = perUnitDuration,
         });
     }
 

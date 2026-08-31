@@ -1,33 +1,36 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import TradePanel from '../components/hud/TradePanel.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
+import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
+import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
+import { useFogDebug } from '../composables/useFogDebug';
 import type { AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
-import type { HoverInfo } from '../lib/map/HexMapRenderer';
+import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 
 const world = useWorldStore();
 const player = usePlayerStore();
-const route = useRoute();
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
 // but clickable, and not gated to demo mode: these are pure client-side
-// rendering toggles, nothing about game state.
-const showFogDebug = computed(() => route.query.debug === '1');
+// rendering toggles, nothing about game state. See useFogDebug for why this
+// is a shared composable rather than a local computed().
+const showFogDebug = useFogDebug();
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
@@ -74,6 +77,78 @@ onUnmounted(() => {
   world.stopHudSync();
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
+
+// Issue #40 phase 2: pushes armies/route/draft-waypoints into the renderer's
+// own overlay layer (HexMapRenderer.setArmyOverlay) whenever any of them
+// change, or as soon as the renderer itself becomes available — watching
+// both together (rather than assuming the renderer is already mounted the
+// first time this fires) covers the ordering race between the canvas
+// mounting and this store data arriving.
+const armyOverlayData = computed<ArmyOverlayData>(() => {
+  const armies: ArmyOverlayMarker[] = world.armies.map((a) => ({
+    id: a.id,
+    position: a.position,
+    selected: a.id === world.selectedArmyId,
+    returning: !!a.movement?.isReturning,
+    // Issue #94: hand the renderer the whole frozen leg, not a position —
+    // it interpolates along it every frame (see HexMapRenderer's
+    // `resolveArmyPoint`). An `atHome`/`supporting` army has no movement at
+    // all and keeps sitting on its authoritative hex. `movement.path` is
+    // always the *active* leg, outbound or return (the backend rebuilds
+    // Movement on turn-around — see Movement.cs's own remarks), so there's
+    // no leg-picking to do here.
+    movement: a.movement
+      ? {
+          path: a.movement.path.map((p) => ({ q: p.q, r: p.r })),
+          cumulativeHours: a.movement.cumulativeHours ?? [],
+          departedAtMs: Date.parse(a.movement.departedAt),
+          arrivesAtMs: Date.parse(a.movement.arrivesAt),
+        }
+      : undefined,
+  }));
+  const selected = world.armies.find((a) => a.id === world.selectedArmyId);
+  const route = selected?.movement
+    ? selected.movement.isReturning
+      ? selected.movement.returnPath
+      : selected.movement.path
+    : [];
+  const draftWaypoints = world.dispatchDraft?.route ?? [];
+  return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
+});
+
+// Issue #93 "attack/raid target indicator": the settlement an attack/support
+// is aimed at, marked on its own hex. Two sources, deliberately both: the
+// dispatch being composed right now (the player picked it from a text list
+// and otherwise gets no confirmation of *where* it is), and the selected
+// in-transit army's target (so a march already under way still shows what
+// it's marching at). A settlement the local WorldModel doesn't know yet
+// (`refreshWorldSettlements` hasn't registered it) simply isn't marked.
+function overlayTargets(selectedArmy: (typeof world.armies)[number] | undefined) {
+  const targets: NonNullable<ArmyOverlayData['targets']> = [];
+  const add = (settlementId: string | null | undefined, mission: string) => {
+    if (!settlementId || (mission !== 'attack' && mission !== 'support' && mission !== 'raid')) return;
+    const settlement = world.model.getSettlement(settlementId);
+    if (!settlement) return;
+    // Raids are attacks as far as the map is concerned — the marker says
+    // "someone is coming for this place", not which flavour of order it is.
+    const kind = mission === 'support' ? 'support' : 'attack';
+    if (targets.some((t) => t.coord.q === settlement.q && t.coord.r === settlement.r && t.kind === kind)) return;
+    targets.push({ coord: { q: settlement.q, r: settlement.r }, kind });
+  };
+  const draft = world.dispatchDraft;
+  if (draft) add(draft.targetSettlementId, draft.mission);
+  if (selectedArmy && !selectedArmy.movement?.isReturning) {
+    add(selectedArmy.targetSettlementId, selectedArmy.mission);
+  }
+  return targets;
+}
+watch(
+  [() => canvasRef.value?.renderer, armyOverlayData],
+  ([renderer, data]) => {
+    renderer?.setArmyOverlay(data ?? null);
+  },
+  { immediate: true },
+);
 
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
@@ -175,7 +250,9 @@ type BuildableType =
   | 'magictower'
   | 'pumpkinfarm'
   | 'shrineofthor'
-  | 'shrineoffreyja';
+  | 'shrineoffreyja'
+  | 'lumberjack'
+  | 'quarry';
 
 interface BuildCategory {
   id: string;
@@ -229,6 +306,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'fishinghut', label: 'Fishing Hut' },
         { type: 'shrineofthor', label: 'Shrine of Thor' },
         { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
+        { type: 'lumberjack', label: 'Lumberjack' },
+        { type: 'quarry', label: 'Quarry' },
       ],
     },
   ],
@@ -380,11 +459,26 @@ const ringBadge = computed(() => {
 });
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+  // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
+  // "Dispatch army" flow), a click plots the next waypoint instead of
+  // opening the usual ring menu — the two interaction modes are mutually
+  // exclusive on this same canvas, per the design doc.
+  if (world.dispatchDraft) {
+    world.addWaypoint(coord);
+    return;
+  }
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
   ringScreen.value = screen;
   ringStack.value = [{ level: 'root' }];
+}
+
+// Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
+// the pin was dragged onto (snapping happens there, against the same
+// isoPixelToAxial a click uses); this just writes it into the draft.
+function onWaypointMove(index: number, coord: AxialCoord) {
+  world.moveWaypoint(index, coord);
 }
 
 function closeRing() {
@@ -530,8 +624,12 @@ async function upgrade() {
       :settlement-id="world.selectedSettlementId"
       @hex-click="onHexClick"
       @hover="onHover"
+      @waypoint-move="onWaypointMove"
     />
-    <FogDebugPanel v-if="showFogDebug" @change="onFogDebugChange" />
+    <div v-if="showFogDebug" class="fog-debug-stack">
+      <FogDebugPanel @change="onFogDebugChange" />
+      <FogPerfPanel />
+    </div>
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
          much lighter than the old backdrop this HUD chrome was designed
          against, and can sit right behind the top bar depending on where
@@ -545,7 +643,9 @@ async function upgrade() {
     </TopBar>
     <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
+    <TradePanel />
     <TrainingQueuePanel />
+    <ArmyPanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
     <template v-if="selectedTile && ringScreen">
       <RingMenu
@@ -599,5 +699,15 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+.fog-debug-stack {
+  position: absolute;
+  /* Clears TopBar (top:16px) and ResourceBar (top:66px, right:16px). */
+  top: 120px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

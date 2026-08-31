@@ -1,10 +1,14 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -30,7 +34,19 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
     private static string Unique(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..20];
 
-    /// <summary>Creates a world and founds a settlement on its first usable plot.</summary>
+    /// <summary>This suite's one client-local id — see FoundAsync's own X-Owner-Id remark.</summary>
+    private const string OwnerId = "ulf-player";
+
+    /// <summary>
+    /// Creates a world and founds a settlement on its first usable plot.
+    /// Also sets <paramref name="client"/>'s default <c>X-Owner-Id</c> header
+    /// to <see cref="OwnerId"/> — the id the settlement was just founded
+    /// under — so every other test in this file that goes on to mutate the
+    /// settlement (build, train) needs no ownership boilerplate of its own;
+    /// see SettlementOwnershipEndpointFilter. Tests that specifically probe
+    /// the ownership boundary (the "ownership" region below) override or
+    /// remove this header themselves afterwards.
+    /// </summary>
     private async Task<(Guid WorldId, SettlementResponse Settlement)> FoundAsync(
         HttpClient client, int seed = 21, int radius = 60)
     {
@@ -46,10 +62,14 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var response = await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", "ulf-player"),
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", OwnerId),
             Ct);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
+
         return (world.Id, await response.ReadStrictAsync<SettlementResponse>(Ct));
     }
 
@@ -167,6 +187,95 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Created, again.StatusCode);
     }
 
+    /// <summary>
+    /// Regression coverage for the fix scoping <c>MinimumSpacing</c> to the
+    /// same island: raising that constant to cover the worst-case border
+    /// overlap (two max-level longhouses — see <c>Settlement.MaxClaimRadius</c>)
+    /// used to reject foundings on two separate, unrelated islands purely
+    /// because their start positions happened to be within that many hexes
+    /// of each other — even though separate islands are always divided by
+    /// open sea and their claim discs can never overlap any real land.
+    /// </summary>
+    [Fact]
+    public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
+    {
+        using var client = Client();
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        // Two start positions on the very same island, closer together than
+        // MinimumSpacing — with an island's start positions this dense
+        // (FindStartPositions places one on every qualifying grass hex),
+        // any pair within a real island is essentially guaranteed to have
+        // at least one such pair.
+        (Guid IslandId, TileCoordinate First, TileCoordinate Second)? sameIsland = null;
+        foreach (var island in islands!)
+        {
+            for (var i = 0; i < island.StartPositions.Count && sameIsland is null; i++)
+            {
+                for (var j = i + 1; j < island.StartPositions.Count; j++)
+                {
+                    var a = new HexCoord(island.StartPositions[i].Q, island.StartPositions[i].R);
+                    var b = new HexCoord(island.StartPositions[j].Q, island.StartPositions[j].R);
+                    if (a.DistanceTo(b) < SettlementService.MinimumSpacing)
+                    {
+                        sameIsland = (island.Id, island.StartPositions[i], island.StartPositions[j]);
+                        break;
+                    }
+                }
+            }
+
+            if (sameIsland is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.True(sameIsland is not null, "Seed 21/radius 60 no longer has an island dense enough to exercise same-island spacing.");
+        var (islandId, first, second) = sameIsland!.Value;
+
+        var founded = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(islandId, first.Q, first.R, "First realm", "Ulf", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+
+        var rejected = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(islandId, second.Q, second.R, "Second realm", "Sigrid", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        Assert.Equal("TooCloseToNeighbour", await rejected.RejectionAsync(Ct));
+
+        // A start position on a *different* island, just as close to the
+        // first settlement by raw hex distance, must still found cleanly.
+        var firstCentre = new HexCoord(first.Q, first.R);
+        (Guid IslandId, TileCoordinate Plot)? crossIsland = null;
+        foreach (var island in islands.Where(i => i.Id != islandId))
+        {
+            var close = island.StartPositions.FirstOrDefault(
+                p => new HexCoord(p.Q, p.R).DistanceTo(firstCentre) < SettlementService.MinimumSpacing);
+            if (close is not null)
+            {
+                crossIsland = (island.Id, close);
+                break;
+            }
+        }
+
+        Assert.True(crossIsland is not null, "Seed 21/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
+        var (crossIslandId, crossPlot) = crossIsland!.Value;
+
+        var crossFounded = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(crossIslandId, crossPlot.Q, crossPlot.R, "Third realm", "Astrid", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, crossFounded.StatusCode);
+    }
+
     [Fact]
     public async Task Resources_accrue_between_reads_with_nothing_running_in_between()
     {
@@ -211,7 +320,9 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var duringBuild = await GetAsync(client, settlement.Id);
         Assert.Single(duringBuild!.Queue);
-        Assert.DoesNotContain(duringBuild.Buildings, b => b.Type == "farm");
+        // Issue #97: a brand-new building already stakes its level-0
+        // foundation the instant it's queued, not just once it completes.
+        Assert.Contains(duringBuild.Buildings, b => b.Type == "farm" && b.Level == 0);
 
         _factory.Time.Advance(TimeSpan.FromHours(2));
         var afterBuild = await GetAsync(client, settlement.Id);
@@ -232,6 +343,52 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
 
         var after = await GetAsync(client, settlement.Id);
         Assert.True(after!.Resources.Stock.Wood < before);
+    }
+
+    [Fact]
+    public async Task A_freshly_queued_building_already_shows_as_a_level_zero_foundation()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var order = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(order);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Contains(
+            after!.Buildings, b => b.Q == order!.Q && b.R == order.R && b.Type == "farm" && b.Level == 0);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_new_buildings_order_refunds_it_and_clears_the_foundation()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var before = settlement.Resources.Stock.Wood;
+
+        var order = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(order);
+
+        var response = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{order!.Id}/cancel", content: null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Empty(after!.Queue);
+        Assert.DoesNotContain(after.Buildings, b => b.Q == order.Q && b.R == order.R);
+        Assert.Equal(before, after.Resources.Stock.Wood, 0);
+    }
+
+    [Fact]
+    public async Task Cancelling_an_unknown_order_is_a_404()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var response = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{Guid.CreateVersion7()}/cancel", content: null, Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -350,9 +507,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             $"/api/v1/worlds/{world.Id}/settlements",
             new FoundSettlementRequest(
                 islands!.First(i => i.StartPositions.Contains(foundStart)).Id,
-                foundStart.Q, foundStart.R, "Sjostad", "Ulf", "ulf-player"),
+                foundStart.Q, foundStart.R, "Sjostad", "Ulf", OwnerId),
             Ct);
         Assert.Equal(HttpStatusCode.Created, founded.StatusCode);
+        client.DefaultRequestHeaders.Add("X-Owner-Id", OwnerId);
         var settlement = await founded.ReadStrictAsync<SettlementResponse>(Ct);
         var centre = new HexCoord(settlement.Q, settlement.R);
 
@@ -501,6 +659,26 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_build_orders_total_seconds_stays_fixed_across_polls()
+    {
+        // Issue #99: the client needs the order's full duration, not just its
+        // remaining time, to compute progress without the bar snapping back
+        // on every poll — see BuildQueuePanel.vue.
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var queued = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(queued);
+        Assert.True(queued!.TotalSeconds > 0);
+
+        _factory.Time.Advance(TimeSpan.FromSeconds(30));
+        var polled = await GetAsync(client, settlement.Id);
+
+        Assert.Single(polled!.Queue);
+        Assert.Equal(queued.TotalSeconds, polled.Queue[0].TotalSeconds, 3);
+    }
+
+    [Fact]
     public async Task A_locked_world_finishes_queued_work_but_takes_no_new_orders()
     {
         using var client = Client();
@@ -538,9 +716,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(TimeSpan.FromHours(1));
 
         // Resume crediting two extra hours on top of the hour of downtime.
-        var resumed = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/state",
-            new SetWorldStateRequest("running", GraceSeconds: 2 * 3600),
+        using var adminClient = await AdminClientAsync();
+        var resumed = await adminClient.PostJsonAsync(
+            $"/api/v1/admin/worlds/{worldId}/run-state",
+            new SetWorldRunStateRequest("resume", GraceMinutes: 2 * 60),
             Ct);
         Assert.Equal(HttpStatusCode.OK, resumed.StatusCode);
 
@@ -570,8 +749,9 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         using var client = Client();
         var (worldId, _) = await FoundAsync(client);
 
-        var response = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/state", new SetWorldStateRequest("banana"), Ct);
+        using var adminClient = await AdminClientAsync();
+        var response = await adminClient.PostJsonAsync(
+            $"/api/v1/admin/worlds/{worldId}/run-state", new SetWorldRunStateRequest("banana"), Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -589,6 +769,97 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(settlement.Id, only.Id);
         Assert.Equal("Ulf", only.OwnerName);
         Assert.Equal(1, only.LonghouseLevel);
+    }
+
+    // ------------------------------------------------------------- ownership
+
+    [Fact]
+    public async Task Build_is_refused_with_no_owner_header()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Build_is_refused_with_someone_elses_owner_header()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Build_succeeds_with_the_founding_browsers_own_owner_header()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        // FoundAsync already set X-Owner-Id to its own OwnerId — the
+        // founding browser's client-local id — so nothing more to arrange.
+
+        Assert.NotNull(await QueueFarmAsync(client, settlement));
+    }
+
+    [Fact]
+    public async Task Train_units_is_refused_for_a_settlement_with_a_different_owner()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/units",
+            new TrainUnitsRequest("thrall", 1),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_claimed_settlement_refuses_a_build_from_a_different_account()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        await ClaimAsync(client, "ulf-player");
+
+        // A different, unrelated account — proves the settlement's specific
+        // claim is what's checked, not merely "any authenticated caller".
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await RegisterAsync(client, Unique("rival")));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds",
+            new QueueBuildRequest("farm", settlement.Q + 1, settlement.R),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_claimed_settlement_accepts_a_build_from_its_own_account()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var ownerToken = await ClaimAsync(client, "ulf-player");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        Assert.NotNull(await QueueFarmAsync(client, settlement));
     }
 
     // ---------------------------------------------------------------- helpers
@@ -613,12 +884,84 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         return null;
     }
 
+    /// <summary>
+    /// World pause/lock/maintenance/resume, as a test fixture rather than the
+    /// thing under test — routed through the real admin surface
+    /// (<c>POST /api/v1/admin/worlds/{id}/run-state</c>) since the endpoint
+    /// this used to hit (an unauthenticated duplicate at
+    /// <c>POST /api/v1/worlds/{id}/state</c>) was removed as a bypass of the
+    /// Admin policy the real one enforces — see
+    /// docs/codebase-gap-analysis.md.
+    /// </summary>
     private async Task PauseAsync(HttpClient client, Guid worldId, string state)
     {
-        var response = await client.PostJsonAsync(
-            $"/api/v1/worlds/{worldId}/state", new SetWorldStateRequest(state), Ct);
+        var action = state switch
+        {
+            "paused" => "pause",
+            "running" => "resume",
+            "locked" => "lock",
+            "maintenance" => "maintenance",
+            _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown world state."),
+        };
+
+        using var adminClient = await AdminClientAsync();
+        var response = await adminClient.PostJsonAsync(
+            $"/api/v1/admin/worlds/{worldId}/run-state", new SetWorldRunStateRequest(action), Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>Registers a fresh account, with no settlement claim, returning its access token.</summary>
+    private async Task<string> RegisterAsync(HttpClient client, string userName)
+    {
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        return (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+    }
+
+    /// <summary>
+    /// Registers a fresh account claiming every unclaimed settlement founded
+    /// under the client-local <paramref name="ownerId"/> (see
+    /// <c>AuthService.RegisterAsync</c>'s <c>existingOwnerId</c>), returning
+    /// its access token.
+    /// </summary>
+    private async Task<string> ClaimAsync(HttpClient client, string ownerId)
+    {
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register",
+            new RegisterRequest(Unique("owner"), "correct-horse-battery", ownerId),
+            Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        return (await registered.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+    }
+
+    /// <summary>An HTTP client already carrying a fresh admin's access token.</summary>
+    private async Task<HttpClient> AdminClientAsync()
+    {
+        var client = _factory.CreateClient();
+
+        var userName = Unique("admin");
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var auth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == auth.User.Id, Ct);
+            user.Role = UserRole.Admin;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var loggedIn = await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
+        var token = (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
     }
 
     private async Task<DateTimeOffset> ReadSettledAtAsync(Guid settlementId)

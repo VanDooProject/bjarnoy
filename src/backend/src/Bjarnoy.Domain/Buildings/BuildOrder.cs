@@ -63,6 +63,23 @@ public sealed record BuildDecision(BuildRejection Rejection, BuildOrder? Order =
     public static BuildDecision Accept(BuildOrder order) => new(BuildRejection.None, order);
 }
 
+/// <summary>Why cancelling a queued build order was refused.</summary>
+public enum CancelBuildRejection
+{
+    None = 0,
+    OrderNotFound,
+}
+
+/// <summary>The outcome of cancelling a queued build order.</summary>
+public sealed record CancelBuildResult(CancelBuildRejection Rejection, Settlement? Settlement = null)
+{
+    public bool Accepted => Rejection == CancelBuildRejection.None && Settlement is not null;
+
+    public static CancelBuildResult Rejected(CancelBuildRejection reason) => new(reason);
+
+    public static CancelBuildResult Accept(Settlement settlement) => new(CancelBuildRejection.None, settlement);
+}
+
 /// <summary>Why an admin's direct building-level set was refused.</summary>
 public enum SetBuildingLevelRejection
 {

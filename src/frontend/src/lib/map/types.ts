@@ -35,7 +35,9 @@ export interface Tile {
     | 'magictower'
     | 'pumpkinfarm'
     | 'shrineofthor'
-    | 'shrineoffreyja';
+    | 'shrineoffreyja'
+    | 'lumberjack'
+    | 'quarry';
   buildingLevel?: number;
 }
 
@@ -50,6 +52,13 @@ export interface Settlement {
   level: number;
   resources: Resources;
   rates: Resources;
+  /**
+   * Per-resource storage cap, live mode only (from `ResourcesResponse.Capacity`
+   * — see `SettlementService.GrantResourcesAsync`/`ResourcePool.Adjust`, which
+   * actually enforce it server-side). Demo settlements leave this unset;
+   * `WorldModel.storageCapFor` derives a synthetic cap for them instead.
+   */
+  capacity?: Resources;
   foundedAt: number;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;
@@ -64,6 +73,29 @@ export interface Fleet {
   toR: number;
   departedAt: number;
   etaAt: number;
+}
+
+/**
+ * A trade cart in transit between two settlements, interpolated on the
+ * world map exactly like `Fleet` above (same `{from,to}Q/R` +
+ * `departedAt`/`etaAt` shape, both wall-clock-comparable millisecond
+ * timestamps) — see `HexMapRenderer`'s cart-rendering loop, which shares
+ * that interpolation code rather than inventing a second scheme. Live mode
+ * populates this straight from `ShipmentResponse`'s own frozen path
+ * endpoints (`WorldModel.setCartShipments`, see `stores/world.ts`'s
+ * `refreshTradeAsync`); demo mode seeds one cosmetic cart per accepted
+ * offer (`WorldModel.acceptTradeOffer`).
+ */
+export interface CartShipment {
+  id: string;
+  fromQ: number;
+  fromR: number;
+  toQ: number;
+  toR: number;
+  departedAt: number;
+  etaAt: number;
+  cargoResource: ResourceKind;
+  cargoAmount: number;
 }
 
 /** An island's name and centre, as known from the backend (live mode) — for world-map labels. */

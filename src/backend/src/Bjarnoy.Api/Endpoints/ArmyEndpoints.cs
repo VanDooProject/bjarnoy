@@ -26,7 +26,9 @@ public static class ArmyEndpoints
         settlements.MapPost("/{settlementId:guid}/armies", Dispatch)
             .WithName("DispatchArmy")
             .WithSummary("Dispatches units from a settlement's garrison on a move mission.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapGet("/{settlementId:guid}/armies", ListForSettlement)
             .WithName("ListSettlementArmies")
@@ -47,7 +49,9 @@ public static class ArmyEndpoints
         armies.MapPost("/{armyId:guid}/recall", Recall)
             .WithName("RecallArmy")
             .WithSummary("Turns an army around mid-journey to head home early.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<ArmyOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         var reports = app.MapGroup("/api/v1")
             .WithApiVersionSet(versionSet)

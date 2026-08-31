@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { api, ApiError } from '../../api/client';
-import type { ProfileReportResponse } from '../../api/types';
+import type { ReportResponse } from '../../api/types';
 
-const reports = ref<ProfileReportResponse[]>([]);
+const SOURCE_LABELS: Record<string, string> = {
+  profileBio: 'Profile',
+  chatMessage: 'Chat message',
+};
+
+const reports = ref<ReportResponse[]>([]);
 const totalCount = ref(0);
 const page = ref(1);
 const pageSize = 25;
@@ -11,6 +16,7 @@ const loading = ref(true);
 const loadError = ref<string | null>(null);
 
 const statusFilter = ref('pending');
+const sourceTypeFilter = ref('');
 
 // Per-report in-flight/error state, keyed by id — same pattern as
 // AdminUsersView's row drafts.
@@ -25,8 +31,9 @@ async function load() {
   loading.value = true;
   loadError.value = null;
   try {
-    const result = await api.adminListProfileReports({
+    const result = await api.adminListReports({
       status: statusFilter.value || undefined,
+      sourceType: sourceTypeFilter.value || undefined,
       page: page.value,
       pageSize,
     });
@@ -56,14 +63,14 @@ function changePage(delta: number) {
   void load();
 }
 
-async function resolve(report: ProfileReportResponse, status: string) {
+async function resolve(report: ReportResponse, outcome: string) {
   const row = rows[report.id];
   if (!row || row.saving) return;
 
   row.saving = true;
   row.error = null;
   try {
-    const updated = await api.adminResolveProfileReport(report.id, { status });
+    const updated = await api.adminResolveReport(report.id, { outcome });
     const index = reports.value.findIndex((r) => r.id === updated.id);
     if (index !== -1) reports.value[index] = updated;
   } catch (err) {
@@ -76,15 +83,20 @@ async function resolve(report: ProfileReportResponse, status: string) {
 
 <template>
   <div class="reports">
-    <h1>Profile reports</h1>
+    <h1>Reports</h1>
 
     <div class="filters">
       <select v-model="statusFilter" @change="onFilter">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
-        <option value="reviewed">Reviewed</option>
+        <option value="resolved">Resolved</option>
         <option value="dismissed">Dismissed</option>
         <option value="actioned">Actioned</option>
+      </select>
+      <select v-model="sourceTypeFilter" @change="onFilter">
+        <option value="">All sources</option>
+        <option value="profileBio">Profile</option>
+        <option value="chatMessage">Chat message</option>
       </select>
     </div>
 
@@ -96,8 +108,10 @@ async function resolve(report: ProfileReportResponse, status: string) {
       <table class="table">
         <thead>
           <tr>
+            <th>Source</th>
             <th>Reported</th>
             <th>Reporter</th>
+            <th>Content</th>
             <th>Reason</th>
             <th>Note</th>
             <th>Status</th>
@@ -107,6 +121,7 @@ async function resolve(report: ProfileReportResponse, status: string) {
         </thead>
         <tbody>
           <tr v-for="report in reports" :key="report.id">
+            <td>{{ SOURCE_LABELS[report.sourceType] ?? report.sourceType }}</td>
             <td>
               <!-- Straight to the user row moderation already lives on. -->
               <router-link :to="`/profile/${report.reportedUserName}`">
@@ -114,6 +129,7 @@ async function resolve(report: ProfileReportResponse, status: string) {
               </router-link>
             </td>
             <td>{{ report.reporterUserName }}</td>
+            <td class="snapshot">{{ report.contextSnapshot }}</td>
             <td>{{ report.reason }}</td>
             <td class="note">{{ report.note ?? '—' }}</td>
             <td>
@@ -122,8 +138,8 @@ async function resolve(report: ProfileReportResponse, status: string) {
             <td>{{ new Date(report.createdAt).toLocaleString() }}</td>
             <td class="actions">
               <template v-if="report.status === 'pending'">
-                <button :disabled="rows[report.id]?.saving" @click="resolve(report, 'reviewed')">
-                  Reviewed
+                <button :disabled="rows[report.id]?.saving" @click="resolve(report, 'resolved')">
+                  Resolve
                 </button>
                 <button :disabled="rows[report.id]?.saving" @click="resolve(report, 'dismissed')">
                   Dismiss
@@ -132,9 +148,7 @@ async function resolve(report: ProfileReportResponse, status: string) {
                   Actioned
                 </button>
               </template>
-              <button v-else :disabled="rows[report.id]?.saving" @click="resolve(report, 'pending')">
-                Reopen
-              </button>
+              <span v-else class="muted">—</span>
             </td>
           </tr>
         </tbody>
@@ -176,7 +190,8 @@ async function resolve(report: ProfileReportResponse, status: string) {
   font-size: 14px;
   vertical-align: middle;
 }
-.note {
+.note,
+.snapshot {
   max-width: 260px;
   overflow-wrap: anywhere;
 }

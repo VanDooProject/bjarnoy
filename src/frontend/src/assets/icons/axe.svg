@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Bearded viking axe, head to the right (+x). -->
+  <rect x="4" y="29" width="40" height="6" rx="3" fill="#cbd6dd"/>
+  <path d="M38 14 C52 18 58 25 58 32 C58 39 52 46 38 50 C42 42 43 37 43 32 C43 27 42 22 38 14 Z" fill="#fff"/>
+</svg>

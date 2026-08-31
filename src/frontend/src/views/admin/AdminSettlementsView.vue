@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref, watch } from 'vue';
 import { api, ApiError } from '../../api/client';
 import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
+import { useAdminWorldStore } from '../../stores/adminWorld';
+import ArmyEditor from './ArmyEditor.vue';
+import GarrisonForm from './GarrisonForm.vue';
 import GrantResourcesForm from './GrantResourcesForm.vue';
-import SetBuildingLevelForm from './SetBuildingLevelForm.vue';
+import SettlementLayoutEditor from './SettlementLayoutEditor.vue';
+
+const adminWorld = useAdminWorldStore();
 
 const settlements = ref<AdminSettlementSummary[]>([]);
 const totalCount = ref(0);
@@ -12,7 +17,6 @@ const pageSize = 25;
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 
-const worldId = ref('');
 const owner = ref('');
 
 // The settlement currently expanded for management (grant/level forms), and
@@ -23,11 +27,20 @@ const detailLoading = ref(false);
 const detailError = ref<string | null>(null);
 
 async function load() {
+  // No world selected yet (worlds still loading, or none exist) — nothing to
+  // search; the template shows a placeholder instead of an empty table.
+  if (!adminWorld.selectedWorldId) {
+    settlements.value = [];
+    totalCount.value = 0;
+    loading.value = false;
+    return;
+  }
+
   loading.value = true;
   loadError.value = null;
   try {
     const result = await api.adminSearchSettlements({
-      worldId: worldId.value || undefined,
+      worldId: adminWorld.selectedWorldId,
       owner: owner.value || undefined,
       page: page.value,
       pageSize,
@@ -41,7 +54,17 @@ async function load() {
   }
 }
 
-onMounted(load);
+// Reloads whenever the header's world selector changes — including its
+// first resolution from AdminLayout's onMounted loadWorlds(), which this
+// view's own onMounted can race ahead of.
+watch(
+  () => adminWorld.selectedWorldId,
+  () => {
+    page.value = 1;
+    void load();
+  },
+  { immediate: true },
+);
 
 function onSearch() {
   page.value = 1;
@@ -96,12 +119,14 @@ function onChanged(updated: SettlementResponse) {
     <h1>Settlements</h1>
 
     <div class="filters">
-      <input v-model="worldId" type="text" placeholder="World id" @keyup.enter="onSearch" />
       <input v-model="owner" type="text" placeholder="Owner name" @keyup.enter="onSearch" />
       <button @click="onSearch">Search</button>
     </div>
 
-    <p v-if="loading">Loading…</p>
+    <p v-if="!adminWorld.selectedWorldId" class="hint">
+      Select a world above to search its settlements.
+    </p>
+    <p v-else-if="loading">Loading…</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else>
@@ -136,19 +161,29 @@ function onChanged(updated: SettlementResponse) {
                 <p v-else-if="detailError" class="error">{{ detailError }}</p>
                 <div v-else-if="detail" class="detail">
                   <div class="stocks">
-                    <span>Wood {{ Math.floor(detail.resources.stock.wood) }}</span>
-                    <span>Stone {{ Math.floor(detail.resources.stock.stone) }}</span>
-                    <span>Food {{ Math.floor(detail.resources.stock.food) }}</span>
-                    <span>Iron {{ Math.floor(detail.resources.stock.iron) }}</span>
+                    <span>Wood {{ Math.floor(detail.resources.stock.wood) }} / {{ Math.floor(detail.resources.capacity.wood) }}</span>
+                    <span>Stone {{ Math.floor(detail.resources.stock.stone) }} / {{ Math.floor(detail.resources.capacity.stone) }}</span>
+                    <span>Food {{ Math.floor(detail.resources.stock.food) }} / {{ Math.floor(detail.resources.capacity.food) }}</span>
+                    <span>Iron {{ Math.floor(detail.resources.stock.iron) }} / {{ Math.floor(detail.resources.capacity.iron) }}</span>
                   </div>
                   <div class="forms">
-                    <GrantResourcesForm :settlement-id="detail.id" @granted="onChanged" />
-                    <SetBuildingLevelForm
+                    <GrantResourcesForm
                       :settlement-id="detail.id"
-                      :buildings="detail.buildings"
-                      @updated="onChanged"
+                      :before="detail.resources.stock"
+                      @granted="onChanged"
+                    />
+                    <GarrisonForm
+                      :settlement-id="detail.id"
+                      :garrison="detail.garrison"
+                      @changed="onChanged"
                     />
                   </div>
+                  <SettlementLayoutEditor
+                    :settlement-id="detail.id"
+                    :settlement="detail"
+                    @changed="onChanged"
+                  />
+                  <ArmyEditor :settlement-id="detail.id" />
                 </div>
               </td>
             </tr>
@@ -207,6 +242,10 @@ function onChanged(updated: SettlementResponse) {
   display: flex;
   gap: 32px;
   flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.detail > * + * {
+  margin-top: 20px;
 }
 .pager {
   display: flex;
@@ -217,6 +256,10 @@ function onChanged(updated: SettlementResponse) {
 }
 .error {
   color: var(--rival);
+  font-size: 13px;
+}
+.hint {
+  color: var(--muted);
   font-size: 13px;
 }
 input {

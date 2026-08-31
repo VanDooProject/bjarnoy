@@ -60,6 +60,65 @@ describe('WorldModel border-anchoring (watchtower)', () => {
   });
 });
 
+describe('WorldModel applyServerSnapshot renders every backend building type', () => {
+  it('places a lumberjack and a quarry from a snapshot, not just the pre-existing types', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const lumberjackCoord = { q: at.q + 1, r: at.r };
+    const quarryCoord = { q: at.q, r: at.r + 1 };
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: lumberjackCoord.q, r: lumberjackCoord.r, type: 'lumberjack', level: 1 },
+        { q: quarryCoord.q, r: quarryCoord.r, type: 'quarry', level: 1 },
+      ],
+    });
+
+    expect(model.getTile(lumberjackCoord.q, lumberjackCoord.r).buildingType).toBe('lumberjack');
+    expect(model.getTile(quarryCoord.q, quarryCoord.r).buildingType).toBe('quarry');
+  });
+});
+
+// Issue #97: the backend now stakes a level-0 foundation for a brand-new
+// building the instant it's queued (Settlement.Enqueue), rather than the
+// frontend having to derive "under construction" from the separate build
+// queue — so a snapshot's `buildings` array is the single source of truth
+// for what should render on a hex, completed or not.
+describe('WorldModel applyServerSnapshot renders under-construction buildings', () => {
+  it('shows a queued buildings level-0 foundation, then its completed level, then clears it once cancelled/gone', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const coord = { q: at.q + 1, r: at.r };
+
+    const snapshot = (buildings: { q: number; r: number; type: string; level: number }[]) => ({
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings,
+    });
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: coord.q, r: coord.r, type: 'farm', level: 0 }]));
+    let tile = model.getTile(coord.q, coord.r);
+    expect(tile.buildingType).toBe('farm');
+    expect(tile.buildingLevel).toBe(0);
+
+    model.applyServerSnapshot(settlement.id, snapshot([{ q: coord.q, r: coord.r, type: 'farm', level: 1 }]));
+    tile = model.getTile(coord.q, coord.r);
+    expect(tile.buildingType).toBe('farm');
+    expect(tile.buildingLevel).toBe(1);
+
+    model.applyServerSnapshot(settlement.id, snapshot([]));
+    tile = model.getTile(coord.q, coord.r);
+    expect(tile.buildingType).toBeUndefined();
+    expect(tile.buildingLevel).toBeUndefined();
+  });
+});
+
 describe('WorldModel longhouse placement', () => {
   it('refuses to place a longhouse on an otherwise-buildable owned hex — founding is the only source of one', () => {
     const model = new WorldModel(20260825);

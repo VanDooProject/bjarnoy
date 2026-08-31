@@ -1,35 +1,81 @@
 import { API_BASE_URL } from '../config';
 import type {
+  AcceptTradeOfferRequest,
+  ActivitySummaryResponse,
+  AdjustGarrisonRequest,
+  AdminArmyResponse,
+  AdminEditArmyRequest,
+  AdminSettlementLayoutResponse,
+  AdminUserActivityDetailResponse,
   AdminUserDetailResponse,
   AdminUserResponse,
   AdminWorldResponse,
+  ArmyResponse,
+  ArmySummary,
+  BattleReportResponse,
   BuildingDefinitionResponse,
+  CancelTradeOfferRequest,
+  CompleteQueuesRequest,
+  CompleteQueuesResponse,
+  CreateGuildPostRequest,
+  CreateGuildRequest,
+  CreateGuildTopicRequest,
   CreateWorldRequest,
+  DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
   GrantRuneRequest,
+  GuestArmySummary,
+  GuildBoardTopicResponse,
+  GuildMemberResponse,
+  GuildPerksResponse,
+  GuildResponse,
+  GuildTreatyResponse,
   IslandResponse,
   LeaderboardBoardResponse,
+  PagedAdminActivityUsersResponse,
   LeaderboardCategory,
   LeaderboardDirectoryResponse,
   LeaderboardMeResponse,
   LeaderboardScope,
   WeeklyStatsPageResponse,
+  MarkReadResponse,
+  MessageResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
-  PagedProfileReportsResponse,
+  PreviewWorldSeedRequest,
+  ReseedWorldRequest,
+  ReseedWorldResponse,
+  WorldSeedPreviewResponse,
+  PagedConversationsResponse,
+  PagedMessagesResponse,
+  PagedReportsResponse,
+  PlaceBuildingRequest,
+  PostTradeOfferRequest,
   ProblemDetails,
-  ProfileReportResponse,
   ProfileResponse,
+  ProposeTreatyRequest,
   QueueBuildRequest,
+  ReportMessageRequest,
   ReportProfileRequest,
-  ResolveProfileReportRequest,
+  ReportResponse,
+  ResolveReportRequest,
+  SendMessageRequest,
   SetBuildingLevelRequest,
+  SetGuildFeeTierRequest,
+  SetGuildMemberRoleRequest,
+  SetUserPremiumRequest,
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
   SlotRuneRequest,
   SettlementSummary,
+  ShipmentResponse,
+  SimulatorRequest,
+  SimulatorResponse,
+  TradeAcceptResponse,
+  TradeOfferResponse,
+  TradeReportResponse,
   TrainingOrderResponse,
   TrainUnitsRequest,
   UnitDefinitionResponse,
@@ -63,6 +109,10 @@ export const authHooks: {
   refreshAccessToken: async () => false,
   onAccountLocked: () => {},
 };
+
+function ownerHeader(ownerId?: string): HeadersInit | undefined {
+  return ownerId ? { 'X-Owner-Id': ownerId } : undefined;
+}
 
 async function request<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
   const accessToken = authHooks.getAccessToken();
@@ -109,10 +159,17 @@ export const api = {
     request<SettlementSummary[]>(`/worlds/${worldId}/settlements`),
   getSettlement: (settlementId: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}`),
-  queueBuild: (settlementId: string, body: QueueBuildRequest) =>
+  // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
+  // filter reads for an anonymous (unclaimed) settlement — see
+  // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
+  // claimed settlement: the backend only consults it while the settlement
+  // is still owned by the anonymous-play system account, and trusts the
+  // caller's JWT once it's claimed.
+  queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   slotRune: (settlementId: string, runeId: string, body: SlotRuneRequest) =>
     request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/slot`, {
@@ -124,8 +181,63 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
-  trainUnits: (settlementId: string, body: TrainUnitsRequest) =>
+  // Refunds the order's cost and, for a brand-new building, clears its
+  // level-0 foundation stub (see Settlement.CancelBuild) — same ownership
+  // proof as queueBuild.
+  cancelBuild: (settlementId: string, orderId: string, ownerId?: string) =>
+    request<unknown>(`/settlements/${settlementId}/builds/${orderId}/cancel`, {
+      method: 'POST',
+      headers: ownerHeader(ownerId),
+    }),
+  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
+    request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getTradeBoard: (settlementId: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/board`),
+  getMyTradeOffers: (settlementId: string) =>
+    request<TradeOfferResponse[]>(`/settlements/${settlementId}/trade-offers/mine`),
+  getShipments: (settlementId: string) =>
+    request<ShipmentResponse[]>(`/settlements/${settlementId}/shipments`),
+  getSettlementTradeReports: (settlementId: string) =>
+    request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`),
+  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
+    request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest) =>
+    request<TradeOfferResponse>(`/trade-offers/${offerId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  sendMessage: (body: SendMessageRequest) =>
+    request<MessageResponse>('/messages', { method: 'POST', body: JSON.stringify(body) }),
+  listConversations: (params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedConversationsResponse>(`/messages/conversations${qs ? `?${qs}` : ''}`);
+  },
+  getConversation: (otherUserId: string, params?: { page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    const qs = query.toString();
+    return request<PagedMessagesResponse>(`/messages/conversations/${otherUserId}${qs ? `?${qs}` : ''}`);
+  },
+  markConversationRead: (otherUserId: string) =>
+    request<MarkReadResponse>(`/messages/conversations/${otherUserId}/read`, { method: 'POST' }),
+  reportMessage: (messageId: string, body: ReportMessageRequest) =>
+    request<ReportResponse>(`/messages/${messageId}/report`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -135,20 +247,21 @@ export const api = {
   updateMyBio: (body: UpdateBioRequest) =>
     request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
   reportProfile: (userId: string, body: ReportProfileRequest) =>
-    request<ProfileReportResponse>(`/profiles/${userId}/reports`, {
+    request<ReportResponse>(`/profiles/${userId}/reports`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  adminListProfileReports: (params?: { status?: string; page?: number; pageSize?: number }) => {
+  adminListReports: (params?: { status?: string; sourceType?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.status) query.set('status', params.status);
+    if (params?.sourceType) query.set('sourceType', params.sourceType);
     if (params?.page) query.set('page', String(params.page));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
-    return request<PagedProfileReportsResponse>(`/admin/profile-reports${qs ? `?${qs}` : ''}`);
+    return request<PagedReportsResponse>(`/admin/reports${qs ? `?${qs}` : ''}`);
   },
-  adminResolveProfileReport: (reportId: string, body: ResolveProfileReportRequest) =>
-    request<ProfileReportResponse>(`/admin/profile-reports/${reportId}/resolve`, {
+  adminResolveReport: (reportId: string, body: ResolveReportRequest) =>
+    request<ReportResponse>(`/admin/reports/${reportId}/resolve`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -169,6 +282,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  // Issue #133. Preview persists nothing; reseed destroys every settlement in
+  // the world, which is why its body carries the re-typed world name.
+  adminPreviewWorldSeed: (worldId: string, body: PreviewWorldSeedRequest) =>
+    request<WorldSeedPreviewResponse>(`/admin/worlds/${worldId}/preview-seed`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminReseedWorld: (worldId: string, body: ReseedWorldRequest) =>
+    request<ReseedWorldResponse>(`/admin/worlds/${worldId}/reseed`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   adminListUsers: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
@@ -183,6 +308,11 @@ export const api = {
     request<AdminUserResponse>(`/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   adminSetUserStatus: (userId: string, body: SetUserStatusRequest) =>
     request<AdminUserResponse>(`/admin/users/${userId}/status`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminSetUserPremium: (userId: string, body: SetUserPremiumRequest) =>
+    request<AdminUserResponse>(`/admin/users/${userId}/premium`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -212,6 +342,59 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  adminCompleteQueues: (settlementId: string, body: CompleteQueuesRequest = {}) =>
+    request<CompleteQueuesResponse>(`/admin/settlements/${settlementId}/queue/complete`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminGetSettlementLayout: (settlementId: string) =>
+    request<AdminSettlementLayoutResponse>(`/admin/settlements/${settlementId}/layout`),
+  adminPlaceBuilding: (settlementId: string, q: number, r: number, body: PlaceBuildingRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  adminRazeBuilding: (settlementId: string, q: number, r: number) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}`, {
+      method: 'DELETE',
+    }),
+  adminAdjustGarrison: (settlementId: string, body: AdjustGarrisonRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/garrison`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  adminListArmies: (params: { worldId?: string; settlementId?: string }) => {
+    const query = new URLSearchParams();
+    if (params.worldId) query.set('worldId', params.worldId);
+    if (params.settlementId) query.set('settlementId', params.settlementId);
+    return request<AdminArmyResponse[]>(`/admin/armies?${query.toString()}`);
+  },
+  adminEditArmy: (armyId: string, body: AdminEditArmyRequest) =>
+    request<AdminArmyResponse>(`/admin/armies/${armyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  adminCreateWorld: (body: CreateWorldRequest) =>
+    request<AdminWorldResponse>('/admin/worlds', { method: 'POST', body: JSON.stringify(body) }),
+  adminGetActivitySummary: (params: { from: string; to: string; bucket?: 'day' | 'hour' }) => {
+    const query = new URLSearchParams({ from: params.from, to: params.to });
+    if (params.bucket) query.set('bucket', params.bucket);
+    return request<ActivitySummaryResponse>(`/admin/activity/summary?${query.toString()}`);
+  },
+  adminListActivityUsers: (params?: { page?: number; pageSize?: number; sort?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.pageSize) query.set('pageSize', String(params.pageSize));
+    if (params?.sort) query.set('sort', params.sort);
+    const qs = query.toString();
+    return request<PagedAdminActivityUsersResponse>(`/admin/activity/users${qs ? `?${qs}` : ''}`);
+  },
+  adminGetUserActivityDetail: (userId: string, params: { from: string; to: string }) => {
+    const query = new URLSearchParams({ from: params.from, to: params.to });
+    return request<AdminUserActivityDetailResponse>(`/admin/activity/users/${userId}?${query.toString()}`);
+  },
+  // Plain authenticated user action, not admin-only — see useActivityHeartbeat.
+  heartbeat: () => request<void>('/activity/heartbeat', { method: 'POST' }),
   getLeaderboardDirectory: (worldId: string) =>
     request<LeaderboardDirectoryResponse>(`/worlds/${worldId}/leaderboards`),
   getLeaderboardBoard: (
@@ -236,6 +419,34 @@ export const api = {
     const qs = query.toString();
     return request<WeeklyStatsPageResponse>(`/worlds/${worldId}/stats/users/${userId}/weekly${qs ? `?${qs}` : ''}`);
   },
+  // Issue #40 phase 2: dispatching/tracking armies. Mirrors ArmyEndpoints.cs's
+  // routes exactly (`/settlements/{id}/armies`, `/armies/{id}`, `/armies/{id}/recall`).
+  // `ownerId` is the same X-Owner-Id ownership proof queueBuild/trainUnits
+  // send — ArmyEndpoints.Dispatch/Recall are gated by
+  // SettlementOwnershipEndpointFilter/ArmyOwnershipEndpointFilter too.
+  dispatchArmy: (settlementId: string, body: DispatchArmyRequest, ownerId?: string) =>
+    request<ArmyResponse>(`/settlements/${settlementId}/armies`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  getSettlementArmies: (settlementId: string) =>
+    request<ArmySummary[]>(`/settlements/${settlementId}/armies`),
+  getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
+  recallArmy: (armyId: string, ownerId?: string) =>
+    request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // Issue #40 phase 4: the host's read-only view of who is currently
+  // supporting this settlement. Mirrors ArmyEndpoints.cs's
+  // `/settlements/{id}/guests`.
+  getSettlementGuests: (settlementId: string) =>
+    request<GuestArmySummary[]>(`/settlements/${settlementId}/guests`),
+  // Issue #40 phase 3: battle reports. Mirrors ArmyEndpoints.cs's
+  // `/reports/{reportId}` and `/settlements/{settlementId}/reports` — the
+  // latter is a flat newest-first list, not paged (BattleReportService has
+  // no pagination), so the reports store just holds it as-is.
+  getReport: (reportId: string) => request<BattleReportResponse>(`/reports/${reportId}`),
+  getSettlementReports: (settlementId: string) =>
+    request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,
@@ -250,4 +461,52 @@ export const api = {
       `/worlds/${worldId}/leaderboards/${scope}/${category}/me${qs ? `?${qs}` : ''}`,
     );
   },
+  listWorldGuilds: (worldId: string) => request<GuildResponse[]>(`/worlds/${worldId}/guilds`),
+  createGuild: (worldId: string, body: CreateGuildRequest) =>
+    request<GuildResponse>(`/worlds/${worldId}/guilds`, { method: 'POST', body: JSON.stringify(body) }),
+  getGuild: (guildId: string) => request<GuildResponse>(`/guilds/${guildId}`),
+  getGuildPerks: (guildId: string) => request<GuildPerksResponse>(`/guilds/${guildId}/perks`),
+  joinGuild: (guildId: string) =>
+    request<GuildMemberResponse>(`/guilds/${guildId}/join`, { method: 'POST' }),
+  leaveGuild: (guildId: string) => request<unknown>(`/guilds/${guildId}/leave`, { method: 'POST' }),
+  kickGuildMember: (guildId: string, userId: string) =>
+    request<unknown>(`/guilds/${guildId}/members/${userId}/kick`, { method: 'POST' }),
+  setGuildMemberRole: (guildId: string, userId: string, body: SetGuildMemberRoleRequest) =>
+    request<GuildMemberResponse>(`/guilds/${guildId}/members/${userId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  setGuildFeeTier: (guildId: string, body: SetGuildFeeTierRequest) =>
+    request<GuildResponse>(`/guilds/${guildId}/fee-tier`, { method: 'PUT', body: JSON.stringify(body) }),
+  payGuildFee: (guildId: string) =>
+    request<GuildMemberResponse>(`/guilds/${guildId}/fee-payment`, { method: 'POST' }),
+  listGuildTopics: (guildId: string) => request<GuildBoardTopicResponse[]>(`/guilds/${guildId}/board/topics`),
+  createGuildTopic: (guildId: string, body: CreateGuildTopicRequest) =>
+    request<GuildBoardTopicResponse>(`/guilds/${guildId}/board/topics`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getGuildTopic: (guildId: string, topicId: string) =>
+    request<GuildBoardTopicResponse>(`/guilds/${guildId}/board/topics/${topicId}`),
+  replyToGuildTopic: (guildId: string, topicId: string, body: CreateGuildPostRequest) =>
+    request<unknown>(`/guilds/${guildId}/board/topics/${topicId}/posts`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listGuildTreaties: (guildId: string) => request<GuildTreatyResponse[]>(`/guilds/${guildId}/treaties`),
+  proposeGuildTreaty: (guildId: string, body: ProposeTreatyRequest) =>
+    request<GuildTreatyResponse>(`/guilds/${guildId}/treaties`, { method: 'POST', body: JSON.stringify(body) }),
+  acceptGuildTreaty: (treatyId: string) =>
+    request<GuildTreatyResponse>(`/treaties/${treatyId}/accept`, { method: 'POST' }),
+  rejectGuildTreaty: (treatyId: string) =>
+    request<GuildTreatyResponse>(`/treaties/${treatyId}/reject`, { method: 'POST' }),
+  breakGuildTreaty: (treatyId: string) =>
+    request<GuildTreatyResponse>(`/treaties/${treatyId}/break`, { method: 'POST' }),
+  // Issue #40 phase 7: the premium fight simulator. `PremiumUserEndpointFilter`
+  // returns 401 (unauthenticated) or 403 `{ error: "premium_required" }`
+  // (authenticated but not premium) — both surface as an `ApiError` here,
+  // same as any other rejection; SimulatorView.vue is what gives the latter
+  // its own friendly copy instead of showing raw problem text.
+  simulate: (body: SimulatorRequest) =>
+    request<SimulatorResponse>('/simulator', { method: 'POST', body: JSON.stringify(body) }),
 };

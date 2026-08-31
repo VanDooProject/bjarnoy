@@ -27,17 +27,17 @@ public static class SettlementEndpoints
             .WithName("FoundSettlement")
             .WithSummary("Founds a settlement on one of an island's start positions.")
             // Mutating: a Locked/Banned authenticated caller is refused, but
-            // anonymous play (no owner-auth yet) is unaffected — see
-            // ActiveUserEndpointFilter.
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            // anonymous play is unaffected — see ActiveUserEndpointFilter.
+            // No SettlementOwnershipEndpointFilter here: founding is what
+            // *establishes* ownership (OwnerId/OwnerName in the request
+            // body), so there is nothing to own yet at this point — see
+            // QueueBuild/TrainUnits below for where that filter applies.
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
             .WithSummary("Lists the settlements in a world.");
-
-        worlds.MapPost("/{worldId:guid}/state", SetState)
-            .WithName("SetWorldRunState")
-            .WithSummary("Pauses, locks, puts into maintenance, or resumes a world.");
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
@@ -50,12 +50,23 @@ public static class SettlementEndpoints
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
+        settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
+            .WithName("CancelBuild")
+            .WithSummary("Cancels a still-queued build order, refunding its cost.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
@@ -154,7 +165,8 @@ public static class SettlementEndpoints
         [
             .. entities.Select(s => new SettlementSummary(
                 s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0)),
+                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+                s.IslandId)),
         ];
 
         return TypedResults.Ok(response);
@@ -201,6 +213,7 @@ public static class SettlementEndpoints
                 new BuildOrderResponse(
                     order.Id, order.Coord.Q, order.Coord.R, order.Type.ToWireName(),
                     order.TargetLevel, order.CompletesAt,
+                    (order.CompletesAt - order.StartedAt).TotalSeconds,
                     (order.CompletesAt - order.StartedAt).TotalSeconds));
         }
 
@@ -214,6 +227,30 @@ public static class SettlementEndpoints
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
             : TypedResults.Conflict(problem);
+    }
+
+    private static async Task<Results<NoContent, NotFound, Conflict<ProblemDetails>>> CancelBuild(
+        Guid settlementId,
+        Guid orderId,
+        SettlementService settlements,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.CancelBuildAsync(settlementId, orderId, cancellationToken);
+
+        if (result.WorldPaused)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world is not accepting commands.",
+                Detail = "It is paused, locked or under maintenance.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        // OrderNotFound is CancelBuildRejection's only other value — either
+        // the order was never there, or it already completed and left the
+        // queue (SettleTo ran first — see CancelBuildAsync).
+        return result.Accepted ? TypedResults.NoContent() : TypedResults.NotFound();
     }
 
     private static async Task<Results<Accepted<TrainingOrderResponse>, NotFound,
@@ -255,7 +292,8 @@ public static class SettlementEndpoints
                 $"/api/v1/settlements/{settlementId}",
                 new TrainingOrderResponse(
                     order.Id, order.UnitType.ToWireName(), order.Count, 0,
-                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds));
+                    order.CompletesAt, (order.CompletesAt - order.StartedAt).TotalSeconds,
+                    (order.CompletesAt - order.StartedAt).TotalSeconds));
         }
 
         var problem = new ProblemDetails

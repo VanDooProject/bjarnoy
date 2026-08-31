@@ -16,6 +16,7 @@ const props = defineProps<{
   settlementId?: string;
   previewCenter?: AxialCoord;
   highlightCoord?: AxialCoord;
+  highlightCoords?: AxialCoord[];
   screenBiasX?: number;
   // Overrides the container's default fog-matching backdrop — the landing
   // page's preview (water not drawn at all, see HexMapRenderer) needs its
@@ -36,6 +37,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
   hover: [info: HoverInfo | null];
+  // Issue #93: a draft waypoint pin was dragged onto another hex — see
+  // HexMapRendererOptions.onWaypointMove.
+  'waypoint-move': [index: number, coord: AxialCoord];
 }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -48,10 +52,12 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   settlementId: props.settlementId,
   previewCenter: props.previewCenter,
   highlightCoord: props.highlightCoord,
+  highlightCoords: props.highlightCoords,
   screenBiasX: props.screenBiasX,
   hideSettlementBadge: props.hideSettlementBadge,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
+  onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
 });
 
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild
