@@ -40,6 +40,14 @@ public static class LiveFrontendTestHelpers
         // own. Wait for it explicitly, once, with real headroom.
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
+        // Diagnostic-only capture for the exception message below — not an
+        // assertion on its own. Scoped to just this call (not the whole
+        // test's own CollectConsoleErrors(), which a caller may also be
+        // using for its own final assertion).
+        var consoleMessages = new List<string>();
+        void OnConsole(object? _, IConsoleMessage msg) => consoleMessages.Add($"[{msg.Type}] {msg.Text}");
+        page.Console += OnConsole;
+
         var founded = false;
         for (var attempt = 0; attempt < 10 && !founded; attempt++)
         {
@@ -63,9 +71,25 @@ public static class LiveFrontendTestHelpers
             }
         }
 
+        page.Console -= OnConsole;
+
         if (!founded)
         {
-            throw new InvalidOperationException("Clicking the starter plot never founded a settlement.");
+            // LandingView.vue's own status line — "Making landfall…" while a
+            // request is in flight, or the "You can't found there — pick one
+            // of the glowing plots" hint when the click didn't land on an
+            // exact, unclaimed start position (see startPositionAt, issue
+            // #96) — is the difference between "the request never went out"
+            // and "the click hit the wrong hex", so surface it rather than
+            // leaving this exception to guess.
+            var heroStatus = await page.Locator(".hero .status").AllTextContentsAsync();
+            var recentConsole = consoleMessages.Count > 20
+                ? consoleMessages.Skip(consoleMessages.Count - 20)
+                : consoleMessages;
+            throw new InvalidOperationException(
+                "Clicking the starter plot never founded a settlement. "
+                + $"Hero status: [{string.Join(" | ", heroStatus)}]. "
+                + $"Recent console messages: [{string.Join(" | ", recentConsole)}]");
         }
     }
 }
