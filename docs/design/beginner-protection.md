@@ -97,27 +97,49 @@ This issue trades on a feature that doesn't exist yet: issue #108 plans
 
 ## 6. Spawn-area segregation by account age
 
-**Current state, verified in code:** there is no beginner-area logic today.
-Founding lands on a deterministic starter plot near the world origin
-regardless of who else is nearby — `LandingView.vue` always previews
+**Current state, verified in code:** there is no beginner-area logic today,
+and what exists is entirely backend-fed, unfiltered. `GET
+/worlds/{worldId}/islands` (`WorldEndpoints.cs:36-38` →
+`WorldService.GetIslandsAsync` → `IslandResponse.From`) returns **every**
+island's `StartPositions` for the world, with no per-island signal about who
+(if anyone) is already settled there. The frontend does no more than pick a
+point out of that full set: `LandingView.vue` previews
 `world.nearestStartPosition({ q: 0, r: 0 })` and lets the player found on any
 of `world.nearbyStartPositions({ q: 0, r: 0 })`
-(`src/frontend/src/views/LandingView.vue:74-87`); the backend's `FoundAsync`
-(`SettlementService.cs`) only checks that the target hex is a real
-`StartPositions` entry, isn't taken, and clears `MinimumSpacing` from other
-settlements *on the same island* (`SettlementService.cs:221-246`) — it has no
-concept of "is anyone else already here" or "how new is everyone else here."
-So "the beginners area is implemented by checking the landing page locations"
-is aspirational, not yet true; this issue is where that gets designed:
+(`src/frontend/src/views/LandingView.vue:74-87`), both just nearest-distance
+lookups over whatever the backend sent — there's no client-side concept of
+"who's on this island" either, nor should there be; ownership/shield state
+lives server-side and a client-computed suggestion would just be a race
+against every other client doing the same computation over the same stale
+snapshot. The backend's `FoundAsync` (`SettlementService.cs`) separately only
+checks that the target hex is a real `StartPositions` entry, isn't taken, and
+clears `MinimumSpacing` from other settlements *on the same island*
+(`SettlementService.cs:221-246`) — no concept of "how new is everyone else
+here" either. So "the beginners area is implemented by checking the landing
+page locations in the backend" describes where this has to live, not
+something already built; this issue is where that gets designed:
 
+- **The backend does the filtering, not the frontend.** The suggestion rule
+  belongs in `WorldService`/`WorldEndpoints`, in the same place that already
+  assembles `IslandResponse` for `GET /worlds/{worldId}/islands` — either by
+  having that endpoint only return (or flag) islands that currently qualify
+  as beginner-suitable, or by adding a dedicated "suggest a beginner island"
+  read that `LandingView.vue` calls instead of picking nearest-by-distance
+  over the full unfiltered list. Either way the client keeps doing exactly
+  what it does today — take whatever the backend hands it and preview/found
+  on that — it just stops being handed the whole world's start positions
+  undifferentiated.
 - **Island suggestion rule:** an island offered as a landing spot should have
   no players on it yet, or only other players still inside their own shield
   window (i.e., still beginners by the same clock this issue defines in §1).
-  Concretely: extend the start-position/island lookup the landing flow already
-  calls with a filter — an island qualifies if every founded settlement on it
-  has `ShieldExpiresAtUtc > now`. Once an island has any unshielded
-  (graduated) settlement on it, it drops out of the beginner pool for new
-  foundings; existing settlements on it are unaffected.
+  Concretely: the backend query answering `GetIslandsAsync` (or its new
+  beginner-suggestion counterpart) joins each island's `StartPositions`
+  against `Settlements` on that island and keeps only islands where every
+  founded settlement has `ShieldExpiresAtUtc > now`. Once an island has any
+  unshielded (graduated) settlement on it, it drops out of the beginner pool
+  for new foundings; existing settlements on it are unaffected, and
+  `FoundAsync` itself is unchanged — the filtering happens before a start
+  position is ever offered, not as a new rejection reason at founding time.
 - **Ring mechanic (future work, not this issue's scope):** as beginner
   islands near the world's spawn origin fill up, new foundings should be
   pushed progressively further out — spawning in expanding rings around the
