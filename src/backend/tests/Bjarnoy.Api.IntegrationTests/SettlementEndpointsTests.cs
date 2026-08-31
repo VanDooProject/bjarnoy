@@ -611,6 +611,26 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_build_orders_total_seconds_stays_fixed_across_polls()
+    {
+        // Issue #99: the client needs the order's full duration, not just its
+        // remaining time, to compute progress without the bar snapping back
+        // on every poll — see BuildQueuePanel.vue.
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var queued = await QueueFarmAsync(client, settlement);
+        Assert.NotNull(queued);
+        Assert.True(queued!.TotalSeconds > 0);
+
+        _factory.Time.Advance(TimeSpan.FromSeconds(30));
+        var polled = await GetAsync(client, settlement.Id);
+
+        Assert.Single(polled!.Queue);
+        Assert.Equal(queued.TotalSeconds, polled.Queue[0].TotalSeconds, 3);
+    }
+
+    [Fact]
     public async Task A_locked_world_finishes_queued_work_but_takes_no_new_orders()
     {
         using var client = Client();

@@ -34,6 +34,10 @@ public static class AdminWorldEndpoints
             .WithName("AdminListWorlds")
             .WithSummary("Lists every world with its admin-only fields.");
 
+        worlds.MapPost("/", CreateWorld)
+            .WithName("AdminCreateWorld")
+            .WithSummary("Generates and stores a new world, returning it with its admin-only fields.");
+
         worlds.MapPatch("/{worldId:guid}/settings", UpdateSettings)
             .WithName("AdminUpdateWorldSettings")
             .WithSummary("Updates a world's speed factor, start date, stop-join toggle, and endboss instant.");
@@ -66,6 +70,65 @@ public static class AdminWorldEndpoints
         ];
 
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The admin surface for world creation (issue #105). Deliberately a
+    /// separate endpoint from the public <c>POST /api/v1/worlds</c> rather
+    /// than a wrapper around it: this one answers with
+    /// <see cref="AdminWorldResponse"/>, so the admin list a caller already
+    /// holds can be updated from the response without a follow-up round trip.
+    /// </summary>
+    private static async Task<Results<Created<AdminWorldResponse>, ValidationProblem, Conflict<ProblemDetails>>>
+        CreateWorld(
+            CreateWorldRequest request,
+            WorldService worlds,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Name)] = ["A world needs a name."],
+            });
+        }
+
+        var options = WorldGenerationOptions.ForSeed(request.Seed ?? Random.Shared.Next()) with
+        {
+            Radius = request.Radius,
+        };
+
+        try
+        {
+            options.Validate();
+        }
+        catch (ArgumentException ex)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [ex.ParamName ?? nameof(request)] = [ex.Message],
+            });
+        }
+
+        try
+        {
+            var world = await worlds.CreateWorldAsync(
+                request.Name.Trim(), options, request.MaxPlayers, cancellationToken);
+
+            return TypedResults.Created(
+                $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0));
+        }
+        catch (WorldCreationException ex)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The world could not be created.",
+                Detail = ex.Message,
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
     }
 
     private static async Task<Results<Ok<AdminWorldResponse>, NotFound, ValidationProblem>> UpdateSettings(

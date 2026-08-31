@@ -48,6 +48,48 @@ function fromLocalInput(local: string): string | null {
   return new Date(local).toISOString();
 }
 
+// Creating a world (issue #105). Its own draft, separate from the per-world
+// settings drafts above — this one has no world to key off yet.
+const newWorld = reactive({
+  name: '',
+  seed: '',
+  radius: '60',
+  maxPlayers: '500',
+  creating: false,
+  error: null as string | null,
+});
+
+async function createWorld() {
+  if (newWorld.creating) return;
+
+  if (newWorld.name.trim().length < 3) {
+    newWorld.error = 'A world name needs at least three characters.';
+    return;
+  }
+
+  newWorld.creating = true;
+  newWorld.error = null;
+  try {
+    const created = await api.adminCreateWorld({
+      name: newWorld.name.trim(),
+      // An omitted seed means "draw one" — the backend does that, so an empty
+      // field must send nothing rather than 0, which is a real seed.
+      seed: newWorld.seed === '' ? undefined : Number(newWorld.seed),
+      radius: Number(newWorld.radius) || 60,
+      maxPlayers: Number(newWorld.maxPlayers) || 500,
+    });
+
+    worlds.value = [...worlds.value, created];
+    drafts[created.id] = draftFor(created);
+    newWorld.name = '';
+    newWorld.seed = '';
+  } catch (err) {
+    newWorld.error = err instanceof ApiError ? err.message : 'Could not create the world.';
+  } finally {
+    newWorld.creating = false;
+  }
+}
+
 async function load() {
   loading.value = true;
   loadError.value = null;
@@ -129,6 +171,32 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 <template>
   <div class="worlds">
     <h1>Worlds</h1>
+
+    <form class="create" @submit.prevent="createWorld">
+      <h2>Create a world</h2>
+      <div class="create-fields">
+        <label>
+          Name
+          <input v-model="newWorld.name" type="text" placeholder="Midgard" />
+        </label>
+        <label>
+          Seed
+          <input v-model="newWorld.seed" type="number" step="1" placeholder="random" />
+        </label>
+        <label>
+          Radius
+          <input v-model="newWorld.radius" type="number" min="1" max="1000" step="1" />
+        </label>
+        <label>
+          Max players
+          <input v-model="newWorld.maxPlayers" type="number" min="1" step="1" />
+        </label>
+        <button type="submit" :disabled="newWorld.creating">
+          {{ newWorld.creating ? 'Generating…' : 'Create world' }}
+        </button>
+      </div>
+      <p v-if="newWorld.error" class="error">{{ newWorld.error }}</p>
+    </form>
 
     <p v-if="loading">Loading…</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
@@ -270,6 +338,36 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 }
 .grace input {
   width: 60px;
+}
+.create {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+.create h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.create-fields {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.create-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.create-fields input {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
 }
 .error {
   color: var(--rival);

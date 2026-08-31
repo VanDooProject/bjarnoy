@@ -5,17 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminWorldsView from './AdminWorldsView.vue';
 import type { AdminWorldResponse } from '../../api/types';
 
-const { adminListWorlds, adminUpdateWorldSettings, adminSetWorldRunState } = vi.hoisted(() => ({
-  adminListWorlds: vi.fn(),
-  adminUpdateWorldSettings: vi.fn(),
-  adminSetWorldRunState: vi.fn(),
-}));
+const { adminListWorlds, adminCreateWorld, adminUpdateWorldSettings, adminSetWorldRunState } = vi.hoisted(
+  () => ({
+    adminListWorlds: vi.fn(),
+    adminCreateWorld: vi.fn(),
+    adminUpdateWorldSettings: vi.fn(),
+    adminSetWorldRunState: vi.fn(),
+  }),
+);
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
   return {
     ...actual,
-    api: { adminListWorlds, adminUpdateWorldSettings, adminSetWorldRunState },
+    api: { adminListWorlds, adminCreateWorld, adminUpdateWorldSettings, adminSetWorldRunState },
   };
 });
 
@@ -96,5 +99,49 @@ describe('AdminWorldsView', () => {
       '/admin/worlds/world-2/reseed',
     ]);
     expect(links[0].text()).toContain('Reseed map');
+  });
+
+  it('creates a world and adds it to the list', async () => {
+    const wrapper = await mountView([world()]);
+    adminCreateWorld.mockResolvedValue(world({ id: 'world-2', name: 'Alfheim', maxPlayers: 200 }));
+
+    await wrapper.find('.create input[type="text"]').setValue('Alfheim');
+    const numbers = wrapper.findAll('.create input[type="number"]');
+    await numbers[0]!.setValue('77');
+    await numbers[2]!.setValue('200');
+    await wrapper.find('.create').trigger('submit');
+    await flushPromises();
+
+    expect(adminCreateWorld).toHaveBeenCalledWith({
+      name: 'Alfheim',
+      seed: 77,
+      radius: 60,
+      maxPlayers: 200,
+    });
+    expect(wrapper.text()).toContain('Alfheim');
+  });
+
+  it('leaves the seed out entirely when the field is blank, so the backend draws one', async () => {
+    const wrapper = await mountView([]);
+    adminCreateWorld.mockResolvedValue(world({ id: 'world-2', name: 'Alfheim' }));
+
+    await wrapper.find('.create input[type="text"]').setValue('Alfheim');
+    await wrapper.find('.create').trigger('submit');
+    await flushPromises();
+
+    expect(adminCreateWorld).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Alfheim', seed: undefined }),
+    );
+  });
+
+  it('refuses a name too short to be a world name without calling the API', async () => {
+    const wrapper = await mountView([]);
+
+    await wrapper.find('.create input[type="text"]').setValue('ab');
+    await wrapper.find('.create').trigger('submit');
+    await flushPromises();
+
+    expect(adminCreateWorld).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('at least three characters');
   });
 });

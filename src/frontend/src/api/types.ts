@@ -73,6 +73,8 @@ export interface BuildOrderResponse {
   targetLevel: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
+  /** The order's full build duration, poll-invariant — see issue #99. */
+  totalSeconds: number;
 }
 
 /** A garrison line: how many of one unit type currently stand at a settlement. */
@@ -94,6 +96,8 @@ export interface TrainingOrderResponse {
   completedCount: number;
   completesAtGameTime: string;
   completesInSeconds: number | null;
+  /** The batch's full duration, poll-invariant — see issue #99. */
+  totalSeconds: number;
 }
 
 export interface WorldClockResponse {
@@ -432,6 +436,70 @@ export interface GrantResourcesRequest {
 
 export interface SetBuildingLevelRequest {
   level: number;
+}
+
+/** Which of a settlement's two queues an admin's instant build should finish. */
+export interface CompleteQueuesRequest {
+  builds?: boolean;
+  training?: boolean;
+}
+
+export interface CompleteQueuesResponse {
+  completedBuilds: number;
+  completedTraining: number;
+  settlement: SettlementResponse;
+}
+
+export interface PlaceBuildingRequest {
+  building: string;
+  level: number;
+}
+
+/** Signed: a positive count creates units, a negative one removes them. */
+export interface AdjustGarrisonRequest {
+  unit: string;
+  count: number;
+}
+
+/** One hex of a settlement's claimed area, as the graphical editor paints it. */
+export interface AdminSettlementHexResponse {
+  q: number;
+  r: number;
+  terrain: string;
+  isCoastalWater: boolean;
+  building: string | null;
+  level: number | null;
+  isCentre: boolean;
+}
+
+export interface AdminSettlementLayoutResponse {
+  settlementId: string;
+  claimRadius: number;
+  hexes: AdminSettlementHexResponse[];
+  buildingTypes: string[];
+  maxLevel: number;
+}
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/AdminArmyContracts.cs.
+
+export interface AdminUnitCountRequest {
+  unit: string;
+  count: number;
+}
+
+export interface AdminEditArmyRequest {
+  units?: AdminUnitCountRequest[];
+  provisions?: number;
+  /** Retimes the current journey to land this many game-minutes from now; 0 lands it at once. */
+  arriveInMinutes?: number;
+  position?: { q: number; r: number };
+}
+
+export interface AdminArmyResponse {
+  army: ArmyResponse;
+  worldId: string;
+  settlementName: string;
+  ownerName: string;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/ChatContracts.cs.
