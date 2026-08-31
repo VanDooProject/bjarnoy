@@ -171,13 +171,54 @@ something already built; this issue is where that gets designed:
   regardless of `Radius`.
 
   **Selection:** the beginner-suggestion query (§ above) walks rings
-  innermost-first and returns islands from the first ring that still has
-  spare beginner capacity (a threshold on unfilled `StartPositions` across
-  that ring's qualifying islands — e.g. at least one open, un-graduated
-  plot). Only once a ring is exhausted does the query fall through to the
-  next ring out. This is a tie-break/ordering rule layered on top of the
+  innermost-first and returns islands from the first ring with an actually
+  **open** plot — "capacity" here means literal unfounded `StartPositions`,
+  not merely "no graduated settler yet." Those are two different
+  conditions and both have to hold for an island to be offered:
+  - **Qualifies at all** (§ above): no *graduated* (unshielded) settlement
+    on the island.
+  - **Has capacity**: `openPlots(island) = StartPositions.Count -
+    SettledCount(island) > 0`.
+
+  An island can qualify without having capacity — every one of its
+  `StartPositions` can already be taken by *other beginners*, all still
+  inside their shield window, with nobody graduated yet. That island is
+  still "beginner-only," but there is nowhere left to click on it, so it
+  must be excluded from what gets offered even though it isn't
+  disqualified by the graduation rule. The ring only counts as having
+  spare capacity if at least one qualifying island in it has `openPlots >
+  0`; only then does the ring get offered, and only once every island in a
+  ring has `openPlots == 0` (or is disqualified) does the query fall
+  through to the next ring out.
+
+  **Fallback when every ring is exhausted:** if no ring anywhere has an
+  open, qualifying plot (a small or very active world can run through all
+  of them), the query falls back to today's behaviour — the plain
+  nearest-open-start-position search over every island, beginner filter
+  dropped — rather than refusing to suggest anywhere. Founding must never
+  hard-fail just because the beginner/ring feature couldn't find a
+  beginner-shaped spot; worst case, a new player lands next to a graduated
+  neighbour exactly as they would today, without this feature.
+
+  This is a tie-break/ordering rule layered on top of the
   existing-vs-graduated filter above, not a separate mechanism — the same
   query, same data, one more `GroupBy`.
+
+  **Does the backend/tests handle this today?** Only the reactive half.
+  `FoundAsync`'s per-hex `PlotTaken` rejection
+  (`SettlementService.cs:238-241,293-296`, backed by the unique
+  `(WorldId, CentreQ, CentreR)` index for the race-safe case) is real and
+  covered by existing tests — but that only fires *after* a client already
+  tried to found on a specific, already-taken hex. There is no proactive
+  "does this island/ring have any open plot left" query anywhere in the
+  codebase today, because the beginner/ring suggestion endpoint itself
+  doesn't exist yet — `openPlots`, the ring walk, and the exhausted-ring
+  fallback above are new logic this issue's implementation still has to
+  write and test, not something already handled. Test cases worth adding
+  when it's built: an island fully claimed by beginners (still
+  "qualifying," zero `openPlots`, must be skipped); a ring where every
+  island is in that state (falls through to the next ring); and every ring
+  exhausted (falls back to the unfiltered nearest-open-plot search).
 
 ## Ring fill-state cost
 
@@ -203,33 +244,46 @@ doing:
   mechanic where "cache for hours" undersells it; it can be cached until
   the world is reseeded or torn down, full stop.
 
-**Fill state (which rings currently have spare beginner capacity) is the
-opposite: it changes on every founding and every shield expiry**, so it
-needs to stay close to live, not sit for hours:
+**Fill state (which rings currently have spare beginner capacity) changes on
+every founding and every shield expiry**, so — to be clear, this is about an
+in-process/application cache (an `IMemoryCache` entry per world, not an HTTP
+cache-control header — nothing about this suggestion is client-cacheable,
+it has to be re-decided server-side on every landing-page load), not a
+time-based TTL guessed at from "how fresh does this feel." Two different
+things actually change it, and the right invalidation is event-driven for
+each:
 
-- It rides the same `Settlements`-joined-to-`Islands` query the
-  shield-based filter (the bullet above) already runs — index-backed via
-  the FK EF creates on `Settlements.IslandId` by convention
-  (`GameDbContext.cs`'s `settlement.HasOne(s => s.Island)...`), grouped by
-  ring in memory after the fetch. That query is cheap on its own (bounded
-  by island/settlement counts, not by scanning the world), which is the
-  point — it doesn't *need* an hours-long cache to be affordable.
-- A multi-hour cache would actively misbehave here: it would keep
-  suggesting a ring as "open" for hours after its last slot filled (or,
-  worse, keep a ring marked full long after a shield expired and vacated
-  it — shields expire on their own schedule from §1, not in response to
-  anyone founding), pushing new players out to the wrong ring or stacking
-  them past capacity. If a cache is added at all, it should sit in the
-  seconds range — the existing `UserActivityService.ThrottleInterval`
-  (60s, `UserActivityService.cs:32`) and the frontend's 4s rival-refresh
-  poll are this codebase's precedent for "how fresh does live-ish state
-  need to stay," and either is a closer fit than hours.
+- **A founding invalidates it directly and can be caught exactly**:
+  `FoundAsync` is the one place a `SettlementEntity` gets inserted
+  (`SettlementService.cs`), so it's the one place that needs to drop the
+  cached fill-state for `(worldId, that island's ring)` (or just the whole
+  world's cache — a single `IMemoryCache` entry per world is cheap enough
+  that invalidating the whole thing on every founding is simpler than
+  tracking which ring changed, and foundings are not so frequent that this
+  matters). No polling, no TTL needed for this half — "cached until a new
+  settlement is founded" is exactly right, and it's an explicit
+  `cache.Remove(worldId)` call at the end of `FoundAsync`, not a timer.
+- **A shield expiry changes fill state with no founding involved at all** —
+  an island can flip from "beginner-only" to "has a graduate" purely
+  because `ShieldExpiresAtUtc` passed, while nobody founded anything. A
+  cache invalidated only on founding would miss this and keep offering a
+  now-graduated island as beginner-safe. This doesn't need a poll either:
+  since every shielded settlement's `ShieldExpiresAtUtc` is already a known
+  timestamp, the cache entry's own expiry can be set to the **earliest**
+  `ShieldExpiresAtUtc` among the settlements it counted as still-shielded
+  (`IMemoryCache`'s `AbsoluteExpiration` takes a `DateTimeOffset` directly)
+  — the cache self-invalidates at the exact moment its answer could first
+  be wrong, rather than on a guessed interval. Combined with the
+  founding-triggered removal above, the cached fill-state is correct until
+  one of the two things that can actually change it happens — not stale
+  for "hours," and not recomputed on every request either.
 
 Net: no new table, no new index, no background job. The static half (ring
 number) is cheap enough to skip caching or, if wanted, cache without an
-expiry at all; the dynamic half (fill state) is cheap enough on its own
-that it doesn't need caching to be affordable, and specifically shouldn't be
-cached for hours if it is.
+expiry at all; the dynamic half (fill state) is an `IMemoryCache` entry per
+world, invalidated by the two events that can actually change it —
+`FoundAsync` inserting a settlement, and the earliest `ShieldExpiresAtUtc`
+among the settlements it counted — not by a guessed TTL.
 
 ## Scope
 
