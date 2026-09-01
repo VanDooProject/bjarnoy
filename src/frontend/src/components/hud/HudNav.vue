@@ -93,7 +93,10 @@ const initials = computed(() => {
     <button class="link" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
       Landing
     </button>
-    <!-- Logged in, the avatar opens the player's own profile (issue #42). -->
+    <!-- Logged in, the avatar opens the player's own profile (issue #42).
+         Anonymous, it opens registration (issue #108) — the only entry
+         point in the HUD for turning a local player id into a real
+         account. -->
     <button
       v-if="auth.isAuthenticated"
       class="avatar avatar-button"
@@ -103,7 +106,15 @@ const initials = computed(() => {
     >
       {{ initials }}
     </button>
-    <span v-else class="avatar" :title="player.nickname ?? 'Bjarnoy'">{{ initials }}</span>
+    <button
+      v-else
+      class="avatar avatar-button"
+      type="button"
+      :title="`${player.nickname ?? 'Bjarnoy'} — create an account`"
+      @click="router.push('/register')"
+    >
+      {{ initials }}
+    </button>
   </nav>
 </template>
 

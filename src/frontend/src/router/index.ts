@@ -17,6 +17,14 @@ export const router = createRouter({
       component: () => import('../views/LoginView.vue'),
     },
     {
+      // Issue #108: converts an anonymous player (local player.id, an
+      // unclaimed settlement) into a permanent account — see
+      // RegisterView.vue and AuthService.RegisterAsync's settlement-claim.
+      path: '/register',
+      name: 'register',
+      component: () => import('../views/RegisterView.vue'),
+    },
+    {
       path: '/world',
       name: 'world',
       component: () => import('../views/WorldMapView.vue'),
