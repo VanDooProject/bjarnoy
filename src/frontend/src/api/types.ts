@@ -16,6 +16,28 @@ export interface WorldResponse {
   joinableReason: string;
   startsAt: string | null;
   endbossTriggered: boolean;
+  speedFactor: number;
+  generation: WorldGenerationResponse;
+  movement: WorldMovementResponse;
+}
+
+/** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
+export interface WorldGenerationResponse {
+  islandCellSize: number;
+  islandChance: number;
+  islandMinRadius: number;
+  islandMaxRadius: number;
+  beachThreshold: number;
+  mountainThreshold: number;
+  mountainRockiness: number;
+  forestRockiness: number;
+}
+
+/** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
+export interface WorldMovementResponse {
+  land: Record<string, number>;
+  sea: Record<string, number>;
+  riverCrossingCost: number;
 }
 
 export interface TileCoordinate {

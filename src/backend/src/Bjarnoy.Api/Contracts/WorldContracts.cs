@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 
@@ -26,7 +27,10 @@ public sealed record WorldResponse(
     bool Joinable,
     string JoinableReason,
     DateTimeOffset? StartsAt,
-    bool EndbossTriggered)
+    bool EndbossTriggered,
+    double SpeedFactor,
+    WorldGenerationResponse Generation,
+    WorldMovementResponse Movement)
 {
     public static WorldResponse From(WorldEntity world, int islandCount, int playerCount, DateTimeOffset now)
     {
@@ -46,8 +50,64 @@ public sealed record WorldResponse(
             joinability.Joinable,
             joinability.Reason.ToString().ToLowerInvariant(),
             world.StartsAt,
-            world.EndbossTriggeredAt is not null);
+            world.EndbossTriggeredAt is not null,
+            world.SpeedFactor,
+            WorldGenerationResponse.From(world.ToGenerationOptions()),
+            WorldMovementResponse.Current);
     }
+}
+
+/// <summary>
+/// The generation constants a world was created with (issue #159 part B) — a
+/// world's <see cref="Bjarnoy.Domain.World.WorldGenerationOptions"/>, projected
+/// so the client can mirror the exact terrain the server paths over instead of
+/// the hardcoded module constants <c>lib/map/worldGenerator.ts</c> used before
+/// this, which silently went stale for any world reseeded with non-default
+/// options (<c>POST /api/v1/admin/worlds/{id}/preview-seed</c>).
+/// </summary>
+public sealed record WorldGenerationResponse(
+    int IslandCellSize,
+    double IslandChance,
+    double IslandMinRadius,
+    double IslandMaxRadius,
+    double BeachThreshold,
+    double MountainThreshold,
+    double MountainRockiness,
+    double ForestRockiness)
+{
+    public static WorldGenerationResponse From(WorldGenerationOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return new WorldGenerationResponse(
+            options.IslandCellSize,
+            options.IslandChance,
+            options.IslandMinRadius,
+            options.IslandMaxRadius,
+            options.BeachThreshold,
+            options.MountainThreshold,
+            options.MountainRockiness,
+            options.ForestRockiness);
+    }
+}
+
+/// <param name="Land">Per-terrain step cost for land armies, keyed by wire terrain name (see <see cref="TileResponse.Terrain"/>). <c>sea</c> is deliberately absent — impassable to land units.</param>
+/// <param name="Sea">Per-terrain step cost for fleets. Only <c>sea</c> is present — every land terrain is impassable to ships.</param>
+/// <param name="RiverCrossingCost">
+/// Flat penalty, on top of terrain cost, for a land unit entering a river hex —
+/// <see cref="HexPathfinder.RiverCrossingCost"/>. Not world-specific, but sent
+/// here rather than hardcoded client-side so the two cost models cannot drift
+/// apart silently (issue #159 part B).
+/// </param>
+public sealed record WorldMovementResponse(
+    IReadOnlyDictionary<string, double> Land,
+    IReadOnlyDictionary<string, double> Sea,
+    double RiverCrossingCost)
+{
+    public static readonly WorldMovementResponse Current = new(
+        HexPathfinder.LandTerrainCostByName,
+        HexPathfinder.SeaTerrainCostByName,
+        HexPathfinder.RiverCrossingCost);
 }
 
 public sealed record IslandResponse(

@@ -56,6 +56,19 @@ public static class HexPathfinder
         isLandUnit ? LandTerrainCost : SeaTerrainCost;
 
     /// <summary>
+    /// <see cref="LandTerrainCost"/>, keyed by <see cref="TerrainExtensions.ToWireName"/>
+    /// instead of the enum, so the API contract (issue #159 part B — the
+    /// client-side range tint) can project the real cost table instead of a
+    /// hand-copied literal the frontend would have to keep in sync by hand.
+    /// </summary>
+    public static IReadOnlyDictionary<string, double> LandTerrainCostByName { get; } =
+        LandTerrainCost.ToDictionary(kv => kv.Key.ToWireName(), kv => kv.Value);
+
+    /// <summary>Same as <see cref="LandTerrainCostByName"/>, for <see cref="SeaTerrainCost"/>.</summary>
+    public static IReadOnlyDictionary<string, double> SeaTerrainCostByName { get; } =
+        SeaTerrainCost.ToDictionary(kv => kv.Key.ToWireName(), kv => kv.Value);
+
+    /// <summary>
     /// Flat penalty charged, on top of terrain cost, for entering a river hex
     /// (issue #159 part A). Twice the median generated river's length and
     /// above the median detour-preferring penalty measured across 40 worlds
