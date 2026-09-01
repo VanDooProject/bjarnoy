@@ -10,7 +10,7 @@
 // to read correctly through the same shader — not a byte-for-byte port (see
 // fogMaskLayout.ts's own note on that being deliberately out of scope here).
 import type { AxialCoord } from '../../hex/coords';
-import { hexDistance } from '../../hex/coords';
+import { hexEuclideanDistance } from '../../hex/coords';
 import type { Settlement } from '../types';
 import type { WorldModel } from '../WorldModel';
 import {
@@ -23,8 +23,11 @@ import {
 } from './fogMaskLayout';
 
 // Mirrors FogMaskOptions' defaults (UnknownMarginHexes / OutOfSightMarginHexes)
-// — UNKNOWN_MARGIN_HEXES also matches HexMapRenderer's own FOG_MARGIN_HEXES.
-const UNKNOWN_MARGIN_HEXES = 10;
+// — UNKNOWN_MARGIN_HEXES also matches HexMapRenderer's own
+// FOG_RAMP_MARGIN_HEXES. All three describe the same ramp and have to move
+// together; see FogMaskOptions.UnknownMarginHexes for why a mismatch is
+// silent rather than an error.
+const UNKNOWN_MARGIN_HEXES = 14;
 const OUT_OF_SIGHT_MARGIN_HEXES = 2;
 
 // Demo worlds are boundless and procedurally generated on demand — there is
@@ -62,10 +65,25 @@ function visibleRadius(model: WorldModel, settlement: Settlement): number {
   return model.borderRadius(settlement) + 1;
 }
 
-function distanceBeyondVisible(model: WorldModel, settlements: Settlement[], hex: AxialCoord): number {
+/**
+ * Distance past the nearest source's ring, measured with the *round* metric
+ * (`hexEuclideanDistance`) rather than `hexDistance`.
+ *
+ * This is what makes the fog's contours circles instead of hexagons — see
+ * that function's own comment for why a hexDistance field can't produce a
+ * round edge no matter how much noise is thrown at it downstream. Mirrors
+ * the backend generator's RingDistance; the two have to agree or the live
+ * and demo fog are different shapes.
+ *
+ * Radii stay in hexes, as everywhere else. That is not a unit mismatch: the
+ * ring's own hexes all sit at euclidean distance <= their hex radius, so the
+ * 0 contour still encloses every hex the ring contains, and the ramp beyond
+ * it is round.
+ */
+function ringDistance(sources: Array<{ q: number; r: number; radius: number }>, hex: AxialCoord): number {
   let min = Infinity;
-  for (const settlement of settlements) {
-    const d = hexDistance({ q: settlement.q, r: settlement.r }, hex) - visibleRadius(model, settlement);
+  for (const source of sources) {
+    const d = hexEuclideanDistance({ q: source.q, r: source.r }, hex) - source.radius;
     if (d < min) min = d;
   }
   return min === Infinity ? Infinity : Math.max(0, min);
@@ -92,11 +110,17 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
     }
   }
 
-  // Pass 1: real hexes, straight from WorldModel's own explored/visible state.
+  const exploredSources = settlements.map((s) => ({ q: s.q, r: s.r, radius: model.exploredRadius(s) }));
+  const visibleSources = settlements.map((s) => ({ q: s.q, r: s.r, radius: visibleRadius(model, s) }));
+
+  // Pass 1: real hexes. `isExplored` still gates the unknown channel — that
+  // is WorldModel's own monotonic explored set (hex-counted, as gameplay
+  // reach always is), and no rendering metric should be able to fog a hex
+  // the player has actually scouted. Only the *ramp past* it is round.
   for (const texel of hexTexels) {
     const hex = toHex(texel);
-    const unknown = model.isExplored(hex.q, hex.r) ? 0 : ramp(model.distanceBeyondExplored(hex.q, hex.r), UNKNOWN_MARGIN_HEXES);
-    const outOfSight = ramp(distanceBeyondVisible(model, settlements, hex), OUT_OF_SIGHT_MARGIN_HEXES);
+    const unknown = model.isExplored(hex.q, hex.r) ? 0 : ramp(ringDistance(exploredSources, hex), UNKNOWN_MARGIN_HEXES);
+    const outOfSight = ramp(ringDistance(visibleSources, hex), OUT_OF_SIGHT_MARGIN_HEXES);
     cells[indexOf(texel)] = { unknown, outOfSight, noise: noiseSeed(hex) };
   }
 

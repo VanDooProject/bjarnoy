@@ -43,7 +43,7 @@ import type { Settlement, Terrain, Tile } from './types';
 import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer } from './fog/FogMaskLayer';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
@@ -144,7 +144,28 @@ export interface FogDebugFlags {
   realmBorders: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
+  /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
+  waveCull: boolean;
 }
+/**
+ * Fog knobs that are a *value* rather than an on/off — same debug-only
+ * status as FogDebugFlags, kept separate so that interface stays all-boolean
+ * (FogDebugPanel renders it as a checkbox per key, and its LABELS map is
+ * typed off it).
+ */
+export interface FogDebugTuning {
+  /**
+   * Multiplier on the cloud field's wind speed (FogMaskLayer's WIND). 1 is
+   * the shipped rate; the panel offers a slider around it so a better one
+   * can be found by eye, on a live map, instead of by rebuilding between
+   * guesses. Not persisted — a reload is back to 1.
+   */
+  driftSpeed: number;
+}
+export const fogDebugTuning: FogDebugTuning = {
+  driftSpeed: 1,
+};
+
 export const fogDebugFlags: FogDebugFlags = {
   maskUnknown: true,
   maskOutOfSight: true,
@@ -153,6 +174,7 @@ export const fogDebugFlags: FogDebugFlags = {
   showRawMask: false,
   realmBorders: true,
   terrainCull: true,
+  waveCull: true,
 };
 
 // Per-rebuild/per-frame stats, read by FogPerfPanel — §2.8's "what's
@@ -180,6 +202,10 @@ export interface FogPerfStats {
   markersMs: number;
   /** rebuildWaves: world-mode open-water squiggle placement (world mode only; 0 in settlement mode). */
   wavesMs: number;
+  /** Wave squiggles kept by rebuildWaves — the ones drawWaves re-strokes every frame. */
+  waveDrawnCount: number;
+  /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
+  waveCulledCount: number;
   /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
   /** Hexes in the current viewport rect — the size the above times scale with. */
@@ -200,6 +226,8 @@ export const fogPerfStats: FogPerfStats = {
   borderedHexCount: 0,
   markersMs: 0,
   wavesMs: 0,
+  waveDrawnCount: 0,
+  waveCulledCount: 0,
   totalMs: 0,
   hexCount: 0,
   maskFetchMs: 0,
@@ -469,7 +497,7 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 // explored radius is ~5 hexes, which at 0.85 filled almost the entire
 // default viewport on its own, hiding the fog entirely until the player
 // panned. zoomForFogMargin picks the real initial zoom (usually well below
-// this) so FOG_MARGIN_HEXES of fog is guaranteed visible from frame one.
+// this) so FOG_ZOOM_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // zip 6a: the landing page's pre-founding preview is a bit wider than the
 // settlement view's own default, so the single starter island reads as a
@@ -486,24 +514,53 @@ const PREVIEW_ISLAND_RADIUS = 7;
 const CAMERA_TRANSITION_MS = 1400;
 // How many hexes of white (unexplored) fog zoomForFogMargin guarantees
 // visible past the settlement's explored ring, on every side, at rest.
-const FOG_MARGIN_HEXES = 10;
+// Deliberately *not* FOG_RAMP_MARGIN_HEXES below, though it used to be the
+// same constant: widening the ramp so the mist has more room to fray must
+// not also pull the starting camera further out, which is a framing
+// decision with nothing to do with how the fog is shaded.
+const FOG_ZOOM_MARGIN_HEXES = 10;
+// Width, in hexes, of the mask's unknown ramp — the distance past a
+// settlement's explored ring that the R channel spends going 0 -> 255, and
+// therefore the entire budget the shader has to work with: past it the mask
+// is saturated and no amount of edge shaping can reach (fogShader.ts works
+// in ramp units, where 1.0 is exactly this many hexes).
+//
+// Must stay equal to the backend generator's FogMaskOptions.UnknownMarginHexes
+// and demoFogMask.ts's UNKNOWN_MARGIN_HEXES — the three describe the same
+// ramp, and a mismatch silently puts the live and demo fog edges at
+// different distances. Nothing derives it from the mask itself; a PNG
+// carries no metadata beyond its pixel dimensions.
+const FOG_RAMP_MARGIN_HEXES = 14;
 // Floor for zoomForFogMargin — a very high-level settlement's explored ring
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
-// Extra headroom (in hexes) added past where the v2 unknown ramp itself
-// saturates (FOG_MARGIN_HEXES) before terrain/border drawing stops
-// bothering — see FOG_TERRAIN_CULL_HEXES.
-const FOG_CULL_HEADROOM_HEXES = 3;
+// Step count per unit of straight-line hex distance, worst case (2/sqrt(3)).
+// The fog mask measures distance the round way (hexEuclideanDistance) while
+// the cull below counts steps, and a hex at straight-line distance d can be
+// up to this many steps away — so the cull radius has to be scaled by it or
+// it would clip ground the mist has not covered yet.
+const STEPS_PER_HEX_UNIT = 2 / Math.sqrt(3);
 // Past this many hexes beyond the explored ring, terrain is guaranteed to
-// sit under fully opaque unknown fog (the shader's own ramp — see
-// fogShader.ts — saturates well before this, so the headroom above is
-// generous, not exact): rebuildTerrain/rebuildTerrainFlat stop drawing
-// sprites/fills there, and rebuildBorders stops drawing borders, since
-// nothing could show through the mesh sitting over the whole viewport
+// sit under fully opaque unknown fog: rebuildTerrain/rebuildTerrainFlat stop
+// drawing sprites/fills there, and rebuildBorders stops drawing borders,
+// since nothing could show through the mesh sitting over the whole viewport
 // either way. isEntirelyDeepFog reuses the same threshold to skip an entire
 // deep-ocean viewport's worth of terrain/wave work in world mode.
-const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
+//
+// Derived rather than guessed, because guessing it is expensive in both
+// directions. Too small and ground pops into view at the cull boundary
+// under mist that hasn't gone opaque yet; too large and every rebuild pays
+// for sprites nothing can ever see — this radius is squared in the hex
+// count, so the difference between a tight bound and a generous one
+// measured ~30ms a frame on a software-rendered runner, which was enough to
+// tip two timing-sensitive e2e specs over. FOG_MIST_OPAQUE_AT_RAMP is the
+// point past which the shader's edge noise is fully shut off and the mist
+// is provably alpha 1 (fogShader.ts's edgeBand), and the step-count
+// conversion above is what makes the bound safe rather than merely close.
+const FOG_TERRAIN_CULL_HEXES = Math.ceil(
+  FOG_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP * STEPS_PER_HEX_UNIT,
+);
 // §1c's live army-vision radius, in hexes — mirrors the backend's
 // FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
 // history growth trigger; used here for the real-time shader reveal itself,
@@ -853,7 +910,7 @@ export class HexMapRenderer {
   }
 
   /**
-   * Picks the initial settlement zoom so at least FOG_MARGIN_HEXES of white
+   * Picks the initial settlement zoom so at least FOG_ZOOM_MARGIN_HEXES of white
    * (unexplored) fog is visible past the settlement's explored ring on
    * every side, without the camera ever having to pan first — the map
    * should read as continuing under fog from the very first frame, not
@@ -865,7 +922,7 @@ export class HexMapRenderer {
   private zoomForFogMargin(settlement: Settlement, center: { x: number; y: number }): number {
     if (this.viewport.width === 0 || this.viewport.height === 0) return SETTLEMENT_DEFAULT_ZOOM;
 
-    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_MARGIN_HEXES;
+    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_ZOOM_MARGIN_HEXES;
     let maxDx = 0;
     let maxDy = 0;
     for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, targetRadius)) {
@@ -1042,8 +1099,8 @@ export class HexMapRenderer {
     const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
     this.drawRangeOverlay();
     this.drawHighlight();
   };
@@ -1612,10 +1669,12 @@ export class HexMapRenderer {
       // the same opaque backdrop, so there's nothing to gain by refreshing
       // wavePoints for hexes that are entirely hidden.
       phaseStart = performance.now();
-      this.rebuildWaves();
+      this.rebuildWaves(coords, fogActive);
       fogPerfStats.wavesMs = performance.now() - phaseStart;
     } else {
       fogPerfStats.wavesMs = 0;
+      fogPerfStats.waveDrawnCount = 0;
+      fogPerfStats.waveCulledCount = 0;
     }
 
     fogPerfStats.hexCount = coords.length;
@@ -1821,10 +1880,30 @@ export class HexMapRenderer {
   // Recomputes which open-water grid points get a wave squiggle for the
   // current viewport — same cadence as terrain (only on a cull rebuild).
   // Animating them (drawWaves, every tick) is a separate, much cheaper step.
-  private rebuildWaves() {
+  //
+  // Cheap-first ordering matters here, because the grid this walks grows
+  // with the visible world rect and so with how far out the camera is
+  // zoomed: the density hash rejects ~38% for the cost of three multiplies,
+  // the fog cull is a few subtractions over an already-pruned source list,
+  // and isNearLand — 7 getTile lookups — runs only on what survives both.
+  private rebuildWaves(coords: AxialCoord[], fogActive: boolean) {
     const margin = TILE_W;
     const rect = visibleWorldRect(this.camera, this.viewport, margin);
     const points: WavePoint[] = [];
+    let culled = 0;
+
+    // Same threshold, and the same reasoning, as the terrain cull: past
+    // FOG_TERRAIN_CULL_HEXES the unknown ramp is saturated, so the mist
+    // mesh above these strokes is provably opaque and a wave drawn there
+    // cannot reach the screen. Unlike terrain this is not only a build-time
+    // saving — drawWaves re-strokes every surviving point *every frame*, so
+    // a wave kept here costs two quadratic curves per frame forever.
+    // rebuildAll's rect uses VISIBLE_RECT_MARGIN (2 * TILE_W) against this
+    // one's TILE_W, so coords strictly contains the wave grid and its
+    // bounds cannot prune a source that reaches a wave.
+    const fogSources =
+      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+    const culling = fogSources.length > 0;
 
     const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
     const xStart = Math.floor(rect.minX / WAVE_STEP_X) * WAVE_STEP_X;
@@ -1833,7 +1912,12 @@ export class HexMapRenderer {
         if (hash01(x, y, 1) > WAVE_DENSITY) continue;
         const jx = x + (hash01(x, y, 2) - 0.5) * WAVE_JITTER_X;
         const jy = y + (hash01(x, y, 3) - 0.5) * WAVE_JITTER_Y;
-        if (this.isNearLand(isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H))) continue;
+        const coord = isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H);
+        if (culling && this.isPastTerrainCull(coord.q, coord.r, fogSources)) {
+          culled++;
+          continue;
+        }
+        if (this.isNearLand(coord)) continue;
         points.push({
           x: jx,
           y: jy,
@@ -1843,6 +1927,8 @@ export class HexMapRenderer {
       }
     }
     this.wavePoints = points;
+    fogPerfStats.waveDrawnCount = points.length;
+    fogPerfStats.waveCulledCount = culled;
   }
 
   // zip 7 prototype's `vr-swell`: each wave nudges up-and-right and back,

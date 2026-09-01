@@ -2,7 +2,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { DEMO_MODE } from './config';
-import { fogDebugFlags } from './lib/map/HexMapRenderer';
+import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
@@ -28,4 +28,12 @@ if (DEMO_MODE) {
   // `window.__fogDebug.distJitter = false`; takes effect on the next
   // rebuild (any camera pan/zoom), it isn't itself a trigger.
   (window as unknown as { __fogDebug: typeof fogDebugFlags }).__fogDebug = fogDebugFlags;
+  // The non-boolean half of the same knob set (currently just the wind-speed
+  // multiplier) — see FogDebugTuning.
+  (window as unknown as { __fogTuning: typeof fogDebugTuning }).__fogTuning = fogDebugTuning;
+  // The read side of the same surface: the counters and phase timings
+  // FogPerfPanel renders, exposed so a script can read them too — the panel
+  // polls this object, so anything measuring a cull's effect (wave/terrain
+  // drawn vs culled) can sample it directly instead of scraping the DOM.
+  (window as unknown as { __fogPerf: typeof fogPerfStats }).__fogPerf = fogPerfStats;
 }

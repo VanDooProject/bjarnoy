@@ -19,8 +19,18 @@ public readonly record struct FogVisionSource(HexCoord Coord, int ExploredRadius
 /// </summary>
 public sealed record FogMaskOptions
 {
-    /// <summary>Ramp width, in hexes, of the R (unknown) channel.</summary>
-    public int UnknownMarginHexes { get; init; } = 10;
+    /// <summary>
+    /// Ramp width, in hexes, of the R (unknown) channel — and therefore the
+    /// whole budget the client's edge shading has to work with, since past
+    /// it the channel is saturated and nothing downstream can tell one
+    /// distance from another. Must stay equal to the frontend's
+    /// <c>FOG_RAMP_MARGIN_HEXES</c> (<c>HexMapRenderer.ts</c>) and
+    /// <c>UNKNOWN_MARGIN_HEXES</c> (<c>demoFogMask.ts</c>): the mask PNG
+    /// carries no metadata beyond its pixel dimensions, so a mismatch does
+    /// not fail anywhere, it just quietly puts the live and demo fog edges
+    /// at different distances from the realm.
+    /// </summary>
+    public int UnknownMarginHexes { get; init; } = 14;
 
     /// <summary>Ramp width, in hexes, of the G (out-of-sight) channel.</summary>
     public int OutOfSightMarginHexes { get; init; } = 2;
@@ -74,6 +84,13 @@ public static class FogMaskGenerator
     /// own hex falls inside it) — this method does not expand the query
     /// itself, it only bakes whatever sources it's given.
     /// </summary>
+    /// <summary>
+    /// Upper bound on step count per unit of euclidean hex distance (2/√3) —
+    /// see <see cref="MultiSourceDistance"/>'s remarks on why the enumeration
+    /// ring is widened by it.
+    /// </summary>
+    private const double StepsPerEuclideanUnit = 1.1547005383792517;
+
     public static FogMaskBuffer Generate(
         MaskBounds bounds,
         IReadOnlyList<FogVisionSource> sources,
@@ -162,8 +179,8 @@ public static class FogMaskGenerator
 
     /// <summary>
     /// For every hex texel in <paramref name="hexTexels"/>, the minimum over
-    /// all sources of <c>hexDistance(hex, source) - radius(source)</c> — i.e.
-    /// distance measured from each source's own ring boundary (a negative
+    /// all sources of <c>euclideanDistance(hex, source) - radius(source)</c> —
+    /// i.e. distance measured from each source's own ring boundary (a negative
     /// value inside the ring), not from the source hex itself. A hex with no
     /// source within <paramref name="cap"/> of its ring boundary has no
     /// entry in the result, which <see cref="GetOrMax"/>/<see cref="Ramp"/>
@@ -171,26 +188,42 @@ public static class FogMaskGenerator
     /// changes the baked ramp value, so it isn't computed.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The measure is <see cref="HexCoord.EuclideanDistance"/>, not
+    /// <see cref="HexCoord.Distance"/>: this ramp is rendered, not counted,
+    /// and a step-count field's contours are hexagons — see that method's
+    /// remarks. Radii stay whole hexes, which is not a unit mismatch: every
+    /// hex within a ring of radius r sits at euclidean distance &lt;= r, so
+    /// the 0 contour still encloses the whole ring and only the ramp beyond
+    /// it becomes round.
+    /// </para>
+    /// <para>
     /// Walks a bounded ring around each source directly (<see
     /// cref="HexCoord.WithinRadius"/>) rather than a true multi-source
     /// flood-fill: on an obstacle-free hex grid the two give identical
-    /// results, and this is simpler to keep correct. Cost is
-    /// <c>O(sources × (radius + cap)²)</c>, not <c>O(hexes)</c> — fine at
-    /// today's settlement counts and radii; swap in a real flood-fill later
-    /// if profiling ever shows this matters (the public API doesn't change).
+    /// results, and this is simpler to keep correct. The walk is widened by
+    /// 2/√3 because it enumerates by step count while the measure is
+    /// euclidean, and a hex at euclidean distance d can be up to 2/√3·d
+    /// steps away — without that, the far corners of the ramp would be
+    /// silently clipped. Cost is <c>O(sources × (radius + cap)²)</c>, not
+    /// <c>O(hexes)</c> — fine at today's settlement counts and radii; swap in
+    /// a real flood-fill later if profiling ever shows this matters (the
+    /// public API doesn't change).
+    /// </para>
     /// </remarks>
-    private static Dictionary<MaskTexel, int> MultiSourceDistance(
+    private static Dictionary<MaskTexel, double> MultiSourceDistance(
         HashSet<MaskTexel> hexTexels,
         IReadOnlyList<FogVisionSource> sources,
         Func<FogVisionSource, int> radiusOf,
         int cap)
     {
-        var distance = new Dictionary<MaskTexel, int>();
+        var distance = new Dictionary<MaskTexel, double>();
 
         foreach (var source in sources)
         {
             var radius = radiusOf(source);
-            var explore = Math.Max(0, radius) + Math.Max(0, cap);
+            var reach = Math.Max(0, radius) + Math.Max(0, cap);
+            var explore = (int)Math.Ceiling(reach * StepsPerEuclideanUnit);
 
             foreach (var hex in source.Coord.WithinRadius(explore))
             {
@@ -200,7 +233,7 @@ public static class FogMaskGenerator
                     continue;
                 }
 
-                var dist = HexCoord.Distance(hex, source.Coord) - radius;
+                var dist = HexCoord.EuclideanDistance(hex, source.Coord) - radius;
                 if (dist > cap)
                 {
                     continue;
@@ -216,8 +249,8 @@ public static class FogMaskGenerator
         return distance;
     }
 
-    private static int GetOrMax(Dictionary<MaskTexel, int> distance, MaskTexel texel) =>
-        distance.TryGetValue(texel, out var value) ? value : int.MaxValue;
+    private static double GetOrMax(Dictionary<MaskTexel, double> distance, MaskTexel texel) =>
+        distance.TryGetValue(texel, out var value) ? value : double.PositiveInfinity;
 
     /// <summary>
     /// Converts a signed ring distance into a <c>0..255</c> ramp value:
@@ -225,9 +258,9 @@ public static class FogMaskGenerator
     /// <paramref name="marginHexes"/> beyond it, linear in between. This is
     /// what §2.4's shader samples directly with no further distance math.
     /// </summary>
-    private static byte Ramp(int distance, int marginHexes)
+    private static byte Ramp(double distance, int marginHexes)
     {
-        if (distance == int.MaxValue)
+        if (double.IsPositiveInfinity(distance))
         {
             return 255;
         }
