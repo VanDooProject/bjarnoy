@@ -118,7 +118,15 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         // frontend build.
         builder.UseWebRoot(TestWebRootPath);
 
-        builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
+        // SetMinimumLevel only sets a fallback used when no rule matches, and
+        // appsettings.json's "Logging:LogLevel:Default": "Information" is
+        // itself a category-less rule, so it wins over that fallback and the
+        // app's own info logs (world generation, migrations, settlement
+        // service) still reach the console. AddFilter registers an explicit
+        // rule instead, which — being added after the configuration-based
+        // one — actually takes effect and keeps CI logs down to what a
+        // failing test needs to be findable in them.
+        builder.ConfigureLogging(logging => logging.AddFilter(null, LogLevel.Warning));
 
         builder.ConfigureServices(services =>
         {
