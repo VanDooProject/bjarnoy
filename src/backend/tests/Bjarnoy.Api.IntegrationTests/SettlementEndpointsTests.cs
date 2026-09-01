@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -274,6 +275,153 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             new FoundSettlementRequest(crossIslandId, crossPlot.Q, crossPlot.R, "Third realm", "Astrid", Unique("owner")),
             Ct);
         Assert.Equal(HttpStatusCode.Created, crossFounded.StatusCode);
+    }
+
+    /// <summary>
+    /// Regression coverage for <c>FoundAsync</c>'s two-phase spacing check
+    /// (<c>SettlementService.MinimumSpacing</c>/<c>FoundingSafetyMargin</c>):
+    /// phase 1 alone (a cheap, longhouse-only centre-to-centre distance
+    /// filter) cannot see a chain of Towers that has pushed a neighbour's
+    /// *real* claimed territory out past that fixed radius — only phase 2,
+    /// which reads the neighbour's actual current buildings live via
+    /// <see cref="Settlement.ClaimDiscsFor"/>, can. This plants a short chain
+    /// of max-level towers directly via <c>SettlementEntity.ApplyDomain</c>
+    /// (the same reconciliation <c>SettlementService</c> itself writes
+    /// through) rather than driving them through the real build queue —
+    /// chaining placement itself is already covered, terrain-free and DB-free,
+    /// by <c>SettlementTests.cs</c>'s own domain-level test; this one is
+    /// purely about whether <c>FoundAsync</c> actually consults that live
+    /// state instead of trusting the static distance constant alone.
+    /// </summary>
+    [Fact]
+    public async Task A_founding_attempt_beyond_the_cheap_spacing_filter_is_still_rejected_by_the_live_phase_two_check()
+    {
+        using var client = Client();
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        // Two start positions on the same island, far enough apart that the
+        // cheap phase-1 filter (MinimumSpacing, longhouse-only) alone would
+        // let the second one through — this is exactly the case phase 1 by
+        // itself cannot catch. Islands are large enough (seed 21/radius 60)
+        // that at least one has start positions spanning this far.
+        (Guid IslandId, TileCoordinate Centre, TileCoordinate Candidate)? pair = null;
+        foreach (var island in islands!)
+        {
+            for (var i = 0; i < island.StartPositions.Count && pair is null; i++)
+            {
+                for (var j = i + 1; j < island.StartPositions.Count; j++)
+                {
+                    var a = new HexCoord(island.StartPositions[i].Q, island.StartPositions[i].R);
+                    var b = new HexCoord(island.StartPositions[j].Q, island.StartPositions[j].R);
+                    if (a.DistanceTo(b) >= SettlementService.MinimumSpacing)
+                    {
+                        pair = (island.Id, island.StartPositions[i], island.StartPositions[j]);
+                        break;
+                    }
+                }
+            }
+
+            if (pair is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.True(pair is not null, "Seed 21/radius 60 no longer has an island with two start positions at least MinimumSpacing apart to exercise this.");
+        var (islandId, centrePlot, candidatePlot) = pair!.Value;
+        var centre = new HexCoord(centrePlot.Q, centrePlot.R);
+        var candidateCoord = new HexCoord(candidatePlot.Q, candidatePlot.R);
+
+        var founding = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(islandId, centrePlot.Q, centrePlot.R, "Bjornstad", "Ulf", Unique("owner")),
+            Ct);
+        Assert.Equal(HttpStatusCode.Created, founding.StatusCode);
+        var settlement = await founding.ReadStrictAsync<SettlementResponse>(Ct);
+
+        // Plant a short chain of max-level towers directly on the entity,
+        // stepping from centre toward the candidate, each landing within the
+        // last one's own satellite disc — this is what a player's real,
+        // already-standing buildings could look like; FoundAsync must read
+        // exactly this, not just the centre.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var entity = await dbContext.Settlements
+                .Include(s => s.Buildings)
+                .FirstAsync(s => s.Id == settlement.Id, Ct);
+            var domain = entity.ToDomain();
+
+            var line = HexLine(centre, candidateCoord);
+            var towerCoords = new[] { 0.4, 0.7, 0.95 }
+                .Select(fraction => line[(int)Math.Round(fraction * (line.Length - 1))])
+                .Distinct()
+                .ToList();
+
+            domain = domain with
+            {
+                Buildings =
+                [
+                    .. domain.Buildings.Where(b => b.Type != BuildingType.Tower),
+                    .. towerCoords.Select(c => new PlacedBuilding(c, BuildingType.Tower, BuildingCatalogue.MaxLevel)),
+                ],
+            };
+            entity.ApplyDomain(domain);
+            await dbContext.SaveChangesAsync(Ct);
+        }
+
+        var founded = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(islandId, candidateCoord.Q, candidateCoord.R, "Too close after all", "Astrid", Unique("owner")),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, founded.StatusCode);
+        Assert.Equal("TooCloseToNeighbour", await founded.RejectionAsync(Ct));
+    }
+
+    /// <summary>Standard cube-coordinate hex line: the sequence of hexes from <paramref name="a"/> to <paramref name="b"/> inclusive, one per step of their real hex distance.</summary>
+    private static HexCoord[] HexLine(HexCoord a, HexCoord b)
+    {
+        var steps = a.DistanceTo(b);
+        var result = new HexCoord[steps + 1];
+        for (var i = 0; i <= steps; i++)
+        {
+            var t = steps == 0 ? 0.0 : (double)i / steps;
+            result[i] = CubeRound(
+                a.Q + ((b.Q - a.Q) * t),
+                a.S + ((b.S - a.S) * t),
+                a.R + ((b.R - a.R) * t));
+        }
+
+        return result;
+    }
+
+    private static HexCoord CubeRound(double x, double y, double z)
+    {
+        double rx = Math.Round(x), ry = Math.Round(y), rz = Math.Round(z);
+        var xDiff = Math.Abs(rx - x);
+        var yDiff = Math.Abs(ry - y);
+        var zDiff = Math.Abs(rz - z);
+
+        if (xDiff > yDiff && xDiff > zDiff)
+        {
+            rx = -ry - rz;
+        }
+        else if (yDiff > zDiff)
+        {
+            ry = -rx - rz;
+        }
+        else
+        {
+            rz = -rx - ry;
+        }
+
+        return new HexCoord((int)rx, (int)rz);
     }
 
     [Fact]

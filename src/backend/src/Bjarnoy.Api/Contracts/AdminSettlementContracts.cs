@@ -75,12 +75,12 @@ public sealed record AdminSettlementHexResponse(
 
 /// <summary>The editable canvas for one settlement: every claimed hex, plus which building types may go on it.</summary>
 /// <param name="ClaimRadius">
-/// The centre disc's radius (<c>Settlement.ClaimRadius</c>) — the same disc
-/// <paramref name="Hexes"/> enumerates. Deliberately not the wider,
-/// tower-extended territory <c>Settlement.Claims</c> computes: a Tower's own
-/// satellite disc is claimed ground but not itself buildable-on, so it has
-/// no place in this build-editor canvas (see <c>Settlement.CentreClaims</c>'s
-/// remarks).
+/// The centre disc's own radius only (<c>Settlement.ClaimRadius</c>) — a
+/// single number the UI can display next to the longhouse level.
+/// <paramref name="Hexes"/> is the settlement's full claimed territory,
+/// including any Tower satellite discs (<c>Settlement.ClaimDiscs</c>), and
+/// is what the editor actually paints and what <c>PlaceBuilding</c> actually
+/// accepts — the two can disagree in extent once a Tower is standing.
 /// </param>
 public sealed record AdminSettlementLayoutResponse(
     Guid SettlementId,

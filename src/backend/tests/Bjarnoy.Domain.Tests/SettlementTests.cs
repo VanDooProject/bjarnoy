@@ -311,23 +311,26 @@ public class SettlementTests
     }
 
     [Fact]
-    public void New_construction_including_a_second_tower_is_scoped_to_the_centre_disc_only()
+    public void A_tower_can_be_built_inside_another_towers_satellite_disc_chaining_is_allowed()
     {
-        // Building placement is intentionally one disc, one hop from Centre
-        // — a tower is never itself a new foothold to build the next tower
-        // from. A hex reachable only via an existing tower's own satellite
-        // disc (not the centre disc) is exactly the shape that rule exists
-        // to describe: still refused for a new build, even though it already
-        // reads as claimed territory (Settlement.Claims) via that first
-        // tower. See Settlement.CentreClaims's remarks for why the combined-
-        // territory effect of multiple towers is realized by reading Claims
-        // live instead, not by letting placement chain through a tower.
+        // Settlement.Claims is the settlement's one claim predicate — it
+        // gates new building placement exactly the same as it answers
+        // territory-facing reads elsewhere. A hex reachable only via an
+        // existing tower's own satellite disc (not the centre disc) is still
+        // claimed ground, so a second tower may legitimately go there —
+        // chaining several towers this way, each one's disc opening up
+        // ground for the next, is the actual intended mechanism behind
+        // "a settlement with enough towers reads as an extended realm", not
+        // a loophole. See Settlement.Claims's remarks.
         var firstTower = new HexCoord(1, 0);
         var settlement = Found() with
         {
+            // Longhouse level 2, not 1: a new Tower's RequiredLonghouseLevel
+            // (BuildingCatalogue.Tower) is 2 at level 1 — this test is about
+            // the claim check, not the longhouse-prerequisite one.
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 1), // ClaimRadius == 1
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 2), // ClaimRadius == 2
                 new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 5
             ],
         };
@@ -336,13 +339,13 @@ public class SettlementTests
         // (distance 5 from firstTower, distance 6 from Centre — outside the
         // centre disc's radius of 1), not through the centre disc itself.
         var farHex = new HexCoord(6, 0);
+        Assert.True(Centre.DistanceTo(farHex) > settlement.ClaimRadius, "sanity: the centre disc alone should not reach this hex");
         Assert.True(settlement.Claims(farHex), "sanity: the union claim should already reach this hex via the first tower");
-        Assert.False(settlement.CentreClaims(farHex));
 
         var decision = settlement.PlanBuild(
             BuildingType.Tower, farHex, Terrain.Sand, T0, Guid.CreateVersion7());
 
-        Assert.Equal(BuildRejection.HexNotInSettlement, decision.Rejection);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]

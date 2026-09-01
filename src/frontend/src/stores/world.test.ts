@@ -273,7 +273,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
 describe('useWorldStore unclaimedStartPositions (spacing is per-island)', () => {
   const HOME_ISLAND = 'island-home';
   const OTHER_ISLAND = 'island-other';
-  // Well within MINIMUM_SETTLEMENT_SPACING (23) of the existing settlement
+  // Well within MINIMUM_SETTLEMENT_SPACING (13) of the existing settlement
   // at {0,0} on both islands below.
   const CLOSE_ON_HOME = { q: 2, r: 0 };
   const CLOSE_ON_OTHER = { q: 0, r: 2 };

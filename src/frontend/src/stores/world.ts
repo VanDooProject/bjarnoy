@@ -36,16 +36,20 @@ const LIVE_POLL_MS = 4000;
 // full websocket/animation loop, which the design doc explicitly defers.
 const ARMY_POLL_MS = 2000;
 
-// Mirrors the backend's SettlementService.MinimumSpacing: the minimum hex
-// distance the API enforces between two settlements' centres, sized so two
-// settlements can never have overlapping territory no matter how high either
-// one's longhouse and every Tower level up (see Settlement.MaxTerritoryReach's
-// own comment on the backend — a Tower extends territory from its own hex,
-// not the centre, so this accounts for a satellite disc, not just the centre
-// disc's own worst case). Kept in sync here so nearestStartPosition/
-// nearbyStartPositions can skip a plot the backend would reject instead of
-// finding out only after the founding request fails.
-const MINIMUM_SETTLEMENT_SPACING = 23;
+// Mirrors the backend's SettlementService.MinimumSpacing: founding's cheap,
+// longhouse-only pre-filter (centre-to-centre distance), sized so two
+// settlements' *centre discs alone* can never overlap even at max longhouse
+// level. This is only ever a hint here — the real, tower-aware safety net is
+// the backend's own live "phase 2" check (SettlementService.FoundAsync,
+// Settlement.ClaimDiscsFor), which reads every nearby settlement's actual
+// current buildings (Tower chains included) and has no static distance this
+// client could mirror; a settlement whose towers have chained territory out
+// past this radius can still make an otherwise-passing plot get rejected
+// server-side. Kept in sync here purely so nearestStartPosition/
+// nearbyStartPositions can skip the *obviously* too-close plots the backend
+// would reject via phase 1, without waiting on a request; it does not
+// replace the backend's own enforcement.
+const MINIMUM_SETTLEMENT_SPACING = 13;
 
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's

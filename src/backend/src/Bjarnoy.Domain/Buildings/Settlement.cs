@@ -76,13 +76,17 @@ public sealed record Settlement
 
     /// <summary>
     /// The largest <see cref="ClaimRadius"/> the centre disc alone can ever
-    /// reach (longhouse at <see cref="BuildingCatalogue.MaxLevel"/>). Kept
-    /// distinct from <see cref="MaxTerritoryReach"/>, which additionally
-    /// accounts for a satellite Tower disc and is the one
-    /// <c>SettlementService.MinimumSpacing</c> actually derives from — this
-    /// constant is retained for callers that only ever care about the centre
-    /// disc's own worst case (e.g. doc comments describing longhouse-only
-    /// growth).
+    /// reach (longhouse at <see cref="BuildingCatalogue.MaxLevel"/>). This is
+    /// deliberately <em>not</em> a bound on a settlement's full territory —
+    /// once Towers are involved there is no such fixed ceiling (a long enough
+    /// chain of towers, each built inside ground the last one's own disc
+    /// opened up, can in principle reach arbitrarily far from
+    /// <see cref="Centre"/>; see <see cref="Claims"/>'s remarks). This
+    /// constant is only ever used as founding's cheap, longhouse-only
+    /// pre-filter (<c>SettlementService.MinimumSpacing</c>'s "phase 1") — a
+    /// fast distance check that quickly rejects the obviously-too-close case
+    /// without needing to load anyone's building list, before the real,
+    /// tower-aware check runs.
     /// </summary>
     public const int MaxClaimRadius = 1 + (BuildingCatalogue.MaxLevel / 2);
 
@@ -94,114 +98,93 @@ public sealed record Settlement
     /// versus one per two longhouse levels) and, deliberately, with no "+1"
     /// floor: <see cref="ClaimRadius"/>'s floor exists because a settlement
     /// always has *some* territory just for existing, but a tower can only
-    /// ever be built on a hex the settlement's centre disc already reaches
-    /// (see <see cref="CentreClaims"/>'s use in <see cref="PlanBuild"/>), so
-    /// a freshly built level-1 tower needs no guaranteed reach of its own —
-    /// it is a bonus on top of ground already held, not a second foothold.
-    /// Product call: towers become a meaningfully sized expansion tool only
-    /// once levelled up, rather than instantly doubling border growth per
-    /// tower placed.
+    /// ever be built on ground the settlement already claims, so a freshly
+    /// built level-1 tower needs no guaranteed reach of its own. Product
+    /// call: towers become a meaningfully sized expansion tool only once
+    /// levelled up, rather than instantly doubling border growth per tower
+    /// placed.
     /// </summary>
     public static int TowerClaimRadius(int towerLevel) => Math.Max(0, towerLevel) / 2;
 
-    /// <summary>
-    /// The largest <see cref="TowerClaimRadius"/> a single tower can ever
-    /// reach (at <see cref="BuildingCatalogue.MaxLevel"/>).
-    /// </summary>
+    /// <summary>The largest a single tower's own satellite disc can ever reach on its own (at <see cref="BuildingCatalogue.MaxLevel"/>).</summary>
     public const int MaxTowerClaimRadius = BuildingCatalogue.MaxLevel / 2;
 
     /// <summary>
-    /// The farthest any hex of a settlement's territory can ever sit from its
-    /// own <see cref="Centre"/>, once towers are accounted for: the centre
-    /// disc's own worst case (<see cref="MaxClaimRadius"/>) plus the extra
-    /// reach a max-level tower sitting right at that disc's own edge adds
-    /// (<see cref="MaxTowerClaimRadius"/>). This bound is tight because a
-    /// tower's own reach is always exactly one hop from <see cref="Centre"/>
-    /// — new construction, towers included, is only ever placed inside the
-    /// centre disc (see <see cref="CentreClaims"/>'s remarks on why that is
-    /// the intended shape of the building-placement rule, not something a
-    /// tower could ever reach beyond). So the farthest a tower can ever stand
-    /// from centre is exactly <see cref="MaxClaimRadius"/>, and from there
-    /// its own disc reaches <see cref="MaxTowerClaimRadius"/> further still.
-    /// This, not the old single-disc <see cref="MaxClaimRadius"/>, is what
-    /// <c>SettlementService.MinimumSpacing</c> must be derived from: two
-    /// settlements' full territories (centre disc plus every tower satellite
-    /// disc) can never overlap, at any level either reaches, once their
-    /// centres are more than twice this apart.
+    /// Every disc that makes up the claimed territory described by
+    /// <paramref name="centre"/> and <paramref name="buildings"/>: the centre
+    /// disc first (sized by whatever Longhouse level <paramref name="buildings"/>
+    /// carries), then one satellite disc per standing
+    /// <see cref="BuildingType.Tower"/> in it, centred on that tower's own
+    /// <see cref="PlacedBuilding.Coord"/> rather than <paramref name="centre"/>.
+    /// The static, data-only twin of the instance <see cref="ClaimDiscs"/> —
+    /// exists so a caller that only has a settlement's raw
+    /// centre/buildings (e.g. a lightweight DB projection, rather than a full
+    /// <see cref="Settlement"/>) can still run the exact same union check;
+    /// <c>SettlementService.FoundAsync</c>'s founding-time spacing check is
+    /// exactly such a caller — see that method's remarks. A tower at any
+    /// level (including a level-0 foundation stub, which yields a
+    /// zero-radius disc — harmless, since that hex is already claimed by
+    /// construction) is included.
     /// </summary>
-    public const int MaxTerritoryReach = MaxClaimRadius + MaxTowerClaimRadius;
-
-    /// <summary>
-    /// Every disc that makes up this settlement's claimed territory: the
-    /// centre disc first, then one satellite disc per standing
-    /// <see cref="BuildingType.Tower"/>, centred on that tower's own
-    /// <see cref="PlacedBuilding.Coord"/> rather than <see cref="Centre"/>.
-    /// A tower at any level (including a level-0 foundation stub, which
-    /// yields a zero-radius disc — harmless, since that hex is already
-    /// claimed by construction) is included; <see cref="Claims"/> is simply
-    /// "does any of these discs reach this hex".
-    /// </summary>
-    public IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscs
+    public static IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscsFor(
+        HexCoord centre, IReadOnlyList<PlacedBuilding> buildings)
     {
-        get
+        ArgumentNullException.ThrowIfNull(buildings);
+
+        var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
+        yield return (centre, 1 + (longhouseLevel / 2));
+        foreach (var building in buildings)
         {
-            yield return (Centre, ClaimRadius);
-            foreach (var building in Buildings)
+            if (building.Type == BuildingType.Tower)
             {
-                if (building.Type == BuildingType.Tower)
-                {
-                    yield return (building.Coord, TowerClaimRadius(building.Level));
-                }
+                yield return (building.Coord, TowerClaimRadius(building.Level));
             }
         }
     }
 
+    /// <summary>This settlement's own claim discs — <see cref="ClaimDiscsFor"/> applied to its own <see cref="Centre"/>/<see cref="Buildings"/>.</summary>
+    public IEnumerable<(HexCoord Centre, int Radius)> ClaimDiscs => ClaimDiscsFor(Centre, Buildings);
+
     /// <summary>
     /// Hexes this settlement has claimed — the union of the centre disc and
     /// every Tower's own satellite disc (see <see cref="ClaimDiscs"/>), not
-    /// just the centre disc alone. This is the "does this settlement own
-    /// this ground at all" predicate for territory-facing concerns: display,
-    /// the fleet shoreline check, ship-training's coastal gate, and — outside
-    /// this codebase's own callers — the beginner-protection island-suggestion
-    /// design (<c>docs/design/beginner-protection.md</c>, branch
-    /// <c>claude/noob-shield-issue-132-zp7xi2</c>), whose live safety check
-    /// calls this directly against each nearby settlement's real current
-    /// buildings before ever offering a plot to a new player. Reading this
-    /// union live is exactly how "several towers together read as an
-    /// extended, stacked-looking realm" is meant to happen — from whatever
-    /// towers already stand, however they're arranged, with no need for any
-    /// of them to have been placed by reaching through one another. It is
-    /// deliberately <em>not</em> what gates placing a new building — see
-    /// <see cref="CentreClaims"/>.
-    /// </summary>
-    public bool Claims(HexCoord coord) => ClaimDiscs.Any(disc => disc.Centre.DistanceTo(coord) <= disc.Radius);
-
-    /// <summary>
-    /// Whether <paramref name="coord"/> sits inside the settlement's own
-    /// centre disc — <em>not</em> the tower-extended union <see cref="Claims"/>
-    /// computes. This, not <see cref="Claims"/>, is what
-    /// <see cref="PlanBuild"/>/<see cref="PlaceBuilding"/> gate new
-    /// construction (towers included) against.
+    /// just the centre disc alone. This is the settlement's <em>one</em>
+    /// claim predicate: it is what gates placing a new building
+    /// (<see cref="PlanBuild"/>/<see cref="PlaceBuilding"/>, another Tower
+    /// included) exactly the same as it is what territory-facing concerns —
+    /// display, the fleet shoreline check, ship-training's coastal gate —
+    /// read.
     /// </summary>
     /// <remarks>
-    /// Building placement is intentionally scoped to one disc, one hop from
-    /// <see cref="Centre"/> — a tower is never itself a new foothold to build
-    /// the next tower from. Combining several towers into a wider, stacked-
-    /// looking realm is a real and intended effect, but it comes entirely
-    /// from reading <see cref="Claims"/> live against whatever towers already
-    /// stand (see that method's own remarks on the beginner-protection design
-    /// that does exactly this) — never from letting placement itself reach
-    /// beyond the centre disc. Chaining placement through a tower's own
-    /// satellite disc was never part of that effect and stays out of scope
-    /// here: it would also make <see cref="MaxTerritoryReach"/> (and the
-    /// founding-time <c>SettlementService.MinimumSpacing</c> derived from it)
-    /// impossible to size, since there would be no fixed worst-case reach to
-    /// bound against. Keeping every new build pinned to the centre disc keeps
-    /// a tower's own reach exactly one hop from <see cref="Centre"/>, which
-    /// is what makes <see cref="MaxTerritoryReach"/>'s "one centre disc, one
-    /// tower disc" bound exact.
+    /// <para>
+    /// A new Tower may legitimately be built inside ground only an
+    /// <em>existing</em> tower's own satellite disc reaches, not the centre
+    /// disc — and from there its own disc can reach further still. Chaining
+    /// several towers this way is intended, not a loophole: it is the actual
+    /// mechanism behind "a settlement with enough towers reads as an
+    /// extended, stacked-looking realm" — no separate "buildable" radius
+    /// gates it back to the centre disc alone.
+    /// </para>
+    /// <para>
+    /// Because chaining is allowed, a settlement's full territory has no
+    /// fixed ceiling the way <see cref="ClaimRadius"/> alone does — there is
+    /// no analogue of the old <c>MaxTerritoryReach</c> to derive a safe,
+    /// static minimum founding distance from any more. That is why
+    /// <c>SettlementService.FoundAsync</c>'s spacing check is two-phase
+    /// instead: a cheap, longhouse-only pre-filter first
+    /// (<c>SettlementService.MinimumSpacing</c>, derived from
+    /// <see cref="MaxClaimRadius"/> alone), then a real call to this method
+    /// (via <see cref="ClaimDiscsFor"/>) against each nearby settlement's
+    /// actual current buildings, towers included, plus a small fixed safety
+    /// margin — see that method's remarks. The beginner-protection
+    /// island-suggestion design (<c>docs/design/beginner-protection.md</c>,
+    /// branch <c>claude/noob-shield-issue-132-zp7xi2</c>) applies the same
+    /// two-phase pattern independently, for the same reason, at its own call
+    /// site — it is not unified with <c>FoundAsync</c>'s check, just built on
+    /// the same idea.
+    /// </para>
     /// </remarks>
-    public bool CentreClaims(HexCoord coord) => Centre.DistanceTo(coord) <= ClaimRadius;
+    public bool Claims(HexCoord coord) => ClaimDiscs.Any(disc => disc.Centre.DistanceTo(coord) <= disc.Radius);
 
     /// <summary>
     /// This settlement's leaderboard score (issue #43): the triangular number
@@ -588,7 +571,7 @@ public sealed record Settlement
         double speedFactor = 1.0,
         bool isCoastalWater = false)
     {
-        if (!CentreClaims(coord))
+        if (!Claims(coord))
         {
             return BuildDecision.Rejected(BuildRejection.HexNotInSettlement);
         }
@@ -836,7 +819,7 @@ public sealed record Settlement
         IReadOnlyList<UnitStack>? guestStacks = null,
         Func<HexCoord, Terrain>? terrainAt = null)
     {
-        if (!CentreClaims(coord))
+        if (!Claims(coord))
         {
             return AdminBuildingEditResult.Rejected(AdminBuildingEditRejection.HexNotInSettlement);
         }
