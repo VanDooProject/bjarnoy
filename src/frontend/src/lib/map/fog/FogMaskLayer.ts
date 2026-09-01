@@ -11,12 +11,61 @@ export type FogTier = 'outOfSight' | 'unknown';
 /** How long a newly-set mask texture takes to fully cross-fade in (§2.6). */
 const REVEAL_FADE_MS = 600;
 
-// Amplitude of the UV warp's two octaves, in UV (texel-fraction) units —
-// picked directly in that space rather than converted from "hexes" (the
-// design doc's own unit): the ratio of hexes to texels varies with world
-// size, and a UV-space amplitude gives the same visual wobble regardless.
-const WARP_AMPLITUDE: [number, number] = [0.006, 0.006];
-const WIND: [number, number] = [0.015, -0.01];
+// --- Vision-edge shaping (fogShader.ts's tierAlpha) ------------------------
+//
+// Everything below is in *ramp units*: 0 is the tier's own ring, 1 is the
+// generator's full margin for that tier — 10 hexes for unknown
+// (UNKNOWN_MARGIN_HEXES / FogMaskOptions.UnknownMarginHexes), 2 for
+// out-of-sight. So 0.1 of the unknown ramp is one hex, and 0.1 of the
+// out-of-sight ramp is a fifth of one.
+
+/**
+ * Where the never-scouted mist starts (x) and reaches full opacity (y).
+ * Half a hex past the explored ring to three and a third: the raw 0→10-hex
+ * ramp the mask bakes is an airbrush hundreds of pixels deep, with no edge
+ * in it to make organic in the first place, and it leaves the sea around a
+ * realm bare for ten hexes in every direction. Past `y` the mist is fully
+ * opaque and stays that way — deep fog is not supposed to be see-through.
+ */
+const UNKNOWN_EDGE: [number, number] = [0.05, 0.33];
+/**
+ * Same for the scouted-but-out-of-sight tint, over its own 2-hex ramp: a
+ * third of a hex past the line-of-sight ring to one and two thirds, so the
+ * grey band lands inside the explored ring (WorldModel's FOG_SCOUT_RING)
+ * rather than washing over the mist beyond it.
+ */
+const OUT_OF_SIGHT_EDGE: [number, number] = [0.15, 0.85];
+/**
+ * Peak-to-peak displacement of each tier's edge by the drifting cloud field
+ * — [unknown, outOfSight]. 0.26 of the unknown ramp is ±1.3 hexes, which is
+ * comfortably more than the one-hex spacing of the mask's integer
+ * `hexDistance` contours: that is the amplitude at which the hexagonal
+ * rings stop being legible as straight edges.
+ */
+const EDGE_NOISE: [number, number] = [0.26, 0.4];
+/**
+ * Displacement by the mask's baked per-hex seed (§2.2's B channel), same
+ * units. Deliberately well under EDGE_NOISE — this adds per-hex grain to
+ * the edge, but pushed further it starts re-imposing the hex silhouette the
+ * cloud noise exists to break.
+ */
+const SEED_JITTER: [number, number] = [0.1, 0.14];
+/**
+ * Reciprocal of the cloud field's largest feature size, in world units.
+ * TILE_W is 168 world units, so 1/560 puts the coarsest billow at ~3.3
+ * hexes and (three octaves at ~2× each) the finest detail just under one.
+ */
+const NOISE_SCALE = 1 / 560;
+/**
+ * Cloud drift, in noise-space units per second — divide by NOISE_SCALE for
+ * world units, so this is ~28 × ~17 world units/s, about one hex every six
+ * seconds diagonally. Slow enough to read as weather rather than a scrolling
+ * texture, fast enough that the edge visibly moves while you look at it —
+ * the shipped values were ~30× slower than this *and* attached to a
+ * displacement ~40× smaller (see fogShader.ts's header), which together is
+ * why the drift appeared not to run at all.
+ */
+const WIND: [number, number] = [0.05, -0.03];
 
 let sharedGlProgram: GlProgram | null = null;
 function fogGlProgram(): GlProgram {
@@ -97,7 +146,11 @@ export class FogMaskLayer {
       uScoutedColor: { value: new Float32Array([scoutedR, scoutedG, scoutedB]), type: 'vec3<f32>' },
       uUnexploredColor: { value: new Float32Array([unexploredR, unexploredG, unexploredB]), type: 'vec3<f32>' },
       uScoutedAlpha: { value: colors.scoutedAlpha, type: 'f32' },
-      uWarp: { value: new Float32Array(WARP_AMPLITUDE), type: 'vec2<f32>' },
+      uUnknownEdge: { value: new Float32Array(UNKNOWN_EDGE), type: 'vec2<f32>' },
+      uOutOfSightEdge: { value: new Float32Array(OUT_OF_SIGHT_EDGE), type: 'vec2<f32>' },
+      uEdgeNoise: { value: new Float32Array(EDGE_NOISE), type: 'vec2<f32>' },
+      uSeedJitter: { value: new Float32Array(SEED_JITTER), type: 'vec2<f32>' },
+      uNoiseScale: { value: NOISE_SCALE, type: 'f32' },
       uTime: { value: 0, type: 'f32' },
       uWind: { value: new Float32Array(WIND), type: 'vec2<f32>' },
       uMaskBlend: { value: 1, type: 'f32' },
@@ -157,21 +210,27 @@ export class FogMaskLayer {
   }
 
   /**
-   * §2.8's real (functional, not cosmetic) debug toggles: `warp` zeroes the
-   * UV warp amplitude entirely (a dead-straight ring edge, same diagnostic
-   * value as v1's distJitter off); `showRawMask` bypasses the warp and tier
-   * compositing, rendering the fetched mask texture unmodified.
+   * §2.8's real (functional, not cosmetic) debug toggles: `warp` zeroes both
+   * edge-noise amplitudes, leaving the mask's raw `hexDistance` ramp to
+   * shape the boundary on its own — the fog boundary snaps back to visible
+   * concentric hexagons, which is the same diagnostic value v1's distJitter
+   * toggle had and a direct read on how much work the noise is doing.
+   * `showRawMask` bypasses the edge shaping and tier compositing entirely,
+   * rendering the fetched mask texture unmodified.
    */
   setDebug(opts: { warpEnabled: boolean; showRawMask: boolean }): void {
-    const warp = this.uniforms.uniforms.uWarp as Float32Array;
-    warp[0] = opts.warpEnabled ? WARP_AMPLITUDE[0] : 0;
-    warp[1] = opts.warpEnabled ? WARP_AMPLITUDE[1] : 0;
+    const edgeNoise = this.uniforms.uniforms.uEdgeNoise as Float32Array;
+    edgeNoise[0] = opts.warpEnabled ? EDGE_NOISE[0] : 0;
+    edgeNoise[1] = opts.warpEnabled ? EDGE_NOISE[1] : 0;
+    const seedJitter = this.uniforms.uniforms.uSeedJitter as Float32Array;
+    seedJitter[0] = opts.warpEnabled ? SEED_JITTER[0] : 0;
+    seedJitter[1] = opts.warpEnabled ? SEED_JITTER[1] : 0;
     this.uniforms.uniforms.uShowRaw = opts.showRawMask ? 1 : 0;
   }
 
   /**
-   * Advances uTime (the UV warp's animation clock, unless `driftEnabled` is
-   * false — §2.8's drift toggle freezes the warp pattern in place) and the
+   * Advances uTime (the cloud field's animation clock, unless `driftEnabled`
+   * is false — §2.8's drift toggle freezes the fog edge in place) and the
    * reveal cross-fade, if one is running.
    */
   tick(nowMs: number, driftEnabled: boolean): void {
