@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
+import { distanceFrom, foundSettlement, rectsOf } from './helpers';
 
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
@@ -42,8 +42,16 @@ test.describe('ring menu drill-down', () => {
     let drilled = false;
     for (const [dx, dy] of offsets) {
       await page.mouse.click(cx + dx, cy + dy);
-      await page.waitForTimeout(150);
       const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' });
+      // Wait for the ring to actually appear rather than sleeping a flat
+      // 150ms and hoping. On a runner where one frame costs 200ms+, that
+      // sleep expires before the ring renders and a perfectly good tile
+      // gets discarded as unbuildable — burning an offset, and eventually
+      // the test's whole budget (issue #167). This is the same move
+      // foundSettlement() already makes with waitForMapReady(): a condition
+      // wait, not a longer timeout. A tile that genuinely has no ring still
+      // costs only the 2s cap, and only on the offsets that miss.
+      await buildBubble.first().waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {});
       if ((await buildBubble.count()) === 0 || (await buildBubble.getAttribute('disabled')) !== null) {
         await page.mouse.click(20, 20);
         await page.waitForTimeout(80);
@@ -65,27 +73,33 @@ test.describe('ring menu drill-down', () => {
       const rootBuildDist = Math.hypot(rootBuildBox.x + rootBuildBox.width / 2 - (cx + dx), rootBuildBox.y + rootBuildBox.height / 2 - (cy + dy));
 
       const categoryBubbles = page.locator('.ring-bubble').filter({ hasNotText: /^Details$|^Build$/ });
-      const categoryCount = await categoryBubbles.count();
-      expect(categoryCount).toBeGreaterThan(0);
-      for (let i = 0; i < categoryCount; i++) {
-        const bubble = categoryBubbles.nth(i);
-        await expect(bubble).toBeVisible();
+      // rectsOf snapshots synchronously, where the per-bubble
+      // toBeVisible() this replaces used to auto-wait — so keep one
+      // auto-waiting assertion to let the ring finish opening, then read
+      // all of them at once. One round trip's worth of waiting instead of
+      // N. See rectsOf's own comment for why the N mattered.
+      await expect(categoryBubbles.first()).toBeVisible();
+      const categoryRects = await rectsOf(categoryBubbles);
+      expect(categoryRects.length).toBeGreaterThan(0);
+      for (const rect of categoryRects) {
+        expect(rect.visible, `category bubble "${rect.text}" should be visible`).toBe(true);
         // Every category bubble sits on a wider orbit than the root ring's
         // own "Build" bubble — that's what "concentric ... moving out"
         // means, as opposed to just being present anywhere on screen.
-        const bBox = (await bubble.boundingBox())!;
-        const dist = Math.hypot(bBox.x + bBox.width / 2 - (cx + dx), bBox.y + bBox.height / 2 - (cy + dy));
-        expect(dist).toBeGreaterThan(rootBuildDist);
+        expect(distanceFrom(rect, cx + dx, cy + dy)).toBeGreaterThan(rootBuildDist);
       }
       // The tile's own hover tooltip must stay suppressed throughout —
       // this is the regression from the first correction: it used to
       // render on top of exactly these freshly opened bubbles.
       await expect(page.locator('.hex-tooltip')).toBeHidden();
 
-      const categoryTexts = await categoryBubbles.allTextContents();
-      const firstCategory = categoryBubbles.first();
-      const fb = (await firstCategory.boundingBox())!;
-      await page.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2, { steps: 6 });
+      const categoryTexts = categoryRects.map((r) => r.text);
+      const firstCategoryRect = categoryRects[0];
+      await page.mouse.move(
+        firstCategoryRect.x + firstCategoryRect.width / 2,
+        firstCategoryRect.y + firstCategoryRect.height / 2,
+        { steps: 6 },
+      );
       await page.waitForTimeout(250);
 
       // Drilling one level deeper (into a category's building list) must
@@ -97,16 +111,13 @@ test.describe('ring menu drill-down', () => {
         await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(1);
       }
       const buildingBubbles = page.locator('.ring-bubble').filter({ hasNotText: /^Details$|^Build$/ }).filter({ hasNotText: new RegExp(`^(${categoryTexts.join('|')})$`) });
-      const buildingCount = await buildingBubbles.count();
-      expect(buildingCount).toBeGreaterThan(0);
-      const categoryBox = (await firstCategory.boundingBox())!;
-      const categoryDist = Math.hypot(categoryBox.x + categoryBox.width / 2 - (cx + dx), categoryBox.y + categoryBox.height / 2 - (cy + dy));
-      for (let i = 0; i < buildingCount; i++) {
-        const bubble = buildingBubbles.nth(i);
-        await expect(bubble).toBeVisible();
-        const bBox = (await bubble.boundingBox())!;
-        const dist = Math.hypot(bBox.x + bBox.width / 2 - (cx + dx), bBox.y + bBox.height / 2 - (cy + dy));
-        expect(dist).toBeGreaterThan(categoryDist);
+      await expect(buildingBubbles.first()).toBeVisible();
+      const buildingRects = await rectsOf(buildingBubbles);
+      expect(buildingRects.length).toBeGreaterThan(0);
+      const categoryDist = distanceFrom(firstCategoryRect, cx + dx, cy + dy);
+      for (const rect of buildingRects) {
+        expect(rect.visible, `building bubble "${rect.text}" should be visible`).toBe(true);
+        expect(distanceFrom(rect, cx + dx, cy + dy)).toBeGreaterThan(categoryDist);
       }
       await expect(page.locator('.hex-tooltip')).toBeHidden();
 
