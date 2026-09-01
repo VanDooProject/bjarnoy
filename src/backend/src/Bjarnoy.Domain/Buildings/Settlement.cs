@@ -1176,16 +1176,56 @@ public sealed record Settlement
 
         if (builds)
         {
-            // Promote every waiting order first, spending each reservation
-            // where affordable, so god mode empties the whole queue —
-            // including the premium waiting tail — rather than stalling on
-            // slot limits. maxWaitingOrders/maxOrdersPerHex do not apply here:
-            // this is an admin bypass, not a new plan.
-            (settlement, _) = settlement.PromoteWaitingOrders(now);
-            settlement = settlement with
+            // God mode bypasses slot limits entirely, not just this once —
+            // ordinary PromoteWaitingOrders is deliberately slot-gated (that
+            // is the whole feature it exists for), so it cannot be reused
+            // here: the still-building orders below are about to be marked
+            // due in this very call, but PromoteWaitingOrders would see them
+            // as still occupying their slots and refuse to promote anything
+            // behind them. Every waiting order is instead spent and started
+            // directly, ignoring FreeSlots, so instant build always empties
+            // the whole queue in one pass — including the premium waiting
+            // tail — never stalling on slot limits. maxWaitingOrders/
+            // maxOrdersPerHex do not apply here either: this is an admin
+            // bypass, not a new plan.
+            var queue = settlement.Queue.ToList();
+            var buildings = settlement.Buildings.ToList();
+            var resources = settlement.Resources;
+
+            for (var i = 0; i < queue.Count; i++)
             {
-                Queue = [.. settlement.Queue.Select(o => o.IsComplete(now) ? o : o with { CompletesAt = now })],
-            };
+                var order = queue[i];
+                if (order.IsComplete(now))
+                {
+                    continue;
+                }
+
+                if (order.IsWaiting)
+                {
+                    var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+                    if (!resources.TrySpend(definition.Cost, now, out var paid))
+                    {
+                        // Defensive only: reserved resources should already
+                        // cover this. Leave it waiting rather than starting
+                        // an order that was never actually paid for.
+                        continue;
+                    }
+
+                    resources = paid;
+                    if (!buildings.Any(b => b.Coord == order.Coord))
+                    {
+                        buildings.Add(new PlacedBuilding(order.Coord, order.Type, Level: 0));
+                    }
+
+                    queue[i] = order with { StartedAt = now, CompletesAt = now };
+                }
+                else
+                {
+                    queue[i] = order with { CompletesAt = now };
+                }
+            }
+
+            settlement = settlement with { Queue = queue, Buildings = buildings, Resources = resources };
         }
 
         if (training)
