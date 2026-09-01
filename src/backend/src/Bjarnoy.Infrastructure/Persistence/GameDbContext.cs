@@ -80,6 +80,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<UserActivitySessionEntity> UserActivitySessions => Set<UserActivitySessionEntity>();
 
+    public DbSet<PlayerExploredEntity> PlayerExplored => Set<PlayerExploredEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -815,6 +817,24 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Retention (a later PR) sweeps by age.
             session.HasIndex(s => s.StartedAtUtc);
+        });
+
+        modelBuilder.Entity<PlayerExploredEntity>(explored =>
+        {
+            explored.ToTable("player_explored");
+            explored.HasKey(e => e.Id);
+            explored.Property(e => e.Id).ValueGeneratedNever();
+            explored.Property(e => e.OwnerId).IsRequired();
+
+            // One row per player per world — FogMaskService reads/writes it
+            // by this exact pair every call, and it's what "the same player
+            // asking again" means for this table.
+            explored.HasIndex(e => new { e.WorldId, e.OwnerId }).IsUnique();
+
+            explored.HasOne(e => e.World)
+                .WithMany()
+                .HasForeignKey(e => e.WorldId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

@@ -23,6 +23,45 @@ inversion needed. Confirmed before baking ramp/color logic into the backend
 generator, since flipping it later means redoing both the C# and TS ramp
 implementations.
 
+**The two tiers are nested, not adjacent.** Ground that was never scouted is
+also, necessarily, not in sight right now — "never been there" implies "can't
+see it now." So `unknown ⊆ outOfSight` as sets: **wherever white mist
+applies, black fog applies too.** The mask's own two channels already encode
+it that way — R (unknown) is measured past the *explored* ring, G
+(out-of-sight) past the *line-of-sight* ring, and the explored ring is
+always the outer of the two (`WorldModel.exploredRadius` is
+`borderRadius + FOG_SCOUT_RING`, `visibleHexes` only `borderRadius + 1`) —
+so any texel with R > 0 has G already saturated.
+
+That invariant is what makes the layer stack in §4 correct as a plain stack:
+
+- **The dark tier is a full underlay.** Everything outside current line of
+  sight is tinted, all the way out to the edge of the world. Its ramp
+  saturating a couple of hexes past the visible ring and then staying
+  saturated forever is the intended behaviour, not an unbounded-tint bug —
+  it is exactly "the whole world except what I can see".
+- **The mist quad simply covers it up** wherever the mist is opaque. The
+  dark band you actually see is therefore the window where the mist above
+  has not gone fully opaque yet — its width is set by where the mist ramp
+  turns over (`UNKNOWN_EDGE` in `FogMaskLayer.ts`), not by anything in the
+  G channel.
+
+Two consequences worth stating so they aren't "fixed" later by someone
+reading only one tier's code:
+
+- Masking the dark tier by the mist (`outOfSight * (1 - unknown)`), or
+  bounding it to the explored ring, is **wrong** — it deletes the underlay
+  the stack depends on and leaves the mist's own transition band sitting on
+  bare terrain.
+- §2.4's fragment pseudocode composites the two tiers in one expression
+  instead (`rgb = mix(SCOUTED, UNEXPLORED, unknown)`,
+  `alpha = max(unknown, outOfSight * SCOUTED_ALPHA)`), which is a *different*
+  result from stacking two premultiplied quads: the mix keeps more terrain
+  readable through the transition band, the stack is darker there. §4's
+  two-quad split (needed so troop markers can sit between the tiers) means
+  the shipped renderer is the stack. Deliberate — noted here because the
+  two are easy to mistake for each other.
+
 ### 1a. Guild shared vision — new requirement, not in the original plan
 
 As long as a player is in a guild, they share vision with guildmates. This
@@ -73,7 +112,17 @@ on every member's settlement change. Both are needed.
 
 ### 1c. Option C — live layer, never cached, composited in the shader
 
-Live army-granted vision — not implemented today, design for it anyway.
+**Implemented.** `fogShader.ts`'s `uArmyVisionSources`/`uArmyVisionCount`/
+`uArmyVisionRadius` uniforms, uploaded every tick by `HexMapRenderer` from
+its own already-computed live army render positions (`resolveArmyPoint`,
+reused as-is), composited as a multiplicative reveal on the ramp values —
+never written into `uMask`/`uMaskPrev`, exactly as designed below. The
+vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
+`ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
+unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
+number from.
+
+Live army-granted vision — the rest of this section is the original design.
 
 Checked: nothing in `WorldModel.ts` currently derives visibility from army
 position — `explored`/`visibleHexes` are purely settlement-derived. But
@@ -143,6 +192,20 @@ stays float and smooth; only the answer, when a hex-shaped answer is
 asked for, is hex-shaped.
 
 ### 1e. Persisted explored history — third input, adopted
+
+**Implemented, whole-world rather than per-chunk.** `PersistedExploredBitset`
+(pure bit-packing, `Bjarnoy.Domain.World`) + `PlayerExploredEntity`
+(`Bjarnoy.Infrastructure`, one row per `(WorldId, OwnerId)`) + `FogMaskService`
+OR-ing in each settlement's explored ring and each in-transit army's
+walked-over ground (§1c's radius, but only ever *appended*, never the live
+per-frame bonus itself) on every call, saved back only when it actually
+grew. Chunked delivery (§3) still isn't built anywhere in this codebase, so
+this keys by `(WorldId, OwnerId)` rather than the `(playerId, worldId,
+chunkCoord)` this section originally specified — splitting the bitset per
+chunk is real follow-up work for whenever §3 lands, not something to
+half-build ahead of it. Guild-wide merging (§1a) isn't implemented either —
+the persisted set today is exactly the requesting player's own history,
+same single-player scope as everything else in this file's §1a note.
 
 An external review of this doc caught a real gap: §1 defines black fog as
 *history* ("you've been here, can't see it now"), but Option B's cache key

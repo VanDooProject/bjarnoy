@@ -43,8 +43,8 @@ import type { Settlement, Terrain, Tile } from './types';
 import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, type FogMaskPlacement } from './fog/FogMaskLayer';
-import { worldMaskBounds } from './fog/fogMaskLayout';
+import { FogMaskLayer } from './fog/FogMaskLayer';
+import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -498,6 +498,14 @@ const FOG_CULL_HEADROOM_HEXES = 3;
 // either way. isEntirelyDeepFog reuses the same threshold to skip an entire
 // deep-ocean viewport's worth of terrain/wave work in world mode.
 const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
+// §1c's live army-vision radius, in hexes — mirrors the backend's
+// FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
+// history growth trigger; used here for the real-time shader reveal itself,
+// see fogShader.ts's own remarks on why the two stay out of sync-free of
+// each other despite sharing this one number). TILE_W approximates "one hex"
+// in world-space distance the same way NOISE_SCALE (FogMaskLayer.ts) does —
+// good enough for a soft visual radius, not a gameplay-precision distance.
+const ARMY_VISION_RADIUS_HEXES = 2;
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
@@ -2279,11 +2287,7 @@ export class HexMapRenderer {
   setFogMask(radius: number, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
 
-    const bounds = worldMaskBounds(radius);
-    const placement: FogMaskPlacement = {
-      scale: [1 / (0.75 * TILE_W * bounds.width), 2 / (TILE_H * bounds.height)],
-      offset: [-bounds.minU / bounds.width, -bounds.minV / bounds.height],
-    };
+    const placement = fogMaskPlacement(radius, TILE_W, TILE_H);
     this.blackFogLayer.setPlacement(placement);
     this.whiteMistLayer.setPlacement(placement);
 
@@ -2531,8 +2535,14 @@ export class HexMapRenderer {
     // authoritative hex while standing. Gold for the one currently selected,
     // muted blue for everything else, grey for one already turned around and
     // heading home.
+    const armyVisionPoints: { x: number; y: number }[] = [];
     for (const army of overlay.armies) {
       const point = this.resolveArmyPoint(army, now);
+      // §1c: only a travelling army grants live vision — one standing at
+      // home or as a guest garrison already sits inside its settlement's own
+      // explored/visible rings, same scope as the backend's own in-transit-
+      // only condition (FogMaskService.GeneratePlayerMaskAsync).
+      if (army.movement) armyVisionPoints.push({ x: point.x, y: point.y });
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
@@ -2562,6 +2572,13 @@ export class HexMapRenderer {
       // pole drawn upward from the position reads as hovering above the map.
       this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
     }
+
+    // §1c: pushed every tick, independent of any mask fetch — see
+    // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
+    // of the cached mask texture entirely.
+    const armyVisionRadiusWorld = ARMY_VISION_RADIUS_HEXES * TILE_W;
+    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
+    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
 
     // Armies that have gone away (arrived home and been folded back) would
     // otherwise keep their easing state forever.
