@@ -502,6 +502,7 @@ public sealed class TradeService(
             .Include(s => s.World)
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
+            .Include(s => s.Runes)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
     private async Task PersistSettlementIfChangedAsync(

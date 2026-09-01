@@ -459,13 +459,15 @@ export const useWorldStore = defineStore('world', {
      */
     async slotRuneLive(runeId: string, at: AxialCoord) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.slotRune(this.selectedSettlementId, runeId, { q: at.q, r: at.r });
+      await api.slotRune(
+        this.selectedSettlementId, runeId, { q: at.q, r: at.r }, this.ownerId ?? undefined,
+      );
       await this.refreshLiveSettlement();
     },
     /** Live mode: returns a slotted rune to storage, then refreshes. Mirrors `slotRuneLive`. */
     async unslotRuneLive(runeId: string) {
       if (!this.selectedSettlementId) throw new Error('No settlement selected');
-      await api.unslotRune(this.selectedSettlementId, runeId);
+      await api.unslotRune(this.selectedSettlementId, runeId, this.ownerId ?? undefined);
       await this.refreshLiveSettlement();
     },
     /**

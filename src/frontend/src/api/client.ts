@@ -171,15 +171,17 @@ export const api = {
       body: JSON.stringify(body),
       headers: ownerHeader(ownerId),
     }),
-  slotRune: (settlementId: string, runeId: string, body: SlotRuneRequest) =>
+  slotRune: (settlementId: string, runeId: string, body: SlotRuneRequest, ownerId?: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/slot`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
-  unslotRune: (settlementId: string, runeId: string) =>
+  unslotRune: (settlementId: string, runeId: string, ownerId?: string) =>
     request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/unslot`, {
       method: 'POST',
       body: JSON.stringify({}),
+      headers: ownerHeader(ownerId),
     }),
   // Refunds the order's cost and, for a brand-new building, clears its
   // level-0 foundation stub (see Settlement.CancelBuild) — same ownership

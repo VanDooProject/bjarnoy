@@ -810,6 +810,7 @@ public sealed class SettlementService(
 
         return (settlement, clock, now, settled, settleResult, guestArmies, guestStacks);
     }
+
     public Task<List<SettlementEntity>> GetForWorldAsync(
         Guid worldId, CancellationToken cancellationToken = default) =>
         _dbContext.Settlements

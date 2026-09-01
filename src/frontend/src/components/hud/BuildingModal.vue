@@ -56,6 +56,10 @@ const RUNE_RARITY_LABELS: Record<string, string> = {
 const isShrine = computed(
   () => props.tile.buildingType === 'shrineofthor' || props.tile.buildingType === 'shrineoffreyja',
 );
+// Level 0 is the foundation stub while the shrine is still under
+// construction (Enqueue) — it grants no favour and has no slots yet, mirrored
+// by Settlement.SlotRune/ActiveEffect rejecting it backend-side.
+const shrineBuilt = computed(() => (props.tile.buildingLevel ?? 0) >= 1);
 const shrineSlots = computed(() => shrineSlotsFor(props.tile.buildingLevel ?? 1));
 const slottedRunes = computed(() =>
   world.hud.runes.filter((r) => r.slottedAtQ === props.tile.q && r.slottedAtR === props.tile.r),
@@ -279,7 +283,7 @@ const costLine = computed(() =>
           </template>
         </dl>
 
-        <div v-if="isShrine && mine" class="runes">
+        <div v-if="isShrine && mine && shrineBuilt" class="runes">
           <div class="runes-head">
             Runes: {{ slottedRunes.length }} / {{ shrineSlots }} slotted
           </div>

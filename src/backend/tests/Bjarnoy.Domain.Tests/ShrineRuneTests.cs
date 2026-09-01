@@ -205,6 +205,36 @@ public class SettlementShrineTests
     }
 
     [Fact]
+    public void Slotting_into_a_shrines_unbuilt_foundation_stub_is_rejected()
+    {
+        // Level 0 is Enqueue's foundation stub for a shrine still under
+        // construction — it grants no favour yet (BuildingCatalogue.Totals
+        // skips it the same way), so it must not accept a rune either.
+        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 0);
+        var granted = settlement.GrantRune(NewRune(RuneType.Fehu, RuneRarity.Carved));
+
+        var result = granted.SlotRune(granted.Runes[0].Id, ShrineHex, T0);
+
+        Assert.False(result.Accepted);
+        Assert.Equal(SlotRuneRejection.NoShrineOnHex, result.Rejection);
+    }
+
+    [Fact]
+    public void An_unbuilt_shrines_foundation_stub_grants_no_favour()
+    {
+        var withStub = FoundWithShrine(BuildingType.ShrineOfThor, 0);
+        var withoutShrine = FoundWithShrine(BuildingType.ShrineOfThor, 0) with
+        {
+            Buildings = [.. withStub.Buildings.Where(b => b.Coord != ShrineHex)],
+        };
+
+        var (stubProduction, _) = withStub.CurrentTotals();
+        var (noShrineProduction, _) = withoutShrine.CurrentTotals();
+
+        Assert.Equal(noShrineProduction.Wood, stubProduction.Wood, 6);
+    }
+
+    [Fact]
     public void Slotting_past_a_shrines_slot_count_is_rejected()
     {
         var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1); // level 1 => 1 slot

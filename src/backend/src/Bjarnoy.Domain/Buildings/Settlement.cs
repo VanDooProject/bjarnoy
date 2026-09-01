@@ -947,8 +947,12 @@ public sealed record Settlement
 
         var shrine = Buildings.FirstOrDefault(b => b.Coord == shrineCoord);
         var occupied = Buildings.Any(b => b.Coord == shrineCoord);
-        if (!occupied || BuildingCatalogue.GodOf(shrine.Type) is null)
+        if (!occupied || BuildingCatalogue.GodOf(shrine.Type) is null || shrine.Level < 1)
         {
+            // Level 0 is the foundation stub Enqueue places while the shrine
+            // is still under construction (see BuildingCatalogue.Totals's own
+            // level < 1 skip) — it grants no favour yet, so it isn't a shrine
+            // to slot into.
             return SlotRuneResult.Rejected(SlotRuneRejection.NoShrineOnHex);
         }
 
@@ -1024,6 +1028,16 @@ public sealed record Settlement
 
         foreach (var building in buildings)
         {
+            // Level 0 is the foundation stub while a shrine is still under
+            // construction — BuildingCatalogue.Totals skips it the same way;
+            // ShrineCatalogue.Favour/Slots clamp their level argument to
+            // [1,5], so without this check a stub would grant full level-1
+            // favour and a rune slot before the shrine is actually built.
+            if (building.Level < 1)
+            {
+                continue;
+            }
+
             var god = BuildingCatalogue.GodOf(building.Type);
             if (god is null)
             {

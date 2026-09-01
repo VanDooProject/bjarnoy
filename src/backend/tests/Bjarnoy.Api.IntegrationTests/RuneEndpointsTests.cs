@@ -191,6 +191,39 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Slotting_a_rune_is_refused_for_a_settlement_with_a_different_owner()
+    {
+        using var client = Client();
+        var settlement = await FoundWithLonghouseLevelThreeAsync(client);
+        var built = await BuildShrineOfThorAsync(client, settlement);
+        var shrineHex = built.Buildings.Single(b => b.Type == "shrineofthor");
+
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var granted = await (await client.PostJsonAsync(
+            $"/api/v1/admin/settlements/{built.Id}/runes",
+            new GrantRuneRequest("fehu", "carved"), Ct))
+            .ReadStrictAsync<SettlementResponse>(Ct);
+        var rune = Assert.Single(granted.Runes);
+
+        // FoundWithLonghouseLevelThreeAsync already set X-Owner-Id to this
+        // settlement's real owner — swap it for someone else's before either
+        // player-facing rune call, same as SettlementEndpointsTests does for
+        // QueueBuild/TrainUnits.
+        client.DefaultRequestHeaders.Authorization = null;
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "someone-else");
+
+        var slotResponse = await client.PostJsonAsync(
+            $"/api/v1/settlements/{built.Id}/runes/{rune.Id}/slot",
+            new SlotRuneRequest(shrineHex.Q, shrineHex.R), Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, slotResponse.StatusCode);
+
+        var unslotResponse = await client.PostJsonAsync(
+            $"/api/v1/settlements/{built.Id}/runes/{rune.Id}/unslot", new { }, Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, unslotResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Granting_an_unknown_rune_type_is_a_validation_error()
     {
         using var client = Client();
