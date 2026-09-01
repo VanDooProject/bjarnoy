@@ -218,6 +218,16 @@ public static class ArmyEndpoints
             });
         }
 
+        if (result.Outcome == RecallOutcome.NoRouteHome)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "No route home.",
+                Detail = "The army cannot be recalled: no route home exists from where it currently is.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
         var found = await armies.GetAsync(armyId, cancellationToken);
         var (entity, clock) = found!.Value;
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));

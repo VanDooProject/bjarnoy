@@ -18,14 +18,18 @@ import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
+import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
-import type { AxialCoord } from '../lib/hex/coords';
+import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
+import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { reachableRange, type PathContext } from '../lib/map/hexPath';
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const unitCatalogue = useUnitCatalogueStore();
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
 // but clickable, and not gated to demo mode: these are pure client-side
@@ -63,6 +67,7 @@ onMounted(async () => {
     await world.restoreLiveSettlement(player.id, player.settlementId);
   }
   world.startHudSync();
+  void unitCatalogue.load();
 
   // Same test/debug-hook idea as main.ts's __demoWorld: lets an e2e test
   // convert a real hex coordinate to an exact click point via the
@@ -158,6 +163,43 @@ watch(
   [() => canvasRef.value?.renderer, armyOverlayData],
   ([renderer, data]) => {
     renderer?.setArmyOverlay(data ?? null);
+  },
+  { immediate: true },
+);
+
+// Issue #159 part B: the reachable-range tint while composing a dispatch.
+// Origin and home are both the settlement's own hex — a field order from a
+// standing army (where they'd differ) is #156 phase 1, not built yet.
+// Rounded to the nearest tenth of an hour so a sub-pixel provisions-slider
+// twitch doesn't force a fresh flood-fill every frame.
+const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
+  const draft = world.dispatchDraft;
+  if (!draft || draft.mission !== 'move') return null;
+  if (!world.selectedSettlementId) return null;
+
+  const home = world.model.getSettlement(world.selectedSettlementId);
+  if (!home) return null;
+
+  const speed = totalSpeed(draft.unitCounts, unitCatalogue.byType);
+  const upkeep = totalUpkeepPerHour(draft.unitCounts, unitCatalogue.byType);
+  if (speed <= 0 || upkeep <= 0 || draft.provisions <= 0) return null;
+
+  const hoursOfFood = draft.provisions / upkeep;
+  const ctx: PathContext = {
+    terrainAt: (c) => world.model.getTile(c.q, c.r).terrain,
+    isRiver: (c) => world.model.getRiverTile(c.q, c.r) !== undefined,
+    rules: { land: world.movementRules.land, riverCrossingCost: world.movementRules.riverCrossingCost },
+    hexesPerHour: speed * world.worldSpeedFactor,
+  };
+  const origin = { q: home.q, r: home.r };
+  const range = reachableRange(origin, origin, hoursOfFood, ctx);
+  return [...range.keys()].map(parseKey);
+});
+
+watch(
+  [() => canvasRef.value?.renderer, rangeOverlayHexes],
+  ([renderer, hexes]) => {
+    renderer?.setRangeOverlay(hexes ?? null);
   },
   { immediate: true },
 );

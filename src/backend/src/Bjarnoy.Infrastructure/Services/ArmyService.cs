@@ -26,6 +26,16 @@ public enum RecallOutcome
     /// <summary>Already home (including "arrived home during this very settle") or already returning.</summary>
     NothingToRecall,
 
+    /// <summary>
+    /// The army could be recalled (it is mid-journey or supporting) but no
+    /// land/sea route home exists for it — distinct from
+    /// <see cref="NothingToRecall"/>, which means there was nothing to
+    /// recall in the first place (issue #159 part A). A crossing-cost river
+    /// never causes this on its own; it remains possible in principle (e.g.
+    /// a fleet with no adjacent open sea, or a guest's host settlement gone).
+    /// </summary>
+    NoRouteHome,
+
     Recalled,
 }
 
@@ -213,6 +223,7 @@ public sealed class ArmyService(
         }
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var riverTiles = await LoadRiverTilesAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
 
         // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
@@ -255,7 +266,7 @@ public sealed class ArmyService(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
-            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor);
+            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, riverTiles.Contains);
 
         if (!decision.Accepted)
         {
@@ -360,7 +371,9 @@ public sealed class ArmyService(
     /// Turns an army around mid-journey — or, for a <see cref="ArmyLocation.Supporting"/>
     /// guest, calls it home from its host (issue #40 phase 4 §4). Refused (as
     /// <see cref="RecallOutcome.NothingToRecall"/>) when it is already
-    /// returning, or arrived home during this very settle.
+    /// returning, or arrived home during this very settle; refused instead as
+    /// <see cref="RecallOutcome.NoRouteHome"/> when the army was actually
+    /// recallable but no route home exists (issue #159 part A).
     /// </summary>
     public async Task<RecallResult> RecallAsync(Guid armyId, CancellationToken cancellationToken = default)
     {
@@ -381,6 +394,7 @@ public sealed class ArmyService(
         }
 
         var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var domain = army.ToDomain();
@@ -401,7 +415,15 @@ public sealed class ArmyService(
             }
         }
 
-        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor);
+        // Mirrors Army.Recall's own switch: only these two locations (with a
+        // resolved host hex for a guest) are recallable at all. Checked
+        // separately here so a null Recall result can be told apart as
+        // RecallOutcome.NoRouteHome rather than folded into NothingToRecall.
+        var isRecallable = domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false }
+            || (domain.Location is ArmyLocation.Supporting && currentHex is not null);
+
+        var recalled = domain.Recall(
+            now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor, riverTiles.Contains);
 
         if (recalled is null)
         {
@@ -410,7 +432,7 @@ public sealed class ArmyService(
                 await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            return new RecallResult(RecallOutcome.NothingToRecall, army);
+            return new RecallResult(isRecallable ? RecallOutcome.NoRouteHome : RecallOutcome.NothingToRecall, army);
         }
 
         army.ApplyDomain(recalled);
@@ -555,6 +577,7 @@ public sealed class ArmyService(
         if (teleportTo is { } destination)
         {
             var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+            var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
             var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
             // An explicit provisions value is the admin's final word, so it is
@@ -562,7 +585,8 @@ public sealed class ArmyService(
             // leg this teleport is throwing away.
             var teleported = domain.TeleportTo(
                 destination, home, now, sampler.TerrainAt,
-                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor);
+                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor,
+                riverTiles.Contains);
             if (teleported is null)
             {
                 return await RejectAsync(AdminArmyEditOutcome.UnreachableHex).ConfigureAwait(false);
@@ -937,6 +961,30 @@ public sealed class ArmyService(
             .Include(s => s.TrainingQueue)
             .Include(s => s.Runes)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
+
+    /// <summary>
+    /// Every river tile across every island of <paramref name="worldId"/>, as
+    /// a flat set of hexes (issue #159 part A) — one query per request at
+    /// each of the three call sites that already build a
+    /// <see cref="TerrainSampler"/>, mirroring how terrain itself is sampled
+    /// once per request rather than per hex. <c>RiverTiles</c> is an
+    /// EF-converted column (<see cref="Persistence.RiverTileListConverter"/>),
+    /// so it can only be flattened client-side once each island's row is
+    /// materialized, not projected further in SQL.
+    /// </summary>
+    private async Task<HashSet<HexCoord>> LoadRiverTilesAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.RiverTiles)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return islands
+            .SelectMany(tiles => tiles)
+            .Select(t => new HexCoord(t.Q, t.R))
+            .ToHashSet();
+    }
 
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>
         _dbContext.Armies

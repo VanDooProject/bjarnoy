@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Movement;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -239,5 +240,82 @@ public class RiverGenerationTests
         }
 
         return qualifying;
+    }
+
+    /// <summary>
+    /// Guards <see cref="HexPathfinder.RiverCrossingCost"/> (issue #159 part
+    /// A) against a later change to <c>RiverMeanderWeight</c>/<c>MinRiverLength</c>
+    /// quietly making generated rivers long enough that the constant no
+    /// longer buys "troops detour around a river most of the time". A
+    /// smaller-scale reproduction of the measurement the issue itself
+    /// describes: for every river tile, compare walking straight across it
+    /// (two of its dry-land neighbours, via the tile) against the cheapest
+    /// route between those same two neighbours that avoids every river tile
+    /// on the island.
+    /// </summary>
+    [Fact]
+    public void RiverCrossingCost_still_exceeds_the_median_penalty_needed_to_prefer_a_detour()
+    {
+        var neededPenalties = new List<double>();
+
+        foreach (var seed in new[] { 1, 7, 42, 2024, 1337, 99, 12345, 55555 })
+        {
+            var world = Generate(seed);
+            var sampler = new TerrainSampler(world.Options);
+
+            foreach (var island in world.Islands)
+            {
+                if (island.RiverTiles.Count == 0)
+                {
+                    continue;
+                }
+
+                var riverCoords = island.RiverTiles.Select(t => t.Coord).ToHashSet();
+                Terrain WithoutRivers(HexCoord c) => riverCoords.Contains(c) ? Terrain.Sea : sampler.TerrainAt(c);
+
+                foreach (var tile in island.RiverTiles)
+                {
+                    var banks = tile.Coord.Neighbours()
+                        .Where(n => sampler.IsLand(n) && !riverCoords.Contains(n))
+                        .Take(2)
+                        .ToList();
+
+                    if (banks.Count < 2)
+                    {
+                        continue;
+                    }
+
+                    var (a, b) = (banks[0], banks[1]);
+
+                    // Straight across: entering the river tile, then the far
+                    // bank — the same shape HexPathfinder actually charges.
+                    var direct = HexPathfinder.CumulativeHours([a, tile.Coord, b], sampler.TerrainAt, hexesPerHour: 1.0)[^1];
+
+                    var detourPath = HexPathfinder.FindPath(a, b, WithoutRivers, isLandUnit: true);
+                    if (detourPath is null)
+                    {
+                        // The two banks are only connected through this river tile — no detour exists, so crossing is the only route.
+                        continue;
+                    }
+
+                    var detour = HexPathfinder.CumulativeHours(detourPath, sampler.TerrainAt, hexesPerHour: 1.0)[^1];
+
+                    neededPenalties.Add(detour - direct);
+                }
+            }
+        }
+
+        Assert.True(
+            neededPenalties.Count >= 5,
+            $"expected several measurable river tiles across these seeds, found {neededPenalties.Count} — widen the seed list if this starts failing");
+
+        neededPenalties.Sort();
+        var median = neededPenalties[neededPenalties.Count / 2];
+
+        Assert.True(
+            HexPathfinder.RiverCrossingCost > median,
+            $"RiverCrossingCost ({HexPathfinder.RiverCrossingCost}) no longer exceeds the median penalty needed "
+                + $"to prefer a detour ({median}) across {neededPenalties.Count} measured river tiles — troops "
+                + "would stop routing around rivers most of the time.");
     }
 }

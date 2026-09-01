@@ -1,0 +1,80 @@
+{
+  "_comment": "Issue #159 part B's anti-drift guard. HexPathfinderGoldenTests.cs (backend) and hexPath.golden.test.ts (frontend) both compute against this fixture using each side's OWN production cost tables/river rule, then assert the frozen results below. Either side's cost model drifting from the other turns its own suite red, instead of the client's range tint quietly disagreeing with what the server actually paths over. terrain omits sea — any (q, r) not listed is sea (impassable to a land unit). hexesPerHour/speedFactor are always 1.0 in these cases so every hour figure below is a plain sum of step costs.",
+  "terrain": {
+    "0,0": "grass",
+    "1,0": "grass",
+    "2,0": "grass",
+    "10,0": "grass",
+    "11,0": "grass",
+    "11,-1": "grass",
+    "12,-1": "grass",
+    "12,0": "grass",
+    "20,0": "grass",
+    "21,0": "mountain",
+    "22,0": "mountain",
+    "23,0": "grass",
+    "21,-1": "grass",
+    "22,-1": "grass",
+    "23,-1": "grass"
+  },
+  "riverTiles": ["1,0", "11,0"],
+  "findPathCases": [
+    {
+      "name": "river_crossing_no_detour_available",
+      "comment": "A single grass corridor with a river tile in the middle and nothing else reachable (everywhere else is sea) — crossing is the only route, never a hard block.",
+      "from": { "q": 0, "r": 0 },
+      "to": { "q": 2, "r": 0 },
+      "isLandUnit": true,
+      "expectedPath": [
+        { "q": 0, "r": 0 },
+        { "q": 1, "r": 0 },
+        { "q": 2, "r": 0 }
+      ],
+      "expectedCumulativeHours": [0.0, 9.0, 10.0]
+    },
+    {
+      "name": "river_detour_preferred_over_crossing",
+      "comment": "Same river-tile shape as above, but this time a 2-hex grass detour exists — cheaper than paying the crossing penalty, so the router goes around.",
+      "from": { "q": 10, "r": 0 },
+      "to": { "q": 12, "r": 0 },
+      "isLandUnit": true,
+      "expectedPath": [
+        { "q": 10, "r": 0 },
+        { "q": 11, "r": -1 },
+        { "q": 12, "r": -1 },
+        { "q": 12, "r": 0 }
+      ],
+      "expectedCumulativeHours": [0.0, 1.0, 2.0, 3.0]
+    },
+    {
+      "name": "cheap_terrain_preferred_over_shorter_distance",
+      "comment": "No river involved — just terrain cost: the direct 3-hop route crosses two mountain hexes (5.0h total); a 4-hop all-grass detour is cheaper (4.0h) despite being longer.",
+      "from": { "q": 20, "r": 0 },
+      "to": { "q": 23, "r": 0 },
+      "isLandUnit": true,
+      "expectedPath": [
+        { "q": 20, "r": 0 },
+        { "q": 21, "r": -1 },
+        { "q": 22, "r": -1 },
+        { "q": 23, "r": -1 },
+        { "q": 23, "r": 0 }
+      ],
+      "expectedCumulativeHours": [0.0, 1.0, 2.0, 3.0, 4.0]
+    }
+  ],
+  "reachableRangeCases": [
+    {
+      "name": "ordinary_dispatch_river_detour_patch",
+      "comment": "origin === home (an ordinary dispatch, not a field order): the reachable set from (10,0) with 6h of food, over the river-detour patch above.",
+      "origin": { "q": 10, "r": 0 },
+      "home": { "q": 10, "r": 0 },
+      "hoursOfFood": 6.0,
+      "expectedReachable": [
+        { "q": 10, "r": 0, "hours": 0.0 },
+        { "q": 11, "r": -1, "hours": 2.0 },
+        { "q": 12, "r": -1, "hours": 4.0 },
+        { "q": 12, "r": 0, "hours": 6.0 }
+      ]
+    }
+  ]
+}
