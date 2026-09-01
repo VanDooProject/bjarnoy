@@ -63,6 +63,22 @@ public class UserEntity
     public string? DisplayName { get; set; }
 
     /// <summary>
+    /// Renown ("culture points" — issue #55 §3): accrues per building level
+    /// per hour, summed across every settlement this account owns, never
+    /// decays, and is only ever spent implicitly by gating how many
+    /// settlements the account may found next (see
+    /// <c>Bjarnoy.Domain.Settlers.RenownThresholds</c>). Only true as of
+    /// <see cref="RenownSettledAt"/> — see
+    /// <c>Bjarnoy.Domain.Settlers.RenownAccount.SettleTo</c> and
+    /// <c>RenownService</c>, which roll it forward lazily, the same
+    /// "SettleTo on read" shape <see cref="SettlementEntity"/>'s resource pool
+    /// uses.
+    /// </summary>
+    public double RenownTotal { get; set; }
+
+    public DateTimeOffset RenownSettledAt { get; set; }
+
+    /// <summary>
     /// Free-text profile bio (issue #42). Whitespace and line breaks are
     /// significant — the frontend renders it with <c>white-space: pre</c> so
     /// ASCII art survives — which is why nothing here trims or normalizes it.

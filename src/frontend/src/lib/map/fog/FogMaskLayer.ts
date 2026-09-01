@@ -69,9 +69,10 @@ const SEED_JITTER: [number, number] = [0.14, 0.14];
 /**
  * Reciprocal of the cloud field's largest feature size, in world units.
  * TILE_W is 168 world units, so 1/620 puts the coarsest billow at ~3.7
- * hexes and (four octaves at ~2× each) the finest wisps at about half a
- * hex — the span the mist needs to read as banks of cloud with detail on
- * them, rather than as one smoothly wobbling outline.
+ * hexes and (three octaves at ~2× each, see fogShader.ts's fbm()) the
+ * finest wisps at about one hex — the span the mist needs to read as banks
+ * of cloud with detail on them, rather than as one smoothly wobbling
+ * outline.
  */
 const NOISE_SCALE = 1 / 620;
 /**

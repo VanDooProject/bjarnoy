@@ -1194,6 +1194,15 @@ public sealed record Settlement
     /// independent of any future Shipyard building); ignored for every other
     /// class.
     /// </param>
+    /// <param name="costMultiplier">
+    /// Multiplies the catalogue's flat per-unit cost (issue #55 §4: settler
+    /// crews cost more the more settlements the player already holds — see
+    /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every ordinary
+    /// unit; the caller (<c>SettlementService.TrainUnitsAsync</c>) is the one
+    /// that knows how many settlements the owning player holds, so it
+    /// computes this rather than <see cref="Settlement"/> reaching outside
+    /// its own aggregate for it.
+    /// </param>
     /// <param name="speedFactor">
     /// The world's current <c>SpeedFactor</c> — divides per-unit training
     /// duration, the same way <see cref="PlanBuild"/> already divides build
@@ -1202,7 +1211,8 @@ public sealed record Settlement
     /// unscaled rate while every building finished faster.
     /// </param>
     public TrainDecision PlanTrain(
-        UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false, double speedFactor = 1.0)
+        UnitType type, int count, DateTimeOffset now, Guid orderId, bool hasShoreline = false,
+        double costMultiplier = 1.0, double speedFactor = 1.0)
     {
         if (count <= 0)
         {
@@ -1225,7 +1235,7 @@ public sealed record Settlement
         }
 
         var definition = UnitCatalogue.Get(type);
-        var totalCost = definition.TrainingCost * count;
+        var totalCost = definition.TrainingCost * count * costMultiplier;
         if (!Resources.CanAfford(totalCost, now))
         {
             return TrainDecision.Rejected(TrainRejection.NotEnoughResources);
@@ -1242,19 +1252,20 @@ public sealed record Settlement
             Count = count,
             StartedAt = now,
             PerUnitDuration = perUnitDuration,
+            CostMultiplier = costMultiplier,
         });
     }
 
     /// <summary>
-    /// Pays for <paramref name="order"/> (cost × batch size) and appends it to
-    /// the training queue.
+    /// Pays for <paramref name="order"/> (cost × batch size × <see cref="TrainingOrder.CostMultiplier"/>)
+    /// and appends it to the training queue.
     /// </summary>
     public Settlement EnqueueTraining(TrainingOrder order, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(order);
 
         var definition = UnitCatalogue.Get(order.UnitType);
-        var totalCost = definition.TrainingCost * order.Count;
+        var totalCost = definition.TrainingCost * order.Count * order.CostMultiplier;
         if (!Resources.TrySpend(totalCost, now, out var paid))
         {
             throw new InvalidOperationException(

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -250,6 +251,20 @@ public sealed record BuildingDefinitionResponse(
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
 public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
+
+/// <summary>
+/// The caller's own renown in one world (issue #55 §3), plus the settlement
+/// count it is measured against and the threshold for one more — everything
+/// a "found another settlement" UI needs in one call.
+/// </summary>
+public sealed record RenownResponse(double Total, int SettlementCount, double RequiredForNextSettlement, bool CanFoundAnother)
+{
+    public static RenownResponse From(double total, int settlementCount) => new(
+        total,
+        settlementCount,
+        RenownThresholds.RequiredFor(settlementCount + 1),
+        RenownThresholds.AllowsAnotherSettlement(settlementCount, total));
+}
 
 public sealed record UnitDefinitionResponse(
     string Type,

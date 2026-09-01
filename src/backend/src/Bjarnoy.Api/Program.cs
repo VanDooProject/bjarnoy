@@ -44,6 +44,7 @@ builder.Services.AddScoped<ChatService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
+builder.Services.AddScoped<RenownService>();
 
 // The per-user write-throttle UserActivityService keeps in IMemoryCache, and
 // FogMaskService's computed-mask cache (map-fog-v2.md §3) shares the same one.
@@ -225,6 +226,7 @@ app.MapTradeEndpoints(versionSet);
 app.MapProfileEndpoints(versionSet);
 app.MapLeaderboardEndpoints(versionSet);
 app.MapArmyEndpoints(versionSet);
+app.MapSettlerEndpoints(versionSet);
 app.MapActivityEndpoints(versionSet);
 app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);

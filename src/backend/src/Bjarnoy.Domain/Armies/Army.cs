@@ -2,6 +2,7 @@ using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Movement;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
@@ -45,6 +46,22 @@ public enum ArmyMission
     /// remarks for the exact loss-fraction math.
     /// </summary>
     Raid = 3,
+
+    /// <summary>
+    /// Travel to an arbitrary hex — overland via land pathing, or by sea as a
+    /// ship-carried convoy landing on a shoreline hex (issue #55 §2) — and, on
+    /// arrival, found a new settlement there if the hex is still foundable
+    /// (see <see cref="Army.PlanDispatch"/>'s Found-specific validation and
+    /// the infrastructure layer's <c>ArmyService.ResolveFoundingAsync</c>).
+    /// Otherwise behaves exactly like <see cref="Move"/>: it stands at the
+    /// target, auto-returns once provisions demand it (same
+    /// <see cref="Movement.TurnAroundAt"/> mechanism), and can be recalled or
+    /// retargeted (<see cref="Army.RetargetFounding"/>) mid-journey or while
+    /// parked — issue #55 §6's "claimed mid-transit" edge case is handled by
+    /// simply never treating a no-longer-foundable arrival as a special case
+    /// at all, letting it fall through to ordinary standing/auto-return.
+    /// </summary>
+    Found = 4,
 }
 
 /// <summary>
@@ -196,6 +213,24 @@ public sealed record Army
     /// have not computed the target's real territory. Ignored for land
     /// armies and for every other mission.
     /// </param>
+    /// <param name="isHexFoundable">
+    /// Only consulted for <see cref="ArmyMission.Found"/> (issue #55): whether
+    /// <paramref name="destination"/> currently clears every claimed
+    /// settlement's spacing rule — see
+    /// <see cref="Founding.IsHexFoundable"/>. The caller
+    /// (<c>ArmyService.DispatchAsync</c>) is the one with database access to
+    /// every settlement in the world, so it always supplies this for a Found
+    /// dispatch; <see langword="null"/> is only a valid default for every
+    /// other mission, which ignores it entirely.
+    /// </param>
+    /// <param name="renownAndSlotAllowed">
+    /// Only consulted for <see cref="ArmyMission.Found"/>: whether the
+    /// dispatching player's current renown and settlement count already clear
+    /// <see cref="RenownThresholds.AllowsAnotherSettlement"/> — computed
+    /// by the caller and resolved here, at dispatch time, exactly once (issue
+    /// #55 §6: a convoy already travelling is never invalidated later by a
+    /// renown or slot rule that changes after it left).
+    /// </param>
     /// <param name="speedFactor">
     /// The world's speed multiplier, mirroring how build/training durations
     /// are scaled in <see cref="Buildings.Settlement.PlanBuild"/>. Defaults to
@@ -219,6 +254,8 @@ public sealed record Army
         Guid? targetSettlementId = null,
         HexCoord? targetBuildingCoord = null,
         IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs = null,
+        Func<HexCoord, bool>? isHexFoundable = null,
+        bool renownAndSlotAllowed = true,
         double speedFactor = 1.0,
         Func<HexCoord, bool>? isRiver = null)
     {
@@ -227,20 +264,76 @@ public sealed record Army
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(terrainAt);
 
+        var normalisedRequest = requestedUnits.Where(s => s.Count > 0).ToList();
+
         // Shape validation only — whether a requested unit type even exists is
         // Settlement.PlanDispatch's job below; this only rejects mixing the
         // two unit-class families (issue #40 phase 6 §2). A fleet (every
         // requested class is UnitClass.Ship) and a land army (no Ship class
         // requested) are otherwise handled identically from here on, just
         // against different terrain/pathfinder tables.
-        var requestedClasses = requestedUnits
-            .Where(s => s.Count > 0)
+        //
+        // ArmyMission.Found gets one narrow exception (issue #55 §2 "by
+        // sea"): Ship stacks alongside UnitType.SettlerCrew stacks are read
+        // as "the ships are carrying the crews" rather than an illegal mix —
+        // there is still no general ferry mechanic, so any other non-Ship
+        // class alongside Ship remains rejected even for Found.
+        var requestedClasses = normalisedRequest
             .Select(s => UnitCatalogue.Get(s.Type).Class)
             .ToHashSet();
-        var isFleet = requestedClasses.Count > 0 && requestedClasses.All(c => c == UnitClass.Ship);
-        if (!isFleet && requestedClasses.Contains(UnitClass.Ship))
+        var isFoundingConvoy = mission == ArmyMission.Found;
+        var nonShipClasses = requestedClasses.Where(c => c != UnitClass.Ship).ToHashSet();
+        var isSettlerEmbark = isFoundingConvoy
+            && requestedClasses.Contains(UnitClass.Ship)
+            && nonShipClasses.Count > 0
+            && nonShipClasses.SetEquals([UnitClass.Civilian])
+            && normalisedRequest.Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Civilian)
+                .All(s => s.Type == UnitType.SettlerCrew);
+
+        bool isFleet;
+        if (isSettlerEmbark)
         {
-            return DispatchDecision.Rejected(DispatchRejection.MixedFleetAndLandUnits);
+            isFleet = true;
+        }
+        else
+        {
+            isFleet = requestedClasses.Count > 0 && requestedClasses.All(c => c == UnitClass.Ship);
+            if (!isFleet && requestedClasses.Contains(UnitClass.Ship))
+            {
+                return DispatchDecision.Rejected(DispatchRejection.MixedFleetAndLandUnits);
+            }
+        }
+
+        if (isFoundingConvoy)
+        {
+            var settlerCrews = normalisedRequest
+                .Where(s => s.Type == UnitType.SettlerCrew)
+                .Sum(s => s.Count);
+            if (settlerCrews != Founding.RequiredSettlerCrews)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.WrongSettlerCrewCount);
+            }
+
+            if (isFleet)
+            {
+                var shipCapacity = normalisedRequest
+                    .Where(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship)
+                    .Sum(s => Founding.ShipCapacity(s.Type) * s.Count);
+                if (settlerCrews > shipCapacity)
+                {
+                    return DispatchDecision.Rejected(DispatchRejection.InsufficientShipCapacityForSettlers);
+                }
+            }
+
+            if (!renownAndSlotAllowed)
+            {
+                return DispatchDecision.Rejected(DispatchRejection.RenownOrSettlementSlotRequirementNotMet);
+            }
+
+            if (isHexFoundable is not null && !isHexFoundable(destination))
+            {
+                return DispatchDecision.Rejected(DispatchRejection.TargetHexNotFoundable);
+            }
         }
 
         if (mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid)
@@ -310,8 +403,14 @@ public sealed record Army
         // isLandUnit remarks on the beaching/harbor exemption it applies at
         // both route endpoints), so this generic sea-only check is skipped
         // only for that one combination; the real fleet-reachability gate for
-        // Attack is DefenderHasNoShoreline above, not this check.
-        var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid;
+        // Attack is DefenderHasNoShoreline above, not this check. A sea Found
+        // convoy's destination is, by definition, the land hex it means to
+        // land settlers on (issue #55 §2) — same beaching exemption, no
+        // separate shoreline check needed: HexPathfinder can only ever reach
+        // that land hex by sea if it is adjacent to reachable open water,
+        // which is exactly what "shoreline" means (see Shoreline.IsShoreline);
+        // any other land hex fails as UnreachableLeg below instead.
+        var skipDestinationTerrainCheck = isFleet && mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid or ArmyMission.Found;
         if (!skipDestinationTerrainCheck && terrainAt(destination).IsLand() != isLandUnit)
         {
             return DispatchDecision.Rejected(isFleet
@@ -654,6 +753,158 @@ public sealed record Army
     }
 
     /// <summary>
+    /// Decides, at the instant an <see cref="ArmyMission.Found"/> convoy
+    /// reaches its target hex, whether founding actually happens (issue #55
+    /// §5/§6). A pure decision only — creating the new settlement, an entity
+    /// touching the settlement/user aggregates and requiring a fresh id, is
+    /// the infrastructure layer's job (<c>ArmyService.ResolveFoundingAsync</c>),
+    /// mirroring how <see cref="SettleArrival"/> itself never writes a
+    /// <c>BattleReportEntity</c>.
+    /// </summary>
+    /// <param name="targetStillFoundable">
+    /// Whether the target hex still clears the spacing rule as of
+    /// <paramref name="now"/> (see <see cref="Founding.IsHexFoundable"/>) —
+    /// re-checked at arrival, not trusted from dispatch time, since someone
+    /// else may have claimed nearby territory in the meantime (issue #55 §6).
+    /// When <see langword="false"/>, this is a no-op: the caller falls back to
+    /// plain <see cref="SettleTo"/>, which treats an arrived-but-not-yet-
+    /// turned-around <see cref="ArmyMission.Found"/> army exactly like a
+    /// <see cref="ArmyMission.Move"/> one — it simply stands at the hex,
+    /// auto-returns once provisions demand it, and can be recalled
+    /// (<see cref="Recall"/>) or redirected (<see cref="RetargetFounding"/>)
+    /// in the meantime. That is this issue's answer to "target hex claimed
+    /// mid-transit": the mission is never silently lost, just never founds
+    /// until either the hex frees up again or the player moves it.
+    /// </param>
+    public static FoundingArrivalResult PlanFoundingArrival(Army army, DateTimeOffset now, bool targetStillFoundable)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+
+        if (army.Mission != ArmyMission.Found
+            || army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
+            || now < inTransit.Movement.ArrivesAt)
+        {
+            return new FoundingArrivalResult(Arrived: false, ShouldFound: false, army, [], default);
+        }
+
+        if (!targetStillFoundable)
+        {
+            return new FoundingArrivalResult(Arrived: true, ShouldFound: false, army, [], default);
+        }
+
+        var targetHex = inTransit.Movement.Path[^1];
+
+        // Exactly RequiredSettlerCrews were required at dispatch (PlanDispatch's
+        // WrongSettlerCrewCount rejection), so every SettlerCrew stack present
+        // is consumed entire; whatever else travelled along (ships that
+        // carried them, any escort) is what the new settlement starts with —
+        // "undefended except for any escort units that travelled with the
+        // convoy" (issue #55 §5). Ships are not a sensible land garrison, but
+        // this deliberately does not special-case them out: a player who
+        // sailed settlers over with no other escort ends up with the ships
+        // themselves as the only "defenders", exactly as reasonable a v1
+        // reading of "leaves it undefended except escorts" as any other.
+        var garrisonForNewSettlement = army.Stacks.Where(s => s.Type != UnitType.SettlerCrew).ToList();
+
+        return new FoundingArrivalResult(
+            Arrived: true, ShouldFound: true, Army: null, GarrisonForNewSettlement: garrisonForNewSettlement, FoundedAt: targetHex);
+    }
+
+    /// <summary>
+    /// Redirects an <see cref="ArmyMission.Found"/> convoy to a different
+    /// target hex — issue #55 §6's "retargetable" edge case, for when the
+    /// original target was claimed by someone else mid-transit (see
+    /// <see cref="PlanFoundingArrival"/>) and the player would rather try
+    /// somewhere else than recall all the way home. Works whether the convoy
+    /// is still travelling or already standing/parked at the old target — in
+    /// both cases a fresh route is planned from wherever it currently is.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="Recall"/>'s shape closely — same current-position
+    /// derivation, same <see cref="HexPathfinder"/> call — but the new
+    /// <see cref="Movement"/> is an outbound Found leg to
+    /// <paramref name="newTarget"/>, not a trip home: it gets its own
+    /// precomputed <see cref="Movement.ReturnPath"/> back to
+    /// <paramref name="home"/> so the round-trip food check
+    /// (<see cref="Army.PlanDispatch"/>'s own logic, reapplied here against
+    /// whatever provisions remain) and a later plain <see cref="Recall"/>
+    /// both still work exactly as they would for a freshly dispatched Found
+    /// convoy — this is issue #55 §6's food-gating requirement applied to
+    /// retargeting the same way it already applies to recall.
+    /// </remarks>
+    /// <param name="speedFactor">
+    /// The world's speed multiplier — see <see cref="PlanDispatch"/>'s own
+    /// parameter of the same name. Defaults to <c>1.0</c> for callers with no
+    /// world in hand.
+    /// </param>
+    public static RetargetFoundingResult RetargetFounding(
+        Army army, HexCoord newTarget, DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt,
+        double speedFactor = 1.0)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (army.Mission != ArmyMission.Found)
+        {
+            return RetargetFoundingResult.Rejected(RetargetFoundingRejection.NotAFoundingMission);
+        }
+
+        HexCoord fromHex;
+        switch (army.Location)
+        {
+            case ArmyLocation.InTransit { Movement.IsReturning: false } inTransit:
+                fromHex = inTransit.Movement.PositionAt(now);
+                break;
+
+            default:
+                return RetargetFoundingResult.Rejected(RetargetFoundingRejection.NothingToRetarget);
+        }
+
+        var isFleet = army.Stacks.Count > 0 && army.Stacks.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
+        var isLandUnit = !isFleet;
+
+        // Mirrors PlanDispatch's own skipDestinationTerrainCheck: an overland
+        // convoy's new target must itself be land; a sea convoy is exempt —
+        // the beaching exemption baked into HexPathfinder/FindPath below
+        // already requires the hex to be reachable by water, which is exactly
+        // what a shoreline hex is.
+        if (isLandUnit && !terrainAt(newTarget).IsLand())
+        {
+            return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
+        }
+
+        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit);
+        if (path is null || path.Count == 0)
+        {
+            return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
+        }
+
+        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit);
+        if (returnPath is null || returnPath.Count == 0)
+        {
+            return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
+        }
+
+        var speed = army.TotalSpeed;
+        var upkeepPerHour = army.TotalUpkeepPerHour;
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor);
+
+        var provisionsNow = army.ProvisionsAt(now);
+        var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+        if (provisionsNow < totalFoodNeeded)
+        {
+            return RetargetFoundingResult.Rejected(RetargetFoundingRejection.InsufficientProvisionsForRoundTrip);
+        }
+
+        var movement = Movement.Movement.Create(
+            now, path, cumulativeHours, returnPath, returnCumulativeHours, provisionsNow, upkeepPerHour);
+
+        var retargeted = army with { Location = new ArmyLocation.InTransit(movement), Provisions = provisionsNow };
+        return RetargetFoundingResult.Accept(retargeted);
+    }
+
+    /// <summary>
     /// Settles this army to <paramref name="now"/>: past <see cref="Movement.TurnAroundAt"/>
     /// it is put onto its precomputed return leg, and past the return leg's
     /// arrival it comes home. Mirrors <see cref="Settlement.SettleTo"/>'s
@@ -946,6 +1197,51 @@ public sealed record ArmyArrivalResult(
 /// </param>
 public sealed record ArmySupportArrivalResult(Army Army, bool Arrived);
 
+/// <param name="Arrived">Whether the outbound leg's arrival instant has been reached — a no-op before then.</param>
+/// <param name="ShouldFound">
+/// True only when the convoy has arrived and the target hex still clears the
+/// spacing rule (see <see cref="Army.PlanFoundingArrival"/>). The caller
+/// (<c>ArmyService.ResolveFoundingAsync</c>) creates the new settlement only
+/// when this is true; otherwise it falls back to plain <see cref="Army.SettleTo"/>.
+/// </param>
+/// <param name="Army">
+/// <see langword="null"/> when <paramref name="ShouldFound"/> — the convoy is
+/// entirely consumed founding the new settlement, same shape as a wiped-out
+/// attacker in <see cref="ArmyArrivalResult"/>. The unchanged input army in
+/// every other case.
+/// </param>
+/// <param name="GarrisonForNewSettlement">
+/// Non-settler stacks (any escort, and any ships that carried a sea convoy)
+/// that become the new settlement's starting garrison — empty (and
+/// meaningless) unless <paramref name="ShouldFound"/>.
+/// </param>
+/// <param name="FoundedAt">The target hex — meaningless unless <paramref name="ShouldFound"/>.</param>
+public sealed record FoundingArrivalResult(
+    bool Arrived, bool ShouldFound, Army? Army, IReadOnlyList<UnitStack> GarrisonForNewSettlement, HexCoord FoundedAt);
+
+/// <summary>Why <see cref="Army.RetargetFounding"/> was refused.</summary>
+public enum RetargetFoundingRejection
+{
+    None = 0,
+    NotAFoundingMission,
+
+    /// <summary>The convoy is already home, already returning, or a guest — nothing left to redirect.</summary>
+    NothingToRetarget,
+
+    TargetNotReachable,
+    InsufficientProvisionsForRoundTrip,
+}
+
+/// <summary>The outcome of asking to redirect a founding convoy — mirrors <see cref="DispatchDecision"/>.</summary>
+public sealed record RetargetFoundingResult(RetargetFoundingRejection Rejection, Army? Army = null)
+{
+    public bool Accepted => Rejection == RetargetFoundingRejection.None && Army is not null;
+
+    public static RetargetFoundingResult Rejected(RetargetFoundingRejection reason) => new(reason);
+
+    public static RetargetFoundingResult Accept(Army army) => new(RetargetFoundingRejection.None, army);
+}
+
 /// <summary>Why a dispatch was refused.</summary>
 public enum DispatchRejection
 {
@@ -1016,6 +1312,34 @@ public enum DispatchRejection
     /// doc §8). Never raised for a land army.
     /// </summary>
     DefenderHasNoShoreline,
+
+    /// <summary>
+    /// An <see cref="ArmyMission.Found"/> dispatch did not name exactly
+    /// <see cref="Founding.RequiredSettlerCrews"/>
+    /// <see cref="UnitType.SettlerCrew"/> — too few to found, or more than the
+    /// mission consumes (issue #55 §1).
+    /// </summary>
+    WrongSettlerCrewCount,
+
+    /// <summary>
+    /// An <see cref="ArmyMission.Found"/> sea convoy named more settler crews
+    /// than its ships can carry — see <see cref="Founding.ShipCapacity"/>.
+    /// </summary>
+    InsufficientShipCapacityForSettlers,
+
+    /// <summary>
+    /// The dispatching player's renown and current settlement count do not
+    /// yet clear <see cref="RenownThresholds.AllowsAnotherSettlement"/>
+    /// (issue #55 §3/§6) — checked once, at dispatch time.
+    /// </summary>
+    RenownOrSettlementSlotRequirementNotMet,
+
+    /// <summary>
+    /// An <see cref="ArmyMission.Found"/> dispatch's target hex fails the
+    /// minimum-spacing rule (issue #55 §4) against some already-claimed
+    /// settlement — see <see cref="Founding.IsHexFoundable"/>.
+    /// </summary>
+    TargetHexNotFoundable,
 }
 
 /// <summary>The outcome of asking to dispatch an army — mirrors <see cref="BuildDecision"/>.</summary>

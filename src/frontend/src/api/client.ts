@@ -56,10 +56,12 @@ import type {
   ProfileResponse,
   ProposeTreatyRequest,
   QueueBuildRequest,
+  RenownResponse,
   ReportMessageRequest,
   ReportProfileRequest,
   ReportResponse,
   ResolveReportRequest,
+  RetargetFoundingRequest,
   SendMessageRequest,
   SetBuildingLevelRequest,
   SetGuildFeeTierRequest,
@@ -277,6 +279,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  // Settlement expansion (issue #55): settler-crew founding convoys ride the
+  // same generic army-dispatch endpoints the troop system's backend exposes
+  // (dispatchArmy/getSettlementArmies/getArmy/recallArmy below); only the
+  // founding-specific retarget and renown reads are new here.
+  retargetFounding: (armyId: string, body: RetargetFoundingRequest) =>
+    request<ArmyResponse>(`/armies/${armyId}/retarget-founding`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getRenown: (worldId: string) => request<RenownResponse>(`/worlds/${worldId}/renown`),
+  listMySettlements: (worldId: string) =>
+    request<SettlementSummary[]>(`/worlds/${worldId}/settlements/mine`),
   getProfile: (userId: string) => request<ProfileResponse>(`/profiles/${userId}`),
   getProfileByName: (userName: string) =>
     request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
