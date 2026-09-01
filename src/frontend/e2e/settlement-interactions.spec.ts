@@ -123,33 +123,28 @@ test.describe('settlement view interactions', () => {
     const buildBox = (await buildBubble.boundingBox())!;
     await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
 
-    // On grass terrain the category ring has three bubbles (Housing,
-    // Resource, Defense); every other buildable terrain has just the one
-    // ("Build", reused as both the root action's label and its sole
-    // category's — see BUILD_CATEGORIES). Either way, whichever category is
-    // first leads to "Hut" as its first building (Housing's only building;
-    // "Build"'s own list starts with Hut too), so hovering the first
-    // category bubble and clicking the first building bubble always reaches
-    // a real, placeable building regardless of which terrain was picked.
-    // Issue #16 follow-up "concentric rings": the root ring's own bubbles
-    // are still on screen at this point (a plain `.ring-bubble` locator
-    // would grab one of those instead) — the category ring is specifically
-    // the one *without* its own backdrop (see RingMenu's `backdrop` prop,
-    // false for every ring but the innermost), so scope through that rather
-    // than by label text, which the "other"-terrain category can share
-    // with the root "Build" bubble ("Build" is reused as both).
-    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
+    // On grass terrain the categories are Housing/Resource/Defense/Shrines;
+    // every other buildable terrain has just the one ("Build", reused as both
+    // the root action's label and its sole category's — see
+    // BUILD_CATEGORIES). Either way, whichever category is first leads to
+    // "Hut" as its first building (Housing's only building; "Build"'s own
+    // list starts with Hut too), so hovering the first category bubble and
+    // clicking the first building bubble always reaches a real, placeable
+    // building regardless of which terrain was picked.
+    //
+    // The 2a ring caps itself at two lanes, so drilling *replaces* the root
+    // actions with the categories rather than orbiting outside them —
+    // `.child` is the outer lane, `.back` the reserved back slot, and what is
+    // left is the categories.
+    const categoryBubble = page.locator('.ring-bubble:not(.back):not(.child)').first();
     await expect(categoryBubble).toBeVisible();
-    // Issue #16 follow-up "concentric rings": drilling into the category
-    // ring opens a new, wider ring around the same tile rather than
-    // replacing the root ring — "Details" (a root-ring action) stays put.
-    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
     const categoryBox = (await categoryBubble.boundingBox())!;
     await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
       steps: 6,
     });
 
-    const hutBubble = page.locator('.ring-bubble', { hasText: 'Hut' }).first();
+    const hutBubble = page.locator('.ring-bubble.child', { hasText: 'Hut' }).first();
     await expect(hutBubble).toBeVisible();
     await hutBubble.click();
 
@@ -208,16 +203,18 @@ test.describe('settlement view interactions', () => {
     await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
 
     // Forest is non-grass terrain, so it gets the single "Build" category
-    // (BUILD_CATEGORIES' `other` bucket) rather than grass's three-category
-    // spread — see SettlementView's categoriesFor.
-    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
+    // (BUILD_CATEGORIES' `other` bucket) rather than grass's four-category
+    // spread — see SettlementView's categoriesFor. The root "Build" action it
+    // shares a label with is gone by now: the 2a ring swaps the inner lane
+    // on drill-down instead of orbiting outside it.
+    const categoryBubble = page.locator('.ring-bubble:not(.back):not(.child)').first();
     await expect(categoryBubble).toBeVisible();
     const categoryBox = (await categoryBubble.boundingBox())!;
     await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
       steps: 6,
     });
 
-    const lumberjackBubble = page.locator('.ring-bubble', { hasText: 'Lumberjack' }).first();
+    const lumberjackBubble = page.locator('.ring-bubble.child', { hasText: 'Lumberjack' }).first();
     await expect(lumberjackBubble).toBeVisible();
     await lumberjackBubble.click();
 
