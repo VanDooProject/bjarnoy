@@ -33,8 +33,40 @@ function valueNoise(x: number, y: number, seed: number, cell: number): number {
   return a + (b - a) * ty;
 }
 
+/**
+ * The generation constants a world was created with — mirrors the backend's
+ * `WorldGenerationOptions`/`WorldGenerationResponse` (issue #159 part B).
+ * Persisted per world and sent once with `WorldResponse`, since an admin
+ * reseed (`POST /api/v1/admin/worlds/{id}/preview-seed`) can change these
+ * away from the defaults below, and the client has to mirror the exact
+ * terrain the server paths over, not just its own hardcoded guess at it.
+ */
+export interface WorldGenerationConstants {
+  islandCellSize: number;
+  islandChance: number;
+  islandMinRadius: number;
+  islandMaxRadius: number;
+  beachThreshold: number;
+  mountainThreshold: number;
+  mountainRockiness: number;
+  forestRockiness: number;
+}
+
+/** `WorldGenerationOptions`'s own C# defaults — demo mode's world (no backend to ask). */
+export const DEFAULT_GENERATION: WorldGenerationConstants = {
+  islandCellSize: 9,
+  islandChance: 0.45,
+  islandMinRadius: 2.4,
+  islandMaxRadius: 5.6,
+  beachThreshold: 0.82,
+  mountainThreshold: 0.4,
+  mountainRockiness: 0.72,
+  forestRockiness: 0.52,
+};
+
 export interface WorldSeed {
   seed: number;
+  generation: WorldGenerationConstants;
 }
 
 // Islands are seeded on a coarse grid of cells (in odd-q offset space, which
@@ -43,25 +75,20 @@ export interface WorldSeed {
 // (jittered) centre sits, and how big it is — all as O(1) hashes of the
 // cell's own coordinates, so a hex's terrain never depends on generating
 // its neighbours.
-const ISLAND_CELL = 9;
-const ISLAND_CHANCE = 0.45;
-const ISLAND_MIN_RADIUS = 2.4;
-const ISLAND_MAX_RADIUS = 5.6;
-
-function closestIsland(col: number, row: number, seed: number): { t: number } | null {
+function closestIsland(col: number, row: number, seed: number, gen: WorldGenerationConstants): { t: number } | null {
   let best: { t: number } | null = null;
   for (let dcx = -1; dcx <= 1; dcx++) {
     for (let dcy = -1; dcy <= 1; dcy++) {
-      const cellCol = Math.floor(col / ISLAND_CELL) + dcx;
-      const cellRow = Math.floor(row / ISLAND_CELL) + dcy;
-      if (hash2(cellCol, cellRow, seed) > ISLAND_CHANCE) continue;
-      const jitter = ISLAND_CELL * 0.55;
+      const cellCol = Math.floor(col / gen.islandCellSize) + dcx;
+      const cellRow = Math.floor(row / gen.islandCellSize) + dcy;
+      if (hash2(cellCol, cellRow, seed) > gen.islandChance) continue;
+      const jitter = gen.islandCellSize * 0.55;
       const centerCol =
-        cellCol * ISLAND_CELL + ISLAND_CELL / 2 + (hash2(cellCol, cellRow, seed + 11) - 0.5) * jitter;
+        cellCol * gen.islandCellSize + gen.islandCellSize / 2 + (hash2(cellCol, cellRow, seed + 11) - 0.5) * jitter;
       const centerRow =
-        cellRow * ISLAND_CELL + ISLAND_CELL / 2 + (hash2(cellCol, cellRow, seed + 13) - 0.5) * jitter;
+        cellRow * gen.islandCellSize + gen.islandCellSize / 2 + (hash2(cellCol, cellRow, seed + 13) - 0.5) * jitter;
       const radius =
-        ISLAND_MIN_RADIUS + hash2(cellCol, cellRow, seed + 17) * (ISLAND_MAX_RADIUS - ISLAND_MIN_RADIUS);
+        gen.islandMinRadius + hash2(cellCol, cellRow, seed + 17) * (gen.islandMaxRadius - gen.islandMinRadius);
       const dist = Math.hypot(col - centerCol, row - centerRow);
       const t = dist / radius;
       if (t <= 1 && (!best || t < best.t)) best = { t };
@@ -72,12 +99,14 @@ function closestIsland(col: number, row: number, seed: number): { t: number } | 
 
 export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
   const { col, row } = axialToOddQ({ q, r });
-  const island = closestIsland(col, row, world.seed);
+  const island = closestIsland(col, row, world.seed, world.generation);
   if (!island) return 'sea';
-  if (island.t > 0.82) return 'sand';
+  if (island.t > world.generation.beachThreshold) return 'sand';
   const rockiness = valueNoise(q, r, world.seed + 2, 2.5);
-  if (island.t < 0.4 && rockiness > 0.72) return 'mountain';
-  return rockiness > 0.52 ? 'forest' : 'grass';
+  if (island.t < world.generation.mountainThreshold && rockiness > world.generation.mountainRockiness) {
+    return 'mountain';
+  }
+  return rockiness > world.generation.forestRockiness ? 'forest' : 'grass';
 }
 
 function isLand(q: number, r: number, world: WorldSeed): boolean {

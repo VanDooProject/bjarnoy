@@ -6,7 +6,7 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { validateTradeRatio } from '../trade/tradeRatio';
-import { generateTile } from './worldGenerator';
+import { DEFAULT_GENERATION, generateTile, type WorldGenerationConstants } from './worldGenerator';
 import {
   emptyResources,
   type CartShipment,
@@ -96,6 +96,8 @@ const TOWER_CLAIM_RADIUS = 1;
 
 export class WorldModel {
   readonly seed: number;
+  /** The world's generation constants (issue #159 part B) — `DEFAULT_GENERATION` in demo mode, since there is no backend to ask. */
+  readonly generation: WorldGenerationConstants;
   private tiles = new Map<string, Tile>();
   private settlements = new Map<string, Settlement>();
   private fleets = new Map<string, Fleet>();
@@ -119,8 +121,9 @@ export class WorldModel {
    */
   private renderedBuildingCoords = new Map<string, Set<string>>();
 
-  constructor(seed = 1) {
+  constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
+    this.generation = generation;
     // One canned open offer so a fresh demo world always has something on
     // the trade board to accept — see the constant's own doc comment.
     this.demoTradeOffers.set('demo-seed-offer', {
@@ -210,7 +213,7 @@ export class WorldModel {
     const k = coordKey({ q, r });
     let tile = this.tiles.get(k);
     if (!tile) {
-      tile = generateTile(q, r, { seed: this.seed });
+      tile = generateTile(q, r, { seed: this.seed, generation: this.generation });
       this.tiles.set(k, tile);
     }
     return tile;
