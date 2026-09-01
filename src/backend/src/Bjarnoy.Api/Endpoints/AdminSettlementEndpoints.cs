@@ -164,7 +164,15 @@ public static class AdminSettlementEndpoints
 
         // The editor paints the whole claimed disc, not just the occupied
         // hexes: an empty buildable hex is exactly what an admin wants to
-        // click on, and terrain is what decides whether anything may go there.
+        // click on, and terrain is what decides whether anything may go
+        // there. Deliberately the centre disc only (Settlement.ClaimRadius /
+        // CentreClaims), not the tower-extended union Settlement.Claims
+        // computes: PlaceBuilding below only ever accepts a new building
+        // inside the centre disc (see CentreClaims's remarks on why — a
+        // tower's own satellite disc must never itself unlock more
+        // construction, or territory could telescope outward without bound).
+        // Painting a wider area here would show the admin hexes that look
+        // clickable but PlaceBuilding would then refuse.
         IReadOnlyList<AdminSettlementHexResponse> hexes =
         [
             .. domain.Centre.WithinRadius(domain.ClaimRadius)

@@ -132,13 +132,20 @@ public sealed class SettlementService(
     /// <summary>
     /// Minimum hex distance between two settlements' centres, enforced at
     /// founding. Sized so that even if both eventually reach
-    /// <see cref="BuildingCatalogue.MaxLevel"/> their borders (see
-    /// <see cref="Settlement.ClaimRadius"/>/<see cref="Settlement.MaxClaimRadius"/>)
+    /// <see cref="BuildingCatalogue.MaxLevel"/> on every building — longhouse
+    /// and every Tower — their full territories (see
+    /// <see cref="Settlement.ClaimDiscs"/>/<see cref="Settlement.MaxTerritoryReach"/>)
     /// can never overlap — a level-up itself is not blocked from overlapping
     /// a neighbour (first-claim-wins on any contested hex), so this is the
-    /// only thing keeping that from happening in practice.
+    /// only thing keeping that from happening in practice. Derived from
+    /// <see cref="Settlement.MaxTerritoryReach"/> rather than the older,
+    /// centre-disc-only <see cref="Settlement.MaxClaimRadius"/>: a tower
+    /// pushes territory out from its own hex, not the centre, so the true
+    /// worst-case reach from a settlement's own centre is the centre disc's
+    /// own max radius *plus* the extra a max-level tower sitting at that
+    /// disc's edge could add.
     /// </summary>
-    public const int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
+    public const int MinimumSpacing = (2 * Settlement.MaxTerritoryReach) + 1;
 
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
@@ -222,7 +229,7 @@ public sealed class SettlementService(
         // distance is hex distance, which SQL cannot express portably.
         // Scoped to the same island, not the whole world — two settlements
         // on different islands are always separated by open sea, so their
-        // claim discs (see Settlement.ClaimRadius) can never actually
+        // claim discs (see Settlement.ClaimDiscs) can never actually
         // overlap any land either could claim no matter how far apart (or
         // close) the islands themselves happen to be. Checking world-wide
         // would reject perfectly fine foundings on two nearby-but-separate
@@ -812,7 +819,15 @@ public sealed class SettlementService(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
-        var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
+
+        // Ship training needs the settlement's *full* claimed territory to
+        // reach the sea, not just its centre disc — a settlement inland at
+        // its centre but with a tower on the coast is exactly the case this
+        // mechanic exists to enable. See Settlement.ClaimDiscs.
+        var hasShoreline = settled.ClaimDiscs
+            .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
+            .Distinct()
+            .Any(sampler.IsShoreline);
         var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)

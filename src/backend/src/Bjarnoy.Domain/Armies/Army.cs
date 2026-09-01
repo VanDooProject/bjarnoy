@@ -178,17 +178,23 @@ public sealed record Army
     /// </summary>
     public const double SupportReserveHours = 2.0;
 
-    /// <param name="targetSettlementClaimRadius">
-    /// The target settlement's own <see cref="Settlement.ClaimRadius"/> —
-    /// only consulted when <paramref name="mission"/> is
-    /// <see cref="ArmyMission.Attack"/> and the requested units are a fleet
+    /// <param name="targetClaimDiscs">
+    /// The target settlement's full claimed territory, as the same
+    /// (centre, radius) discs <see cref="Settlement.ClaimDiscs"/> yields —
+    /// the centre disc plus one satellite disc per placed Tower, each
+    /// centred on that tower's own hex, not the settlement's centre. Only
+    /// consulted when <paramref name="mission"/> is <see cref="ArmyMission.Attack"/>
+    /// or <see cref="ArmyMission.Raid"/> and the requested units are a fleet
     /// (issue #40 phase 6, design doc §8): a fleet can only reach a
     /// settlement that claims at least one <see cref="Shoreline.IsShoreline"/>
-    /// hex, checked by walking <paramref name="destination"/> (the target's
-    /// own <see cref="Settlement.Centre"/> — <c>ArmyService</c> always passes
-    /// it as such for Attack/Support) out to this radius, mirroring
-    /// <see cref="Settlement.Claims"/> without needing the target's whole
-    /// aggregate here. Ignored for land armies and for every other mission.
+    /// hex anywhere in its territory — a tower can extend that territory to
+    /// the coast even when the centre disc alone never reaches it, so every
+    /// disc is walked, not just the one around <paramref name="destination"/>.
+    /// <see langword="null"/> or empty is treated as a single zero-radius
+    /// disc at <paramref name="destination"/> (only <paramref name="destination"/>
+    /// itself must be a shoreline hex) — a safe default for callers that
+    /// have not computed the target's real territory. Ignored for land
+    /// armies and for every other mission.
     /// </param>
     /// <param name="speedFactor">
     /// The world's speed multiplier, mirroring how build/training durations
@@ -207,7 +213,7 @@ public sealed record Army
         ArmyMission mission = ArmyMission.Move,
         Guid? targetSettlementId = null,
         HexCoord? targetBuildingCoord = null,
-        int targetSettlementClaimRadius = 0,
+        IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs = null,
         double speedFactor = 1.0)
     {
         ArgumentNullException.ThrowIfNull(settlement);
@@ -267,7 +273,10 @@ public sealed record Army
         // catapult in it" unreachable; no separate check is needed here.)
         if (mission is ArmyMission.Attack or ArmyMission.Raid && isFleet)
         {
-            var targetHasShoreline = destination.WithinRadius(targetSettlementClaimRadius)
+            IReadOnlyList<(HexCoord Centre, int Radius)> discs =
+                targetClaimDiscs is { Count: > 0 } ? targetClaimDiscs : [(destination, 0)];
+            var targetHasShoreline = discs
+                .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
                 .Any(coord => Shoreline.IsShoreline(coord, terrainAt));
             if (!targetHasShoreline)
             {

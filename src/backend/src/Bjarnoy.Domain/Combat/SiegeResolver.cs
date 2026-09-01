@@ -24,8 +24,15 @@ namespace Bjarnoy.Domain.Combat;
 /// True when the target was the Longhouse and <paramref name="LevelAfter"/>
 /// is 0 — per the design doc, a settlement with no Longhouse is "razed": its
 /// <see cref="Settlement.ClaimRadius"/> falls to its level-0 floor for free
-/// (see <see cref="Settlement.ClaimRadius"/>'s remarks), nothing else is
-/// implied or applied automatically. The garrison is left as-is (not
+/// (see <see cref="Settlement.ClaimRadius"/>'s remarks); a sieged Tower's own
+/// satellite disc collapses the same way, for the same reason — a
+/// destroyed/removed Tower is simply gone from <c>UpdatedBuildings</c>, and
+/// <see cref="Settlement.Claims"/> only ever reads the discs of buildings
+/// still standing (<see cref="Settlement.ClaimDiscs"/>), so no separate
+/// handling is needed here: the territory shrink is a consequence of the
+/// building list changing, not a rule this resolver applies itself. Beyond
+/// that, nothing else is implied or applied automatically. The garrison is
+/// left as-is (not
 /// specified by the design doc) and guest armies are not forcibly recalled —
 /// both deliberately deferred, see <see cref="Resolve"/>'s remarks.
 /// </param>

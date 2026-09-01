@@ -356,7 +356,7 @@ public class ArmyAttackTests
         var decision = Army.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
-            targetSettlementClaimRadius: 0);
+            targetClaimDiscs: [(TargetHex, 0)]);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
@@ -371,7 +371,7 @@ public class ArmyAttackTests
         var decision = Army.PlanDispatch(
             settlement, [new UnitStack(UnitType.Karve, 5)], 100, [], TargetHex, T0,
             Guid.CreateVersion7(), TerrainAt, ArmyMission.Attack, Guid.CreateVersion7(),
-            targetSettlementClaimRadius: 0);
+            targetClaimDiscs: [(TargetHex, 0)]);
 
         Assert.Equal(DispatchRejection.DefenderHasNoShoreline, decision.Rejection);
     }

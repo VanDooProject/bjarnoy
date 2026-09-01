@@ -38,12 +38,14 @@ const ARMY_POLL_MS = 2000;
 
 // Mirrors the backend's SettlementService.MinimumSpacing: the minimum hex
 // distance the API enforces between two settlements' centres, sized so two
-// settlements can never have overlapping borders no matter how high either
-// one's longhouse levels up (see Settlement.MaxClaimRadius's own comment on
-// the backend). Kept in sync here so nearestStartPosition/nearbyStartPositions
-// can skip a plot the backend would reject instead of finding out only after
-// the founding request fails.
-const MINIMUM_SETTLEMENT_SPACING = 13;
+// settlements can never have overlapping territory no matter how high either
+// one's longhouse and every Tower level up (see Settlement.MaxTerritoryReach's
+// own comment on the backend — a Tower extends territory from its own hex,
+// not the centre, so this accounts for a satellite disc, not just the centre
+// disc's own worst case). Kept in sync here so nearestStartPosition/
+// nearbyStartPositions can skip a plot the backend would reject instead of
+// finding out only after the founding request fails.
+const MINIMUM_SETTLEMENT_SPACING = 23;
 
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's
@@ -70,6 +72,16 @@ export const useWorldStore = defineStore('world', {
       // longhouse counts as the first) rather than a separately tracked
       // counter that could drift from what's really on the ground.
       buildingsPlaced: 0,
+      // Full placed-building list (type/level/coord) for the selected live
+      // settlement, refreshed alongside everything else in
+      // `refreshLiveSettlement` — TrainingModal.vue's own coastal check needs
+      // the player's Tower positions/levels to mirror the backend's
+      // multi-disc `Settlement.Claims` (see `lib/map/shoreline.ts`'s
+      // `hasShoreline`/`claimDiscsForSettlement`), which `WorldModel` itself
+      // doesn't retain per-settlement (it only ever renders buildings onto
+      // tiles — see `WorldModel.applyServerSnapshot`). Always empty in demo
+      // mode, same as `hud.garrison`/`hud.trainingQueue` above.
+      buildings: [] as PlacedBuildingResponse[],
       // zip 9: "real-time elements: build queue countdowns" — a snapshot of
       // the backend's queue plus when it was fetched, so BuildQueuePanel can
       // count each order down locally between polls instead of only
@@ -437,6 +449,7 @@ export const useWorldStore = defineStore('world', {
         capacity: { ...response.resources.capacity },
         buildings: response.buildings,
       });
+      this.hud.buildings = response.buildings;
       this.hud.queue = response.queue;
       this.hud.queueFetchedAt = Date.now();
       this.hud.garrison = response.garrison;

@@ -275,6 +275,95 @@ public class SettlementTests
     }
 
     [Fact]
+    public void A_tower_extends_the_claim_with_its_own_satellite_disc()
+    {
+        // Far enough from the centre that the centre disc alone (radius 1 at
+        // longhouse level 1) never reaches it, but a level-4 tower sitting
+        // just inside the centre disc's edge (TowerClaimRadius(4) == 2) does.
+        var towerCoord = new HexCoord(1, 0);
+        var farHex = new HexCoord(3, 0);
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 1),
+                new PlacedBuilding(towerCoord, BuildingType.Tower, 4),
+            ],
+        };
+
+        Assert.False(settlement.ClaimRadius >= Centre.DistanceTo(farHex));
+        Assert.True(settlement.Claims(farHex));
+    }
+
+    [Fact]
+    public void A_hex_beyond_every_disc_is_not_claimed()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 1),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.Tower, 4),
+            ],
+        };
+
+        Assert.False(settlement.Claims(new HexCoord(50, 0)));
+    }
+
+    [Fact]
+    public void A_tower_cannot_be_built_inside_another_towers_satellite_disc_only_inside_the_centre_disc()
+    {
+        // Exploit-prevention regression: if placement were gated by Claims
+        // (the tower-extended union) instead of CentreClaims (the centre
+        // disc alone), a hex reachable only via an existing tower's own
+        // satellite disc would accept a *second* tower, whose own disc would
+        // reach further still, letting a chain of towers telescope territory
+        // arbitrarily far from Centre — breaking the fixed worst-case
+        // MaxTerritoryReach/MinimumSpacing is sized against. See
+        // Settlement.CentreClaims's remarks.
+        var firstTower = new HexCoord(1, 0);
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 1), // ClaimRadius == 1
+                new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 5
+            ],
+        };
+
+        // Reachable only through the first tower's own satellite disc
+        // (distance 5 from firstTower, distance 6 from Centre — outside the
+        // centre disc's radius of 1), not through the centre disc itself.
+        var farHex = new HexCoord(6, 0);
+        Assert.True(settlement.Claims(farHex), "sanity: the union claim should already reach this hex via the first tower");
+        Assert.False(settlement.CentreClaims(farHex));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Tower, farHex, Terrain.Sand, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.HexNotInSettlement, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_level_zero_tower_stub_adds_no_extra_reach()
+    {
+        // Enqueue leaves a level-0 foundation stub in Buildings until the
+        // build order completes (Settlement.Enqueue's own remarks) — that
+        // stub must not itself widen the claim before the tower is finished.
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 1),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.Tower, 0),
+            ],
+        };
+
+        Assert.Equal(0, Settlement.TowerClaimRadius(0));
+        Assert.False(settlement.Claims(new HexCoord(3, 0)));
+    }
+
+    [Fact]
     public void Building_outside_the_claim_is_refused()
     {
         var settlement = Found();
