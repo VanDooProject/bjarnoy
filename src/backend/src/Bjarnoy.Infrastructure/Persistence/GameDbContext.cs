@@ -223,8 +223,15 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             order.Property(o => o.Id).ValueGeneratedNever();
             order.Property(o => o.Type).HasConversion<int>();
 
-            // One order per hex at a time.
-            order.HasIndex(o => new { o.SettlementId, o.Q, o.R }).IsUnique();
+            // Unique on (SettlementId, Q, R, TargetLevel) rather than just
+            // (SettlementId, Q, R): with maxOrdersPerHex == 1 in force
+            // everywhere today (issue #158 stage 1d), the app never produces
+            // a second row per hex anyway, so this still refuses exact
+            // duplicates — including the concurrent-double-queue race on one
+            // hex, which a plain non-unique index would not catch — while
+            // already permitting the level chain the day a stacking tier is
+            // switched on, with no second migration needed then.
+            order.HasIndex(o => new { o.SettlementId, o.Q, o.R, o.TargetLevel }).IsUnique();
         });
 
         modelBuilder.Entity<UnitStackEntity>(stack =>

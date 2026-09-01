@@ -491,6 +491,14 @@ public sealed record Army
             ? spent
             : settledDefender.Resources.SettledTo(battleInstant);
 
+        // Loot deliberately reaches into reserved resources too (taking them
+        // is the entire point of a raid) — a reservation is only unspendable
+        // by the settlement's own economy (issue #158 stage 1c). If the raid
+        // took the stock below what the waiting queue has earmarked, the
+        // first unfunded waiting order and everything behind it is dropped
+        // at this same instant, not whenever someone next looks.
+        settledDefender = (settledDefender with { Resources = afterLoot }).DropUnfundedOrders(battleInstant);
+
         // plan.DefenderLosses/DefenderSurvivors are pooled across home+guest
         // (they were computed against combinedDefense above) — split each
         // type's pooled loss back between "home garrison" and "the guest
@@ -519,7 +527,12 @@ public sealed record Army
 
         if (siege.Applied)
         {
-            defenderPostBattle = defenderPostBattle with { Buildings = siege.UpdatedBuildings! };
+            // Drops any build order still targeting the hit hex when the
+            // catapult destroyed it outright, or the next SettleTo would find
+            // nothing standing there and silently rebuild it (issue #158
+            // stage 1b).
+            defenderPostBattle = defenderPostBattle.WithSiegeDamage(
+                siege.UpdatedBuildings!, siege.TargetCoord!.Value, battleInstant, defenderSpeedFactor, guestDefenderStacks);
         }
 
         var finalDefender = defenderPostBattle.SettleTo(now, defenderSpeedFactor).Settlement;

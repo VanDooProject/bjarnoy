@@ -345,7 +345,7 @@ public class SettlementShrineTests
         Assert.True(order.Accepted);
         var queued = settlement.Enqueue(order.Order!, T0);
 
-        var settled = queued.SettleTo(order.Order!.CompletesAt).Settlement;
+        var settled = queued.SettleTo(order.Order!.CompletesAt!.Value).Settlement;
 
         var (expectedProduction, _) = settled.CurrentTotals();
         Assert.Equal(expectedProduction.Wood, settled.Resources.RatePerHour.Wood, 6);

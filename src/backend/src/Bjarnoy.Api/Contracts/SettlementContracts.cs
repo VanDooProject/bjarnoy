@@ -42,13 +42,30 @@ public sealed record TrainUnitsRequest(
 /// be misleading, so this is the rate the settlement <em>has</em>; whether it is
 /// currently accruing is <c>world.running</c>.
 /// </param>
+/// <param name="Reserved">
+/// Earmarked for the premium waiting queue (issue #158 stage 1c) — still
+/// physically sitting in <see cref="Stock"/> (still raidable, still counted
+/// against <see cref="Capacity"/>), but unspendable on anything voluntary:
+/// another build, training, trade, dispatch provisions, a guild fee. Lives
+/// here, not under construction, because every one of those other panels has
+/// to respect it too.
+/// </param>
+/// <param name="Available"><see cref="Stock"/> minus <see cref="Reserved"/>, floored at zero — what a client should actually offer the player to spend.</param>
 public sealed record ResourcesResponse(
     ResourceLine Stock,
     ResourceLine RatePerHour,
-    ResourceLine Capacity)
+    ResourceLine Capacity,
+    ResourceLine Reserved,
+    ResourceLine Available)
 {
-    public static ResourcesResponse From(ResourceAmounts stock, ResourceAmounts rate, ResourceAmounts capacity) =>
-        new(ResourceLine.From(stock.Floor()), ResourceLine.From(rate), ResourceLine.From(capacity));
+    public static ResourcesResponse From(
+        ResourceAmounts stock, ResourceAmounts rate, ResourceAmounts capacity, ResourceAmounts reserved, ResourceAmounts available) =>
+        new(
+            ResourceLine.From(stock.Floor()),
+            ResourceLine.From(rate),
+            ResourceLine.From(capacity),
+            ResourceLine.From(reserved.Floor()),
+            ResourceLine.From(available.Floor()));
 }
 
 public sealed record ResourceLine(double Wood, double Stone, double Food, double Iron)
@@ -66,16 +83,35 @@ public sealed record ResourceLine(double Wood, double Stone, double Food, double
 /// </param>
 public sealed record PlacedBuildingResponse(int Q, int R, string Type, int Level, string? Orientation = null);
 
+/// <param name="State">
+/// <c>"building"</c> while under construction, <c>"waiting"</c> while queued
+/// behind a full set of construction slots (issue #158) — the premium
+/// waiting queue.
+/// </param>
+/// <param name="SlotCost">
+/// How many construction slots this order occupies once building — every
+/// slot the settlement currently has, for a Longhouse upgrade
+/// (<c>OccupiesAllSlots</c>); otherwise the catalogue's per-order
+/// <c>SlotCost</c> (1 for everything today).
+/// </param>
+/// <param name="CompletesAtGameTime">
+/// <see langword="null"/> for a waiting order — it has not started, so there
+/// is no real completion instant yet, only <see cref="TotalSeconds"/>'s
+/// estimate.
+/// </param>
 /// <param name="CompletesInSeconds">
-/// Remaining game time. Null while the world is frozen, because the countdown
-/// is suspended rather than merely postponed.
+/// Remaining game time. Null while the world is frozen (the countdown is
+/// suspended rather than merely postponed) or while the order is still
+/// waiting for a slot.
 /// </param>
 /// <param name="TotalSeconds">
 /// The order's full build duration (from <c>StartedAt</c> to
-/// <c>CompletesAt</c>), so the client can compute progress as an absolute
-/// fraction of the whole order instead of relative to whenever it last
-/// polled — see issue #99. Unaffected by the world clock freezing, since it
-/// doesn't depend on "now".
+/// <c>CompletesAt</c>) for a started order, so the client can compute
+/// progress as an absolute fraction of the whole order instead of relative
+/// to whenever it last polled — see issue #99. For a still-waiting order this
+/// is an <em>estimate</em> — the catalogue's base duration at the world's
+/// current speed factor — since the real duration is only decided at
+/// promotion, whatever the speed factor is then.
 /// </param>
 public sealed record BuildOrderResponse(
     Guid Id,
@@ -83,7 +119,9 @@ public sealed record BuildOrderResponse(
     int R,
     string Building,
     int TargetLevel,
-    DateTimeOffset CompletesAtGameTime,
+    string State,
+    int SlotCost,
+    DateTimeOffset? CompletesAtGameTime,
     double? CompletesInSeconds,
     double TotalSeconds);
 
@@ -119,6 +157,19 @@ public sealed record TrainingOrderResponse(
     double? CompletesInSeconds,
     double TotalSeconds);
 
+/// <param name="MaxWaitingOrders">
+/// Zero means the waiting queue is premium-locked for this settlement — the
+/// client's only signal that premium is required, so it never needs its own
+/// premium flag. Non-zero (currently always <c>Settlement.MaxWaitingOrders</c>)
+/// means the player can queue behind a full set of slots.
+/// </param>
+/// <param name="MaxOrdersPerHex">
+/// Always 1 today (<c>Settlement.DefaultMaxOrdersPerHex</c>) — the same
+/// "read the cap off the response" trick as <see cref="MaxWaitingOrders"/>,
+/// this time for the stage 1d per-hex stacking tier once it exists.
+/// </param>
+public sealed record ConstructionResponse(int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex);
+
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -130,6 +181,7 @@ public sealed record SettlementResponse(
     int LonghouseLevel,
     int ClaimRadius,
     ResourcesResponse Resources,
+    ConstructionResponse Construction,
     IReadOnlyList<PlacedBuildingResponse> Buildings,
     IReadOnlyList<BuildOrderResponse> Queue,
     IReadOnlyList<UnitStackResponse> Garrison,
@@ -160,6 +212,10 @@ public sealed record SettlementResponse(
             return sampler.FishingHutOrientation(coord, centre).ToWireName();
         }
 
+        var speedFactor = entity.World?.SpeedFactor ?? 1.0;
+        var isPremium = entity.Owner?.IsPremium ?? false;
+        var maxWaitingOrders = isPremium ? Settlement.MaxWaitingOrders : 0;
+
         return new SettlementResponse(
             entity.Id,
             entity.WorldId,
@@ -171,7 +227,17 @@ public sealed record SettlementResponse(
             domain.LonghouseLevel,
             domain.ClaimRadius,
             ResourcesResponse.From(
-                domain.Resources.At(gameNow), domain.Resources.RatePerHour, domain.Resources.Capacity),
+                domain.Resources.At(gameNow),
+                domain.Resources.RatePerHour,
+                domain.Resources.Capacity,
+                domain.ReservedResources,
+                domain.AvailableResources(gameNow)),
+            new ConstructionResponse(
+                domain.ConstructionSlots,
+                domain.UsedSlots,
+                maxWaitingOrders,
+                domain.WaitingOrders.Count(),
+                Settlement.DefaultMaxOrdersPerHex),
             [.. domain.Buildings.Select(b =>
                 new PlacedBuildingResponse(
                     b.Coord.Q, b.Coord.R, b.Type.ToWireName(), b.Level, OrientationFor(b.Type, b.Coord)))],
@@ -181,9 +247,15 @@ public sealed record SettlementResponse(
                 o.Coord.R,
                 o.Type.ToWireName(),
                 o.TargetLevel,
+                o.IsWaiting ? "waiting" : "building",
+                BuildingCatalogue.Get(o.Type, o.TargetLevel).OccupiesAllSlots
+                    ? domain.ConstructionSlots
+                    : BuildingCatalogue.Get(o.Type, o.TargetLevel).SlotCost,
                 o.CompletesAt,
-                clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
-                (o.CompletesAt - o.StartedAt).TotalSeconds))],
+                (clock.FreezesTime || o.IsWaiting) ? null : o.RemainingAt(gameNow).TotalSeconds,
+                o.IsWaiting
+                    ? o.BaseDuration.TotalSeconds / speedFactor
+                    : (o.CompletesAt!.Value - o.StartedAt!.Value).TotalSeconds))],
             [.. domain.Garrison.Select(g => new UnitStackResponse(g.Type.ToWireName(), g.Count))],
             [.. domain.TrainingQueue.Select(o => new TrainingOrderResponse(
                 o.Id,
@@ -228,7 +300,9 @@ public sealed record BuildingDefinitionResponse(
     ResourceLine StorageCapacity,
     IReadOnlyList<string> AllowedTerrain,
     bool RequiresCoastalWater,
-    int RequiredLonghouseLevel)
+    int RequiredLonghouseLevel,
+    int SlotCost,
+    bool OccupiesAllSlots)
 {
     public static BuildingDefinitionResponse From(BuildingDefinition definition)
     {
@@ -243,7 +317,9 @@ public sealed record BuildingDefinitionResponse(
             ResourceLine.From(definition.StorageCapacity),
             [.. definition.AllowedTerrain.Select(t => t.ToWireName()).Order(StringComparer.Ordinal)],
             definition.RequiresCoastalWater,
-            definition.RequiredLonghouseLevel);
+            definition.RequiredLonghouseLevel,
+            definition.SlotCost,
+            definition.OccupiesAllSlots);
     }
 }
 

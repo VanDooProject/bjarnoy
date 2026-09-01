@@ -247,6 +247,10 @@ public static class BuildingCatalogue
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
         AllowedTerrain = Grass,
         RequiredLonghouseLevel = 1,
+        // A longhouse upgrade is the settlement's biggest single commitment —
+        // it consumes every construction slot the settlement currently has,
+        // blocking all other construction until it finishes (issue #158).
+        OccupiesAllSlots = true,
     };
 
     private static BuildingDefinition StorageHouse(int level) => new()
