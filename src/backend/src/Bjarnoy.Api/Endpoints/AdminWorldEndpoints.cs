@@ -147,6 +147,11 @@ public static class AdminWorldEndpoints
             errors[nameof(request.SpeedFactor)] = ["Speed factor must be greater than 0."];
         }
 
+        if (request.BaseShieldDays is <= 0)
+        {
+            errors[nameof(request.BaseShieldDays)] = ["Base shield days must be greater than 0."];
+        }
+
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
         if (world is null)
         {
@@ -176,6 +181,7 @@ public static class AdminWorldEndpoints
         var updated = await worlds.UpdateAdminSettingsAsync(
             worldId,
             request.SpeedFactor,
+            request.BaseShieldDays,
             request.StartsAt.HasValue,
             request.StartsAt.Value,
             request.JoinsClosed,

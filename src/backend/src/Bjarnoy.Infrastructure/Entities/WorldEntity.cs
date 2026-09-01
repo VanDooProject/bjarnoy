@@ -91,6 +91,16 @@ public class WorldEntity
     /// </summary>
     public double SpeedFactor { get; set; } = 1.0;
 
+    /// <summary>
+    /// Admin-configurable base for the new-account shield (design doc §1,
+    /// issue #132) — divided by <see cref="SpeedFactor"/> and clamped to
+    /// <c>Settlement.MinShieldDays</c>/<c>MaxShieldDays</c> at founding time,
+    /// same admin-tunable-per-world shape as <see cref="SpeedFactor"/> itself.
+    /// Default of 7 mirrors Travian's ~5-day shield, scaled up slightly for
+    /// this genre's slower early curve.
+    /// </summary>
+    public double BaseShieldDays { get; set; } = 7;
+
     /// <summary>World not joinable before this instant. Null means open immediately.</summary>
     public DateTimeOffset? StartsAt { get; set; }
 

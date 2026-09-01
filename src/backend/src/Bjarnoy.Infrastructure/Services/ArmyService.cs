@@ -215,7 +215,16 @@ public sealed class ArmyService(
             return new ArmyDispatchResult(decision.Rejection);
         }
 
-        settlement.ApplyDomain(decision.Settlement!);
+        // Design doc §3: an actual attack (not Move/Support/scouting) drops
+        // whatever shield this settlement was still under, unconditionally —
+        // the shield is only ever on while the player doesn't attack. Raid is
+        // an attack for this purpose too (same combat path, just a softer
+        // loss curve — see ArmyMission.Raid's own remarks).
+        var dispatchedSettlement = mission is ArmyMission.Attack or ArmyMission.Raid
+            ? decision.Settlement!.YieldShield()
+            : decision.Settlement!;
+
+        settlement.ApplyDomain(dispatchedSettlement);
 
         var armyEntity = new ArmyEntity { Id = armyId, SettlementId = settlementId };
         armyEntity.ApplyDomain(decision.Army!);

@@ -460,6 +460,7 @@ public sealed class WorldService(
     public async Task<WorldEntity?> UpdateAdminSettingsAsync(
         Guid worldId,
         double? speedFactor,
+        double? baseShieldDays,
         bool hasStartsAt,
         DateTimeOffset? startsAt,
         bool? joinsClosed,
@@ -478,6 +479,11 @@ public sealed class WorldService(
         if (speedFactor is { } factor)
         {
             world.SpeedFactor = factor;
+        }
+
+        if (baseShieldDays is { } shieldDays)
+        {
+            world.BaseShieldDays = shieldDays;
         }
 
         if (hasStartsAt)

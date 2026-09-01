@@ -435,9 +435,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProposerGuildId", "TargetGuildId");
-
                     b.HasIndex("TargetGuildId");
+
+                    b.HasIndex("ProposerGuildId", "TargetGuildId");
 
                     b.ToTable("guild_peace_treaties", (string)null);
                 });
@@ -834,6 +834,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("SettledAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("ShieldExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<double>("StockFood")
                         .HasColumnType("double precision");
 
@@ -942,11 +945,11 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("OfferedResource")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("PosterSettlementId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("PostedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PosterSettlementId")
+                        .HasColumnType("uuid");
 
                     b.Property<double>("RequestedAmount")
                         .HasColumnType("double precision");
@@ -1242,6 +1245,9 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<double>("BaseShieldDays")
+                        .HasColumnType("double precision");
+
                     b.Property<double>("BeachThreshold")
                         .HasColumnType("double precision");
 
@@ -1372,13 +1378,6 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired();
 
                     b.Navigation("BattleReport");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>
-                {
-                    b.Navigation("AttackerLines");
-
-                    b.Navigation("DefenderLines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BuildOrderEntity", b =>
@@ -1623,6 +1622,45 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("World");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ShipmentEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("FromSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ToSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PosterSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -1686,23 +1724,16 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("World");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
-                {
-                    b.Navigation("RefreshTokens");
-
-                    b.Navigation("Settlements");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
-                {
-                    b.Navigation("Islands");
-
-                    b.Navigation("Settlements");
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
                     b.Navigation("Stacks");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>
+                {
+                    b.Navigation("AttackerLines");
+
+                    b.Navigation("DefenderLines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardTopicEntity", b =>
@@ -1740,43 +1771,18 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Navigation("TrainingQueue");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ShipmentEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("RefreshTokens");
 
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("FromSettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("ToSettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                    b.Navigation("Settlements");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PosterSettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
+                    b.Navigation("Islands");
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("Settlements");
                 });
 #pragma warning restore 612, 618
         }

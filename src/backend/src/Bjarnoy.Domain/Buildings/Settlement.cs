@@ -72,6 +72,56 @@ public sealed record Settlement
     /// </summary>
     public IReadOnlyList<RuneInstance> Runes { get; init; } = [];
 
+    /// <summary>
+    /// When this settlement's new-account shield (issue #132) lapses;
+    /// <see langword="null"/> once yielded (<see cref="YieldShield"/>) or
+    /// never granted at all. Computed once at founding
+    /// (<c>SettlementService.FoundAsync</c>) from that instant plus
+    /// <see cref="ShieldDurationFor"/>, and never re-evaluated afterward even
+    /// if the world's <c>SpeedFactor</c> later changes (design doc §1).
+    /// Despite the "Utc" in its name this lives in the same clock domain as
+    /// <see cref="Buildings"/>'s own instants and
+    /// <c>SettlementEntity.FoundedAt</c> — game time, not wall time — so it
+    /// compares directly against the same <c>now</c> every other rule here
+    /// takes as a parameter; see <c>SettlementEntity</c>'s remarks on why a
+    /// <see cref="DateTimeOffset"/> column here is still game time.
+    /// </summary>
+    public DateTimeOffset? ShieldExpiresAtUtc { get; init; }
+
+    /// <summary>Whether this settlement is still inside its new-account shield window at <paramref name="now"/>.</summary>
+    public bool IsShielded(DateTimeOffset now) => ShieldExpiresAtUtc is { } expires && now < expires;
+
+    /// <summary>
+    /// The new-account shield's length (design doc §1): a world-level base
+    /// (admin-configurable, <c>WorldEntity.BaseShieldDays</c>) shrunk by the
+    /// world's <c>SpeedFactor</c> the same way build times are, then clamped
+    /// to <see cref="MinShieldDays"/>/<see cref="MaxShieldDays"/> so neither a
+    /// very slow nor a very fast world ever lands outside that range.
+    /// </summary>
+    public const double MinShieldDays = 3;
+
+    /// <summary>See <see cref="MinShieldDays"/>.</summary>
+    public const double MaxShieldDays = 14;
+
+    /// <summary>Pure form of the design doc §1 formula — see <see cref="MinShieldDays"/>.</summary>
+    public static TimeSpan ShieldDurationFor(double baseShieldDays, double speedFactor)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(speedFactor);
+
+        var days = Math.Clamp(baseShieldDays / speedFactor, MinShieldDays, MaxShieldDays);
+        return TimeSpan.FromDays(days);
+    }
+
+    /// <summary>
+    /// Voluntary early shield drop (design doc §2): a protected player may
+    /// give up the shield to attack sooner. No frontend control ships in v1 —
+    /// this exists so the capability (and the endpoint that calls it) can be
+    /// exercised on its own, distinct from the shield simply expiring or
+    /// lapsing implicitly on the player's own attack (§3, see
+    /// <c>ArmyService.DispatchAsync</c>).
+    /// </summary>
+    public Settlement YieldShield() => this with { ShieldExpiresAtUtc = null };
+
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
 

@@ -12,6 +12,7 @@ public sealed record AdminWorldResponse(
     int MaxPlayers,
     int PlayerCount,
     double SpeedFactor,
+    double BaseShieldDays,
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
     DateTimeOffset? EndbossAt,
@@ -31,6 +32,7 @@ public sealed record AdminWorldResponse(
             world.MaxPlayers,
             playerCount,
             world.SpeedFactor,
+            world.BaseShieldDays,
             world.StartsAt,
             world.JoinsClosed,
             world.EndbossAt,
@@ -42,6 +44,12 @@ public sealed record AdminWorldResponse(
 }
 
 /// <param name="SpeedFactor">Omit to leave unchanged. Must be greater than 0 when sent.</param>
+/// <param name="BaseShieldDays">
+/// Omit to leave unchanged. Must be greater than 0 when sent — see
+/// <see cref="Bjarnoy.Infrastructure.Entities.WorldEntity.BaseShieldDays"/>.
+/// A settlement's actual shield length is computed once at founding and
+/// never re-derived from a later change to this value (design doc §1).
+/// </param>
 /// <param name="StartsAt">
 /// Omit to leave unchanged; send explicit <c>null</c> to open the world immediately.
 /// </param>
@@ -53,6 +61,7 @@ public sealed record AdminWorldResponse(
 /// </param>
 public sealed record UpdateWorldSettingsRequest(
     double? SpeedFactor,
+    double? BaseShieldDays = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     Optional<DateTimeOffset?> StartsAt = default,
     bool? JoinsClosed = null,

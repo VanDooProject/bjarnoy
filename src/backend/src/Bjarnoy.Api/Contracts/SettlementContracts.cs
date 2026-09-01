@@ -135,7 +135,9 @@ public sealed record SettlementResponse(
     IReadOnlyList<UnitStackResponse> Garrison,
     IReadOnlyList<TrainingOrderResponse> TrainingQueue,
     IReadOnlyList<RuneInstanceResponse> Runes,
-    WorldClockResponse World)
+    WorldClockResponse World,
+    DateTimeOffset? ShieldExpiresAtUtc,
+    bool IsShielded)
 {
     public static SettlementResponse From(
         SettlementEntity entity, GameClock clock, DateTimeOffset gameNow)
@@ -195,7 +197,9 @@ public sealed record SettlementResponse(
                 o.PerUnitDuration.TotalSeconds * o.Count))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
-            WorldClockResponse.From(clock, gameNow));
+            WorldClockResponse.From(clock, gameNow),
+            domain.ShieldExpiresAtUtc,
+            domain.IsShielded(gameNow));
     }
 }
 
