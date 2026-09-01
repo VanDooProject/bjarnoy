@@ -612,6 +612,9 @@ function onBackdropPointerDown(e: PointerEvent) {
 .card-rows dt {
   color: var(--muted);
   font-weight: 400;
+  /* "Build time" is a two-word label in a shrink-to-fit column — without this
+     it breaks across two lines as soon as a value on another row is wide. */
+  white-space: nowrap;
 }
 .card-rows dd {
   margin: 0;
