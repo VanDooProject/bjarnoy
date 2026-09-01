@@ -138,6 +138,8 @@ export interface FogDebugFlags {
   realmBorders: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
+  /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
+  waveCull: boolean;
 }
 /**
  * Fog knobs that are a *value* rather than an on/off — same debug-only
@@ -166,6 +168,7 @@ export const fogDebugFlags: FogDebugFlags = {
   showRawMask: false,
   realmBorders: true,
   terrainCull: true,
+  waveCull: true,
 };
 
 // Per-rebuild/per-frame stats, read by FogPerfPanel — §2.8's "what's
@@ -193,6 +196,10 @@ export interface FogPerfStats {
   markersMs: number;
   /** rebuildWaves: world-mode open-water squiggle placement (world mode only; 0 in settlement mode). */
   wavesMs: number;
+  /** Wave squiggles kept by rebuildWaves — the ones drawWaves re-strokes every frame. */
+  waveDrawnCount: number;
+  /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
+  waveCulledCount: number;
   /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
   /** Hexes in the current viewport rect — the size the above times scale with. */
@@ -213,6 +220,8 @@ export const fogPerfStats: FogPerfStats = {
   borderedHexCount: 0,
   markersMs: 0,
   wavesMs: 0,
+  waveDrawnCount: 0,
+  waveCulledCount: 0,
   totalMs: 0,
   hexCount: 0,
   maskFetchMs: 0,
@@ -1607,10 +1616,12 @@ export class HexMapRenderer {
       // the same opaque backdrop, so there's nothing to gain by refreshing
       // wavePoints for hexes that are entirely hidden.
       phaseStart = performance.now();
-      this.rebuildWaves();
+      this.rebuildWaves(coords, fogActive);
       fogPerfStats.wavesMs = performance.now() - phaseStart;
     } else {
       fogPerfStats.wavesMs = 0;
+      fogPerfStats.waveDrawnCount = 0;
+      fogPerfStats.waveCulledCount = 0;
     }
 
     fogPerfStats.hexCount = coords.length;
@@ -1816,10 +1827,30 @@ export class HexMapRenderer {
   // Recomputes which open-water grid points get a wave squiggle for the
   // current viewport — same cadence as terrain (only on a cull rebuild).
   // Animating them (drawWaves, every tick) is a separate, much cheaper step.
-  private rebuildWaves() {
+  //
+  // Cheap-first ordering matters here, because the grid this walks grows
+  // with the visible world rect and so with how far out the camera is
+  // zoomed: the density hash rejects ~38% for the cost of three multiplies,
+  // the fog cull is a few subtractions over an already-pruned source list,
+  // and isNearLand — 7 getTile lookups — runs only on what survives both.
+  private rebuildWaves(coords: AxialCoord[], fogActive: boolean) {
     const margin = TILE_W;
     const rect = visibleWorldRect(this.camera, this.viewport, margin);
     const points: WavePoint[] = [];
+    let culled = 0;
+
+    // Same threshold, and the same reasoning, as the terrain cull: past
+    // FOG_TERRAIN_CULL_HEXES the unknown ramp is saturated, so the mist
+    // mesh above these strokes is provably opaque and a wave drawn there
+    // cannot reach the screen. Unlike terrain this is not only a build-time
+    // saving — drawWaves re-strokes every surviving point *every frame*, so
+    // a wave kept here costs two quadratic curves per frame forever.
+    // rebuildAll's rect uses VISIBLE_RECT_MARGIN (2 * TILE_W) against this
+    // one's TILE_W, so coords strictly contains the wave grid and its
+    // bounds cannot prune a source that reaches a wave.
+    const fogSources =
+      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+    const culling = fogSources.length > 0;
 
     const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
     const xStart = Math.floor(rect.minX / WAVE_STEP_X) * WAVE_STEP_X;
@@ -1828,7 +1859,12 @@ export class HexMapRenderer {
         if (hash01(x, y, 1) > WAVE_DENSITY) continue;
         const jx = x + (hash01(x, y, 2) - 0.5) * WAVE_JITTER_X;
         const jy = y + (hash01(x, y, 3) - 0.5) * WAVE_JITTER_Y;
-        if (this.isNearLand(isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H))) continue;
+        const coord = isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H);
+        if (culling && this.isPastTerrainCull(coord.q, coord.r, fogSources)) {
+          culled++;
+          continue;
+        }
+        if (this.isNearLand(coord)) continue;
         points.push({
           x: jx,
           y: jy,
@@ -1838,6 +1874,8 @@ export class HexMapRenderer {
       }
     }
     this.wavePoints = points;
+    fogPerfStats.waveDrawnCount = points.length;
+    fogPerfStats.waveCulledCount = culled;
   }
 
   // zip 7 prototype's `vr-swell`: each wave nudges up-and-right and back,

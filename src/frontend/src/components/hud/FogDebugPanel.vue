@@ -37,6 +37,7 @@ const LABELS: Record<keyof FogDebugFlags, string> = {
   showRawMask: 'Debug: bypass edge shaping, show raw mask',
   realmBorders: 'Realm borders enabled',
   terrainCull: 'Terrain: cull past fog cutoff',
+  waveCull: 'Waves: cull past fog cutoff',
 };
 
 watch(
