@@ -92,6 +92,10 @@ uniform vec2 uOutOfSightEdge;
 // why these displace the ramp rather than the sample UV.
 uniform vec2 uEdgeNoise;
 uniform vec2 uSeedJitter;
+// Per-tier ramp value at which the noise starts tapering off, reaching zero
+// at 1.0. Deliberately independent of where the tier's opacity saturates —
+// see edgeBand().
+uniform vec2 uNoiseReach;
 // Reciprocal of the largest noise octave's feature size, in world units —
 // the fog's cloud structure is anchored to the *world*, not to the mask
 // texture, so it neither scales with world radius (a bigger world would
@@ -125,19 +129,19 @@ float noise(vec2 p) {
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// Three octaves, normalised back to roughly 0..1. A single octave of value
+// Four octaves, normalised back to roughly 0..1. A single octave of value
 // noise reads as smooth blobs — recognisably procedural; the octaves are
 // what give the edge the frayed, wispy silhouette a hex-ring distance field
-// has none of.
+// has none of, each one adding detail at half the scale of the last.
 float fbm(vec2 p) {
   float sum = 0.0;
   float amp = 0.5;
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 4; i++) {
     sum += amp * noise(p);
     p *= 2.03;
     amp *= 0.5;
   }
-  return sum / 0.875;
+  return sum / 0.9375;
 }
 
 /**
@@ -149,16 +153,26 @@ float fbm(vec2 p) {
 float cloud(vec2 world) {
   vec2 p = world * uNoiseScale;
   vec2 drift = uTime * uWind;
-  return mix(fbm(p + drift), fbm(p * 1.9 - drift * 0.55), 0.35);
+  return mix(fbm(p + drift), fbm(p * 1.9 - drift * 0.55), 0.4);
 }
 
 /**
  * How much of the edge noise is allowed to act at a given ramp value: full
  * strength through the middle of the ramp, tapering to exactly zero at both
- * endpoints. This is what makes the displacement safe — see the file header.
+ * endpoints. The taper to zero is what makes the displacement safe — see
+ * the file header.
+ *
+ * The outer taper starts at reach, not at the tier's own saturation point
+ * (edge.y), because the two want different things. Opacity has to climb
+ * fairly promptly — every hex it spends still translucent is a hex of bare
+ * terrain showing through the mist. The noise wants to keep acting well
+ * past that, thinning ground that is otherwise solid mist, because that is
+ * where the outermost wisps and detached banks come from. Tying them
+ * together forces a choice between a wide fluffy edge and a mist that
+ * actually covers.
  */
-float edgeBand(float raw, vec2 edge) {
-  return smoothstep(0.0, edge.x, raw) * (1.0 - smoothstep(edge.y, 1.0, raw));
+float edgeBand(float raw, float low, float reach) {
+  return smoothstep(0.0, low, raw) * (1.0 - smoothstep(reach, 1.0, raw));
 }
 
 /**
@@ -173,8 +187,8 @@ float edgeBand(float raw, vec2 edge) {
  * edges. An amplitude of more than one hex scrambles those rings into a
  * boundary with no preferred direction left.
  */
-float tierAlpha(float raw, vec2 edge, float noiseAmp, float seedAmp, float clouds, float seed) {
-  float displaced = raw + ((clouds - 0.5) * noiseAmp + seed * seedAmp) * edgeBand(raw, edge);
+float tierAlpha(float raw, vec2 edge, float reach, float noiseAmp, float seedAmp, float clouds, float seed) {
+  float displaced = raw + ((clouds - 0.5) * noiseAmp + seed * seedAmp) * edgeBand(raw, edge.x, reach);
   return smoothstep(edge.x, edge.y, displaced);
 }
 
@@ -206,7 +220,7 @@ void main() {
   float clouds = cloud(world);
   float seed = m.b - 0.5;
 
-  float unknown = tierAlpha(m.r, uUnknownEdge, uEdgeNoise.x, uSeedJitter.x, clouds, seed);
+  float unknown = tierAlpha(m.r, uUnknownEdge, uNoiseReach.x, uEdgeNoise.x, uSeedJitter.x, clouds, seed);
 
   if (uTier < 0.5) {
     // A full underlay, deliberately unmasked — see §1's "the two tiers are
@@ -219,7 +233,7 @@ void main() {
     // mist has not gone fully opaque yet, whose width UNKNOWN_EDGE
     // (FogMaskLayer.ts) sets. Masking this by (1 - unknown), or bounding it
     // to the explored ring, deletes the underlay — §1 says why not.
-    float outOfSight = tierAlpha(m.g, uOutOfSightEdge, uEdgeNoise.y, uSeedJitter.y, clouds, seed);
+    float outOfSight = tierAlpha(m.g, uOutOfSightEdge, uNoiseReach.y, uEdgeNoise.y, uSeedJitter.y, clouds, seed);
     float alpha = outOfSight * uScoutedAlpha;
     finalColor = vec4(uScoutedColor * alpha, alpha);
   } else {

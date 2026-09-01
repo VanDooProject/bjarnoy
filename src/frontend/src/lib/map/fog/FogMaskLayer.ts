@@ -21,13 +21,18 @@ const REVEAL_FADE_MS = 600;
 
 /**
  * Where the never-scouted mist starts (x) and reaches full opacity (y).
- * Half a hex past the explored ring to three and a third: the raw 0→10-hex
- * ramp the mask bakes is an airbrush hundreds of pixels deep, with no edge
- * in it to make organic in the first place, and it leaves the sea around a
- * realm bare for ten hexes in every direction. Past `y` the mist is fully
- * opaque and stays that way — deep fog is not supposed to be see-through.
+ * Half a hex past the explored ring to five: wide enough that the frayed,
+ * fading part of the mist is a band you can read as weather rather than a
+ * rim around the realm, and (with EDGE_NOISE below) the outermost wisps
+ * carry a good deal further than `y` itself. Past the point where the noise
+ * window closes the mist is fully opaque and stays that way — deep fog is
+ * not supposed to be see-through.
+ *
+ * Not the raw 0→10-hex ramp the mask bakes, though: that is a linear
+ * airbrush hundreds of pixels deep with no edge in it to make organic at
+ * all, and it never reaches full opacity inside the terrain cull radius.
  */
-const UNKNOWN_EDGE: [number, number] = [0.05, 0.33];
+const UNKNOWN_EDGE: [number, number] = [0.05, 0.5];
 /**
  * Same for the scouted-but-out-of-sight tint, over its own 2-hex ramp: a
  * third of a hex past the line-of-sight ring to one and two thirds, so the
@@ -36,29 +41,42 @@ const UNKNOWN_EDGE: [number, number] = [0.05, 0.33];
  */
 const OUT_OF_SIGHT_EDGE: [number, number] = [0.15, 0.85];
 /**
- * Peak-to-peak displacement of each tier's edge by the drifting cloud field
- * — [unknown, outOfSight]. 0.26 of the unknown ramp is ±1.3 hexes, which is
- * comfortably more than the one-hex spacing of the mask's integer
- * `hexDistance` contours: that is the amplitude at which the hexagonal
- * rings stop being legible as straight edges.
+ * Where each tier's edge noise starts tapering off, reaching zero at the end
+ * of the ramp — [unknown, outOfSight], and independent of where the tier's
+ * opacity saturates (see fogShader.ts's edgeBand). 0.65 of the mist's ramp
+ * is six and a half hexes, so wisps keep thinning otherwise-solid mist for
+ * a couple of hexes past the point it has gone opaque, which is where the
+ * outer, faintest half of the fluff lives.
  */
-const EDGE_NOISE: [number, number] = [0.26, 0.4];
+const NOISE_REACH: [number, number] = [0.65, 0.85];
+/**
+ * Peak-to-peak displacement of each tier's edge by the drifting cloud field
+ * — [unknown, outOfSight]. 0.44 of the unknown ramp is ±2.2 hexes, several
+ * times the one-hex spacing of the mask's integer `hexDistance` contours,
+ * which is what stops those hexagonal rings being legible as straight
+ * edges at all. It is also what makes the edge *fluffy* rather than merely
+ * wavy: at this amplitude the noise tears the boundary into overlapping
+ * banks and detached wisps instead of displacing one continuous line.
+ */
+const EDGE_NOISE: [number, number] = [0.44, 0.4];
 /**
  * Displacement by the mask's baked per-hex seed (§2.2's B channel), same
  * units. Deliberately well under EDGE_NOISE — this adds per-hex grain to
  * the edge, but pushed further it starts re-imposing the hex silhouette the
  * cloud noise exists to break.
  */
-const SEED_JITTER: [number, number] = [0.1, 0.14];
+const SEED_JITTER: [number, number] = [0.14, 0.14];
 /**
  * Reciprocal of the cloud field's largest feature size, in world units.
- * TILE_W is 168 world units, so 1/560 puts the coarsest billow at ~3.3
- * hexes and (three octaves at ~2× each) the finest detail just under one.
+ * TILE_W is 168 world units, so 1/620 puts the coarsest billow at ~3.7
+ * hexes and (four octaves at ~2× each) the finest wisps at about half a
+ * hex — the span the mist needs to read as banks of cloud with detail on
+ * them, rather than as one smoothly wobbling outline.
  */
-const NOISE_SCALE = 1 / 560;
+const NOISE_SCALE = 1 / 620;
 /**
  * Cloud drift, in noise-space units per second — divide by NOISE_SCALE for
- * world units, so this is ~28 × ~17 world units/s, about one hex every six
+ * world units, so this is ~31 × ~19 world units/s, about one hex every five
  * seconds diagonally. Slow enough to read as weather rather than a scrolling
  * texture, fast enough that the edge visibly moves while you look at it —
  * the shipped values were ~30× slower than this *and* attached to a
@@ -148,6 +166,7 @@ export class FogMaskLayer {
       uScoutedAlpha: { value: colors.scoutedAlpha, type: 'f32' },
       uUnknownEdge: { value: new Float32Array(UNKNOWN_EDGE), type: 'vec2<f32>' },
       uOutOfSightEdge: { value: new Float32Array(OUT_OF_SIGHT_EDGE), type: 'vec2<f32>' },
+      uNoiseReach: { value: new Float32Array(NOISE_REACH), type: 'vec2<f32>' },
       uEdgeNoise: { value: new Float32Array(EDGE_NOISE), type: 'vec2<f32>' },
       uSeedJitter: { value: new Float32Array(SEED_JITTER), type: 'vec2<f32>' },
       uNoiseScale: { value: NOISE_SCALE, type: 'f32' },
