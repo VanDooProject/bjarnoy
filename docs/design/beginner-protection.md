@@ -191,6 +191,32 @@ something already built; this issue is where that gets designed:
     `openPlots` has to reflect that, or it would keep advertising a
     position that a founding attempt would immediately reject.
 
+  **Two-phase check, not a single trust-the-constant pass.** `openPlots`
+  above uses `MinimumSpacing` as a cheap first filter — deliberately
+  computed off the Longhouse-only baseline, ignoring towers, so it stays a
+  simple, static distance comparison over `StartPositions` vs. settlement
+  *centres* (no need to load anyone's building list to narrow candidates).
+  But a constant sized for a *theoretical* worst case is only as trustworthy
+  as that worst case actually being finite and correctly derived — the
+  tower-territory work in flight (issue-adjacent, not part of this design)
+  found that claim geometry is genuinely more involved once towers extend
+  territory from their own position, and getting that derivation wrong
+  would make this filter silently insufficient without anything here
+  catching it. So before a candidate plot from phase one is actually
+  offered (not just during the cheap filter pass), it gets verified for
+  real: call the settlement domain's own `Claims(coord)` — the authoritative
+  check, walking each nearby settlement's actual current buildings
+  (Longhouse and any towers) — against the candidate hex, for every
+  settlement within some generous distance. Only a candidate that clears
+  *both* — the cheap constant-based filter, and the live check against
+  actual current territory — gets offered. This is defense-in-depth
+  specifically because the cheap filter's constant is a moving target
+  while the tower mechanic is still being finalized elsewhere, not a
+  replacement for getting `MinimumSpacing` right — if the constant is
+  correctly sized, the live check should simply never disagree with it in
+  practice; it exists to catch the case where it's wrong, not to be the
+  primary mechanism.
+
   An island can qualify without having capacity — every one of its
   `StartPositions` can already be taken by *other beginners*, all still
   inside their shield window, with nobody graduated yet. That island is
