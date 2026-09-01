@@ -310,6 +310,19 @@ function closePrompt() {
   player.completeOnboarding();
   router.push('/settlement');
 }
+
+// Fog v2 (map-fog-v2.md §3): same watcher as SettlementView.vue's — without
+// it, founding here (world.startHudSync() in foundHere, above) leaves the
+// fog quads on their opaque "fully unknown" placeholder forever, since
+// nothing else pushes a freshly built/fetched mask into the renderer once
+// isFogActive() flips true. Watching both together covers the renderer not
+// existing yet on the tick a mask resolves.
+watch(
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
+  ([renderer, bitmap, radius]) => {
+    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  },
+);
 </script>
 
 <template>
