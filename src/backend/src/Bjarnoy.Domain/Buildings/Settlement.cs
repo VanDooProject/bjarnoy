@@ -114,19 +114,20 @@ public sealed record Settlement
     /// The farthest any hex of a settlement's territory can ever sit from its
     /// own <see cref="Centre"/>, once towers are accounted for: the centre
     /// disc's own worst case (<see cref="MaxClaimRadius"/>) plus the extra
-    /// reach a max-level tower sitting right at that disc's own edge could
-    /// add (<see cref="MaxTowerClaimRadius"/>). This bound is only tight
-    /// because a tower can *only* ever be built inside the centre disc, never
-    /// inside another tower's own satellite disc — see <see cref="CentreClaims"/>'s
-    /// remarks for why that split is load-bearing, not incidental. So the
-    /// farthest a tower can ever stand from centre is exactly
-    /// <see cref="MaxClaimRadius"/>, and from there its own disc reaches
-    /// <see cref="MaxTowerClaimRadius"/> further still — one hop, never a
-    /// chain. This, not the old single-disc <see cref="MaxClaimRadius"/>, is
-    /// what <c>SettlementService.MinimumSpacing</c> must be derived from:
-    /// two settlements' full territories (centre disc plus every tower
-    /// satellite disc) can never overlap, at any level either reaches, once
-    /// their centres are more than twice this apart.
+    /// reach a max-level tower sitting right at that disc's own edge adds
+    /// (<see cref="MaxTowerClaimRadius"/>). This bound is tight because a
+    /// tower's own reach is always exactly one hop from <see cref="Centre"/>
+    /// — new construction, towers included, is only ever placed inside the
+    /// centre disc (see <see cref="CentreClaims"/>'s remarks on why that is
+    /// the intended shape of the building-placement rule, not something a
+    /// tower could ever reach beyond). So the farthest a tower can ever stand
+    /// from centre is exactly <see cref="MaxClaimRadius"/>, and from there
+    /// its own disc reaches <see cref="MaxTowerClaimRadius"/> further still.
+    /// This, not the old single-disc <see cref="MaxClaimRadius"/>, is what
+    /// <c>SettlementService.MinimumSpacing</c> must be derived from: two
+    /// settlements' full territories (centre disc plus every tower satellite
+    /// disc) can never overlap, at any level either reaches, once their
+    /// centres are more than twice this apart.
     /// </summary>
     public const int MaxTerritoryReach = MaxClaimRadius + MaxTowerClaimRadius;
 
@@ -160,7 +161,16 @@ public sealed record Settlement
     /// every Tower's own satellite disc (see <see cref="ClaimDiscs"/>), not
     /// just the centre disc alone. This is the "does this settlement own
     /// this ground at all" predicate for territory-facing concerns: display,
-    /// the fleet shoreline check, ship-training's coastal gate. It is
+    /// the fleet shoreline check, ship-training's coastal gate, and — outside
+    /// this codebase's own callers — the beginner-protection island-suggestion
+    /// design (<c>docs/design/beginner-protection.md</c>, branch
+    /// <c>claude/noob-shield-issue-132-zp7xi2</c>), whose live safety check
+    /// calls this directly against each nearby settlement's real current
+    /// buildings before ever offering a plot to a new player. Reading this
+    /// union live is exactly how "several towers together read as an
+    /// extended, stacked-looking realm" is meant to happen — from whatever
+    /// towers already stand, however they're arranged, with no need for any
+    /// of them to have been placed by reaching through one another. It is
     /// deliberately <em>not</em> what gates placing a new building — see
     /// <see cref="CentreClaims"/>.
     /// </summary>
@@ -174,21 +184,22 @@ public sealed record Settlement
     /// construction (towers included) against.
     /// </summary>
     /// <remarks>
-    /// This split is a correctness requirement, not a style choice: if a new
-    /// Tower could be placed anywhere <see cref="Claims"/> already returns
-    /// true — including inside an <em>existing</em> tower's own satellite
-    /// disc — a second tower there would extend territory
-    /// <see cref="TowerClaimRadius"/> further still, a third tower could then
-    /// be built inside <em>that</em> disc, and so on: an unbounded
-    /// telescoping chain marching territory arbitrarily far from
-    /// <see cref="Centre"/>, one tower-hop at a time. That would make
-    /// <see cref="MaxTerritoryReach"/> (and the founding-time
-    /// <c>SettlementService.MinimumSpacing</c> derived from it) wrong at any
-    /// fixed value — there would be no true worst case to size it against.
-    /// Pinning every new build, tower included, to the centre disc alone
-    /// keeps a tower's own reach strictly one hop from <see cref="Centre"/>,
-    /// which is exactly what makes <see cref="MaxTerritoryReach"/>'s
-    /// "one centre disc, one tower disc" bound actually tight.
+    /// Building placement is intentionally scoped to one disc, one hop from
+    /// <see cref="Centre"/> — a tower is never itself a new foothold to build
+    /// the next tower from. Combining several towers into a wider, stacked-
+    /// looking realm is a real and intended effect, but it comes entirely
+    /// from reading <see cref="Claims"/> live against whatever towers already
+    /// stand (see that method's own remarks on the beginner-protection design
+    /// that does exactly this) — never from letting placement itself reach
+    /// beyond the centre disc. Chaining placement through a tower's own
+    /// satellite disc was never part of that effect and stays out of scope
+    /// here: it would also make <see cref="MaxTerritoryReach"/> (and the
+    /// founding-time <c>SettlementService.MinimumSpacing</c> derived from it)
+    /// impossible to size, since there would be no fixed worst-case reach to
+    /// bound against. Keeping every new build pinned to the centre disc keeps
+    /// a tower's own reach exactly one hop from <see cref="Centre"/>, which
+    /// is what makes <see cref="MaxTerritoryReach"/>'s "one centre disc, one
+    /// tower disc" bound exact.
     /// </remarks>
     public bool CentreClaims(HexCoord coord) => Centre.DistanceTo(coord) <= ClaimRadius;
 

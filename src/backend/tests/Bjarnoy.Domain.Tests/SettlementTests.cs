@@ -311,16 +311,17 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_tower_cannot_be_built_inside_another_towers_satellite_disc_only_inside_the_centre_disc()
+    public void New_construction_including_a_second_tower_is_scoped_to_the_centre_disc_only()
     {
-        // Exploit-prevention regression: if placement were gated by Claims
-        // (the tower-extended union) instead of CentreClaims (the centre
-        // disc alone), a hex reachable only via an existing tower's own
-        // satellite disc would accept a *second* tower, whose own disc would
-        // reach further still, letting a chain of towers telescope territory
-        // arbitrarily far from Centre — breaking the fixed worst-case
-        // MaxTerritoryReach/MinimumSpacing is sized against. See
-        // Settlement.CentreClaims's remarks.
+        // Building placement is intentionally one disc, one hop from Centre
+        // — a tower is never itself a new foothold to build the next tower
+        // from. A hex reachable only via an existing tower's own satellite
+        // disc (not the centre disc) is exactly the shape that rule exists
+        // to describe: still refused for a new build, even though it already
+        // reads as claimed territory (Settlement.Claims) via that first
+        // tower. See Settlement.CentreClaims's remarks for why the combined-
+        // territory effect of multiple towers is realized by reading Claims
+        // live instead, not by letting placement chain through a tower.
         var firstTower = new HexCoord(1, 0);
         var settlement = Found() with
         {
