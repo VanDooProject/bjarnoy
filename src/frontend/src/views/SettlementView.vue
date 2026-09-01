@@ -16,6 +16,7 @@ import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { ApiError } from '../api/client';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
@@ -179,6 +180,10 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
+// Issue #158: a build/upgrade rejection's detail text (NoFreeSlot's premium
+// hint included) — cleared on every new attempt and whenever the modal
+// closes, so a stale error never lingers into an unrelated hex.
+const modalError = ref<string | null>(null);
 // Issue #40 phase 1: a separate modal from BuildingModal (train has no
 // per-hex build/upgrade action, it lists the whole unit roster at once) —
 // see the ring's 'train' action below.
@@ -532,7 +537,15 @@ async function onRingSelect(i: number, id: string) {
   }
   if (ring.level === 'build-buildings') {
     await buildType(id as BuildableType);
-    closeRing();
+    // Issue #158: a rejection (NoFreeSlot's premium hint included) needs to
+    // stay visible — hand off to BuildingModal (same "ring closes, modal
+    // takes over" pattern as 'details'/'info' below) instead of closing the
+    // ring out from under an error the player never got to read.
+    if (modalError.value) {
+      ringScreen.value = null;
+    } else {
+      closeRing();
+    }
     return;
   }
   switch (id) {
@@ -547,7 +560,11 @@ async function onRingSelect(i: number, id: string) {
       return;
     case 'upgrade':
       await upgrade();
-      closeRing();
+      if (modalError.value) {
+        ringScreen.value = null;
+      } else {
+        closeRing();
+      }
       return;
     case 'train':
       // Falls through to TrainingModal below, same pattern as
@@ -569,6 +586,7 @@ async function onRingSelect(i: number, id: string) {
 function closeModal() {
   closeRing();
   modalBusy.value = false;
+  modalError.value = null;
 }
 
 function closeTrainModal() {
@@ -589,10 +607,15 @@ async function buildType(type: BuildableType) {
     return;
   }
   modalBusy.value = true;
+  modalError.value = null;
   try {
     await world.queueBuildLive(type, selectedCoord.value);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
+    // Issue #158: surface the rejection's detail — NoFreeSlot's premium
+    // hint included — rather than leaving the player to guess why nothing
+    // happened.
+    modalError.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Could not queue that build.';
   } finally {
     modalBusy.value = false;
   }
@@ -603,7 +626,10 @@ async function buildType(type: BuildableType) {
 // own, so it keeps the previous default of a hut.
 async function build() {
   await buildType('hut');
-  closeModal();
+  // Only dismiss the modal on success — a rejection (e.g. NoFreeSlot) needs
+  // to stay visible via modalError rather than being closed out from under
+  // the player before they can read it.
+  if (!modalError.value) closeModal();
 }
 
 async function upgrade() {
@@ -615,11 +641,13 @@ async function upgrade() {
     return;
   }
   modalBusy.value = true;
+  modalError.value = null;
   try {
     await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
     closeModal();
   } catch (err) {
     console.error('Failed to queue upgrade against the backend', err);
+    modalError.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Could not queue that upgrade.';
     modalBusy.value = false;
   }
 }
@@ -683,6 +711,7 @@ async function upgrade() {
       :mine="modalMine"
       :owner-label="modalOwnerLabel"
       :busy="modalBusy"
+      :error="modalError"
       @close="closeModal"
       @build="build"
       @upgrade="upgrade"
