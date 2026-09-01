@@ -173,8 +173,11 @@ float noise(vec2 p) {
 // Three, not more, because octaves cost the same each and are worth less
 // each: the fourth carries 1/16 of the amplitude and the fifth 1/32, at a
 // scale finer than the mask texel grid the whole field is displacing. This
-// is the hot path — a full-viewport quad, twice a frame — so an octave that
-// cannot be seen is not free detail, it is a quarter of the noise budget.
+// is the hot path — cloud() evaluates fbm() twice per pixel on a
+// full-viewport quad, drawn once per tier (§4), so an octave is 4 noise()
+// calls over the whole viewport every frame. An octave that cannot be seen
+// is not free detail, it is a quarter of the noise budget. #168 trimmed the
+// fourth octave on main for the same reason, arriving here independently.
 float fbm(vec2 p) {
   float sum = 0.0;
   float amp = 0.5;

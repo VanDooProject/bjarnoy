@@ -93,10 +93,13 @@ const EDGE_SOFTNESS: [number, number] = [0.45, 0.3];
 /**
  * Reciprocal of the cloud field's largest feature size, in world units.
  * TILE_W is 168 world units, so 1/900 puts the coarsest billow at ~5.4
- * hexes and (five octaves at ~2× each) the finest wisps at about a third of
- * one. The coarse end is what makes the edge read as *soft*: a large
- * feature is a shallow gradient, and it is the gradient of the noise, not
- * its amplitude, that decides how abruptly the mist opens up.
+ * hexes and (three octaves at ~2x each, see fogShader.ts's fbm()) the
+ * finest wisps at about 1.3. The coarse end is what makes the edge read as
+ * *soft*: a large feature is a shallow gradient, and it is the gradient of
+ * the noise, not its amplitude, that decides how abruptly the mist opens
+ * up. main's #168 kept 1/620 against three octaves; this branch widened the
+ * field to 1/900 for the broader fluffy band, so the same octave count
+ * lands on coarser detail here by design.
  */
 const NOISE_SCALE = 1 / 900;
 /**
