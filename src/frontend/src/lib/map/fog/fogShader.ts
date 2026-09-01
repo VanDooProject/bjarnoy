@@ -152,19 +152,29 @@ float noise(vec2 p) {
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// Four octaves, normalised back to roughly 0..1. A single octave of value
+// Three octaves, normalised back to roughly 0..1. A single octave of value
 // noise reads as smooth blobs — recognisably procedural; the octaves are
 // what give the edge the frayed, wispy silhouette a hex-ring distance field
 // has none of, each one adding detail at half the scale of the last.
+//
+// A fourth octave was tried (see git history) for finer wisps, but cloud()
+// below evaluates fbm() twice per pixel and this shader draws twice a frame
+// (once per fog tier, §4), so each octave here is 4 noise() calls across a
+// full viewport, every frame — on the software-rendered runners CI and this
+// repo's e2e suite run on, that quietly turned into real wall-clock (issue
+// #167: ring-menu.spec.ts's drill-down test, already the slowest test in its
+// file, blew its 90s budget once this went from three octaves to four). The
+// visible loss is the finest half-hex-scale detail; the edge is still
+// fluffy from the remaining three.
 float fbm(vec2 p) {
   float sum = 0.0;
   float amp = 0.5;
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     sum += amp * noise(p);
     p *= 2.03;
     amp *= 0.5;
   }
-  return sum / 0.9375;
+  return sum / 0.875;
 }
 
 /**
