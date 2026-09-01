@@ -53,6 +53,16 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # 3-way shard rather than more in-process workers: each shard gets its
+      # own runner (GitHub's standard hosted runner is only 2 vCPUs), so
+      # this is real parallelism instead of oversubscribing one runner's
+      # CPU — these specs render real WebGL/PixiJS canvases, which without
+      # a GPU is CPU-bound (see playwright.config.ts's `workers` comment for
+      # what happened when this ran 2 in-process workers on one runner).
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
 
@@ -79,12 +89,12 @@ jobs:
       - run: npm run build
 
       - name: E2E tests
-        run: npm run test:e2e
+        run: npx playwright test --shard=${{ matrix.shard }}/3
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             src/frontend/playwright-report/
             src/frontend/test-results/
