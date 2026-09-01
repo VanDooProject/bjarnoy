@@ -56,6 +56,25 @@ public static class HexPathfinder
         isLandUnit ? LandTerrainCost : SeaTerrainCost;
 
     /// <summary>
+    /// Flat penalty charged, on top of terrain cost, for entering a river hex
+    /// (issue #159 part A). Twice the median generated river's length and
+    /// above the median detour-preferring penalty measured across 40 worlds
+    /// at default <c>WorldGenerationOptions</c> — see the issue for the full
+    /// table. Troops route around a river at roughly 63% of river tiles;
+    /// crossing is never refused outright, only made expensive, so a river
+    /// can never make a route impossible.
+    /// </summary>
+    /// <remarks>
+    /// Charged additively on entry only — never on exit, and never as a
+    /// separate edge-crossing charge — which is what keeps
+    /// stopping/restarting a march mid-river from ever paying the penalty
+    /// twice or dodging it altogether (see the issue's "why additive-on-entry"
+    /// section). It also keeps every step cost &gt;= 1.0, so <see cref="Heuristic"/>
+    /// stays admissible and consistent.
+    /// </remarks>
+    public const double RiverCrossingCost = 8.0;
+
+    /// <summary>
     /// Hard cap on nodes a single search may expand. A world is unbounded, so
     /// without this, "no route exists" (e.g. an island cut off by sea) would
     /// otherwise search forever outward looking for one. Combined with the
@@ -95,8 +114,17 @@ public static class HexPathfinder
     /// target with no shoreline hex to beach on (see
     /// <see cref="World.Shoreline"/>) still fails to find a route.
     /// </param>
+    /// <param name="isRiver">
+    /// Optional river-tile lookup (issue #159 part A) — a land unit's step
+    /// cost onto a hex this returns <see langword="true"/> for is charged an
+    /// extra <see cref="RiverCrossingCost"/>. <see langword="null"/> (the
+    /// default) prices no hex as a river, matching every caller from before
+    /// rivers existed. Ignored for a fleet: river tiles are land terrain,
+    /// already impassable to ships regardless of this predicate.
+    /// </param>
     public static IReadOnlyList<HexCoord>? FindPath(
-        HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit)
+        HexCoord from, HexCoord to, Func<HexCoord, Terrain> terrainAt, bool isLandUnit,
+        Func<HexCoord, bool>? isRiver = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -174,6 +202,11 @@ public static class HexPathfinder
                     continue;
                 }
 
+                if (isLandUnit && isRiver is not null && isRiver(neighbour))
+                {
+                    stepCost += RiverCrossingCost;
+                }
+
                 var tentativeG = gScore[current] + stepCost;
                 if (gScore.TryGetValue(neighbour, out var existingG) && tentativeG >= existingG)
                 {
@@ -234,9 +267,16 @@ public static class HexPathfinder
     /// reports the travel time that terrain actually costs, not a plain
     /// distance/speed estimate.
     /// </remarks>
+    /// <param name="isRiver">
+    /// Same river-tile lookup <see cref="FindPath"/> takes — must match
+    /// whatever call produced <paramref name="path"/>, or the reported hours
+    /// silently disagree with the route that was actually chosen (see
+    /// <see cref="RiverCrossingCost"/>'s remarks on why both sides have to
+    /// agree). <see langword="null"/> (the default) charges no river penalty.
+    /// </param>
     public static IReadOnlyList<double> CumulativeHours(
         IReadOnlyList<HexCoord> path, Func<HexCoord, Terrain> terrainAt, double hexesPerHour, bool isLandUnit = true,
-        double speedFactor = 1.0)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -269,6 +309,12 @@ public static class HexPathfinder
             var stepCost = costTable.TryGetValue(terrainAt(path[i]), out var cost)
                 ? cost
                 : !isLandUnit && i == path.Count - 1 ? 1.0 : double.PositiveInfinity;
+
+            if (isLandUnit && isRiver is not null && isRiver(path[i]))
+            {
+                stepCost += RiverCrossingCost;
+            }
+
             hours[i] = hours[i - 1] + (stepCost / effectiveHexesPerHour);
         }
 

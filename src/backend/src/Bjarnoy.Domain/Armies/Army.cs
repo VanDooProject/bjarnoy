@@ -201,6 +201,11 @@ public sealed record Army
     /// are scaled in <see cref="Buildings.Settlement.PlanBuild"/>. Defaults to
     /// <c>1.0</c> (no scaling) for callers that have no world in hand.
     /// </param>
+    /// <param name="isRiver">
+    /// Optional river-tile lookup (issue #159 part A), threaded straight into
+    /// every <see cref="HexPathfinder"/> call this makes. <see langword="null"/>
+    /// (the default) prices no hex as a river.
+    /// </param>
     public static DispatchDecision PlanDispatch(
         Settlement settlement,
         IReadOnlyList<UnitStack> requestedUnits,
@@ -214,7 +219,8 @@ public sealed record Army
         Guid? targetSettlementId = null,
         HexCoord? targetBuildingCoord = null,
         IReadOnlyList<(HexCoord Centre, int Radius)>? targetClaimDiscs = null,
-        double speedFactor = 1.0)
+        double speedFactor = 1.0,
+        Func<HexCoord, bool>? isRiver = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -328,7 +334,7 @@ public sealed record Army
 
         for (var i = 0; i < stops.Count - 1; i++)
         {
-            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit);
+            var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
             if (leg is null || leg.Count == 0)
             {
                 return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
@@ -342,15 +348,15 @@ public sealed record Army
         var speed = stacks.Min(s => UnitCatalogue.Get(s.Type).Speed);
         var upkeepPerHour = stacks.Sum(s => UnitCatalogue.Get(s.Type).UpkeepPerHour * s.Count);
 
-        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor);
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
 
-        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit);
+        var returnPath = HexPathfinder.FindPath(destination, settlement.Centre, terrainAt, isLandUnit, isRiver);
         if (returnPath is null || returnPath.Count == 0)
         {
             return DispatchDecision.Rejected(DispatchRejection.UnreachableLeg);
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
 
         // Support only needs a one-way trip plus a small reserve — see
         // SupportReserveHours — everything else still needs the full round
@@ -726,9 +732,14 @@ public sealed record Army
     /// return (<see cref="Movement.IsReturning"/> is set immediately, same as
     /// a mid-journey <see cref="ArmyMission.Move"/> recall).
     /// </param>
+    /// <param name="isRiver">
+    /// Optional river-tile lookup (issue #159 part A), threaded straight into
+    /// the recall route's <see cref="HexPathfinder"/> call. <see langword="null"/>
+    /// (the default) prices no hex as a river.
+    /// </param>
     public Army? Recall(
         DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt, HexCoord? currentHex = null,
-        double speedFactor = 1.0)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -753,14 +764,14 @@ public sealed record Army
         // this army's own recall route needs.
         var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
 
-        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit);
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver);
         if (path is null || path.Count == 0)
         {
             return null;
         }
 
         var speed = TotalSpeed;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
 
         // ProvisionsAt returns the raw Provisions field for anything other
         // than InTransit — including Supporting, which is exactly right here:
@@ -851,9 +862,14 @@ public sealed record Army
     /// derived from that same number rather than from a figure the override
     /// has already replaced.
     /// </param>
+    /// <param name="isRiver">
+    /// Optional river-tile lookup (issue #159 part A), threaded straight into
+    /// the fresh return route's <see cref="HexPathfinder"/> call.
+    /// <see langword="null"/> (the default) prices no hex as a river.
+    /// </param>
     public Army? TeleportTo(
         HexCoord coord, HexCoord home, DateTimeOffset now, Func<HexCoord, Terrain> terrainAt,
-        double? provisions = null, double speedFactor = 1.0)
+        double? provisions = null, double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
     {
         ArgumentNullException.ThrowIfNull(terrainAt);
 
@@ -866,13 +882,13 @@ public sealed record Army
             return null;
         }
 
-        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit);
+        var returnPath = HexPathfinder.FindPath(coord, home, terrainAt, isLandUnit, isRiver);
         if (returnPath is null || returnPath.Count == 0)
         {
             return null;
         }
 
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, TotalSpeed, isLandUnit, speedFactor, isRiver);
         var provisionsNow = provisions is { } given ? Math.Max(0, given) : ProvisionsAt(now);
 
         var movement = Movement.Movement.Create(
