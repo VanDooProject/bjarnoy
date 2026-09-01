@@ -339,7 +339,7 @@ public class HexPathfinderTests
         // Same trip again, waypointed through the river tile within one
         // dispatch (dropping the joint hex, exactly as Army.PlanDispatch
         // does when chaining legs).
-        var waypointedPath = new List<HexCoord> { .. leg1, .. leg2.Skip(1) };
+        List<HexCoord> waypointedPath = [.. leg1, .. leg2.Skip(1)];
         var waypointed = HexPathfinder.CumulativeHours(waypointedPath, AllGrass(), hexesPerHour: 1.0, isRiver: IsRiver);
 
         Assert.Equal(totalOneMarch, waypointed[^1], 6);
