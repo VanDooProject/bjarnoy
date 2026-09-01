@@ -38,6 +38,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     maxPlayers: 100,
     playerCount: 1,
     speedFactor: 1,
+    baseShieldDays: 7,
     startsAt: null,
     joinsClosed: false,
     endbossAt: null,
@@ -45,6 +46,9 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runState: 'running',
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
+    beginnerRingsWithCapacity: 6,
+    beginnerRingsTotal: 6,
+    beginnerTotalExhaustion: false,
     ...overrides,
   };
 }

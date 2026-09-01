@@ -294,6 +294,8 @@ export interface AdminWorldResponse {
   maxPlayers: number;
   playerCount: number;
   speedFactor: number;
+  /** Issue #132 design doc §1: admin-configurable base for the new-account shield, scaled by speedFactor at founding time. */
+  baseShieldDays: number;
   startsAt: string | null;
   joinsClosed: boolean;
   endbossAt: string | null;
@@ -301,6 +303,11 @@ export interface AdminWorldResponse {
   runState: string;
   runStateSince: string;
   createdAt: string;
+  /** Issue #132 design doc §7: rings currently offering beginner spare capacity, out of how many contain any island at all. */
+  beginnerRingsWithCapacity: number;
+  beginnerRingsTotal: number;
+  /** True on genuine total exhaustion (§6): every island either graduated or at zero open plots. */
+  beginnerTotalExhaustion: boolean;
 }
 
 /**
@@ -311,9 +318,25 @@ export interface AdminWorldResponse {
  */
 export interface UpdateWorldSettingsRequest {
   speedFactor?: number;
+  baseShieldDays?: number;
   startsAt?: string | null;
   joinsClosed?: boolean;
   endbossAt?: string | null;
+}
+
+// Issue #132 design doc §6: a backend-ranked/filtered candidate landing spot
+// for a new player — mirrors Bjarnoy.Api.Contracts.SuggestedStartPositionResponse.
+export interface SuggestedStartPositionResponse {
+  islandId: string;
+  q: number;
+  r: number;
+  ring: number;
+}
+
+/** `fallback` is true only on genuine total exhaustion (§6) — every island either graduated or at zero open plots. */
+export interface SuggestedStartResponse {
+  candidates: SuggestedStartPositionResponse[];
+  fallback: boolean;
 }
 
 /** `action`: one of `pause`, `maintenance`, `lock`, `resume`. */

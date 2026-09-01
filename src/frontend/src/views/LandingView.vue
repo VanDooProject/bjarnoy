@@ -77,14 +77,17 @@ onMounted(async () => {
   //
   // Demo mode has no start positions at all, so it previews/founds via
   // `findLandfall`, an arbitrary walkable hex — the two already agree there.
-  // Live mode previews the nearest start position purely to centre the
-  // camera; `nearbyStartCoords` below is what's actually clickable.
-  previewCoord.value = DEMO_MODE
-    ? (world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 })
-    : (world.nearestStartPosition({ q: 0, r: 0 })?.at ??
-      world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 });
-  if (!DEMO_MODE) {
-    nearbyStartCoords.value = world.nearbyStartPositions({ q: 0, r: 0 }).map((pos) => pos.at);
+  // Live mode asks the backend for beginner-area-segregated candidates
+  // (issue #132 design doc §6) rather than picking nearest-by-distance over
+  // the raw unfiltered island list itself — `nearbyStartCoords` below is
+  // what's actually clickable, same as before, just backend-filtered now.
+  if (DEMO_MODE) {
+    previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
+  } else {
+    await world.fetchSuggestedStart({ q: 0, r: 0 });
+    previewCoord.value =
+      world.suggestedStart[0]?.at ?? world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
+    nearbyStartCoords.value = world.suggestedStart.map((pos) => pos.at);
   }
   // Same test/debug-hook idea as SettlementView's own __settlementRenderer:
   // lets an e2e test convert a real hex coordinate to an exact click point
