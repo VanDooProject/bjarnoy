@@ -43,8 +43,8 @@ import type { Settlement, Terrain, Tile } from './types';
 import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, type FogMaskPlacement } from './fog/FogMaskLayer';
-import { worldMaskBounds } from './fog/fogMaskLayout';
+import { FogMaskLayer } from './fog/FogMaskLayer';
+import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -2279,11 +2279,7 @@ export class HexMapRenderer {
   setFogMask(radius: number, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
 
-    const bounds = worldMaskBounds(radius);
-    const placement: FogMaskPlacement = {
-      scale: [1 / (0.75 * TILE_W * bounds.width), 2 / (TILE_H * bounds.height)],
-      offset: [-bounds.minU / bounds.width, -bounds.minV / bounds.height],
-    };
+    const placement = fogMaskPlacement(radius, TILE_W, TILE_H);
     this.blackFogLayer.setPlacement(placement);
     this.whiteMistLayer.setPlacement(placement);
 
