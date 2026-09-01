@@ -1003,8 +1003,14 @@ export class HexMapRenderer {
     }
     this.tickCameraAnim();
     const now = performance.now();
-    this.blackFogLayer.mesh.visible = fogDebugFlags.maskOutOfSight;
-    this.whiteMistLayer.mesh.visible = fogDebugFlags.maskUnknown;
+    // isFogActive() mirrors rebuildTerrain's/rebuildBorders' own bypass: no
+    // settlement yet (settlement-mode preview) or the local player hasn't
+    // founded one (world mode) means there's nothing to fog — without this,
+    // both quads' placeholder (fully-unknown) texture would blanket a view
+    // the rest of the renderer deliberately leaves unfogged.
+    const fogActive = this.isFogActive();
+    this.blackFogLayer.mesh.visible = fogActive && fogDebugFlags.maskOutOfSight;
+    this.whiteMistLayer.mesh.visible = fogActive && fogDebugFlags.maskUnknown;
     const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
