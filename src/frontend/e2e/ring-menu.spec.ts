@@ -3,11 +3,9 @@ import { distanceFrom, foundSettlement, rectsOf } from './helpers';
 
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
- * (1) drilling into a category/building ring via hover used to leave the
- * previous ring's tooltip/DOM in a state that could obscure or fail to
- * show the newly opened bubbles (and, per a later correction, hovering
- * "Build" must now open a new *outer, concentric* ring rather than
- * replacing the current one), (2) the map underneath kept reacting to
+ * (1) drilling into a category/building level via hover used to leave the
+ * previous level's tooltip/DOM in a state that could obscure or fail to
+ * show the newly opened bubbles, (2) the map underneath kept reacting to
  * hover/wheel/click while a ring was open, since the renderer's own
  * pointer tracking is window-level and doesn't know a ring's DOM overlay
  * is on top (see HexMapRenderer's `interactionLocked`), (3) the header's
@@ -15,9 +13,13 @@ import { distanceFrom, foundSettlement, rectsOf } from './helpers';
  * backdrop instead of navigating, and (4) clicking elsewhere on the map
  * with a ring open used to close that ring and immediately open a new one
  * at the click point, instead of just closing it.
+ *
+ * The drill-down test below now asserts the "2a" ring's own rule instead of
+ * the concentric one it replaced: at most TWO lanes are ever on screen, so
+ * drilling *swaps* the inner lane rather than adding an orbit outside it.
  */
 test.describe('ring menu drill-down', () => {
-  test('hovering into build categories, then a category into its buildings, opens concentric outer rings without closing the inner ones', async ({ page }) => {
+  test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -62,17 +64,16 @@ test.describe('ring menu drill-down', () => {
       await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2, { steps: 6 });
       await page.waitForTimeout(250);
 
-      // The root ring's own bubbles ("Details"/"Build") must still be
-      // there — concentric rings move outward, they don't replace the
-      // ring they were opened from — and the new category ring's bubbles
-      // must be visible too, further out than the root ring's.
-      const rootBuild = page.getByRole('button', { name: 'Build', exact: true });
-      await expect(rootBuild).toHaveCount(1);
-      await expect(rootBuild).toBeVisible();
-      const rootBuildBox = (await rootBuild.boundingBox())!;
-      const rootBuildDist = Math.hypot(rootBuildBox.x + rootBuildBox.width / 2 - (cx + dx), rootBuildBox.y + rootBuildBox.height / 2 - (cy + dy));
+      // The inner lane is now the categories plus the reserved ‹ BACK slot —
+      // the root actions it replaced are gone, which is the whole point of
+      // capping the menu at two lanes.
+      await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
+      const backBubble = page.locator('.ring-bubble.back');
+      await expect(backBubble).toHaveCount(1);
 
-      const categoryBubbles = page.locator('.ring-bubble').filter({ hasNotText: /^Details$|^Build$/ });
+      // Lanes are distinguishable by class rather than by excluding labels:
+      // `.back` is the reserved back slot, `.child` the outer lane.
+      const categoryBubbles = page.locator('.ring-bubble:not(.back):not(.child)');
       // rectsOf snapshots synchronously, where the per-bubble
       // toBeVisible() this replaces used to auto-wait — so keep one
       // auto-waiting assertion to let the ring finish opening, then read
@@ -83,10 +84,6 @@ test.describe('ring menu drill-down', () => {
       expect(categoryRects.length).toBeGreaterThan(0);
       for (const rect of categoryRects) {
         expect(rect.visible, `category bubble "${rect.text}" should be visible`).toBe(true);
-        // Every category bubble sits on a wider orbit than the root ring's
-        // own "Build" bubble — that's what "concentric ... moving out"
-        // means, as opposed to just being present anywhere on screen.
-        expect(distanceFrom(rect, cx + dx, cy + dy)).toBeGreaterThan(rootBuildDist);
       }
       // The tile's own hover tooltip must stay suppressed throughout —
       // this is the regression from the first correction: it used to
@@ -95,6 +92,7 @@ test.describe('ring menu drill-down', () => {
 
       const categoryTexts = categoryRects.map((r) => r.text);
       const firstCategoryRect = categoryRects[0];
+      const categoryDist = distanceFrom(firstCategoryRect, cx + dx, cy + dy);
       await page.mouse.move(
         firstCategoryRect.x + firstCategoryRect.width / 2,
         firstCategoryRect.y + firstCategoryRect.height / 2,
@@ -102,29 +100,133 @@ test.describe('ring menu drill-down', () => {
       );
       await page.waitForTimeout(250);
 
-      // Drilling one level deeper (into a category's building list) must
-      // not lose either previous ring — the root ring's "Build" and the
-      // category ring's own bubbles both stay put, with the buildings ring
-      // opening as a third, even wider orbit.
-      await expect(rootBuild).toHaveCount(1);
+      // Drilling into a category fans its buildings out on a second lane
+      // *beside* the category, which stays exactly where it was — so the
+      // player can see what they came through without the menu growing a
+      // third orbit.
       for (const label of categoryTexts) {
         await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(1);
       }
-      const buildingBubbles = page.locator('.ring-bubble').filter({ hasNotText: /^Details$|^Build$/ }).filter({ hasNotText: new RegExp(`^(${categoryTexts.join('|')})$`) });
+      await expect(backBubble).toHaveCount(1);
+      const buildingBubbles = page.locator('.ring-bubble.child');
       await expect(buildingBubbles.first()).toBeVisible();
       const buildingRects = await rectsOf(buildingBubbles);
       expect(buildingRects.length).toBeGreaterThan(0);
-      const categoryDist = distanceFrom(firstCategoryRect, cx + dx, cy + dy);
       for (const rect of buildingRects) {
         expect(rect.visible, `building bubble "${rect.text}" should be visible`).toBe(true);
+        // The outer lane sits further out than the inner one it fanned from.
         expect(distanceFrom(rect, cx + dx, cy + dy)).toBeGreaterThan(categoryDist);
       }
       await expect(page.locator('.hex-tooltip')).toBeHidden();
+
+      // ‹ BACK goes up exactly one level, back to the categories.
+      await backBubble.click();
+      await page.waitForTimeout(250);
+      for (const label of categoryTexts) {
+        await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(1);
+      }
+      for (const rect of buildingRects) {
+        await expect(page.getByRole('button', { name: rect.text, exact: true })).toHaveCount(0);
+      }
 
       drilled = true;
       break;
     }
     expect(drilled, 'no offset found an own, empty, buildable tile to drill into').toBe(true);
+  });
+
+  test('hovering a building shows its cost, build time and longhouse gate, and a locked one cannot be placed', async ({ page }) => {
+    // The detail card is what the redesign added on top of navigation: the
+    // player asked to see "resource cost, build time, can I afford it" without
+    // committing to anything. It must also be honest about the gate — the
+    // watchtower is RequiredLonghouseLevel 2 (BuildingCatalogue.cs), so a
+    // fresh level-1 realm cannot place one, and the ring says why rather than
+    // letting the click silently do nothing.
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    // Ask the model for a real empty, owned, grass hex (grass is what carries
+    // the Defense category — see BUILD_CATEGORIES) rather than guessing a
+    // pixel offset that only lands on one at a particular camera framing.
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
+            return win.__settlementRenderer().hexCenterScreen(at);
+          }
+        }
+      }
+      throw new Error('no empty buildable grass hex found inside the realm');
+    });
+
+    const countBuildings = () =>
+      page.evaluate(() => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        return world.model.countBuildings(world.selectedSettlementId) as number;
+      });
+    const before = await countBuildings();
+
+    await page.mouse.click(box.x + target.x, box.y + target.y);
+
+    const hoverBubble = async (locator: ReturnType<typeof page.locator>) => {
+      await expect(locator).toBeVisible();
+      const rect = (await locator.boundingBox())!;
+      await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 6 });
+    };
+
+    await hoverBubble(page.locator('.ring-bubble', { hasText: 'Build' }).first());
+    await hoverBubble(page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Defense' }).first());
+
+    // Nothing hovered yet, so nothing is preselected — opening a category must
+    // not pop a card for a building the player never pointed at.
+    await expect(page.locator('.ring-card')).toHaveCount(0);
+
+    const watchtower = page.locator('.ring-bubble.child', { hasText: 'Watchtower' }).first();
+    await hoverBubble(watchtower);
+
+    const card = page.locator('.ring-card');
+    await expect(card).toBeVisible();
+    // Cost, time and the gate all come from the building catalogue, so these
+    // are the backend's own numbers: 120 wood / 200 stone / 10 iron, 8:00,
+    // longhouse 2.
+    await expect(card).toContainText('120');
+    await expect(card).toContainText('200');
+    await expect(card).toContainText('8:00');
+    await expect(card).toContainText('REQUIRES LONGHOUSE 2');
+    await expect(watchtower).toHaveClass(/locked/);
+
+    await watchtower.click({ force: true });
+    await page.waitForTimeout(300);
+    expect(await countBuildings()).toBe(before);
+
+    // Building is a click on the bubble itself; the card's button is only a
+    // second way to do the same thing. The card is an informational read-out
+    // docked next to the ring, so it must stay click-through — otherwise it
+    // swallows clicks aimed at whichever bubble it happens to dock beside.
+    const cardBox = (await card.boundingBox())!;
+    const underCard = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.className ?? null,
+      { x: cardBox.x + cardBox.width / 2, y: cardBox.y + 20 },
+    );
+    expect(underCard).not.toContain('ring-card');
+
+    const magicTower = page.locator('.ring-bubble.child', { hasText: 'Magic Tower' }).first();
+    await hoverBubble(magicTower);
+    await magicTower.click();
+    await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
   test('a mousedown outside a ring bubble closes the ring and starts dragging the map', async ({ page }) => {
