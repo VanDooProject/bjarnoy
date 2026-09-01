@@ -78,6 +78,17 @@ onUnmounted(() => {
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
 
+// Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
+// renderer — same "watch both together" reasoning the army-overlay watcher
+// below uses, since the renderer may not exist yet on the tick a fetch
+// resolves.
+watch(
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
+  ([renderer, bitmap, radius]) => {
+    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  },
+);
+
 // Issue #40 phase 2: pushes armies/route/draft-waypoints into the renderer's
 // own overlay layer (HexMapRenderer.setArmyOverlay) whenever any of them
 // change, or as soon as the renderer itself becomes available — watching

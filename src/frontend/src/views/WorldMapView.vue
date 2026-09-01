@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import WorldMapCanvas from '../components/map/WorldMapCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
@@ -44,6 +44,19 @@ onMounted(async () => {
   void world.refreshWorldSettlements();
 });
 onUnmounted(() => world.stopHudSync());
+
+// Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
+// renderer as soon as both the renderer and a bitmap exist. `worldRadius`
+// only ever changes on a fresh bootstrap (a new world), so `fogMaskBitmap`
+// updating (every fetchFogMask poll) is what actually drives this in
+// practice — same "watch both together" reasoning SettlementView.vue's own
+// army-overlay watcher uses.
+watch(
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
+  ([renderer, bitmap, radius]) => {
+    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  },
+);
 
 function onHexClick() {
   router.push('/settlement');

@@ -17,6 +17,7 @@ const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
+const getFogMask = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -42,6 +43,7 @@ async function loadStoreModule(demoMode: boolean) {
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
+      getFogMask: (...args: unknown[]) => getFogMask(...args),
     },
     ApiError: class ApiError extends Error {},
   }));
@@ -364,5 +366,68 @@ describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
 
     expect(store.hud.storageCap).toEqual({ wood: 750, stone: 750, food: 900, iron: 375 });
     expect(store.hud.resources.wood).toBe(750);
+  });
+});
+
+describe('useWorldStore fetchFogMask', () => {
+  it('is a no-op in demo mode', async () => {
+    getFogMask.mockReset();
+
+    const store = await loadStoreModule(true);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+
+    expect(getFogMask).not.toHaveBeenCalled();
+    expect(store.fogMaskBitmap).toBeNull();
+  });
+
+  it('is a no-op before a world/owner is known', async () => {
+    getFogMask.mockReset();
+
+    const store = await loadStoreModule(false);
+
+    await store.fetchFogMask();
+
+    expect(getFogMask).not.toHaveBeenCalled();
+  });
+
+  it('fetches and stashes the decoded bitmap, closing the previous one', async () => {
+    const firstBitmap = { close: vi.fn() };
+    const secondBitmap = { close: vi.fn() };
+    getFogMask
+      .mockReset()
+      .mockResolvedValueOnce({ bitmap: firstBitmap, version: '"v1"' })
+      .mockResolvedValueOnce({ bitmap: secondBitmap, version: '"v2"' });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+    expect(getFogMask).toHaveBeenCalledWith('world-1', 'player-1');
+    expect(store.fogMaskBitmap).toBe(firstBitmap);
+
+    await store.fetchFogMask();
+    expect(firstBitmap.close).toHaveBeenCalledOnce();
+    expect(store.fogMaskBitmap).toBe(secondBitmap);
+  });
+
+  it('leaves the previous bitmap in place if the fetch fails', async () => {
+    const firstBitmap = { close: vi.fn() };
+    getFogMask
+      .mockReset()
+      .mockResolvedValueOnce({ bitmap: firstBitmap, version: '"v1"' })
+      .mockRejectedValueOnce(new Error('network error'));
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    await store.fetchFogMask();
+    await store.fetchFogMask();
+
+    expect(store.fogMaskBitmap).toBe(firstBitmap);
   });
 });

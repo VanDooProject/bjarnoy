@@ -20,6 +20,8 @@ import {
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
+import { fogPerfStats } from '../lib/map/HexMapRenderer';
+import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
 import type { CartShipment, ResourceKind, Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
@@ -181,6 +183,7 @@ export const useWorldStore = defineStore('world', {
     armyPollHandle: null as ReturnType<typeof setInterval> | null,
     syncHandle: null as ReturnType<typeof setInterval> | null,
     livePollHandle: null as ReturnType<typeof setInterval> | null,
+    demoFogPollHandle: null as ReturnType<typeof setInterval> | null,
     // Live-mode state: which backend world this session is playing in, and
     // the start positions a settlement may be founded on. Unused in demo
     // mode, where `WorldModel` is the entire source of truth.
@@ -200,6 +203,16 @@ export const useWorldStore = defineStore('world', {
     worldJoinable: true,
     worldJoinableReason: 'None',
     worldStartsAt: null as string | null,
+    // The requesting player's fog-of-war mask (map-fog-v2.md §2.2/§3),
+    // fetched via `fetchFogMask`. `markRaw` like `model` above: an
+    // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
+    // needs to proxy.
+    fogMaskBitmap: null as ImageBitmap | null,
+    // The world's hex radius (WorldResponse.radius), set once bootstrapLiveWorld
+    // resolves — fetchFogMask's caller needs it to place the mask texture
+    // (HexMapRenderer.setFogMask's own worldMaskBounds computation).
+    // Unused in demo mode.
+    worldRadius: null as number | null,
   }),
   actions: {
     /**
@@ -241,6 +254,7 @@ export const useWorldStore = defineStore('world', {
       }
 
       this.worldId = world.id;
+      this.worldRadius = world.radius;
       this.worldJoinable = world.joinable;
       this.worldJoinableReason = world.joinableReason;
       this.worldStartsAt = world.startsAt;
@@ -856,15 +870,20 @@ export const useWorldStore = defineStore('world', {
         void this.refreshWorldSettlements();
         void this.refreshTradeAsync();
         void this.refreshArmies();
+        void this.fetchFogMask();
         this.livePollHandle = setInterval(() => {
           void this.refreshLiveSettlement();
           void this.refreshWorldSettlements();
           void this.refreshTradeAsync();
+          void this.fetchFogMask();
         }, LIVE_POLL_MS);
         // Separate, tighter interval than LIVE_POLL_MS — see ARMY_POLL_MS's
         // own comment for why armies need to be polled more often than
         // buildings/queues.
         this.armyPollHandle = setInterval(() => void this.refreshArmies(), ARMY_POLL_MS);
+      } else {
+        void this.refreshDemoFogMask();
+        this.demoFogPollHandle = setInterval(() => void this.refreshDemoFogMask(), LIVE_POLL_MS);
       }
     },
     stopHudSync() {
@@ -874,6 +893,65 @@ export const useWorldStore = defineStore('world', {
       this.livePollHandle = null;
       if (this.armyPollHandle) clearInterval(this.armyPollHandle);
       this.armyPollHandle = null;
+      if (this.demoFogPollHandle) clearInterval(this.demoFogPollHandle);
+      this.demoFogPollHandle = null;
+    },
+    /**
+     * Fetches and decodes the current player's fog mask (map-fog-v2.md
+     * §2.2/§3), stashing it on `fogMaskBitmap` and the fetch's own timing/
+     * version on `fogPerfStats` (read by FogPerfPanel). A no-op in demo mode
+     * (there is no backend to ask) or before a world/owner is known. Polled
+     * alongside the rest of live mode's HUD sync (startHudSync, LIVE_POLL_MS)
+     * — the view layer (WorldMapView.vue/SettlementView.vue) watches
+     * `fogMaskBitmap` and pushes it into the renderer via
+     * `HexMapRenderer.setFogMask`.
+     */
+    async fetchFogMask() {
+      if (DEMO_MODE || !this.worldId || !this.ownerId) return;
+
+      fogPerfStats.maskFetchInFlight = true;
+      const startedAt = performance.now();
+      try {
+        const { bitmap, version } = await api.getFogMask(this.worldId, this.ownerId);
+        // Close the previous bitmap only once the new one is actually in
+        // hand — closing it eagerly before the fetch settles would leave a
+        // failed request having discarded the one usable bitmap this store
+        // had.
+        this.fogMaskBitmap?.close();
+        this.fogMaskBitmap = markRaw(bitmap);
+        fogPerfStats.maskVersion = version;
+      } catch {
+        // Best-effort: a failed fetch just leaves the previous bitmap (or
+        // null) in place, same as any other poll in this store that doesn't
+        // want a transient network blip to surface as a hard error.
+      } finally {
+        fogPerfStats.maskFetchMs = performance.now() - startedAt;
+        fogPerfStats.maskFetchInFlight = false;
+      }
+    },
+    /**
+     * Demo mode's counterpart to `fetchFogMask` — there is no backend to
+     * fetch a mask from, so this bakes one straight from `WorldModel`'s own
+     * explored/visible state instead (see `lib/map/fog/demoFogMask.ts`).
+     * Polled on the same cadence as live mode's mask fetch (startHudSync,
+     * LIVE_POLL_MS) so fog keeps catching up as the player explores.
+     */
+    async refreshDemoFogMask() {
+      if (!DEMO_MODE) return;
+
+      fogPerfStats.maskFetchInFlight = true;
+      const startedAt = performance.now();
+      try {
+        const bitmap = await buildDemoFogMask(this.model);
+        if (!bitmap) return;
+        this.fogMaskBitmap?.close();
+        this.fogMaskBitmap = markRaw(bitmap);
+        this.worldRadius = DEMO_MASK_RADIUS;
+        fogPerfStats.maskVersion = 'demo';
+      } finally {
+        fogPerfStats.maskFetchMs = performance.now() - startedAt;
+        fogPerfStats.maskFetchInFlight = false;
+      }
     },
   },
 });
