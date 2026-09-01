@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -384,6 +385,117 @@ public sealed class SettlementService(
             name, settlement.Id, coord, islandId);
 
         return new FoundingResult(FoundingRejection.None, settlement);
+    }
+
+    /// <summary>
+    /// Founds a new settlement from a settler-crew convoy's arrival (issue
+    /// #55 §5) — the second-and-onward-settlement counterpart to
+    /// <see cref="FoundAsync"/>'s first-settlement flow, reusing the same
+    /// starting shape (a Lv 1 Longhouse, <see cref="BuildingCatalogue.FoundingStock"/>)
+    /// but skipping the start-position/joinability/one-per-world checks that
+    /// only apply to a brand-new player joining a world — <c>ArmyService.
+    /// ResolveFoundingAsync</c> has already re-validated the target hex is
+    /// still foundable before calling this. Real, relational
+    /// <paramref name="userId"/> ownership from the start (unlike anonymous
+    /// founding's <c>SystemUserIds.Abandoned</c> fallback) — a founding
+    /// convoy can only ever have been dispatched by an already-real account
+    /// (see <c>ArmyService.DispatchAsync</c>'s Found-specific check).
+    /// </summary>
+    public async Task<SettlementEntity> FoundFromConvoyAsync(
+        Guid worldId,
+        HexCoord coord,
+        Guid userId,
+        string ownerName,
+        string ownerId,
+        string name,
+        IReadOnlyList<UnitStack> startingGarrison,
+        DateTimeOffset now,
+        double speedFactor,
+        CancellationToken cancellationToken = default)
+    {
+        // No tile-membership index exists per hex (see IslandEntity's
+        // remarks) — the nearest island by centre is a reasonable, purely
+        // decorative approximation (island name/grouping only; nothing
+        // gameplay-relevant reads a settlement's IslandId today beyond that).
+        var islands = await _dbContext.Islands
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.Id, i.CentreQ, i.CentreR })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var islandId = islands
+            .OrderBy(i => coord.DistanceTo(new HexCoord(i.CentreQ, i.CentreR)))
+            .Select(i => i.Id)
+            .FirstOrDefault();
+
+        var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+        production *= speedFactor;
+
+        var settlement = new SettlementEntity
+        {
+            WorldId = worldId,
+            IslandId = islandId,
+            Name = name,
+            OwnerName = ownerName,
+            OwnerId = ownerId,
+            UserId = userId,
+            FoundedAt = now,
+        };
+
+        settlement.ApplyDomain(new Settlement
+        {
+            Id = settlement.Id,
+            Name = name,
+            Centre = coord,
+            Buildings = [new PlacedBuilding(coord, BuildingType.Longhouse, 1)],
+            Garrison = startingGarrison,
+            Resources = ResourcePool.Create(BuildingCatalogue.FoundingStock, production, capacity, now),
+        });
+
+        _dbContext.Settlements.Add(settlement);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Settlement {Name} ({Id}) founded at {Coord} by settler convoy for user {UserId}.",
+            name, settlement.Id, coord, userId);
+
+        return settlement;
+    }
+
+    /// <summary>
+    /// How many settlements <paramref name="userId"/> already holds in
+    /// <paramref name="worldId"/> — the "existing settlement count" both
+    /// <c>Settlers.RenownThresholds.AllowsAnotherSettlement</c> and
+    /// <c>Settlers.Founding.CostMultiplier</c> scale against (issue #55 §3/§4).
+    /// </summary>
+    public Task<int> GetSettlementCountAsync(Guid userId, Guid worldId, CancellationToken cancellationToken = default) =>
+        _dbContext.Settlements.CountAsync(s => s.UserId == userId && s.WorldId == worldId, cancellationToken);
+
+    /// <summary>
+    /// Every claimed settlement in <paramref name="worldId"/> — yours or
+    /// another player's — as a (centre, claim radius) pair, for
+    /// <c>Settlers.Founding.IsHexFoundable</c>'s spacing check (issue #55 §4).
+    /// Longhouse level is fetched alongside centre in one query, mirroring
+    /// <c>ArmyService.DispatchAsync</c>'s own target-claim-radius lookup for
+    /// Attack/Support fleet dispatch.
+    /// </summary>
+    public async Task<IReadOnlyList<(HexCoord Centre, int ClaimRadius)>> GetClaimedSettlementsAsync(
+        Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.WorldId == worldId)
+            .Select(s => new
+            {
+                s.CentreQ,
+                s.CentreR,
+                LonghouseLevel = s.Buildings
+                    .Where(b => b.Type == BuildingType.Longhouse)
+                    .Select(b => (int?)b.Level)
+                    .Max() ?? 0,
+            })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return [.. rows.Select(r => (new HexCoord(r.CentreQ, r.CentreR), 1 + (r.LonghouseLevel / 2)))]; // mirrors Settlement.ClaimRadius
     }
 
     /// <summary>
@@ -1011,7 +1123,20 @@ public sealed class SettlementService(
             .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
             .Distinct()
             .Any(sampler.IsShoreline);
-        var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline, settlement.World.SpeedFactor);
+
+        // Settler-crew training escalates per settlement the owning player
+        // already holds (issue #55 §4) — every other unit type trains at the
+        // catalogue's flat cost (multiplier 1.0).
+        var costMultiplier = 1.0;
+        if (unitType == UnitType.SettlerCrew)
+        {
+            var existingSettlementCount = await GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
+                .ConfigureAwait(false);
+            costMultiplier = Founding.CostMultiplier(existingSettlementCount);
+        }
+
+        var decision = settled.PlanTrain(
+            unitType, count, now, Guid.CreateVersion7(), hasShoreline, costMultiplier, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)
         {

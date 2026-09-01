@@ -151,10 +151,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             // rather than a check-then-act.
             settlement.HasIndex(s => new { s.WorldId, s.CentreQ, s.CentreR }).IsUnique();
 
-            // One settlement per player per world, for the same reason — this is
-            // the "no second village (yet)" rule from MECHANICS.md, enforced at
-            // the database rather than only checked in the service.
-            settlement.HasIndex(s => new { s.WorldId, s.OwnerId }).IsUnique();
+            // Was a unique (WorldId, OwnerId) index enforcing "no second
+            // village (yet)" from MECHANICS.md — removed by issue #55, which
+            // is exactly that "(yet)": a player can now hold more than one
+            // settlement per world (gated by Renown, not the database). Plot
+            // exclusivity is still enforced above.
+            settlement.HasIndex(s => new { s.WorldId, s.OwnerId });
 
             settlement.HasOne(s => s.World)
                 .WithMany(w => w.Settlements)
@@ -405,6 +407,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                     Status = UserStatus.Active,
                     IsSystem = true,
                     CreatedAt = systemSeededAt,
+                    RenownSettledAt = systemSeededAt,
                 },
                 new UserEntity
                 {
@@ -416,6 +419,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                     Status = UserStatus.Active,
                     IsSystem = true,
                     CreatedAt = systemSeededAt,
+                    RenownSettledAt = systemSeededAt,
                 },
                 new UserEntity
                 {
@@ -427,6 +431,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                     Status = UserStatus.Active,
                     IsSystem = true,
                     CreatedAt = systemSeededAt,
+                    RenownSettledAt = systemSeededAt,
                 });
         });
 

@@ -102,6 +102,31 @@ public static class UnitCatalogue
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 4,
         },
+        [UnitType.SettlerCrew] = new UnitDefinition
+        {
+            Type = UnitType.SettlerCrew,
+            Class = UnitClass.Civilian,
+            Attack = 0,
+            Defense = 3,
+            // Ordinary land-army pace so it neither bottlenecks nor outruns
+            // an escort of infantry (issue #55) — the same figure the
+            // Spearman/Axeman/Bowman/Provisioner line already uses. A sea
+            // convoy travels at the carrying ship's (faster) speed instead —
+            // Army.TotalSpeed/PlanDispatch take the slowest stack, and no
+            // ship is ever slower than 4 — so this only ever paces an
+            // overland march.
+            Speed = 4,
+            CarryCapacity = 0,
+            FoodCarryCapacity = 40,
+            UpkeepPerHour = 1,
+            // Base cost before Bjarnoy.Domain.Settlers.SettlerCostScaling's
+            // per-existing-settlement multiplier (issue #55 §4) — deliberately
+            // steep even at the base rate, mirroring Travian's settlers being
+            // one of the most expensive units in the game.
+            TrainingCost = new ResourceAmounts(Wood: 200, Stone: 150, Food: 100, Iron: 100),
+            TrainingDuration = TimeSpan.FromMinutes(40),
+            RequiredLonghouseLevel = 5,
+        },
         [UnitType.Catapult] = new UnitDefinition
         {
             Type = UnitType.Catapult,
