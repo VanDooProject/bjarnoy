@@ -162,12 +162,20 @@ public static class AdminSettlementEndpoints
         var domain = entity.ToDomain();
         var sampler = new TerrainSampler(entity.World!.ToGenerationOptions());
 
-        // The editor paints the whole claimed disc, not just the occupied
-        // hexes: an empty buildable hex is exactly what an admin wants to
-        // click on, and terrain is what decides whether anything may go there.
+        // The editor paints the whole claimed territory, not just the
+        // occupied hexes: an empty buildable hex is exactly what an admin
+        // wants to click on, and terrain is what decides whether anything
+        // may go there. The full union of discs (Settlement.ClaimDiscs), not
+        // just the centre disc: PlaceBuilding below accepts a new building
+        // anywhere Settlement.Claims already reaches — including inside an
+        // existing tower's own satellite disc, chaining allowed — so this
+        // must paint the same shape or an admin would see buildable-looking
+        // hexes PlaceBuilding then refuses.
         IReadOnlyList<AdminSettlementHexResponse> hexes =
         [
-            .. domain.Centre.WithinRadius(domain.ClaimRadius)
+            .. domain.ClaimDiscs
+                .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
+                .Distinct()
                 .OrderBy(c => c.R).ThenBy(c => c.Q)
                 .Select(coord =>
                 {

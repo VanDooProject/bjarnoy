@@ -1,8 +1,10 @@
 using Asp.Versioning;
 using Asp.Versioning.Builder;
+using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -40,6 +42,10 @@ public static class WorldEndpoints
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
+
+        worlds.MapGet("/{worldId:guid}/fog-mask", GetFogMask)
+            .WithName("GetWorldFogMask")
+            .WithSummary("The requesting player's fog-of-war mask, as an RGBA8 PNG (map-fog-v2.md §2.2).");
 
         return app;
     }
@@ -197,5 +203,49 @@ public static class WorldEndpoints
         ];
 
         return TypedResults.Ok(new TileChunkResponse(worldId, qMin, qMax, rMin, rMax, tiles));
+    }
+
+    /// <summary>
+    /// Reads <see cref="OwnershipGate.OwnerIdHeaderName"/> the same way the
+    /// settlement-mutating endpoints do (see
+    /// <see cref="Bjarnoy.Api.Auth.OwnershipEndpointFilters"/>) — anonymous
+    /// play has no JWT to prove identity with, so the caller's own
+    /// client-local id is what selects which settlements this mask is
+    /// built from. Per <c>map-fog-v2.md</c> §1f, this endpoint must stay
+    /// player-scoped even though <c>/tiles</c> above is deliberately open —
+    /// the header is what does that scoping today, at the same trust level
+    /// every other anonymous-play endpoint already relies on.
+    /// </summary>
+    private static async Task<Results<FileContentHttpResult, StatusCodeHttpResult, NotFound, BadRequest<ProblemDetails>>> GetFogMask(
+        Guid worldId,
+        HttpContext httpContext,
+        FogMaskService fogMask,
+        CancellationToken cancellationToken)
+    {
+        var ownerId = httpContext.Request.Headers[OwnershipGate.OwnerIdHeaderName].ToString();
+        if (string.IsNullOrEmpty(ownerId))
+        {
+            return TypedResults.BadRequest(new ProblemDetails
+            {
+                Title = "Missing owner id.",
+                Detail = $"The '{OwnershipGate.OwnerIdHeaderName}' header is required.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        var result = await fogMask.GeneratePlayerMaskAsync(worldId, ownerId, cancellationToken);
+        if (!result.Accepted)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var eTag = $"\"{result.ETag}\"";
+        if (httpContext.Request.Headers.IfNoneMatch == eTag)
+        {
+            return TypedResults.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        httpContext.Response.Headers.ETag = eTag;
+        return TypedResults.File(result.Png!, "image/png");
     }
 }

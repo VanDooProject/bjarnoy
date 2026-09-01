@@ -34,11 +34,60 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
 
 /**
  * Mirrors `Settlement.cs`'s `ClaimRadius => 1 + (LonghouseLevel / 2)` — the
- * claimed-territory radius `hasShoreline` needs derives purely from the
- * longhouse level the frontend already tracks (`hud.level`), so no extra
- * wire field (`SettlementResponse.claimRadius`, fetched but otherwise unused
- * by anything client-side) needs plumbing through just for this.
+ * centre disc's own radius, derived purely from the longhouse level the
+ * frontend already tracks (`hud.level`), so no extra wire field
+ * (`SettlementResponse.claimRadius`, fetched but otherwise unused by
+ * anything client-side) needs plumbing through just for this. This is only
+ * the centre disc — see `claimDiscs` for the settlement's full claimed
+ * territory once Tower satellite discs are included.
  */
 export function claimRadiusForLevel(longhouseLevel: number): number {
   return 1 + Math.floor(longhouseLevel / 2);
+}
+
+/**
+ * Mirrors `Settlement.cs`'s `TowerClaimRadius(int towerLevel) => Math.Max(0,
+ * towerLevel) / 2` — half the growth rate of `claimRadiusForLevel`, with no
+ * "+1" floor (a Tower only ever extends ground the settlement's centre disc
+ * already reaches; see that backend method's own remarks for why).
+ */
+export function towerClaimRadiusForLevel(towerLevel: number): number {
+  return Math.floor(Math.max(0, towerLevel) / 2);
+}
+
+/** One disc of a settlement's claimed territory — see `claimDiscs`. */
+export interface ClaimDisc {
+  q: number;
+  r: number;
+  radius: number;
+}
+
+/**
+ * Mirrors `Settlement.ClaimDiscs`: every disc that makes up a settlement's
+ * full claimed territory — the centre disc first, then one satellite disc
+ * per placed Tower, centred on that tower's own hex rather than `center`.
+ * `towers` only needs `PlacedBuildingResponse` entries already filtered (or
+ * not — any non-Tower type is harmless here, callers just shouldn't bother)
+ * to `type === 'tower'`; only `q`/`r`/`level` are read.
+ */
+export function claimDiscs(
+  center: AxialCoord,
+  longhouseLevel: number,
+  towers: Array<{ q: number; r: number; level: number }>,
+): ClaimDisc[] {
+  return [
+    { q: center.q, r: center.r, radius: claimRadiusForLevel(longhouseLevel) },
+    ...towers.map((t) => ({ q: t.q, r: t.r, radius: towerClaimRadiusForLevel(t.level) })),
+  ];
+}
+
+/**
+ * `hasShoreline`, unioned across every disc of a settlement's full claimed
+ * territory (see `claimDiscs`) — true when *any* disc reaches a shoreline
+ * hex, not just the centre disc. This is what a real coastal-training check
+ * needs: a settlement inland at its centre but with a Tower on the coast is
+ * exactly the case the multi-disc territory mechanic exists to enable.
+ */
+export function hasShorelineInTerritory(discs: ClaimDisc[], terrain: TerrainLookup): boolean {
+  return discs.some((disc) => hasShoreline({ q: disc.q, r: disc.r }, disc.radius, terrain));
 }
