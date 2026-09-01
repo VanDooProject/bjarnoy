@@ -235,6 +235,10 @@ public static class SettlementEndpoints
             Detail = Describe(result.Rejection),
             Status = StatusCodes.Status409Conflict,
         };
+        // Machine-readable, same pattern as founding's Problem(...) — the
+        // frontend needs to tell NoFreeSlot (premium upsell) apart from
+        // AlreadyQueuedOnHex/QueueFull without parsing Detail text.
+        problem.Extensions["rejection"] = result.Rejection.ToString();
 
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
