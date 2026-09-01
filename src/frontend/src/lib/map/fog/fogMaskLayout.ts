@@ -1,17 +1,19 @@
-// TS port of Bjarnoy.Domain.World.FogMaskLayout.WorldBounds (backend,
-// src/backend/src/Bjarnoy.Domain/World/FogMaskLayout.cs) — just the bounds
-// calculation, not the whole generator (see map-fog-v2.md §2.3's note on a
-// golden-fixture-tested TS port; that's the fuller version this stops short
-// of). The client needs this because the fog-mask PNG the backend serves
-// carries no metadata of its own: its pixel dimensions imply `width`/
-// `height`, but not where texel (0,0) sits in world space — that's exactly
-// what `MinU`/`MinV` answer, and the backend derives them purely from the
-// world's `radius`, which the client already has (`WorldResponse.radius`).
-// As long as this stays byte-for-byte the same formula as the C# version,
-// recomputing it here reconstructs the exact bounds the server used, with no
-// extra request.
+// TS port of Bjarnoy.Domain.World.FogMaskLayout (backend,
+// src/backend/src/Bjarnoy.Domain/World/FogMaskLayout.cs) — the texel-space
+// primitives, not the full FogMaskGenerator distance-transform (see
+// map-fog-v2.md §2.3's note on a golden-fixture-tested TS port; that's the
+// fuller version this stops short of). `demoFogMask.ts` uses `toHex`/
+// `isHexTexel`/`diagonalNeighboursForInterpolation` to bake a mask directly
+// from the client-side `WorldModel`'s own explored/visible state (no
+// backend to fetch one from in demo mode); `worldMaskBounds` is also used to
+// reconstruct where a *fetched* mask PNG sits in world space, since the PNG
+// itself carries no metadata beyond its pixel dimensions and the backend
+// derives `MinU`/`MinV` purely from the world's `radius`
+// (`WorldResponse.radius`). As long as these stay byte-for-byte the same
+// formulas as the C# version, this reconstructs exactly what the server
+// would compute, with no extra request.
 import type { AxialCoord } from '../../hex/coords';
-import { axialToOddQ, hexesInRadius } from '../../hex/coords';
+import { axialToOddQ, hexesInRadius, oddQToAxial } from '../../hex/coords';
 
 export interface MaskTexel {
   u: number;
@@ -31,6 +33,35 @@ export interface MaskBounds {
 export function toTexel(hex: AxialCoord): MaskTexel {
   const { col, row } = axialToOddQ(hex);
   return { u: col, v: 2 * row + (col & 1) };
+}
+
+/**
+ * Inverse of `toTexel` — mirrors FogMaskLayout.ToHex. Only meaningful for an
+ * even-parity texel (`u + v` even); odd-parity texels are interpolation-only
+ * and have no corresponding hex.
+ */
+export function toHex(texel: MaskTexel): AxialCoord {
+  const col = texel.u;
+  const row = (texel.v - (col & 1)) / 2;
+  return oddQToAxial({ col, row });
+}
+
+/** Whether a texel lands on a real hex rather than an interpolation cell — mirrors FogMaskLayout.IsHexTexel. */
+export function isHexTexel(texel: MaskTexel): boolean {
+  return ((texel.u + texel.v) & 1) === 0;
+}
+
+/**
+ * The four hexes diagonally surrounding an odd-parity interpolation texel —
+ * mirrors FogMaskLayout.DiagonalNeighboursForInterpolation.
+ */
+export function diagonalNeighboursForInterpolation(texel: MaskTexel): MaskTexel[] {
+  return [
+    { u: texel.u - 1, v: texel.v },
+    { u: texel.u + 1, v: texel.v },
+    { u: texel.u, v: texel.v - 1 },
+    { u: texel.u, v: texel.v + 1 },
+  ];
 }
 
 /**
