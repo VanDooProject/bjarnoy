@@ -4,7 +4,7 @@
 // custom-shader code in this codebase; see HexMapRenderer.ts's own comment
 // on how this replaces v1's per-hex blob/pattern-sprite fog entirely.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
-import { FOG_FRAGMENT, FOG_VERTEX } from './fogShader';
+import { FOG_FRAGMENT, FOG_VERTEX, MAX_ARMY_VISION_SOURCES } from './fogShader';
 
 export type FogTier = 'outOfSight' | 'unknown';
 
@@ -174,6 +174,9 @@ export class FogMaskLayer {
       uWind: { value: new Float32Array(WIND), type: 'vec2<f32>' },
       uMaskBlend: { value: 1, type: 'f32' },
       uShowRaw: { value: 0, type: 'f32' },
+      uArmyVisionSources: { value: new Float32Array(MAX_ARMY_VISION_SOURCES * 2), type: 'vec2<f32>' },
+      uArmyVisionCount: { value: 0, type: 'f32' },
+      uArmyVisionRadius: { value: 0, type: 'f32' },
     });
 
     const shader = new Shader({
@@ -211,6 +214,27 @@ export class FogMaskLayer {
     const offset = this.uniforms.uniforms.uWorldToMaskOffset as Float32Array;
     offset[0] = placement.offset[0];
     offset[1] = placement.offset[1];
+  }
+
+  /**
+   * §1c: uploads this frame's live army vision sources — world-space points,
+   * already resolved by HexMapRenderer from its own army render-position
+   * tracking (the same continuous, resync-eased position the army overlay
+   * itself draws from) — plus the shared radius (world units) they reveal
+   * within. Called every tick alongside `tick()`, never gated on a mask
+   * fetch: this is the whole point of keeping §1c out of the cached texture
+   * (see fogShader.ts's header). Silently truncates past
+   * `MAX_ARMY_VISION_SOURCES` — see that constant's own comment.
+   */
+  setArmyVisionSources(points: readonly { x: number; y: number }[], radiusWorldUnits: number): void {
+    const sources = this.uniforms.uniforms.uArmyVisionSources as Float32Array;
+    const count = Math.min(points.length, MAX_ARMY_VISION_SOURCES);
+    for (let i = 0; i < count; i++) {
+      sources[i * 2] = points[i].x;
+      sources[(i * 2) + 1] = points[i].y;
+    }
+    this.uniforms.uniforms.uArmyVisionCount = count;
+    this.uniforms.uniforms.uArmyVisionRadius = radiusWorldUnits;
   }
 
   /**

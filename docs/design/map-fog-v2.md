@@ -112,7 +112,17 @@ on every member's settlement change. Both are needed.
 
 ### 1c. Option C — live layer, never cached, composited in the shader
 
-Live army-granted vision — not implemented today, design for it anyway.
+**Implemented.** `fogShader.ts`'s `uArmyVisionSources`/`uArmyVisionCount`/
+`uArmyVisionRadius` uniforms, uploaded every tick by `HexMapRenderer` from
+its own already-computed live army render positions (`resolveArmyPoint`,
+reused as-is), composited as a multiplicative reveal on the ramp values —
+never written into `uMask`/`uMaskPrev`, exactly as designed below. The
+vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
+`ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
+unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
+number from.
+
+Live army-granted vision — the rest of this section is the original design.
 
 Checked: nothing in `WorldModel.ts` currently derives visibility from army
 position — `explored`/`visibleHexes` are purely settlement-derived. But
@@ -182,6 +192,20 @@ stays float and smooth; only the answer, when a hex-shaped answer is
 asked for, is hex-shaped.
 
 ### 1e. Persisted explored history — third input, adopted
+
+**Implemented, whole-world rather than per-chunk.** `PersistedExploredBitset`
+(pure bit-packing, `Bjarnoy.Domain.World`) + `PlayerExploredEntity`
+(`Bjarnoy.Infrastructure`, one row per `(WorldId, OwnerId)`) + `FogMaskService`
+OR-ing in each settlement's explored ring and each in-transit army's
+walked-over ground (§1c's radius, but only ever *appended*, never the live
+per-frame bonus itself) on every call, saved back only when it actually
+grew. Chunked delivery (§3) still isn't built anywhere in this codebase, so
+this keys by `(WorldId, OwnerId)` rather than the `(playerId, worldId,
+chunkCoord)` this section originally specified — splitting the bitset per
+chunk is real follow-up work for whenever §3 lands, not something to
+half-build ahead of it. Guild-wide merging (§1a) isn't implemented either —
+the persisted set today is exactly the requesting player's own history,
+same single-player scope as everything else in this file's §1a note.
 
 An external review of this doc caught a real gap: §1 defines black fog as
 *history* ("you've been here, can't see it now"), but Option B's cache key
