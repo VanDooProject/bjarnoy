@@ -13,7 +13,14 @@ export default defineConfig({
   // No retries, in CI or locally: a retry silently hides a flaky test
   // behind a green run instead of surfacing it.
   retries: 0,
-  workers: process.env.CI ? 1 : undefined,
+  // 2, not 1: CI runners have 4 vCPUs, and every spec here (fixtures.ts,
+  // page.route mocks scoped per-test) is already isolated per browser
+  // context with no shared backend/DB, so nothing here needs serial
+  // execution. Verified locally at 1/2/4 workers: 2 gets a ~1.6x wall-clock
+  // win over serial with zero flakes; 4 oversubscribes the runner's CPU
+  // (these specs render real WebGL/PixiJS canvases, which is CPU-bound
+  // without a GPU) and starts timing out under contention.
+  workers: process.env.CI ? 2 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
