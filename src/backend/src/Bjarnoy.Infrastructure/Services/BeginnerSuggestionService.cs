@@ -25,6 +25,17 @@ public sealed record SuggestedStartCandidate(Guid IslandId, int Q, int R, int Ri
 public sealed record SuggestedStartResult(IReadOnlyList<SuggestedStartCandidate> Candidates, bool Fallback);
 
 /// <summary>
+/// The admin-visibility summary (design doc §6-7, issue #132): how many
+/// rings currently have beginner spare capacity, out of how many contain any
+/// island at all, plus the same total-exhaustion flag <see cref="SuggestedStartResult.Fallback"/>
+/// reports to a landing player — a world showing 0/N here (or
+/// <see cref="TotalExhaustion"/> true) is exactly the "new players are no
+/// longer getting a beginner-safe start anywhere" state an admin needs to
+/// notice on its own.
+/// </summary>
+public sealed record BeginnerRingSummary(int RingsWithCapacity, int RingsWithAnyIsland, bool TotalExhaustion);
+
+/// <summary>
 /// Beginner-area spawn segregation (design doc §6, issue #132): a
 /// read-time-only ring/qualification bucketing of data <see cref="WorldService"/>
 /// already persists — no change to <see cref="WorldGenerator"/>, no new
@@ -168,6 +179,49 @@ public sealed class BeginnerSuggestionService(
             .ToList();
 
         return new SuggestedStartResult(RankByDistance(fallbackCandidates, near, maxCandidates), Fallback: true);
+    }
+
+    /// <summary>
+    /// Design doc §7's admin-visibility summary — reads off the same cached
+    /// state <see cref="GetSuggestedStartAsync"/> itself uses (or computes it
+    /// fresh on a cold cache), so this costs nothing extra beyond whatever a
+    /// suggestion query would already have paid. Null when the world does not
+    /// exist.
+    /// </summary>
+    public async Task<BeginnerRingSummary?> GetRingSummaryAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var world = await _dbContext.Worlds.AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == worldId, cancellationToken).ConfigureAwait(false);
+        if (world is null)
+        {
+            return null;
+        }
+
+        var gameNow = world.ToClock().ToGameTime(_timeProvider.GetUtcNow());
+
+        var islands = await _dbContext.Islands.AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => new { i.Id, i.CentreQ, i.CentreR })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        if (islands.Count == 0)
+        {
+            return new BeginnerRingSummary(RingsWithCapacity: 0, RingsWithAnyIsland: 0, TotalExhaustion: true);
+        }
+
+        var ringOf = await GetRingAssignmentsAsync(world, islands.Select(i => (i.Id, i.CentreQ, i.CentreR)), cancellationToken)
+            .ConfigureAwait(false);
+        var openPlots = await GetOpenPlotsAsync(worldId, cancellationToken).ConfigureAwait(false);
+        var qualifies = await GetQualifyingIslandsAsync(
+            worldId, gameNow, islands.Select(i => i.Id), cancellationToken).ConfigureAwait(false);
+
+        var ringsWithAnyIsland = ringOf.Values.Distinct().Count();
+        var ringsWithCapacity = ringOf
+            .GroupBy(kv => kv.Value)
+            .Count(ring => ring.Any(kv =>
+                qualifies.GetValueOrDefault(kv.Key, true) && openPlots.GetValueOrDefault(kv.Key, []).Count > 0));
+
+        return new BeginnerRingSummary(ringsWithCapacity, ringsWithAnyIsland, TotalExhaustion: ringsWithCapacity == 0);
     }
 
     private static IReadOnlyList<SuggestedStartCandidate> RankByDistance(

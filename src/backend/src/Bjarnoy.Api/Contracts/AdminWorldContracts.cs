@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Bjarnoy.Api.Json;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -19,9 +20,18 @@ public sealed record AdminWorldResponse(
     DateTimeOffset? EndbossTriggeredAt,
     string RunState,
     DateTimeOffset RunStateSince,
-    DateTimeOffset CreatedAt)
+    DateTimeOffset CreatedAt,
+    // Design doc §7: how many rings currently have beginner spare capacity,
+    // out of how many contain any island at all — the same "Players"/
+    // "Joinable"/"Endboss"-style at-a-glance health signal, for beginner
+    // spawn segregation (§6).
+    int BeginnerRingsWithCapacity,
+    int BeginnerRingsTotal,
+    // True on genuine total exhaustion (§6) — every island either graduated
+    // or at zero openPlots.
+    bool BeginnerTotalExhaustion)
 {
-    public static AdminWorldResponse From(WorldEntity world, int playerCount)
+    public static AdminWorldResponse From(WorldEntity world, int playerCount, BeginnerRingSummary? beginnerRings)
     {
         ArgumentNullException.ThrowIfNull(world);
 
@@ -39,7 +49,10 @@ public sealed record AdminWorldResponse(
             world.EndbossTriggeredAt,
             world.RunState.ToString().ToLowerInvariant(),
             world.RunStateSince,
-            world.CreatedAt);
+            world.CreatedAt,
+            beginnerRings?.RingsWithCapacity ?? 0,
+            beginnerRings?.RingsWithAnyIsland ?? 0,
+            beginnerRings?.TotalExhaustion ?? true);
     }
 }
 
