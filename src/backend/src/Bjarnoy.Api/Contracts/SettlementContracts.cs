@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -27,6 +28,9 @@ public sealed record QueueBuildRequest(
     [property: Required] string Building,
     int Q,
     int R);
+
+/// <param name="Q">The hex a shrine stands on, to slot this rune into.</param>
+public sealed record SlotRuneRequest(int Q, int R);
 
 public sealed record TrainUnitsRequest(
     [property: Required] string Unit,
@@ -85,6 +89,14 @@ public sealed record BuildOrderResponse(
 
 public sealed record UnitStackResponse(string Unit, int Count);
 
+/// <param name="SlottedAtQ">
+/// The shrine hex this rune is slotted into, or <see langword="null"/> if it
+/// is sitting unslotted in storage (issue #53). <see cref="SlottedAtR"/> is
+/// always set alongside it.
+/// </param>
+public sealed record RuneInstanceResponse(
+    Guid Id, string Type, string Rarity, int? SlottedAtQ, int? SlottedAtR);
+
 /// <param name="CompletedCount">
 /// How many units of the batch are done so far — display only; they land in
 /// the garrison all at once when the whole batch completes (see
@@ -122,6 +134,7 @@ public sealed record SettlementResponse(
     IReadOnlyList<BuildOrderResponse> Queue,
     IReadOnlyList<UnitStackResponse> Garrison,
     IReadOnlyList<TrainingOrderResponse> TrainingQueue,
+    IReadOnlyList<RuneInstanceResponse> Runes,
     WorldClockResponse World)
 {
     public static SettlementResponse From(
@@ -180,6 +193,8 @@ public sealed record SettlementResponse(
                 o.CompletesAt,
                 clock.FreezesTime ? null : o.RemainingAt(gameNow).TotalSeconds,
                 o.PerUnitDuration.TotalSeconds * o.Count))],
+            [.. domain.Runes.Select(r => new RuneInstanceResponse(
+                r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
             WorldClockResponse.From(clock, gameNow));
     }
 }

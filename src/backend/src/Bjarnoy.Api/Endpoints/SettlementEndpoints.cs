@@ -68,6 +68,20 @@ public static class SettlementEndpoints
             .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
+        settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
+            .WithName("SlotRune")
+            .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
+        settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/unslot", UnslotRune)
+            .WithName("UnslotRune")
+            .WithSummary("Returns a slotted rune to storage.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
         app.MapGet("/api/v1/buildings", Catalogue)
             .WithApiVersionSet(versionSet)
             .WithTags("Settlements")
@@ -295,6 +309,67 @@ public static class SettlementEndpoints
 
         return TypedResults.Conflict(problem);
     }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> SlotRune(
+        Guid settlementId,
+        Guid runeId,
+        SlotRuneRequest request,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await settlements.SlotRuneAsync(
+            settlementId, runeId, new HexCoord(request.Q, request.R), cancellationToken);
+
+        return RuneResultToResponse(result, time);
+    }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> UnslotRune(
+        Guid settlementId,
+        Guid runeId,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.UnslotRuneAsync(settlementId, runeId, cancellationToken);
+
+        return RuneResultToResponse(result, time);
+    }
+
+    private static Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>> RuneResultToResponse(
+        RuneResult result, TimeProvider time)
+    {
+        if (result.Outcome == RuneOutcome.SettlementNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!result.Accepted)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The rune action was refused.",
+                Detail = DescribeRune(result.Outcome),
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(
+            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static string DescribeRune(RuneOutcome outcome) => outcome switch
+    {
+        RuneOutcome.RuneNotFound => "This settlement holds no such rune.",
+        RuneOutcome.RuneAlreadySlotted => "That rune is already slotted; unslot it first.",
+        RuneOutcome.RuneNotSlotted => "That rune is not slotted.",
+        RuneOutcome.NoShrineOnHex => "No shrine stands on that hex.",
+        RuneOutcome.ShrineSlotsFull => "That shrine has no free rune slots.",
+        _ => "The rune action was refused.",
+    };
 
     private static Ok<IReadOnlyList<BuildingDefinitionResponse>> Catalogue(int? level)
     {

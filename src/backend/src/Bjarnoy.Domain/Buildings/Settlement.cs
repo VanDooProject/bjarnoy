@@ -1,6 +1,7 @@
 using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
@@ -41,6 +42,12 @@ public sealed record Settlement
     /// </summary>
     public const int MaxTrainingQueueLength = 5;
 
+    /// <summary>
+    /// The stacking cap on a shrine/rune bonus (issue #53): additive, then
+    /// capped — no multiplicative chains, no diminishing returns in v1.
+    /// </summary>
+    public const double MaxEffectBonus = 0.5;
+
     public required Guid Id { get; init; }
 
     public required string Name { get; init; }
@@ -58,6 +65,12 @@ public sealed record Settlement
     public IReadOnlyList<UnitStack> Garrison { get; init; } = [];
 
     public IReadOnlyList<TrainingOrder> TrainingQueue { get; init; } = [];
+
+    /// <summary>
+    /// Runes this settlement holds — slotted into a shrine (<see cref="RuneInstance.SlottedAt"/>
+    /// is that shrine's hex) or sitting unslotted in storage.
+    /// </summary>
+    public IReadOnlyList<RuneInstance> Runes { get; init; } = [];
 
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
@@ -294,11 +307,11 @@ public sealed record Settlement
             // Each completion changes the rate from its own instant, so a
             // building (or batch) finished an hour ago has applied for that
             // hour.
-            var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
+            var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
             resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, time);
         }
 
-        var (finalProduction, finalCapacity) = BuildingCatalogue.Totals(buildings, terrainAt);
+        var (finalProduction, finalCapacity) = BoostedTotals(buildings, Runes, terrainAt);
         finalProduction *= speedFactor;
 
         // Starvation is checked every settle, not only when something
@@ -753,7 +766,7 @@ public sealed record Settlement
 
         buildings[index] = buildings[index] with { Level = level };
 
-        var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
+        var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
@@ -943,7 +956,7 @@ public sealed record Settlement
             garrison.Add(new UnitStack(type, delta));
         }
 
-        var (production, capacity) = BuildingCatalogue.Totals(Buildings, terrainAt);
+        var (production, capacity) = BoostedTotals(Buildings, Runes, terrainAt);
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, garrison, guestStacks ?? []), capacity, now);
 
@@ -966,7 +979,7 @@ public sealed record Settlement
         IReadOnlyList<UnitStack>? guestStacks,
         Func<HexCoord, Terrain>? terrainAt)
     {
-        var (production, capacity) = BuildingCatalogue.Totals(buildings, terrainAt);
+        var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
@@ -978,12 +991,189 @@ public sealed record Settlement
         };
     }
 
-    /// <summary>Net production (after garrison and guest upkeep) and capacity implied by what currently stands.</summary>
+    /// <summary>
+    /// Net production (after garrison and guest upkeep) and capacity implied
+    /// by what currently stands, shrine favour and slotted runes included.
+    /// </summary>
     public (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) CurrentTotals(
         double speedFactor = 1.0, IReadOnlyList<UnitStack>? guestStacks = null, Func<HexCoord, Terrain>? terrainAt = null)
     {
-        var (production, capacity) = BuildingCatalogue.Totals(Buildings, terrainAt);
+        var (production, capacity) = BoostedTotals(Buildings, Runes, terrainAt);
         return (ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity);
+    }
+
+    /// <summary>Adds an unslotted rune to storage — a raid's spoils, a hex find, an offering's reward.</summary>
+    public Settlement GrantRune(RuneInstance rune)
+    {
+        ArgumentNullException.ThrowIfNull(rune);
+
+        return this with { Runes = [.. Runes, rune with { SlottedAt = null }] };
+    }
+
+    /// <summary>
+    /// Slots an unslotted rune into the shrine standing on
+    /// <paramref name="shrineCoord"/>, and re-rates production/capacity from
+    /// <paramref name="now"/> exactly as a normal build completion would —
+    /// a slotted rune's boost must show up immediately, not only on the next
+    /// unrelated settle.
+    /// </summary>
+    /// <remarks>
+    /// v1 does not restrict which rune fits which god's shrine (issue #53's
+    /// "Odin accepts any rune" rule is, for now, every shrine's rule) —
+    /// domain-matching is deferred until there are enough gods for the choice
+    /// to matter. Call on an already-settled settlement, same as
+    /// <see cref="SetBuildingLevel"/>.
+    /// </remarks>
+    public SlotRuneResult SlotRune(
+        Guid runeId,
+        HexCoord shrineCoord,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        var rune = Runes.FirstOrDefault(r => r.Id == runeId);
+        if (rune is null)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.RuneNotFound);
+        }
+
+        if (rune.SlottedAt is not null)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.RuneAlreadySlotted);
+        }
+
+        var shrine = Buildings.FirstOrDefault(b => b.Coord == shrineCoord);
+        var occupied = Buildings.Any(b => b.Coord == shrineCoord);
+        if (!occupied || BuildingCatalogue.GodOf(shrine.Type) is null || shrine.Level < 1)
+        {
+            // Level 0 is the foundation stub Enqueue places while the shrine
+            // is still under construction (see BuildingCatalogue.Totals's own
+            // level < 1 skip) — it grants no favour yet, so it isn't a shrine
+            // to slot into.
+            return SlotRuneResult.Rejected(SlotRuneRejection.NoShrineOnHex);
+        }
+
+        var slots = ShrineCatalogue.Slots(shrine.Level);
+        var slottedCount = Runes.Count(r => r.SlottedAt == shrineCoord);
+        if (slottedCount >= slots)
+        {
+            return SlotRuneResult.Rejected(SlotRuneRejection.ShrineSlotsFull);
+        }
+
+        var runes = Runes
+            .Select(r => r.Id == runeId ? r with { SlottedAt = shrineCoord } : r)
+            .ToList();
+
+        return SlotRuneResult.Accept(WithRunes(runes, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Returns a slotted rune to storage, and re-rates production/capacity
+    /// from <paramref name="now"/> — the counterpart to <see cref="SlotRune"/>.
+    /// </summary>
+    public UnslotRuneResult UnslotRune(
+        Guid runeId,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        var rune = Runes.FirstOrDefault(r => r.Id == runeId);
+        if (rune is null)
+        {
+            return UnslotRuneResult.Rejected(UnslotRuneRejection.RuneNotFound);
+        }
+
+        if (rune.SlottedAt is null)
+        {
+            return UnslotRuneResult.Rejected(UnslotRuneRejection.RuneNotSlotted);
+        }
+
+        var runes = Runes
+            .Select(r => r.Id == runeId ? r with { SlottedAt = null } : r)
+            .ToList();
+
+        return UnslotRuneResult.Accept(WithRunes(runes, now, speedFactor, guestStacks, terrainAt));
+    }
+
+    /// <summary>
+    /// Swaps in a new rune list and re-rates production/capacity from
+    /// <paramref name="now"/> — the shared tail of <see cref="SlotRune"/> and
+    /// <see cref="UnslotRune"/>, mirroring <see cref="WithBuildings"/>.
+    /// </summary>
+    private Settlement WithRunes(
+        List<RuneInstance> runes,
+        DateTimeOffset now,
+        double speedFactor,
+        IReadOnlyList<UnitStack>? guestStacks,
+        Func<HexCoord, Terrain>? terrainAt)
+    {
+        var (production, capacity) = BoostedTotals(Buildings, runes, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
+
+        return this with { Runes = runes, Resources = resources };
+    }
+
+    /// <summary>
+    /// The combined favour of every shrine standing, plus every rune slotted
+    /// into one, capped at <see cref="MaxEffectBonus"/> per kind.
+    /// </summary>
+    private static ShrineEffect ActiveEffect(IEnumerable<PlacedBuilding> buildings, IReadOnlyList<RuneInstance> runes)
+    {
+        var total = ShrineEffect.Zero;
+
+        foreach (var building in buildings)
+        {
+            // Level 0 is the foundation stub while a shrine is still under
+            // construction — BuildingCatalogue.Totals skips it the same way;
+            // ShrineCatalogue.Favour/Slots clamp their level argument to
+            // [1,5], so without this check a stub would grant full level-1
+            // favour and a rune slot before the shrine is actually built.
+            if (building.Level < 1)
+            {
+                continue;
+            }
+
+            var god = BuildingCatalogue.GodOf(building.Type);
+            if (god is null)
+            {
+                continue;
+            }
+
+            total += ShrineCatalogue.Favour(god.Value, building.Level);
+
+            var slots = ShrineCatalogue.Slots(building.Level);
+            foreach (var rune in runes.Where(r => r.SlottedAt == building.Coord).Take(slots))
+            {
+                total += RuneCatalogue.Effect(rune.Type, rune.Rarity);
+            }
+        }
+
+        return total.Capped(MaxEffectBonus, MaxEffectBonus);
+    }
+
+    /// <summary>
+    /// <see cref="BuildingCatalogue.Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>,
+    /// with shrine favour and slotted runes applied as a percentage on top —
+    /// the multiplicative layer, evaluated after that method's own
+    /// terrain-adjacency boost.
+    /// </summary>
+    private static (ResourceAmounts ProductionPerHour, ResourceAmounts Capacity) BoostedTotals(
+        IEnumerable<PlacedBuilding> buildings, IReadOnlyList<RuneInstance> runes, Func<HexCoord, Terrain>? terrainAt)
+    {
+        var placed = buildings as IReadOnlyCollection<PlacedBuilding> ?? buildings.ToList();
+        var (production, capacity) = BuildingCatalogue.Totals(placed, terrainAt);
+        var effect = ActiveEffect(placed, runes);
+
+        var boostedProduction = new ResourceAmounts(
+            production.Wood * (1 + effect.ProductionBonus.Wood),
+            production.Stone * (1 + effect.ProductionBonus.Stone),
+            production.Food * (1 + effect.ProductionBonus.Food),
+            production.Iron * (1 + effect.ProductionBonus.Iron));
+
+        return (boostedProduction, capacity * (1 + effect.StorageBonus));
     }
 
     /// <summary>

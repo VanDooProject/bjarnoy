@@ -40,6 +40,15 @@ public sealed record GrantResourcesRequest(
 
 public sealed record SetBuildingLevelRequest([property: Required, Range(1, int.MaxValue)] int Level);
 
+/// <summary>
+/// Admin/dev god-mode grant (issue #53): stands in for a real rune
+/// acquisition source (hex finds, raid loot, offerings), none of which exist
+/// yet.
+/// </summary>
+public sealed record GrantRuneRequest(
+    [property: Required] string Type,
+    [property: Required] string Rarity);
+
 /// <param name="Builds">Whether to finish the build queue. Defaults to true.</param>
 /// <param name="Training">Whether to finish the training queue too. Defaults to true.</param>
 public sealed record CompleteQueuesRequest(bool Builds = true, bool Training = true);

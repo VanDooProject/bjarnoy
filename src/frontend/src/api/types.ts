@@ -107,6 +107,15 @@ export interface WorldClockResponse {
   gameTime: string;
 }
 
+/** A rune a settlement holds — slotted into the shrine on (slottedAtQ, slottedAtR), or unslotted in storage when both are null (issue #53). */
+export interface RuneInstanceResponse {
+  id: string;
+  type: string;
+  rarity: string;
+  slottedAtQ: number | null;
+  slottedAtR: number | null;
+}
+
 export interface SettlementResponse {
   id: string;
   worldId: string;
@@ -122,6 +131,7 @@ export interface SettlementResponse {
   queue: BuildOrderResponse[];
   garrison: UnitStackResponse[];
   trainingQueue: TrainingOrderResponse[];
+  runes: RuneInstanceResponse[];
   world: WorldClockResponse;
 }
 
@@ -228,6 +238,18 @@ export interface QueueBuildRequest {
   building: string;
   q: number;
   r: number;
+}
+
+/** The shrine hex to slot a rune into. */
+export interface SlotRuneRequest {
+  q: number;
+  r: number;
+}
+
+/** Admin/dev god-mode grant (issue #53) — stands in for a real acquisition source that doesn't exist yet. */
+export interface GrantRuneRequest {
+  type: string;
+  rarity: string;
 }
 
 export interface TrainUnitsRequest {

@@ -4,7 +4,7 @@
 // instant-build-on-click in SettlementView.vue with the mockup's full-screen
 // hex detail screen (Viking Realm.dc.html's `sel` overlay): art on the left,
 // name/level/description/action on the right.
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
 import { useWorldStore } from '../../stores/world';
@@ -34,6 +34,67 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
 
+// Issue #53: shrine slots by level, mirroring ShrineCatalogue.Slots.cs.
+function shrineSlotsFor(level: number): number {
+  const clamped = Math.min(Math.max(level, 1), 5);
+  if (clamped >= 5) return 3;
+  if (clamped >= 3) return 2;
+  return 1;
+}
+
+const RUNE_TYPE_LABELS: Record<string, string> = {
+  fehu: 'Fehu',
+  jera: 'Jera',
+  othala: 'Othala',
+};
+const RUNE_RARITY_LABELS: Record<string, string> = {
+  carved: 'Carved',
+  bound: 'Bound',
+  blooded: 'Blooded',
+};
+
+const isShrine = computed(
+  () => props.tile.buildingType === 'shrineofthor' || props.tile.buildingType === 'shrineoffreyja',
+);
+// Level 0 is the foundation stub while the shrine is still under
+// construction (Enqueue) — it grants no favour and has no slots yet, mirrored
+// by Settlement.SlotRune/ActiveEffect rejecting it backend-side.
+const shrineBuilt = computed(() => (props.tile.buildingLevel ?? 0) >= 1);
+const shrineSlots = computed(() => shrineSlotsFor(props.tile.buildingLevel ?? 1));
+const slottedRunes = computed(() =>
+  world.hud.runes.filter((r) => r.slottedAtQ === props.tile.q && r.slottedAtR === props.tile.r),
+);
+// A rune slotted into a *different* shrine can't be slotted here too — only
+// storage (slottedAtQ === null) is offered as a candidate for this shrine.
+const storedRunes = computed(() => world.hud.runes.filter((r) => r.slottedAtQ === null));
+
+const runeBusy = ref(false);
+const runeError = ref<string | null>(null);
+
+async function slotHere(runeId: string) {
+  runeBusy.value = true;
+  runeError.value = null;
+  try {
+    await world.slotRuneLive(runeId, { q: props.tile.q, r: props.tile.r });
+  } catch {
+    runeError.value = 'Could not slot that rune — it may already be slotted, or this shrine has no free slot.';
+  } finally {
+    runeBusy.value = false;
+  }
+}
+
+async function unslot(runeId: string) {
+  runeBusy.value = true;
+  runeError.value = null;
+  try {
+    await world.unslotRuneLive(runeId);
+  } catch {
+    runeError.value = 'Could not unslot that rune.';
+  } finally {
+    runeBusy.value = false;
+  }
+}
+
 // Each building's art family ships one composited (base+props already
 // merged) image per level, e.g. `vikinghut_SE_level000.png` ..
 // `vikinghut_SE_level004.png` — always the `_SE` rotation, matching the
@@ -45,6 +106,10 @@ const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
 const BUILDING_ART_FAMILIES: Record<string, string> = {
   hut: 'vikinghut',
   longhouse: 'vikinghut',
+  // No shrine art in the pack yet (issue #53) — the hut family is the same
+  // placeholder textures.ts and WorldModel.ts already use on the map itself.
+  shrineofthor: 'vikinghut',
+  shrineoffreyja: 'vikinghut',
   farm: 'farm_crop',
   tower: 'towerbuilding',
   pumpkinfarm: 'farm_pumpkin',
@@ -90,6 +155,8 @@ const BUILDING_NAMES: Record<string, string> = {
   fishinghut: 'Fishing Hut',
   magictower: 'Magic Tower',
   pumpkinfarm: 'Pumpkin Farm',
+  shrineofthor: 'Shrine of Thor',
+  shrineoffreyja: 'Shrine of Freyja',
   lumberjack: 'Lumberjack',
   quarry: 'Quarry',
 };
@@ -215,6 +282,36 @@ const costLine = computed(() =>
             <dd>{{ currentStats.workers }}</dd>
           </template>
         </dl>
+
+        <div v-if="isShrine && mine && shrineBuilt" class="runes">
+          <div class="runes-head">
+            Runes: {{ slottedRunes.length }} / {{ shrineSlots }} slotted
+          </div>
+          <p v-if="runeError" class="rune-error">{{ runeError }}</p>
+
+          <ul v-if="slottedRunes.length" class="rune-list">
+            <li v-for="rune in slottedRunes" :key="rune.id">
+              <span>{{ RUNE_TYPE_LABELS[rune.type] ?? rune.type }} ({{ RUNE_RARITY_LABELS[rune.rarity] ?? rune.rarity }})</span>
+              <button class="ghost" :disabled="runeBusy" @click="unslot(rune.id)">Unslot</button>
+            </li>
+          </ul>
+
+          <template v-if="storedRunes.length">
+            <div class="runes-head">In storage</div>
+            <ul class="rune-list">
+              <li v-for="rune in storedRunes" :key="rune.id">
+                <span>{{ RUNE_TYPE_LABELS[rune.type] ?? rune.type }} ({{ RUNE_RARITY_LABELS[rune.rarity] ?? rune.rarity }})</span>
+                <button
+                  class="ghost"
+                  :disabled="runeBusy || slottedRunes.length >= shrineSlots"
+                  @click="slotHere(rune.id)"
+                >
+                  Slot here
+                </button>
+              </li>
+            </ul>
+          </template>
+        </div>
 
         <div v-if="mine && buildable" class="actions">
           <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
@@ -350,6 +447,50 @@ const costLine = computed(() =>
 }
 .primary:disabled {
   opacity: 0.6;
+  cursor: default;
+}
+.runes {
+  margin: 16px 0 0;
+  max-width: 380px;
+  font-size: 13px;
+}
+.runes-head {
+  color: var(--muted);
+  margin: 10px 0 6px;
+}
+.runes-head:first-child {
+  margin-top: 0;
+}
+.rune-error {
+  color: #e07a5f;
+  margin: 4px 0;
+}
+.rune-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rune-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+}
+.ghost {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ghost:disabled {
+  opacity: 0.5;
   cursor: default;
 }
 </style>

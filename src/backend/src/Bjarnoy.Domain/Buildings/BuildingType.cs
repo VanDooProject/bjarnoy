@@ -41,6 +41,18 @@ public enum BuildingType
 
     /// <summary>Food, on grass. A second farm variant (issue #24).</summary>
     PumpkinFarm = 8,
+
+    /// <summary>
+    /// Raised to Thor. Its favour, plus any slotted runes, boosts Wood and
+    /// Stone production (issue #53).
+    /// </summary>
+    ShrineOfThor = 9,
+
+    /// <summary>
+    /// Raised to Freyja. Its favour, plus any slotted runes, boosts Food
+    /// production (issue #53).
+    /// </summary>
+    ShrineOfFreyja = 10,
 }
 
 public static class BuildingTypeExtensions
@@ -56,6 +68,8 @@ public static class BuildingTypeExtensions
         BuildingType.FishingHut => "fishinghut",
         BuildingType.MagicTower => "magictower",
         BuildingType.PumpkinFarm => "pumpkinfarm",
+        BuildingType.ShrineOfThor => "shrineofthor",
+        BuildingType.ShrineOfFreyja => "shrineoffreyja",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

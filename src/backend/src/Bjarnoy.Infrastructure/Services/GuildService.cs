@@ -422,6 +422,7 @@ public sealed class GuildService(
             .Include(s => s.World)
             .Include(s => s.Buildings)
             .Include(s => s.Queue)
+            .Include(s => s.Runes)
             .FirstOrDefaultAsync(
                 s => s.UserId == userId && s.WorldId == membership.Guild.WorldId, cancellationToken)
             .ConfigureAwait(false);

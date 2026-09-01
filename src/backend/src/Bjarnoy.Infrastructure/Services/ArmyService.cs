@@ -774,6 +774,7 @@ public sealed class ArmyService(
             .Include(s => s.Queue)
             .Include(s => s.Garrison)
             .Include(s => s.TrainingQueue)
+            .Include(s => s.Runes)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>
@@ -785,6 +786,7 @@ public sealed class ArmyService(
             .Include(a => a.Settlement!).ThenInclude(s => s.Queue)
             .Include(a => a.Settlement!).ThenInclude(s => s.Garrison)
             .Include(a => a.Settlement!).ThenInclude(s => s.TrainingQueue)
+            .Include(a => a.Settlement!).ThenInclude(s => s.Runes)
             .FirstOrDefaultAsync(a => a.Id == armyId, cancellationToken);
 
     private async Task PersistIfSettledAsync(

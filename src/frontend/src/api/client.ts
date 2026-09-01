@@ -24,6 +24,7 @@ import type {
   DispatchArmyRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
+  GrantRuneRequest,
   GuestArmySummary,
   GuildBoardTopicResponse,
   GuildMemberResponse,
@@ -67,6 +68,7 @@ import type {
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
+  SlotRuneRequest,
   SettlementSummary,
   ShipmentResponse,
   SimulatorRequest,
@@ -201,6 +203,18 @@ export const api = {
     request<unknown>(`/settlements/${settlementId}/builds`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  slotRune: (settlementId: string, runeId: string, body: SlotRuneRequest, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/slot`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
+  unslotRune: (settlementId: string, runeId: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}/runes/${runeId}/unslot`, {
+      method: 'POST',
+      body: JSON.stringify({}),
       headers: ownerHeader(ownerId),
     }),
   // Refunds the order's cost and, for a brand-new building, clears its
@@ -357,6 +371,11 @@ export const api = {
   adminSetBuildingLevel: (settlementId: string, q: number, r: number, body: SetBuildingLevelRequest) =>
     request<SettlementResponse>(`/admin/settlements/${settlementId}/buildings/${q}/${r}/level`, {
       method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  adminGrantRune: (settlementId: string, body: GrantRuneRequest) =>
+    request<SettlementResponse>(`/admin/settlements/${settlementId}/runes`, {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
   adminCompleteQueues: (settlementId: string, body: CompleteQueuesRequest = {}) =>

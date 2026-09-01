@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -75,6 +76,23 @@ public sealed record AdminSetBuildingLevelResult(
     SetBuildingLevelOutcome Outcome, SettlementEntity? Settlement = null, GameClock? Clock = null)
 {
     public bool Accepted => Outcome == SetBuildingLevelOutcome.Applied && Settlement is not null;
+}
+
+/// <summary>Outcome of a rune grant, slot, or unslot (issue #53).</summary>
+public enum RuneOutcome
+{
+    Applied,
+    SettlementNotFound,
+    RuneNotFound,
+    RuneAlreadySlotted,
+    RuneNotSlotted,
+    NoShrineOnHex,
+    ShrineSlotsFull,
+}
+
+public sealed record RuneResult(RuneOutcome Outcome, SettlementEntity? Settlement = null, GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == RuneOutcome.Applied && Settlement is not null;
 }
 
 /// <summary>How an admin god-mode edit ended.</summary>
@@ -542,6 +560,120 @@ public sealed class SettlementService(
     }
 
     /// <summary>
+    /// Admin/dev god-mode: grants a rune of the given type and rarity to a
+    /// settlement's storage, unslotted. Stand-in for a real acquisition
+    /// source (hex finds, raid loot, offerings — issue #53), which does not
+    /// exist yet.
+    /// </summary>
+    public async Task<RuneResult> GrantRuneAsync(
+        Guid settlementId, RuneType type, RuneRarity rarity, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new RuneResult(RuneOutcome.SettlementNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+        var granted = settled.GrantRune(new RuneInstance { Id = Guid.CreateVersion7(), Type = type, Rarity = rarity });
+
+        settlement.ApplyDomain(granted);
+        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Granted a {Rarity} {Type} rune to settlement {Id}.", rarity, type, settlementId);
+
+        return new RuneResult(RuneOutcome.Applied, settlement, clock);
+    }
+
+    /// <summary>Slots an unslotted rune into the shrine standing on <paramref name="shrineCoord"/>.</summary>
+    public async Task<RuneResult> SlotRuneAsync(
+        Guid settlementId, Guid runeId, HexCoord shrineCoord, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new RuneResult(RuneOutcome.SettlementNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+        var result = settled.SlotRune(
+            runeId, shrineCoord, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (!result.Accepted)
+        {
+            var outcome = result.Rejection switch
+            {
+                SlotRuneRejection.RuneNotFound => RuneOutcome.RuneNotFound,
+                SlotRuneRejection.RuneAlreadySlotted => RuneOutcome.RuneAlreadySlotted,
+                SlotRuneRejection.NoShrineOnHex => RuneOutcome.NoShrineOnHex,
+                SlotRuneRejection.ShrineSlotsFull => RuneOutcome.ShrineSlotsFull,
+                _ => RuneOutcome.RuneNotFound,
+            };
+
+            // A rejected slot may still have completed due builds while
+            // settling, which is a real change worth keeping.
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new RuneResult(outcome);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return new RuneResult(RuneOutcome.Applied, settlement, clock);
+    }
+
+    /// <summary>Returns a slotted rune to storage.</summary>
+    public async Task<RuneResult> UnslotRuneAsync(
+        Guid settlementId, Guid runeId, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new RuneResult(RuneOutcome.SettlementNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+        var guestStacks = AggregateStacks(guestArmies.SelectMany(a => a.Stacks.Select(s => new UnitStack(s.UnitType, s.Count))));
+        var result = settled.UnslotRune(
+            runeId, now, settlement.World.SpeedFactor, guestStacks, TerrainAt(settlement.World));
+
+        if (!result.Accepted)
+        {
+            var outcome = result.Rejection switch
+            {
+                UnslotRuneRejection.RuneNotFound => RuneOutcome.RuneNotFound,
+                UnslotRuneRejection.RuneNotSlotted => RuneOutcome.RuneNotSlotted,
+                _ => RuneOutcome.RuneNotFound,
+            };
+
+            await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new RuneResult(outcome);
+        }
+
+        settlement.ApplyDomain(result.Settlement!);
+        ApplyGuestDeaths(guestArmies, settleResult.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return new RuneResult(RuneOutcome.Applied, settlement, clock);
+    }
+
+    /// <summary>
     /// Admin god-mode "instant build": marks every still-pending build (and,
     /// optionally, training) order as due right now and then settles, so the
     /// completions land through the ordinary
@@ -937,6 +1069,7 @@ public sealed class SettlementService(
             .Include(s => s.Queue)
             .Include(s => s.Garrison)
             .Include(s => s.TrainingQueue)
+            .Include(s => s.Runes)
             .Where(s => s.WorldId == worldId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
@@ -1017,6 +1150,7 @@ public sealed class SettlementService(
             .Include(s => s.Queue)
             .Include(s => s.Garrison)
             .Include(s => s.TrainingQueue)
+            .Include(s => s.Runes)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
     /// <summary>

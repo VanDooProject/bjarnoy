@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
@@ -46,6 +47,12 @@ public static class AdminSettlementEndpoints
         settlements.MapPut("/{settlementId:guid}/buildings/{q:int}/{r:int}/level", SetBuildingLevel)
             .WithName("AdminSetBuildingLevel")
             .WithSummary("Sets a placed building's level directly, recomputing rates like a normal build completion.");
+
+        settlements.MapPost("/{settlementId:guid}/runes", GrantRune)
+            .WithName("AdminGrantRune")
+            .WithSummary(
+                "Grants an unslotted rune to a settlement's storage — a stand-in for a real acquisition "
+                    + "source (issue #53), which does not exist yet.");
 
         settlements.MapPost("/{settlementId:guid}/queue/complete", CompleteQueues)
             .WithName("AdminCompleteQueues")
@@ -381,5 +388,78 @@ public static class AdminSettlementEndpoints
 
         var clock = result.Clock!.Value;
         return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> GrantRune(
+        Guid settlementId,
+        GrantRuneRequest request,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!TryParseRuneType(request.Type, out var type))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Type)] = [
+                    $"'{request.Type}' is not a rune. Valid: "
+                        + $"{string.Join(", ", Enum.GetValues<RuneType>().Select(t => t.ToWireName()))}.",
+                ],
+            });
+        }
+
+        if (!TryParseRuneRarity(request.Rarity, out var rarity))
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(request.Rarity)] = [
+                    $"'{request.Rarity}' is not a rarity. Valid: "
+                        + $"{string.Join(", ", Enum.GetValues<RuneRarity>().Select(r => r.ToWireName()))}.",
+                ],
+            });
+        }
+
+        var result = await settlements.GrantRuneAsync(settlementId, type, rarity, cancellationToken);
+        if (!result.Accepted)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static bool TryParseRuneType(string value, out RuneType type)
+    {
+        foreach (var candidate in Enum.GetValues<RuneType>())
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                type = candidate;
+                return true;
+            }
+        }
+
+        type = default;
+        return false;
+    }
+
+    private static bool TryParseRuneRarity(string value, out RuneRarity rarity)
+    {
+        foreach (var candidate in Enum.GetValues<RuneRarity>())
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                rarity = candidate;
+                return true;
+            }
+        }
+
+        rarity = default;
+        return false;
     }
 }

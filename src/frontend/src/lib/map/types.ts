@@ -34,6 +34,8 @@ export interface Tile {
     | 'fishinghut'
     | 'magictower'
     | 'pumpkinfarm'
+    | 'shrineofthor'
+    | 'shrineoffreyja'
     | 'lumberjack'
     | 'quarry';
   buildingLevel?: number;

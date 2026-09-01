@@ -7,6 +7,7 @@ import type {
   GuestArmySummary,
   IslandResponse,
   PlacedBuildingResponse,
+  RuneInstanceResponse,
   ShipmentResponse,
   TradeOfferResponse,
   TrainingOrderResponse,
@@ -111,6 +112,10 @@ export const useWorldStore = defineStore('world', {
       garrison: [] as UnitStackResponse[],
       trainingQueue: [] as TrainingOrderResponse[],
       trainingQueueFetchedAt: 0,
+      // Issue #53: a settlement's rune inventory, refreshed the same way as
+      // the build queue above — always empty in demo mode, since shrines and
+      // runes have no local WorldModel simulation, only the live backend.
+      runes: [] as RuneInstanceResponse[],
       /** Increments every syncHud tick (1s) — a cheap reactive dependency for countdown displays. */
       tick: 0,
     },
@@ -473,7 +478,28 @@ export const useWorldStore = defineStore('world', {
       this.hud.garrison = response.garrison;
       this.hud.trainingQueue = response.trainingQueue;
       this.hud.trainingQueueFetchedAt = Date.now();
+      this.hud.runes = response.runes;
       this.syncHud();
+    },
+    /**
+     * Live mode: slots an unslotted rune into the shrine standing on `at`,
+     * then refreshes the settlement so the boosted rate and the rune's new
+     * `slottedAtQ`/`slottedAtR` show immediately. Throws `ApiError` on
+     * rejection (e.g. no shrine there, or its slots are full); callers
+     * decide how to surface that — mirrors `queueBuildLive`.
+     */
+    async slotRuneLive(runeId: string, at: AxialCoord) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.slotRune(
+        this.selectedSettlementId, runeId, { q: at.q, r: at.r }, this.ownerId ?? undefined,
+      );
+      await this.refreshLiveSettlement();
+    },
+    /** Live mode: returns a slotted rune to storage, then refreshes. Mirrors `slotRuneLive`. */
+    async unslotRuneLive(runeId: string) {
+      if (!this.selectedSettlementId) throw new Error('No settlement selected');
+      await api.unslotRune(this.selectedSettlementId, runeId, this.ownerId ?? undefined);
+      await this.refreshLiveSettlement();
     },
     /**
      * Live mode: posts a trade offer at this settlement's longhouse.

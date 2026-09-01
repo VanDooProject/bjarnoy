@@ -453,6 +453,8 @@ export class WorldModel {
       'fishinghut',
       'magictower',
       'pumpkinfarm',
+      'shrineofthor',
+      'shrineoffreyja',
       'lumberjack',
       'quarry',
     ]);

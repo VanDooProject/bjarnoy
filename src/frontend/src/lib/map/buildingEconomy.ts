@@ -111,6 +111,14 @@ export function buildingStatsFor(
     }
     case 'magictower':
       return { output: `+${level * 24} iron/h`, modifier: 'Arcane' };
+    // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
+    // capped at level 5 (+22%) so slotted runes always have headroom.
+    case 'shrineofthor':
+    case 'shrineoffreyja': {
+      const favour = Math.round((0.10 + 0.03 * (Math.min(level, 5) - 1)) * 100);
+      const domain = type === 'shrineofthor' ? 'Wood/Stone' : 'Food';
+      return { modifier: `+${favour}% ${domain} production` };
+    }
     default:
       return {};
   }
@@ -136,6 +144,8 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   quarry: { wood: 100, stone: 80, food: 0, iron: 0 },
   longhouse: { wood: 200, stone: 150, food: 100, iron: 0 },
   tower: { wood: 120, stone: 200, food: 0, iron: 10 },
+  shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
+  shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */
