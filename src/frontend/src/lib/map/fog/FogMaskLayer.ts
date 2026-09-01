@@ -14,14 +14,15 @@ const REVEAL_FADE_MS = 600;
 // --- Vision-edge shaping (fogShader.ts's tierAlpha) ------------------------
 //
 // Everything below is in *ramp units*: 0 is the tier's own ring, 1 is the
-// generator's full margin for that tier — 10 hexes for unknown
-// (UNKNOWN_MARGIN_HEXES / FogMaskOptions.UnknownMarginHexes), 2 for
-// out-of-sight. So 0.1 of the unknown ramp is one hex, and 0.1 of the
+// generator's full margin for that tier — 14 hexes for unknown
+// (FOG_RAMP_MARGIN_HEXES / UNKNOWN_MARGIN_HEXES /
+// FogMaskOptions.UnknownMarginHexes, which all have to agree), 2 for
+// out-of-sight. So 0.1 of the unknown ramp is 1.4 hexes, and 0.1 of the
 // out-of-sight ramp is a fifth of one.
 
 /**
  * Where the never-scouted mist starts (x) and reaches full opacity (y).
- * Half a hex past the explored ring to five: wide enough that the frayed,
+ * Half a hex past the explored ring to just under six: wide enough that the frayed,
  * fading part of the mist is a band you can read as weather rather than a
  * rim around the realm, and (with EDGE_NOISE below) the outermost wisps
  * carry a good deal further than `y` itself. Past the point where the noise
@@ -32,7 +33,7 @@ const REVEAL_FADE_MS = 600;
  * airbrush hundreds of pixels deep with no edge in it to make organic at
  * all, and it never reaches full opacity inside the terrain cull radius.
  */
-const UNKNOWN_EDGE: [number, number] = [0.05, 0.5];
+const UNKNOWN_EDGE: [number, number] = [0.04, 0.42];
 /**
  * Same for the scouted-but-out-of-sight tint, over its own 2-hex ramp: a
  * third of a hex past the line-of-sight ring to one and two thirds, so the
@@ -43,45 +44,62 @@ const OUT_OF_SIGHT_EDGE: [number, number] = [0.15, 0.85];
 /**
  * Where each tier's edge noise starts tapering off, reaching zero at the end
  * of the ramp — [unknown, outOfSight], and independent of where the tier's
- * opacity saturates (see fogShader.ts's edgeBand). 0.65 of the mist's ramp
- * is six and a half hexes, so wisps keep thinning otherwise-solid mist for
- * a couple of hexes past the point it has gone opaque, which is where the
- * outer, faintest half of the fluff lives.
+ * opacity saturates (see fogShader.ts's edgeBand). 0.72 of the mist's ramp
+ * is ten hexes, so wisps keep thinning otherwise-solid mist for four hexes
+ * past the point it has gone opaque, tapering away entirely by fourteen —
+ * that outer stretch is where the faintest, roundest half of the fluff
+ * lives, and it is the reason the ramp is fourteen hexes wide rather than
+ * the ten it used to be.
  */
-const NOISE_REACH: [number, number] = [0.65, 0.85];
+const NOISE_REACH: [number, number] = [0.72, 0.85];
 /**
  * Peak-to-peak displacement of each tier's edge by the drifting cloud field
- * — [unknown, outOfSight]. 0.44 of the unknown ramp is ±2.2 hexes, several
+ * — [unknown, outOfSight]. 0.46 of the unknown ramp is ±3.2 hexes, several
  * times the one-hex spacing of the mask's integer `hexDistance` contours,
  * which is what stops those hexagonal rings being legible as straight
  * edges at all. It is also what makes the edge *fluffy* rather than merely
  * wavy: at this amplitude the noise tears the boundary into overlapping
  * banks and detached wisps instead of displacing one continuous line.
  */
-const EDGE_NOISE: [number, number] = [0.44, 0.4];
+const EDGE_NOISE: [number, number] = [0.46, 0.4];
 /**
  * Displacement by the mask's baked per-hex seed (§2.2's B channel), same
  * units. Deliberately well under EDGE_NOISE — this adds per-hex grain to
  * the edge, but pushed further it starts re-imposing the hex silhouette the
  * cloud noise exists to break.
  */
-const SEED_JITTER: [number, number] = [0.14, 0.14];
+const SEED_JITTER: [number, number] = [0.1, 0.14];
+/**
+ * How far the second cloud layer is allowed to thin each tier where the
+ * noise window is open — [unknown, outOfSight], as a fraction of the tier's
+ * own opacity. Displacing the ramp threshold alone leaves a *hard* edge
+ * however irregular its outline, because every pixel ends up on one side of
+ * the ramp or the other; this is what puts soft gradients inside the frayed
+ * silhouette. Bounded well below 1 so the band thins rather than tearing
+ * open, and windowed to zero at the ramp's ends like everything else here,
+ * so it can never touch the deep mist.
+ */
+const EDGE_SOFTNESS: [number, number] = [0.45, 0.3];
 /**
  * Reciprocal of the cloud field's largest feature size, in world units.
- * TILE_W is 168 world units, so 1/620 puts the coarsest billow at ~3.7
- * hexes and (four octaves at ~2× each) the finest wisps at about half a
- * hex — the span the mist needs to read as banks of cloud with detail on
- * them, rather than as one smoothly wobbling outline.
+ * TILE_W is 168 world units, so 1/900 puts the coarsest billow at ~5.4
+ * hexes and (five octaves at ~2× each) the finest wisps at about a third of
+ * one. The coarse end is what makes the edge read as *soft*: a large
+ * feature is a shallow gradient, and it is the gradient of the noise, not
+ * its amplitude, that decides how abruptly the mist opens up.
  */
-const NOISE_SCALE = 1 / 620;
+const NOISE_SCALE = 1 / 900;
 /**
  * Cloud drift, in noise-space units per second — divide by NOISE_SCALE for
- * world units, so this is ~31 × ~19 world units/s, about one hex every five
- * seconds diagonally. Slow enough to read as weather rather than a scrolling
- * texture, fast enough that the edge visibly moves while you look at it —
- * the shipped values were ~30× slower than this *and* attached to a
- * displacement ~40× smaller (see fogShader.ts's header), which together is
- * why the drift appeared not to run at all.
+ * world units, so this is ~45 × ~27 world units/s, about one hex every three
+ * and a half seconds diagonally. Slow enough to read as weather rather than
+ * a scrolling texture, fast enough that the edge visibly moves while you
+ * look at it — the shipped values were ~30x slower than this *and* attached
+ * to a displacement ~40x smaller (see fogShader.ts's header), which
+ * together is why the drift appeared not to run at all.
+ *
+ * FogDebugPanel's drift-speed slider scales this live (see `tick`), so it
+ * can be re-judged by eye without a rebuild.
  */
 const WIND: [number, number] = [0.05, -0.03];
 
@@ -149,6 +167,10 @@ export class FogMaskLayer {
   private readonly uniforms: UniformGroup;
   private fadeStartedAt: number | null = null;
   private fadeFromBlend = 0;
+  // The cloud field's own clock, accumulated rather than read off
+  // performance.now() — see `tick`.
+  private driftPhase = 0;
+  private lastTickAtMs: number | null = null;
 
   constructor(tier: FogTier, colors: FogMaskLayerColors) {
     const [scoutedR, scoutedG, scoutedB] = hexToRgb01(colors.scoutedColor);
@@ -169,6 +191,7 @@ export class FogMaskLayer {
       uNoiseReach: { value: new Float32Array(NOISE_REACH), type: 'vec2<f32>' },
       uEdgeNoise: { value: new Float32Array(EDGE_NOISE), type: 'vec2<f32>' },
       uSeedJitter: { value: new Float32Array(SEED_JITTER), type: 'vec2<f32>' },
+      uEdgeSoftness: { value: new Float32Array(EDGE_SOFTNESS), type: 'vec2<f32>' },
       uNoiseScale: { value: NOISE_SCALE, type: 'f32' },
       uTime: { value: 0, type: 'f32' },
       uWind: { value: new Float32Array(WIND), type: 'vec2<f32>' },
@@ -248,12 +271,23 @@ export class FogMaskLayer {
   }
 
   /**
-   * Advances uTime (the cloud field's animation clock, unless `driftEnabled`
-   * is false — §2.8's drift toggle freezes the fog edge in place) and the
-   * reveal cross-fade, if one is running.
+   * Advances the cloud field's animation clock and the reveal cross-fade, if
+   * one is running.
+   *
+   * `uTime` accumulates elapsed time scaled by `speed` rather than being set
+   * to the raw clock, for two reasons. The drift toggle (§2.8) can freeze
+   * and resume the edge without it jumping forward by however long it was
+   * paused; and FogDebugPanel's speed slider changes the *rate* from
+   * wherever the pattern currently is, instead of rescaling the whole
+   * elapsed clock and teleporting the fog on every drag of the handle.
    */
-  tick(nowMs: number, driftEnabled: boolean): void {
-    if (driftEnabled) this.uniforms.uniforms.uTime = nowMs / 1000;
+  tick(nowMs: number, driftEnabled: boolean, speed = 1): void {
+    const sinceLast = this.lastTickAtMs === null ? 0 : nowMs - this.lastTickAtMs;
+    this.lastTickAtMs = nowMs;
+    if (driftEnabled) {
+      this.driftPhase += (sinceLast / 1000) * speed;
+      this.uniforms.uniforms.uTime = this.driftPhase;
+    }
 
     if (this.fadeStartedAt === null) return;
     const t = Math.min(1, (nowMs - this.fadeStartedAt) / REVEAL_FADE_MS);

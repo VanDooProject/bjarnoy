@@ -92,6 +92,9 @@ uniform vec2 uOutOfSightEdge;
 // why these displace the ramp rather than the sample UV.
 uniform vec2 uEdgeNoise;
 uniform vec2 uSeedJitter;
+// Per-tier strength of the density thinning applied on top of the threshold
+// displacement — see tierAlpha().
+uniform vec2 uEdgeSoftness;
 // Per-tier ramp value at which the noise starts tapering off, reaching zero
 // at 1.0. Deliberately independent of where the tier's opacity saturates —
 // see edgeBand().
@@ -129,31 +132,36 @@ float noise(vec2 p) {
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// Four octaves, normalised back to roughly 0..1. A single octave of value
+// Five octaves, normalised back to roughly 0..1. A single octave of value
 // noise reads as smooth blobs — recognisably procedural; the octaves are
 // what give the edge the frayed, wispy silhouette a hex-ring distance field
 // has none of, each one adding detail at half the scale of the last.
 float fbm(vec2 p) {
   float sum = 0.0;
   float amp = 0.5;
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 5; i++) {
     sum += amp * noise(p);
     p *= 2.03;
     amp *= 0.5;
   }
-  return sum / 0.9375;
+  return sum / 0.96875;
 }
 
 /**
- * The drifting cloud field, in world space. Two layers moving against each
- * other at different scales and speeds — one layer alone translates as a
+ * The drifting cloud field, in world space: two layers moving against each
+ * other at different scales and speeds. One layer alone translates as a
  * rigid sheet, which reads as the whole map sliding rather than as fog
  * churning in place.
+ *
+ * Both layers are returned rather than pre-mixed because tierAlpha wants two
+ * weakly-correlated fields and computing a third fbm for the second one
+ * would be pure waste — x drives the edge displacement, y the density
+ * thinning.
  */
-float cloud(vec2 world) {
+vec2 cloudLayers(vec2 world) {
   vec2 p = world * uNoiseScale;
   vec2 drift = uTime * uWind;
-  return mix(fbm(p + drift), fbm(p * 1.9 - drift * 0.55), 0.4);
+  return vec2(fbm(p + drift), fbm(p * 1.9 - drift * 0.55));
 }
 
 /**
@@ -187,9 +195,28 @@ float edgeBand(float raw, float low, float reach) {
  * edges. An amplitude of more than one hex scrambles those rings into a
  * boundary with no preferred direction left.
  */
-float tierAlpha(float raw, vec2 edge, float reach, float noiseAmp, float seedAmp, float clouds, float seed) {
-  float displaced = raw + ((clouds - 0.5) * noiseAmp + seed * seedAmp) * edgeBand(raw, edge.x, reach);
-  return smoothstep(edge.x, edge.y, displaced);
+float tierAlpha(
+  float raw,
+  vec2 edge,
+  float reach,
+  float noiseAmp,
+  float seedAmp,
+  float softness,
+  vec2 clouds,
+  float seed
+) {
+  float band = edgeBand(raw, edge.x, reach);
+  float displaced = raw + ((clouds.x - 0.5) * noiseAmp + seed * seedAmp) * band;
+  float alpha = smoothstep(edge.x, edge.y, displaced);
+
+  // Displacing the threshold alone gives a *hard* edge, however irregular
+  // its shape: every pixel is on one side of the ramp or the other, and the
+  // transition is only as gradual as the ramp is wide. Real fog also just
+  // gets thinner in places. So thin the result by a second, independent
+  // cloud layer, windowed to the same band — a multiplicative density term
+  // rather than another displacement, which is what puts soft gradients
+  // inside the frayed silhouette instead of only at its outline.
+  return alpha * (1.0 - softness * band * (1.0 - clouds.y));
 }
 
 // Outside the fetched/generated mask entirely (past the world's own
@@ -217,10 +244,11 @@ void main() {
   vec4 current = sampleMask(uMask, maskUV);
   vec4 m = mix(prev, current, uMaskBlend);
 
-  float clouds = cloud(world);
+  vec2 clouds = cloudLayers(world);
   float seed = m.b - 0.5;
 
-  float unknown = tierAlpha(m.r, uUnknownEdge, uNoiseReach.x, uEdgeNoise.x, uSeedJitter.x, clouds, seed);
+  float unknown = tierAlpha(
+    m.r, uUnknownEdge, uNoiseReach.x, uEdgeNoise.x, uSeedJitter.x, uEdgeSoftness.x, clouds, seed);
 
   if (uTier < 0.5) {
     // A full underlay, deliberately unmasked — see §1's "the two tiers are
@@ -233,7 +261,8 @@ void main() {
     // mist has not gone fully opaque yet, whose width UNKNOWN_EDGE
     // (FogMaskLayer.ts) sets. Masking this by (1 - unknown), or bounding it
     // to the explored ring, deletes the underlay — §1 says why not.
-    float outOfSight = tierAlpha(m.g, uOutOfSightEdge, uNoiseReach.y, uEdgeNoise.y, uSeedJitter.y, clouds, seed);
+    float outOfSight = tierAlpha(
+      m.g, uOutOfSightEdge, uNoiseReach.y, uEdgeNoise.y, uSeedJitter.y, uEdgeSoftness.y, clouds, seed);
     float alpha = outOfSight * uScoutedAlpha;
     finalColor = vec4(uScoutedColor * alpha, alpha);
   } else {

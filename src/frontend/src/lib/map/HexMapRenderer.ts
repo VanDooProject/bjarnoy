@@ -139,6 +139,25 @@ export interface FogDebugFlags {
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
 }
+/**
+ * Fog knobs that are a *value* rather than an on/off — same debug-only
+ * status as FogDebugFlags, kept separate so that interface stays all-boolean
+ * (FogDebugPanel renders it as a checkbox per key, and its LABELS map is
+ * typed off it).
+ */
+export interface FogDebugTuning {
+  /**
+   * Multiplier on the cloud field's wind speed (FogMaskLayer's WIND). 1 is
+   * the shipped rate; the panel offers a slider around it so a better one
+   * can be found by eye, on a live map, instead of by rebuilding between
+   * guesses. Not persisted — a reload is back to 1.
+   */
+  driftSpeed: number;
+}
+export const fogDebugTuning: FogDebugTuning = {
+  driftSpeed: 1,
+};
+
 export const fogDebugFlags: FogDebugFlags = {
   maskUnknown: true,
   maskOutOfSight: true,
@@ -463,7 +482,7 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 // explored radius is ~5 hexes, which at 0.85 filled almost the entire
 // default viewport on its own, hiding the fog entirely until the player
 // panned. zoomForFogMargin picks the real initial zoom (usually well below
-// this) so FOG_MARGIN_HEXES of fog is guaranteed visible from frame one.
+// this) so FOG_ZOOM_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // zip 6a: the landing page's pre-founding preview is a bit wider than the
 // settlement view's own default, so the single starter island reads as a
@@ -480,13 +499,29 @@ const PREVIEW_ISLAND_RADIUS = 7;
 const CAMERA_TRANSITION_MS = 1400;
 // How many hexes of white (unexplored) fog zoomForFogMargin guarantees
 // visible past the settlement's explored ring, on every side, at rest.
-const FOG_MARGIN_HEXES = 10;
+// Deliberately *not* FOG_RAMP_MARGIN_HEXES below, though it used to be the
+// same constant: widening the ramp so the mist has more room to fray must
+// not also pull the starting camera further out, which is a framing
+// decision with nothing to do with how the fog is shaded.
+const FOG_ZOOM_MARGIN_HEXES = 10;
+// Width, in hexes, of the mask's unknown ramp — the distance past a
+// settlement's explored ring that the R channel spends going 0 -> 255, and
+// therefore the entire budget the shader has to work with: past it the mask
+// is saturated and no amount of edge shaping can reach (fogShader.ts works
+// in ramp units, where 1.0 is exactly this many hexes).
+//
+// Must stay equal to the backend generator's FogMaskOptions.UnknownMarginHexes
+// and demoFogMask.ts's UNKNOWN_MARGIN_HEXES — the three describe the same
+// ramp, and a mismatch silently puts the live and demo fog edges at
+// different distances. Nothing derives it from the mask itself; a PNG
+// carries no metadata beyond its pixel dimensions.
+const FOG_RAMP_MARGIN_HEXES = 14;
 // Floor for zoomForFogMargin — a very high-level settlement's explored ring
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
 // Extra headroom (in hexes) added past where the v2 unknown ramp itself
-// saturates (FOG_MARGIN_HEXES) before terrain/border drawing stops
+// saturates (FOG_RAMP_MARGIN_HEXES) before terrain/border drawing stops
 // bothering — see FOG_TERRAIN_CULL_HEXES.
 const FOG_CULL_HEADROOM_HEXES = 3;
 // Past this many hexes beyond the explored ring, terrain is guaranteed to
@@ -497,7 +532,7 @@ const FOG_CULL_HEADROOM_HEXES = 3;
 // nothing could show through the mesh sitting over the whole viewport
 // either way. isEntirelyDeepFog reuses the same threshold to skip an entire
 // deep-ocean viewport's worth of terrain/wave work in world mode.
-const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
+const FOG_TERRAIN_CULL_HEXES = FOG_RAMP_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
@@ -828,7 +863,7 @@ export class HexMapRenderer {
   }
 
   /**
-   * Picks the initial settlement zoom so at least FOG_MARGIN_HEXES of white
+   * Picks the initial settlement zoom so at least FOG_ZOOM_MARGIN_HEXES of white
    * (unexplored) fog is visible past the settlement's explored ring on
    * every side, without the camera ever having to pan first — the map
    * should read as continuing under fog from the very first frame, not
@@ -840,7 +875,7 @@ export class HexMapRenderer {
   private zoomForFogMargin(settlement: Settlement, center: { x: number; y: number }): number {
     if (this.viewport.width === 0 || this.viewport.height === 0) return SETTLEMENT_DEFAULT_ZOOM;
 
-    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_MARGIN_HEXES;
+    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_ZOOM_MARGIN_HEXES;
     let maxDx = 0;
     let maxDy = 0;
     for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, targetRadius)) {
@@ -1016,8 +1051,8 @@ export class HexMapRenderer {
     const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
     this.drawHighlight();
   };
 
