@@ -165,21 +165,25 @@ float noise(vec2 p) {
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// Four octaves, normalised back to roughly 0..1. A single octave of value
+// Three octaves, normalised back to roughly 0..1. A single octave of value
 // noise reads as smooth blobs — recognisably procedural; the octaves are
 // what give the edge the frayed, wispy silhouette a hex-ring distance field
-// has none of, each one adding detail at half the scale of the last. A
-// fifth octave carries 1/32 of the amplitude — below the point it changes
-// what the edge looks like, and still a quarter of the noise's cost.
+// has none of, each one adding detail at half the scale of the last.
+//
+// Three, not more, because octaves cost the same each and are worth less
+// each: the fourth carries 1/16 of the amplitude and the fifth 1/32, at a
+// scale finer than the mask texel grid the whole field is displacing. This
+// is the hot path — a full-viewport quad, twice a frame — so an octave that
+// cannot be seen is not free detail, it is a quarter of the noise budget.
 float fbm(vec2 p) {
   float sum = 0.0;
   float amp = 0.5;
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     sum += amp * noise(p);
     p *= 2.03;
     amp *= 0.5;
   }
-  return sum / 0.9375;
+  return sum / 0.875;
 }
 
 // The haze layer's cheaper cousin. It only feeds tierAlpha's density term —
@@ -319,9 +323,16 @@ void main() {
     return;
   }
 
-  vec4 prev = sampleMask(uMaskPrev, maskUV);
-  vec4 current = sampleMask(uMask, maskUV);
-  vec4 m = mix(prev, current, uMaskBlend);
+  // uMaskPrev only matters while a reveal cross-fade is actually running
+  // (§2.6), which is a few hundred milliseconds after a mask swap and never
+  // again — the steady state is uMaskBlend == 1, where the mix is the
+  // identity and the second fetch is a full-viewport texture read thrown
+  // away. uMaskBlend is a uniform, so this branch is uniform across the
+  // draw, not per-pixel divergence.
+  vec4 m = sampleMask(uMask, maskUV);
+  if (uMaskBlend < 1.0) {
+    m = mix(sampleMask(uMaskPrev, maskUV), m, uMaskBlend);
+  }
 
   // §1c: a live army's real-time vision only ever reveals — it multiplies
   // both ramps toward 0 (fully explored/visible), never pushes them up, and
