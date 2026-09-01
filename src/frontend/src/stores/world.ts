@@ -20,6 +20,7 @@ import {
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
 import { WorldModel } from '../lib/map/WorldModel';
+import { fogPerfStats } from '../lib/map/HexMapRenderer';
 import type { CartShipment, ResourceKind, Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
@@ -187,9 +188,13 @@ export const useWorldStore = defineStore('world', {
     // The requesting player's fog-of-war mask (map-fog-v2.md §2.2/§3),
     // fetched via `fetchFogMask`. `markRaw` like `model` above: an
     // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
-    // needs to proxy. Not yet consumed by the renderer — see
-    // `fetchFogMask`'s own remarks.
+    // needs to proxy.
     fogMaskBitmap: null as ImageBitmap | null,
+    // The world's hex radius (WorldResponse.radius), set once bootstrapLiveWorld
+    // resolves — fetchFogMask's caller needs it to place the mask texture
+    // (HexMapRenderer.setFogMask's own worldMaskBounds computation).
+    // Unused in demo mode.
+    worldRadius: null as number | null,
   }),
   actions: {
     /**
@@ -231,6 +236,7 @@ export const useWorldStore = defineStore('world', {
       }
 
       this.worldId = world.id;
+      this.worldRadius = world.radius;
       this.worldJoinable = world.joinable;
       this.worldJoinableReason = world.joinableReason;
       this.worldStartsAt = world.startsAt;
@@ -845,10 +851,12 @@ export const useWorldStore = defineStore('world', {
         void this.refreshWorldSettlements();
         void this.refreshTradeAsync();
         void this.refreshArmies();
+        void this.fetchFogMask();
         this.livePollHandle = setInterval(() => {
           void this.refreshLiveSettlement();
           void this.refreshWorldSettlements();
           void this.refreshTradeAsync();
+          void this.fetchFogMask();
         }, LIVE_POLL_MS);
         // Separate, tighter interval than LIVE_POLL_MS — see ARMY_POLL_MS's
         // own comment for why armies need to be polled more often than
@@ -866,28 +874,35 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Fetches and decodes the current player's fog mask (map-fog-v2.md
-     * §2.2/§3), stashing it on `fogMaskBitmap`. A no-op in demo mode (there
-     * is no backend to ask) or before a world/owner is known. Purely
-     * additive for now — nothing in `HexMapRenderer.ts` reads
-     * `fogMaskBitmap` yet; wiring it into the fog shader is a follow-up
-     * slice (§2.4/§4), same "fetch first, render later" split the backend
-     * side already went through.
+     * §2.2/§3), stashing it on `fogMaskBitmap` and the fetch's own timing/
+     * version on `fogPerfStats` (read by FogPerfPanel). A no-op in demo mode
+     * (there is no backend to ask) or before a world/owner is known. Polled
+     * alongside the rest of live mode's HUD sync (startHudSync, LIVE_POLL_MS)
+     * — the view layer (WorldMapView.vue/SettlementView.vue) watches
+     * `fogMaskBitmap` and pushes it into the renderer via
+     * `HexMapRenderer.setFogMask`.
      */
     async fetchFogMask() {
       if (DEMO_MODE || !this.worldId || !this.ownerId) return;
 
+      fogPerfStats.maskFetchInFlight = true;
+      const startedAt = performance.now();
       try {
-        const bitmap = markRaw(await api.getFogMask(this.worldId, this.ownerId));
+        const { bitmap, version } = await api.getFogMask(this.worldId, this.ownerId);
         // Close the previous bitmap only once the new one is actually in
         // hand — closing it eagerly before the fetch settles would leave a
         // failed request having discarded the one usable bitmap this store
         // had.
         this.fogMaskBitmap?.close();
-        this.fogMaskBitmap = bitmap;
+        this.fogMaskBitmap = markRaw(bitmap);
+        fogPerfStats.maskVersion = version;
       } catch {
         // Best-effort: a failed fetch just leaves the previous bitmap (or
         // null) in place, same as any other poll in this store that doesn't
         // want a transient network blip to surface as a hard error.
+      } finally {
+        fogPerfStats.maskFetchMs = performance.now() - startedAt;
+        fogPerfStats.maskFetchInFlight = false;
       }
     },
   },

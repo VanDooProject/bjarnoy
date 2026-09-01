@@ -32,18 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import {
-  Application,
-  BlurFilter,
-  Container,
-  FillGradient,
-  Graphics,
-  Rectangle,
-  RenderTexture,
-  Sprite,
-  Text,
-  Texture,
-} from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexDistance, hexesInRadius } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -54,6 +43,8 @@ import type { Settlement, Terrain, Tile } from './types';
 import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
+import { FogMaskLayer, type FogMaskPlacement } from './fog/FogMaskLayer';
+import { worldMaskBounds } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -127,151 +118,88 @@ function hash01(x: number, y: number, salt: number): number {
   return ((h >>> 0) % 100000) / 100000;
 }
 
-// Debug-only switches for the individual fog mechanisms, so each can be
-// disabled independently to inspect what it's actually responsible for
-// (e.g. "is this hex-ring edge from the distance jitter or the blob
-// jitter?"). Mutated directly (no setter) — see main.ts's window.__fogDebug,
-// exposed only in demo mode. Flipping a flag takes effect on the *next*
-// rebuild (a camera pan/zoom, or HexMapRenderer.refreshFog()); it doesn't
-// itself trigger one, since these are read at rebuild time, not cached.
+// Debug-only switches for fog v2's shader (§2.8 of map-fog-v2.md — "shader-
+// era equivalents", replacing v1's per-hex jitter/blob flags). Mutated
+// directly (no setter) — see main.ts's window.__fogDebug, exposed only in
+// demo mode. Flipping a flag takes effect on the *next* rebuild/frame, not
+// retroactively.
 export interface FogDebugFlags {
-  /** Distance jitter on the fog ramp's own alpha/blob-vs-flat-fill boundary (FOG_DIST_JITTER_HEXES) — the mist's edge. Off = a dead-straight hex-ring mist edge. Does *not* affect where terrain sprites stop being drawn; see terrainCullJitter for that. */
-  distJitter: boolean;
-  /** Also jitter the terrain-sprite draw cutoff (rebuildTerrain/rebuildTerrainFlat) by the same distance, instead of the fixed, padded cutoff isPastTerrainCull uses when this is off. Off by default: jittering *tiles* (hard-edged art, unlike the blurred/overlapping fog blobs) makes them pop in/out unpredictably near the ring — issue #20. On reproduces the old behaviour, tile popping included. */
-  terrainCullJitter: boolean;
-  /**
-   * Fades the scouted (dark) tint in gradually as a hex crosses the edge of
-   * a settlement's line of sight (FOG_VISIBLE_MARGIN_HEXES), instead of a
-   * hard binary jump — previously named `visibleRamp`, which described the
-   * *edge it watches* rather than *what it does* (issue #20: "'visible ->
-   * scouted fade' has a strange name for what it does"). Off = the original
-   * hard jump: full FOG_SCOUTED_ALPHA the instant a hex is past the
-   * (unjittered) visible radius, nothing at all inside it. See scoutedFog
-   * to turn the dark tint off entirely rather than just its fade.
-   */
-  scoutedTintFade: boolean;
-  /** Turns the scouted (dark, out-of-sight-but-explored) fog tint off entirely, independent of scoutedTintFade — for isolating whether an artifact near a settlement's edge is the tint itself or its fade/jitter. */
-  scoutedFog: boolean;
-  /** Turns the unexplored (white) fog off entirely — both the per-hex blob/flat-fill mist and the world-map deep-fog background shortcut (syncWorldBackground). Off leaves unexplored hexes fully transparent/undrawn past the scouted ring, so only scoutedFog's dark tint remains visible — for isolating the black (scouted) fog from the white (unexplored) one, since the two overlap heavily near a settlement's edge and are otherwise hard to tell apart. */
-  unexploredFog: boolean;
-  /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex (independent of both fog tiers — a claimed hex still gets its border with all fog off). For isolating whether something near a settlement's edge is fog or the border art on top of it. */
+  /** Isolates the unexplored (white mist) tier — off hides whiteMistLayer entirely. */
+  maskUnknown: boolean;
+  /** Isolates the out-of-sight (dark) tier — off hides blackFogLayer entirely. */
+  maskOutOfSight: boolean;
+  /** The §2.4 UV warp on/off — direct successor to v1's distJitter, but now a continuous per-pixel wobble instead of a per-hex jitter. */
+  warp: boolean;
+  /** The wind-drift animation (uWind/uTime) driving the warp's motion — off freezes the warp pattern in place instead of animating it. */
+  drift: boolean;
+  /** Bypasses the warp entirely and renders the mask texture unmodified — useful for inspecting the raw fetched mask (chunk seams, once §3's chunking lands) without the shader's own distortion on top. */
+  showRawMask: boolean;
+  /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex — survives unchanged from v1 (§4 doesn't touch what it gates, only when it redraws). */
   realmBorders: boolean;
-  /** Per-hex position/size jitter on fog blobs (FOG_BLOB_JITTER_X/Y, FOG_BLOB_SIZE_JITTER). Off = blobs sit dead-centre on their hex, same size. */
-  blobJitter: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
-  /** Skip the overlap blobs placed past each tier's flat-fill cutoff (FOG_BLOB_OVERLAP_HEXES) — reproduces the blur/flat-fill seam this was added to fix. */
-  flatFillOnly: boolean;
-  /** Never switch to a flat, guaranteed-opacity fill once a tier is fully saturated (unexplored past FOG_TERRAIN_CULL_HEXES, scouted past FOG_VISIBLE_MARGIN_HEXES) — mist stays blob-only forever, reproducing the original "fog never reaches full opacity" bug. */
-  blobsOnly: boolean;
-  /** Fade the fog blur cache back in after a drag release (FOG_DRAG_FADE_MS) instead of showing the rebuilt fog immediately. Off by default: the fade dips *all* fog to FOG_DRAG_FADE_FROM_ALPHA, not just whatever the drag just revealed (it's one shared bitmap — see FOG_BLOB_CACHE_PADDING's comment) — issue #20: "drag fades ALL elements in again, not only new". On reproduces the old always-on behaviour. */
-  dragFade: boolean;
-  /** Tints hexes that hit the unexplored tier's hard flat-fill cutoff (FOG_TERRAIN_CULL_HEXES, gated on cullBeyond — see FOG_CULL_JITTER_HEXES) a distinct debug magenta instead of fog white, so the flat-fill/blob boundary — which is jittered independently of the alpha ramp, and is a *render-method* switch (crisp opaque polygon vs a blurred blob), not just a value change — is visible on its own instead of blending into the rest of the mist. */
-  cullThresholdDebug: boolean;
 }
 export const fogDebugFlags: FogDebugFlags = {
-  distJitter: true,
-  terrainCullJitter: false,
-  scoutedTintFade: false,
-  scoutedFog: true,
-  unexploredFog: true,
+  maskUnknown: true,
+  maskOutOfSight: true,
+  warp: true,
+  drift: true,
+  showRawMask: false,
   realmBorders: true,
-  blobJitter: true,
   terrainCull: true,
-  flatFillOnly: false,
-  blobsOnly: false,
-  dragFade: false,
-  cullThresholdDebug: false,
 };
 
-// Per-rebuild timing breakdown, read by FogPerfPanel to show what each
-// fogDebugFlags toggle above actually costs — flip a flag, watch the
-// relevant number here move on the next pan/zoom. Mutated directly by
-// rebuildAll()/refreshFogBlobCache() (same plain-object, no-Vue-import
-// pattern as fogDebugFlags — see its own comment), so consumers must poll
-// rather than rely on Vue reactivity to observe changes; FogPerfPanel does
-// this on an interval. `*Ms` are wall-clock (performance.now() deltas) for
-// the single most recent rebuildAll() call, not an average — a live panel
-// reads better as "what just happened" than a smoothed number that lags
-// behind the flag you just flipped.
+// Per-rebuild/per-frame stats, read by FogPerfPanel — §2.8's "what's
+// actually happening now" list, scoped to what this slice can honestly
+// measure. `shaderPassMs` (the actual GPU cost of the fog draw) and
+// `cacheHitRate` (server-side compute-cache hits, surfaced via a response
+// header) are real §2.8 stats this doesn't populate yet — a GPU timer query
+// extension and a header-reading fetch wrapper are both real follow-up work,
+// not faked here (per §2.8's own "shouldn't be faked; absence is itself
+// informative").
 export interface FogPerfStats {
-  /** rebuildTerrain/rebuildTerrainFlat: placing (or culling) terrain sprites/fills. Affected by terrainCull, terrainCullJitter. */
+  /** rebuildTerrain/rebuildTerrainFlat: placing (or culling) terrain sprites/fills. Affected by terrainCull. */
   terrainMs: number;
   /** Hexes that got a terrain sprite/fill this rebuild. */
   terrainDrawnCount: number;
-  /** Hexes skipped by isPastTerrainCull (terrainCull) — the source of terrainDrawnCount + terrainCulledCount not summing to hexCount in settlement/preview mode, where an out-of-radius or sea hex is skipped for reasons unrelated to fog. */
+  /** Hexes skipped by isPastTerrainCull (terrainCull). */
   terrainCulledCount: number;
-
-  /** rebuildBordersAndFog's per-hex loop (borders + fog-tier decisions), excluding blobCacheMs. Affected by distJitter, scoutedTintFade, scoutedFog, unexploredFog, realmBorders, flatFillOnly, blobsOnly. */
-  bordersFogMs: number;
-  /** True when this rebuild took the deepFogOnly shortcut (problem 4) — the per-hex loop below never ran at all, so the three *HexCount fields are 0 even though every hex in the viewport is conceptually unexplored fog. */
+  /** rebuildBorders' per-hex loop. Affected by realmBorders. */
+  bordersMs: number;
+  /** True when this rebuild took the deepFogOnly shortcut — the whole viewport is certainly unexplored, so terrain/borders/waves were skipped entirely. */
   deepFogOnly: boolean;
-  /** Hexes that took the unexplored (white) fog branch — gated by unexploredFog. 0 whenever deepFogOnly is true. */
-  unexploredHexCount: number;
   /** Owned hexes that drew a realm-border wash/stroke — gated by realmBorders. */
   borderedHexCount: number;
-  /** Hexes that took the scouted (dark) fog branch (flat-filled or individually blobbed — see FOG_VISIBLE_MARGIN_HEXES) — gated by scoutedFog. */
-  scoutedHexCount: number;
-
-  /** refreshFogBlobCache: building the blob sprite layer and, when not mid-drag, the offscreen blur render pass — usually the single largest cost, and roughly proportional to blobCount. */
-  blobCacheMs: number;
-  /** refreshFogBlobCache's syncFogBlobs call (pooled-sprite placement, blobJitter) — the cheap half. */
-  blobSyncMs: number;
-  /** refreshFogBlobCache's offscreen RenderTexture render (the actual GPU blur pass) — 0 when skipped (no blobs, or mid-drag — see refreshFogBlobCache's own comment) rather than merely small. */
-  blobRenderMs: number;
-
   /** rebuildMarkers: settlement/island/fleet icon placement. */
   markersMs: number;
   /** rebuildWaves: world-mode open-water squiggle placement (world mode only; 0 in settlement mode). */
   wavesMs: number;
-  /** Sum of the above plus the small remainder (viewport→coords, deep-fog check, background sync) not broken out on its own. */
+  /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
   /** Hexes in the current viewport rect — the size the above times scale with. */
   hexCount: number;
-  /** Fog blobs placed this rebuild (both tiers) — what blobCacheMs's cost is roughly proportional to. */
-  blobCount: number;
+  /** The fog mask fetch's own wall-clock time (stores/world.ts's fetchFogMask), independent of any renderer rebuild. */
+  maskFetchMs: number;
+  /** Whether a fog-mask fetch is currently in flight. */
+  maskFetchInFlight: boolean;
+  /** The current mask's ETag, or null before the first successful fetch — lets a debug session confirm a settlement change actually bumped the version. */
+  maskVersion: string | null;
 }
 export const fogPerfStats: FogPerfStats = {
   terrainMs: 0,
   terrainDrawnCount: 0,
   terrainCulledCount: 0,
-  bordersFogMs: 0,
+  bordersMs: 0,
   deepFogOnly: false,
-  unexploredHexCount: 0,
   borderedHexCount: 0,
-  scoutedHexCount: 0,
-  blobCacheMs: 0,
-  blobSyncMs: 0,
-  blobRenderMs: 0,
   markersMs: 0,
   wavesMs: 0,
   totalMs: 0,
   hexCount: 0,
-  blobCount: 0,
+  maskFetchMs: 0,
+  maskFetchInFlight: false,
+  maskVersion: null,
 };
-
-// Jitters a raw hex-distance by up to ±FOG_DIST_JITTER_HEXES before any fog
-// tier boundary is compared against it — see FOG_DIST_JITTER_HEXES for why.
-// Applied with one shared salt so rebuildTerrain's cull check and
-// rebuildBordersAndFog's fog-tier checks agree on the exact same jittered
-// distance for a given hex, keeping the two aligned (no reintroduced seam).
-// `enabled` lets each call site opt out via fogDebugFlags without every
-// caller re-deriving the same "should I jitter" condition itself.
-// `magnitudeHexes` is the caller's own jitter amplitude — see
-// FOG_VISIBLE_JITTER_HEXES's comment for why this can't just be
-// FOG_DIST_JITTER_HEXES for every call site: a jitter sized for a 10-hex
-// margin is enormous next to a 2-hex one.
-function jitterDistance(
-  q: number,
-  r: number,
-  raw: number,
-  salt: number,
-  enabled: boolean,
-  magnitudeHexes: number,
-): number {
-  if (!enabled || !Number.isFinite(raw)) return raw;
-  return raw + (hash01(q, r, salt) - 0.5) * 2 * magnitudeHexes;
-}
 
 interface WavePoint {
   x: number;
@@ -548,11 +476,6 @@ const PREVIEW_ISLAND_RADIUS = 7;
 // roll in as the camera settles, not cut instantly) rather than an abrupt
 // jump.
 const CAMERA_TRANSITION_MS = 1400;
-// Matches CAMERA_TRANSITION_MS so the mist finishes fading in right as the
-// camera settles on its post-founding position — see FOG_DRAG_FADE_MS for
-// the (much quicker) drag-release version of the same fade mechanism.
-const FOG_REVEAL_FADE_MS = 1400;
-const FOG_REVEAL_FROM_ALPHA = 0;
 // How many hexes of white (unexplored) fog zoomForFogMargin guarantees
 // visible past the settlement's explored ring, on every side, at rest.
 const FOG_MARGIN_HEXES = 10;
@@ -560,167 +483,40 @@ const FOG_MARGIN_HEXES = 10;
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
-// Extra headroom (in hexes) added past where the alpha ramp itself
-// saturates (FOG_MARGIN_HEXES) before switching to the flat, guaranteed-
-// opaque fill — see FOG_TERRAIN_CULL_HEXES. The mist's inner edge no longer
-// needs its own noise term to avoid a hex-shaped cutout (the blob geometry
-// in rebuildBordersAndFog handles that on its own — see FOG_BLOB_* below),
-// but blobs are still individually semi-transparent right up to the
-// saturation point, so this margin keeps them visually dense before the
-// hand-off to the flat fill instead of switching right at their weakest edge.
+// Extra headroom (in hexes) added past where the v2 unknown ramp itself
+// saturates (FOG_MARGIN_HEXES) before terrain/border drawing stops
+// bothering — see FOG_TERRAIN_CULL_HEXES.
 const FOG_CULL_HEADROOM_HEXES = 3;
-// Past this many hexes beyond the explored ring, both rebuildBordersAndFog
-// and rebuildTerrain treat the hex as fully opaque: fog is painted flat
-// solid white (no blob) and terrain sprites stop being drawn underneath it,
-// since nothing could show through either way. Keeping this one distance
-// shared between the two is what closes the seam where terrain used to
-// disappear before the fog above it had actually reached full opacity.
+// Past this many hexes beyond the explored ring, terrain is guaranteed to
+// sit under fully opaque unknown fog (the shader's own ramp — see
+// fogShader.ts — saturates well before this, so the headroom above is
+// generous, not exact): rebuildTerrain/rebuildTerrainFlat stop drawing
+// sprites/fills there, and rebuildBorders stops drawing borders, since
+// nothing could show through the mesh sitting over the whole viewport
+// either way. isEntirelyDeepFog reuses the same threshold to skip an entire
+// deep-ocean viewport's worth of terrain/wave work in world mode.
 const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
-// Blobs keep being placed (at a flat, fully-opaque alpha) this many hexes
-// *past* FOG_TERRAIN_CULL_HEXES, overlapping the flat fill's own territory,
-// so the blob layer's BlurFilter always has real neighbouring content right
-// up to (and past) the hand-off point. Without this the blur has nothing to
-// blend the outermost blobs into — they fade toward the edge of their own
-// content — while the flat fill right next to them starts at full solid
-// opacity with no blur at all, and that contrast is exactly the hex-stepped
-// seam a screenshot exposed at the blob/flat boundary.
-const FOG_BLOB_OVERLAP_HEXES = 6;
-
-// Past this distance (FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES — the
-// same threshold rebuildBordersAndFog already uses to stop placing overlap
-// blobs), an unexplored hex's fog is nothing but a flat, fully-opaque
-// FOG_UNEXPLORED fill with nothing else layered on top — no blob, no blur,
-// no terrain underneath (isPastTerrainCull already stopped drawing that).
-// That's visually identical to the renderer's own background clear colour.
-//
-// World mode's low default zoom (WORLD_DEFAULT_ZOOM) means a viewport's
-// worth of hexes can run into the thousands, and it's mostly open sea (no
-// terrain sprite at any distance — see WORLD_TERRAIN_FILL/rebuildTerrainFlat)
-// — issue #20: "white fog is rendered as/on tiles on worldmap... many
-// elements... slow". A pan far enough into open ocean that the *entire*
-// viewport is past this distance (see isEntirelyDeepFog) skips per-hex fog
-// geometry for the whole rebuild, painting the renderer's own background
-// colour instead (syncWorldBackground) — one clear colour rather than
-// tessellating a Graphics.poly() per hex for a fill nothing could tell
-// apart from a blank canvas.
-//
-// This can only apply when the *whole* viewport qualifies: sea tiles never
-// draw anything of their own even once explored (see WORLD_TERRAIN_FILL's
-// comment) — a currently-visible settlement's clear halo of open water is
-// exactly as blank as unexplored fog would be, so per-hex distance is the
-// only thing telling them apart. A single canvas-wide background colour
-// can't be region-specific, so it's only safe to use when nothing in view
-// could possibly need to stay transparent — see isEntirelyDeepFog. Painting
-// the background and then only skipping the individual deep hexes (instead
-// of gating on the whole viewport) looks equivalent but isn't: a
-// settlement's own nearby explored sea, which should show real water
-// through the transparent canvas, would go solid fog-white right along
-// with the genuinely deep hexes around it.
-const FOG_WORLD_BG_HANDOFF_HEXES = FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES;
-
-// The mockup's own fogAt() (Viking Realm.dc.html) adds noise directly onto
-// the *distance* value before comparing it against any threshold — roughly
-// ±0.75 hex on its own ~2.8-hex margin (~27%) — rather than only jittering
-// the final alpha the way our ramp used to. Hex-distance rings are perfect
-// hexagons, so any threshold compared against the raw distance produces a
-// dead-straight ring facet; jittering the distance itself (once per hex,
-// before the comparison) is what breaks that facet up, the same way the
-// mockup's own rings never read as hex-straight even on a long pan far from
-// the settlement. FOG_DIST_JITTER_HEXES mirrors the mockup's ratio against
-// our own margin (FOG_MARGIN_HEXES).
-const FOG_DIST_JITTER_HEXES = 2.5;
-// hash01 salt for the distance jitter above; a separate salt (30) so it
-// doesn't correlate with the alpha jitter (salt 9) or blob position/size
-// jitter (salts 20-22) — otherwise a hex that gets nudged toward one tier
-// boundary would always get nudged the same way in every other jittered
-// term too, which would just move the visible artifact rather than break it up.
-const FOG_DIST_JITTER_SALT = 30;
-// Separate salt for the visible→scouted ramp's own distance jitter — kept
-// independent of FOG_DIST_JITTER_SALT for the same decorrelation reason.
-const FOG_VISIBLE_JITTER_SALT = 31;
-// A second, much smaller jitter magnitude for the unexplored tier's hard
-// flat-fill cutoff specifically (FOG_TERRAIN_CULL_HEXES), decoupled from
-// FOG_DIST_JITTER_HEXES above. That constant is sized to break up the *alpha
-// ramp*'s ring facet, which is a gradual, blended value — a ±2.5-hex swing
-// there just nudges an already-soft blob's opacity. But the same jittered
-// distance was also gating the ramp-vs-flat-fill switch, which isn't a
-// gradual value change: past it, a hex swaps from a blurred, semi-transparent
-// blob to a crisp, unblurred, fully-opaque polygon (see fillFlatFog's
-// comment) — a *render-method* jump, not just a bigger number. Reusing the
-// full ±2.5-hex ramp jitter for that gate meant two neighbouring hexes at
-// nearly the same true distance could land almost 5 hexes apart in resolved
-// distance, so one pops to the hard opaque tile while the other is still
-// mid-ramp — "some tiles white out completely while nearby ones aren't
-// close to 1" (as reported). A smaller, independently-salted jitter here
-// still keeps the cutoff from being a dead-straight hex ring (same reasoning
-// as FOG_VISIBLE_JITTER_HEXES's own "tighter edge" margin below) without
-// letting it manufacture that visible pop between neighbours.
-const FOG_CULL_JITTER_HEXES = 0.6;
-const FOG_CULL_JITTER_SALT = 32;
-// How many hexes past a settlement's own claimed border (borderRadius) its
-// line-of-sight radius extends — WorldModel.visibleHexes's own "+1" comment
-// calls this out as deliberately one hex past the border, and rendering
-// mirrored that (see visibleEdgeDist below). Bumped to +2 (issue #20: "more
-// view distance for player") to give the scouted-tint ramp (FOG_VISIBLE_
-// MARGIN_HEXES, FOG_VISIBLE_JITTER_HEXES) more room to fade in *before* it
-// reaches ground the player can still see clearly — a single extra hex of
-// margin is a cheap, direct way to make the ramp (and any residual jitter)
-// far less likely to read as dark fog creeping onto the realm's own clear
-// ground, on top of the jitter fix above.
-const FOG_VISIBLE_RADIUS_BONUS_HEXES = 2;
-// How many hexes past the visible (line-of-sight) ring the dark "scouted"
-// tint fades in over, instead of jumping straight from 0 to FOG_SCOUTED_ALPHA
-// in one hex step at a hex-perfect ring — the same ramp treatment as the
-// unexplored mist, just narrower since this inner ring should still read as
-// a tighter edge than the outer fog.
-const FOG_VISIBLE_MARGIN_HEXES = 2;
-// jitterDistance's magnitude for the visible→scouted ramp specifically —
-// deliberately *not* FOG_DIST_JITTER_HEXES (2.5 hexes). That constant is
-// sized against the outer unexplored ramp's own, much wider margin
-// (FOG_MARGIN_HEXES = 10 hexes; the mockup's own ~27% ratio — see
-// FOG_DIST_JITTER_HEXES's comment), but the same jitterDistance() call was
-// also being used, unmodified, against this ramp's 2-hex margin: a ±2.5-hex
-// jitter is *larger than the entire ramp*, so on an unlucky hash the
-// jittered boundary could land past the settlement's own line-of-sight
-// radius, pulling dark "scouted" tint onto ground that should still read as
-// fully, clearly visible (issue #20: "the effect jitters black fog into
-// users realm, this is bad"). Scaled to the same ~27% ratio against this
-// ramp's own margin instead (2 × 0.27 ≈ 0.5), so it breaks up the ring the
-// same way without ever exceeding the ramp it's jittering.
-const FOG_VISIBLE_JITTER_HEXES = 0.5;
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
-// Every fog tier answers the same question per hex: "how far past the
-// nearest settlement's ring is this?" — WorldModel.distanceBeyondExplored's
-// min over *every settlement in the game*. Asking that per hex is O(hexes ×
-// settlements) per rebuild, up to twice per hex (once from the terrain cull,
-// once from rebuildBordersAndFog's fog loop) — a low-zoom world-map viewport
-// over unexplored water is thousands of hexes, on every drag rebuild. But a
-// settlement only ever changes the answer within a bounded ring around
-// itself: past the widest threshold any tier compares against, every branch
-// behaves identically no matter how much larger the number gets (terrain is
-// culled, fog is a flat opaque fill).
+// isPastTerrainCull answers "how far past the nearest settlement's explored
+// ring is this?" — WorldModel.distanceBeyondExplored's min over *every*
+// settlement in the game. Asking that per hex is O(hexes × settlements) per
+// rebuild — a low-zoom world-map viewport over unexplored water is
+// thousands of hexes, on every drag rebuild. But a settlement only ever
+// changes the answer within a bounded ring around itself: past
+// FOG_TERRAIN_CULL_HEXES, every hex culls the same way no matter how much
+// larger the number gets.
 //
 // So the settlement walk is hoisted out of the per-hex work entirely: once
 // per rebuild, settlements whose ring cannot reach the visible hex box are
 // dropped, and the per-hex math runs over that (normally tiny, usually
 // empty) list using plain q/r/radius primitives instead of re-deriving a
 // Settlement's radius or allocating a coord object per settlement per hex.
-// The bound below is deliberately generous — it may keep a settlement that
-// turns out not to matter, but it can never drop one that does, so the
-// rendered result is identical to the full per-hex scan (mirrors
-// isEntirelyDeepFog's own settlement-position prune above, for the same
-// reason — see its doc comment).
-//
-// The widest distance the unexplored-mist tiers still discriminate at: the
-// flat-fill hand-off (FOG_TERRAIN_CULL_HEXES) plus the overlap blobs placed
-// past it (FOG_BLOB_OVERLAP_HEXES), plus the jitter that can pull a hex from
-// beyond that boundary back inside it (FOG_DIST_JITTER_HEXES).
-const FOG_UNEXPLORED_INFLUENCE_HEXES = FOG_TERRAIN_CULL_HEXES + FOG_BLOB_OVERLAP_HEXES + FOG_DIST_JITTER_HEXES;
-// Same, for the scouted (dark) tint's visible-ring ramp: past its margin the
-// ramp is saturated and the tint is flat, so only this much is discriminating.
-const FOG_VISIBLE_INFLUENCE_HEXES = FOG_VISIBLE_MARGIN_HEXES + FOG_VISIBLE_JITTER_HEXES;
+// Deliberately generous — it may keep a settlement that turns out not to
+// matter, but can never drop one that does, so the rendered result is
+// identical to the full per-hex scan (mirrors isEntirelyDeepFog's own
+// settlement-position prune above, for the same reason).
 
 /** Inclusive axial bounding box of the hexes one rebuild is about to draw. */
 interface AxialBounds {
@@ -823,85 +619,11 @@ function distanceBeyondSources(q: number, r: number, sources: FogSource[]): numb
   return min === Infinity ? Infinity : Math.max(0, min);
 }
 
-// prototypes/village_view/Viking Realm.dc.html's fogAt()/`fogs` never fills a
-// hex-shaped polygon at all — every fogged hex gets one large soft circular
-// blob (a blurred radial gradient, ~1.68x hex width / 2.7x hex face height,
-// jittered off-centre) that spills into its neighbours. Overlapping blobs is
-// what makes the mist read as continuous cloud instead of tiled hexes; a
-// single hex-aligned polygon can never look like that no matter how much
-// blur is layered on top, since its edge is still exactly the hex boundary.
-// FOG_BLOB_W_SCALE/H_SCALE mirror the prototype's own ratios (relative to
-// its equivalents of our TILE_W/TILE_H).
-const FOG_BLOB_W_SCALE = 1.68;
-const FOG_BLOB_H_SCALE = 2.7;
-// How far a blob's centre is nudged from its hex's own centre, as a fraction
-// of hex width/height — matches the prototype's per-hex jitter on blob
-// position, so no two neighbouring blobs stack in perfect alignment.
-const FOG_BLOB_JITTER_X = 0.12;
-const FOG_BLOB_JITTER_Y = 0.18;
-// Per-blob size variance (1 ± this fraction) — another source of
-// irregularity so the mist doesn't read as a grid of identical stamps.
-const FOG_BLOB_SIZE_JITTER = 0.15;
+// The scouted (out-of-sight) tier's tint alpha at full ramp saturation — the
+// fog v2 shader's uScoutedAlpha uniform (fogShader.ts) reads this directly,
+// same constant both tiers' colours ultimately come from (see
+// FogMaskLayerColors in FogMaskLayer.ts).
 const FOG_SCOUTED_ALPHA = 0.6;
-// isEntirelyDeepFog's flat-background shortcut (see syncWorldBackground)
-// used to stand in for the whole viewport with a single solid clear colour —
-// cheap, but with none of the organic blob texture above, so a fully-zoomed-
-// out deep-ocean pan read as a flat, featureless white rectangle instead of
-// mist. FOG_PATTERN_W/H size a static, pre-baked tiling of the same blob
-// texture (createFogPatternTexture), generated once and stretched to cover
-// the viewport — restores the cloudy look without paying the per-hex cost
-// the shortcut exists to avoid. Generous enough to cover any real viewport
-// without visible stretching; a wider window just tiles a hair coarser.
-const FOG_PATTERN_W = 2400;
-const FOG_PATTERN_H = 1400;
-const FOG_PATTERN_BLOB_COUNT = 130;
-// The blob layer's BlurFilter is a full-container GPU post-pass. Naively
-// left attached to a container that sits directly in the scene graph, Pixi
-// re-runs it on literally every ticker frame regardless of whether the fog
-// actually changed — there's no automatic dirty-tracking. On CI's
-// software-rendered headless Chromium (no GPU), that standing per-frame
-// cost alone was enough to stall the renderer's main thread badly enough
-// that even page.mouse.move (a CDP command) timed out — reproducing even
-// on a hover test that never drags at all. fogBlobLayer.container is kept
-// offscreen (never added to `world`) for exactly this reason: it's only
-// ever rendered on demand, into fogBlobCacheTexture (see
-// refreshFogBlobCache), and fogBlobCacheSprite displays that cached result
-// like any other plain, unfiltered sprite the rest of the time — a single
-// blur pass per real rebuild instead of one every frame forever.
-//
-// The blur is additionally dropped for an active drag's duration (redraws
-// stay crisp/cheap, so fog geometry still keeps up with the pan — no
-// missing-terrain pop-in at the edges). fogDebugFlags.dragFade (default
-// off — see its own doc comment and issue #20) can fade it back in over
-// FOG_DRAG_FADE_MS once released, dipping fogBlobCacheSprite's *entire*
-// alpha — every hex's fog, not just whatever the drag just revealed — down
-// to FOG_DRAG_FADE_FROM_ALPHA first. That's one shared bitmap (the blur
-// cache), so there's no way to single out only the newly-revealed edge:
-// fog the player had already been looking at, unchanged, dims and fades
-// back in right along with it on every drag release.
-const FOG_BLOB_CACHE_PADDING = 48;
-// Fraction of true size the blob layer is actually rendered/blurred at — see
-// refreshFogBlobCache's own comment. 0.4 keeps the softened result visually
-// indistinguishable from a full-resolution blur (already-soft blob edges
-// upscale cleanly) while cutting the filter's pixel-cost to well under a
-// sixth.
-const FOG_BLOB_CACHE_SCALE = 0.4;
-const FOG_DRAG_FADE_MS = 350;
-const FOG_DRAG_FADE_FROM_ALPHA = 0.25;
-// Stacking order for fog blob sprites (see syncFogBlobs's zIndex/sortChildren
-// below). Without an explicit order, two neighbouring blobs of different fog
-// tiers (a hex's own oversized blob spills into its neighbours — see
-// FOG_BLOB_W_SCALE/H_SCALE) stacked in whatever order rebuildBordersAndFog's
-// `coords` loop happened to visit them in, i.e. raster scan order, unrelated
-// to fog tier. That let a lightly-tinted unexplored (white) blob draw on top
-// of a neighbouring scouted (dark) blob depending on which side of the
-// viewport the camera panned in from — the dark "you've been here, it's just
-// out of sight" tint would flicker in and out depending on pan direction
-// instead of reading as sitting underneath the pale "never scouted" mist.
-// Unexplored always wins the stack: it represents the outer, denser unknown,
-// so scouted's dim tint belongs underneath it wherever the two overlap.
-const FOG_BLOB_Z_SCOUTED = 0;
-const FOG_BLOB_Z_UNEXPLORED = 1;
 // See scheduleCull's own comment for why this exists: throttles how often a
 // drag can trigger a full terrain/border/fog rebuild.
 const DRAG_REBUILD_THROTTLE_MS = 150;
@@ -949,10 +671,10 @@ export class HexMapRenderer {
   private waveLayer = new Graphics();
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
-  // onTick's per-frame drawWaves call can skip redrawing wave strokes that
-  // the opaque fog backdrop syncWorldBackground painted would fully hide
-  // anyway — refreshed on every rebuildAll, stale (matching every other
-  // rebuild-driven field) for the frames between rebuilds during a drag.
+  // onTick's per-frame drawWaves call can skip redrawing wave strokes the
+  // fog mesh above them would fully hide anyway — refreshed on every
+  // rebuildAll, stale (matching every other rebuild-driven field) for the
+  // frames between rebuilds during a drag.
   private deepFogOnly = false;
   private borderLayer = new Graphics();
   private hoverLayer = new Graphics();
@@ -961,43 +683,34 @@ export class HexMapRenderer {
   // is time-based, unlike everything else here which only redraws on a
   // cull rebuild (camera pan/zoom).
   private highlightLayer = new Graphics();
-  // Flat, unblurred, guaranteed alpha:1 white fill — the "definitely fully
-  // opaque, no reliance on blob overlap" backstop past FOG_TERRAIN_CULL_HEXES.
-  private fogLayer = new Graphics();
-  // Organic mist: pooled Sprites sharing one pre-rendered soft-circle
-  // texture, tinted/sized/jittered per hex — see FOG_BLOB_* above.
-  // Offscreen only — see the FOG_BLOB_CACHE_PADDING comment above for why
-  // this is never added to `world` directly.
-  private fogBlobLayer = createSpriteLayer();
-  private fogBlobTexture: Texture | null = null;
-  private fogBlobFilter: BlurFilter | null = null;
-  // The on-demand render of fogBlobLayer.container (see refreshFogBlobCache)
-  // and the plain sprite that displays it every frame in `world`'s place.
-  private fogBlobCacheTexture: RenderTexture | null = null;
-  private fogBlobCacheSize = { width: 0, height: 0 };
-  private fogBlobCacheSprite = new Sprite();
-  // Static, pre-baked stand-in for the organic blob mist (see
-  // FOG_PATTERN_W/H) shown only while isEntirelyDeepFog's shortcut is active
-  // — screen-space (added directly to app.stage, not `world`/`fogWorld`), so
-  // it neither pans nor needs rebuilding: syncWorldBackground only toggles
-  // its visibility. Sized to the viewport in mount/resize.
-  private fogPatternTexture: Texture | null = null;
-  private fogPatternSprite = new Sprite();
-  // Set while a fog fade is running (either the drag-release fade, see
-  // FOG_DRAG_FADE_MS, or the founding reveal, see FOG_REVEAL_FADE_MS); null
-  // once it completes or a new drag starts. duration/fromAlpha are set
-  // alongside it by whichever triggered the fade, since only one of the two
-  // can ever be running at once.
-  private fogFadeStartedAt: number | null = null;
-  private fogFadeDurationMs = FOG_DRAG_FADE_MS;
-  private fogFadeFromAlpha = FOG_DRAG_FADE_FROM_ALPHA;
-  // The drag-release fade deliberately never dips the flat, guaranteed-
-  // opaque backstop (fogLayer) — only the blurred blob cache, which is what
-  // gets detached for the drag's duration in the first place. The founding
-  // reveal fade is different: fog wasn't showing *at all* a moment ago (no
-  // settlement existed yet), so fading both in together is exactly the
-  // "mist rolling in" effect zip 6a wants, with nothing to protect.
-  private fogFadeAffectsFlatLayer = false;
+  // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
+  // layers sampling the fetched mask texture through a shared GLSL shader —
+  // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
+  // `world` and `markerLayer` in the stage; whiteMistLayer (never-scouted
+  // mist) sits after `markerLayer` — see mount()'s addChild order. Both are
+  // genuinely screen-space (no `world`-transform syncing needed, unlike v1's
+  // `fogWorld`), and both stay in sync via setCamera on every camera change.
+  private blackFogLayer = new FogMaskLayer('outOfSight', {
+    scoutedColor: FOG_SCOUTED,
+    unexploredColor: FOG_UNEXPLORED,
+    scoutedAlpha: FOG_SCOUTED_ALPHA,
+  });
+  private whiteMistLayer = new FogMaskLayer('unknown', {
+    scoutedColor: FOG_SCOUTED,
+    unexploredColor: FOG_UNEXPLORED,
+    scoutedAlpha: FOG_SCOUTED_ALPHA,
+  });
+  // The fetched (or, before the first fetch resolves, not-yet-fetched) mask
+  // texture and the world-to-mask-UV placement it was decoded with — see
+  // setFogMask. Null until fetchFogMask's first call resolves (or forever in
+  // demo mode, which has no backend to fetch from — both layers' shader
+  // already defaults an unbound mask to fully-unknown, so this is a real,
+  // correct "nothing scouted yet" state, not a loading glitch).
+  private fogMaskTexture: Texture | null = null;
+  // The generation before `fogMaskTexture` — kept one deep so a still-fading
+  // uMaskPrev never gets destroyed out from under an in-progress reveal
+  // cross-fade (see setFogMask's own comment).
+  private previousFogMaskTexture: Texture | null = null;
   // Eases `camera` from one position/zoom to another over time (see
   // animateCameraTo) instead of snapping — used for the founding transition
   // so the view doesn't jump.
@@ -1038,16 +751,6 @@ export class HexMapRenderer {
   // pointerup. `lastCoordKey` suppresses repeat callbacks while the pointer
   // moves within one hex.
   private waypointDrag: { index: number; lastCoordKey: string } | null = null;
-  // Fog (fogLayer + fogBlobCacheSprite) needs to draw *above* markerLayer's
-  // island names/settlement badges/fleet ETAs — a label sitting right at the
-  // edge of scouted territory should read as veiled by the mist, not float
-  // in front of it — but everything else in `world` (terrain, buildings)
-  // still needs to draw *beneath* markerLayer. A second world-space
-  // container, kept in lockstep with `world`'s own transform every time it
-  // changes (see applyCameraTransform), lets fog sit later in the stage's
-  // paint order than markerLayer while still panning/zooming identically to
-  // the terrain it's covering.
-  private fogWorld = new Container();
 
   private textures: TileTextures | null = null;
 
@@ -1160,7 +863,7 @@ export class HexMapRenderer {
    * pre-founding landing-page preview has no settlement yet, and
    * `WorldModel.isExplored` would be trivially false everywhere, so fog
    * would otherwise blanket the whole preview plot (see rebuildTerrain's
-   * and rebuildBordersAndFog's matching bypass). In world mode, only once
+   * and rebuildBorders' matching bypass). In world mode, only once
    * the local player has founded at least one settlement — before that,
    * hiding the whole map would break the onboarding flow ("click any green
    * island to make landfall": the player needs to see the world to pick a
@@ -1234,27 +937,6 @@ export class HexMapRenderer {
     }
     if (this.destroyed) return;
 
-    // One soft-circle texture, generated once and reused (tinted, resized,
-    // alpha'd) for every fog blob — see FOG_BLOB_* above. Sprites sharing a
-    // texture batch into very few WebGL draw calls, same reasoning as the
-    // tile-art sprite pools.
-    this.fogBlobTexture = this.createFogBlobTexture(app);
-    // Blurred on top of the gradient's own soft falloff — matches the
-    // mockup's per-blob `filter: blur(...)` (Viking Realm.dc.html's `fogs`).
-    // Only the organic blob layer needs this; fogLayer's flat fill is
-    // already a uniform solid colour, so blurring it would cost GPU time for
-    // no visible change. Applied only inside refreshFogBlobCache's on-demand
-    // render, never left attached in the live scene graph — see
-    // FOG_BLOB_CACHE_PADDING above.
-    this.fogBlobFilter = new BlurFilter({ strength: 10, quality: 3 });
-    this.fogBlobCacheSprite.visible = false;
-
-    this.fogPatternTexture = this.createFogPatternTexture(app);
-    this.fogPatternSprite.texture = this.fogPatternTexture;
-    this.fogPatternSprite.tint = FOG_UNEXPLORED;
-    this.fogPatternSprite.visible = false;
-    this.syncFogPatternSpriteSize();
-
     this.world.addChild(
       this.terrainBase.container,
       this.waveLayer,
@@ -1264,8 +946,14 @@ export class HexMapRenderer {
       this.terrainTop.container,
       this.highlightLayer,
     );
-    this.fogWorld.addChild(this.fogLayer, this.fogBlobCacheSprite);
-    app.stage.addChild(this.fogPatternSprite, this.world, this.markerLayer, this.fogWorld);
+    // §4's layer stack: the two fog quads are the only genuinely
+    // screen-space `app.stage` children — everything else (terrain,
+    // borders, buildings) stays nested inside `world`, camera-transformed
+    // as one. blackFogLayer (out-of-sight tint) sits under markerLayer so
+    // troop/settlement labels read as veiled by it rather than floating in
+    // front; whiteMistLayer (never-scouted) sits over everything, since
+    // nothing should show through ground that's never been seen at all.
+    app.stage.addChild(this.world, this.blackFogLayer.mesh, this.markerLayer, this.whiteMistLayer.mesh);
 
     app.ticker.add(this.onTick);
 
@@ -1278,16 +966,7 @@ export class HexMapRenderer {
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
     this.applyCameraTransform();
-    this.syncFogPatternSpriteSize();
     this.scheduleCull();
-  }
-
-  // Stretches the pre-baked pattern texture to always cover the viewport —
-  // see FOG_PATTERN_W/H's comment for why a fixed-size texture rather than a
-  // regenerated one is fine here.
-  private syncFogPatternSpriteSize() {
-    this.fogPatternSprite.width = this.viewport.width;
-    this.fogPatternSprite.height = this.viewport.height;
   }
 
   private applyCameraTransform() {
@@ -1296,8 +975,12 @@ export class HexMapRenderer {
       this.viewport.width / 2 - this.camera.x * this.camera.zoom,
       this.viewport.height / 2 - this.camera.y * this.camera.zoom,
     );
-    this.fogWorld.scale.copyFrom(this.world.scale);
-    this.fogWorld.position.copyFrom(this.world.position);
+    // The fog quads are genuinely screen-space (see the class-level comment
+    // on blackFogLayer/whiteMistLayer) — no transform to sync, just the raw
+    // camera/viewport values their shader uses to invert screen -> world
+    // itself (fogShader.ts's own screenToWorld-equivalent).
+    this.blackFogLayer.setCamera(this.camera, this.viewport);
+    this.whiteMistLayer.setCamera(this.camera, this.viewport);
   }
 
   private onTick = () => {
@@ -1309,7 +992,7 @@ export class HexMapRenderer {
     // ring's CSS z-index/opacity tricks can't touch it. `interactionLocked` is
     // already the "a ring is open" signal (see setInteractionLocked); ease the
     // whole marker layer's alpha toward hidden/shown off that same flag rather
-    // than snapping, matching the fog fade's feel elsewhere in this renderer.
+    // than snapping.
     const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
     this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
     if (this.options.mode === 'world' && !this.deepFogOnly) this.drawWaves();
@@ -1319,15 +1002,22 @@ export class HexMapRenderer {
       this.scheduleCull();
     }
     this.tickCameraAnim();
-    this.tickFogFade();
+    const now = performance.now();
+    this.blackFogLayer.mesh.visible = fogDebugFlags.maskOutOfSight;
+    this.whiteMistLayer.mesh.visible = fogDebugFlags.maskUnknown;
+    const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
+    this.blackFogLayer.setDebug(debug);
+    this.whiteMistLayer.setDebug(debug);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift);
     this.drawHighlight();
   };
 
   /**
    * Eases from the founding transition's start camera to its target (see
    * animateCameraTo) — zip 6a: the landing page's founding moment should
-   * read as the camera settling into place while the fog rolls in
-   * (tickFogFade, started alongside this one), not an instant jump.
+   * read as the camera settling into place while the fog reveals via its own
+   * cross-fade (FogMaskLayer.setMaskTexture, §2.6), not an instant jump.
    */
   private tickCameraAnim() {
     const anim = this.cameraAnim;
@@ -1374,21 +1064,6 @@ export class HexMapRenderer {
         .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
         .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
     }
-  }
-
-  // Eases fogBlobCacheSprite's (and, for the founding reveal, fogLayer's)
-  // alpha back up — either after onPointerUp's forced rebuild re-bakes the
-  // blur into the cache texture (see FOG_DRAG_FADE_MS), or after founding a
-  // settlement reveals fog for the first time (see FOG_REVEAL_FADE_MS,
-  // triggered from updateOptions). Only one of the two can be running at
-  // once, so one pair of fields (set by whichever triggered it) covers both.
-  private tickFogFade() {
-    if (this.fogFadeStartedAt === null) return;
-    const t = Math.min(1, (performance.now() - this.fogFadeStartedAt) / this.fogFadeDurationMs);
-    const alpha = this.fogFadeFromAlpha + (1 - this.fogFadeFromAlpha) * t;
-    this.fogBlobCacheSprite.alpha = alpha;
-    if (this.fogFadeAffectsFlatLayer) this.fogLayer.alpha = alpha;
-    if (t >= 1) this.fogFadeStartedAt = null;
   }
 
   private onPointerDown = (e: PointerEvent) => {
@@ -1471,12 +1146,6 @@ export class HexMapRenderer {
     // skips updateHover entirely while dragging, so nothing would clear it
     // on its own until the drag ends over a different hex.
     this.setHoveredCoord(null);
-    // Cut short any fade still running from a previous drag so it doesn't
-    // fight this one — refreshFogBlobCache reads `this.dragging` itself on
-    // the next rebuild, so there's nothing else to toggle here.
-    this.fogFadeStartedAt = null;
-    this.fogBlobCacheSprite.alpha = 1;
-    this.fogLayer.alpha = 1;
   }
 
   /** Issue #16 "ring menu": disable hover highlighting/tooltip and zoom
@@ -1541,33 +1210,19 @@ export class HexMapRenderer {
     this.suppressNextClick = false;
     // `dragging` is true for *any* pointerdown, a stationary click included,
     // so it alone doesn't say whether the camera actually moved. Gate the
-    // rebuild/fade below on the same slop threshold the click check above
-    // uses: a click that never panned the map leaves every sprite, and the
-    // fog cache, exactly as they already are — no reason to pay for a full
-    // rebuild (blur render pass and all) or to fade the fog back in.
+    // rebuild below on the same slop threshold the click check above uses: a
+    // click that never panned the map leaves every sprite exactly as it
+    // already is — no reason to pay for a full rebuild.
     const wasDragging = this.dragging && this.dragMoved >= DRAG_CLICK_SLOP_PX;
     this.dragging = false;
     if (wasDragging) {
       // The drag's last queued rebuild (scheduleCull's rAF, from the final
       // pointermove) may already have fired while dragging was still true —
-      // rendering the crisp/unblurred cache — so force one more, synchronous
-      // rebuild now that dragging is false to guarantee the blur actually
-      // gets baked back in before anything below reveals it.
+      // force one more, synchronous rebuild now that dragging is false to
+      // guarantee the final state is fully up to date. The fog mesh itself
+      // needs no equivalent step: it samples the live mask texture every
+      // frame regardless of camera movement, so there is nothing to rebake.
       this.rebuildAll();
-      if (fogDebugFlags.dragFade) {
-        this.fogBlobCacheSprite.alpha = FOG_DRAG_FADE_FROM_ALPHA;
-        this.fogFadeDurationMs = FOG_DRAG_FADE_MS;
-        this.fogFadeFromAlpha = FOG_DRAG_FADE_FROM_ALPHA;
-        this.fogFadeAffectsFlatLayer = false;
-        this.fogFadeStartedAt = performance.now();
-      } else {
-        // Default: show the freshly-rebuilt, correctly-blurred fog
-        // immediately, no fade — see fogDebugFlags.dragFade's own comment
-        // for why the fade dims fog the player was already looking at, not
-        // just what the drag revealed.
-        this.fogFadeStartedAt = null;
-        this.fogBlobCacheSprite.alpha = 1;
-      }
     }
   };
 
@@ -1750,8 +1405,8 @@ export class HexMapRenderer {
    * Marks a wheel/pinch zoom gesture as in progress and (re)arms the timer
    * that ends it. A continuous zoom changes `camera.zoom` on every event, so
    * it crosses cameraMovedEnough()'s threshold on many successive frames —
-   * exactly what scheduleCull/refreshFogBlobCache already throttle for a
-   * drag, except a wheel gesture has no pointerup to hang that on. Once the
+   * exactly what scheduleCull already throttles for a drag, except a wheel
+   * gesture has no pointerup to hang that on. Once the
    * events stop for WHEEL_IDLE_MS the gesture is over, so the flag clears and
    * one forced rebuild bakes the settled view — same guarantee onPointerUp
    * gives when a drag ends and tickCameraAnim gives when an animation
@@ -1807,10 +1462,9 @@ export class HexMapRenderer {
       // transition's animation, or a wheel/pinch zoom) can cross
       // cameraMovedEnough's threshold on almost every rAF — each pointermove,
       // animation step or wheel event nudges the camera or its zoom further —
-      // and a rebuild re-syncs every visible terrain/border/fog sprite, not
-      // just the fog blur (see refreshFogBlobCache's own skip above), so
-      // that's real per-rebuild cost under software rendering, paid several
-      // times over across a single gesture. visibleCoords already renders a
+      // and a rebuild re-syncs every visible terrain/border sprite, real
+      // per-rebuild cost under software rendering, paid several times over
+      // across a single gesture. visibleCoords already renders a
       // TILE_W*2 margin past the viewport edge, so there's slack to spend:
       // throttle rebuilds to once per DRAG_REBUILD_THROTTLE_MS instead of
       // firing on every threshold-crossing frame. Each gesture still ends
@@ -1859,21 +1513,15 @@ export class HexMapRenderer {
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
     const coords = this.coordsInRect(rect);
     const deepFogOnly =
-      this.options.mode === 'world' &&
-      fogActive &&
-      fogDebugFlags.unexploredFog &&
-      !fogDebugFlags.blobsOnly &&
-      this.isEntirelyDeepFog(rect);
+      this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;
-    this.syncWorldBackground(deepFogOnly);
 
     let phaseStart = performance.now();
     if (deepFogOnly) {
-      // isEntirelyDeepFog already confirmed every visible hex is deep,
-      // uniformly-opaque fog, and syncWorldBackground painted the
-      // renderer's own clear colour to match (see rebuildBordersAndFog's
-      // matching shortcut just below) — terrain drawn under that backdrop
-      // would be fully hidden, so there's nothing to gain by building it.
+      // isEntirelyDeepFog already confirmed every visible hex sits under
+      // fully opaque unknown fog — terrain/borders drawn under it would be
+      // fully hidden by the whiteMistLayer mesh regardless, so there's
+      // nothing to gain by building either.
       fogPerfStats.terrainDrawnCount = 0;
       fogPerfStats.terrainCulledCount = 0;
     } else {
@@ -1882,12 +1530,8 @@ export class HexMapRenderer {
     fogPerfStats.terrainMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
-    this.rebuildBordersAndFog(coords, fogActive, deepFogOnly);
-    // refreshFogBlobCache (called from within rebuildBordersAndFog) times
-    // and records its own share into fogPerfStats.blobCacheMs — subtracted
-    // back out here so bordersFogMs isolates just the per-hex loop around
-    // it, matching the two rows FogPerfPanel shows separately.
-    fogPerfStats.bordersFogMs = performance.now() - phaseStart - fogPerfStats.blobCacheMs;
+    this.rebuildBorders(coords, fogActive, deepFogOnly);
+    fogPerfStats.bordersMs = performance.now() - phaseStart;
 
     phaseStart = performance.now();
     this.rebuildMarkers();
@@ -1911,30 +1555,29 @@ export class HexMapRenderer {
 
   /**
    * True only when it's certain no settlement's fog influence
-   * (exploredRadius + FOG_WORLD_BG_HANDOFF_HEXES, converted to world-space
+   * (exploredRadius + FOG_TERRAIN_CULL_HEXES, converted to world-space
    * pixels) reaches anywhere into `rect` — i.e. every hex in the current
-   * viewport is deep, uniformly-opaque unexplored fog (see
-   * FOG_WORLD_BG_HANDOFF_HEXES), so a single flat background colour can
-   * stand in for the whole viewport's worth of per-hex fog geometry.
+   * viewport sits under fully opaque unknown fog, so terrain/wave/border
+   * work for the whole rebuild can be skipped (the fog mesh paints over all
+   * of it regardless).
    *
    * This checks settlement *positions* — O(settlements) — rather than
-   * scanning every visible hex's isExplored/distanceBeyondExplored the way
-   * rebuildBordersAndFog's own per-hex loop does. An earlier version did
-   * exactly that per-hex scan, checking `coords` and bailing out at the
-   * first explored hex it found — cheap in principle (no geometry, just
-   * lookups), but wrong in practice: raster (column-major) scan order has
-   * no relationship to distance from a settlement, so for a *mixed*
-   * viewport (a settlement's own default world-map view, not a deep-ocean
-   * pan) the scan could walk a large fraction of a low-zoom viewport's
-   * thousands of hexes before reaching the one explored hex that lets it
-   * return false — on every rebuild, even though the answer never changes.
-   * Measured ~1.7x *slower* per rebuild than before this optimisation
-   * existed at all, for exactly the common "looking at your own island"
-   * case it was never supposed to touch. A bounding check against known
-   * settlement positions answers the same question in a small, fixed
-   * number of comparisons regardless of viewport hex count — and, being
-   * generous rather than exact about the radius, can only ever *under*-
-   * apply the optimisation (safe), never wrongly skip real content.
+   * scanning every visible hex's isExplored/distanceBeyondExplored. An
+   * earlier version did exactly that per-hex scan, checking `coords` and
+   * bailing out at the first explored hex it found — cheap in principle (no
+   * geometry, just lookups), but wrong in practice: raster (column-major)
+   * scan order has no relationship to distance from a settlement, so for a
+   * *mixed* viewport (a settlement's own default world-map view, not a
+   * deep-ocean pan) the scan could walk a large fraction of a low-zoom
+   * viewport's thousands of hexes before reaching the one explored hex that
+   * lets it return false — on every rebuild, even though the answer never
+   * changes. Measured ~1.7x *slower* per rebuild than before this
+   * optimisation existed at all, for exactly the common "looking at your
+   * own island" case it was never supposed to touch. A bounding check
+   * against known settlement positions answers the same question in a
+   * small, fixed number of comparisons regardless of viewport hex count —
+   * and, being generous rather than exact about the radius, can only ever
+   * *under*-apply the optimisation (safe), never wrongly skip real content.
    */
   private isEntirelyDeepFog(rect: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
     const { worldModel } = this.options;
@@ -1944,7 +1587,7 @@ export class HexMapRenderer {
       // direction, so multiplying by it (rather than the tighter per-axis
       // pitch) only ever over-, never under-, estimates how far a
       // settlement's influence reaches.
-      const radiusPx = (worldModel.exploredRadius(s) + FOG_WORLD_BG_HANDOFF_HEXES) * TILE_W;
+      const radiusPx = (worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES) * TILE_W;
       const reaches =
         grid.x + radiusPx >= rect.minX &&
         grid.x - radiusPx <= rect.maxX &&
@@ -1956,86 +1599,26 @@ export class HexMapRenderer {
   }
 
   /**
-   * World mode only: once isEntirelyDeepFog has already confirmed nothing
-   * in the current viewport needs to stay transparent, paint the renderer's
-   * own clear colour as the deep unexplored mist (FOG_UNEXPLORED, fully
-   * opaque) instead — rebuildBordersAndFog then skips its whole per-hex fog
-   * loop for this rebuild (see its own `deepFogOnly` handling). Reset to
-   * fully transparent otherwise (mixed/near view, fog inactive, or
-   * settlement/preview mode, which never touches this at all) so the CSS
-   * backdrop behind the canvas (WorldMapCanvas.vue/SettlementCanvas.vue),
-   * and any explored terrain/open water this rebuild draws normally, shows
-   * through exactly as it did before this existed.
-   */
-  private syncWorldBackground(deepFogOnly: boolean) {
-    if (!this.app || this.options.mode !== 'world') return;
-    // WebGL's clear colour is non-premultiplied but the canvas composites
-    // premultiplied (the default premultipliedAlpha:true context) — clearing
-    // to FOG_UNEXPLORED's pale RGB at alpha 0 writes a non-premultiplied
-    // "transparent" pixel the browser then adds on top of the CSS sea
-    // backdrop behind the canvas, washing every transparent pixel out to a
-    // pale wash instead of showing the blue gradient through. Only a color
-    // whose RGB is already black at alpha 0 is a valid premultiplied
-    // transparent, so the two must be set together, never RGB alone.
-    this.app.renderer.background.color = deepFogOnly ? FOG_UNEXPLORED : 0x000000;
-    this.app.renderer.background.alpha = deepFogOnly ? 1 : 0;
-    // fogPatternSprite layers the pre-baked cloud texture on top of that flat
-    // clear colour — see its own field comment and FOG_PATTERN_W/H's — so the
-    // shortcut still reads as mist, not a blank rectangle. Any gap between
-    // its blobs just shows the same flat FOG_UNEXPLORED behind it, so this
-    // never leaks anything the per-hex path wouldn't have shown anyway.
-    this.fogPatternSprite.visible = deepFogOnly;
-  }
-
-  /**
    * Once-per-rebuild prune of the settlement list to the ones whose
-   * unexplored-mist ring can still reach `bounds` (see fogSourcesNear and
-   * FOG_UNEXPLORED_INFLUENCE_HEXES above). Shared by isPastTerrainCull's
-   * two callers (rebuildTerrain, rebuildTerrainFlat) and rebuildBordersAndFog,
-   * so a single settlement walk replaces what used to be a fresh
-   * distanceBeyondExplored scan over every settlement, per hex, in every one
-   * of those loops.
+   * explored ring can still reach `bounds` (see fogSourcesNear). Shared by
+   * isPastTerrainCull's two callers (rebuildTerrain, rebuildTerrainFlat) so
+   * a single settlement walk replaces what would otherwise be a fresh
+   * distanceBeyondExplored scan over every settlement, per hex.
    */
   private unexploredFogSources(bounds: AxialBounds | null): FogSource[] {
     const { worldModel } = this.options;
-    return fogSourcesNear(
-      worldModel.listSettlements(),
-      (s) => worldModel.exploredRadius(s),
-      bounds,
-      FOG_UNEXPLORED_INFLUENCE_HEXES,
-    );
+    return fogSourcesNear(worldModel.listSettlements(), (s) => worldModel.exploredRadius(s), bounds, FOG_TERRAIN_CULL_HEXES);
   }
 
   /**
    * Whether an unexplored hex is far enough past the scouted ring that
-   * there's nothing to gain by drawing terrain under the mist there — the
-   * mist above it is guaranteed fully opaque by FOG_TERRAIN_CULL_HEXES (see
-   * rebuildBordersAndFog). Shared by rebuildTerrain (settlement tile art)
+   * there's nothing to gain by drawing terrain there — the fog mesh above
+   * it is guaranteed fully opaque (unknown ramp saturated) past
+   * FOG_TERRAIN_CULL_HEXES. Shared by rebuildTerrain (settlement tile art)
    * and rebuildTerrainFlat (world-map flat fill) so the two agree.
-   *
-   * fogDebugFlags.terrainCullJitter defaults to *false*, unlike the fog
-   * ramp's own distJitter: jittering the fog's own edge is what turns a
-   * dead-straight hex ring into an organic mist boundary (see
-   * FOG_DIST_JITTER_HEXES's own comment), but jittering the terrain cutoff
-   * *too* makes individual tiles pop in/out unpredictably near the ring —
-   * an artifact that's obvious on hard-edged tile art in a way the blurred,
-   * overlapping fog blobs never show (issue #20: "distance jitter... affects
-   * tiles too, should not by default"). With it off, terrain instead culls
-   * at a fixed distance padded by the fog ramp's own worst-case jitter
-   * (FOG_TERRAIN_CULL_HEXES + FOG_DIST_JITTER_HEXES) — far enough out that
-   * even a maximally-jittered fog edge is still guaranteed opaque there, so
-   * the terrain/fog seam FOG_TERRAIN_CULL_HEXES was built to close stays
-   * closed regardless of whether the two flags agree.
    */
   private isPastTerrainCull(q: number, r: number, fogSources: FogSource[]): boolean {
-    const beyondRaw = distanceBeyondSources(q, r, fogSources);
-    if (fogDebugFlags.terrainCullJitter) {
-      return (
-        jitterDistance(q, r, beyondRaw, FOG_DIST_JITTER_SALT, fogDebugFlags.distJitter, FOG_DIST_JITTER_HEXES) >
-        FOG_TERRAIN_CULL_HEXES
-      );
-    }
-    return beyondRaw > FOG_TERRAIN_CULL_HEXES + FOG_DIST_JITTER_HEXES;
+    return distanceBeyondSources(q, r, fogSources) > FOG_TERRAIN_CULL_HEXES;
   }
 
   private rebuildTerrain(coords: AxialCoord[], fogActive: boolean) {
@@ -2070,10 +1653,9 @@ export class HexMapRenderer {
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
-      // the fog fully clears — but past FOG_TERRAIN_CULL_HEXES the mist above
-      // it is guaranteed fully opaque (rebuildBordersAndFog switches to a
-      // flat solid fill there), so there's nothing to gain by drawing it
-      // that far out.
+      // the fog fully clears — but past FOG_TERRAIN_CULL_HEXES the mist
+      // above it is guaranteed fully opaque (the shader's own ramp
+      // saturates), so there's nothing to gain by drawing it that far out.
       if (
         fogActive &&
         fogDebugFlags.terrainCull &&
@@ -2140,7 +1722,7 @@ export class HexMapRenderer {
       // under the thin part of the unexplored mist near the scouted ring
       // (so it isn't a hard pop-in once the fog clears), but stop drawing
       // it at all once past FOG_TERRAIN_CULL_HEXES, where the mist above it
-      // is guaranteed fully opaque anyway (see rebuildBordersAndFog).
+      // is guaranteed fully opaque anyway (the shader's own ramp saturates).
       if (
         fogActive &&
         fogDebugFlags.terrainCull &&
@@ -2216,220 +1798,6 @@ export class HexMapRenderer {
     }
   }
 
-  // A single soft white circle (opaque centre fading to transparent at the
-  // rim), rasterized once. Every fog blob is a Sprite of this same texture —
-  // tint gives it its colour, Sprite.alpha its per-hex intensity, width/height
-  // its per-hex size — so the GPU only ever uploads one small texture no
-  // matter how much fog is on screen.
-  private createFogBlobTexture(app: Application): Texture {
-    const radius = 128;
-    const gradient = new FillGradient({
-      type: 'radial',
-      colorStops: [
-        { offset: 0, color: 'rgba(255,255,255,1)' },
-        { offset: 0.44, color: 'rgba(255,255,255,0.88)' },
-        { offset: 0.7, color: 'rgba(255,255,255,0.42)' },
-        { offset: 1, color: 'rgba(255,255,255,0)' },
-      ],
-    });
-    const g = new Graphics().circle(radius, radius, radius).fill(gradient);
-    const texture = app.renderer.generateTexture(g);
-    g.destroy();
-    return texture;
-  }
-
-  // Bakes FOG_PATTERN_BLOB_COUNT copies of the same soft-circle texture
-  // above at deterministic (hash01-seeded, not Math.random — a stable
-  // pattern across mounts, same reasoning as every other jittered fog value
-  // in this file) positions/sizes/alphas into one FOG_PATTERN_W x
-  // FOG_PATTERN_H texture, once, at mount. This is the flat-background
-  // shortcut's stand-in for the organic blob mist — see fogPatternSprite's
-  // own comment — generated the same way refreshFogBlobCache bakes its own
-  // on-demand cache (stamp blurred sprites into an offscreen container, then
-  // renderer.generateTexture it), just once instead of per-rebuild and over
-  // a fixed area instead of the current viewport.
-  private createFogPatternTexture(app: Application): Texture {
-    const blobTexture = this.fogBlobTexture;
-    if (!blobTexture) return Texture.EMPTY;
-    const container = new Container();
-    const baseW = TILE_W * FOG_BLOB_W_SCALE;
-    const baseH = TILE_W * FOG_BLOB_H_SCALE;
-    for (let i = 0; i < FOG_PATTERN_BLOB_COUNT; i++) {
-      const sprite = new Sprite(blobTexture);
-      sprite.anchor.set(0.5);
-      // Overscan past the texture edges so blobs centred near a border still
-      // contribute their full falloff instead of clipping to a hard edge.
-      sprite.position.set(
-        hash01(i, 0, 401) * (FOG_PATTERN_W + baseW) - baseW / 2,
-        hash01(i, 0, 402) * (FOG_PATTERN_H + baseH) - baseH / 2,
-      );
-      const sizeJitter = 1 + (hash01(i, 0, 403) * 2 - 1) * FOG_BLOB_SIZE_JITTER * 2;
-      sprite.width = baseW * sizeJitter;
-      sprite.height = baseH * sizeJitter;
-      sprite.alpha = 0.55 + hash01(i, 0, 404) * 0.45;
-      container.addChild(sprite);
-    }
-    container.filters = [new BlurFilter({ strength: 14, quality: 3 })];
-    const texture = app.renderer.generateTexture({
-      target: container,
-      frame: new Rectangle(0, 0, FOG_PATTERN_W, FOG_PATTERN_H),
-    });
-    container.destroy({ children: true });
-    return texture;
-  }
-
-  // Pooled equivalent of syncSpriteLayer, for the fog blob layer: each entry
-  // is a soft circle positioned/sized/tinted/alpha'd per hex rather than a
-  // fixed-size tile sprite, so it takes its own geometry fields instead of
-  // reusing that method's tile-shaped one.
-  private syncFogBlobs(
-    entries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }>,
-  ) {
-    const layer = this.fogBlobLayer;
-    for (const [key, e] of entries) {
-      let sprite = layer.active.get(key);
-      const isNew = !sprite;
-      if (!sprite) {
-        sprite = layer.pool.pop() ?? new Sprite();
-        sprite.anchor.set(0.5);
-        layer.active.set(key, sprite);
-      }
-      sprite.texture = this.fogBlobTexture ?? Texture.EMPTY;
-      sprite.position.set(e.x, e.y);
-      sprite.width = e.w;
-      sprite.height = e.h;
-      sprite.tint = e.tint;
-      sprite.alpha = e.alpha;
-      // See FOG_BLOB_Z_SCOUTED/FOG_BLOB_Z_UNEXPLORED: without this, two
-      // overlapping neighbouring blobs of different fog tiers stack in
-      // whatever order `entries` was populated in (raster scan order from
-      // rebuildBordersAndFog's `coords` loop), not by tier — sortChildren()
-      // (container.sortableChildren is set in createSpriteLayer) is what
-      // actually applies `zIndex` instead of leaving it inert.
-      sprite.zIndex = e.z;
-      if (isNew) layer.container.addChild(sprite);
-    }
-    for (const [key, sprite] of layer.active) {
-      if (entries.has(key)) continue;
-      layer.container.removeChild(sprite);
-      layer.pool.push(sprite);
-      layer.active.delete(key);
-    }
-    layer.container.sortChildren();
-  }
-
-  // Syncs the offscreen blob sprites, then renders them (blurred, unless a
-  // drag is in progress — see FOG_DRAG_FADE_MS) into fogBlobCacheTexture and
-  // points fogBlobCacheSprite at the result. This is the only place the
-  // blur filter actually runs — see the FOG_BLOB_CACHE_PADDING comment
-  // above for why it's never left attached in the live scene graph.
-  private refreshFogBlobCache(
-    blobEntries: Map<string, { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }>,
-  ) {
-    const start = performance.now();
-    fogPerfStats.blobCount = blobEntries.size;
-    this.syncFogBlobs(blobEntries);
-    fogPerfStats.blobSyncMs = performance.now() - start;
-    if (!this.app || blobEntries.size === 0) {
-      this.fogBlobCacheSprite.visible = false;
-      fogPerfStats.blobRenderMs = 0;
-      fogPerfStats.blobCacheMs = performance.now() - start;
-      return;
-    }
-    // Deliberately `dragging || wheeling` rather than the broader
-    // `isInteracting`: a *player* gesture is over in a few hundred ms, but
-    // cameraAnim runs for CAMERA_TRANSITION_MS (1.4s) with the founding
-    // reveal's fog fade timed to it, and skipping the cache for that long
-    // would leave nothing for that fade to reveal — the mist would pop in at
-    // the end instead of rolling in.
-    if (this.dragging || this.wheeling) {
-      // An ongoing player gesture (a drag, or a wheel/pinch zoom) can trigger
-      // a rebuild on nearly every rAF (scheduleCull fires whenever the camera
-      // has moved or zoomed enough), and the visible unexplored area's
-      // bounding box shifts in world space on almost every one of those —
-      // which, below, would mean destroying and recreating a GPU texture on
-      // (near-)every frame of the gesture, on top of a whole extra render()
-      // pass. On CI's software-rendered headless Chromium that alone was
-      // enough to stall the main thread badly enough for page.mouse.move (a
-      // CDP command) to time out, even with the blur filter already dropped
-      // for the drag. So: leave the existing cache sprite exactly as it was —
-      // stale for the gesture's duration, the same tradeoff the
-      // blur-drop/fade already makes — and let the forced rebuild that ends
-      // the gesture (onPointerUp's on release, noteWheelActivity's idle timer
-      // once zooming settles) bake a fresh, correctly-blurred one.
-      fogPerfStats.blobRenderMs = 0;
-      fogPerfStats.blobCacheMs = performance.now() - start;
-      return;
-    }
-
-    const renderStart = performance.now();
-
-    // Padded past the blob geometry so the blur (which bleeds a few pixels
-    // past what it's applied to) doesn't get clipped at the texture's edge.
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const e of blobEntries.values()) {
-      minX = Math.min(minX, e.x - e.w / 2);
-      maxX = Math.max(maxX, e.x + e.w / 2);
-      minY = Math.min(minY, e.y - e.h / 2);
-      maxY = Math.max(maxY, e.y + e.h / 2);
-    }
-    minX -= FOG_BLOB_CACHE_PADDING;
-    minY -= FOG_BLOB_CACHE_PADDING;
-    maxX += FOG_BLOB_CACHE_PADDING;
-    maxY += FOG_BLOB_CACHE_PADDING;
-    const width = Math.ceil(maxX - minX);
-    const height = Math.ceil(maxY - minY);
-
-    // Render at a fraction of the true size, then display the result scaled
-    // back up — a gaussian blur's whole visual job is to erase high-frequency
-    // detail, so blurring a downsampled copy and upscaling it is visually
-    // indistinguishable from blurring at full resolution, while the filter
-    // pass itself (whose cost scales with pixel count) runs on a fraction of
-    // the pixels. FOG_BLOB_CACHE_SCALE is calibrated in *screen* pixels, so
-    // it's multiplied by camera.zoom here rather than applied to the bbox's
-    // world-unit size directly: the visible bbox's world-space extent is
-    // viewport-size / zoom, so a fixed world-space factor rendered far more
-    // texture pixels than the screen could ever show at a low zoom (a
-    // zoomed-out world-map pan spans a huge world-space area for the same
-    // screen-sized viewport) — up to ~64x oversampled at the minimum zoom.
-    // Scaling by zoom cancels that out, so the rendered texture tracks
-    // viewport size (world bbox size * zoom) rather than world-space extent,
-    // at every zoom level.
-    const scale = FOG_BLOB_CACHE_SCALE * this.camera.zoom;
-    const texWidth = Math.max(1, Math.ceil(width * scale));
-    const texHeight = Math.max(1, Math.ceil(height * scale));
-
-    this.fogBlobLayer.container.filters = this.fogBlobFilter ? [this.fogBlobFilter] : [];
-    // The container's children are positioned in world coordinates (which
-    // can be arbitrarily far from the origin) — offset (to land the region
-    // we want on the texture's origin) and scale (for the downsample above)
-    // the container itself. Harmless since this container is never rendered
-    // any other way.
-    this.fogBlobLayer.container.scale.set(scale);
-    this.fogBlobLayer.container.position.set(-minX * scale, -minY * scale);
-
-    if (this.fogBlobCacheSize.width !== texWidth || this.fogBlobCacheSize.height !== texHeight) {
-      this.fogBlobCacheTexture?.destroy(true);
-      this.fogBlobCacheTexture = RenderTexture.create({ width: texWidth, height: texHeight });
-      this.fogBlobCacheSize = { width: texWidth, height: texHeight };
-    }
-    this.app.renderer.render({
-      container: this.fogBlobLayer.container,
-      target: this.fogBlobCacheTexture!,
-      clear: true,
-    });
-
-    this.fogBlobCacheSprite.texture = this.fogBlobCacheTexture!;
-    this.fogBlobCacheSprite.position.set(minX, minY);
-    this.fogBlobCacheSprite.scale.set(1 / scale);
-    this.fogBlobCacheSprite.visible = true;
-    fogPerfStats.blobRenderMs = performance.now() - renderStart;
-    fogPerfStats.blobCacheMs = performance.now() - start;
-  }
-
   private syncSpriteLayer(
     layer: SpriteLayer,
     entries: Map<string, { texture: Texture; coord: AxialCoord }>,
@@ -2459,289 +1827,57 @@ export class HexMapRenderer {
     layer.container.sortChildren();
   }
 
-  // isoTopPoints()'s 6 corners, nudged outward from the hex centre by a
-  // hair so adjacent hex fills overlap instead of exactly abutting — closes
-  // the hairline seams float rounding would otherwise leave between
-  // neighbouring fog tiles (same trick as rebuildTerrainFlat's `inflated`).
-  private inflatedTop(): { x: number; y: number }[] {
-    const top = isoTopPoints(TILE_W, TILE_H);
-    const cx = top.reduce((s, p) => s + p.x, 0) / top.length;
-    const cy = top.reduce((s, p) => s + p.y, 0) / top.length;
-    return top.map((p) => {
-      const dx = p.x - cx;
-      const dy = p.y - cy;
-      const len = Math.hypot(dx, dy) || 1;
-      return { x: p.x + (dx / len) * 0.75, y: p.y + (dy / len) * 0.75 };
-    });
-  }
-
-  private rebuildBordersAndFog(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
+  private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {
     const { worldModel, mode, playerId } = this.options;
     this.borderLayer.clear();
-    this.fogLayer.clear();
-    fogPerfStats.deepFogOnly = deepFogOnly;
-    fogPerfStats.unexploredHexCount = 0;
     fogPerfStats.borderedHexCount = 0;
-    fogPerfStats.scoutedHexCount = 0;
-
-    // Hoisted once per rebuild — see fogSourcesNear/FOG_UNEXPLORED_INFLUENCE_HEXES
-    // above for why a single settlement-position prune here replaces what
-    // would otherwise be a fresh distanceBeyondExplored scan over every
-    // settlement, for every hex, below.
-    const bounds = axialBounds(coords);
 
     if (deepFogOnly) {
-      // isEntirelyDeepFog already confirmed every visible hex is deep,
-      // uniformly-opaque fog, and syncWorldBackground painted the
-      // renderer's own clear colour to match — nothing here would be
-      // visible over it, so skip straight to clearing the blob cache
-      // instead of tessellating a Graphics.poly()/blob Sprite for every one
-      // of what can be thousands of hexes in a low-zoom world-map viewport.
-      this.refreshFogBlobCache(new Map());
+      // isEntirelyDeepFog already confirmed no settlement (any owner's) can
+      // reach this viewport, so nothing in it is explored — there is no
+      // border to draw and no per-hex loop worth running over what can be
+      // thousands of hexes in a low-zoom world-map viewport.
       return;
     }
 
-    // Distance (jittered, see FOG_VISIBLE_MARGIN_HEXES) past the currently
-    // visible (line-of-sight) ring, mirroring WorldModel.visibleHexes's own
-    // radius formula so the two stay in agreement — replaces that Set's
-    // boolean membership test entirely for rendering, so the scouted tint
-    // fades in symmetrically around the jittered boundary instead of jumping
-    // from 0 to FOG_SCOUTED_ALPHA in one hex step at a hex-perfect ring.
-    // Settlement mode has exactly one settlement to be in sight of; world
-    // mode is in sight of every settlement the local player owns (there's
-    // normally just one, but nothing stops a player from having several).
-    let visibleEdgeDist: ((c: AxialCoord) => number) | null = null;
-    if (mode === 'settlement') {
-      const settlement = this.settlement();
-      if (settlement) {
-        const visRadius = worldModel.borderRadius(settlement) + FOG_VISIBLE_RADIUS_BONUS_HEXES;
-        visibleEdgeDist = (c) =>
-          jitterDistance(
-            c.q,
-            c.r,
-            hexDistance({ q: settlement.q, r: settlement.r }, c) - visRadius,
-            FOG_VISIBLE_JITTER_SALT,
-            fogDebugFlags.scoutedTintFade,
-            FOG_VISIBLE_JITTER_HEXES,
-          );
-      }
-    } else if (fogActive) {
-      const own = worldModel.listSettlements().filter((s) => s.ownerId === playerId);
-      if (own.length > 0) {
-        // Same viewport prune as the unexplored tier (fogSourcesNear above),
-        // applied to the owned-settlement list this closure would otherwise
-        // rescan in full for every hex.
-        const sources = fogSourcesNear(
-          own,
-          (s) => worldModel.borderRadius(s) + FOG_VISIBLE_RADIUS_BONUS_HEXES,
-          bounds,
-          FOG_VISIBLE_INFLUENCE_HEXES,
-        );
-        visibleEdgeDist = (c) => {
-          let min = Infinity;
-          for (const s of sources) {
-            const d = jitterDistance(
-              c.q,
-              c.r,
-              hexDistance({ q: s.q, r: s.r }, c) - s.radius,
-              FOG_VISIBLE_JITTER_SALT,
-              fogDebugFlags.scoutedTintFade,
-              FOG_VISIBLE_JITTER_HEXES,
-            );
-            if (d < min) min = d;
-          }
-          return min;
-        };
-      }
-    }
-
-    const inflatedTop = this.inflatedTop();
-    const topPoints = isoTopPoints(TILE_W, TILE_H);
-    const topCentroid = {
-      x: topPoints.reduce((s, p) => s + p.x, 0) / topPoints.length,
-      y: topPoints.reduce((s, p) => s + p.y, 0) / topPoints.length,
-    };
-    const blobEntries = new Map<
-      string,
-      { x: number; y: number; w: number; h: number; tint: number; alpha: number; z: number }
-    >();
-
-    // A blob per fogged hex, oversized and jittered in position/size so
-    // neighbours overlap heavily instead of abutting at their hex edges —
-    // see the FOG_BLOB_* comment above for why this replaces per-hex
-    // polygon fills entirely for both fog tiers. `z` is the blob's fog tier
-    // (FOG_BLOB_Z_SCOUTED/FOG_BLOB_Z_UNEXPLORED) — every call site below
-    // passes FOG_UNEXPLORED or FOG_SCOUTED as `tint`, so it's derived from
-    // that instead of threading a second parameter through every call.
-    const addBlob = (c: AxialCoord, tint: number, alpha: number) => {
-      const grid = isoGridPosition(c, TILE_W, TILE_H);
-      const jx = fogDebugFlags.blobJitter ? (hash01(c.q, c.r, 20) - 0.5) * 2 : 0;
-      const jy = fogDebugFlags.blobJitter ? (hash01(c.q, c.r, 21) - 0.5) * 2 : 0;
-      const sizeJ = fogDebugFlags.blobJitter ? 1 + (hash01(c.q, c.r, 22) - 0.5) * 2 * FOG_BLOB_SIZE_JITTER : 1;
-      blobEntries.set(coordKey(c), {
-        x: grid.x + topCentroid.x + jx * TILE_W * FOG_BLOB_JITTER_X,
-        y: grid.y + topCentroid.y + jy * TILE_H * FOG_BLOB_JITTER_Y,
-        w: TILE_W * FOG_BLOB_W_SCALE * sizeJ,
-        h: TILE_H * FOG_BLOB_H_SCALE * sizeJ,
-        tint,
-        alpha,
-        z: tint === FOG_SCOUTED ? FOG_BLOB_Z_SCOUTED : FOG_BLOB_Z_UNEXPLORED,
-      });
-    };
-
-    // Solid, unblurred fill for a hex whose fog tint is already fully
-    // saturated (no further gradient to render) — drawn straight into
-    // fogLayer, which composites *under* the blurred blob sprite (see the
-    // addChild order in mountApp/constructor), so it sits as a plain
-    // backdrop the organic blobs still overlay near any real edge. Once a
-    // tier is saturated it already reads as one uniform plane visually
-    // (that's what "saturated" means), so painting that plane directly
-    // instead of thousands of individually blurred blobs is free, not an
-    // approximation — see FOG_TERRAIN_CULL_HEXES (unexplored) and
-    // FOG_VISIBLE_MARGIN_HEXES (scouted) for where each tier's cutoff is.
-    const fillFlatFog = (gridPt: { x: number; y: number }, color: number, alpha: number) => {
-      const flat = inflatedTop.flatMap((p) => [gridPt.x + p.x, gridPt.y + p.y]);
-      this.fogLayer.poly(flat).fill({ color, alpha });
-    };
-
-    const unexploredSources =
-      fogActive && fogDebugFlags.unexploredFog ? this.unexploredFogSources(bounds) : [];
+    if (!fogDebugFlags.realmBorders) return;
 
     for (const c of coords) {
-      if (fogActive && fogDebugFlags.unexploredFog && !worldModel.isExplored(c.q, c.r)) {
-        fogPerfStats.unexploredHexCount++;
-        // Mist over ground the settlement has never scouted — covers every
-        // hex the camera can currently see, however far it's panned, so the
-        // world reads as continuing forever under fog rather than ending at
-        // a hard edge. Terrain is still drawn underneath (rebuildTerrain no
-        // longer skips unexplored hexes) below FOG_TERRAIN_CULL_HEXES, so
-        // instead of a hard white wall right past the scouted ring, the
-        // mist fades in over FOG_MARGIN_HEXES hexes.
-        const beyondRaw = distanceBeyondSources(c.q, c.r, unexploredSources);
-        // Jittered before any threshold check — see FOG_DIST_JITTER_HEXES.
-        // Hex-distance rings are perfect hexagons; without this, both the
-        // ramp below and the cutoff here produce dead-straight ring facets
-        // instead of an organic mist edge.
-        const beyond = jitterDistance(
-          c.q,
-          c.r,
-          beyondRaw,
-          FOG_DIST_JITTER_SALT,
-          fogDebugFlags.distJitter,
-          FOG_DIST_JITTER_HEXES,
-        );
-        // Separately (and much more mildly) jittered — see FOG_CULL_JITTER_HEXES
-        // for why the flat-fill/blob switch below can't reuse `beyond`'s full
-        // ramp-sized jitter without neighbouring hexes popping in and out of
-        // the hard-opaque tile unevenly.
-        const cullBeyond = jitterDistance(
-          c.q,
-          c.r,
-          beyondRaw,
-          FOG_CULL_JITTER_SALT,
-          fogDebugFlags.distJitter,
-          FOG_CULL_JITTER_HEXES,
-        );
-        if (cullBeyond > FOG_TERRAIN_CULL_HEXES && !fogDebugFlags.blobsOnly) {
-          // Guaranteed saturated (see FOG_TERRAIN_CULL_HEXES) — paint flat
-          // solid white at a literal alpha:1 instead of a blob. This is the
-          // only thing that actually *guarantees* full opacity: blobs alone
-          // (individually capped below 1, relying on overlap to read as
-          // solid) can leave faint gaps right at the edge of what's
-          // rendered, which is exactly the seam a hard flat fill closes.
-          fillFlatFog(
-            isoGridPosition(c, TILE_W, TILE_H),
-            fogDebugFlags.cullThresholdDebug ? 0xff2ec2 : FOG_UNEXPLORED,
-            1,
-          );
-          // Keep placing solid blobs a bit past the hand-off too (see
-          // FOG_BLOB_OVERLAP_HEXES) — otherwise the blur has nothing real to
-          // blend the outermost blobs into and they visibly fade right
-          // where the flat fill starts at full strength.
-          if (!fogDebugFlags.flatFillOnly && cullBeyond <= FOG_WORLD_BG_HANDOFF_HEXES) {
-            addBlob(c, fogDebugFlags.cullThresholdDebug ? 0xff2ec2 : FOG_UNEXPLORED, 1);
-          }
-          continue;
-        }
-        const jitter = hash01(c.q, c.r, 9);
-        const t = Math.min(1, Math.max(0, beyond / FOG_MARGIN_HEXES));
-        const alpha = 0.1 + t * 0.8 + jitter * 0.08;
-        addBlob(c, FOG_UNEXPLORED, alpha);
-        continue;
-      }
+      if (fogActive && !worldModel.isExplored(c.q, c.r)) continue;
+
       const tile = worldModel.getTile(c.q, c.r);
       if (mode === 'world' && tile.terrain === 'sea') continue;
+      if (!tile.ownerId) continue;
+
+      fogPerfStats.borderedHexCount++;
+      const owner = worldModel.getSettlement(tile.ownerId);
+      const mine = owner?.ownerId === playerId;
+      const color = mine ? GOLD : RIVAL;
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
       const flat = top.flatMap((p) => [p.x, p.y]);
 
-      if (tile.ownerId && fogDebugFlags.realmBorders) {
-        fogPerfStats.borderedHexCount++;
-        const owner = worldModel.getSettlement(tile.ownerId);
-        const mine = owner?.ownerId === playerId;
-        const color = mine ? GOLD : RIVAL;
+      // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
+      // translucent fill across every owned hex ("wash"), with a brighter,
+      // thicker stroke reserved for the realm's *outer* edges only
+      // ("glow") — drawn as two overlapping strokes (a wide, faint one
+      // under a thin, solid one) to fake a soft glow without a dedicated
+      // blur filter. Previously this stroked the *entire* outline of every
+      // claimed hex, including edges shared with another owned hex, which
+      // drew a solid mesh over the whole realm instead of a border around it.
+      this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
 
-        // "Glow+wash" (docs/design/zip-brainstorms.md, zip 9): a soft
-        // translucent fill across every owned hex ("wash"), with a
-        // brighter, thicker stroke reserved for the realm's *outer* edges
-        // only ("glow") — drawn as two overlapping strokes (a wide, faint
-        // one under a thin, solid one) to fake a soft glow without a
-        // dedicated blur filter. Previously this stroked the *entire*
-        // outline of every claimed hex, including edges shared with
-        // another owned hex, which drew a solid mesh over the whole realm
-        // instead of a border around it.
-        this.borderLayer.poly(flat).fill({ color, alpha: 0.12 });
-
-        for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
-          const a = top[edge[0]];
-          const b = top[edge[1]];
-          this.borderLayer
-            .moveTo(a.x, a.y)
-            .lineTo(b.x, b.y)
-            .stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
-          this.borderLayer
-            .moveTo(a.x, a.y)
-            .lineTo(b.x, b.y)
-            .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
-        }
-      }
-
-      if (visibleEdgeDist && fogDebugFlags.scoutedFog) {
-        if (fogDebugFlags.scoutedTintFade) {
-          const dist = visibleEdgeDist(c);
-          const t = Math.min(1, Math.max(0, dist / FOG_VISIBLE_MARGIN_HEXES));
-          if (t >= 1 && !fogDebugFlags.blobsOnly) {
-            // Saturated past FOG_VISIBLE_MARGIN_HEXES — same guaranteed-fill
-            // shortcut as the unexplored tier's own cutoff (see
-            // fillFlatFog's comment). Without it, a zoomed-out view where a
-            // huge scouted-but-out-of-sight region fills the viewport (a
-            // sea-heavy world map, say) was placing one individually
-            // blurred blob per hex across all of it for a result that
-            // already reads as one flat plane — exactly the case this
-            // closes.
-            fillFlatFog(grid, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
-            fogPerfStats.scoutedHexCount++;
-            // Keep a thin ring of blobs just past saturation too, so the
-            // blur has something real to blend into (mirrors
-            // FOG_BLOB_OVERLAP_HEXES's role in the unexplored tier).
-            if (!fogDebugFlags.flatFillOnly && dist <= FOG_VISIBLE_MARGIN_HEXES + FOG_BLOB_OVERLAP_HEXES) {
-              addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
-            }
-          } else if (t > 0) {
-            addBlob(c, FOG_SCOUTED, t * FOG_SCOUTED_ALPHA);
-            fogPerfStats.scoutedHexCount++;
-          }
-        } else if (visibleEdgeDist(c) > 0) {
-          // Original hard binary: full tint the instant a hex is past the
-          // (unjittered) visible radius, nothing at all inside it.
-          addBlob(c, FOG_SCOUTED, FOG_SCOUTED_ALPHA);
-          fogPerfStats.scoutedHexCount++;
-        }
+      for (const edge of outerEdgesOf(worldModel, c, tile.ownerId)) {
+        const a = top[edge[0]];
+        const b = top[edge[1]];
+        this.borderLayer.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 7, color, alpha: 0.25, cap: 'round' });
+        this.borderLayer
+          .moveTo(a.x, a.y)
+          .lineTo(b.x, b.y)
+          .stroke({ width: 2.5, color, alpha: 0.95, cap: 'round' });
       }
     }
-
-    this.refreshFogBlobCache(blobEntries);
   }
 
   private rebuildMarkers() {
@@ -3122,6 +2258,41 @@ export class HexMapRenderer {
     return this.armyOverlayFrame;
   }
 
+  /**
+   * Fog v2 (docs/design/map-fog-v2.md §2.4/§3): hands the renderer a freshly
+   * fetched (or, in demo mode, generated) mask bitmap for a world of the
+   * given `radius`. `radius` picks the same world-to-mask-UV placement
+   * (worldMaskBounds, mirroring the backend's FogMaskLayout.WorldBounds) on
+   * every call, so this is cheap to call again even when only the texture
+   * itself changed. `bitmap` null is a no-op — both fog layers already
+   * default an unbound mask to fully-unknown, so there's nothing useful to
+   * do before the first real fetch resolves.
+   */
+  setFogMask(radius: number, bitmap: ImageBitmap | null) {
+    if (!bitmap) return;
+
+    const bounds = worldMaskBounds(radius);
+    const placement: FogMaskPlacement = {
+      scale: [1 / (0.75 * TILE_W * bounds.width), 2 / (TILE_H * bounds.height)],
+      offset: [-bounds.minU / bounds.width, -bounds.minV / bounds.height],
+    };
+    this.blackFogLayer.setPlacement(placement);
+    this.whiteMistLayer.setPlacement(placement);
+
+    const texture = Texture.from(bitmap);
+    this.blackFogLayer.setMaskTexture(texture);
+    this.whiteMistLayer.setMaskTexture(texture);
+
+    // Both layers now hold `texture` as their current mask and the previous
+    // one as uMaskPrev, mid cross-fade (FogMaskLayer.setMaskTexture, §2.6).
+    // The generation *before* that is no longer referenced by either layer
+    // at all, so it's safe to free now — one generation of slack rather
+    // than destroying the texture still actively cross-fading out.
+    this.previousFogMaskTexture?.destroy(true);
+    this.previousFogMaskTexture = this.fogMaskTexture;
+    this.fogMaskTexture = texture;
+  }
+
   /** World-space centre of a hex's top face — `hexCenterScreen` before the camera transform. */
   private hexCenterWorld(coord: AxialCoord): { x: number; y: number } {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
@@ -3398,11 +2569,14 @@ export class HexMapRenderer {
    * zip 6a: the landing page mounts one renderer in preview mode (no
    * `settlementId`) and, the instant the player founds their settlement,
    * needs it to become a real settlement view — same canvas, no
-   * remount/flash. Rather than snap the camera and fog on straight away
-   * (the reported "view jumps on every tutorial interaction"), this eases
-   * the camera to its new position/zoom and fades fog in over the same
-   * span (see CAMERA_TRANSITION_MS/FOG_REVEAL_FADE_MS) — the fog reads as
-   * rolling in as the camera settles, rather than a cut.
+   * remount/flash. Rather than snap the camera on straight away (the
+   * reported "view jumps on every tutorial interaction"), this eases the
+   * camera to its new position/zoom over CAMERA_TRANSITION_MS. The fog
+   * reveal itself needs no explicit trigger here any more: founding fetches
+   * a fresh mask shortly after (stores/world.ts's fetchFogMask), and
+   * FogMaskLayer.setMaskTexture's own cross-fade (§2.6) reveals it the
+   * moment that resolves — the same mechanism that handles "newly explored"
+   * generally, not a founding-specific special case.
    */
   updateOptions(patch: Partial<HexMapRendererOptions>) {
     const wasFounded = !!this.settlement();
@@ -3415,12 +2589,6 @@ export class HexMapRenderer {
         this.applyCameraTransform();
       } else {
         this.animateCameraTo(target, CAMERA_TRANSITION_MS);
-        this.fogBlobCacheSprite.alpha = FOG_REVEAL_FROM_ALPHA;
-        this.fogLayer.alpha = FOG_REVEAL_FROM_ALPHA;
-        this.fogFadeDurationMs = FOG_REVEAL_FADE_MS;
-        this.fogFadeFromAlpha = FOG_REVEAL_FROM_ALPHA;
-        this.fogFadeAffectsFlatLayer = true;
-        this.fogFadeStartedAt = performance.now();
       }
     }
     this.rebuildAll();
@@ -3442,19 +2610,16 @@ export class HexMapRenderer {
     }
     this.wheeling = false;
     this.app?.ticker.remove(this.onTick);
-    // app.destroy({ children: true }) destroys the Sprites but not a texture
-    // we generated ourselves (generateTexture() output isn't owned by any
-    // one Sprite), so it needs its own explicit destroy.
-    this.fogBlobTexture?.destroy(true);
-    this.fogBlobTexture = null;
-    this.fogPatternTexture?.destroy(true);
-    this.fogPatternTexture = null;
-    // fogBlobLayer.container is deliberately never added to app.stage (see
-    // FOG_BLOB_CACHE_PADDING above), so app.destroy's children:true won't
-    // reach it or fogBlobCacheTexture — both need their own explicit destroy.
-    this.fogBlobLayer.container.destroy({ children: true });
-    this.fogBlobCacheTexture?.destroy(true);
-    this.fogBlobCacheTexture = null;
+    // app.destroy({ children: true }) destroys everything still attached to
+    // the stage, but the fog layers' meshes are — see mount()'s addChild —
+    // so this covers them too; only the mask textures they hold are
+    // generated/fetched independently and need their own explicit destroy.
+    this.fogMaskTexture?.destroy(true);
+    this.fogMaskTexture = null;
+    this.previousFogMaskTexture?.destroy(true);
+    this.previousFogMaskTexture = null;
+    this.blackFogLayer.destroy();
+    this.whiteMistLayer.destroy();
     this.app?.destroy(false, { children: true });
     this.app = null;
   }

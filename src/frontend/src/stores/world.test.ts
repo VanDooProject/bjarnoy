@@ -396,7 +396,10 @@ describe('useWorldStore fetchFogMask', () => {
   it('fetches and stashes the decoded bitmap, closing the previous one', async () => {
     const firstBitmap = { close: vi.fn() };
     const secondBitmap = { close: vi.fn() };
-    getFogMask.mockReset().mockResolvedValueOnce(firstBitmap).mockResolvedValueOnce(secondBitmap);
+    getFogMask
+      .mockReset()
+      .mockResolvedValueOnce({ bitmap: firstBitmap, version: '"v1"' })
+      .mockResolvedValueOnce({ bitmap: secondBitmap, version: '"v2"' });
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';
@@ -413,7 +416,10 @@ describe('useWorldStore fetchFogMask', () => {
 
   it('leaves the previous bitmap in place if the fetch fails', async () => {
     const firstBitmap = { close: vi.fn() };
-    getFogMask.mockReset().mockResolvedValueOnce(firstBitmap).mockRejectedValueOnce(new Error('network error'));
+    getFogMask
+      .mockReset()
+      .mockResolvedValueOnce({ bitmap: firstBitmap, version: '"v1"' })
+      .mockRejectedValueOnce(new Error('network error'));
 
     const store = await loadStoreModule(false);
     store.worldId = 'world-1';

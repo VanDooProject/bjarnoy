@@ -142,6 +142,12 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
   return (await res.json()) as T;
 }
 
+export interface ImageBitmapResponse {
+  bitmap: ImageBitmap;
+  /** The response's `ETag` header, if any — the fog mask endpoint's version id (map-fog-v2.md §3). */
+  version: string | null;
+}
+
 /**
  * Fetches a binary (non-JSON) response and decodes it as an `ImageBitmap` —
  * the fog mask endpoint's `image/png` body, per `map-fog-v2.md` §2.2/§3.
@@ -151,7 +157,7 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
  * proves ownership via `ownerId` the same way the mutating endpoints do — so
  * there is no access token whose expiry this call needs to react to.
  */
-async function requestImageBitmap(path: string, ownerId?: string): Promise<ImageBitmap> {
+async function requestImageBitmap(path: string, ownerId?: string): Promise<ImageBitmapResponse> {
   const accessToken = authHooks.getAccessToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
@@ -166,7 +172,8 @@ async function requestImageBitmap(path: string, ownerId?: string): Promise<Image
   }
 
   const blob = await res.blob();
-  return createImageBitmap(blob);
+  const bitmap = await createImageBitmap(blob);
+  return { bitmap, version: res.headers.get('ETag') };
 }
 
 export const api = {

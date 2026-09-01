@@ -1,19 +1,20 @@
 <script setup lang="ts">
 // Live per-rebuild timing breakdown, mounted beneath FogDebugPanel —
-// toggle a flag there and watch the matching row (and, where a phase mixes
-// several fog features, the matching *sub*-row) move on the next
-// pan/zoom. See fogPerfStats's own comment in HexMapRenderer.ts for
-// exactly which flags affect which row.
+// toggle a flag there and watch the matching row move on the next
+// pan/zoom. See fogPerfStats's own comment in HexMapRenderer.ts for exactly
+// which flags affect which row, and its module comment for why
+// `shaderPassMs`/`cacheHitRate` (real §2.8 stats) aren't shown here yet —
+// neither is measurable without work this slice doesn't do (a GPU timer
+// query, a header-reading fetch wrapper), and faking them would be worse
+// than the honest gap.
 //
 // Sub-rows are real measurements or real counts, never fabricated: the
-// blob-cache split (sync vs blur render) is two actual timed sections of
-// refreshFogBlobCache, and the per-hex splits (terrain drawn/culled,
-// unexplored/bordered/scouted hex counts) are counters incremented in the
-// same branches the flags already gate — cheap (an integer increment),
-// unlike wrapping each per-hex branch in its own performance.now() call,
-// which would cost more than the branch it's timing and skew the very
-// loop being measured. Counts are a size-of-work proxy for a sub-row's
-// share of its parent's ms, not a separately measured time.
+// per-hex splits (terrain drawn/culled, bordered hex count) are counters
+// incremented in the same branches the flags already gate — cheap (an
+// integer increment), unlike wrapping each per-hex branch in its own
+// performance.now() call, which would cost more than the branch it's timing
+// and skew the very loop being measured. Counts are a size-of-work proxy
+// for a sub-row's share of its parent's ms, not a separately measured time.
 //
 // fogPerfStats is a plain object mutated directly by HexMapRenderer, not a
 // Vue ref/reactive (HexMapRenderer.ts stays Vue-reactivity-free — see
@@ -41,7 +42,7 @@ interface Row {
   label: string;
   /** Wall-clock ms for this row, when measured directly. Bars for a row with children are sized against the *parent's* ms; leaf rows without ms show only their count. */
   ms: number | null;
-  /** Size-of-work count (hexes, blobs) shown next to (or, for a count-only sub-row, instead of) ms. */
+  /** Size-of-work count (hexes) shown next to (or, for a count-only sub-row, instead of) ms. */
   count?: number;
   countLabel?: string;
   children?: Row[];
@@ -58,43 +59,18 @@ const ROWS = computed<Row[]>(() => [
     ],
   },
   {
-    key: 'bordersFog',
-    label: 'Borders + fog (per-hex)',
-    ms: stats.bordersFogMs,
+    key: 'borders',
+    label: 'Borders (per-hex)',
+    ms: stats.bordersMs,
     children: stats.deepFogOnly
       ? [
           {
             key: 'deep-fog-shortcut',
-            label: `Background shortcut active — per-hex loop skipped (${stats.hexCount} hexes)`,
+            label: `Deep-fog shortcut active — per-hex loop skipped (${stats.hexCount} hexes)`,
             ms: null,
           },
         ]
-      : [
-          {
-            key: 'unexplored',
-            label: 'Unexplored (white) fog',
-            ms: null,
-            count: stats.unexploredHexCount,
-            countLabel: 'hexes',
-          },
-          { key: 'bordered', label: 'Realm borders', ms: null, count: stats.borderedHexCount, countLabel: 'hexes' },
-          {
-            key: 'scouted',
-            label: 'Scouted (dark) fog',
-            ms: null,
-            count: stats.scoutedHexCount,
-            countLabel: 'hexes',
-          },
-        ],
-  },
-  {
-    key: 'blobCache',
-    label: 'Blob cache (blur render)',
-    ms: stats.blobCacheMs,
-    children: [
-      { key: 'blob-sync', label: 'Sprite sync', ms: stats.blobSyncMs },
-      { key: 'blob-render', label: 'Blur render pass', ms: stats.blobRenderMs },
-    ],
+      : [{ key: 'bordered', label: 'Realm borders drawn', ms: null, count: stats.borderedHexCount, countLabel: 'hexes' }],
   },
   { key: 'markers', label: 'Markers', ms: stats.markersMs },
   { key: 'waves', label: 'Waves', ms: stats.wavesMs },
@@ -145,9 +121,21 @@ function share(v: number, of: number): number {
       <span class="bar-track" />
       <span class="value">{{ ms(stats.totalMs) }}</span>
     </div>
-    <div class="meta">{{ stats.hexCount }} hexes &middot; {{ stats.blobCount }} fog blobs</div>
+    <div class="meta">{{ stats.hexCount }} hexes</div>
+    <div class="mask">
+      <div class="mask-row">
+        <span>Fog mask fetch</span>
+        <span>{{ stats.maskFetchInFlight ? 'in flight…' : ms(stats.maskFetchMs) }}</span>
+      </div>
+      <div class="mask-row">
+        <span>Mask version</span>
+        <span>{{ stats.maskVersion ?? '—' }}</span>
+      </div>
+    </div>
     <div class="legend">
-      Hatched sub-row bars are hex counts, not timings — they show a row's <em>share of the viewport</em>, not a slice of its ms. Only Blob cache's sub-rows (solid bars: Sprite sync / Blur render pass) are real measured sub-timings that add up to their parent.
+      Hatched sub-row bars are hex counts, not timings — they show a row's <em>share of the viewport</em>, not a
+      slice of its ms. `shaderPassMs`/`cacheHitRate` (real §2.8 stats — the fog shader's own GPU cost, and the
+      server-side compute cache's hit rate) aren't measurable yet and are left off rather than faked.
     </div>
   </div>
 </template>
@@ -230,6 +218,18 @@ function share(v: number, of: number): number {
   margin-top: 8px;
   font-size: 11px;
   color: var(--muted);
+}
+.mask {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.mask-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 0;
 }
 .legend {
   margin-top: 6px;

@@ -17,22 +17,17 @@ const emit = defineEmits<{ change: [] }>();
 // two stay in sync without HexMapRenderer.ts importing Vue at all.
 const flags = reactive(fogDebugFlags);
 
-// Labelled to match FogPerfPanel's row/sub-row names ("Terrain", "Unexplored
-// (white) fog", "Realm borders", "Scouted (dark) fog", "Blob cache") so a
-// toggle here and the number it moves there are easy to line up.
+// Labelled to match FogPerfPanel's row names ("Terrain", "Borders", "Mask
+// fetch") so a toggle here and the number it moves there are easy to line
+// up. See map-fog-v2.md §2.8 for why this is a different flag set from v1's.
 const LABELS: Record<keyof FogDebugFlags, string> = {
-  distJitter: 'Distance jitter (fog ramp)',
-  terrainCull: 'Terrain: cull past fog cutoff',
-  terrainCullJitter: 'Terrain: cull distance jitter (off by default)',
-  unexploredFog: 'Unexplored (white) fog enabled',
+  maskUnknown: 'Unexplored (white mist) tier enabled',
+  maskOutOfSight: 'Out-of-sight (dark) tier enabled',
+  warp: 'UV warp (organic mist edge)',
+  drift: 'Wind drift (animates the warp)',
+  showRawMask: 'Debug: bypass warp, show raw mask',
   realmBorders: 'Realm borders enabled',
-  scoutedFog: 'Scouted (dark) fog enabled',
-  scoutedTintFade: 'Scouted (dark) fog: tint fade (sight edge, off by default)',
-  blobJitter: 'Blob cache: position/size jitter',
-  flatFillOnly: 'Skip blob/flat-fill overlap',
-  blobsOnly: 'Blob-only mist (no flat fill)',
-  dragFade: 'Fade fog back in after drag (off by default)',
-  cullThresholdDebug: 'Debug: highlight hard fog-cliff hexes (magenta)',
+  terrainCull: 'Terrain: cull past fog cutoff',
 };
 
 watch(
