@@ -406,6 +406,48 @@ software-rendered CI before Phase 4 ships, not deferred as a "measure it
 later" — but the mechanism itself is settled: unconditional, not
 test-gated.
 
+**Measured, and it does not pay — superseded.** The section above reasons
+from v1's `BlurFilter` incident and assumes the v2 shader pass is expensive
+for the same reason. It isn't. Measured on software-rendered headless
+Chromium at 1280x800, on the settlement view:
+
+| | median frame |
+|---|---|
+| both fog quads | 381 ms |
+| both quads, shader replaced by one texture sample (`showRawMask`) | 361 ms |
+| one quad instead of two | 318 ms |
+| both quads hidden | 260 ms |
+
+So each full-viewport quad costs ~60 ms of *compositing*, while the entire
+fragment-shader body — two multi-octave fbm evaluations and all the edge
+maths — accounts for ~20 ms across both. The pass is fill/blend bound, not
+ALU bound.
+
+Half-res was implemented against those numbers and made things very slightly
+*worse* (374 ms → 378 ms): rasterising at quarter the pixels saves a
+fraction of the 20 ms, and the upscale blit that replaces it is itself a
+full-viewport composite costing about what the direct draw cost. It was
+reverted rather than kept as machinery that loses.
+
+What did work, on the same measurements:
+
+- **Skipping the noise where its window is shut** (`edgeBand == 0`, i.e.
+  every pixel of solid mist and of clear ground). Most of a frame.
+- **Deriving the terrain cull radius** from where the mist is provably
+  opaque instead of from a generous margin. The radius is squared in the hex
+  count, so this was worth ~30 ms a frame on its own — more than the whole
+  shader body.
+- **Not evaluating both tiers on both quads**, and dropping octaves that
+  carry 1/32 of the amplitude.
+
+Together: 374 ms → 328 ms, against a 311 ms baseline on `main`.
+
+The general lesson is worth keeping even though the specific remedy was
+wrong: the fog's cost lives in how many full-viewport layers get composited
+and how much ground is drawn underneath them, not in how clever the shader
+is. Reach for the layer count and the cull radius before the shader body.
+
+
 ### 2.6 Reveal cross-fade (also serves §1e's "fog can light up animated")
 
 Mask updates keep the previous texture bound as `uMaskPrev`, animate

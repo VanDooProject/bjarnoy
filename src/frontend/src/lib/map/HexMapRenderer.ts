@@ -43,7 +43,7 @@ import type { Settlement, Terrain, Tile } from './types';
 import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer } from './fog/FogMaskLayer';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
@@ -520,19 +520,32 @@ const FOG_RAMP_MARGIN_HEXES = 14;
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
-// Extra headroom (in hexes) added past where the v2 unknown ramp itself
-// saturates (FOG_RAMP_MARGIN_HEXES) before terrain/border drawing stops
-// bothering — see FOG_TERRAIN_CULL_HEXES.
-const FOG_CULL_HEADROOM_HEXES = 3;
+// Step count per unit of straight-line hex distance, worst case (2/sqrt(3)).
+// The fog mask measures distance the round way (hexEuclideanDistance) while
+// the cull below counts steps, and a hex at straight-line distance d can be
+// up to this many steps away — so the cull radius has to be scaled by it or
+// it would clip ground the mist has not covered yet.
+const STEPS_PER_HEX_UNIT = 2 / Math.sqrt(3);
 // Past this many hexes beyond the explored ring, terrain is guaranteed to
-// sit under fully opaque unknown fog (the shader's own ramp — see
-// fogShader.ts — saturates well before this, so the headroom above is
-// generous, not exact): rebuildTerrain/rebuildTerrainFlat stop drawing
-// sprites/fills there, and rebuildBorders stops drawing borders, since
-// nothing could show through the mesh sitting over the whole viewport
+// sit under fully opaque unknown fog: rebuildTerrain/rebuildTerrainFlat stop
+// drawing sprites/fills there, and rebuildBorders stops drawing borders,
+// since nothing could show through the mesh sitting over the whole viewport
 // either way. isEntirelyDeepFog reuses the same threshold to skip an entire
 // deep-ocean viewport's worth of terrain/wave work in world mode.
-const FOG_TERRAIN_CULL_HEXES = FOG_RAMP_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
+//
+// Derived rather than guessed, because guessing it is expensive in both
+// directions. Too small and ground pops into view at the cull boundary
+// under mist that hasn't gone opaque yet; too large and every rebuild pays
+// for sprites nothing can ever see — this radius is squared in the hex
+// count, so the difference between a tight bound and a generous one
+// measured ~30ms a frame on a software-rendered runner, which was enough to
+// tip two timing-sensitive e2e specs over. FOG_MIST_OPAQUE_AT_RAMP is the
+// point past which the shader's edge noise is fully shut off and the mist
+// is provably alpha 1 (fogShader.ts's edgeBand), and the step-count
+// conversion above is what makes the bound safe rather than merely close.
+const FOG_TERRAIN_CULL_HEXES = Math.ceil(
+  FOG_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP * STEPS_PER_HEX_UNIT,
+);
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
