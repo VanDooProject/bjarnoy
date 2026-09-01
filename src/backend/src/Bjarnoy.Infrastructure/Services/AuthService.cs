@@ -88,6 +88,11 @@ public sealed class AuthService(
             Role = UserRole.Player,
             Status = UserStatus.Active,
             CreatedAt = _timeProvider.GetUtcNow(),
+            // Renown (issue #55 §3) accrues from account creation, not from
+            // whenever it happens to first be read — see RenownService's
+            // "SettledAt == default" bootstrap check, which this satisfies
+            // by never leaving it at the C# default in the first place.
+            RenownSettledAt = _timeProvider.GetUtcNow(),
         };
         user.PasswordHash = _hasher.HashPassword(user, password);
 
@@ -305,6 +310,7 @@ public sealed class AuthService(
             Role = UserRole.Admin,
             Status = UserStatus.Active,
             CreatedAt = _timeProvider.GetUtcNow(),
+            RenownSettledAt = _timeProvider.GetUtcNow(),
         };
         admin.PasswordHash = _hasher.HashPassword(admin, password);
 

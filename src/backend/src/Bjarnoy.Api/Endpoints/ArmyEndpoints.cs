@@ -53,6 +53,12 @@ public static class ArmyEndpoints
             .AddEndpointFilter<ArmyOwnershipEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
+        armies.MapPost("/{armyId:guid}/retarget-founding", RetargetFounding)
+            .WithName("RetargetFoundingConvoy")
+            .WithSummary("Redirects an in-transit or parked founding convoy to a different target hex (issue #55).")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<ArmyOwnershipEndpointFilter>();
+
         var reports = app.MapGroup("/api/v1")
             .WithApiVersionSet(versionSet)
             .WithTags("Battle reports");
@@ -99,7 +105,7 @@ public static class ArmyEndpoints
             return TypedResults.BadRequest(new ProblemDetails
             {
                 Title = "Unknown mission.",
-                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid.",
+                Detail = $"'{request.Mission}' is not a mission. Valid: move, attack, support, raid, found.",
                 Status = StatusCodes.Status400BadRequest,
             });
         }
@@ -217,6 +223,48 @@ public static class ArmyEndpoints
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
     }
 
+    private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> RetargetFounding(
+        Guid armyId,
+        RetargetFoundingRequest request,
+        ArmyService armies,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await armies.RetargetFoundingAsync(armyId, request.Target.ToHexCoord(), cancellationToken);
+
+        if (result.ArmyNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!result.Accepted)
+        {
+            var detail = result.Rejection switch
+            {
+                RetargetFoundingRejection.NotAFoundingMission => "This army is not on a founding mission.",
+                RetargetFoundingRejection.NothingToRetarget =>
+                    "The convoy is already returning, already home, or arrived home during this settle.",
+                RetargetFoundingRejection.TargetNotReachable => "No route exists to the new target hex.",
+                RetargetFoundingRejection.InsufficientProvisionsForRoundTrip =>
+                    "The provisions remaining would not cover the round trip to the new target.",
+                _ => "Refused.",
+            };
+
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The retarget was refused.",
+                Detail = detail,
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        var found = await armies.GetAsync(armyId, cancellationToken);
+        var (entity, clock) = found!.Value;
+        return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+    }
+
     private static async Task<Results<Ok<BattleReportResponse>, NotFound>> GetReport(
         Guid reportId,
         BattleReportService reports,
@@ -262,6 +310,12 @@ public static class ArmyEndpoints
         if (string.Equals(value, "raid", StringComparison.OrdinalIgnoreCase))
         {
             mission = ArmyMission.Raid;
+            return true;
+        }
+
+        if (string.Equals(value, "found", StringComparison.OrdinalIgnoreCase))
+        {
+            mission = ArmyMission.Found;
             return true;
         }
 
@@ -317,6 +371,14 @@ public static class ArmyEndpoints
                 DispatchRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
                 DispatchRejection.DefenderHasNoShoreline =>
                     "The target settlement is fully inland and cannot be reached by ship.",
+                DispatchRejection.WrongSettlerCrewCount =>
+                    "A founding mission requires exactly 3 settler crews, no more, no fewer.",
+                DispatchRejection.InsufficientShipCapacityForSettlers =>
+                    "The ships in this convoy cannot carry this many settler crews (Karve: 1, Longship: 2).",
+                DispatchRejection.RenownOrSettlementSlotRequirementNotMet =>
+                    "Not enough renown for another settlement yet, or founding requires a real account.",
+                DispatchRejection.TargetHexNotFoundable =>
+                    "The target hex is too close to an already-claimed settlement's border.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,
