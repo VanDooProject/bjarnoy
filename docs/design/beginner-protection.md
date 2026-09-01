@@ -112,10 +112,12 @@ lookups over whatever the backend sent — there's no client-side concept of
 lives server-side and a client-computed suggestion would just be a race
 against every other client doing the same computation over the same stale
 snapshot. The backend's `FoundAsync` (`SettlementService.cs`) separately only
-checks that the target hex is a real `StartPositions` entry, isn't taken, and
-clears `MinimumSpacing` from other settlements *on the same island*
-(`SettlementService.cs:221-246`) — no concept of "how new is everyone else
-here" either. So "the beginners area is implemented by checking the landing
+checks that the target hex is a real `StartPositions` entry, isn't taken,
+and clears spacing from other settlements *on the same island* — since
+#155, a two-phase check (`MinimumSpacing`, then a live check against
+neighbours' actual territory, see below) rather than a single constant,
+but still purely a "is this hex physically clear" check, no concept of
+"how new is everyone else here" either. So "the beginners area is implemented by checking the landing
 page locations in the backend" describes where this has to live, not
 something already built; this issue is where that gets designed:
 
@@ -191,41 +193,40 @@ something already built; this issue is where that gets designed:
     `openPlots` has to reflect that, or it would keep advertising a
     position that a founding attempt would immediately reject.
 
-  **Two-phase check, not a single trust-the-constant pass.** `openPlots`
-  above uses `MinimumSpacing` as a cheap first filter — deliberately
-  computed off the Longhouse-only baseline, ignoring towers, so it stays a
-  simple, static distance comparison over `StartPositions` vs. settlement
-  *centres* (no need to load anyone's building list to narrow candidates).
-  But a constant sized for a *theoretical* worst case is only as trustworthy
-  as that worst case actually being finite and correctly derived — the
-  tower-territory work in flight (issue-adjacent, not part of this design)
-  found that claim geometry is genuinely more involved once towers extend
-  territory from their own position, and getting that derivation wrong
-  would make this filter silently insufficient without anything here
-  catching it. So before a candidate plot from phase one is actually
-  offered (not just during the cheap filter pass), it gets verified for
-  real: call the settlement domain's own `Claims(coord)` — the authoritative
-  check, walking each nearby settlement's actual current buildings
-  (Longhouse and any towers) — against the candidate hex, for every
-  settlement within some generous distance, **plus a small fixed safety
-  margin (1-2 tiles) added on top of the real computed edge** — i.e. reject
-  a candidate if it's within `Claims(coord)` *or* within margin tiles of
-  it, not just strictly inside someone's territory. This isn't there to
-  paper over an uncertain bound (phase one's constant already exists for
-  that); it's for the new player's benefit specifically — landing exactly
-  on the last legally-open hex, one tile outside a neighbour's real
-  border, is a technically-safe but uncomfortably tight start. The margin
-  buys a beginner genuine breathing room next to whatever's actually
-  there, not just the minimum the rules allow. Only a candidate that
-  clears *both* phases — the cheap constant-based filter, and the live
-  check (with margin) against actual current territory — gets offered.
-  This is defense-in-depth specifically because the cheap filter's
-  constant is a moving target
-  while the tower mechanic is still being finalized elsewhere, not a
-  replacement for getting `MinimumSpacing` right — if the constant is
-  correctly sized, the live check should simply never disagree with it in
-  practice; it exists to catch the case where it's wrong, not to be the
-  primary mechanism.
+  **Two-phase check, mirroring the same pattern `FoundAsync` now runs
+  itself.** `openPlots` above uses `MinimumSpacing` as a cheap first
+  filter — the Longhouse-only value (`2 * Settlement.MaxClaimRadius + 1
+  = 13`), ignoring towers entirely, so it stays a simple, static distance
+  comparison over `StartPositions` vs. settlement *centres* (no need to
+  load anyone's building list to narrow candidates). This isn't a
+  provisional stand-in for a "real" constant that towers complicate — the
+  tower-territory work (#155, merged into `main`) settled that no static
+  constant can soundly account for towers at all, because chaining (a
+  tower built inside another tower's own satellite disc, and so on) has
+  no fixed ceiling to derive one from. `SettlementService.FoundAsync`
+  itself now runs the identical two-phase shape for exactly this reason:
+  phase 1 is `MinimumSpacing` (the same cheap, tower-blind 13), phase 2 is
+  a live check against `Settlement.ClaimDiscsFor(centre, buildings)` —
+  each nearby settlement's *actual current* buildings, towers included —
+  plus `SettlementService.FoundingSafetyMargin` (2 tiles) added on top of
+  each disc's real computed edge.
+
+  This suggestion query runs the same phase 2 independently, not by
+  calling into `FoundAsync` (that only runs against the exact hex someone
+  is trying to found on, this runs across every candidate `StartPosition`
+  being considered for suggestion) — before a candidate that clears phase
+  one is actually offered, it's verified against
+  `Settlement.ClaimDiscsFor` for every settlement within some generous
+  distance, with the **same `FoundingSafetyMargin`, plus a little more on
+  top for the new player's comfort specifically** — landing exactly on
+  the last legally-open hex, one tile outside a neighbour's real border,
+  is a technically-safe but uncomfortably tight start regardless of what
+  `FoundAsync` would accept. Only a candidate that clears *both* phases —
+  the cheap constant-based filter, and the live check against actual
+  current territory — gets offered. Both call sites apply the same
+  pattern deliberately un-unified (per #155's own reasoning): `FoundAsync`
+  validates one specific hex someone chose, this validates a whole set of
+  candidates before any of them are ever shown.
 
   An island can qualify without having capacity — every one of its
   `StartPositions` can already be taken by *other beginners*, all still
