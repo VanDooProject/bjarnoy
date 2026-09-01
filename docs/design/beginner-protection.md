@@ -207,10 +207,20 @@ something already built; this issue is where that gets designed:
   real: call the settlement domain's own `Claims(coord)` — the authoritative
   check, walking each nearby settlement's actual current buildings
   (Longhouse and any towers) — against the candidate hex, for every
-  settlement within some generous distance. Only a candidate that clears
-  *both* — the cheap constant-based filter, and the live check against
-  actual current territory — gets offered. This is defense-in-depth
-  specifically because the cheap filter's constant is a moving target
+  settlement within some generous distance, **plus a small fixed safety
+  margin (1-2 tiles) added on top of the real computed edge** — i.e. reject
+  a candidate if it's within `Claims(coord)` *or* within margin tiles of
+  it, not just strictly inside someone's territory. This isn't there to
+  paper over an uncertain bound (phase one's constant already exists for
+  that); it's for the new player's benefit specifically — landing exactly
+  on the last legally-open hex, one tile outside a neighbour's real
+  border, is a technically-safe but uncomfortably tight start. The margin
+  buys a beginner genuine breathing room next to whatever's actually
+  there, not just the minimum the rules allow. Only a candidate that
+  clears *both* phases — the cheap constant-based filter, and the live
+  check (with margin) against actual current territory — gets offered.
+  This is defense-in-depth specifically because the cheap filter's
+  constant is a moving target
   while the tower mechanic is still being finalized elsewhere, not a
   replacement for getting `MinimumSpacing` right — if the constant is
   correctly sized, the live check should simply never disagree with it in
