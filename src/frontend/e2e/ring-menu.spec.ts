@@ -211,6 +211,22 @@ test.describe('ring menu drill-down', () => {
     await watchtower.click({ force: true });
     await page.waitForTimeout(300);
     expect(await countBuildings()).toBe(before);
+
+    // Building is a click on the bubble itself; the card's button is only a
+    // second way to do the same thing. The card is an informational read-out
+    // docked next to the ring, so it must stay click-through — otherwise it
+    // swallows clicks aimed at whichever bubble it happens to dock beside.
+    const cardBox = (await card.boundingBox())!;
+    const underCard = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.className ?? null,
+      { x: cardBox.x + cardBox.width / 2, y: cardBox.y + 20 },
+    );
+    expect(underCard).not.toContain('ring-card');
+
+    const magicTower = page.locator('.ring-bubble.child', { hasText: 'Magic Tower' }).first();
+    await hoverBubble(magicTower);
+    await magicTower.click();
+    await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
   test('a mousedown outside a ring bubble closes the ring and starts dragging the map', async ({ page }) => {

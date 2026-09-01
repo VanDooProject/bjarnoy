@@ -555,7 +555,11 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .ring-card {
   position: absolute;
-  pointer-events: auto;
+  /* The card is an informational read-out that happens to sit next to the
+     bubbles, so it must never swallow a click aimed at one — building is a
+     click on the bubble itself, and the card's button is only a second way to
+     do the same thing. Its own button opts back in below. */
+  pointer-events: none;
   overflow: hidden;
   border-radius: 11px;
   background: rgba(10, 20, 27, 0.96);
@@ -644,6 +648,7 @@ function onBackdropPointerDown(e: PointerEvent) {
   color: var(--rival);
 }
 .card-cta {
+  pointer-events: auto;
   margin: 11px 12px 12px;
   width: calc(100% - 24px);
   padding: 9px 0;
