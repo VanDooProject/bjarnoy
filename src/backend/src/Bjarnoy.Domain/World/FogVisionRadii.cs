@@ -54,4 +54,15 @@ public static class FogVisionRadii
     /// <summary>Builds the <see cref="FogVisionSource"/> a settlement contributes to the mask.</summary>
     public static FogVisionSource ToVisionSource(HexCoord coord, int longhouseLevel) =>
         new(coord, ExploredRadius(longhouseLevel), VisibleRadius(longhouseLevel));
+
+    /// <summary>
+    /// How far around a travelling army's current hex counts as "walked, now
+    /// permanently explored" — §1e's "Growth" trigger for
+    /// <c>PersistedExploredBitset</c>. Deliberately not a per-unit-type value:
+    /// no unit anywhere in <c>UnitCatalogue</c> has a vision stat today, and
+    /// §1c's real-time shader bonus (a separate, ephemeral thing — see
+    /// <c>fogShader.ts</c>) uses the same flat radius, so there is only one
+    /// number to tune rather than two that could quietly drift apart.
+    /// </summary>
+    public const int ArmyVisionRadiusHexes = 2;
 }

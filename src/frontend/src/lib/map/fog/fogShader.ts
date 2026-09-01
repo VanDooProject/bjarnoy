@@ -15,13 +15,17 @@
 // which channel a given FogMaskLayer instance outputs, so the sampling/edge
 // math (identical for both tiers) is written once, not duplicated.
 //
-// Deliberately not implemented here: §1c's live army-granted vision
-// (`uArmyVisionSources`). It composites into `outOfSight` in the design
-// doc's own pseudocode, but nothing in this codebase threads army live
-// positions into the renderer yet (see docs/design/map-fog-v2.md §1c: "not
-// implemented today, design for it anyway") — wiring a uniform array for a
-// value that would only ever be empty is machinery with nothing to verify,
-// so it's left as a real follow-up rather than dead plumbing.
+// §1c's live army-granted vision: `uArmyVisionSources` is a small, bounded
+// (MAX_ARMY_VISION_SOURCES) array of world-space points, uploaded fresh every
+// frame from HexMapRenderer's already-computed live army render positions
+// (FogMaskLayer.setArmyVisionSources) — never written into `uMask`/`uMaskPrev`
+// themselves, so an army in transit never busts the server's cached PNG (see
+// FogMaskService's own remarks on why §1c stays shader-only). Composites as a
+// straight multiplicative reveal on the ramp values (`armyReveal` below,
+// applied to both m.r and m.g before tierAlpha) rather than through
+// edgeBand()'s noise displacement — this is a real-time visibility bonus, not
+// part of the organic edge's cloud texture, so it gets its own simple radial
+// falloff instead of inheriting the vision edge's noise machinery.
 //
 // --- Why the edge noise displaces the ramp, not the sample UV -------------
 //
@@ -73,6 +77,16 @@ void main() {
 }
 `;
 
+/**
+ * Upper bound on live army sources composited into the fog shader per frame
+ * — see FOG_FRAGMENT's `uArmyVisionSources` array. "A handful of entries —
+ * current armies in transit" per §1c; a real GLSL array needs a fixed
+ * compile-time size, and 8 is comfortably above what a single settlement
+ * view or world map would ever show moving at once. FogMaskLayer.ts truncates
+ * to this count if HexMapRenderer ever hands it more.
+ */
+export const MAX_ARMY_VISION_SOURCES = 8;
+
 export const FOG_FRAGMENT = `
 precision highp float;
 
@@ -121,6 +135,15 @@ uniform vec2 uWind;
 // inspecting the fetched mask texture itself (chunk-stitching seams, once
 // §3's chunking lands).
 uniform float uShowRaw;
+// §1c's live army vision — see this file's header comment. Only the first
+// uArmyVisionCount entries of uArmyVisionSources are read; uArmyVisionRadius
+// is in world units (the same space the world position below is computed
+// in), shared by every source rather than per-army, matching
+// FogVisionRadii.ArmyVisionRadiusHexes (backend) having no per-unit-type
+// variant to draw from either.
+uniform vec2 uArmyVisionSources[${MAX_ARMY_VISION_SOURCES}];
+uniform float uArmyVisionCount;
+uniform float uArmyVisionRadius;
 
 // Cheap 2D value noise (hash + smooth interpolation) — no external
 // dependency, good enough for a fog edge; not aiming for the visual quality
@@ -258,6 +281,23 @@ float tierAlpha(
   return alpha * (1.0 - softness * band * (1.0 - clouds.y));
 }
 
+/**
+ * §1c's real-time reveal at a world-space point: 1.0 within
+ * uArmyVisionRadius of the nearest live army source, smoothly tapering to
+ * 0.0 by 1.5x that radius, 0.0 with no sources at all. A max, not a sum,
+ * across sources — two armies standing close together should read as one
+ * unbroken revealed patch, not a brighter one.
+ */
+float armyVisionReveal(vec2 world) {
+  float reveal = 0.0;
+  for (int i = 0; i < ${MAX_ARMY_VISION_SOURCES}; i++) {
+    if (float(i) >= uArmyVisionCount) break;
+    float dist = distance(world, uArmyVisionSources[i]);
+    reveal = max(reveal, 1.0 - smoothstep(uArmyVisionRadius, uArmyVisionRadius * 1.5, dist));
+  }
+  return reveal;
+}
+
 // Outside the fetched/generated mask entirely (past the world's own
 // radius) reads as "never scouted" — never a leak, always correct, per
 // map-fog-v2.md §3's missing-chunk-default rule, which applies just as much
@@ -282,6 +322,17 @@ void main() {
   vec4 prev = sampleMask(uMaskPrev, maskUV);
   vec4 current = sampleMask(uMask, maskUV);
   vec4 m = mix(prev, current, uMaskBlend);
+
+  // §1c: a live army's real-time vision only ever reveals — it multiplies
+  // both ramps toward 0 (fully explored/visible), never pushes them up, and
+  // it is applied to the blended mask above (uMask/uMaskPrev already mixed
+  // into m), so it can't leak into what gets cross-faded from/to on the next
+  // mask swap. Applied before the tier/band selection below so the reveal
+  // also opens the edge-noise window, rather than being shaped by a band
+  // computed from the un-revealed ramp.
+  float reveal = 1.0 - armyVisionReveal(world);
+  m.r *= reveal;
+  m.g *= reveal;
 
   // This quad draws one tier, so it reads one channel and one set of edge
   // parameters. uTier is a uniform, so these select without divergence —

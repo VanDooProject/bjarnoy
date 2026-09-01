@@ -430,9 +430,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProposerGuildId", "TargetGuildId");
-
                     b.HasIndex("TargetGuildId");
+
+                    b.HasIndex("ProposerGuildId", "TargetGuildId");
 
                     b.ToTable("guild_peace_treaties", (string)null);
                 });
@@ -649,6 +649,33 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.ToTable("placed_buildings", (string)null);
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Bits")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorldId", "OwnerId")
+                        .IsUnique();
+
+                    b.ToTable("player_explored", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
@@ -937,10 +964,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<int>("OfferedResource")
                         .HasColumnType("INTEGER");
 
-                    b.Property<Guid>("PosterSettlementId")
+                    b.Property<DateTimeOffset>("PostedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("PostedAt")
+                    b.Property<Guid>("PosterSettlementId")
                         .HasColumnType("TEXT");
 
                     b.Property<double>("RequestedAmount")
@@ -1369,13 +1396,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("BattleReport");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>
-                {
-                    b.Navigation("AttackerLines");
-
-                    b.Navigation("DefenderLines");
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BuildOrderEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -1543,6 +1563,17 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("World");
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.UserEntity", "User")
@@ -1618,6 +1649,45 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("World");
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ShipmentEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("FromSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ToSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PosterSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TrainingOrderEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", "Settlement")
@@ -1681,23 +1751,16 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("World");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
-                {
-                    b.Navigation("RefreshTokens");
-
-                    b.Navigation("Settlements");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
-                {
-                    b.Navigation("Islands");
-
-                    b.Navigation("Settlements");
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ArmyEntity", b =>
                 {
                     b.Navigation("Stacks");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.BattleReportEntity", b =>
+                {
+                    b.Navigation("AttackerLines");
+
+                    b.Navigation("DefenderLines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardTopicEntity", b =>
@@ -1735,43 +1798,18 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("TrainingQueue");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.ShipmentEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.UserEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("RefreshTokens");
 
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("FromSettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("ToSettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                    b.Navigation("Settlements");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", b =>
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.WorldEntity", b =>
                 {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.SettlementEntity", null)
-                        .WithMany()
-                        .HasForeignKey("PosterSettlementId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
+                    b.Navigation("Islands");
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.TradeReportEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.TradeOfferEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("Settlements");
                 });
 #pragma warning restore 612, 618
         }
