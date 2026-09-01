@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -77,6 +78,31 @@ public sealed record IslandResponse(
 }
 
 public sealed record TileCoordinate(int Q, int R);
+
+/// <summary>
+/// One candidate landing spot for a new player (design doc §6, issue #132) —
+/// ranked/filtered server-side rather than the client picking nearest-by-
+/// distance over the raw unfiltered island list. See
+/// <see cref="Bjarnoy.Infrastructure.Services.SuggestedStartCandidate"/>.
+/// </summary>
+public sealed record SuggestedStartPositionResponse(Guid IslandId, int Q, int R, int Ring)
+{
+    public static SuggestedStartPositionResponse From(SuggestedStartCandidate candidate) =>
+        new(candidate.IslandId, candidate.Q, candidate.R, candidate.Ring);
+}
+
+/// <param name="Candidates">
+/// Nearest-first candidates within whichever ring (or, on total exhaustion,
+/// the unfiltered fallback pool) the query settled on. Empty only when the
+/// world genuinely has no open plot left anywhere.
+/// </param>
+/// <param name="Fallback">
+/// True only on genuine total exhaustion (design doc §6): every island
+/// either has a graduated settlement on it or zero open plots, so beginner
+/// filtering was dropped entirely for this response.
+/// </param>
+public sealed record SuggestedStartResponse(
+    IReadOnlyList<SuggestedStartPositionResponse> Candidates, bool Fallback);
 
 /// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>.</param>
 /// <param name="InDirections">

@@ -39,6 +39,12 @@ public static class WorldEndpoints
             .WithName("GetWorldIslands")
             .WithSummary("Lists the islands of a world, with their start positions.");
 
+        worlds.MapGet("/{worldId:guid}/suggested-start", GetSuggestedStart)
+            .WithName("GetWorldSuggestedStart")
+            .WithSummary(
+                "Ranked/filtered candidate start positions for a new player (design doc §6, issue #132) — " +
+                "beginner-area segregation. GET /islands' own behaviour is unchanged for other callers.");
+
         worlds.MapGet("/{worldId:guid}/tiles", GetTiles)
             .WithName("GetWorldTiles")
             .WithSummary("Returns the terrain of an axial rectangle of hexes.");
@@ -146,6 +152,35 @@ public static class WorldEndpoints
         IReadOnlyList<IslandResponse> response = [.. islands.Select(IslandResponse.From)];
 
         return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// Design doc §6: candidate landing spots ranked innermost-ring-first and
+    /// filtered to islands with no graduated (unshielded) settlement on them
+    /// yet — the backend-computed replacement for the frontend's old
+    /// nearest-by-distance-over-everything pick. <paramref name="near"/>
+    /// only breaks ties within whichever ring/pool the query settles on; it
+    /// never widens or narrows which ring is offered.
+    /// </summary>
+    private static async Task<Results<Ok<SuggestedStartResponse>, NotFound>> GetSuggestedStart(
+        Guid worldId,
+        int? nearQ,
+        int? nearR,
+        int? count,
+        BeginnerSuggestionService beginnerSuggestions,
+        CancellationToken cancellationToken)
+    {
+        var near = new HexCoord(nearQ ?? 0, nearR ?? 0);
+        var maxCandidates = count is > 0 ? count.Value : 6;
+
+        var result = await beginnerSuggestions.GetSuggestedStartAsync(worldId, near, maxCandidates, cancellationToken);
+        if (result is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(new SuggestedStartResponse(
+            [.. result.Candidates.Select(SuggestedStartPositionResponse.From)], result.Fallback));
     }
 
     /// <summary>

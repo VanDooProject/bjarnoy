@@ -161,7 +161,8 @@ public sealed record CompleteQueuesResult(
 public sealed class SettlementService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
-    ILogger<SettlementService> logger)
+    ILogger<SettlementService> logger,
+    BeginnerSuggestionService beginnerSuggestions)
 {
     /// <summary>
     /// Founding's cheap, longhouse-only pre-filter: the minimum hex distance
@@ -204,6 +205,7 @@ public sealed class SettlementService(
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<SettlementService> _logger = logger;
+    private readonly BeginnerSuggestionService _beginnerSuggestions = beginnerSuggestions;
 
     /// <summary>
     /// Founds a settlement on one of an island's precomputed start positions.
@@ -404,6 +406,11 @@ public sealed class SettlementService(
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} on island {IslandId}.",
             name, settlement.Id, coord, islandId);
+
+        // Design doc §6: this island's cached openPlots/qualifies state is
+        // stale the instant this settlement lands, so it is dropped rather
+        // than left to a guessed TTL.
+        _beginnerSuggestions.InvalidateAfterFounding(worldId, islandId);
 
         return new FoundingResult(FoundingRejection.None, settlement);
     }
