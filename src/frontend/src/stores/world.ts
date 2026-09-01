@@ -12,6 +12,7 @@ import type {
   TradeOfferResponse,
   TrainingOrderResponse,
   UnitStackResponse,
+  WorldMovementResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
@@ -218,6 +219,23 @@ export const useWorldStore = defineStore('world', {
     // (HexMapRenderer.setFogMask's own worldMaskBounds computation).
     // Unused in demo mode.
     worldRadius: null as number | null,
+    // The world's speed multiplier (WorldResponse.speedFactor) — same 1.0
+    // demo-mode default the backend's own WorldEntity.SpeedFactor column
+    // defaults to. Feeds hexPath.ts's hexesPerHour for the range tint
+    // (issue #159 part B); nothing else on the client reads travel time
+    // client-side yet.
+    worldSpeedFactor: 1 as number,
+    // WorldResponse.movement (issue #159 part B) — HexPathfinder's own cost
+    // tables, projected. Demo-mode default mirrors HexPathfinder.cs's
+    // LandTerrainCost/SeaTerrainCost/RiverCrossingCost byte-for-byte, since
+    // there is no backend to ask; kept here (not a module constant in
+    // hexPath.ts) for the same reason worldGenerator.ts's constants moved
+    // out — a live world's numbers always take priority once fetched.
+    movementRules: {
+      land: { grass: 1.0, sand: 1.1, forest: 1.3, mountain: 2.0 },
+      sea: { sea: 1.0 },
+      riverCrossingCost: 8.0,
+    } as WorldMovementResponse,
   }),
   actions: {
     /**
@@ -260,6 +278,8 @@ export const useWorldStore = defineStore('world', {
 
       this.worldId = world.id;
       this.worldRadius = world.radius;
+      this.worldSpeedFactor = world.speedFactor;
+      this.movementRules = world.movement;
       this.worldJoinable = world.joinable;
       this.worldJoinableReason = world.joinableReason;
       this.worldStartsAt = world.startsAt;

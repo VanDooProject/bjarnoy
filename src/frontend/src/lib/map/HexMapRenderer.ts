@@ -34,7 +34,7 @@
 // its whole tile, props included.
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexDistance, hexesInRadius } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -65,6 +65,12 @@ const RIVAL = 0xe2705f;
 // carts belong to neither ownership axis, so they get their own color
 // rather than borrowing one that would otherwise read as an owner cue.
 const CART_COLOR = 0x8fd19e;
+// Issue #159 part B: a cool, low-saturation blue for the range tint — kept
+// distinct from GOLD (click-to-place highlight) and RIVAL/CART so it never
+// reads as any of those existing overlay meanings.
+const RANGE_TINT_COLOR = 0x5ab0e0;
+const RANGE_TINT_ALPHA = 0.16;
+const RANGE_OUTLINE_ALPHA = 0.55;
 const FOG_SCOUTED = 0x0b1116;
 // zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
 // the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
@@ -693,6 +699,17 @@ export class HexMapRenderer {
   // is time-based, unlike everything else here which only redraws on a
   // cull rebuild (camera pan/zoom).
   private highlightLayer = new Graphics();
+  // Issue #159 part B: the composing-a-dispatch/field-order range tint —
+  // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
+  // an outline on the boundary edges (the edges whose neighbour isn't in the
+  // set), same "just stores data, drawn every tick" convention as
+  // `armyOverlay`. Sits directly below `highlightLayer` (both immediately
+  // above `terrainTop.container` — see mount()'s addChild order) so it tints
+  // the tile tops the way the hover/highlight layers do; fog sits above
+  // `world` entirely (see mount()'s own remarks), so this is automatically
+  // hidden under fog with no extra check needed here.
+  private rangeLayer = new Graphics();
+  private rangeOverlay: AxialCoord[] | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -954,6 +971,7 @@ export class HexMapRenderer {
       this.borderLayer,
       this.hoverLayer,
       this.terrainTop.container,
+      this.rangeLayer,
       this.highlightLayer,
     );
     // §4's layer stack: the two fog quads are the only genuinely
@@ -1026,6 +1044,7 @@ export class HexMapRenderer {
     this.whiteMistLayer.setDebug(debug);
     this.blackFogLayer.tick(now, fogDebugFlags.drift);
     this.whiteMistLayer.tick(now, fogDebugFlags.drift);
+    this.drawRangeOverlay();
     this.drawHighlight();
   };
 
@@ -1061,6 +1080,40 @@ export class HexMapRenderer {
    */
   private animateCameraTo(target: Camera, durationMs: number) {
     this.cameraAnim = { from: { ...this.camera }, to: target, startedAt: performance.now(), durationMs };
+  }
+
+  /**
+   * Issue #159 part B. `points[i]`/`points[(i+1)%6]` (see `isoTopPoints`) is
+   * the edge shared with `neighbors(c)[(i+3)%6]` — verified by construction:
+   * direction 0 (`{q:1,r:0}`)'s neighbour grid-lands exactly on this hex's
+   * edge 3, and every other direction/edge pair falls out of that one by the
+   * hexagon's 180°-rotational symmetry (opposite directions/edges are
+   * `+3 mod 6` apart).
+   */
+  private drawRangeOverlay() {
+    this.rangeLayer.clear();
+    const hexes = this.rangeOverlay;
+    if (!hexes || hexes.length === 0) return;
+
+    const inSet = new Set(hexes.map(coordKey));
+    const topPoints = isoTopPoints(TILE_W, TILE_H);
+
+    for (const at of hexes) {
+      const grid = isoGridPosition(at, TILE_W, TILE_H);
+      const flat = topPoints.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+      this.rangeLayer.poly(flat).fill({ color: RANGE_TINT_COLOR, alpha: RANGE_TINT_ALPHA });
+
+      const dirs = neighbors(at);
+      for (let j = 0; j < 6; j++) {
+        if (inSet.has(coordKey(dirs[j]))) continue;
+        const a = topPoints[(j + 3) % 6];
+        const b = topPoints[(j + 4) % 6];
+        this.rangeLayer
+          .moveTo(grid.x + a.x, grid.y + a.y)
+          .lineTo(grid.x + b.x, grid.y + b.y)
+          .stroke({ width: 2, color: RANGE_TINT_COLOR, alpha: RANGE_OUTLINE_ALPHA });
+      }
+    }
   }
 
   private drawHighlight() {
@@ -2272,6 +2325,17 @@ export class HexMapRenderer {
   /** What `drawArmyOverlay` placed on screen on the most recent frame — see `ArmyOverlayFrame`. */
   lastArmyOverlayFrame(): ArmyOverlayFrame {
     return this.armyOverlayFrame;
+  }
+
+  /**
+   * Issue #159 part B: the reachable-range tint shown while composing a
+   * dispatch or field order — see `lib/map/hexPath.ts`'s `reachableRange`,
+   * which is what the store should feed in here. Pass `null` (or an empty
+   * array) to clear it. Like `setArmyOverlay`, this only stores the data;
+   * `onTick` (already running every frame) redraws it on the next tick.
+   */
+  setRangeOverlay(hexes: AxialCoord[] | null) {
+    this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
   }
 
   /**
