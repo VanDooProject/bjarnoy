@@ -69,11 +69,18 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
         var island = islands!.First(i => i.StartPositions.Count > 0);
         var plot = island.StartPositions[0];
 
+        var ownerId = Unique("ulf-player");
         var founded = await (await client.PostJsonAsync(
             $"/api/v1/worlds/{world.Id}/settlements",
-            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", "ulf-player"),
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Bjornstad", "Ulf", ownerId),
             Ct))
             .ReadStrictAsync<SettlementResponse>(Ct);
+
+        // Anonymous-owned settlements now enforce ownership on every mutation
+        // (QueueBuild included) — proven for the Abandoned system user by
+        // this same client-local id echoed back on X-Owner-Id, see
+        // OwnershipGate.EnforceAsync.
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
         Authorize(client, await CreateAdminTokenAsync(client));
         var leveled = await (await client.PutJsonAsync(
