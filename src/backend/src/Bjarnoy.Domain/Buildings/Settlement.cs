@@ -1658,7 +1658,9 @@ public sealed record Settlement
 
         var definition = UnitCatalogue.Get(type);
         var totalCost = definition.TrainingCost * count;
-        if (!Resources.CanAfford(totalCost, now))
+        // Issue #158 stage 1c: a reservation earmarked for the waiting build
+        // queue must be unspendable on anything else, training included.
+        if (!CanAffordAvailable(totalCost, now))
         {
             return TrainDecision.Rejected(TrainRejection.NotEnoughResources);
         }
@@ -1687,7 +1689,7 @@ public sealed record Settlement
 
         var definition = UnitCatalogue.Get(order.UnitType);
         var totalCost = definition.TrainingCost * order.Count;
-        if (!Resources.TrySpend(totalCost, now, out var paid))
+        if (!TrySpendAvailable(totalCost, now, out var paid))
         {
             throw new InvalidOperationException(
                 "Cannot enqueue training that is not affordable; call PlanTrain first.");
@@ -1750,7 +1752,9 @@ public sealed record Settlement
             return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
         }
 
-        if (!Resources.TrySpend(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
+        // Issue #158 stage 1c: provisions are a voluntary spend too — they
+        // must not dip into what is reserved for the waiting build queue.
+        if (!TrySpendAvailable(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
         {
             return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
         }

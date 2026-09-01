@@ -222,7 +222,7 @@ public static class TradeEndpoints
                 TradeRejection.ZeroAmount => "Both amounts must be positive.",
                 TradeRejection.SameResource => "Offered and requested resources must differ.",
                 TradeRejection.RatioExceeded => "That ratio is outside the allowed corridor.",
-                TradeRejection.NotEnoughResources => "Not enough resources.",
+                TradeRejection.NotEnoughResources => "Not enough resources (some may be reserved for queued construction).",
                 TradeRejection.OutOfRange => "That settlement is out of the poster's trade range.",
                 TradeRejection.OfferNotOpen => "The offer is no longer open.",
                 TradeRejection.GuildOnlyOffer => "Only guild mates may accept this offer.",

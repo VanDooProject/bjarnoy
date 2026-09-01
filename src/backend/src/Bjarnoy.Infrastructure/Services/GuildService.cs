@@ -438,7 +438,9 @@ public sealed class GuildService(
         var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor).Settlement;
         var cost = GuildRules.FeeCost(membership.Guild.FeeTier);
 
-        if (!settled.Resources.TrySpend(cost, now, out var paid))
+        // Issue #158 stage 1c: a reservation earmarked for the waiting build
+        // queue must be unspendable on a guild fee too.
+        if (!settled.TrySpendAvailable(cost, now, out var paid))
         {
             settlement.ApplyDomain(settled);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

@@ -499,7 +499,8 @@ public static class SettlementEndpoints
         TrainRejection.UnitNotAvailable => "That unit is not available at this longhouse level yet.",
         TrainRejection.TrainingQueueFull =>
             $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
-        TrainRejection.NotEnoughResources => "Not enough resources.",
+        TrainRejection.NotEnoughResources =>
+            "Not enough resources (some may be reserved for queued construction).",
         TrainRejection.InvalidCount => "Count must be at least 1.",
         TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
         _ => "Refused.",
