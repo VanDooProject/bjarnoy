@@ -37,6 +37,13 @@ public enum UnitType
 
     /// <summary>Heavier warship; requires Karve to be trainable first.</summary>
     Longship = 8,
+
+    /// <summary>
+    /// Civilian coloniser (issue #55): three, standing together on an
+    /// unclaimed hex, found a new settlement — see
+    /// <see cref="Bjarnoy.Domain.Settlers.Founding"/>.
+    /// </summary>
+    SettlerCrew = 9,
 }
 
 public static class UnitTypeExtensions
@@ -52,6 +59,7 @@ public static class UnitTypeExtensions
         UnitType.Catapult => "catapult",
         UnitType.Karve => "karve",
         UnitType.Longship => "longship",
+        UnitType.SettlerCrew => "settlercrew",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown unit type"),
     };
 }

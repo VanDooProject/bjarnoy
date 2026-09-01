@@ -75,6 +75,16 @@ export const usePlayerStore = defineStore('player', {
       this.settlementId = settlementId;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.settlementId', settlementId);
     },
+    // Settlement switcher (issue #55): a player who founded a second
+    // settlement via a settler convoy points the persisted "current
+    // settlement" at a different one they own — same persistence shape as
+    // foundSettlement, just without also setting hasFoundedSettlement (it is
+    // already true). The caller is still responsible for reloading the
+    // WorldModel for the new id — see world.restoreLiveSettlement.
+    switchSettlement(settlementId: string) {
+      this.settlementId = settlementId;
+      if (!DEMO_MODE) localStorage.setItem('bjarnoy.settlementId', settlementId);
+    },
     completeOnboarding() {
       this.onboardingComplete = true;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.onboardingComplete', '1');
