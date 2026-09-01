@@ -26,6 +26,14 @@ COPY src/frontend/ ./
 RUN test -d vendor/bg_assets_hextile/hextiles \
     || (echo "vendor/bg_assets_hextile is empty - run 'git submodule update --init' before building" >&2 && exit 1)
 
+# hexPath.golden.test.ts (issue #159 part B) imports this fixture straight out
+# of src/shared/ by relative path — it's data, not code, shared with the
+# backend's own HexPathfinderGoldenTests.cs, so it lives one level above both
+# src/frontend and src/backend rather than inside either. WORKDIR is
+# /src/frontend, so this has to land at the /src/shared/ the relative import
+# resolves to, not ./shared/.
+COPY src/shared/ /src/shared/
+
 RUN npm run build
 
 # ----------------------------------------------------------------- backend ---
