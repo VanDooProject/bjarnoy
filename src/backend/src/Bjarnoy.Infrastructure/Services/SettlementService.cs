@@ -130,15 +130,42 @@ public sealed class SettlementService(
     ILogger<SettlementService> logger)
 {
     /// <summary>
-    /// Minimum hex distance between two settlements' centres, enforced at
-    /// founding. Sized so that even if both eventually reach
-    /// <see cref="BuildingCatalogue.MaxLevel"/> their borders (see
-    /// <see cref="Settlement.ClaimRadius"/>/<see cref="Settlement.MaxClaimRadius"/>)
-    /// can never overlap — a level-up itself is not blocked from overlapping
-    /// a neighbour (first-claim-wins on any contested hex), so this is the
-    /// only thing keeping that from happening in practice.
+    /// Founding's cheap, longhouse-only pre-filter: the minimum hex distance
+    /// between two settlements' <em>centres</em> that lets a candidate skip
+    /// straight past the real per-neighbour territory check
+    /// (<see cref="FoundAsync"/>'s "phase 2", below) without loading anyone's
+    /// building list. Sized so that even if both settlements' longhouses
+    /// reach <see cref="BuildingCatalogue.MaxLevel"/>, their <em>centre
+    /// discs alone</em> (<see cref="Settlement.MaxClaimRadius"/>) can never
+    /// overlap.
     /// </summary>
+    /// <remarks>
+    /// This is deliberately <em>not</em> sized to also cover Tower satellite
+    /// discs the way an earlier version of this constant tried to: once
+    /// chaining a tower's placement through another tower's own disc is
+    /// allowed (<see cref="Settlement.Claims"/>'s remarks), a settlement's
+    /// full territory has no fixed ceiling to derive a safe static distance
+    /// from — a long enough chain can in principle reach arbitrarily far
+    /// from centre. So founding's real safety net is a second, live check
+    /// (phase 2 in <see cref="FoundAsync"/>): after this cheap distance
+    /// filter passes, every nearby settlement's <em>actual current</em>
+    /// buildings are checked against the candidate via
+    /// <see cref="Settlement.ClaimDiscsFor"/>, towers included, plus a small
+    /// fixed safety margin. This constant only ever short-circuits the
+    /// obviously-too-close case before that real check has to run — it is
+    /// not itself a completeness guarantee.
+    /// </remarks>
     public const int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
+
+    /// <summary>
+    /// Fixed safety cushion (in hexes) phase 2 of <see cref="FoundAsync"/>'s
+    /// spacing check adds on top of a neighbour's real, computed claim-disc
+    /// edge — a candidate landing this close to (not just strictly inside)
+    /// a neighbour's actual territory is still refused, so a settlement's
+    /// border always has a little room to grow into before it can ever touch
+    /// a founding-time neighbour.
+    /// </summary>
+    public const int FoundingSafetyMargin = 2;
 
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
@@ -218,30 +245,61 @@ public sealed class SettlementService(
             });
         }
 
-        // Spacing is checked in memory against this island's centres: the
+        // Spacing is checked in memory against this island's settlements: the
         // distance is hex distance, which SQL cannot express portably.
         // Scoped to the same island, not the whole world — two settlements
         // on different islands are always separated by open sea, so their
-        // claim discs (see Settlement.ClaimRadius) can never actually
+        // claim discs (see Settlement.ClaimDiscs) can never actually
         // overlap any land either could claim no matter how far apart (or
         // close) the islands themselves happen to be. Checking world-wide
         // would reject perfectly fine foundings on two nearby-but-separate
-        // islands purely because MinimumSpacing is sized for the same-island,
-        // worst-case-level overlap case (see that constant's own comment).
-        var centres = await _dbContext.Settlements
+        // islands purely because MinimumSpacing is sized for the same-island
+        // case (see that constant's own comment).
+        //
+        // Two phases, per neighbour, in one pass over one query (buildings
+        // come along so phase 2 never needs a second round trip):
+        //   1. Cheap centre-to-centre distance filter (MinimumSpacing) —
+        //      catches the obviously-too-close case without needing to
+        //      reason about anyone's buildings.
+        //   2. The real check: does the candidate actually sit inside (or
+        //      within FoundingSafetyMargin of) this neighbour's *current*
+        //      claimed territory — Settlement.ClaimDiscsFor, towers and any
+        //      tower chain included? Phase 1 alone cannot catch this: a
+        //      neighbour whose towers chain out past MinimumSpacing's own
+        //      centre-only radius can still have real territory reaching a
+        //      candidate phase 1 would have waved through.
+        // Only a candidate clearing both phases against every neighbour is
+        // accepted.
+        var neighbours = await _dbContext.Settlements
             .Where(s => s.WorldId == worldId && s.IslandId == islandId)
-            .Select(s => new { s.CentreQ, s.CentreR })
+            .Select(s => new
+            {
+                s.CentreQ,
+                s.CentreR,
+                Buildings = s.Buildings.Select(b => new { b.Q, b.R, b.Type, b.Level }).ToList(),
+            })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        foreach (var centre in centres)
+        foreach (var neighbour in neighbours)
         {
-            var distance = coord.DistanceTo(new HexCoord(centre.CentreQ, centre.CentreR));
+            var neighbourCentre = new HexCoord(neighbour.CentreQ, neighbour.CentreR);
+            var distance = coord.DistanceTo(neighbourCentre);
             if (distance == 0)
             {
                 return new FoundingResult(FoundingRejection.PlotTaken);
             }
 
             if (distance < MinimumSpacing)
+            {
+                return new FoundingResult(FoundingRejection.TooCloseToNeighbour);
+            }
+
+            var neighbourBuildings = neighbour.Buildings
+                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))
+                .ToList();
+            var withinRealTerritory = Settlement.ClaimDiscsFor(neighbourCentre, neighbourBuildings)
+                .Any(disc => disc.Centre.DistanceTo(coord) <= disc.Radius + FoundingSafetyMargin);
+            if (withinRealTerritory)
             {
                 return new FoundingResult(FoundingRejection.TooCloseToNeighbour);
             }
@@ -812,7 +870,15 @@ public sealed class SettlementService(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
-        var hasShoreline = settled.Centre.WithinRadius(settled.ClaimRadius).Any(sampler.IsShoreline);
+
+        // Ship training needs the settlement's *full* claimed territory to
+        // reach the sea, not just its centre disc — a settlement inland at
+        // its centre but with a tower on the coast is exactly the case this
+        // mechanic exists to enable. See Settlement.ClaimDiscs.
+        var hasShoreline = settled.ClaimDiscs
+            .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
+            .Distinct()
+            .Any(sampler.IsShoreline);
         var decision = settled.PlanTrain(unitType, count, now, Guid.CreateVersion7(), hasShoreline, settlement.World.SpeedFactor);
 
         if (!decision.Accepted)

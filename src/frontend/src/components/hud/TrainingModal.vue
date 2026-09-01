@@ -16,7 +16,7 @@ import {
   isUnitAvailable,
   totalTrainingCost,
 } from '../../lib/units/trainingEconomy';
-import { claimRadiusForLevel, hasShoreline } from '../../lib/map/shoreline';
+import { claimDiscs, hasShorelineInTerritory } from '../../lib/map/shoreline';
 
 const emit = defineEmits<{ close: []; trained: [] }>();
 
@@ -45,15 +45,25 @@ const longhouseLevel = computed(() => world.hud.level);
 // `Settlement.PlanTrain`'s `hasShoreline` gate (`TrainRejection.SettlementNotCoastal`).
 // Computed client-side from the same deterministic terrain the map already
 // renders (see `lib/map/shoreline.ts`'s own comment on why that's safe)
-// rather than a new backend flag. `null` (no settlement selected yet, e.g.
-// demo mode's landing page) reads as "unknown" — treated as available below
-// so a Ship row isn't wrongly greyed out before there's anything to check
-// against; the Train button still enforces the real rule server-side either way.
+// rather than a new backend flag. Checks the settlement's *full* claimed
+// territory — the centre disc plus every placed Tower's own satellite disc
+// (see `claimDiscs`) — not just the centre disc, since a Tower can reach the
+// coast even when the centre disc alone never does; the player's own Tower
+// positions/levels are already available via `world.hud.buildings`
+// (`PlacedBuildingResponse`, refreshed alongside everything else in
+// `refreshLiveSettlement`), so this needs no extra backend field. `null` (no
+// settlement selected yet, e.g. demo mode's landing page) reads as "unknown"
+// — treated as available below so a Ship row isn't wrongly greyed out before
+// there's anything to check against; the Train button still enforces the
+// real rule server-side either way.
 const isCoastal = computed<boolean | null>(() => {
   const settlement = world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined;
   if (!settlement) return null;
-  const claimRadius = claimRadiusForLevel(longhouseLevel.value);
-  return hasShoreline({ q: settlement.q, r: settlement.r }, claimRadius, world.model);
+  const towers = world.hud.buildings
+    .filter((b) => b.type === 'tower')
+    .map((b) => ({ q: b.q, r: b.r, level: b.level }));
+  const discs = claimDiscs({ q: settlement.q, r: settlement.r }, longhouseLevel.value, towers);
+  return hasShorelineInTerritory(discs, world.model);
 });
 
 const rows = computed(() =>
