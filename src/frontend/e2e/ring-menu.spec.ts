@@ -229,6 +229,69 @@ test.describe('ring menu drill-down', () => {
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
+  test('the root Upgrade bubble is disabled with a reason when the settlement cannot afford it', async ({ page }) => {
+    // Regression: Upgrade used to carry no cost information at all — it
+    // looked exactly as clickable as when affordable, and demo mode would
+    // bump the level for free regardless. Same disabled+hint convention as
+    // Raze/Train/the sea-tile Build action, not a new affordance.
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    const longhouseScreen = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      return win.__settlementRenderer().hexCenterScreen({ q: settlement.q, r: settlement.r });
+    });
+    const buildingLevel = () =>
+      page.evaluate(() => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        const s = world.model.getSettlement(world.selectedSettlementId);
+        return world.model.getTile(s.q, s.r).buildingLevel as number;
+      });
+    const setResources = (resources: { wood: number; stone: number; food: number; iron: number }) =>
+      page.evaluate((r) => {
+        const world = (window as unknown as {
+          __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+        }).__demoWorld();
+        world.model.getSettlement(world.selectedSettlementId).resources = r;
+        world.syncHud();
+      }, resources);
+
+    // Longhouse's next level costs 320 wood / 240 stone / 160 food
+    // (BuildingCatalogue.cs's base * CostFactor(2)) and 0 iron at every
+    // level — zeroing every resource is short on exactly the first three.
+    await setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
+    await page.mouse.click(box.x + longhouseScreen.x, box.y + longhouseScreen.y);
+
+    const upgradeBubble = page.locator('.ring-bubble', { hasText: 'Upgrade' }).first();
+    await expect(upgradeBubble).toBeVisible();
+    await expect(upgradeBubble).toHaveClass(/disabled/);
+    await expect(upgradeBubble).toHaveAttribute('title', 'Not enough wood, stone, food');
+
+    const levelBefore = await buildingLevel();
+    await upgradeBubble.click({ force: true });
+    await page.waitForTimeout(300);
+    expect(await buildingLevel(), 'a disabled Upgrade bubble must not upgrade anything').toBe(levelBefore);
+
+    // Grant plenty and reopen: the same bubble is now a plain, enabled one.
+    await page.keyboard.press('Escape');
+    await setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
+    await page.mouse.click(box.x + longhouseScreen.x, box.y + longhouseScreen.y);
+
+    const upgradeBubble2 = page.locator('.ring-bubble', { hasText: 'Upgrade' }).first();
+    await expect(upgradeBubble2).toBeVisible();
+    await expect(upgradeBubble2).not.toHaveClass(/disabled/);
+    await upgradeBubble2.click();
+    await expect.poll(buildingLevel, { timeout: 5_000 }).toBe(levelBefore + 1);
+  });
+
   test('a mousedown outside a ring bubble closes the ring and starts dragging the map', async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);

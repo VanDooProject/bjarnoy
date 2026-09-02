@@ -25,6 +25,8 @@ const props = defineProps<{
   mine: boolean;
   ownerLabel: string | null;
   busy: boolean;
+  /** Why the last build/upgrade attempt was rejected by the backend, or null once dismissed by a fresh attempt. */
+  error?: string | null;
 }>();
 const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
 
@@ -244,6 +246,7 @@ const costLine = computed(() =>
         </div>
 
         <div v-if="mine && buildable" class="actions">
+          <p v-if="error" class="action-error">{{ error }}</p>
           <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
           <button v-if="tile.buildingType" class="primary" :disabled="busy" @click="emit('upgrade')">
             {{ busy ? 'Queuing…' : `Upgrade to level ${level + 1}` }}
@@ -358,6 +361,11 @@ const costLine = computed(() =>
 }
 .actions {
   margin-top: 22px;
+}
+.action-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #e07a5f;
 }
 .cost {
   margin-bottom: 10px;
