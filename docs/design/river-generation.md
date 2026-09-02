@@ -119,12 +119,32 @@ outflow, all expressed as the `TileOrientation` values from PR #25 (so this plug
 
 ### Art pack orientation convention
 
-The frontend picks one of the tile art pack's six `TileOrientation` files (`rivertile_{shape}_{E,NE,NW,W,SW,SE}_base.png`/`top`) per river tile (`riverOrientationOf` in `textures.ts`). Each file is the *same* physical asset, camera-rotated by 60° increments — not six independently-drawn pieces — so what orientation index `D` (0=E..5=SE, matching `HexCoord.Directions`' order) actually depicts is fixed by the asset, not by convention alone. This was pixel-measured directly against the `VanDooProject/bg_assets_hextile` art (the vendor submodule ships empty in a plain checkout, so this required cloning that repo separately and sampling where each PNG's water touches the hex boundary):
+The frontend picks one of the tile art pack's six `TileOrientation` files (`rivertile_{shape}_{E,NE,NW,W,SW,SE}_base.png`/`top`) per river tile (`riverOrientationOf` in `textures.ts`). Each file is the *same* physical asset, camera-rotated by 60° increments — not six independently-drawn pieces — but the filename index does **not** correspond to the screen edge of the same name. This was missed in an earlier pass at this doc (pixel-sampled the art in isolation, without checking the placement math), which produced a `bendOrientationOf` that still rendered every bend disconnected from its neighbours in the real client — caught only by comparing an actual in-game screenshot against what the fix was supposed to look like, not by any test. The corrected derivation below was pixel-sampled *against* `isoTopPoints`/`isoGridPosition` (`lib/hex/geometry.ts`) — the exact placement math `HexMapRenderer` uses — rather than against the art in isolation, and cross-checked by compositing real tiles end-to-end at their true relative screen positions before touching any code.
 
-- **Straight** (and `Mouth`, which reuses it): orientation `D` touches the hex's edge `D` and its opposite edge `D+3` (mod 6) — a straight-through line. Since `{D, D+3}` is the same *set* whether `D` is the in-edge or the out-edge, either `inDirections[0]` or `outDirection` picks the identical rendered edge pair; which one you pass in doesn't matter geometrically. (`riverOrientationOf` uses `outDirection` when there is one, `inDirections[0]` for a `Mouth`'s no-outflow case — both correct.)
-- **Spring**: orientation `D` touches only its own edge `D` (the single outflow) — unambiguous, always `outDirection`.
-- **Bend**: orientation `D` touches edge `D` *and* edge `D+2` (mod 6) — **never `D-2`**. This is directional: a bend tile's actual `(inDirections[0], outDirection)` pair only renders correctly if you pick whichever of the two *is* that "D", i.e. the one that lands on the other when advanced by 2. See `bendOrientationOf` in `types.ts` for the frontend logic, and the generation-time constraint in "Routing" above that keeps every generated bend within reach of one of the two handedness cases (a 60°-off-straight turn) — the asset can't represent a sharper (120°-off-straight) one in *either* handedness.
-- **Confluence** (`y_narrow`): orientation `D` touches three edges — two of them opposite each other (a fixed through-pair) plus edge `D` itself, which sits 60° from one member of that pair and 120° from the other. Generation doesn't currently constrain a confluence's actual two-inflow/one-outflow angles to match this, so a confluence tile can render with the wrong edges lit up; unlike `Bend` this hasn't been fixed (see "Collisions" above — confluences come from independent paths colliding, so satisfying the asset's geometry would mean changing collision resolution, not just candidate filtering).
+**The projection reflects.** `isoTopPoints(w, h)` returns six vertices in a fixed order; label the edge between vertex `i` and vertex `i+1` as polygon edge `i` (0..5). Computing `isoGridPosition`'s screen delta between a hex and each of its six axial neighbours (`neighbors()`'s direction order — `E`=0, `NE`=1, `NW`=2, `W`=3, `SW`=4, `SE`=5, matching `TILE_ORIENTATIONS`) and matching each delta's direction against the polygon's own edge-midpoint directions gives, for direction index `d`, its shared screen edge:
+
+```
+edge(d) = (3 - d) mod 6
+```
+
+Not `edge(d) = d`. E.g. direction `E` (0) shares polygon edge 3, not edge 0 — the isometric camera reflects the direction wheel across the projection, it doesn't just relabel it in place.
+
+Pixel-sampling every `rivertile_*_base.png` against that corrected edge mapping (`is_blue` sampling along each of the six polygon edges, inset slightly toward the hex centre to avoid anti-aliasing) gives each family's *actual* rotation convention, expressed as which polygon edges filename index `D` touches:
+
+- **Bend** and **Spring** share one convention: file `D` touches the edges *adjacent to* its own index, `D-1` and `D+1` (mod 6) — never edge `D` itself. `Spring`'s pond only has one outflow, so it touches just one of the two (`D-1`).
+- **Straight** (and `Mouth`, which reuses it): file `D` touches `D+1` and `D+4` (mod 6) — an opposite pair, one edge-step rotated from the bend/spring convention.
+
+Converting touched edges back to directions via `edge(d)`'s own formula (it's self-inverse: `edge(edge(d)) = d`) gives, for each family, the set of directions a file numbered `D` actually renders:
+
+- **Bend**/**Spring**: `{ (2-D) mod 6, (4-D) mod 6 }` (spring only ever needs the first).
+- **Straight**/**Mouth**: `{ (2-D) mod 6, (5-D) mod 6 }` — also an opposite pair, and note `D` and `D+3` always touch the *same* set (opposite-pair symmetry), so either end of a straight tile's flow can be solved the same way and still land on a valid (if not necessarily identical) file.
+
+Solving each for the `D` a tile's actual direction(s) need:
+
+- **Bend**: the tile's `(inDirections[0], outDirection)` pair is always 2 orientation-indices apart (see "Routing" above). Let `anchor` be whichever of the two the other is `+2` from (order-independent — the *pair* determines `anchor`, not which one is in vs out). The file to use is `D = (2 - anchor) mod 6`. See `bendOrientationOf` in `types.ts`.
+- **Spring**: `D = (4 - outIndex) mod 6`. See `springOrientationOf`.
+- **Straight**/**Mouth**: `D = (2 - index) mod 6`, using whichever of `inDirections[0]`/`outDirection` is available (either gives a valid file for the same pair). See `straightOrientationOf`.
+- **Confluence** (`y_narrow`): **not** re-derived by this pass — its asset has three touched edges (a fixed opposite pair plus a third at a fixed offset from filename index `D`), not a simple rotated pair or pair-adjacent-to-`D`, and hasn't been pixel-verified against the corrected edge mapping. `riverOrientationOf` still uses the untransformed `outDirection ?? inDirections[0]` for it — known-unrenderable in general (see "Collisions" above: confluences come from independent paths colliding, so fixing this would mean changing collision resolution, not just orientation selection), and now additionally unverified rather than pixel-checked-and-still-wrong.
 
 "Opposite direction" means the inflow and outflow directions are 3 apart on the 6-direction wheel (`E`↔`W`,
 `NE`↔`SW`, `NW`↔`SE`) — the geometric definition of "flows straight through this hex."

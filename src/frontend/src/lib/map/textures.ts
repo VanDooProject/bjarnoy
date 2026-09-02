@@ -31,7 +31,7 @@
 // lumberjack/quarry art exists, for instance) are still never bundled.
 import { Assets, Texture } from 'pixi.js';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
-import { bendOrientationOf, TILE_ORIENTATIONS } from './types';
+import { bendOrientationOf, springOrientationOf, straightOrientationOf, TILE_ORIENTATIONS } from './types';
 
 export const TILE_ART_NATIVE_W = 200;
 export const TILE_ART_NATIVE_H = 300;
@@ -434,24 +434,39 @@ function riverArtShapeFor(river: RiverTile): 'straight' | 'bend' | 'spring' | 'c
 /**
  * Which of the six art-pack rotations a river tile renders with.
  *
- * For a `bend`, the asset is directional (see `bendOrientationOf`), so this
- * picks whichever of `inDirections[0]`/`outDirection` actually matches the
- * asset's fixed geometry rather than always using one or the other.
+ * None of these families' filename index matches the screen edge it
+ * actually touches (the isometric projection reflects direction indices,
+ * not just relabels them — see `docs/design/river-generation.md`'s "Art
+ * pack orientation convention"), so every shape resolves its orientation
+ * through the derived helpers in `types.ts` rather than using
+ * `inDirections`/`outDirection` as a `TileOrientation` directly.
  *
- * Every other shape orients by the direction its flow continues toward
- * (`outDirection`), or — for a mouth, or a confluence that's also a river's
- * mouth (no outflow: see `RiverGenerationTests.Confluence_tiles_have_exactly_two_inflows`
- * on the backend) — the direction it flows in from instead; both are correct
- * for the `straight` art these shapes use (its two edges are always an
- * opposite pair, so either direction picks the same rendered edges — see
- * `docs/design/river-generation.md`'s "Art pack orientation convention").
+ * `bend` is directional (`bendOrientationOf`); `spring` has only an
+ * outflow (`springOrientationOf`); `straight` (and `mouth`, which reuses
+ * the `straight` art — see `riverArtShapeFor`) orients by whichever of
+ * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
+ * gives the same file either way (`docs/design/river-generation.md` again).
+ *
+ * `confluence` (`y_narrow`) is asymmetric — two fixed arms plus a third at
+ * a fixed offset, not a simple rotated pair — and hasn't been pixel-verified
+ * the way the other three families have, so it keeps the untransformed
+ * `outDirection ?? inDirections[0]` this whole function used before this
+ * fix, rather than risk applying a derived formula that wasn't measured
+ * against it. Known-unfixed; see "Art pack orientation convention".
  */
 function riverOrientationOf(river: RiverTile): TileOrientation {
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
     return bendOrientationOf(river.inDirections[0], river.outDirection);
   }
+  if (river.shape === 'spring' && river.outDirection) {
+    return springOrientationOf(river.outDirection);
+  }
+  if (river.shape === 'confluence') {
+    return river.outDirection ?? river.inDirections[0] ?? 'SE';
+  }
 
-  return river.outDirection ?? river.inDirections[0] ?? 'SE';
+  const direction = river.inDirections[0] ?? river.outDirection;
+  return direction ? straightOrientationOf(direction) : 'SE';
 }
 
 /** A river tile's own base/top textures, overriding whatever the underlying terrain would have drawn. */
