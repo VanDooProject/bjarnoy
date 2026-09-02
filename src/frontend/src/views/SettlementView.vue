@@ -17,6 +17,7 @@ import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from 
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
+import { ApiError } from '../api/client';
 import { usePlayerStore } from '../stores/player';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -227,6 +228,10 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
+// Why the last build/upgrade attempt was rejected — surfaced in BuildingModal
+// rather than only `console.error`'d, and cleared whenever a fresh attempt
+// starts or a different tile is selected.
+const actionError = ref<string | null>(null);
 // Issue #40 phase 1: a separate modal from BuildingModal (train has no
 // per-hex build/upgrade action, it lists the whole unit roster at once) —
 // see the ring's 'train' action below.
@@ -334,15 +339,25 @@ interface BuildCategory {
   label: string;
   buildings: { type: BuildableType; label: string }[];
 }
-// Grass gets the full spread of categories (housing/resource/defense);
-// other buildable terrain only offers one outer ring rather than the same
-// multi-category spread — matches the issue calling out grass specifically.
-// fishinghut (sand-only, per BuildingCatalogue) lives in the "other" bucket
-// alongside the rest rather than getting its own sand-specific category —
-// same simplification the pre-existing buildings already made (this ring
-// doesn't filter its choices per exact terrain; the backend is the source
-// of truth and rejects a placement its catalogue's AllowedTerrain forbids).
-const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
+// Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
+// MagicTower are Grass-only, Lumberjack is Forest-only, Quarry is
+// Mountain-only, Tower is SandOrGrass, and a shrine is buildable on any land
+// hex. Offering a building the backend's own AllowedTerrain would reject is
+// what "messed up categories" on a shore (sand) tile meant — sand used to
+// fall into the same flat bucket as forest/mountain and offer Farm/
+// Lumberjack/Quarry, none of which the backend would ever accept there.
+// FishingHut isn't a land-terrain building at all (RequiresCoastalWater, on
+// a Sea hex) so it belongs in none of these — Build is disabled outright on
+// sea tiles below, so there is currently no ring path to it.
+const SHRINE_CATEGORY: BuildCategory = {
+  id: 'religion',
+  label: 'Shrines',
+  buildings: [
+    { type: 'shrineofthor', label: 'Shrine of Thor' },
+    { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
+  ],
+};
+const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
     { id: 'housing', label: 'Housing', buildings: [{ type: 'hut', label: 'Hut' }] },
     {
@@ -361,35 +376,25 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'magictower', label: 'Magic Tower' },
       ],
     },
-    {
-      id: 'religion',
-      label: 'Shrines',
-      buildings: [
-        { type: 'shrineofthor', label: 'Shrine of Thor' },
-        { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
-      ],
-    },
+    SHRINE_CATEGORY,
   ],
-  other: [
-    {
-      id: 'buildings',
-      label: 'Build',
-      buildings: [
-        { type: 'hut', label: 'Hut' },
-        { type: 'farm', label: 'Farm' },
-        { type: 'tower', label: 'Watchtower' },
-        { type: 'fishinghut', label: 'Fishing Hut' },
-        { type: 'shrineofthor', label: 'Shrine of Thor' },
-        { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
-        { type: 'lumberjack', label: 'Lumberjack' },
-        { type: 'quarry', label: 'Quarry' },
-      ],
-    },
+  sand: [
+    { id: 'defense', label: 'Defense', buildings: [{ type: 'tower', label: 'Watchtower' }] },
+    SHRINE_CATEGORY,
+  ],
+  forest: [
+    { id: 'resource', label: 'Resource', buildings: [{ type: 'lumberjack', label: 'Lumberjack' }] },
+    SHRINE_CATEGORY,
+  ],
+  mountain: [
+    { id: 'resource', label: 'Resource', buildings: [{ type: 'quarry', label: 'Quarry' }] },
+    SHRINE_CATEGORY,
   ],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
-  return BUILD_CATEGORIES[tile.terrain === 'grass' ? 'grass' : 'other'];
+  if (tile.terrain === 'sea') return [];
+  return BUILD_CATEGORIES[tile.terrain];
 }
 
 const isEnemyTile = computed(
@@ -407,7 +412,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   resource: 'var(--food)',
   defense: 'var(--iron)',
   religion: 'var(--shrine)',
-  buildings: 'var(--gold)',
 };
 
 const rootActions = computed<RingAction[]>(() => {
@@ -438,8 +442,24 @@ const rootActions = computed<RingAction[]>(() => {
     // a bubble on the inner lane — so upgrade becomes an ordinary bubble and
     // the level it used to carry moves onto the hub (see ringCoordLabel),
     // which is where the tile's own facts live now.
+    //
+    // Unlike a build bubble (which shows an affordable-or-not cost card once
+    // hovered — root actions carry no cost/card), Upgrade needs to say up
+    // front whether it's even possible: same disabled+hint pattern already
+    // used for Raze/Train/Attack above, not a new affordance.
+    const nextLevel = (tile.buildingLevel ?? 1) + 1;
+    const upgradeDefinition = buildingCatalogue.byType[tile.buildingType]?.find((d) => d.level === nextLevel);
+    const upgradeCost = upgradeDefinition?.cost ?? buildingUpgradeCost(tile.buildingType, nextLevel);
+    const stock = world.hud.resources;
+    const shortOf = (['wood', 'stone', 'food', 'iron'] as const).filter((key) => upgradeCost[key] > stock[key]);
     const actions: RingAction[] = [
-      { id: 'upgrade', label: 'Upgrade', color: 'var(--gold)' },
+      {
+        id: 'upgrade',
+        label: 'Upgrade',
+        color: 'var(--gold)',
+        disabled: shortOf.length > 0,
+        hint: shortOf.length ? `Not enough ${shortOf.join(', ')}` : undefined,
+      },
       { id: 'details', label: 'Details' },
       {
         id: 'raze',
@@ -553,6 +573,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   selectedCoord.value = coord;
   selectedTile.value = tile;
   ringScreen.value = screen;
+  actionError.value = null;
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -566,6 +587,7 @@ function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
   ringScreen.value = null;
+  actionError.value = null;
 }
 
 // The ring owns its own drill-down now (hover a category, its buildings fan
@@ -575,7 +597,10 @@ async function onRingSelect(id: string) {
   const tile = selectedTile.value;
   if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
     await buildType(id as BuildableType);
-    closeRing();
+    // A rejection needs somewhere to show — fall back to BuildingModal (same
+    // tile, ring dismissed) instead of closing everything and losing it.
+    if (actionError.value) ringScreen.value = null;
+    else closeRing();
     return;
   }
   switch (id) {
@@ -586,8 +611,11 @@ async function onRingSelect(id: string) {
       ringScreen.value = null;
       return;
     case 'upgrade':
+      // upgrade() already closes on success (both branches); on failure it
+      // deliberately leaves selectedTile/ringScreen alone so this can drop
+      // through to BuildingModal instead, where the error renders.
       await upgrade();
-      closeRing();
+      if (actionError.value) ringScreen.value = null;
       return;
     case 'train':
       // Same hand-off pattern as 'details'/'info', to TrainingModal.
@@ -615,6 +643,13 @@ function closeTrainModal() {
   trainModalOpen.value = false;
 }
 
+// ApiError.problem.detail carries the backend's own human-readable
+// rejection reason (BuildRejection etc, ArmyEndpoints.Problem convention) —
+// mirrors world.ts's dispatchArmy/TrainingModal's own error-surfacing.
+function describeActionError(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? (err.problem?.detail ?? err.message) : fallback;
+}
+
 // Demo mode places the chosen building instantly; live mode queues that
 // same type against the backend's real catalogue (BuildingCatalogue.cs) —
 // "hut" is demo-only (BuildingModal's default when there's no picker; the
@@ -623,6 +658,7 @@ function closeTrainModal() {
 // placement (wrong terrain, insufficient longhouse level, ...).
 async function buildType(type: BuildableType) {
   if (!world.selectedSettlementId || !selectedCoord.value) return;
+  actionError.value = null;
   if (DEMO_MODE) {
     world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
     return;
@@ -631,7 +667,7 @@ async function buildType(type: BuildableType) {
   try {
     await world.queueBuildLive(type, selectedCoord.value);
   } catch (err) {
-    console.error('Failed to queue building against the backend', err);
+    actionError.value = describeActionError(err, 'Could not build here.');
   } finally {
     modalBusy.value = false;
   }
@@ -642,11 +678,13 @@ async function buildType(type: BuildableType) {
 // own, so it keeps the previous default of a hut.
 async function build() {
   await buildType('hut');
+  if (actionError.value) return;
   closeModal();
 }
 
 async function upgrade() {
   if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
+  actionError.value = null;
   if (DEMO_MODE) {
     const tile = world.model.getTile(selectedCoord.value.q, selectedCoord.value.r);
     tile.buildingLevel = (selectedTile.value.buildingLevel ?? 1) + 1;
@@ -658,7 +696,7 @@ async function upgrade() {
     await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
     closeModal();
   } catch (err) {
-    console.error('Failed to queue upgrade against the backend', err);
+    actionError.value = describeActionError(err, 'Could not upgrade this building.');
     modalBusy.value = false;
   }
 }
@@ -719,6 +757,7 @@ async function upgrade() {
       :mine="modalMine"
       :owner-label="modalOwnerLabel"
       :busy="modalBusy"
+      :error="actionError"
       @close="closeModal"
       @build="build"
       @upgrade="upgrade"
