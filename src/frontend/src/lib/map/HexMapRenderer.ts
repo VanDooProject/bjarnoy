@@ -39,7 +39,7 @@ import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
-import type { Settlement, Terrain, Tile } from './types';
+import type { RiverTile, Settlement, Terrain, Tile } from './types';
 import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
@@ -454,6 +454,19 @@ const TERRAIN_LABELS: Record<Terrain, string> = {
   forest: 'Forest',
   mountain: 'Mountain',
 };
+
+/**
+ * The hover tooltip's terrain title (not shown at all if the tile has a
+ * building — see hoverInfoFor). A river tile's art fully overrides its
+ * underlying land terrain (see rebuildTerrain's `river` branch, which skips
+ * the plain terrain texture entirely), so the tooltip needs to say so too
+ * instead of naming whatever the river was drawn over — a river mouth on a
+ * sand tile hovered as "Shore" before this, since `river` wasn't threaded
+ * through to the tooltip at all.
+ */
+export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): string {
+  return river ? 'River' : TERRAIN_LABELS[tile.terrain];
+}
 
 // One tile-art size for both views — see the module comment above.
 const TILE_W = 168;
@@ -1411,7 +1424,10 @@ export class HexMapRenderer {
       .fill({ color: HOVER_FILL, alpha: 0.28 })
       .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
 
-    if (mode === 'settlement') this.options.onHoverChange?.(this.hoverInfoFor(tile, grid));
+    if (mode === 'settlement') {
+      const river = worldModel.getRiverTile(coord.q, coord.r);
+      this.options.onHoverChange?.(this.hoverInfoFor(tile, grid, river));
+    }
   }
 
   /**
@@ -1430,7 +1446,7 @@ export class HexMapRenderer {
     return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
   }
 
-  private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
+  private hoverInfoFor(tile: Tile, grid: { x: number; y: number }, river: RiverTile | undefined): HoverInfo {
     // Anchor at the tile's own right edge (not its centre) so the tooltip
     // — which grows rightward from screenX, see HexTooltip.vue — sits
     // clear of the hex instead of covering its right half. The edge itself
@@ -1460,12 +1476,13 @@ export class HexMapRenderer {
         cta: mine ? 'Click to open' : undefined,
       };
     }
+    const title = terrainTitleFor(tile, river);
     if (owner) {
       const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
       return {
         screenX: screen.x,
         screenY: screen.y,
-        title: TERRAIN_LABELS[tile.terrain],
+        title,
         subtitle,
         stat: mine ? 'Click to build here' : 'Claimed ground',
       };
@@ -1473,7 +1490,7 @@ export class HexMapRenderer {
     return {
       screenX: screen.x,
       screenY: screen.y,
-      title: TERRAIN_LABELS[tile.terrain],
+      title,
       subtitle: 'Unclaimed',
       stat: '',
     };
