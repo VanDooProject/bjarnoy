@@ -202,6 +202,26 @@ export function maxAffordableProvisions(
   return Math.max(0, Math.min(carryCapacity, foodStock));
 }
 
+/**
+ * Hexes/hour a dispatch would travel at — mirrors `Army.TotalSpeed`: the
+ * slowest selected unit type sets the pace (a catapult army crawls at
+ * catapult speed). `0` for an empty selection, same as the backend's own
+ * `Stacks.Count == 0` case.
+ */
+export function totalSpeed(
+  unitCounts: Record<string, number>,
+  byType: Record<string, UnitDefinitionResponse>,
+): number {
+  let slowest: number | null = null;
+  for (const [type, count] of Object.entries(unitCounts)) {
+    if (count <= 0) continue;
+    const definition = byType[type];
+    if (!definition) continue;
+    if (slowest === null || definition.speed < slowest) slowest = definition.speed;
+  }
+  return slowest ?? 0;
+}
+
 /** Total upkeep/hour for a chosen unit-count map, for an at-a-glance "this costs N food/h" line. */
 export function totalUpkeepPerHour(
   unitCounts: Record<string, number>,

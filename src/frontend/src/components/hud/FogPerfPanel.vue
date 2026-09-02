@@ -45,8 +45,19 @@ interface Row {
   /** Size-of-work count (hexes) shown next to (or, for a count-only sub-row, instead of) ms. */
   count?: number;
   countLabel?: string;
+  /**
+   * Denominator the count bar is drawn against. Defaults to the viewport's
+   * hex count, which is what the terrain rows partition; the wave rows
+   * partition their own (coarser) placement grid instead, so drawn + culled
+   * fills the track there rather than reading as a stray fraction of hexes.
+   */
+  countOf?: number;
   children?: Row[];
 }
+
+// Wave counts partition the wave placement grid, not the hex grid, so their
+// bars need their own denominator (see Row.countOf).
+const waveGridTotal = computed(() => stats.waveDrawnCount + stats.waveCulledCount);
 
 const ROWS = computed<Row[]>(() => [
   {
@@ -73,7 +84,29 @@ const ROWS = computed<Row[]>(() => [
       : [{ key: 'bordered', label: 'Realm borders drawn', ms: null, count: stats.borderedHexCount, countLabel: 'hexes' }],
   },
   { key: 'markers', label: 'Markers', ms: stats.markersMs },
-  { key: 'waves', label: 'Waves', ms: stats.wavesMs },
+  {
+    key: 'waves',
+    label: 'Waves',
+    ms: stats.wavesMs,
+    children: [
+      {
+        key: 'waves-drawn',
+        label: 'Drawn',
+        ms: null,
+        count: stats.waveDrawnCount,
+        countLabel: 'strokes/frame',
+        countOf: waveGridTotal.value,
+      },
+      {
+        key: 'waves-culled',
+        label: 'Culled (fog)',
+        ms: null,
+        count: stats.waveCulledCount,
+        countLabel: 'strokes',
+        countOf: waveGridTotal.value,
+      },
+    ],
+  },
 ]);
 
 function ms(v: number): string {
@@ -107,7 +140,7 @@ function share(v: number, of: number): number {
           <span
             v-else-if="child.count !== undefined"
             class="bar count"
-            :style="{ width: share(child.count, stats.hexCount) + '%' }"
+            :style="{ width: share(child.count, child.countOf ?? stats.hexCount) + '%' }"
           />
         </span>
         <span class="value">

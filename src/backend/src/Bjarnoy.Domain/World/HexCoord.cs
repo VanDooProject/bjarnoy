@@ -43,6 +43,40 @@ public readonly record struct HexCoord(int Q, int R)
     public int DistanceTo(HexCoord other) => Distance(this, other);
 
     /// <summary>
+    /// Straight-line distance between two hex centres, in hex-spacing units —
+    /// the round metric, as opposed to <see cref="Distance"/>'s step count.
+    /// Mirrors the frontend's <c>hexEuclideanDistance</c> (<c>hex/coords.ts</c>).
+    /// </summary>
+    /// <remarks>
+    /// The two differ in <em>shape</em>, not just precision, which matters
+    /// wherever a distance is rendered rather than counted. A
+    /// <see cref="Distance"/> disk is a hexagon: its six axis directions reach
+    /// ~15% further from the centre than the directions between them (a
+    /// displacement of d steps is d wide along an axis and 0.866·d between
+    /// axes). Every contour of such a field has six corners, which is exactly
+    /// what the fog ramp built on it shows once the client's edge shading is
+    /// soft enough to see the shape of — noise can scramble a contour, but not
+    /// a bias that points the same six ways everywhere.
+    ///
+    /// Gameplay reach stays <see cref="Distance"/>; this is for the fog mask's
+    /// ramp, where the question is "how far away does this <em>look</em>".
+    ///
+    /// Never larger than <see cref="Distance"/> for the same pair, and never
+    /// smaller than √3/2 of it, so a Distance-based enumeration around a
+    /// euclidean query is complete once widened by 2/√3.
+    /// </remarks>
+    public static double EuclideanDistance(HexCoord a, HexCoord b)
+    {
+        // Axial -> cartesian at unit centre spacing: adjacent hexes land
+        // exactly 1 apart, so the result is directly comparable with a
+        // Distance-based radius.
+        var d = a - b;
+        var x = d.Q + (d.R / 2.0);
+        var y = d.R * (Math.Sqrt(3.0) / 2.0);
+        return Math.Sqrt((x * x) + (y * y));
+    }
+
+    /// <summary>
     /// The six adjacent hexes. The legacy implementation walked the 3x3 square
     /// around a hex and so returned eight, two of them at distance 2.
     /// </summary>

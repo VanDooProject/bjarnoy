@@ -235,4 +235,113 @@ public class HexPathfinderTests
         Assert.Equal(normal[1] / 2.0, doubled[1], 6);
         Assert.Equal(normal[2] / 2.0, doubled[2], 6);
     }
+
+    // --- River crossing cost (issue #159 part A) ---------------------------
+
+    [Fact]
+    public void Routes_around_a_river_when_the_detour_is_cheaper_than_the_crossing_penalty()
+    {
+        // A short river straight across the direct line; going around it
+        // costs less than RiverCrossingCost (8.0) on top of the crossing's
+        // own terrain cost, so the cheapest route detours entirely.
+        var river = new HashSet<HexCoord> { new(2, 0) };
+        bool IsRiver(HexCoord c) => river.Contains(c);
+
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(4, 0);
+
+        var path = HexPathfinder.FindPath(from, to, AllGrass(), isLandUnit: true, IsRiver)!;
+
+        Assert.NotNull(path);
+        Assert.DoesNotContain(path, river.Contains);
+    }
+
+    [Fact]
+    public void Crosses_a_river_when_no_detour_exists_within_the_search_bounds()
+    {
+        // The exact same shape as Returns_null_when_the_only_route_crosses_sea
+        // (a wall spanning the whole padded search box), but with a river
+        // instead of sea. Sea returns null; a river never does — it only
+        // adds a crossing cost, so the search still finds a route straight
+        // through the wall rather than failing outright.
+        var riverWall = new HashSet<HexCoord>();
+        for (var r = -10; r <= 10; r++)
+        {
+            riverWall.Add(new HexCoord(2, r));
+        }
+
+        bool IsRiver(HexCoord c) => riverWall.Contains(c);
+
+        var from = new HexCoord(0, 0);
+        var to = new HexCoord(4, 0);
+
+        var path = HexPathfinder.FindPath(from, to, AllGrass(), isLandUnit: true, IsRiver)!;
+
+        Assert.NotNull(path);
+        Assert.Contains(new HexCoord(2, 0), path);
+    }
+
+    [Fact]
+    public void Cumulative_hours_bill_the_river_crossing_penalty_on_entry()
+    {
+        var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
+        bool IsRiver(HexCoord c) => c == new HexCoord(2, 0);
+
+        var hours = HexPathfinder.CumulativeHours(path, _ => Terrain.Grass, hexesPerHour: 1.0, isRiver: IsRiver);
+
+        Assert.Equal(0, hours[0]);
+        Assert.Equal(1.0, hours[1], 6); // grass, no river
+        Assert.Equal(1.0 + 1.0 + HexPathfinder.RiverCrossingCost, hours[2], 6); // grass + river penalty
+    }
+
+    [Fact]
+    public void River_penalty_is_ignored_for_fleets()
+    {
+        // River tiles are land terrain and already impassable to a fleet
+        // (Terrain.Grass has no entry in the sea cost table), so a fleet
+        // sailing open sea is unaffected by isRiver regardless of what it
+        // reports.
+        var path = new List<HexCoord> { new(0, 0), new(1, 0), new(2, 0) };
+
+        var withRiver = HexPathfinder.CumulativeHours(
+            path, _ => Terrain.Sea, hexesPerHour: 1.0, isLandUnit: false, isRiver: _ => true);
+        var withoutRiver = HexPathfinder.CumulativeHours(
+            path, _ => Terrain.Sea, hexesPerHour: 1.0, isLandUnit: false, isRiver: null);
+
+        Assert.Equal(withoutRiver, withRiver);
+    }
+
+    [Fact]
+    public void Stopping_mid_river_and_resuming_bills_the_same_total_as_one_march()
+    {
+        // Guards the "additive-on-entry, not an edge crossing" property the
+        // issue calls out: a one-hex-wide corridor A-B with a single river
+        // tile M in the middle. Splitting the trip into two marches that
+        // stop and restart exactly on the river tile — or waypointing
+        // through it in one dispatch — must bill the same total hours as one
+        // continuous march. If the penalty were instead charged per edge
+        // (entry and exit), stopping on the river would halve it.
+        HexCoord[] corridor = [new(0, 0), new(1, 0), new(2, 0), new(3, 0), new(4, 0)];
+        var river = new HexCoord(2, 0);
+        bool IsRiver(HexCoord c) => c == river;
+
+        var oneMarch = HexPathfinder.CumulativeHours(corridor, AllGrass(), hexesPerHour: 1.0, isRiver: IsRiver);
+        var totalOneMarch = oneMarch[^1];
+
+        var leg1 = corridor[..3]; // A, .., M
+        var leg2 = corridor[2..]; // M, .., B
+        var hours1 = HexPathfinder.CumulativeHours(leg1, AllGrass(), hexesPerHour: 1.0, isRiver: IsRiver);
+        var hours2 = HexPathfinder.CumulativeHours(leg2, AllGrass(), hexesPerHour: 1.0, isRiver: IsRiver);
+        var totalTwoMarches = hours1[^1] + hours2[^1];
+
+        Assert.Equal(totalOneMarch, totalTwoMarches, 6);
+
+        // Same trip again, waypointed through the river tile within one
+        // dispatch (dropping the joint hex, exactly as Army.PlanDispatch
+        // does when chaining legs).
+        List<HexCoord> waypointedPath = [.. leg1, .. leg2.Skip(1)];
+        var waypointed = HexPathfinder.CumulativeHours(waypointedPath, AllGrass(), hexesPerHour: 1.0, isRiver: IsRiver);
+
+        Assert.Equal(totalOneMarch, waypointed[^1], 6);
+    }
 }

@@ -83,12 +83,18 @@ test.describe('settlement view interactions', () => {
           if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
           const at = { q: settlement.q + dq, r: settlement.r + dr };
           const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId === world.selectedSettlementId && tile.terrain !== 'sea' && !tile.buildingType) {
+          // Grass specifically: it's the one terrain where every category's
+          // first building (Hut) has no longhouse-level gate at all, so a
+          // fresh level-1 realm can always actually place it — sand/forest/
+          // mountain's own categories (Tower, shrines) are gated and would
+          // make this generic "does the click-to-build flow work" smoke
+          // test flaky on whichever terrain the scan happened to hit first.
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
             return win.__settlementRenderer().hexCenterScreen(at);
           }
         }
       }
-      throw new Error('no empty buildable hex found inside the realm');
+      throw new Error('no empty buildable grass hex found inside the realm');
     });
 
     // The model, via the __demoWorld debug hook, is the deterministic
@@ -123,35 +129,25 @@ test.describe('settlement view interactions', () => {
     const buildBox = (await buildBubble.boundingBox())!;
     await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
 
-    // On grass terrain the category ring has three bubbles (Housing,
-    // Resource, Defense); every other buildable terrain has just the one
-    // ("Build", reused as both the root action's label and its sole
-    // category's — see BUILD_CATEGORIES). Either way, whichever category is
-    // first leads to "Hut" as its first building (Housing's only building;
-    // "Build"'s own list starts with Hut too), so hovering the first
-    // category bubble and clicking the first building bubble always reaches
-    // a real, placeable building regardless of which terrain was picked.
-    // Issue #16 follow-up "concentric rings": the root ring's own bubbles
-    // are still on screen at this point (a plain `.ring-bubble` locator
-    // would grab one of those instead) — the category ring is specifically
-    // the one *without* its own backdrop (see RingMenu's `backdrop` prop,
-    // false for every ring but the innermost), so scope through that rather
-    // than by label text, which the "other"-terrain category can share
-    // with the root "Build" bubble ("Build" is reused as both).
-    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
+    // Grass's first category (Housing) has exactly one building — Hut — so
+    // hovering the first category bubble and clicking the first building
+    // bubble always reaches it, without needing to name it explicitly.
+    //
+    // The 2a ring caps itself at two lanes, so drilling *replaces* the root
+    // actions with the categories rather than orbiting outside them —
+    // `.child` is the outer lane, `.back` the reserved back slot, and what is
+    // left is the categories.
+    const categoryBubble = page.locator('.ring-bubble:not(.back):not(.child)').first();
     await expect(categoryBubble).toBeVisible();
-    // Issue #16 follow-up "concentric rings": drilling into the category
-    // ring opens a new, wider ring around the same tile rather than
-    // replacing the root ring — "Details" (a root-ring action) stays put.
-    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
     const categoryBox = (await categoryBubble.boundingBox())!;
     await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
       steps: 6,
     });
 
-    const hutBubble = page.locator('.ring-bubble', { hasText: 'Hut' }).first();
-    await expect(hutBubble).toBeVisible();
-    await hutBubble.click();
+    const buildingBubble = page.locator('.ring-bubble.child').first();
+    await expect(buildingBubble).toBeVisible();
+    await buildingBubble.click();
 
     await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
   });
@@ -207,21 +203,80 @@ test.describe('settlement view interactions', () => {
     const buildBox = (await buildBubble.boundingBox())!;
     await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
 
-    // Forest is non-grass terrain, so it gets the single "Build" category
-    // (BUILD_CATEGORIES' `other` bucket) rather than grass's three-category
-    // spread — see SettlementView's categoriesFor.
-    const categoryBubble = page.locator('.ring-backdrop.no-backdrop .ring-bubble').first();
+    // Forest only offers what BuildingCatalogue.cs's AllowedTerrain actually
+    // permits there — Lumberjack (Resource) and shrines (any land hex) —
+    // rather than grass's four-category spread; see SettlementView's
+    // categoriesFor/BUILD_CATEGORIES. The root "Build" action it shares a
+    // label with is gone by now: the 2a ring swaps the inner lane on
+    // drill-down instead of orbiting outside it.
+    const categoryBubble = page.locator('.ring-bubble:not(.back):not(.child)').first();
     await expect(categoryBubble).toBeVisible();
     const categoryBox = (await categoryBubble.boundingBox())!;
     await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
       steps: 6,
     });
 
-    const lumberjackBubble = page.locator('.ring-bubble', { hasText: 'Lumberjack' }).first();
+    const lumberjackBubble = page.locator('.ring-bubble.child', { hasText: 'Lumberjack' }).first();
     await expect(lumberjackBubble).toBeVisible();
     await lumberjackBubble.click();
 
     await expect.poll(getBuildingTypeAtTarget, { timeout: 5_000 }).toBe('lumberjack');
+  });
+
+  test('a shore (sand) hex only offers categories BuildingCatalogue.cs actually allows there', async ({ page }) => {
+    // Regression guard: sand used to fall into the same flat "other" bucket
+    // as forest/mountain and offer Farm/Lumberjack/Quarry — none of which
+    // the backend's AllowedTerrain would ever accept on sand (Farm is
+    // Grass-only, Lumberjack Forest-only, Quarry Mountain-only). Sand only
+    // carries Tower (SandOrGrass) and the two shrines (any land hex).
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'sand' && !tile.buildingType) {
+            return win.__settlementRenderer().hexCenterScreen(at);
+          }
+        }
+      }
+      throw new Error('no empty sand hex found inside the realm — pick a different demo seed');
+    });
+
+    await page.mouse.click(box.x + target.x, box.y + target.y);
+
+    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
+    await expect(buildBubble).toBeVisible();
+    const buildBox = (await buildBubble.boundingBox())!;
+    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+
+    const categoryBubbles = page.locator('.ring-bubble:not(.back):not(.child)');
+    await expect(categoryBubbles.first()).toBeVisible();
+    const categoryLabels = await categoryBubbles.allTextContents();
+    expect(new Set(categoryLabels)).toEqual(new Set(['Defense', 'Shrines']));
+
+    for (const label of categoryLabels) {
+      const category = page.locator('.ring-bubble:not(.back):not(.child)', { hasText: label }).first();
+      const rect = (await category.boundingBox())!;
+      await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 6 });
+      await expect(page.locator('.ring-bubble.child').first()).toBeVisible();
+      const buildingLabels = await page.locator('.ring-bubble.child').allTextContents();
+      for (const forbidden of ['Farm', 'Pumpkin Farm', 'Lumberjack', 'Quarry', 'Hut', 'Magic Tower']) {
+        expect(buildingLabels).not.toContain(forbidden);
+      }
+    }
   });
 
   test('the hex tooltip hides while hovering a HUD panel on top of the canvas', async ({ page }) => {
