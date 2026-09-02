@@ -3,6 +3,7 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
+- when asked to "squash this PR" (or similar, with nothing more specific said), that means squash-merge the PR via GitHub (rewriting the branch's own commit history by hand is not what's meant) — keep the branch's full commit history intact, and use GitHub's squash-merge so the PR title becomes the one resulting commit message on the base branch
 
 
 # ai dev workflow

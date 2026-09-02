@@ -147,6 +147,36 @@ public class RiverGenerationTests
     }
 
     [Fact]
+    public void Bend_tiles_never_turn_more_than_60_degrees_off_straight_ahead()
+    {
+        // The tile art pack's bend asset is a single fixed curve, camera-rotated
+        // six ways — it can only depict a straight continuation or a 60°-off-
+        // straight curve, never a sharper 120° one (see
+        // docs/design/river-generation.md's "Routing" and "Tile shape and
+        // orientation" sections). RiverGenerator.TracePath excludes 120° turns
+        // at generation time, so this locks that down.
+        foreach (var seed in new[] { 1, 7, 42, 2024 })
+        {
+            var world = Generate(seed);
+            foreach (var island in world.Islands)
+            {
+                foreach (var tile in island.RiverTiles)
+                {
+                    if (tile.Shape != RiverTileShape.Bend)
+                    {
+                        continue;
+                    }
+
+                    var straightAhead = ((int)tile.InDirections[0] + 3) % 6;
+                    var diff = Math.Abs((int)tile.OutDirection!.Value - straightAhead);
+                    var turn = Math.Min(diff, 6 - diff);
+                    Assert.Equal(1, turn);
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void No_river_is_shorter_than_the_configured_minimum()
     {
         // A river's *rendered* length is however many tiles carry it; a path
