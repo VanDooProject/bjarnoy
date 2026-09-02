@@ -42,34 +42,36 @@ describe('isNearAnyOf', () => {
 
 describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs)', () => {
   it('lumberjack scales 10%/matching neighbour with no boost at zero', () => {
-    expect(buildingStatsFor('lumberjack', 1, false, 0)).toEqual({ output: '+30 wood/h', modifier: undefined });
+    expect(buildingStatsFor('lumberjack', 1, 0)).toEqual({ output: '+30 wood/h', modifier: undefined });
   });
 
   it('lumberjack caps at +50% (5 neighbours), same as 6', () => {
-    const five = buildingStatsFor('lumberjack', 1, false, 5);
-    const six = buildingStatsFor('lumberjack', 1, false, 6);
+    const five = buildingStatsFor('lumberjack', 1, 5);
+    const six = buildingStatsFor('lumberjack', 1, 6);
     expect(five).toEqual({ output: '+45 wood/h', modifier: 'Forest (+50%)' });
     expect(six).toEqual(five);
   });
 
   it('quarry scales the same curve off stone', () => {
-    expect(buildingStatsFor('quarry', 1, false, 0)).toEqual({ output: '+24 stone/h', modifier: undefined });
-    expect(buildingStatsFor('quarry', 1, false, 3)).toEqual({ output: '+31 stone/h', modifier: 'Mountain (+30%)' });
+    expect(buildingStatsFor('quarry', 1, 0)).toEqual({ output: '+24 stone/h', modifier: undefined });
+    expect(buildingStatsFor('quarry', 1, 3)).toEqual({ output: '+31 stone/h', modifier: 'Mountain (+30%)' });
   });
 
   it('fishinghut is boosted by open sea, not the coastal flag alone', () => {
-    expect(buildingStatsFor('fishinghut', 1, false, 0)).toEqual({ output: '+30 food/h', modifier: 'Coastal' });
-    expect(buildingStatsFor('fishinghut', 1, false, 2)).toEqual({
+    expect(buildingStatsFor('fishinghut', 1, 0)).toEqual({ output: '+30 food/h', modifier: 'Coastal' });
+    expect(buildingStatsFor('fishinghut', 1, 2)).toEqual({
       output: '+36 food/h',
       modifier: 'Coastal (+20%)',
     });
   });
 
-  it("farm's irrigation bonus is untouched by the new matchingNeighbours parameter", () => {
-    expect(buildingStatsFor('farm', 1, true, 6)).toEqual({
-      output: '+132 food/h',
-      modifier: 'Irrigated (+10%)',
-      workers: '4/4',
-    });
+  it('farm and pumpkinfarm ignore terrain adjacency entirely, matching Boosts excluding them', () => {
+    // BuildingCatalogue.cs: Farm 36/level, PumpkinFarm 36/level, neither in Boosts.
+    expect(buildingStatsFor('farm', 1, 6)).toEqual({ output: '+36 food/h', workers: '4/4' });
+    expect(buildingStatsFor('pumpkinfarm', 2, 6)).toEqual({ output: '+72 food/h', workers: '8/8' });
+  });
+
+  it('magictower matches BuildingCatalogue.cs’s 6 iron/level', () => {
+    expect(buildingStatsFor('magictower', 1, 0)).toEqual({ output: '+6 iron/h', modifier: 'Arcane' });
   });
 });
