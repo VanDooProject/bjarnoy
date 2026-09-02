@@ -24,13 +24,7 @@ import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
-import {
-  BOOST_TERRAIN,
-  buildingStatsFor,
-  buildingUpgradeCost,
-  isNearAnyOf,
-  matchingNeighbourCount,
-} from '../lib/map/buildingEconomy';
+import { BOOST_TERRAIN, buildingStatsFor, buildingUpgradeCost, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import { formatBuildTime, longhouseLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
@@ -480,11 +474,11 @@ function tileAt(q: number, r: number): Tile {
 // /api/v1/buildings, or its bundled snapshot in demo mode) — so the card
 // can't drift from BuildingCatalogue.cs. "hut" is demo-only and has no
 // catalogue entry, hence the client-side cost fallback and no time/lock.
-function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord, nearWater: boolean): RingBuilding {
+function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
   const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
-  const stats = buildingStatsFor(type, 1, nearWater, matching);
+  const stats = buildingStatsFor(type, 1, matching);
   return {
     id: type,
     label,
@@ -500,12 +494,11 @@ const ringCategories = computed<RingCategory[]>(() => {
   const tile = selectedTile.value;
   const coord = selectedCoord.value;
   if (!tile || !coord) return [];
-  const nearWater = isNearAnyOf(coord, ['sea', 'sand'], tileAt);
   return categoriesFor(tile).map((category) => ({
     id: category.id,
     label: category.label,
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
-    buildings: category.buildings.map((b) => ringBuildingFor(b.type, b.label, coord, nearWater)),
+    buildings: category.buildings.map((b) => ringBuildingFor(b.type, b.label, coord)),
   }));
 });
 

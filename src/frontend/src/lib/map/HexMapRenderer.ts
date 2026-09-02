@@ -40,7 +40,7 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { Settlement, Terrain, Tile } from './types';
-import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
+import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
@@ -406,8 +406,8 @@ export interface ArmyOverlayFrame {
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
  * (title + level, an output rate, a modifier line, worker count, "click to
- * open") like the mockup's "Crop farm LEVEL 2 / Output +240 food/h /
- * Irrigated yes (+10%) / Workers 8/8 / CLICK TO OPEN". None of that is
+ * open") like the mockup's "Crop farm LEVEL 2 / Output +72 food/h /
+ * Workers 8/8 / CLICK TO OPEN". None of that is
  * tracked per-building anywhere (the backend/WorldModel only know a
  * settlement's *aggregate* rates, not a single building's own output) so
  * `output`/`modifier`/`workers` below are derived deterministically from
@@ -1482,10 +1482,9 @@ export class HexMapRenderer {
   /**
    * See the HoverInfo doc comment: output/modifier/workers aren't tracked
    * per-building anywhere, so these are derived deterministically from the
-   * building's own type/level (and, for the irrigation modifier, whether a
-   * neighbouring hex is shore/water) purely so the hover card has something
-   * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
-   * yes (+10%) / Workers 8/8" for a farm. The formulas themselves live in
+   * building's own type/level/neighbours purely so the hover card has
+   * something concrete to show, matching the mockup's "Output +240 food/h /
+   * Workers 8/8" for a farm. The formulas themselves live in
    * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(
@@ -1495,11 +1494,7 @@ export class HexMapRenderer {
     if (!tile.buildingType) return {};
     const boostTerrain = BOOST_TERRAIN[tile.buildingType];
     const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
-    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile), matchingNeighbours);
-  }
-
-  private nearWater(tile: Tile): boolean {
-    return isNearAnyOf(tile, ['sea', 'sand'], this.getTile);
+    return buildingStatsFor(tile.buildingType, level, matchingNeighbours);
   }
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Issue #16 "better hover": "hover on tiles should have more info and
-// square edges" — matches the mockup's "Crop farm LEVEL 2 / Output +240
-// food/h / Irrigated yes (+10%) / Workers 8/8 / CLICK TO OPEN" card. The
+// square edges" — matches the mockup's "Crop farm LEVEL 2 / Output +72
+// food/h / Workers 8/8 / CLICK TO OPEN" card. The
 // extra fields (output/modifier/workers/cta) are optional — non-building
 // tiles just render title/subtitle/stat as before. See HoverInfo's doc
 // comment in HexMapRenderer.ts for how those numbers are derived.

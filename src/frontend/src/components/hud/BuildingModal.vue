@@ -12,7 +12,6 @@ import {
   BOOST_TERRAIN,
   buildingStatsFor,
   buildingUpgradeCost,
-  isNearAnyOf,
   matchingNeighbourCount,
   type BuildingKind,
 } from '../../lib/map/buildingEconomy';
@@ -132,11 +131,10 @@ const sub = computed(() => {
 });
 const level = computed(() => props.tile.buildingLevel ?? 0);
 
-// Same terrain-adjacency helpers hoverInfoFor/buildingStats uses in
+// Same terrain-adjacency helper hoverInfoFor/buildingStats uses in
 // HexMapRenderer.ts, so the modal's "current stats" match whatever the hover
 // tooltip just showed.
 const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
-const nearWater = computed(() => isNearAnyOf(props.tile, ['sea', 'sand'], getTile));
 const matchingNeighbours = computed(() => {
   const boostTerrain = props.tile.buildingType ? BOOST_TERRAIN[props.tile.buildingType] : undefined;
   return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
@@ -146,7 +144,7 @@ const matchingNeighbours = computed(() => {
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const currentStats = computed(() =>
   props.tile.buildingType
-    ? buildingStatsFor(props.tile.buildingType, level.value, nearWater.value, matchingNeighbours.value)
+    ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value)
     : undefined,
 );
 

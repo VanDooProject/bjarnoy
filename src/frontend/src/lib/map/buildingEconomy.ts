@@ -57,17 +57,16 @@ export function isNearAnyOf(tile: AxialCoord, terrains: Terrain[], getTile: (q: 
 export function buildingStatsFor(
   type: BuildingKind,
   level: number,
-  nearWater: boolean,
   matchingNeighbours = 0,
 ): BuildingLevelStats {
   switch (type) {
+    // Farm and PumpkinFarm are deliberately excluded from BuildingCatalogue.cs's
+    // Boosts table (they work a fixed field, not a resource that concentrates
+    // nearby) — no terrain or water adjacency changes their output.
     case 'farm': {
-      const irrigated = nearWater;
-      const base = level * 120;
       const workersCap = level * 4;
       return {
-        output: `+${irrigated ? Math.round(base * 1.1) : base} food/h`,
-        modifier: irrigated ? 'Irrigated (+10%)' : undefined,
+        output: `+${level * 36} food/h`,
         workers: `${workersCap}/${workersCap}`,
       };
     }
@@ -79,7 +78,7 @@ export function buildingStatsFor(
       return { output: `+${level * 100} storage capacity` };
     case 'pumpkinfarm': {
       const workersCap = level * 4;
-      return { output: `+${level * 144} food/h`, workers: `${workersCap}/${workersCap}` };
+      return { output: `+${level * 36} food/h`, workers: `${workersCap}/${workersCap}` };
     }
     case 'lumberjack': {
       const multiplier = boostMultiplier(matchingNeighbours);
@@ -110,7 +109,7 @@ export function buildingStatsFor(
       };
     }
     case 'magictower':
-      return { output: `+${level * 24} iron/h`, modifier: 'Arcane' };
+      return { output: `+${level * 6} iron/h`, modifier: 'Arcane' };
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
