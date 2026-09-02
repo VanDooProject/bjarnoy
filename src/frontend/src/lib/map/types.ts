@@ -10,6 +10,21 @@ export type TileOrientation = 'E' | 'NE' | 'NW' | 'W' | 'SW' | 'SE';
 /** `TileOrientation` values in the same order as `neighbors()`'s direction indices. */
 export const TILE_ORIENTATIONS: readonly TileOrientation[] = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
 
+/**
+ * The river art pack's bend asset is one fixed curve, camera-rotated six
+ * ways: at orientation index `i` it always joins the hex's own edge `i` to
+ * edge `i+2` (mod 6) — never `i-2` (pixel-measured against the art pack; see
+ * `docs/design/river-generation.md`'s "Art pack orientation convention"). A
+ * bend tile's actual `(inDirection, outDirection)` pair can satisfy that
+ * relation either way round, so the orientation to render with is whichever
+ * of the two *is* that "i" — i.e. advancing it by 2 lands on the other.
+ */
+export function bendOrientationOf(inDirection: TileOrientation, outDirection: TileOrientation): TileOrientation {
+  const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+  const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
+  return (inIndex + 2) % 6 === outIndex ? inDirection : outDirection;
+}
+
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;

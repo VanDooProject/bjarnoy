@@ -63,10 +63,18 @@ doesn't read as a river. Instead, at each step from the current tile:
 4. If a tile has zero qualifying candidates before ever reaching the coast (a local depth pocket from two
    islands' overlapping influence, in principle), the walk stops there instead of looping — a dead end, not
    a bug.
+5. Once a step already has an inflow direction (i.e. it's not the spring's own first step), a candidate that
+   would turn 120° off "continuing straight ahead" is excluded before scoring. The tile art pack's bend
+   asset is a single fixed curve, camera-rotated six ways, and rotation alone can only ever depict a
+   straight continuation or a 60°-off-straight curve — never a sharp 120° one, in either handedness. Letting
+   the walk take a 120° turn would produce a `Bend` tile no orientation could render correctly, so it's ruled
+   out at generation time rather than rendered wrong. This never excludes "continue straight" or the direction
+   back toward the previous tile (already excluded by the visited-tiles check).
 
 Scoring against noise instead of always taking the strict argmax is what produces meander: the path wobbles
-between the 2-3 non-decreasing neighbours available at most steps while still making steady net progress to
-the coast, and naturally produces a mix of bend and straight tiles instead of "mostly straight."
+between the (now up to) 2-3 non-decreasing, non-sharp-turn neighbours available at most steps while still
+making steady net progress to the coast, and naturally produces a mix of bend and straight tiles instead of
+"mostly straight."
 
 ## Length filter
 
@@ -108,6 +116,15 @@ outflow, all expressed as the `TileOrientation` values from PR #25 (so this plug
 | 1 | yes, opposite direction | Straight | flows through in one line |
 | 1 | yes, any other direction | Bend | the direction change is what makes it a bend |
 | 2 | yes | Confluence | the Y tile; the two inflow directions are the two rivers merging |
+
+### Art pack orientation convention
+
+The frontend picks one of the tile art pack's six `TileOrientation` files (`rivertile_{shape}_{E,NE,NW,W,SW,SE}_base.png`/`top`) per river tile (`riverOrientationOf` in `textures.ts`). Each file is the *same* physical asset, camera-rotated by 60° increments — not six independently-drawn pieces — so what orientation index `D` (0=E..5=SE, matching `HexCoord.Directions`' order) actually depicts is fixed by the asset, not by convention alone. This was pixel-measured directly against the `VanDooProject/bg_assets_hextile` art (the vendor submodule ships empty in a plain checkout, so this required cloning that repo separately and sampling where each PNG's water touches the hex boundary):
+
+- **Straight** (and `Mouth`, which reuses it): orientation `D` touches the hex's edge `D` and its opposite edge `D+3` (mod 6) — a straight-through line. Since `{D, D+3}` is the same *set* whether `D` is the in-edge or the out-edge, either `inDirections[0]` or `outDirection` picks the identical rendered edge pair; which one you pass in doesn't matter geometrically. (`riverOrientationOf` uses `outDirection` when there is one, `inDirections[0]` for a `Mouth`'s no-outflow case — both correct.)
+- **Spring**: orientation `D` touches only its own edge `D` (the single outflow) — unambiguous, always `outDirection`.
+- **Bend**: orientation `D` touches edge `D` *and* edge `D+2` (mod 6) — **never `D-2`**. This is directional: a bend tile's actual `(inDirections[0], outDirection)` pair only renders correctly if you pick whichever of the two *is* that "D", i.e. the one that lands on the other when advanced by 2. See `bendOrientationOf` in `types.ts` for the frontend logic, and the generation-time constraint in "Routing" above that keeps every generated bend within reach of one of the two handedness cases (a 60°-off-straight turn) — the asset can't represent a sharper (120°-off-straight) one in *either* handedness.
+- **Confluence** (`y_narrow`): orientation `D` touches three edges — two of them opposite each other (a fixed through-pair) plus edge `D` itself, which sits 60° from one member of that pair and 120° from the other. Generation doesn't currently constrain a confluence's actual two-inflow/one-outflow angles to match this, so a confluence tile can render with the wrong edges lit up; unlike `Bend` this hasn't been fixed (see "Collisions" above — confluences come from independent paths colliding, so satisfying the asset's geometry would mean changing collision resolution, not just candidate filtering).
 
 "Opposite direction" means the inflow and outflow directions are 3 apart on the 6-direction wheel (`E`↔`W`,
 `NE`↔`SW`, `NW`↔`SE`) — the geometric definition of "flows straight through this hex."

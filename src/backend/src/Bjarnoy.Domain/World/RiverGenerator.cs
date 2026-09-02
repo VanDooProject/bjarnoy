@@ -119,7 +119,11 @@ internal static class RiverGenerator
     /// Walks from a spring toward the coast: never steps to a lower-depth
     /// neighbour (so it can't loop or backtrack), scores the rest by depth
     /// plus a meander noise term, and stops the step *before* it would leave
-    /// land, so the last tile in the path is always the river's mouth.
+    /// land, so the last tile in the path is always the river's mouth. Once
+    /// the walk already has an inflow direction, a step that would turn 120°
+    /// off straight-ahead is excluded — the single bend art asset can only
+    /// render a straight continuation or a 60°-off-straight curve, never a
+    /// sharp 120° one (see <c>docs/design/river-generation.md</c>).
     /// </summary>
     private static List<HexCoord> TracePath(
         HexCoord spring,
@@ -136,8 +140,10 @@ internal static class RiverGenerator
         // tiles are never revisited), so this can't loop forever.
         for (var step = 0; step < islandLand.Count; step++)
         {
+            var neighbours = current.Neighbours();
+
             var touchesSea = false;
-            foreach (var neighbour in current.Neighbours())
+            foreach (var neighbour in neighbours)
             {
                 if (!sampler.IsLand(neighbour))
                 {
@@ -151,13 +157,33 @@ internal static class RiverGenerator
                 break;
             }
 
+            // The two candidate directions a 120°-off-straight-ahead turn
+            // would take, once there's a previous tile to measure "straight
+            // ahead" from. The direction straight back to that previous tile
+            // is excluded anyway by the `visited` check below.
+            int? disallowedA = null;
+            int? disallowedB = null;
+            if (path.Count >= 2)
+            {
+                var inIndex = DirectionIndex(current, path[^2]);
+                var straightAhead = (inIndex + 3) % 6;
+                disallowedA = (straightAhead + 2) % 6;
+                disallowedB = (straightAhead + 4) % 6;
+            }
+
             var currentDepth = sampler.IslandDepthAt(current) ?? 0.0;
             HexCoord? bestCandidate = null;
             var bestScore = double.NegativeInfinity;
 
-            foreach (var neighbour in current.Neighbours())
+            for (var i = 0; i < neighbours.Length; i++)
             {
+                var neighbour = neighbours[i];
                 if (!islandLand.Contains(neighbour) || visited.Contains(neighbour))
+                {
+                    continue;
+                }
+
+                if (i == disallowedA || i == disallowedB)
                 {
                     continue;
                 }
