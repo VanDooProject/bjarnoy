@@ -124,6 +124,49 @@ describe('RingMenu', () => {
     expect(wrapper.emitted('select')).toEqual([['magictower']]);
   });
 
+  it('treats a touch tap as hover-then-click: first tap previews, second commits', async () => {
+    // Touch has no hover, so a bare click would spend resources blind. The
+    // first touch tap must do what mouseenter does on desktop — show the
+    // card — without building anything. This listens on `touchstart` rather
+    // than `pointerdown`: Chromium only suppresses the tap's compatibility
+    // `click` when the touch event itself was canceled — verified for real
+    // (not just that the handler ran) by e2e/ring-menu.spec.ts's touch test.
+    const wrapper = ring();
+    await bubble(wrapper, 'Build').trigger('mouseenter');
+    await bubble(wrapper, 'Defense').trigger('mouseenter');
+
+    await bubble(wrapper, 'Magic Tower').trigger('touchstart');
+    expect(wrapper.get('.ring-card').text()).toContain('Magic Tower');
+    expect(wrapper.emitted('select')).toBeUndefined();
+
+    // The building is now previewed; the next tap's click commits it.
+    await bubble(wrapper, 'Magic Tower').trigger('click');
+    expect(wrapper.emitted('select')).toEqual([['magictower']]);
+  });
+
+  it('a touch tap previews a locked building but never commits it', async () => {
+    const wrapper = ring();
+    await bubble(wrapper, 'Build').trigger('mouseenter');
+    await bubble(wrapper, 'Defense').trigger('mouseenter');
+
+    await bubble(wrapper, 'Watchtower').trigger('touchstart');
+    expect(wrapper.get('.ring-card').text()).toContain('REQUIRES LONGHOUSE 2');
+
+    await bubble(wrapper, 'Watchtower').trigger('click');
+    expect(wrapper.emitted('select')).toBeUndefined();
+  });
+
+  it('does not require a preview tap for a mouse click, which still commits immediately', async () => {
+    const wrapper = ring();
+    await bubble(wrapper, 'Build').trigger('mouseenter');
+    await bubble(wrapper, 'Defense').trigger('mouseenter');
+
+    // A mouse click never fires touchstart at all, so onBuildingTouchStart
+    // never runs — this is the same interaction the pre-touch RingMenu had.
+    await bubble(wrapper, 'Magic Tower').trigger('click');
+    expect(wrapper.emitted('select')).toEqual([['magictower']]);
+  });
+
   it('emits a root action straight through instead of drilling', async () => {
     const wrapper = ring();
     await bubble(wrapper, 'Details').trigger('click');
