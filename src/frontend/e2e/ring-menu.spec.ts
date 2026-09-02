@@ -229,6 +229,69 @@ test.describe('ring menu drill-down', () => {
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
+  test('the root Upgrade bubble is disabled with a reason when the settlement cannot afford it', async ({ page }) => {
+    // Regression: Upgrade used to carry no cost information at all — it
+    // looked exactly as clickable as when affordable, and demo mode would
+    // bump the level for free regardless. Same disabled+hint convention as
+    // Raze/Train/the sea-tile Build action, not a new affordance.
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    const longhouseScreen = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      return win.__settlementRenderer().hexCenterScreen({ q: settlement.q, r: settlement.r });
+    });
+    const buildingLevel = () =>
+      page.evaluate(() => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        const s = world.model.getSettlement(world.selectedSettlementId);
+        return world.model.getTile(s.q, s.r).buildingLevel as number;
+      });
+    const setResources = (resources: { wood: number; stone: number; food: number; iron: number }) =>
+      page.evaluate((r) => {
+        const world = (window as unknown as {
+          __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+        }).__demoWorld();
+        world.model.getSettlement(world.selectedSettlementId).resources = r;
+        world.syncHud();
+      }, resources);
+
+    // Longhouse's next level costs 320 wood / 240 stone / 160 food
+    // (BuildingCatalogue.cs's base * CostFactor(2)) and 0 iron at every
+    // level — zeroing every resource is short on exactly the first three.
+    await setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
+    await page.mouse.click(box.x + longhouseScreen.x, box.y + longhouseScreen.y);
+
+    const upgradeBubble = page.locator('.ring-bubble', { hasText: 'Upgrade' }).first();
+    await expect(upgradeBubble).toBeVisible();
+    await expect(upgradeBubble).toHaveClass(/disabled/);
+    await expect(upgradeBubble).toHaveAttribute('title', 'Not enough wood, stone, food');
+
+    const levelBefore = await buildingLevel();
+    await upgradeBubble.click({ force: true });
+    await page.waitForTimeout(300);
+    expect(await buildingLevel(), 'a disabled Upgrade bubble must not upgrade anything').toBe(levelBefore);
+
+    // Grant plenty and reopen: the same bubble is now a plain, enabled one.
+    await page.keyboard.press('Escape');
+    await setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
+    await page.mouse.click(box.x + longhouseScreen.x, box.y + longhouseScreen.y);
+
+    const upgradeBubble2 = page.locator('.ring-bubble', { hasText: 'Upgrade' }).first();
+    await expect(upgradeBubble2).toBeVisible();
+    await expect(upgradeBubble2).not.toHaveClass(/disabled/);
+    await upgradeBubble2.click();
+    await expect.poll(buildingLevel, { timeout: 5_000 }).toBe(levelBefore + 1);
+  });
+
   test('a mousedown outside a ring bubble closes the ring and starts dragging the map', async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
@@ -335,5 +398,74 @@ test.describe('ring menu drill-down', () => {
 
     await page.keyboard.press('Escape');
     await expect(page.locator('.ring-bubble')).toHaveCount(0);
+  });
+});
+
+// The design handoff's remaining open question: touch has no hover, so
+// "hover previews, click commits" needs a touch equivalent or a tablet
+// player spends resources on the first tap with no chance to see the cost.
+// A real touch context (not a synthetic dispatchEvent) is what actually
+// exercises the browser's own pointerdown->click suppression this depends
+// on — see RingMenu.vue's onBuildingPointerDown.
+test.describe('ring menu touch build', () => {
+  test.use({ hasTouch: true });
+
+  test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {
+    test.setTimeout(90_000);
+    await foundSettlement(page);
+    const canvas = page.locator('canvas');
+    const box = (await canvas.boundingBox())!;
+
+    const target = await page.evaluate(() => {
+      const win = window as unknown as {
+        __demoWorld: () => { model: any; selectedSettlementId: string };
+        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
+      };
+      const world = win.__demoWorld();
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      const radius = world.model.borderRadius(settlement);
+      for (let dq = -radius; dq <= radius; dq++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
+          const at = { q: settlement.q + dq, r: settlement.r + dr };
+          const tile = world.model.getTile(at.q, at.r);
+          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
+            return win.__settlementRenderer().hexCenterScreen(at);
+          }
+        }
+      }
+      throw new Error('no empty buildable grass hex found inside the realm');
+    });
+
+    const countBuildings = () =>
+      page.evaluate(() => {
+        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
+          .__demoWorld();
+        return world.model.countBuildings(world.selectedSettlementId) as number;
+      });
+    const before = await countBuildings();
+
+    // Opening the ring and drilling into a category is unaffected by this
+    // fix — hover/click already drilled without needing a hover-equivalent,
+    // since navigating isn't destructive. Only the terminal, cost-spending
+    // tap on a leaf building needs the two-tap treatment tested below. The
+    // navigation taps use .tap() rather than .click() throughout, since a
+    // real touch input (not a mouse click a touch-capable context happens
+    // to also allow) is what this test is about.
+    await page.mouse.click(box.x + target.x, box.y + target.y);
+    await page.waitForSelector('.ring-bubble');
+    await page.locator('.ring-bubble', { hasText: 'Build' }).first().tap();
+    await page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Defense' }).first().tap();
+
+    const magicTower = page.locator('.ring-bubble.child', { hasText: 'Magic Tower' }).first();
+    await expect(magicTower).toBeVisible();
+
+    await magicTower.tap();
+    await expect(page.locator('.ring-card')).toContainText('Magic Tower');
+    await page.waitForTimeout(300);
+    expect(await countBuildings(), 'the first tap must only preview, not build').toBe(before);
+
+    await magicTower.tap();
+    await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 });

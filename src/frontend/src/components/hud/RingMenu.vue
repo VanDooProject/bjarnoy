@@ -266,6 +266,22 @@ function onBuildingClick(building: RingBuilding) {
   if (building.lock || building.disabled) return;
   emit('select', building.id);
 }
+// Touch has no hover, so the desktop "hover previews, click commits" pattern
+// would otherwise collapse into "one tap spends resources blind". A touch
+// touchstart does the hover's job instead: the first tap on a building
+// previews it (shows the card) and consumes the tap, the second tap on that
+// same, now-previewed building falls through to the ordinary click handler
+// below and commits — mouse/pen pointers are untouched (they don't fire
+// touchstart at all), since a real mouseenter already previewed the card
+// before the click ever fires. This must listen on `touchstart` rather than
+// `pointerdown`: Chromium only suppresses the tap's compatibility `click`
+// when the *touch* event, not the pointer event, was the one canceled.
+function onBuildingTouchStart(e: TouchEvent, building: RingBuilding) {
+  if (hover.value !== building.id) {
+    e.preventDefault();
+    hover.value = building.id;
+  }
+}
 function onBackdropPointerDown(e: PointerEvent) {
   emit('outsidePointerDown', e);
 }
@@ -363,6 +379,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         '--tint': b.color,
       }"
       :title="b.building.lock"
+      @touchstart="onBuildingTouchStart($event, b.building)"
       @click="onBuildingClick(b.building)"
       @mouseenter="hover = b.building.id"
     >

@@ -12,7 +12,6 @@ import {
   BOOST_TERRAIN,
   buildingStatsFor,
   buildingUpgradeCost,
-  isNearAnyOf,
   matchingNeighbourCount,
   type BuildingKind,
 } from '../../lib/map/buildingEconomy';
@@ -26,6 +25,8 @@ const props = defineProps<{
   mine: boolean;
   ownerLabel: string | null;
   busy: boolean;
+  /** Why the last build/upgrade attempt was rejected by the backend, or null once dismissed by a fresh attempt. */
+  error?: string | null;
 }>();
 const emit = defineEmits<{ close: []; build: []; upgrade: [] }>();
 
@@ -132,11 +133,10 @@ const sub = computed(() => {
 });
 const level = computed(() => props.tile.buildingLevel ?? 0);
 
-// Same terrain-adjacency helpers hoverInfoFor/buildingStats uses in
+// Same terrain-adjacency helper hoverInfoFor/buildingStats uses in
 // HexMapRenderer.ts, so the modal's "current stats" match whatever the hover
 // tooltip just showed.
 const getTile = (q: number, r: number): Tile => world.model.getTile(q, r);
-const nearWater = computed(() => isNearAnyOf(props.tile, ['sea', 'sand'], getTile));
 const matchingNeighbours = computed(() => {
   const boostTerrain = props.tile.buildingType ? BOOST_TERRAIN[props.tile.buildingType] : undefined;
   return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
@@ -146,7 +146,7 @@ const matchingNeighbours = computed(() => {
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const currentStats = computed(() =>
   props.tile.buildingType
-    ? buildingStatsFor(props.tile.buildingType, level.value, nearWater.value, matchingNeighbours.value)
+    ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value)
     : undefined,
 );
 
@@ -246,6 +246,7 @@ const costLine = computed(() =>
         </div>
 
         <div v-if="mine && buildable" class="actions">
+          <p v-if="error" class="action-error">{{ error }}</p>
           <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
           <button v-if="tile.buildingType" class="primary" :disabled="busy" @click="emit('upgrade')">
             {{ busy ? 'Queuing…' : `Upgrade to level ${level + 1}` }}
@@ -360,6 +361,11 @@ const costLine = computed(() =>
 }
 .actions {
   margin-top: 22px;
+}
+.action-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #e07a5f;
 }
 .cost {
   margin-bottom: 10px;
