@@ -73,6 +73,38 @@ export function straightOrientationOf(direction: TileOrientation): TileOrientati
   return TILE_ORIENTATIONS[(2 - index + 6) % 6];
 }
 
+/**
+ * A `Mouth` tile has no `outDirection` (it's the end of the walk, not a
+ * turn) — but it still needs to visually flow *toward the sea*, and the
+ * sea neighbour isn't necessarily geometrically opposite the inflow the
+ * way `straightOrientationOf` assumes (`RiverGenerator.TracePath` stops the
+ * walk as soon as any neighbour is sea, regardless of the angle that lands
+ * at). `seaDirection` — the caller's own lookup of which neighbour is
+ * actually sea, since a `RiverTile` doesn't carry terrain — decides which
+ * asset can represent that angle: 3 apart (opposite) is `straight`'s native
+ * case; 2 apart is bend-representable via `bendOrientationOf`, same as an
+ * ordinary mid-river turn; 1 apart (120°) is unrepresentable by either
+ * family (nothing on the generation side prevents this, unlike an ordinary
+ * bend's 120°-turn exclusion — the sea isn't a tile in the walk), so this
+ * falls back to the inflow-opposite `straight` file as a documented
+ * best-effort rather than picking a misleading direction.
+ */
+export function mouthOrientationOf(
+  inDirection: TileOrientation,
+  seaDirection: TileOrientation | null,
+): { shape: 'straight' | 'bend'; orientation: TileOrientation } {
+  if (seaDirection) {
+    const inIndex = TILE_ORIENTATIONS.indexOf(inDirection);
+    const seaIndex = TILE_ORIENTATIONS.indexOf(seaDirection);
+    const diff = Math.abs(inIndex - seaIndex);
+    const turn = Math.min(diff, 6 - diff);
+    if (turn === 2) {
+      return { shape: 'bend', orientation: bendOrientationOf(inDirection, seaDirection) };
+    }
+  }
+  return { shape: 'straight', orientation: straightOrientationOf(inDirection) };
+}
+
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;

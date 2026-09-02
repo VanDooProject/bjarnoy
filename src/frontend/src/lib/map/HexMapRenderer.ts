@@ -1803,7 +1803,11 @@ export class HexMapRenderer {
 
       const key = coordKey(c);
       if (river) {
-        const riverTextures = riverTexturesFor(textures, river);
+        // Only a Mouth's orientation actually needs this (see
+        // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
+        // for every other shape.
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+        const riverTextures = riverTexturesFor(textures, river, seaDirection);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;

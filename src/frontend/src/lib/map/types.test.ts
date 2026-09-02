@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { bendOrientationOf, springOrientationOf, straightOrientationOf, TILE_ORIENTATIONS } from './types';
+import {
+  bendOrientationOf,
+  mouthOrientationOf,
+  springOrientationOf,
+  straightOrientationOf,
+  TILE_ORIENTATIONS,
+} from './types';
 
 // All three functions below were derived from a from-scratch re-verification
 // of the art pack against this renderer's own isoTopPoints/isoGridPosition
@@ -89,6 +95,44 @@ describe('straightOrientationOf', () => {
       const resultB = TILE_ORIENTATIONS.indexOf(straightOrientationOf(b));
       const touchedOf = (d: number) => [(2 - d + 6) % 6, (5 - d + 6) % 6].sort();
       expect(touchedOf(resultA)).toEqual(touchedOf(resultB));
+    }
+  });
+});
+
+describe('mouthOrientationOf', () => {
+  it('renders a bend toward the sea when the sea is 60° off the inflow (a real reported case: Jarlskar mouth at -8,4)', () => {
+    // inDirection=NE, actual sea neighbour=SE (island Jarlskar, seed
+    // 783131215, world 01a06013-03b3-7632-9ee6-f0f00f0fb164) — the mouth
+    // used to render straight-through toward SW (forest, the inflow's
+    // geometric opposite) instead of curving toward the sea at SE.
+    expect(mouthOrientationOf('NE', 'SE')).toEqual({ shape: 'bend', orientation: 'W' });
+  });
+
+  it('renders straight when the sea is directly opposite the inflow', () => {
+    expect(mouthOrientationOf('E', 'W')).toEqual({ shape: 'straight', orientation: 'NW' });
+  });
+
+  it('falls back to the inflow-opposite straight file when the sea is 120° off the inflow (unrepresentable by either family)', () => {
+    expect(mouthOrientationOf('E', 'NE')).toEqual({ shape: 'straight', orientation: 'NW' });
+  });
+
+  it('falls back to the inflow-opposite straight file when no sea neighbour was found', () => {
+    expect(mouthOrientationOf('E', null)).toEqual({ shape: 'straight', orientation: 'NW' });
+  });
+
+  it('picks a bend orientation matching bendOrientationOf for a 60°-apart sea direction, in either handedness', () => {
+    for (let i = 0; i < TILE_ORIENTATIONS.length; i++) {
+      const inDirection = TILE_ORIENTATIONS[i];
+      const seaDirection = TILE_ORIENTATIONS[(i + 2) % 6];
+      expect(mouthOrientationOf(inDirection, seaDirection)).toEqual({
+        shape: 'bend',
+        orientation: bendOrientationOf(inDirection, seaDirection),
+      });
+      const seaDirectionReverse = TILE_ORIENTATIONS[(i - 2 + 6) % 6];
+      expect(mouthOrientationOf(inDirection, seaDirectionReverse)).toEqual({
+        shape: 'bend',
+        orientation: bendOrientationOf(inDirection, seaDirectionReverse),
+      });
     }
   });
 });

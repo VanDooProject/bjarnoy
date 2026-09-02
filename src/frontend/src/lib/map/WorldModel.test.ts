@@ -130,3 +130,23 @@ describe('WorldModel longhouse placement', () => {
     expect(model.getTile(edge.q, edge.r).buildingType).toBeUndefined();
   });
 });
+
+describe('WorldModel.seaFacingDirectionOf', () => {
+  it('finds the real sea neighbour reported disconnected in-game: seed 783131215, island Jarlskar, mouth tile (-8,4)', () => {
+    // Confirmed against the backend's own TerrainSampler for this seed: of
+    // (-8,4)'s six neighbours, only SE (-8,5) is sea — E/NE/NW are sand and
+    // W/SW are forest. Before this fix, the mouth tile rendered a straight
+    // line toward W/SW (the inflow's geometric opposite) instead of curving
+    // toward the sea at SE.
+    const model = new WorldModel(783131215);
+    expect(model.seaFacingDirectionOf({ q: -8, r: 4 })).toBe('SE');
+  });
+
+  it('returns null when no neighbour is sea', () => {
+    // Same seed/island as above, but (-4,2) — Jarlskar's interior, well
+    // inland — confirmed against the backend's TerrainSampler to have all
+    // six neighbours as land (grass/forest).
+    const model = new WorldModel(783131215);
+    expect(model.seaFacingDirectionOf({ q: -4, r: 2 })).toBeNull();
+  });
+});

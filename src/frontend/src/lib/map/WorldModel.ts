@@ -9,6 +9,7 @@ import { validateTradeRatio } from '../trade/tradeRatio';
 import { DEFAULT_GENERATION, generateTile, type WorldGenerationConstants } from './worldGenerator';
 import {
   emptyResources,
+  TILE_ORIENTATIONS,
   type CartShipment,
   type Fleet,
   type IslandLabel,
@@ -17,6 +18,7 @@ import {
   type RiverTile,
   type Settlement,
   type Tile,
+  type TileOrientation,
 } from './types';
 
 /**
@@ -228,6 +230,24 @@ export class WorldModel {
       }
     }
     return out;
+  }
+
+  /**
+   * The direction toward this coord's sea-facing neighbour, for a river
+   * `Mouth` tile's rendering (see `mouthOrientationOf` in `types.ts`) — a
+   * `RiverTile` carries no terrain of its own (a `Mouth`'s `outDirection`
+   * is always null; there's nowhere else in the walk for it to point), and
+   * generation only guarantees *a* sea neighbour exists, not which one or
+   * at what angle from the inflow. Returns the first sea neighbour found,
+   * in `TILE_ORIENTATIONS` order — arbitrary among ties, but a `Mouth` only
+   * ever needs one.
+   */
+  seaFacingDirectionOf(coord: AxialCoord): TileOrientation | null {
+    const dirs = neighbors(coord);
+    for (let i = 0; i < dirs.length; i++) {
+      if (this.getTile(dirs[i].q, dirs[i].r).terrain === 'sea') return TILE_ORIENTATIONS[i];
+    }
+    return null;
   }
 
   isLand(q: number, r: number): boolean {
