@@ -18,11 +18,16 @@ const props = defineProps<{
 
 const world = useWorldStore();
 
+// Issue #158: each pill's fill track gains a dim reserved segment — the
+// stock is not split into two bars, `reserved` is a *portion* of `value`
+// already sitting in stock, earmarked for the waiting build queue and
+// unspendable elsewhere. Always zero in demo mode (`hud.reserved` never
+// changes from its empty default there — see stores/world.ts).
 const pills = computed(() => [
-  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood },
-  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone },
-  { key: 'food', color: 'var(--food)', value: world.hud.resources.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food },
-  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron },
+  { key: 'wood', color: 'var(--wood)', value: world.hud.resources.wood, rate: world.hud.rates.wood, cap: world.hud.storageCap.wood, reserved: world.hud.reserved.wood },
+  { key: 'stone', color: 'var(--stone)', value: world.hud.resources.stone, rate: world.hud.rates.stone, cap: world.hud.storageCap.stone, reserved: world.hud.reserved.stone },
+  { key: 'food', color: 'var(--food)', value: world.hud.resources.food, rate: world.hud.rates.food, cap: world.hud.storageCap.food, reserved: world.hud.reserved.food },
+  { key: 'iron', color: 'var(--iron)', value: world.hud.resources.iron, rate: world.hud.rates.iron, cap: world.hud.storageCap.iron, reserved: world.hud.reserved.iron },
 ]);
 
 const population = computed(() => world.hud.population);
@@ -34,6 +39,21 @@ function fmt(n: number): string {
 function fillPct(value: number, cap: number): number {
   return cap > 0 ? Math.min(100, Math.max(0, (value / cap) * 100)) : 0;
 }
+
+/**
+ * The reserved segment's own left offset and width within the track, as
+ * percentages of `cap` — positioned as the trailing (highest-stock) slice of
+ * the filled bar: from `(value - reserved) / cap` to `value / cap`. Reserved
+ * can never exceed the stock it's carved out of, so this never runs past
+ * `fillPct`.
+ */
+function reservedSegment(value: number, reserved: number, cap: number): { left: number; width: number } {
+  if (cap <= 0) return { left: 0, width: 0 };
+  const clampedReserved = Math.max(0, Math.min(reserved, value));
+  const left = Math.max(0, Math.min(100, ((value - clampedReserved) / cap) * 100));
+  const width = Math.max(0, Math.min(100 - left, (clampedReserved / cap) * 100));
+  return { left, width };
+}
 </script>
 
 <template>
@@ -41,9 +61,22 @@ function fillPct(value: number, cap: number): number {
     <div v-for="pill in pills" :key="pill.key" class="resource">
       <span class="hex-icon" :style="{ background: pill.color }" />
       <div class="numbers">
-        <span class="value">{{ fmt(pill.value) }}<span class="cap">/{{ fmt(pill.cap) }}</span></span>
+        <span class="value">
+          {{ fmt(pill.value) }}<span class="cap">/{{ fmt(pill.cap) }}</span>
+          <span v-if="pill.reserved > 0" class="reserved-hint">({{ fmt(pill.reserved) }} reserved)</span>
+        </span>
         <span class="rate">+{{ Math.round(pill.rate) }}/h</span>
-        <span class="fill-track"><span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" /></span>
+        <span class="fill-track">
+          <span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" />
+          <span
+            v-if="pill.reserved > 0"
+            class="fill-reserved"
+            :style="{
+              left: reservedSegment(pill.value, pill.reserved, pill.cap).left + '%',
+              width: reservedSegment(pill.value, pill.reserved, pill.cap).width + '%',
+            }"
+          />
+        </span>
       </div>
     </div>
     <div v-if="population.max > 0" class="resource population">
@@ -103,6 +136,7 @@ function fillPct(value: number, cap: number): number {
   color: var(--food);
 }
 .fill-track {
+  position: relative;
   margin-top: 3px;
   width: 100%;
   min-width: 64px;
@@ -115,5 +149,18 @@ function fillPct(value: number, cap: number): number {
   display: block;
   height: 100%;
   border-radius: 2px;
+}
+/* Issue #158: the reserved slice of the fill — the top (highest-stock) edge of the bar, dimmed to read as "in stock but spoken for" rather than freely spendable. */
+.fill-reserved {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.45);
+}
+.reserved-hint {
+  margin-left: 4px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
 }
 </style>

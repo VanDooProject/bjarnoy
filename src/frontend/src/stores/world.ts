@@ -90,6 +90,22 @@ export const useWorldStore = defineStore('world', {
       // "current / cap" and a fill-progress bar like the reference — see
       // `WorldModel.storageCapForDisplay`.
       storageCap: emptyResources() as Resources,
+      // Issue #158: earmarked for the premium waiting build queue — still
+      // counted in `resources`/`storageCap`, but unspendable on anything
+      // voluntary. `available` is `resources` minus `reserved`, floored at
+      // zero, and is what every spend-affordability check (build, train,
+      // trade, dispatch) should read instead of `resources` directly. Both
+      // always zero in demo mode — there is no reservation concept in the
+      // local WorldModel.
+      reserved: emptyResources() as Resources,
+      available: emptyResources() as Resources,
+      // Issue #158: construction-slot summary for BuildQueuePanel's header
+      // and BuildingModal's affordability/queue-state copy.
+      // `maxWaitingOrders === 0` doubles as "not premium" — no separate
+      // premium flag needed. Demo mode reports a fixed 2-slot, no-waiting
+      // settlement (longhouse level 1, non-premium) since the local
+      // WorldModel places buildings instantly and has no queue at all.
+      construction: { slots: 2, slotsUsed: 0, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 },
       settlementName: '',
       level: 1,
       // Issue #16: population, wired the same way as the other resources —
@@ -515,6 +531,11 @@ export const useWorldStore = defineStore('world', {
       this.hud.buildings = response.buildings;
       this.hud.queue = response.queue;
       this.hud.queueFetchedAt = Date.now();
+      // `available` is not set here directly — `syncHud()` below (and every
+      // subsequent tick) derives it live from `hud.resources`/`hud.reserved`,
+      // since `resources` keeps accruing locally between polls.
+      this.hud.reserved = { ...response.resources.reserved };
+      this.hud.construction = { ...response.construction };
       this.hud.garrison = response.garrison;
       this.hud.trainingQueue = response.trainingQueue;
       this.hud.trainingQueueFetchedAt = Date.now();
@@ -921,6 +942,13 @@ export const useWorldStore = defineStore('world', {
       this.hud.resources = { ...settlement.resources };
       this.hud.rates = { ...settlement.rates };
       this.hud.storageCap = this.model.storageCapForDisplay(settlement.id);
+      // `reserved` only changes when the queue itself changes (a poll re-sets
+      // it in `refreshLiveSettlement`), but `resources` keeps ticking locally
+      // between polls — recompute `available` from the live figure every
+      // tick instead of caching a snapshot that would drift stale.
+      for (const kind of Object.keys(this.hud.available) as (keyof Resources)[]) {
+        this.hud.available[kind] = Math.max(0, this.hud.resources[kind] - this.hud.reserved[kind]);
+      }
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);

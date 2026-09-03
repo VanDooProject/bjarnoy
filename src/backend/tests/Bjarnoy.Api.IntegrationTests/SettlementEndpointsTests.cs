@@ -539,6 +539,233 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    /// <summary>The settlement's six neighbour hexes, in the same fixed order <see cref="QueueFarmAsync"/> walks.</summary>
+    private static readonly (int Dq, int Dr)[] NeighbourOffsets =
+        [(1, 0), (0, 1), (-1, 1), (1, -1), (-1, 0), (0, -1)];
+
+    private Task<HttpResponseMessage> QueueFarmAtAsync(HttpClient client, Guid settlementId, int q, int r) =>
+        client.PostJsonAsync(
+            $"/api/v1/settlements/{settlementId}/builds", new QueueBuildRequest("farm", q, r), Ct);
+
+    /// <summary>
+    /// Level-1-buildable building types spanning grass, forest and mountain —
+    /// tried in order per hex, so <see cref="QueueDistinctFarmsAsync"/> finds
+    /// a legal build regardless of which land terrain the world happened to
+    /// generate at that neighbour (a settlement's six neighbours are rarely
+    /// all grass). Tower is deliberately excluded — it needs longhouse level
+    /// 2, which these level-1 fixtures never have.
+    /// </summary>
+    private static readonly string[] AnyLevel1Building = ["farm", "lumberjack", "quarry", "storagehouse"];
+
+    /// <summary>
+    /// Queues one legal building on <paramref name="count"/> distinct
+    /// neighbour hexes, walking <see cref="NeighbourOffsets"/> and, per hex,
+    /// <see cref="AnyLevel1Building"/> — so this succeeds regardless of the
+    /// mix of terrain the world happened to generate around the settlement.
+    /// Fails the test outright if the world can't offer <paramref name="count"/>
+    /// legal neighbours to queue on at all. Every returned order still counts
+    /// as one construction slot (every building here has the catalogue's
+    /// default <c>SlotCost</c> of 1), so it is interchangeable with a Farm for
+    /// every assertion these tests make except the building type itself.
+    /// </summary>
+    /// <param name="alreadyUsed">
+    /// Hexes to skip — a running set the caller owns and this method adds
+    /// every newly-queued hex to, so a second call picks up where the first
+    /// left off instead of re-walking (and re-rejecting on) hexes already
+    /// queued.
+    /// </param>
+    private async Task<List<BuildOrderResponse>> QueueDistinctFarmsAsync(
+        HttpClient client, SettlementResponse settlement, int count, HashSet<(int, int)> alreadyUsed)
+    {
+        var orders = new List<BuildOrderResponse>();
+        foreach (var (dq, dr) in NeighbourOffsets)
+        {
+            if (orders.Count >= count)
+            {
+                break;
+            }
+
+            var q = settlement.Q + dq;
+            var r = settlement.R + dr;
+            if (!alreadyUsed.Add((q, r)))
+            {
+                continue;
+            }
+
+            foreach (var building in AnyLevel1Building)
+            {
+                var response = await client.PostJsonAsync(
+                    $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest(building, q, r), Ct);
+                if (response.StatusCode == HttpStatusCode.Accepted)
+                {
+                    orders.Add(await response.ReadStrictAsync<BuildOrderResponse>(Ct));
+                    break;
+                }
+            }
+        }
+
+        Assert.True(orders.Count == count, $"expected {count} legal neighbour hexes, only queued {orders.Count}");
+        return orders;
+    }
+
+    /// <summary>
+    /// Registers a fresh account claiming <paramref name="ownerId"/>'s
+    /// already-founded settlement (via <c>ExistingOwnerId</c> — mirrors
+    /// <c>AuthService.RegisterAsync</c>'s remarks), marks it premium directly
+    /// in the DB (the same shortcut <c>AdminUserEndpointsTests.CreateAdminAsync</c>
+    /// takes for <c>Role</c>, rather than going through the admin premium
+    /// endpoint), and returns a client authorized as that account.
+    /// </summary>
+    private async Task<HttpClient> MakePremiumAsync(string ownerId)
+    {
+        var client = _factory.CreateClient();
+        var userName = Unique("premium");
+        var registered = await client.PostJsonAsync(
+            "/api/v1/auth/register", new RegisterRequest(userName, "correct-horse-battery", ownerId), Ct);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var auth = await registered.ReadStrictAsync<AuthResponse>(Ct);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            var user = await db.Users.SingleAsync(u => u.Id == auth.User.Id, Ct);
+            user.IsPremium = true;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var loggedIn = await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
+        var token = (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    /// <summary>
+    /// Issue #158: a non-premium (here, still-anonymous) settlement has two
+    /// construction slots at longhouse level 1 and no waiting-queue room at
+    /// all — a third simultaneous build is refused 409/NoFreeSlot rather than
+    /// silently queueing.
+    /// </summary>
+    [Fact]
+    public async Task Non_premium_settlement_gets_409_NoFreeSlot_past_its_construction_slots()
+    {
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+        var usedHexes = new HashSet<(int, int)>();
+
+        await QueueDistinctFarmsAsync(client, settlement, count: 2, usedHexes);
+
+        // Both slots are now full — any legal-terrain building on any
+        // remaining hex must be refused NoFreeSlot, not merely rejected for
+        // an unrelated reason. Try every candidate building per remaining
+        // hex until one actually clears terrain, so this doesn't depend on
+        // which specific land terrain the world generated at that neighbour.
+        string? overflowRejection = null;
+        foreach (var (dq, dr) in NeighbourOffsets)
+        {
+            var q = settlement.Q + dq;
+            var r = settlement.R + dr;
+            if (usedHexes.Contains((q, r)))
+            {
+                continue;
+            }
+
+            foreach (var building in AnyLevel1Building)
+            {
+                var response = await client.PostJsonAsync(
+                    $"/api/v1/settlements/{settlement.Id}/builds", new QueueBuildRequest(building, q, r), Ct);
+                var rejection = await response.RejectionAsync(Ct);
+                if (rejection != "TerrainNotAllowed")
+                {
+                    overflowRejection = rejection;
+                    break;
+                }
+            }
+
+            if (overflowRejection is not null)
+            {
+                break;
+            }
+        }
+
+        Assert.Equal("NoFreeSlot", overflowRejection);
+    }
+
+    /// <summary>
+    /// Issue #158: the same third build a non-premium settlement gets refused
+    /// for is accepted as a <em>waiting</em> order for a premium one — its
+    /// cost is reserved (visible in <c>Resources.Reserved</c>/
+    /// <c>Construction.WaitingOrders</c>) without being deducted from stock.
+    /// </summary>
+    [Fact]
+    public async Task Premium_settlement_queues_a_third_build_as_waiting_with_reserved_resources()
+    {
+        using var anon = Client();
+        var (_, settlement) = await FoundAsync(anon);
+
+        using var client = await MakePremiumAsync(OwnerId);
+        var usedHexes = new HashSet<(int, int)>();
+
+        await QueueDistinctFarmsAsync(client, settlement, count: 2, usedHexes);
+
+        var before = await GetAsync(client, settlement.Id);
+        Assert.Equal(0, before!.Resources.Reserved.Wood);
+
+        var third = await QueueDistinctFarmsAsync(client, settlement, count: 1, usedHexes);
+        var thirdOrder = third[0];
+        Assert.Equal("waiting", thirdOrder.State);
+        Assert.Null(thirdOrder.CompletesAtGameTime);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.Equal(1, after!.Construction.WaitingOrders);
+        Assert.Equal(3, after.Construction.MaxWaitingOrders); // Settlement.MaxWaitingOrders
+        Assert.True(after.Resources.Reserved.Wood > 0);
+        Assert.Equal(after.Resources.Stock.Wood - after.Resources.Reserved.Wood, after.Resources.Available.Wood, 0);
+    }
+
+    /// <summary>Cancelling a still-waiting order drops it with no refund (nothing was ever deducted) and it disappears from the queue.</summary>
+    [Fact]
+    public async Task Cancelling_a_waiting_order_drops_it_with_no_refund()
+    {
+        using var anon = Client();
+        var (_, settlement) = await FoundAsync(anon);
+
+        using var client = await MakePremiumAsync(OwnerId);
+        var usedHexes = new HashSet<(int, int)>();
+
+        await QueueDistinctFarmsAsync(client, settlement, count: 2, usedHexes);
+        var thirdOrder = (await QueueDistinctFarmsAsync(client, settlement, count: 1, usedHexes))[0];
+
+        var beforeCancel = await GetAsync(client, settlement.Id);
+        var stockBefore = beforeCancel!.Resources.Stock.Wood;
+
+        var cancelResponse = await client.PostAsync(
+            $"/api/v1/settlements/{settlement.Id}/builds/{thirdOrder.Id}/cancel", content: null, Ct);
+        Assert.Equal(HttpStatusCode.NoContent, cancelResponse.StatusCode);
+
+        var after = await GetAsync(client, settlement.Id);
+        Assert.DoesNotContain(after!.Queue, o => o.Id == thirdOrder.Id);
+        Assert.Equal(0, after.Construction.WaitingOrders);
+        Assert.Equal(stockBefore, after.Resources.Stock.Wood, 0);
+    }
+
+    /// <summary>Stage 1d ships gated off (MaxOrdersPerHex 1) — a second order on an already-queued hex is still refused, premium or not.</summary>
+    [Fact]
+    public async Task A_second_order_on_one_hex_is_still_refused_even_for_a_premium_settlement()
+    {
+        using var anon = Client();
+        var (_, settlement) = await FoundAsync(anon);
+        using var client = await MakePremiumAsync(OwnerId);
+
+        var first = (await QueueDistinctFarmsAsync(client, settlement, count: 1, []))[0];
+
+        var second = await QueueFarmAtAsync(client, settlement.Id, first.Q, first.R);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("AlreadyQueuedOnHex", await second.RejectionAsync(Ct));
+    }
+
     [Fact]
     public async Task A_building_cannot_be_put_on_terrain_it_does_not_belong_on()
     {

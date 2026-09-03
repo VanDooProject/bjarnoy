@@ -473,7 +473,7 @@ public static class GuildEndpoints
         GuildRejection.AlreadyInAGuild => "You are already a member of a guild.",
         GuildRejection.NotAMember => "Not a member of this guild.",
         GuildRejection.GuildFull => "The guild is at its member cap.",
-        GuildRejection.NotEnoughResources => "Not enough resources to pay the fee.",
+        GuildRejection.NotEnoughResources => "Not enough resources to pay the fee (some may be reserved for queued construction).",
         GuildRejection.NoSettlement => "You have no settlement in this guild's world.",
         GuildRejection.Forbidden => "You are not allowed to do that.",
         GuildRejection.TargetIsSelf => "A guild cannot propose peace with itself.",

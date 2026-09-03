@@ -224,6 +224,8 @@ public class PausedWorldTests
             Type = BuildingType.Farm,
             TargetLevel = 1,
             Coord = new HexCoord(1, 0),
+            QueuedAt = clock.ToGameTime(Wall),
+            BaseDuration = TimeSpan.FromMinutes(10),
             StartedAt = clock.ToGameTime(Wall),
             CompletesAt = completesAt,
         };
@@ -250,6 +252,8 @@ public class PausedWorldTests
             Type = BuildingType.Farm,
             TargetLevel = 1,
             Coord = new HexCoord(1, 0),
+            QueuedAt = clock.ToGameTime(Wall),
+            BaseDuration = TimeSpan.FromMinutes(10),
             StartedAt = clock.ToGameTime(Wall),
             CompletesAt = clock.ToGameTime(Wall).AddMinutes(10),
         };

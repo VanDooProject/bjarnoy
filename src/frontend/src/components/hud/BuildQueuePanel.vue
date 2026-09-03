@@ -49,11 +49,6 @@ const BUILDING_LABELS: Record<string, string> = {
   shrineoffreyja: 'Shrine of Freyja',
 };
 
-// No backend concept of "how many build slots does this settlement have"
-// exists yet — a plausible fixed capacity, just for the "X / Y slots"
-// header the mockup shows.
-const TOTAL_SLOTS = 3;
-
 function fmt(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   const h = Math.floor(s / 3600);
@@ -83,11 +78,15 @@ const orders = computed(() => {
   }
   return world.hud.queue.map((q) => {
     const label = BUILDING_LABELS[q.building] ?? q.building;
-    const remainingAtFetch = q.completesInSeconds;
+    const waiting = q.state === 'waiting';
+    // A waiting order has no real completion instant yet (see
+    // BuildOrderResponse.completesAtGameTime's own remarks) — no countdown,
+    // no progress bar, just "waiting for a slot".
+    const remainingAtFetch = waiting ? null : q.completesInSeconds;
     const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
     const totalSeconds = q.totalSeconds;
     let progress =
-      remainingAtFetch === null || totalSeconds <= 0
+      waiting || remainingAtFetch === null || totalSeconds <= 0
         ? 1
         : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
     progress = Math.max(progress, lastProgress.get(q.id) ?? 0);
@@ -96,13 +95,23 @@ const orders = computed(() => {
     return {
       key: q.id,
       name: `${label} → ${q.targetLevel}`,
-      remaining: remainingNow === null ? '—' : fmt(remainingNow),
+      remaining: waiting ? 'Waiting for a slot' : remainingNow === null ? '—' : fmt(remainingNow),
       progress,
       done,
+      waiting,
       subtext: `hex ${q.q}-${q.r}`,
       coord: { q: q.q, r: q.r },
     };
   });
+});
+
+// Issue #158: a footer note when any queued order is a waiting one — its
+// cost sits reserved (still in `hud.resources`, still counted against the
+// storage cap) but unspendable elsewhere. Reads `hud.reserved` — the sum of
+// every waiting order's cost — rather than re-deriving it locally.
+const reservedTotal = computed(() => {
+  const r = world.hud.reserved;
+  return r.wood + r.stone + r.food + r.iron;
 });
 </script>
 
@@ -110,15 +119,15 @@ const orders = computed(() => {
   <div v-if="orders.length" class="status-card">
     <div class="status-card-header">
       <span class="status-card-title">Construction</span>
-      <span class="status-card-count">{{ orders.length }} / {{ TOTAL_SLOTS }} slots</span>
+      <span class="status-card-count">{{ world.hud.construction.slotsUsed }} / {{ world.hud.construction.slots }} slots</span>
     </div>
-    <div v-for="o in orders" :key="o.key" class="status-row">
+    <div v-for="o in orders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
       <button type="button" class="status-row-click" @click="emit('select', o.coord)">
         <div class="status-row-top">
           <span class="status-row-name">{{ o.name }}</span>
           <span class="status-row-time">{{ o.remaining }}</span>
         </div>
-        <div class="status-progress">
+        <div v-if="!o.waiting" class="status-progress">
           <div
             class="status-progress-fill"
             :class="{ 'is-done': o.done }"
@@ -135,6 +144,13 @@ const orders = computed(() => {
       >
         ✕
       </button>
+    </div>
+    <div v-if="reservedTotal > 0" class="status-subtext reserved-footer">
+      Reserved for queued construction:
+      {{ Math.round(world.hud.reserved.wood) }}w
+      {{ Math.round(world.hud.reserved.stone) }}s
+      {{ Math.round(world.hud.reserved.food) }}f
+      {{ Math.round(world.hud.reserved.iron) }}i
     </div>
     <div v-if="error" class="status-subtext error">{{ error }}</div>
   </div>
@@ -221,6 +237,18 @@ const orders = computed(() => {
 .status-subtext.error {
   color: #e05a5a;
   margin-top: 8px;
+}
+/* Issue #158: a waiting order (premium queue, no free slot yet) reads dim — no progress bar, just "Waiting for a slot" in place of a countdown. */
+.status-row.is-waiting {
+  opacity: 0.55;
+}
+.status-row.is-waiting .status-row-time {
+  color: var(--muted);
+}
+.reserved-footer {
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--panel-border);
 }
 .status-row-top {
   display: flex;

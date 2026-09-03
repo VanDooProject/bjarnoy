@@ -431,3 +431,34 @@ describe('useWorldStore fetchFogMask', () => {
     expect(store.fogMaskBitmap).toBe(firstBitmap);
   });
 });
+
+// Issue #158: construction slots/reservations have no backend to ask in
+// demo mode — the local WorldModel simulation places buildings instantly
+// and has no queue at all. Every new `hud` field must default to something
+// safe (no reservation, no waiting queue) rather than erroring or leaving
+// stale/undefined state, and refreshLiveSettlement — the only place these
+// fields are ever refreshed from the backend — must stay a true no-op.
+describe('construction slots/reservations degrade gracefully in demo mode', () => {
+  it('reports a zero-reservation, non-premium construction summary with no backend call', async () => {
+    getSettlement.mockReset();
+    const store = await loadStoreModule(true);
+
+    expect(store.hud.reserved).toEqual({ wood: 0, stone: 0, food: 0, iron: 0 });
+    expect(store.hud.available).toEqual(store.hud.resources);
+    expect(store.hud.construction).toEqual({
+      slots: 2,
+      slotsUsed: 0,
+      maxWaitingOrders: 0,
+      waitingOrders: 0,
+      maxOrdersPerHex: 1,
+    });
+
+    store.selectedSettlementId = 'settlement-1';
+    await store.refreshLiveSettlement();
+
+    expect(getSettlement).not.toHaveBeenCalled();
+    // Still the same safe defaults after the no-op call.
+    expect(store.hud.reserved).toEqual({ wood: 0, stone: 0, food: 0, iron: 0 });
+    expect(store.hud.construction.maxWaitingOrders).toBe(0);
+  });
+});

@@ -141,15 +141,23 @@ public class SettlementEntity
         ],
         Queue =
         [
-            .. Queue.OrderBy(o => o.CompletesAt).Select(o => new BuildOrder
-            {
-                Id = o.Id,
-                Type = o.Type,
-                TargetLevel = o.TargetLevel,
-                Coord = new HexCoord(o.Q, o.R),
-                StartedAt = o.StartedAt,
-                CompletesAt = o.CompletesAt,
-            }),
+            // A started order sorts by its own completion instant; a waiting
+            // one (StartedAt null) sorts after every started one, by FIFO
+            // QueuedAt — deterministic queue order is what makes SettleTo's
+            // same-hex contiguity rule (issue #158 stage 1d) correct with no
+            // extra bookkeeping.
+            .. Queue.OrderBy(o => o.StartedAt ?? DateTimeOffset.MaxValue).ThenBy(o => o.QueuedAt).ThenBy(o => o.Id)
+                .Select(o => new BuildOrder
+                {
+                    Id = o.Id,
+                    Type = o.Type,
+                    TargetLevel = o.TargetLevel,
+                    Coord = new HexCoord(o.Q, o.R),
+                    QueuedAt = o.QueuedAt,
+                    BaseDuration = o.BaseDuration,
+                    StartedAt = o.StartedAt,
+                    CompletesAt = o.CompletesAt,
+                }),
         ],
         Garrison =
         [
@@ -258,22 +266,32 @@ public class SettlementEntity
 
         foreach (var order in settlement.Queue)
         {
-            if (Queue.Any(o => o.Id == order.Id))
+            var existing = Queue.FirstOrDefault(o => o.Id == order.Id);
+            if (existing is null)
             {
-                continue;
+                Queue.Add(new BuildOrderEntity
+                {
+                    Id = order.Id,
+                    SettlementId = Id,
+                    Type = order.Type,
+                    TargetLevel = order.TargetLevel,
+                    Q = order.Coord.Q,
+                    R = order.Coord.R,
+                    QueuedAt = order.QueuedAt,
+                    BaseDuration = order.BaseDuration,
+                    StartedAt = order.StartedAt,
+                    CompletesAt = order.CompletesAt,
+                });
             }
-
-            Queue.Add(new BuildOrderEntity
+            else
             {
-                Id = order.Id,
-                SettlementId = Id,
-                Type = order.Type,
-                TargetLevel = order.TargetLevel,
-                Q = order.Coord.Q,
-                R = order.Coord.R,
-                StartedAt = order.StartedAt,
-                CompletesAt = order.CompletesAt,
-            });
+                // A promotion updates an already-persisted waiting row in
+                // place — StartedAt/CompletesAt go from null to a real
+                // instant (issue #158) — rather than only ever adding/removing
+                // whole rows, which is all this used to need to do.
+                existing.StartedAt = order.StartedAt;
+                existing.CompletesAt = order.CompletesAt;
+            }
         }
     }
 
@@ -400,11 +418,17 @@ public class BuildOrderEntity
 
     public int TargetLevel { get; set; }
 
-    /// <summary>Game instant, not wall time.</summary>
-    public DateTimeOffset StartedAt { get; set; }
+    /// <summary>When the player ordered it — <see cref="BuildOrder.QueuedAt"/>.</summary>
+    public DateTimeOffset QueuedAt { get; set; }
 
-    /// <summary>Game instant the order becomes a building.</summary>
-    public DateTimeOffset CompletesAt { get; set; }
+    /// <summary>The catalogue's unscaled duration for this order's level — <see cref="BuildOrder.BaseDuration"/>.</summary>
+    public TimeSpan BaseDuration { get; set; }
+
+    /// <summary>Game instant, not wall time. <see langword="null"/> while waiting for a construction slot.</summary>
+    public DateTimeOffset? StartedAt { get; set; }
+
+    /// <summary>Game instant the order becomes a building. <see langword="null"/> while waiting.</summary>
+    public DateTimeOffset? CompletesAt { get; set; }
 }
 
 /// <summary>Some number of one unit type standing in a settlement's garrison.</summary>

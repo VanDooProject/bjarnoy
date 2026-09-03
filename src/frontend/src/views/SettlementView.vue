@@ -246,9 +246,10 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
-// Why the last build/upgrade attempt was rejected — surfaced in BuildingModal
-// rather than only `console.error`'d, and cleared whenever a fresh attempt
-// starts or a different tile is selected.
+// Why the last build/upgrade attempt was rejected (NoFreeSlot's premium
+// hint included, issue #158) — surfaced in BuildingModal rather than only
+// `console.error`'d, and cleared whenever a fresh attempt starts, the modal
+// closes, or a different tile is selected.
 const actionError = ref<string | null>(null);
 // Issue #40 phase 1: a separate modal from BuildingModal (train has no
 // per-hex build/upgrade action, it lists the whole unit roster at once) —
@@ -615,8 +616,9 @@ async function onRingSelect(id: string) {
   const tile = selectedTile.value;
   if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
     await buildType(id as BuildableType);
-    // A rejection needs somewhere to show — fall back to BuildingModal (same
-    // tile, ring dismissed) instead of closing everything and losing it.
+    // A rejection (NoFreeSlot's premium hint included, issue #158) needs
+    // somewhere to show — fall back to BuildingModal (same tile, ring
+    // dismissed) instead of closing everything and losing it.
     if (actionError.value) ringScreen.value = null;
     else closeRing();
     return;
@@ -633,7 +635,11 @@ async function onRingSelect(id: string) {
       // deliberately leaves selectedTile/ringScreen alone so this can drop
       // through to BuildingModal instead, where the error renders.
       await upgrade();
-      if (actionError.value) ringScreen.value = null;
+      if (actionError.value) {
+        ringScreen.value = null;
+      } else {
+        closeRing();
+      }
       return;
     case 'train':
       // Same hand-off pattern as 'details'/'info', to TrainingModal.
@@ -655,6 +661,7 @@ async function onRingSelect(id: string) {
 function closeModal() {
   closeRing();
   modalBusy.value = false;
+  actionError.value = null;
 }
 
 function closeTrainModal() {
@@ -684,10 +691,15 @@ async function buildType(type: BuildableType) {
     return;
   }
   modalBusy.value = true;
+  actionError.value = null;
   try {
     await world.queueBuildLive(type, selectedCoord.value);
   } catch (err) {
-    actionError.value = describeActionError(err, 'Could not build here.');
+    console.error('Failed to queue building against the backend', err);
+    // Surface the rejection's detail — NoFreeSlot's premium hint included
+    // (issue #158) — rather than leaving the player to guess why nothing
+    // happened.
+    actionError.value = describeActionError(err, 'Could not queue that build.');
   } finally {
     modalBusy.value = false;
   }
@@ -698,6 +710,9 @@ async function buildType(type: BuildableType) {
 // own, so it keeps the previous default of a hut.
 async function build() {
   await buildType('hut');
+  // Only dismiss the modal on success — a rejection (e.g. NoFreeSlot) needs
+  // to stay visible via actionError rather than being closed out from under
+  // the player before they can read it.
   if (actionError.value) return;
   closeModal();
 }
@@ -713,11 +728,13 @@ async function upgrade() {
     return;
   }
   modalBusy.value = true;
+  actionError.value = null;
   try {
     await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
     closeModal();
   } catch (err) {
-    actionError.value = describeActionError(err, 'Could not upgrade this building.');
+    console.error('Failed to queue upgrade against the backend', err);
+    actionError.value = describeActionError(err, 'Could not queue that upgrade.');
     modalBusy.value = false;
   }
 }

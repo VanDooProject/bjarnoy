@@ -739,4 +739,78 @@ public class ArmyAttackTests
         var resettled = arrival.DefenderSettlement.SettleTo(movement.ArrivesAt.AddHours(2)).Settlement;
         Assert.Equal(foodRateAfter, resettled.Resources.RatePerHour.Food, 6);
     }
+
+    /// <summary>
+    /// Issue #158: a raid taking the defender's stock below what the waiting
+    /// (premium) queue has reserved drops the first unfunded order and every
+    /// order behind it, at the instant of the raid.
+    /// </summary>
+    [Fact]
+    public void A_raid_dropping_the_stock_below_reservations_prunes_the_waiting_queue()
+    {
+        var (production, _) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
+        var farmCost = BuildingCatalogue.Get(BuildingType.Farm, 1).Cost;
+
+        // Enough stock to cover two active builds (already spent, filling
+        // both construction slots) plus two more orders' reservations, with
+        // nothing to spare.
+        var defenderStock = farmCost * 4;
+        var defender = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Target",
+            Centre = TargetHex,
+            Buildings = [new PlacedBuilding(TargetHex, BuildingType.Longhouse, 1)],
+            Garrison = [],
+            Resources = ResourcePool.Create(
+                defenderStock, production, ResourceAmounts.Uniform(10_000), T0),
+        };
+
+        var neighbours = TargetHex.Neighbours();
+
+        // Fill both construction slots first, so the next two orders have
+        // nowhere to go but the waiting queue.
+        var active1 = defender.PlanBuild(
+            BuildingType.Farm, neighbours[0], Terrain.Grass, T0, Guid.CreateVersion7());
+        var withActive1 = defender.Enqueue(active1.Order!, T0);
+        var active2 = withActive1.PlanBuild(
+            BuildingType.Farm, neighbours[1], Terrain.Grass, T0, Guid.CreateVersion7());
+        var withActive2 = withActive1.Enqueue(active2.Order!, T0);
+        Assert.Equal(0, withActive2.FreeSlots);
+
+        var waitingA = withActive2.PlanBuild(
+            BuildingType.Farm, neighbours[2], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        Assert.True(waitingA.Accepted, $"expected accept, got {waitingA.Rejection}");
+        Assert.True(waitingA.Order!.IsWaiting);
+        var withA = withActive2.Enqueue(waitingA.Order!, T0);
+        var waitingB = withA.PlanBuild(
+            BuildingType.Farm, neighbours[3], Terrain.Grass, T0, Guid.CreateVersion7(), maxWaitingOrders: 3);
+        Assert.True(waitingB.Accepted, $"expected accept, got {waitingB.Rejection}");
+        Assert.True(waitingB.Order!.IsWaiting);
+        var withBoth = withA.Enqueue(waitingB.Order!, T0);
+
+        Assert.Equal(2, withBoth.WaitingOrders.Count());
+        Assert.Equal(farmCost.Wood * 2, withBoth.ReservedResources.Wood, 6);
+
+        var defender2 = withBoth;
+
+        // A large, undefended raid: carry capacity comfortably exceeds the
+        // defender's entire stock, so essentially everything is looted.
+        var attackerHome = Found(garrison: [new UnitStack(UnitType.Axeman, 500)]);
+        var decision = DispatchAttack(
+            attackerHome, defender.Id, provisions: 1000, requested: [new UnitStack(UnitType.Axeman, 500)]);
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var arrival = Army.SettleArrival(army, defender2, defenderSpeedFactor: 1.0, movement.ArrivesAt, seed: 11);
+
+        Assert.True(arrival.Fought);
+        Assert.Equal(BattleWinner.Attacker, arrival.Battle!.Winner);
+        Assert.NotEqual(ResourceAmounts.Zero, arrival.Battle.LootTaken);
+
+        // Both waiting orders — reserved but never actually deducted — are
+        // dropped at the raid's own instant, no refund, nothing else.
+        Assert.Empty(arrival.DefenderSettlement.WaitingOrders);
+    }
 }

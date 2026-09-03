@@ -62,6 +62,40 @@ public sealed class AdminGodModeTests
         Assert.Contains(settled.Settlement.Buildings, b => b.Coord == coord && b.Type == BuildingType.Farm);
     }
 
+    /// <summary>
+    /// Issue #158: god mode is an admin bypass, not a new plan — instant
+    /// build must still empty the whole queue, including whatever sits in
+    /// the premium waiting tail, rather than stalling on slot limits.
+    /// </summary>
+    [Fact]
+    public void Instant_build_also_empties_a_queue_with_waiting_orders()
+    {
+        var settlement = NewSettlement();
+
+        // Two construction slots at longhouse level 1 — queue three orders,
+        // the third going to the waiting tail (premium queue simulated by
+        // passing maxWaitingOrders explicitly, exactly as SettlementService
+        // does for a premium settlement).
+        var first = settlement.PlanBuild(BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, Start, Guid.CreateVersion7());
+        var withFirst = settlement.Enqueue(first.Order!, Start);
+        var second = withFirst.PlanBuild(BuildingType.Farm, new HexCoord(0, 1), Terrain.Grass, Start, Guid.CreateVersion7());
+        var withSecond = withFirst.Enqueue(second.Order!, Start);
+        var third = withSecond.PlanBuild(
+            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, Start, Guid.CreateVersion7(), maxWaitingOrders: 1);
+        Assert.True(third.Accepted);
+        Assert.True(third.Order!.IsWaiting);
+        var withThird = withSecond.Enqueue(third.Order!, Start);
+
+        Assert.Single(withThird.WaitingOrders);
+
+        var oneMinuteIn = Start + TimeSpan.FromMinutes(1);
+        var settled = withThird.WithQueuesDueAt(oneMinuteIn).SettleTo(oneMinuteIn);
+
+        Assert.True(settled.Changed);
+        Assert.Empty(settled.Settlement.Queue);
+        Assert.Equal(3, settled.Settlement.Buildings.Count(b => b.Type == BuildingType.Farm));
+    }
+
     [Fact]
     public void Instant_build_lands_a_training_batch_in_the_garrison()
     {

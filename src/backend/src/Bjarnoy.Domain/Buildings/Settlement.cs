@@ -30,8 +30,25 @@ public readonly record struct PlacedBuilding(HexCoord Coord, BuildingType Type, 
 /// </remarks>
 public sealed record Settlement
 {
-    /// <summary>Orders that may be queued at once (MECHANICS.md: build slots).</summary>
-    public const int MaxQueueLength = 3;
+    /// <summary>
+    /// Waiting-queue depth for a premium settlement (issue #158) — orders
+    /// queued behind whatever is already occupying every construction slot.
+    /// Zero for non-premium and anonymous settlements
+    /// (<c>SettlementService.QueueBuildAsync</c> passes 0 for those), which is
+    /// how a client tells "queue is premium-locked" apart from "queue is
+    /// full" — see <see cref="BuildRejection.NoFreeSlot"/>.
+    /// </summary>
+    public const int MaxWaitingOrders = 3;
+
+    /// <summary>
+    /// Default cap on simultaneously queued/building orders on one hex
+    /// (issue #158 stage 1d). The domain supports a level chain per hex from
+    /// day one, but the capability ships switched off — every call site
+    /// passes this constant until a paid "stacking" tier is designed, at
+    /// which point <c>SettlementService.QueueBuildAsync</c> is the one seam
+    /// that needs to change.
+    /// </summary>
+    public const int DefaultMaxOrdersPerHex = 1;
 
     /// <summary>
     /// Training orders that may be queued at once. A separate, more generous
@@ -86,6 +103,85 @@ public sealed record Settlement
     /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>.
     /// </summary>
     public int ClaimRadius => 1 + (LonghouseLevel / 2);
+
+    /// <summary>
+    /// How many orders may build in parallel right now (issue #158):
+    /// <c>2 + max(0, (longhouseLevel − 5) / 5)</c> — 2 slots at level 1–9, 3 at
+    /// 10, 4 at 15, 5 at 20. The formula deliberately outlives today's
+    /// <see cref="BuildingCatalogue.MaxLevel"/> of 10. A razed settlement
+    /// (<see cref="LonghouseLevel"/> 0) still reads 2 — harmless, since every
+    /// building needs <see cref="BuildingDefinition.RequiredLonghouseLevel"/>
+    /// &gt;= 1 and nothing can be queued there anyway.
+    /// </summary>
+    public int ConstructionSlots => ConstructionSlotsFor(Buildings);
+
+    private static int ConstructionSlotsFor(IReadOnlyList<PlacedBuilding> buildings)
+    {
+        var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
+        return 2 + Math.Max(0, (longhouseLevel - 5) / 5);
+    }
+
+    /// <summary>Queued orders already under construction — see <see cref="BuildOrder.IsWaiting"/>.</summary>
+    public IEnumerable<BuildOrder> ActiveOrders => Queue.Where(o => !o.IsWaiting);
+
+    /// <summary>Queued orders still waiting for a construction slot (the premium queue).</summary>
+    public IEnumerable<BuildOrder> WaitingOrders => Queue.Where(o => o.IsWaiting);
+
+    /// <summary>How many construction slots <see cref="ActiveOrders"/> currently occupies.</summary>
+    public int UsedSlots => UsedSlotsFor(Queue, ConstructionSlots);
+
+    private static int EffectiveSlotCost(BuildOrder order, int constructionSlots)
+    {
+        var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+        return definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
+    }
+
+    private static int UsedSlotsFor(IReadOnlyList<BuildOrder> queue, int constructionSlots) =>
+        queue.Where(o => !o.IsWaiting).Sum(o => EffectiveSlotCost(o, constructionSlots));
+
+    /// <summary><see cref="ConstructionSlots"/> minus <see cref="UsedSlots"/>, floored at zero.</summary>
+    public int FreeSlots => Math.Max(0, ConstructionSlots - UsedSlots);
+
+    /// <summary>
+    /// The cost of every <see cref="WaitingOrders"/> entry, summed —
+    /// resources still physically sitting in <see cref="Resources"/> but
+    /// earmarked and unspendable on anything else (issue #158 stage 1c).
+    /// Derived, never stored.
+    /// </summary>
+    public ResourceAmounts ReservedResources =>
+        WaitingOrders.Aggregate(ResourceAmounts.Zero, (sum, o) => sum + BuildingCatalogue.Get(o.Type, o.TargetLevel).Cost);
+
+    /// <summary>
+    /// What is actually free to spend at <paramref name="now"/> — the settled
+    /// stock minus <see cref="ReservedResources"/>, floored at zero. Every
+    /// voluntary spend (build, train, dispatch provisions, trade, guild fees)
+    /// must check this instead of <c>Resources.At(now)</c> directly, or a
+    /// reservation is not a reservation — see <see cref="CanAffordAvailable"/>
+    /// and <see cref="TrySpendAvailable"/>.
+    /// </summary>
+    public ResourceAmounts AvailableResources(DateTimeOffset now) => (Resources.At(now) - ReservedResources).ClampToZero();
+
+    /// <summary>Whether <paramref name="cost"/> is affordable out of <see cref="AvailableResources"/>.</summary>
+    public bool CanAffordAvailable(ResourceAmounts cost, DateTimeOffset now) => AvailableResources(now).Covers(cost);
+
+    /// <summary>
+    /// Spends <paramref name="cost"/> against <see cref="Resources"/>, but
+    /// only when <see cref="AvailableResources"/> covers it — the
+    /// reservation-aware sibling of <see cref="ResourcePool.TrySpend"/>.
+    /// <see cref="ResourcePool"/> itself stays reservation-unaware (it has no
+    /// idea a queue exists); <see cref="Settlement"/> is the only type that
+    /// can answer "available".
+    /// </summary>
+    public bool TrySpendAvailable(ResourceAmounts cost, DateTimeOffset now, out ResourcePool result)
+    {
+        if (!CanAffordAvailable(cost, now))
+        {
+            result = Resources;
+            return false;
+        }
+
+        return Resources.TrySpend(cost, now, out result);
+    }
 
     /// <summary>
     /// The largest <see cref="ClaimRadius"/> the centre disc alone can ever
@@ -261,30 +357,46 @@ public sealed record Settlement
     {
         guestStacks ??= [];
 
-        var dueBuilds = Queue.Where(o => o.IsComplete(now)).ToList();
-        var dueTraining = TrainingQueue.Where(o => o.IsComplete(now)).ToList();
-
         var buildings = Buildings.ToList();
         var garrison = Garrison.ToList();
         var guestPool = guestStacks.ToList();
+        var queue = Queue.ToList();
+        var trainingQueue = TrainingQueue.ToList();
         var resources = Resources;
 
-        // Build completions and training completions both change the rate
-        // (buildings change gross production, a finished batch changes
-        // upkeep), so they are merged into one chronological timeline rather
-        // than applied as two separate passes — otherwise a training batch
-        // that finished between two build completions would be rated as if
-        // it existed the whole time, or not at all.
-        var events = dueBuilds
-            .Select(o => (Time: o.CompletesAt, Build: (BuildOrder?)o, Train: (TrainingOrder?)null))
-            .Concat(dueTraining.Select(o => (Time: o.CompletesAt, Build: (BuildOrder?)null, Train: (TrainingOrder?)o)))
-            .OrderBy(e => e.Time)
-            .ToList();
+        var completedBuilds = new List<BuildOrder>();
+        var completedTraining = new List<TrainingOrder>();
+        var promotedAny = false;
 
-        foreach (var (time, buildOrder, trainOrder) in events)
+        // Bounded loop: each iteration applies the single earliest still-due
+        // completion (a building or a training batch — merged into one
+        // chronological timeline so a batch that finished between two build
+        // completions is rated as existing for exactly the right slice of
+        // time, never the whole window or none of it), then immediately
+        // promotes whatever the resulting free slot allows. Ordering within
+        // an instant is normative: complete -> promote -> (after the loop)
+        // starvation, so a promotion's food spend is visible to the
+        // starvation pass at that same instant. Terminates because every
+        // iteration removes exactly one order from Queue/TrainingQueue, both
+        // finite.
+        while (true)
         {
-            if (buildOrder is { } order)
+            var dueBuild = queue.Where(o => !o.IsWaiting && o.IsComplete(now)).OrderBy(o => o.CompletesAt).FirstOrDefault();
+            var dueTrain = trainingQueue.Where(o => o.IsComplete(now)).OrderBy(o => o.CompletesAt).FirstOrDefault();
+
+            if (dueBuild is null && dueTrain is null)
             {
+                break;
+            }
+
+            var takeBuild = dueBuild is not null && (dueTrain is null || dueBuild.CompletesAt!.Value <= dueTrain.CompletesAt);
+
+            DateTimeOffset eventTime;
+            if (takeBuild)
+            {
+                var order = dueBuild!;
+                eventTime = order.CompletesAt!.Value;
+
                 var index = buildings.FindIndex(b => b.Coord == order.Coord);
                 if (index >= 0)
                 {
@@ -294,21 +406,50 @@ public sealed record Settlement
                 {
                     buildings.Add(new PlacedBuilding(order.Coord, order.Type, order.TargetLevel));
                 }
+
+                queue.Remove(order);
+                completedBuilds.Add(order);
             }
-            else if (trainOrder is { } train)
+            else
             {
+                var train = dueTrain!;
+                eventTime = train.CompletesAt;
+
                 // The whole batch lands in the garrison at once, at the
                 // instant the last unit finishes — see TrainingOrder's
                 // remarks for why a batch is not split as it partially
                 // completes.
                 AddToGarrison(garrison, train.UnitType, train.Count);
+                trainingQueue.Remove(train);
+                completedTraining.Add(train);
             }
 
             // Each completion changes the rate from its own instant, so a
             // building (or batch) finished an hour ago has applied for that
             // hour.
             var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
-            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, time);
+            resources = resources.WithRate(ApplyUpkeep(production * speedFactor, garrison, guestPool), capacity, eventTime);
+
+            // A build completion (or, harmlessly, a training one) may have
+            // freed a construction slot — promote at this same instant, so
+            // reading the settlement at any later time gives the same answer
+            // whether this ran once or was replayed step by step.
+            var soFar = this with
+            {
+                Buildings = buildings,
+                Queue = queue,
+                TrainingQueue = trainingQueue,
+                Garrison = garrison,
+                Resources = resources,
+            };
+            var (promoted, promotionChanged) = soFar.PromoteWaitingOrders(eventTime, speedFactor);
+            if (promotionChanged)
+            {
+                promotedAny = true;
+                buildings = promoted.Buildings.ToList();
+                queue = promoted.Queue.ToList();
+                resources = promoted.Resources;
+            }
         }
 
         var (finalProduction, finalCapacity) = BoostedTotals(buildings, Runes, terrainAt);
@@ -317,7 +458,8 @@ public sealed record Settlement
         // Starvation is checked every settle, not only when something
         // completed: a garrison (home or guest) can run its settlement out of
         // food purely by sitting there while nobody looks, with no order due
-        // at all.
+        // at all. Runs after every completion/promotion above, so a
+        // promotion's food spend at this same instant is already reflected.
         var (deaths, guestDeaths) = ApplyStarvation(ref resources, garrison, guestPool, finalProduction, finalCapacity, now);
 
         // A guest army arriving or departing changes upkeep from outside this
@@ -337,7 +479,18 @@ public sealed record Settlement
             resources = resources.WithRate(correctNetProduction, finalCapacity, now);
         }
 
-        var changed = dueBuilds.Count > 0 || dueTraining.Count > 0 || deaths.Count > 0 || guestDeaths.Count > 0 || rateIsStale;
+        // A raid dropping the stock below the reservations is handled at the
+        // raid's own instant (Army.cs); this is the lazy-settle counterpart —
+        // any settlement's stock can also simply decay below its reservations
+        // over time from other spending paths going stale, so every settle
+        // re-checks the tail of the waiting queue too.
+        var beforeWaiting = queue.Count(o => o.IsWaiting);
+        var afterDrop = (this with { Queue = queue, Resources = resources }).DropUnfundedOrders(now);
+        queue = afterDrop.Queue.ToList();
+        var droppedAny = queue.Count(o => o.IsWaiting) != beforeWaiting;
+
+        var changed = completedBuilds.Count > 0 || completedTraining.Count > 0 || deaths.Count > 0
+            || guestDeaths.Count > 0 || rateIsStale || promotedAny || droppedAny;
         if (!changed)
         {
             return new SettleResult(this, Changed: false, [], [], [], []);
@@ -347,12 +500,156 @@ public sealed record Settlement
         {
             Buildings = buildings,
             Garrison = garrison,
-            Queue = [.. Queue.Where(o => !o.IsComplete(now))],
-            TrainingQueue = [.. TrainingQueue.Where(o => !o.IsComplete(now))],
+            Queue = queue,
+            TrainingQueue = trainingQueue,
             Resources = resources,
         };
 
-        return new SettleResult(settled, Changed: true, dueBuilds, dueTraining, deaths, guestDeaths);
+        return new SettleResult(settled, Changed: true, completedBuilds, completedTraining, deaths, guestDeaths);
+    }
+
+    /// <summary>
+    /// The one place a waiting order becomes a building order: takes
+    /// head-of-queue waiting orders (FIFO by <see cref="BuildOrder.QueuedAt"/>,
+    /// skipping any whose hex still has an earlier unfinished order ahead of
+    /// it — the stage 1d same-hex contiguity rule) while their slot cost fits
+    /// <see cref="FreeSlots"/>, spends each at <paramref name="now"/>, stamps
+    /// <see cref="BuildOrder.StartedAt"/>/<see cref="BuildOrder.CompletesAt"/>
+    /// from <see cref="BuildOrder.BaseDuration"/> scaled by
+    /// <paramref name="speedFactor"/> (the factor in force <em>now</em>, not
+    /// whatever was in force when the order was queued), and stakes the
+    /// level-0 stub. Called from every path that can free a slot:
+    /// <see cref="SettleTo"/> (after each completion), <see cref="CancelBuild"/>
+    /// (cancelling a building order), and <see cref="WithQueuesDueAt"/>
+    /// (admin instant build).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does not skip ahead: if the head-of-line waiting order's
+    /// slot cost does not fit the currently free slots, promotion stops there
+    /// even if a smaller order further back would fit — a longhouse upgrade
+    /// waiting for every slot is not jumped by a one-slot Farm behind it.
+    /// </remarks>
+    public (Settlement Settlement, bool Changed) PromoteWaitingOrders(DateTimeOffset now, double speedFactor = 1.0)
+    {
+        var queue = Queue.ToList();
+        var buildings = Buildings.ToList();
+        var resources = Resources;
+        var constructionSlots = ConstructionSlotsFor(buildings);
+        var changed = false;
+
+        while (true)
+        {
+            var used = UsedSlotsFor(queue, constructionSlots);
+            var free = Math.Max(0, constructionSlots - used);
+            if (free <= 0)
+            {
+                break;
+            }
+
+            // Queue is already in FIFO/plan order (Enqueue only ever
+            // appends), so list position — not QueuedAt — is the tiebreaker
+            // that actually matters: two orders planned in the same instant
+            // (identical QueuedAt, e.g. two requests landing in the same
+            // tick) still have a real, distinguishable plan order here.
+            var candidate = queue
+                .Where(o => o.IsWaiting)
+                .FirstOrDefault(o =>
+                {
+                    var index = queue.IndexOf(o);
+                    return !queue.Any(other => other.Coord == o.Coord && other.Id != o.Id && queue.IndexOf(other) < index);
+                });
+
+            if (candidate is null)
+            {
+                break;
+            }
+
+            var definition = BuildingCatalogue.Get(candidate.Type, candidate.TargetLevel);
+            var slotCost = definition.OccupiesAllSlots ? constructionSlots : definition.SlotCost;
+            if (slotCost > free)
+            {
+                // Head-of-line blocking: the waiting queue is FIFO, not a
+                // pool a smaller order can jump.
+                break;
+            }
+
+            if (!resources.TrySpend(definition.Cost, now, out var paid))
+            {
+                // Reserved resources should already cover this — defensive
+                // only (e.g. a caller settling with a stale/short stock).
+                break;
+            }
+
+            resources = paid;
+
+            var duration = speedFactor == 1.0
+                ? candidate.BaseDuration
+                : TimeSpan.FromTicks((long)(candidate.BaseDuration.Ticks / speedFactor));
+            var started = candidate with { StartedAt = now, CompletesAt = now + duration };
+            queue[queue.FindIndex(o => o.Id == candidate.Id)] = started;
+
+            if (!buildings.Any(b => b.Coord == started.Coord))
+            {
+                buildings.Add(new PlacedBuilding(started.Coord, started.Type, Level: 0));
+            }
+
+            changed = true;
+        }
+
+        return changed
+            ? (this with { Queue = queue, Buildings = buildings, Resources = resources }, true)
+            : (this, false);
+    }
+
+    /// <summary>
+    /// Walks <see cref="WaitingOrders"/> in queue order, accumulating each
+    /// one's reserved cost against the settled stock at <paramref name="now"/>;
+    /// at the first one the stock can no longer cover, drops it and every
+    /// order behind it (issue #158: a raid taking the stock below the
+    /// reservations, at the instant it happens). No refund — the resources
+    /// were never deducted for a waiting order; the raider simply took them.
+    /// Called at the tail of <see cref="SettleTo"/> and from the raid path
+    /// (<c>Army.SettleArrival</c>).
+    /// </summary>
+    public Settlement DropUnfundedOrders(DateTimeOffset now)
+    {
+        // Queue (and so WaitingOrders, a filter over it) is already in
+        // FIFO/plan order — see PromoteWaitingOrders' remarks.
+        var waiting = WaitingOrders.ToList();
+        if (waiting.Count == 0)
+        {
+            return this;
+        }
+
+        var stock = Resources.At(now);
+        var running = ResourceAmounts.Zero;
+        var keep = new HashSet<Guid>();
+        var dropping = false;
+
+        foreach (var order in waiting)
+        {
+            if (dropping)
+            {
+                continue;
+            }
+
+            var candidateTotal = running + BuildingCatalogue.Get(order.Type, order.TargetLevel).Cost;
+            if (!stock.Covers(candidateTotal))
+            {
+                dropping = true;
+                continue;
+            }
+
+            running = candidateTotal;
+            keep.Add(order.Id);
+        }
+
+        if (!dropping)
+        {
+            return this;
+        }
+
+        return this with { Queue = [.. Queue.Where(o => !o.IsWaiting || keep.Contains(o.Id))] };
     }
 
     /// <summary>
@@ -575,6 +872,17 @@ public sealed record Settlement
     /// (the fishing hut) cares; <paramref name="terrain"/> alone can't say,
     /// since it reports plain <see cref="Terrain.Sea"/> either way.
     /// </param>
+    /// <param name="maxWaitingOrders">
+    /// How many orders may sit in the waiting queue at once — 0 for
+    /// non-premium/anonymous play, <see cref="MaxWaitingOrders"/> for premium
+    /// (<c>SettlementService.QueueBuildAsync</c> decides which, from the
+    /// settlement's owning user).
+    /// </param>
+    /// <param name="maxOrdersPerHex">
+    /// How many orders (building + waiting) may target one hex at once —
+    /// <see cref="DefaultMaxOrdersPerHex"/> (1) everywhere today; the seam a
+    /// future per-hex-stacking tier switches on (issue #158 stage 1d).
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -582,19 +890,18 @@ public sealed record Settlement
         DateTimeOffset now,
         Guid orderId,
         double speedFactor = 1.0,
-        bool isCoastalWater = false)
+        bool isCoastalWater = false,
+        int maxWaitingOrders = 0,
+        int maxOrdersPerHex = DefaultMaxOrdersPerHex)
     {
         if (!Claims(coord))
         {
             return BuildDecision.Rejected(BuildRejection.HexNotInSettlement);
         }
 
-        if (Queue.Count >= MaxQueueLength)
-        {
-            return BuildDecision.Rejected(BuildRejection.QueueFull);
-        }
-
-        if (Queue.Any(o => o.Coord == coord))
+        // Queue is already in FIFO/plan order — see PromoteWaitingOrders' remarks.
+        var ordersOnHex = Queue.Where(o => o.Coord == coord).ToList();
+        if (ordersOnHex.Count >= maxOrdersPerHex)
         {
             return BuildDecision.Rejected(BuildRejection.AlreadyQueuedOnHex);
         }
@@ -602,13 +909,20 @@ public sealed record Settlement
         var existing = Buildings.FirstOrDefault(b => b.Coord == coord);
         var occupied = Buildings.Any(b => b.Coord == coord);
 
-        if (occupied && existing.Type != type)
+        // A hex holds one building type. What "already there" means for a
+        // fresh order is either the standing building, or — once stacking is
+        // switched on — whatever the last already-queued order on this hex
+        // targets, so a level chain (Farm -> 2, then -> 3) computes against
+        // the plan rather than what is standing today.
+        var typeOnHex = ordersOnHex.Count > 0 ? ordersOnHex[^1].Type : (occupied ? existing.Type : (BuildingType?)null);
+        if (typeOnHex is { } standingType && standingType != type)
         {
             // A hex holds one building; replacing means razing first.
             return BuildDecision.Rejected(BuildRejection.HexOccupied);
         }
 
-        var targetLevel = occupied ? existing.Level + 1 : 1;
+        var baseLevel = ordersOnHex.Count > 0 ? ordersOnHex[^1].TargetLevel : (occupied ? existing.Level : 0);
+        var targetLevel = baseLevel + 1;
         if (targetLevel > BuildingCatalogue.MaxLevel)
         {
             return BuildDecision.Rejected(BuildRejection.MaxLevelReached);
@@ -642,14 +956,49 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
         }
 
-        if (!Resources.CanAfford(definition.Cost, now))
+        // A voluntary spend — including a brand-new build order — must not
+        // dip into what is already reserved for the waiting queue (issue #158
+        // stage 1c).
+        if (!CanAffordAvailable(definition.Cost, now))
         {
             return BuildDecision.Rejected(BuildRejection.NotEnoughResources);
         }
 
-        var duration = speedFactor == 1.0
-            ? definition.BuildDuration
-            : TimeSpan.FromTicks((long)(definition.BuildDuration.Ticks / speedFactor));
+        var slotCost = definition.OccupiesAllSlots ? ConstructionSlots : definition.SlotCost;
+
+        // A stacked order (maxOrdersPerHex > 1) can only ever start once
+        // every earlier order already queued on this same hex is done — an
+        // earlier one still present in ordersOnHex means it has not
+        // completed, whether it is itself building or still waiting. Slots
+        // alone are not enough: two levels of the same hex must never be
+        // "under construction" at once, or completion order (and hence the
+        // level a hex ends up at) stops being deterministic.
+        var earlierOnHexUnfinished = ordersOnHex.Count > 0;
+        var fitsNow = !earlierOnHexUnfinished && slotCost <= FreeSlots;
+
+        if (!fitsNow && WaitingOrders.Count() >= maxWaitingOrders)
+        {
+            return BuildDecision.Rejected(maxWaitingOrders <= 0 ? BuildRejection.NoFreeSlot : BuildRejection.QueueFull);
+        }
+
+        if (fitsNow)
+        {
+            var duration = speedFactor == 1.0
+                ? definition.BuildDuration
+                : TimeSpan.FromTicks((long)(definition.BuildDuration.Ticks / speedFactor));
+
+            return BuildDecision.Accept(new BuildOrder
+            {
+                Id = orderId,
+                Type = type,
+                TargetLevel = targetLevel,
+                Coord = coord,
+                QueuedAt = now,
+                BaseDuration = definition.BuildDuration,
+                StartedAt = now,
+                CompletesAt = now + duration,
+            });
+        }
 
         return BuildDecision.Accept(new BuildOrder
         {
@@ -657,8 +1006,10 @@ public sealed record Settlement
             Type = type,
             TargetLevel = targetLevel,
             Coord = coord,
-            StartedAt = now,
-            CompletesAt = now + duration,
+            QueuedAt = now,
+            BaseDuration = definition.BuildDuration,
+            StartedAt = null,
+            CompletesAt = null,
         });
     }
 
@@ -681,6 +1032,14 @@ public sealed record Settlement
     public Settlement Enqueue(BuildOrder order, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(order);
+
+        // A waiting order spends nothing and stakes no stub — its cost sits
+        // reserved (see ReservedResources) but the building itself does not
+        // exist yet in any form a hex-reader could see (issue #158).
+        if (order.IsWaiting)
+        {
+            return this with { Queue = [.. Queue, order] };
+        }
 
         var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
         if (!Resources.TrySpend(definition.Cost, now, out var paid))
@@ -711,12 +1070,20 @@ public sealed record Settlement
     /// is removed from <see cref="Buildings"/> too; an upgrade order simply
     /// leaves the building at whatever level it already stands.
     /// </remarks>
-    public CancelBuildResult CancelBuild(Guid orderId, DateTimeOffset now)
+    public CancelBuildResult CancelBuild(Guid orderId, DateTimeOffset now, double speedFactor = 1.0)
     {
         var order = Queue.FirstOrDefault(o => o.Id == orderId);
         if (order is null)
         {
             return CancelBuildResult.Rejected(CancelBuildRejection.OrderNotFound);
+        }
+
+        // A waiting order never spent anything (its cost is only reserved) —
+        // cancelling it just drops it, no refund, no stub to remove (it never
+        // staked one).
+        if (order.IsWaiting)
+        {
+            return CancelBuildResult.Accept(this with { Queue = [.. Queue.Where(o => o.Id != orderId)] });
         }
 
         var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
@@ -733,7 +1100,12 @@ public sealed record Settlement
             Buildings = buildings,
         };
 
-        return CancelBuildResult.Accept(settled);
+        // Cancelling a building order frees a slot right now — promote
+        // whatever is waiting immediately, or it would sit idle until the
+        // next unrelated completion.
+        var (promoted, _) = settled.PromoteWaitingOrders(now, speedFactor);
+
+        return CancelBuildResult.Accept(promoted);
     }
 
     /// <summary>
@@ -770,7 +1142,14 @@ public sealed record Settlement
         var resources = Resources.WithRate(
             ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
 
-        return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources });
+        // Any order still targeting this hex was planned against the level
+        // this admin edit just overwrote — letting it complete later would
+        // silently clobber the edit (issue #158 stage 1b). No refund: same
+        // rule as a raid dropping a waiting order or a catapult removing a
+        // building outright.
+        var queue = Queue.Where(o => o.Coord != coord).ToList();
+
+        return SetBuildingLevelResult.Accept(this with { Buildings = buildings, Resources = resources, Queue = queue });
     }
 
     /// <summary>
@@ -791,21 +1170,81 @@ public sealed record Settlement
     /// Orders already due are left alone (their real completion instant is
     /// what the rate history should keep).
     /// </remarks>
-    public Settlement WithQueuesDueAt(DateTimeOffset now, bool builds = true, bool training = true) => this with
+    public Settlement WithQueuesDueAt(DateTimeOffset now, bool builds = true, bool training = true)
     {
-        Queue = builds
-            ? [.. Queue.Select(o => o.IsComplete(now) ? o : o with { CompletesAt = now })]
-            : Queue,
-        // A TrainingOrder's CompletesAt is derived, not stored (StartedAt plus
-        // per-unit duration times count), so "due now" is expressed by
-        // restarting the batch at now with no per-unit duration left to serve
-        // — which also makes its live CompletedCount read as the full batch.
-        TrainingQueue = training
-            ? [.. TrainingQueue.Select(o => o.IsComplete(now)
-                ? o
-                : o with { StartedAt = now, PerUnitDuration = TimeSpan.Zero })]
-            : TrainingQueue,
-    };
+        var settlement = this;
+
+        if (builds)
+        {
+            // God mode bypasses slot limits entirely, not just this once —
+            // ordinary PromoteWaitingOrders is deliberately slot-gated (that
+            // is the whole feature it exists for), so it cannot be reused
+            // here: the still-building orders below are about to be marked
+            // due in this very call, but PromoteWaitingOrders would see them
+            // as still occupying their slots and refuse to promote anything
+            // behind them. Every waiting order is instead spent and started
+            // directly, ignoring FreeSlots, so instant build always empties
+            // the whole queue in one pass — including the premium waiting
+            // tail — never stalling on slot limits. maxWaitingOrders/
+            // maxOrdersPerHex do not apply here either: this is an admin
+            // bypass, not a new plan.
+            var queue = settlement.Queue.ToList();
+            var buildings = settlement.Buildings.ToList();
+            var resources = settlement.Resources;
+
+            for (var i = 0; i < queue.Count; i++)
+            {
+                var order = queue[i];
+                if (order.IsComplete(now))
+                {
+                    continue;
+                }
+
+                if (order.IsWaiting)
+                {
+                    var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+                    if (!resources.TrySpend(definition.Cost, now, out var paid))
+                    {
+                        // Defensive only: reserved resources should already
+                        // cover this. Leave it waiting rather than starting
+                        // an order that was never actually paid for.
+                        continue;
+                    }
+
+                    resources = paid;
+                    if (!buildings.Any(b => b.Coord == order.Coord))
+                    {
+                        buildings.Add(new PlacedBuilding(order.Coord, order.Type, Level: 0));
+                    }
+
+                    queue[i] = order with { StartedAt = now, CompletesAt = now };
+                }
+                else
+                {
+                    queue[i] = order with { CompletesAt = now };
+                }
+            }
+
+            settlement = settlement with { Queue = queue, Buildings = buildings, Resources = resources };
+        }
+
+        if (training)
+        {
+            // A TrainingOrder's CompletesAt is derived, not stored (StartedAt
+            // plus per-unit duration times count), so "due now" is expressed
+            // by restarting the batch at now with no per-unit duration left
+            // to serve — which also makes its live CompletedCount read as the
+            // full batch.
+            settlement = settlement with
+            {
+                TrainingQueue = [.. settlement.TrainingQueue.Select(o => o.IsComplete(now)
+                    ? o
+                    : o with { StartedAt = now, PerUnitDuration = TimeSpan.Zero })],
+            };
+        }
+
+        return settlement;
+    }
 
     /// <summary>
     /// Admin god-mode: puts a building of <paramref name="type"/> at
@@ -971,6 +1410,39 @@ public sealed record Settlement
     /// building that is no longer the one standing there, so letting it
     /// complete would silently overwrite the admin's edit.
     /// </summary>
+    /// <summary>
+    /// Swaps in <paramref name="buildings"/> after catapult damage
+    /// (<see cref="Combat.SiegeResolver.Resolve"/>) and re-rates
+    /// production/capacity from <paramref name="now"/>, mirroring
+    /// <see cref="WithBuildings"/>. Unlike an admin edit, a siege that merely
+    /// reduces a level leaves any pending order for that hex alone — it still
+    /// completes to whatever level it always would have. Only when the target
+    /// was destroyed outright (<paramref name="targetCoord"/> no longer
+    /// appears in <paramref name="buildings"/>) is the order dropped too
+    /// (issue #158 stage 1b): without this, <see cref="SettleTo"/>'s
+    /// completion pass would find nothing standing at that hex and add the
+    /// finished building back — silently undoing the catapult shot.
+    /// </summary>
+    public Settlement WithSiegeDamage(
+        IReadOnlyList<PlacedBuilding> buildings,
+        HexCoord targetCoord,
+        DateTimeOffset now,
+        double speedFactor = 1.0,
+        IReadOnlyList<UnitStack>? guestStacks = null,
+        Func<HexCoord, Terrain>? terrainAt = null)
+    {
+        ArgumentNullException.ThrowIfNull(buildings);
+
+        var (production, capacity) = BoostedTotals(buildings, Runes, terrainAt);
+        var resources = Resources.WithRate(
+            ApplyUpkeep(production * speedFactor, Garrison, guestStacks ?? []), capacity, now);
+
+        var stillStanding = buildings.Any(b => b.Coord == targetCoord);
+        var queue = stillStanding ? Queue : [.. Queue.Where(o => o.Coord != targetCoord)];
+
+        return this with { Buildings = buildings, Queue = queue, Resources = resources };
+    }
+
     private Settlement WithBuildings(
         List<PlacedBuilding> buildings,
         HexCoord editedCoord,
@@ -1236,7 +1708,9 @@ public sealed record Settlement
 
         var definition = UnitCatalogue.Get(type);
         var totalCost = definition.TrainingCost * count * costMultiplier;
-        if (!Resources.CanAfford(totalCost, now))
+        // Issue #158 stage 1c: a reservation earmarked for the waiting build
+        // queue must be unspendable on anything else, training included.
+        if (!CanAffordAvailable(totalCost, now))
         {
             return TrainDecision.Rejected(TrainRejection.NotEnoughResources);
         }
@@ -1266,7 +1740,7 @@ public sealed record Settlement
 
         var definition = UnitCatalogue.Get(order.UnitType);
         var totalCost = definition.TrainingCost * order.Count * order.CostMultiplier;
-        if (!Resources.TrySpend(totalCost, now, out var paid))
+        if (!TrySpendAvailable(totalCost, now, out var paid))
         {
             throw new InvalidOperationException(
                 "Cannot enqueue training that is not affordable; call PlanTrain first.");
@@ -1329,7 +1803,9 @@ public sealed record Settlement
             return SettlementDispatchDecision.Rejected(DispatchRejection.ProvisionsExceedCarryCapacity);
         }
 
-        if (!Resources.TrySpend(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
+        // Issue #158 stage 1c: provisions are a voluntary spend too — they
+        // must not dip into what is reserved for the waiting build queue.
+        if (!TrySpendAvailable(new ResourceAmounts(Wood: 0, Stone: 0, Food: provisions, Iron: 0), now, out var paidResources))
         {
             return SettlementDispatchDecision.Rejected(DispatchRejection.InsufficientResources);
         }

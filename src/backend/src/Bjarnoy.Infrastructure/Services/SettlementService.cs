@@ -1019,10 +1019,17 @@ public sealed class SettlementService(
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
+        // The premium waiting queue is gated server-side, from the
+        // settlement's owning user (LoadAsync includes Owner) — Anonymous
+        // settlements are owned by SystemUserIds.Abandoned and are simply not
+        // premium (issue #158).
+        var maxWaitingOrders = (settlement.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
+
         var terrain = sampler.TerrainAt(coord);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
-            settlement.World.SpeedFactor, sampler.IsCoastalWater(coord));
+            settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
+            maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
 
         if (!decision.Accepted)
         {
@@ -1070,7 +1077,7 @@ public sealed class SettlementService(
         var (settled, settleResult, guestArmies) = await SettleWithGuestsAsync(
             settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
 
-        var decision = settled.CancelBuild(orderId, now);
+        var decision = settled.CancelBuild(orderId, now, settlement.World.SpeedFactor);
         if (!decision.Accepted)
         {
             await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
@@ -1276,6 +1283,11 @@ public sealed class SettlementService(
             .Include(s => s.Garrison)
             .Include(s => s.TrainingQueue)
             .Include(s => s.Runes)
+            // Needed to gate the premium waiting queue (issue #158) from the
+            // owning user's IsPremium — a single extra join on the row this
+            // already loads, cheaper than a second round trip everywhere the
+            // response needs to know.
+            .Include(s => s.Owner)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
 
     /// <summary>

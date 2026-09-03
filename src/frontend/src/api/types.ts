@@ -76,6 +76,24 @@ export interface ResourcesResponse {
   stock: ResourceLine;
   ratePerHour: ResourceLine;
   capacity: ResourceLine;
+  /** Earmarked for the premium waiting build queue (issue #158) — still in `stock`, still capped by `capacity`, but unspendable on anything voluntary. */
+  reserved: ResourceLine;
+  /** `stock` minus `reserved`, floored at zero — what the player can actually spend right now. */
+  available: ResourceLine;
+}
+
+/**
+ * Construction-slot summary (issue #158). `maxWaitingOrders === 0` is how a
+ * non-premium/anonymous settlement is told apart from a premium one — no
+ * separate premium flag needed. `maxOrdersPerHex` is the same trick for the
+ * (currently always-off) per-hex stacking tier.
+ */
+export interface ConstructionResponse {
+  slots: number;
+  slotsUsed: number;
+  maxWaitingOrders: number;
+  waitingOrders: number;
+  maxOrdersPerHex: number;
 }
 
 export interface PlacedBuildingResponse {
@@ -93,9 +111,14 @@ export interface BuildOrderResponse {
   r: number;
   building: string;
   targetLevel: number;
-  completesAtGameTime: string;
+  /** `'building'` while under construction, `'waiting'` while queued behind a full set of construction slots (the premium queue) — issue #158. */
+  state: 'building' | 'waiting';
+  /** Construction slots this order occupies once building — every slot the settlement has, for a Longhouse upgrade; otherwise 1. */
+  slotCost: number;
+  /** Null while `state === 'waiting'` — it has not started, so there is no real completion instant yet. */
+  completesAtGameTime: string | null;
   completesInSeconds: number | null;
-  /** The order's full build duration, poll-invariant — see issue #99. */
+  /** The order's full build duration, poll-invariant — see issue #99. For a waiting order this is an estimate (base duration at the world's current speed), since the real duration is only decided at promotion. */
   totalSeconds: number;
 }
 
@@ -149,6 +172,7 @@ export interface SettlementResponse {
   longhouseLevel: number;
   claimRadius: number;
   resources: ResourcesResponse;
+  construction: ConstructionResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
   /** Units standing at this settlement (issue #55: includes trained `settlercrew`). */
@@ -733,11 +757,14 @@ export interface ProblemDetails {
   detail?: string;
   status?: number;
   /**
-   * Machine-readable rejection reason, present on FoundSettlement's 409s —
-   * see `Bjarnoy.Infrastructure.Services.FoundingRejection`. Several distinct
-   * rejections (AlreadyFounded, PlotTaken, TooCloseToNeighbour, ...) share
-   * the same 409 status but call for very different frontend reactions, so
-   * this is what actually distinguishes them.
+   * Machine-readable rejection reason, present on FoundSettlement's and
+   * QueueBuild's 409s — see `Bjarnoy.Infrastructure.Services.FoundingRejection`
+   * and `Bjarnoy.Domain.Buildings.BuildRejection`. Several distinct
+   * rejections (AlreadyFounded/PlotTaken/TooCloseToNeighbour;
+   * NoFreeSlot/QueueFull/AlreadyQueuedOnHex; ...) share the same 409 status
+   * but call for very different frontend reactions — `NoFreeSlot` in
+   * particular (issue #158) is the premium-upsell moment — so this is what
+   * actually distinguishes them.
    */
   rejection?: string;
 }
@@ -832,6 +859,10 @@ export interface BuildingDefinitionResponse {
   /** Placed on shallow (coastal) water instead of any land terrain — see BuildingDefinition.RequiresCoastalWater. */
   requiresCoastalWater: boolean;
   requiredLonghouseLevel: number;
+  /** Construction slots one order for this building occupies while building — ignored when `occupiesAllSlots` is set. */
+  slotCost: number;
+  /** When set, an order for this level always occupies every slot the settlement currently has (the Longhouse's rule). */
+  occupiesAllSlots: boolean;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.

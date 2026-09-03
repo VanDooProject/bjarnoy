@@ -20,6 +20,8 @@ function order(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResponse 
     r: 2,
     building: 'farm',
     targetLevel: 1,
+    state: 'building',
+    slotCost: 1,
     completesAtGameTime: '2026-01-01T00:00:00Z',
     completesInSeconds: 100,
     totalSeconds: 100,
@@ -102,5 +104,63 @@ describe('BuildQueuePanel', () => {
 
     expect(fillWidth(wrapper)).toBeLessThan(10);
     wrapper.unmount();
+  });
+
+  // Issue #158: waiting (premium queue) orders render dim, with no progress
+  // bar and "Waiting for a slot" in place of a countdown, and the header's
+  // slot count comes from the real construction summary rather than the
+  // order count.
+  it('renders a waiting order dim with no progress bar, and shows the real slot count', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.construction = { slots: 2, slotsUsed: 2, maxWaitingOrders: 3, waitingOrders: 1, maxOrdersPerHex: 1 };
+    world.hud.queue = [
+      order({ id: 'active-1', state: 'building', q: 1, r: 0 }),
+      order({
+        id: 'waiting-1',
+        state: 'waiting',
+        q: 2,
+        r: 0,
+        completesAtGameTime: null,
+        completesInSeconds: null,
+      }),
+    ];
+
+    const wrapper = mount(BuildQueuePanel);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.text()).toContain('2 / 2 slots');
+
+    const rows = wrapper.findAll('.status-row');
+    expect(rows).toHaveLength(2);
+    const waitingRow = rows[1];
+    expect(waitingRow.classes()).toContain('is-waiting');
+    expect(waitingRow.text()).toContain('Waiting for a slot');
+    expect(waitingRow.find('.status-progress').exists()).toBe(false);
+
+    // Still cancellable — the ✕ button is not disabled for a waiting order.
+    expect(waitingRow.get('.cancel-button').attributes('disabled')).toBeUndefined();
+
+    wrapper.unmount();
+  });
+
+  it('shows a reserved-cost footer only when something is actually reserved', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [order()];
+
+    const noReserve = mount(BuildQueuePanel);
+    await noReserve.vm.$nextTick();
+    expect(noReserve.find('.reserved-footer').exists()).toBe(false);
+    noReserve.unmount();
+
+    world.hud.reserved = { wood: 100, stone: 80, food: 0, iron: 0 };
+    const withReserve = mount(BuildQueuePanel);
+    await withReserve.vm.$nextTick();
+    const footer = withReserve.find('.reserved-footer');
+    expect(footer.exists()).toBe(true);
+    expect(footer.text()).toContain('100w');
+    expect(footer.text()).toContain('80s');
+    withReserve.unmount();
   });
 });

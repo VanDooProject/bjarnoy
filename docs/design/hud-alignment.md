@@ -487,6 +487,16 @@ long-standing top-of-file comment) and standing up the live backend was out of s
 data was injected directly into the pinia store for the screenshot, then fully reverted before committing —
 it is not part of the committed diff.
 
+**Update (issue #158):** the `TOTAL_SLOTS = 3` constant and the "percent-complete honesty note" above are
+now stale — construction slots and multi-slot buildings landed as a real backend concept
+(`Settlement.ConstructionSlots`, `SettlementResponse.construction`), and `BuildOrder` now stores a real
+`StartedAt`/`CompletesAt` pair for a started order (`QueuedAt`/`BaseDuration` for a still-waiting one), so
+`TotalSeconds` is exact rather than an approximation. The header now reads the settlement's real
+`{{ slotsUsed }} / {{ slots }}`, a waiting (premium-queue) order renders dim with no progress bar, and a
+reserved-cost footer appears when the queue holds one. See `docs/design/construction-slots.md` for the full
+design (slot formula, paid-vs-reserved semantics, the raid-prunes-the-tail rule) and
+`docs/codebase-gap-analysis.md`, whose `TOTAL_SLOTS`/percent-complete entries are removed as of that issue.
+
 ![CONSTRUCTION status card](img/status_box_construction.png)
 
 Clicking the "Watchtower" row visibly recentred the camera on hex 4,5 (confirmed by the terrain shifting in
