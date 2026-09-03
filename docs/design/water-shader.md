@@ -291,7 +291,13 @@ top face, so once the legacy split lands `terrainBase` is uniformly flat-topped
 and this section reduces to "put the mesh above `terrainBase`", full stop.
 
 Until then, four families stick up: `mountaintile` (67px), `magictower`
-(105px), `dockyard` (26px), `towerbuilding` (21px). (`sandtile`'s 1px and
+(105px), `dockyard` (26px), `towerbuilding` (21px). In practice
+`mountaintile` is close to a non-case: the generator puts mountains in the
+island *interior* (`mountainThreshold` 0.4) while sand covers the whole outer
+band (`beachThreshold` 0.82), so a mountain would have to bridge a Δt > 0.6 in
+one hex to touch sea. The spike (§11) found 0 coastal mountains out of 289
+across a 181×181 scan. It stays in the table anyway — one entry costs nothing,
+and "vanishingly rare" is not "impossible" on a small island. (`sandtile`'s 1px and
 `fishinghutbuilding`'s 0px are already flat — a fishing hut needs no special
 handling despite standing on coastal water.) Art above the top face overhangs
 the hex to the **north**, which draws earlier, so the artifact is: a coastal
@@ -616,3 +622,48 @@ Each phase is a separate commit and leaves the app buildable.
 - **Mask resolution at low zoom.** `MASK_TEXELS_PER_TILE = 8` is a guess sized
   against a half-hex foam band. If foam looks blocky when zoomed in on a
   settlement, the honest fix is more texels per tile there, not more blur.
+
+## 11. Spike findings
+
+A throwaway spike (`lib/map/water/waterSpike.ts` plus its renderer hook, both
+marked SPIKE and meant to be deleted before phase 1) put a garish hard-edged
+version of this design into the real renderer to test the three load-bearing
+claims above. All three were checked on screen, in both views.
+
+**§3.4's alignment claim holds.** With the mask baked through
+`isoPixelToAxial`, the foam band traces the painted coastline exactly — every
+notch and concavity of the sand ring — in the settlement view and on every
+island on the world map. No half-tile offset, and none of the fudge factors
+that would have been needed if the claim were wrong. The settlement view also
+confirmed the mechanism: along the coast there is no visible land skirt at all,
+because the water tiles in front cover it, exactly as §3.4 argues.
+
+**§3.3's overhang artifact is real, and looks as bad as expected.** A
+`magictower` (105px, the worst in the pack) placed on a coastal hex with sea to
+its north has its spire and battlements washed over by the water layer, while
+its base — the part on the top face — is untouched. That is precisely the
+predicted failure mode, so the interim table is doing real work and is not
+defensive over-engineering.
+
+**Two things the spike changed our mind about:**
+
+- **Mask resolution.** The binding constraint is `MASK_MAX_TEXELS`, not
+  `MASK_TEXELS_PER_TILE` — at a zoomed-out settlement view the clamp bites and
+  the distance contours visibly stair-step. The innermost contour (where foam
+  lives) is still crisp, so foam is fine; but §4.2's wave coast-fade reads the
+  field at d ≈ 0.3–0.55, out where the stepping shows. Either raise the clamp
+  or smooth the fade — worth deciding before phase 3 rather than after.
+- **Foam under fog is louder than expected.** §3.2 puts the water mesh under
+  both fog quads, so foam is correctly veiled — but foam is far higher-contrast
+  than terrain, so a fogged island's coastline reads as a bright rim through
+  mist that its terrain barely shows through. Not an information leak (the
+  terrain is visible through the same mist) but it does redirect the eye to
+  unexplored coastlines. Worth tuning foam alpha against the fog rather than
+  assuming the layer order settles it.
+
+The approximate chamfer distance transform the spike used also showed its
+seams as faint radial streaks along the coast. That is a property of the
+3-4 chamfer, not of the design — §2.3's exact two-pass euclidean transform is
+what phase 1 should implement, and the spike is the reason to not treat that
+as an optimisation to skip.
+

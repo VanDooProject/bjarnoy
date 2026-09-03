@@ -2,6 +2,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { DEMO_MODE } from './config';
+import { waterSpikeFlags } from './lib/map/water/waterSpike'; // SPIKE
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
@@ -28,6 +29,8 @@ if (DEMO_MODE) {
   // `window.__fogDebug.distJitter = false`; takes effect on the next
   // rebuild (any camera pan/zoom), it isn't itself a trigger.
   (window as unknown as { __fogDebug: typeof fogDebugFlags }).__fogDebug = fogDebugFlags;
+  // SPIKE — see lib/map/water/waterSpike.ts. Remove with it.
+  (window as unknown as { __waterSpike: typeof waterSpikeFlags }).__waterSpike = waterSpikeFlags;
   // The non-boolean half of the same knob set (currently just the wind-speed
   // multiplier) — see FogDebugTuning.
   (window as unknown as { __fogTuning: typeof fogDebugTuning }).__fogTuning = fogDebugTuning;

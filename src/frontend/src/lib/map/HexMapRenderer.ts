@@ -44,6 +44,8 @@ import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from './build
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
+// SPIKE — see lib/map/water/waterSpike.ts. Remove with it.
+import { bakeWaterMask, WaterSpikeLayer, waterSpikeFlags } from './water/waterSpike';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
@@ -759,6 +761,8 @@ export class HexMapRenderer {
   private terrainTop = createSpriteLayer();
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
+  // SPIKE — see lib/map/water/waterSpike.ts.
+  private waterSpike = new WaterSpikeLayer(TILE_W);
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
   // onTick's per-frame drawWaves call can skip redrawing wave strokes the
@@ -893,6 +897,8 @@ export class HexMapRenderer {
   private options: HexMapRendererOptions;
 
   constructor(options: HexMapRendererOptions) {
+    // SPIKE: reachable from the screenshot driver for panTo/forceRebuild.
+    (window as unknown as { __renderer: HexMapRenderer }).__renderer = this;
     this.options = options;
     this.idleDrift = options.mode === 'world';
     this.camera =
@@ -1038,16 +1044,35 @@ export class HexMapRenderer {
     }
     if (this.destroyed) return;
 
-    this.world.addChild(
-      this.terrainBase.container,
-      this.waveLayer,
-      this.terrainFlat,
-      this.borderLayer,
-      this.hoverLayer,
-      this.terrainTop.container,
-      this.rangeLayer,
-      this.highlightLayer,
-    );
+    // SPIKE: the water quad's insertion point is the thing being checked.
+    // World mode — first child, under the flat island polygons (the sea
+    // itself). Settlement mode — above all the ground art in terrainBase,
+    // below the tall art in terrainTop.
+    if (this.options.mode === 'world') {
+      this.world.addChild(
+        this.waterSpike.mesh,
+        this.terrainBase.container,
+        this.waveLayer,
+        this.terrainFlat,
+        this.borderLayer,
+        this.hoverLayer,
+        this.terrainTop.container,
+        this.rangeLayer,
+        this.highlightLayer,
+      );
+    } else {
+      this.world.addChild(
+        this.terrainBase.container,
+        this.waveLayer,
+        this.terrainFlat,
+        this.waterSpike.mesh,
+        this.borderLayer,
+        this.hoverLayer,
+        this.terrainTop.container,
+        this.rangeLayer,
+        this.highlightLayer,
+      );
+    }
     // §4's layer stack: the two fog quads are the only genuinely
     // screen-space `app.stage` children — everything else (terrain,
     // borders, buildings) stays nested inside `world`, camera-transformed
@@ -1098,6 +1123,7 @@ export class HexMapRenderer {
     const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
     this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
     if (this.options.mode === 'world' && !this.deepFogOnly) this.drawWaves();
+    this.waterSpike.tick(performance.now()); // SPIKE
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -1691,6 +1717,11 @@ export class HexMapRenderer {
       fogPerfStats.wavesMs = 0;
       fogPerfStats.waveDrawnCount = 0;
       fogPerfStats.waveCulledCount = 0;
+    }
+
+    // SPIKE: re-bake the water mask over the same rect the rebuild used.
+    if (waterSpikeFlags.enabled && !deepFogOnly) {
+      this.waterSpike.setMask(bakeWaterMask(rect, TILE_W, TILE_H, this.options.worldModel));
     }
 
     fogPerfStats.hexCount = coords.length;
