@@ -24,6 +24,7 @@ import {
 import { WorldModel } from '../lib/map/WorldModel';
 import { fogPerfStats } from '../lib/map/HexMapRenderer';
 import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
+import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
 import type { CartShipment, ResourceKind, Resources, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
@@ -55,13 +56,32 @@ const ARMY_POLL_MS = 2000;
 // replace the backend's own enforcement.
 const MINIMUM_SETTLEMENT_SPACING = 13;
 
+// Demo mode's seed — kept as its own constant since both the initial
+// `WorldModel` below and its island labels have to agree on it.
+const DEMO_SEED = 20260824;
+
+/**
+ * Demo mode's `WorldModel`, pre-labelled with dummy island names (issue: the
+ * world map showed no island names at all in demo). A live world instead
+ * gets its real names from the backend and calls `setIslands` itself once
+ * `GET /worlds/{id}/islands` answers (see this file's `init` action) — this
+ * only covers the no-backend-to-ask demo case.
+ */
+function buildDemoModel(): WorldModel {
+  const model = new WorldModel(DEMO_SEED);
+  if (DEMO_MODE) {
+    model.setIslands(enumerateIslands({ seed: DEMO_SEED, generation: DEFAULT_GENERATION }, DEMO_MASK_RADIUS));
+  }
+  return model;
+}
+
 // The WorldModel instance itself is `markRaw`-ed: it's a plain class meant
 // to be mutated directly by the renderer's render loop, not walked by Vue's
 // reactivity proxy. Only the small `hud` summary below is reactive, and it
 // is refreshed on a slow interval (1s) rather than on every resource tick.
 export const useWorldStore = defineStore('world', {
   state: () => ({
-    model: markRaw(new WorldModel(20260824)),
+    model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
     hud: {
       resources: emptyResources() as Resources,

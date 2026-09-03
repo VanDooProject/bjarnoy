@@ -2079,20 +2079,34 @@ export class HexMapRenderer {
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const mine = settlement.ownerId === playerId;
+      // Reference draws settlements as a diamond (prototypes/worldmap/Viking
+      // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
+      // not a plain dot.
+      const markerR = 5 * this.camera.zoom + 3;
       this.markerLayer
-        .circle(center.x, center.y, 5 * this.camera.zoom + 3)
+        .poly([
+          center.x, center.y - markerR,
+          center.x + markerR, center.y,
+          center.x, center.y + markerR,
+          center.x - markerR, center.y,
+        ])
         .fill({ color: mine ? GOLD : RIVAL })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
-      // Settlers-II-style owner label under the marker (see
-      // prototypes/worldmap, `world()`'s `owners`/`labels` rendering).
+      // Settlers-II-style owner label under the marker. Reference styling
+      // (prototypes/worldmap/Viking Realm.dc.html's `world.owners`):
+      // `font:600 12.5px Barlow,sans-serif` plus a soft drop shadow for
+      // legibility over the water/terrain behind it — same treatment as the
+      // island-name labels above, just without their uppercase/letter-spaced
+      // small-caps look (owners read as plain names, not headings).
       const ownerLabel = this.acquireLabel();
       ownerLabel.text = settlement.ownerName;
       ownerLabel.style.fill = mine ? GOLD : RIVAL;
-      ownerLabel.style.fontWeight = 'normal';
-      ownerLabel.style.fontSize = 11;
+      ownerLabel.style.fontFamily = "'Barlow', sans-serif";
+      ownerLabel.style.fontWeight = '600';
+      ownerLabel.style.fontSize = 12.5;
       ownerLabel.style.letterSpacing = 0;
-      ownerLabel.style.dropShadow = false;
+      ownerLabel.style.dropShadow = { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 };
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
@@ -2114,6 +2128,11 @@ export class HexMapRenderer {
       // gray for other islands, gold + bold for the player's own.
       label.text = island.name.toUpperCase();
       label.style.fill = mineIsland ? GOLD : 0x8fa3af;
+      // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels)
+      // sets island names in 'Alegreya Sans SC' — a display small-caps face,
+      // distinct from the 'sans-serif' every other pooled label here uses —
+      // loaded alongside 'Outfit' in index.html's Google Fonts link.
+      label.style.fontFamily = "'Alegreya Sans SC', serif";
       label.style.fontWeight = mineIsland ? 'bold' : '600';
       label.style.fontSize = 13;
       label.style.letterSpacing = 1.5;
@@ -2159,6 +2178,7 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
       label.style.fill = 0xe8f0f5;
+      label.style.fontFamily = 'sans-serif';
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;
@@ -2193,6 +2213,7 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
       label.style.fill = CART_COLOR;
+      label.style.fontFamily = 'sans-serif';
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;
@@ -2263,6 +2284,7 @@ export class HexMapRenderer {
       const nameLabel = this.acquireLabel();
       nameLabel.text = settlement.name;
       nameLabel.style.fill = 0xe8f0f5;
+      nameLabel.style.fontFamily = 'sans-serif';
       nameLabel.style.fontWeight = 'bold';
       nameLabel.style.fontSize = 13 * zoomScale;
       nameLabel.style.letterSpacing = 0;
@@ -2273,6 +2295,7 @@ export class HexMapRenderer {
       const suffixLabel = this.acquireLabel();
       suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
       suffixLabel.style.fill = 0xe8f0f5;
+      suffixLabel.style.fontFamily = 'sans-serif';
       suffixLabel.style.fontWeight = '400';
       suffixLabel.style.fontSize = 12 * zoomScale;
       suffixLabel.style.letterSpacing = 0;
