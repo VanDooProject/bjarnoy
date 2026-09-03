@@ -18,6 +18,7 @@ const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
 const getFogMask = vi.fn();
+const buildDemoFogMask = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -46,6 +47,14 @@ async function loadStoreModule(demoMode: boolean) {
       getFogMask: (...args: unknown[]) => getFogMask(...args),
     },
     ApiError: class ApiError extends Error {},
+  }));
+  // demoFogMask.ts's own bake needs OffscreenCanvas, which this test
+  // environment (node, not jsdom — see the localStorage stub above) has no
+  // stand-in for — stub the module the same way api/client is stubbed above,
+  // rather than the real bake.
+  vi.doMock('../lib/map/fog/demoFogMask', () => ({
+    buildDemoFogMask: (...args: unknown[]) => buildDemoFogMask(...args),
+    DEMO_MASK_RADIUS: 60,
   }));
   const { useWorldStore } = await import('./world');
   setActivePinia(createPinia());
@@ -429,6 +438,85 @@ describe('useWorldStore fetchFogMask', () => {
     await store.fetchFogMask();
 
     expect(store.fogMaskBitmap).toBe(firstBitmap);
+  });
+
+  // Regression: startHudSync polls this on a fixed LIVE_POLL_MS timer with no
+  // regard for how long the previous fetch actually took — a fetch slower
+  // than the poll interval (a slow network, or demo mode's own
+  // refreshDemoFogMask CPU-bound bake — see that describe block below) used
+  // to let the next tick start a second, overlapping fetch right on top of
+  // it. Each overlap adds concurrent work that makes the next one slower
+  // still, which is exactly the kind of unbounded pile-up that could stall a
+  // page for tens of seconds under load (observed hanging a ring-menu e2e
+  // test's build click — see ring-menu.spec.ts's "hovering a building shows
+  // its cost..." test). `maskFetchInFlight` already existed (read by
+  // FogPerfPanel) but was only ever set, never checked — this is what
+  // actually wires it up as a guard.
+  it('does not start a second fetch while one is still in flight', async () => {
+    getFogMask.mockReset();
+    let resolveFirst: (v: { bitmap: unknown; version: string }) => void;
+    const firstCall = new Promise<{ bitmap: unknown; version: string }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    getFogMask.mockReturnValueOnce(firstCall);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+
+    const firstFetch = store.fetchFogMask();
+    const secondFetch = store.fetchFogMask(); // fired before the first resolves
+    expect(getFogMask).toHaveBeenCalledTimes(1);
+
+    resolveFirst!({ bitmap: { close: vi.fn() }, version: '"v1"' });
+    await Promise.all([firstFetch, secondFetch]);
+    expect(getFogMask).toHaveBeenCalledTimes(1);
+
+    // Once the in-flight fetch has actually settled, a later poll tick must
+    // still go through — this isn't a one-shot latch.
+    getFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v2"' });
+    await store.fetchFogMask();
+    expect(getFogMask).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useWorldStore refreshDemoFogMask', () => {
+  it('is a no-op outside demo mode', async () => {
+    buildDemoFogMask.mockReset();
+    const store = await loadStoreModule(false);
+
+    await store.refreshDemoFogMask();
+
+    expect(buildDemoFogMask).not.toHaveBeenCalled();
+  });
+
+  // Same regression as fetchFogMask's own "does not start a second fetch"
+  // test above, but for the poll that actually caused the observed hang:
+  // demoFogMask.ts's bake is real synchronous CPU work (a texel loop over
+  // DEMO_MASK_RADIUS, plus a PNG encode/decode round trip), not a network
+  // wait, so it is the more likely of the two to run long enough to overlap
+  // its own next poll tick under load.
+  it('does not start a second bake while one is still in flight', async () => {
+    buildDemoFogMask.mockReset();
+    let resolveFirst: (bitmap: unknown) => void;
+    const firstBake = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    buildDemoFogMask.mockReturnValueOnce(firstBake);
+
+    const store = await loadStoreModule(true);
+
+    const firstRefresh = store.refreshDemoFogMask();
+    const secondRefresh = store.refreshDemoFogMask(); // fired before the first resolves
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
+
+    resolveFirst!({ close: vi.fn() });
+    await Promise.all([firstRefresh, secondRefresh]);
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
+
+    buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
+    await store.refreshDemoFogMask();
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
   });
 });
 
