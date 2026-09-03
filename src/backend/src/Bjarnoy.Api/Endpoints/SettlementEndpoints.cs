@@ -68,6 +68,15 @@ public static class SettlementEndpoints
             .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
+        settlements.MapPost("/{settlementId:guid}/yield-shield", YieldShield)
+            .WithName("YieldShield")
+            .WithSummary(
+                "Voluntarily drops this settlement's new-account shield early (design doc §1-3, issue #132). " +
+                "No frontend control ships in v1 — see the design doc's §2.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
             .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
@@ -156,6 +165,34 @@ public static class SettlementEndpoints
         var (entity, clock) = found.Value;
         return TypedResults.Ok(
             SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, Conflict<ProblemDetails>>> YieldShield(
+        Guid settlementId,
+        SettlementService settlements,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var result = await settlements.YieldShieldAsync(settlementId, cancellationToken);
+
+        if (result.Outcome == YieldShieldOutcome.SettlementNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!result.Accepted)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Title = "The shield could not be yielded.",
+                Detail = "This settlement has no active shield to yield.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        var clock = result.Clock!.Value;
+        return TypedResults.Ok(
+            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
     }
 
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(

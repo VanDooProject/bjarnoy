@@ -102,6 +102,12 @@ public class SettlementEntity
 
     public DateTimeOffset FoundedAt { get; set; }
 
+    /// <summary>
+    /// Mirrors <see cref="Settlement.ShieldExpiresAtUtc"/> — see that
+    /// property's remarks on why this is game time despite the column name.
+    /// </summary>
+    public DateTimeOffset? ShieldExpiresAtUtc { get; set; }
+
     public List<PlacedBuildingEntity> Buildings { get; set; } = [];
 
     public List<BuildOrderEntity> Queue { get; set; } = [];
@@ -126,6 +132,7 @@ public class SettlementEntity
         Name = Name,
         Centre = new HexCoord(CentreQ, CentreR),
         Resources = ResourcePool.Create(Stock, Rate, Capacity, SettledAt),
+        ShieldExpiresAtUtc = ShieldExpiresAtUtc,
         // Every write path (PlaceBuildingAsync, SetBuildingLevelAsync, PlanBuild's
         // own leveling) already clamps a level to BuildingCatalogue's 1..MaxLevel
         // via TryGet before it ever reaches storage — this Math.Min is a second,
@@ -191,6 +198,7 @@ public class SettlementEntity
         Name = settlement.Name;
         CentreQ = settlement.Centre.Q;
         CentreR = settlement.Centre.R;
+        ShieldExpiresAtUtc = settlement.ShieldExpiresAtUtc;
 
         var pool = settlement.Resources;
         StockWood = pool.Stock.Wood;

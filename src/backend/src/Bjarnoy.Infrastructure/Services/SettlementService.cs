@@ -51,6 +51,22 @@ public sealed record TrainResult(TrainRejection Rejection, TrainingOrder? Order 
 /// <summary>A page of settlements matching an admin search.</summary>
 public sealed record SettlementsPage(IReadOnlyList<SettlementEntity> Settlements, int TotalCount);
 
+/// <summary>Outcome of a voluntary shield yield (design doc §2, issue #132).</summary>
+public enum YieldShieldOutcome
+{
+    Applied,
+    SettlementNotFound,
+
+    /// <summary>The settlement had no active shield to yield (already yielded, or expired).</summary>
+    NoActiveShield,
+}
+
+public sealed record YieldShieldResult(
+    YieldShieldOutcome Outcome, SettlementEntity? Settlement = null, GameClock? Clock = null)
+{
+    public bool Accepted => Outcome == YieldShieldOutcome.Applied && Settlement is not null;
+}
+
 /// <summary>Outcome of an admin resource grant.</summary>
 public enum GrantResourcesOutcome
 {
@@ -146,7 +162,8 @@ public sealed record CompleteQueuesResult(
 public sealed class SettlementService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
-    ILogger<SettlementService> logger)
+    ILogger<SettlementService> logger,
+    BeginnerSuggestionService beginnerSuggestions)
 {
     /// <summary>
     /// Founding's cheap, longhouse-only pre-filter: the minimum hex distance
@@ -189,6 +206,7 @@ public sealed class SettlementService(
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<SettlementService> _logger = logger;
+    private readonly BeginnerSuggestionService _beginnerSuggestions = beginnerSuggestions;
 
     /// <summary>
     /// Founds a settlement on one of an island's precomputed start positions.
@@ -328,6 +346,11 @@ public sealed class SettlementService(
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         production *= world.SpeedFactor;
 
+        // Design doc §1: the shield is sized once, here, from the world's
+        // SpeedFactor as of this exact instant — never re-derived if an
+        // admin changes BaseShieldDays/SpeedFactor afterward.
+        var shieldExpiresAtUtc = now + Settlement.ShieldDurationFor(world.BaseShieldDays, world.SpeedFactor);
+
         var settlement = new SettlementEntity
         {
             WorldId = worldId,
@@ -352,6 +375,7 @@ public sealed class SettlementService(
             Buildings = [new PlacedBuilding(coord, BuildingType.Longhouse, 1)],
             Resources = ResourcePool.Create(
                 BuildingCatalogue.FoundingStock, production, capacity, now),
+            ShieldExpiresAtUtc = shieldExpiresAtUtc,
         });
 
         _dbContext.Settlements.Add(settlement);
@@ -383,6 +407,11 @@ public sealed class SettlementService(
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} on island {IslandId}.",
             name, settlement.Id, coord, islandId);
+
+        // Design doc §6: this island's cached openPlots/qualifies state is
+        // stale the instant this settlement lands, so it is dropped rather
+        // than left to a guessed TTL.
+        _beginnerSuggestions.InvalidateAfterFounding(worldId, islandId);
 
         return new FoundingResult(FoundingRejection.None, settlement);
     }
@@ -585,6 +614,43 @@ public sealed class SettlementService(
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return new SettlementsPage(settlements, totalCount);
+    }
+
+    /// <summary>
+    /// Voluntary early shield drop (design doc §2, issue #132): the standard
+    /// opt-out this genre expects, so a protected player is never locked out
+    /// of playing offensively for the shield's whole length against their
+    /// will. No frontend control ships in v1 — this is exercised by tests and
+    /// admin tooling only; see <see cref="Settlement.YieldShield"/>.
+    /// </summary>
+    public async Task<YieldShieldResult> YieldShieldAsync(
+        Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var settlement = await LoadAsync(settlementId, cancellationToken).ConfigureAwait(false);
+        if (settlement?.World is null)
+        {
+            return new YieldShieldResult(YieldShieldOutcome.SettlementNotFound);
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var (settled, result, guestArmies) = await SettleWithGuestsAsync(
+            settlement, now, settlement.World.SpeedFactor, cancellationToken).ConfigureAwait(false);
+
+        if (!settled.IsShielded(now))
+        {
+            await PersistIfSettledAsync(settlement, result, guestArmies, cancellationToken).ConfigureAwait(false);
+            return new YieldShieldResult(YieldShieldOutcome.NoActiveShield);
+        }
+
+        settlement.ApplyDomain(settled.YieldShield());
+        ApplyGuestDeaths(guestArmies, result.GuestDeaths);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Settlement {Id} yielded its new-account shield.", settlementId);
+
+        return new YieldShieldResult(YieldShieldOutcome.Applied, settlement, clock);
     }
 
     /// <summary>

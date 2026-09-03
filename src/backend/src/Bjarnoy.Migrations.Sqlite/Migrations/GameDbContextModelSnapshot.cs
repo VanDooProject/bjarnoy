@@ -856,6 +856,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("SettledAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("ShieldExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<double>("StockFood")
                         .HasColumnType("REAL");
 
@@ -1274,6 +1277,9 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("TEXT");
+
+                    b.Property<double>("BaseShieldDays")
+                        .HasColumnType("REAL");
 
                     b.Property<double>("BeachThreshold")
                         .HasColumnType("REAL");

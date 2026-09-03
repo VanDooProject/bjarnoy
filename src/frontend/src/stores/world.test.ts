@@ -18,6 +18,7 @@ const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
 const getFogMask = vi.fn();
+const getSuggestedStart = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -44,6 +45,7 @@ async function loadStoreModule(demoMode: boolean) {
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
       getFogMask: (...args: unknown[]) => getFogMask(...args),
+      getSuggestedStart: (...args: unknown[]) => getSuggestedStart(...args),
     },
     ApiError: class ApiError extends Error {},
   }));
@@ -429,5 +431,56 @@ describe('useWorldStore fetchFogMask', () => {
     await store.fetchFogMask();
 
     expect(store.fogMaskBitmap).toBe(firstBitmap);
+  });
+});
+
+// Issue #132 design doc §6: the landing page asks the backend for
+// beginner-area-segregated candidates instead of computing nearest-by-
+// distance over the raw unfiltered island list itself.
+describe('useWorldStore fetchSuggestedStart', () => {
+  it('stores the backend candidates and fallback flag', async () => {
+    getSuggestedStart.mockReset().mockResolvedValue({
+      candidates: [
+        { islandId: 'island-1', q: 3, r: 4, ring: 0 },
+        { islandId: 'island-2', q: 10, r: 0, ring: 1 },
+      ],
+      fallback: false,
+    });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+
+    await store.fetchSuggestedStart({ q: 0, r: 0 });
+
+    expect(getSuggestedStart).toHaveBeenCalledWith('world-1', { q: 0, r: 0 }, 6);
+    expect(store.suggestedStart).toEqual([
+      { islandId: 'island-1', at: { q: 3, r: 4 } },
+      { islandId: 'island-2', at: { q: 10, r: 0 } },
+    ]);
+    expect(store.suggestedStartFallback).toBe(false);
+  });
+
+  it('surfaces the fallback flag when the backend exhausted beginner-safe islands', async () => {
+    getSuggestedStart.mockReset().mockResolvedValue({
+      candidates: [{ islandId: 'island-9', q: 1, r: 1, ring: 5 }],
+      fallback: true,
+    });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+
+    await store.fetchSuggestedStart({ q: 0, r: 0 });
+
+    expect(store.suggestedStartFallback).toBe(true);
+  });
+
+  it('is a no-op in demo mode', async () => {
+    getSuggestedStart.mockReset();
+
+    const store = await loadStoreModule(true);
+    await store.fetchSuggestedStart({ q: 0, r: 0 });
+
+    expect(getSuggestedStart).not.toHaveBeenCalled();
+    expect(store.suggestedStart).toEqual([]);
   });
 });

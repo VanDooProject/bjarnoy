@@ -72,6 +72,7 @@ import type {
   SettlementResponse,
   SlotRuneRequest,
   SettlementSummary,
+  SuggestedStartResponse,
   ShipmentResponse,
   SimulatorRequest,
   SimulatorResponse,
@@ -186,6 +187,14 @@ export const api = {
     request<WorldResponse>('/worlds', { method: 'POST', body: JSON.stringify(body) }),
   getWorld: (worldId: string) => request<WorldResponse>(`/worlds/${worldId}`),
   getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
+  // Issue #132 design doc §6: ranked/filtered beginner-area candidates,
+  // replacing the client's old nearest-by-distance pick over the raw
+  // unfiltered island list. `near` only breaks ties within whichever
+  // ring/pool the query settles on server-side.
+  getSuggestedStart: (worldId: string, near: { q: number; r: number }, count = 6) =>
+    request<SuggestedStartResponse>(
+      `/worlds/${worldId}/suggested-start?nearQ=${near.q}&nearR=${near.r}&count=${count}`,
+    ),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {
       method: 'POST',

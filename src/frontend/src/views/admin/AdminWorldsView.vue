@@ -11,6 +11,9 @@ const loadError = ref<string | null>(null);
 // independently without clobbering the others.
 interface Draft {
   speedFactor: string;
+  // Issue #132 design doc §1: BaseShieldDays is admin-configurable per
+  // world, mirroring speedFactor's own draft/save shape exactly.
+  baseShieldDays: string;
   startsAt: string;
   joinsClosed: boolean;
   endbossAt: string;
@@ -24,6 +27,7 @@ const drafts = reactive<Record<string, Draft>>({});
 function draftFor(world: AdminWorldResponse): Draft {
   return {
     speedFactor: String(world.speedFactor),
+    baseShieldDays: String(world.baseShieldDays),
     startsAt: toLocalInput(world.startsAt),
     joinsClosed: world.joinsClosed,
     endbossAt: toLocalInput(world.endbossAt),
@@ -123,11 +127,18 @@ async function saveSettings(world: AdminWorldResponse) {
     return;
   }
 
+  const baseShieldDays = Number(draft.baseShieldDays);
+  if (!Number.isFinite(baseShieldDays) || baseShieldDays <= 0) {
+    draft.error = 'Base shield days must be greater than 0.';
+    return;
+  }
+
   draft.saving = true;
   draft.error = null;
   try {
     const updated = await api.adminUpdateWorldSettings(world.id, {
       speedFactor,
+      baseShieldDays,
       startsAt: fromLocalInput(draft.startsAt),
       joinsClosed: draft.joinsClosed,
       endbossAt: fromLocalInput(draft.endbossAt),
@@ -210,6 +221,11 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <th>Players</th>
           <th>Joinable</th>
           <th>Endboss</th>
+          <!-- Issue #132 design doc §7: beginner spawn-segregation health at
+               a glance — how many rings still have spare beginner capacity,
+               out of how many contain any island, plus the total-exhaustion
+               fallback state an admin needs to notice on its own. -->
+          <th>Beginner rings</th>
         </tr>
       </thead>
       <tbody>
@@ -220,6 +236,10 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
           <td>{{ world.joinsClosed ? 'Closed' : 'Open' }}</td>
           <td>{{ world.endbossTriggeredAt ? 'Triggered' : world.endbossAt ? 'Scheduled' : '—' }}</td>
+          <td :class="{ exhausted: world.beginnerTotalExhaustion }">
+            {{ world.beginnerRingsWithCapacity }} / {{ world.beginnerRingsTotal }}
+            <span v-if="world.beginnerTotalExhaustion" class="exhausted-flag">exhausted</span>
+          </td>
         </tr>
       </tbody>
     </table>
@@ -235,6 +255,15 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           type="number"
           min="0.01"
           step="0.1"
+        />
+
+        <label :for="`shield-${world.id}`">Base shield days</label>
+        <input
+          :id="`shield-${world.id}`"
+          v-model="drafts[world.id].baseShieldDays"
+          type="number"
+          min="0.01"
+          step="0.5"
         />
 
         <label :for="`starts-${world.id}`">Starts at</label>
@@ -290,6 +319,16 @@ async function setRunState(world: AdminWorldResponse, action: string) {
   padding: 8px 12px;
   border-bottom: 1px solid var(--panel-border);
   font-size: 14px;
+}
+.exhausted {
+  color: var(--rival);
+  font-weight: 600;
+}
+.exhausted-flag {
+  margin-left: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 .panel {
   background: var(--panel-bg);

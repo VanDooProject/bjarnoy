@@ -949,6 +949,97 @@ public class SettlementTests
     }
 }
 
+/// <summary>Beginner protection (issue #132, design doc §1-3).</summary>
+public class SettlementShieldTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
+    [Theory]
+    // At the default BaseShieldDays (7), a 1x world gets the base length
+    // unclamped.
+    [InlineData(7, 1.0, 7)]
+    // A very fast world would compute well under the 3-day floor without the
+    // clamp (7 / 10 = 0.7) — the design doc's whole reason for the clamp.
+    [InlineData(7, 10.0, 3)]
+    // A very slow world would compute well over the 14-day ceiling without
+    // the clamp (7 / 0.1 = 70).
+    [InlineData(7, 0.1, 14)]
+    // A custom, admin-raised base still respects both bounds.
+    [InlineData(20, 1.0, 14)]
+    [InlineData(1, 1.0, 3)]
+    public void Shield_duration_scales_with_speed_and_clamps_to_3_14_days(
+        double baseShieldDays, double speedFactor, double expectedDays)
+    {
+        var duration = Settlement.ShieldDurationFor(baseShieldDays, speedFactor);
+
+        Assert.Equal(TimeSpan.FromDays(expectedDays), duration);
+    }
+
+    [Fact]
+    public void Shield_duration_rejects_a_non_positive_speed_factor()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Settlement.ShieldDurationFor(7, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Settlement.ShieldDurationFor(7, -1));
+    }
+
+    [Fact]
+    public void A_settlement_with_no_shield_is_never_shielded()
+    {
+        var settlement = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = HexCoord.Origin,
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(0), ResourceAmounts.Uniform(0), ResourceAmounts.Uniform(1000), T0),
+        };
+
+        Assert.Null(settlement.ShieldExpiresAtUtc);
+        Assert.False(settlement.IsShielded(T0));
+    }
+
+    [Fact]
+    public void A_settlement_is_shielded_strictly_before_its_expiry_and_not_after()
+    {
+        var expires = T0 + TimeSpan.FromDays(7);
+        var settlement = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = HexCoord.Origin,
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(0), ResourceAmounts.Uniform(0), ResourceAmounts.Uniform(1000), T0),
+            ShieldExpiresAtUtc = expires,
+        };
+
+        Assert.True(settlement.IsShielded(T0));
+        Assert.True(settlement.IsShielded(expires - TimeSpan.FromSeconds(1)));
+        Assert.False(settlement.IsShielded(expires));
+        Assert.False(settlement.IsShielded(expires + TimeSpan.FromSeconds(1)));
+    }
+
+    [Fact]
+    public void Yielding_the_shield_clears_it_and_nothing_else()
+    {
+        var settlement = new Settlement
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Bjornstad",
+            Centre = HexCoord.Origin,
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(0), ResourceAmounts.Uniform(0), ResourceAmounts.Uniform(1000), T0),
+            ShieldExpiresAtUtc = T0 + TimeSpan.FromDays(7),
+        };
+
+        var yielded = settlement.YieldShield();
+
+        Assert.Null(yielded.ShieldExpiresAtUtc);
+        Assert.False(yielded.IsShielded(T0));
+        Assert.Equal(settlement.Name, yielded.Name);
+        Assert.Equal(settlement.Centre, yielded.Centre);
+    }
+}
+
 internal static class SettlementTestExtensions
 {
     /// <summary>

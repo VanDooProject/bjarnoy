@@ -59,17 +59,23 @@ public static class AdminWorldEndpoints
 
     private static async Task<Ok<IReadOnlyList<AdminWorldResponse>>> ListWorlds(
         WorldService worlds,
+        BeginnerSuggestionService beginnerSuggestions,
         CancellationToken cancellationToken)
     {
         var entities = await worlds.GetWorldsAsync(cancellationToken);
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
 
-        IReadOnlyList<AdminWorldResponse> response =
-        [
-            .. entities.Select(w => AdminWorldResponse.From(w, playerCounts.GetValueOrDefault(w.Id))),
-        ];
+        var response = new List<AdminWorldResponse>(entities.Count);
+        foreach (var world in entities)
+        {
+            // Reads off the same cached ring/openPlots state a suggestion
+            // query would (or computes it fresh on a cold cache) — see
+            // BeginnerSuggestionService.GetRingSummaryAsync's remarks.
+            var beginnerRings = await beginnerSuggestions.GetRingSummaryAsync(world.Id, cancellationToken);
+            response.Add(AdminWorldResponse.From(world, playerCounts.GetValueOrDefault(world.Id), beginnerRings));
+        }
 
-        return TypedResults.Ok(response);
+        return TypedResults.Ok((IReadOnlyList<AdminWorldResponse>)response);
     }
 
     /// <summary>
@@ -83,6 +89,7 @@ public static class AdminWorldEndpoints
         CreateWorld(
             CreateWorldRequest request,
             WorldService worlds,
+            BeginnerSuggestionService beginnerSuggestions,
             CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -116,9 +123,11 @@ public static class AdminWorldEndpoints
         {
             var world = await worlds.CreateWorldAsync(
                 request.Name.Trim(), options, request.MaxPlayers, cancellationToken);
+            var beginnerRings = await beginnerSuggestions.GetRingSummaryAsync(world.Id, cancellationToken);
 
             return TypedResults.Created(
-                $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0));
+                $"/api/v1/admin/worlds/{world.Id}",
+                AdminWorldResponse.From(world, playerCount: 0, beginnerRings));
         }
         catch (WorldCreationException ex)
         {
@@ -136,6 +145,7 @@ public static class AdminWorldEndpoints
         UpdateWorldSettingsRequest request,
         WorldService worlds,
         SettlementService settlements,
+        BeginnerSuggestionService beginnerSuggestions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -145,6 +155,11 @@ public static class AdminWorldEndpoints
         if (request.SpeedFactor is <= 0)
         {
             errors[nameof(request.SpeedFactor)] = ["Speed factor must be greater than 0."];
+        }
+
+        if (request.BaseShieldDays is <= 0)
+        {
+            errors[nameof(request.BaseShieldDays)] = ["Base shield days must be greater than 0."];
         }
 
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
@@ -176,6 +191,7 @@ public static class AdminWorldEndpoints
         var updated = await worlds.UpdateAdminSettingsAsync(
             worldId,
             request.SpeedFactor,
+            request.BaseShieldDays,
             request.StartsAt.HasValue,
             request.StartsAt.Value,
             request.JoinsClosed,
@@ -189,7 +205,8 @@ public static class AdminWorldEndpoints
         }
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount));
+        var beginnerRings = await beginnerSuggestions.GetRingSummaryAsync(worldId, cancellationToken);
+        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount, beginnerRings));
     }
 
     /// <summary>
@@ -239,6 +256,7 @@ public static class AdminWorldEndpoints
             ReseedWorldRequest request,
             ClaimsPrincipal principal,
             WorldService worlds,
+            BeginnerSuggestionService beginnerSuggestions,
             CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -289,8 +307,9 @@ public static class AdminWorldEndpoints
 
             default:
                 var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
+                var beginnerRings = await beginnerSuggestions.GetRingSummaryAsync(worldId, cancellationToken);
                 return TypedResults.Ok(new ReseedWorldResponse(
-                    AdminWorldResponse.From(result.World!, playerCount),
+                    AdminWorldResponse.From(result.World!, playerCount, beginnerRings),
                     options.Seed,
                     result.IslandCount,
                     result.DeletedSettlements));
@@ -334,6 +353,7 @@ public static class AdminWorldEndpoints
         Guid worldId,
         SetWorldRunStateRequest request,
         WorldService worlds,
+        BeginnerSuggestionService beginnerSuggestions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -372,6 +392,7 @@ public static class AdminWorldEndpoints
         }
 
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
-        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount));
+        var beginnerRings = await beginnerSuggestions.GetRingSummaryAsync(worldId, cancellationToken);
+        return TypedResults.Ok(AdminWorldResponse.From(updated, playerCount, beginnerRings));
     }
 }

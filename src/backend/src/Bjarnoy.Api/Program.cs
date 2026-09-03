@@ -34,6 +34,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGameDatabase(builder.Configuration);
 builder.Services.AddScoped<WorldService>();
 builder.Services.AddScoped<SettlementService>();
+builder.Services.AddScoped<BeginnerSuggestionService>();
 builder.Services.AddScoped<TradeService>();
 builder.Services.AddScoped<ArmyService>();
 builder.Services.AddScoped<BattleReportService>();

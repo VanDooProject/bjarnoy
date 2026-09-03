@@ -208,6 +208,68 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    /// <summary>Design doc §1: BaseShieldDays is admin-configurable per world, mirroring SpeedFactor's own shape.</summary>
+    [Fact]
+    public async Task Admin_can_update_base_shield_days()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var listed = await client.GetFromJsonAsync<IReadOnlyList<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal(7, Assert.Single(listed!, w => w.Id == world.Id).BaseShieldDays);
+
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: null, BaseShieldDays: 10),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.ReadStrictAsync<AdminWorldResponse>(Ct);
+        Assert.Equal(10, updated.BaseShieldDays);
+
+        // Omitted from the next PATCH — left as-is, same as SpeedFactor's own contract.
+        var second = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: 2.0),
+            Ct);
+        var afterSecond = await second.ReadStrictAsync<AdminWorldResponse>(Ct);
+        Assert.Equal(10, afterSecond.BaseShieldDays);
+    }
+
+    [Fact]
+    public async Task A_non_positive_base_shield_days_is_rejected()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PatchJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/settings",
+            new UpdateWorldSettingsRequest(SpeedFactor: null, BaseShieldDays: 0),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>Design doc §7: a fresh world's islands have no settlements yet, so every ring it has qualifies with capacity.</summary>
+    [Fact]
+    public async Task Admin_world_listing_reports_beginner_ring_capacity()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var listed = await client.GetFromJsonAsync<IReadOnlyList<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+        var admin = Assert.Single(listed!, w => w.Id == world.Id);
+
+        Assert.True(admin.BeginnerRingsTotal > 0);
+        Assert.Equal(admin.BeginnerRingsTotal, admin.BeginnerRingsWithCapacity);
+        Assert.False(admin.BeginnerTotalExhaustion);
+    }
+
     [Fact]
     public async Task Admin_can_pause_and_resume_a_world_with_grace()
     {

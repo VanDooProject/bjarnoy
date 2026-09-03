@@ -201,6 +201,18 @@ export const useWorldStore = defineStore('world', {
     // and docs/codebase-gap-analysis.md. Unused in demo mode.
     ownerId: null as string | null,
     islands: [] as IslandResponse[],
+    // Issue #132 design doc §6: the backend-ranked/filtered beginner-area
+    // candidates for this session's landing page, fetched once via
+    // `fetchSuggestedStart`. Replaces client-side nearest-by-distance
+    // picking over the raw unfiltered `islands` list above — the client
+    // still does exactly what it did before (preview/found on whatever it's
+    // handed), it's just handed a pre-filtered list now. Unused in demo mode.
+    suggestedStart: [] as { islandId: string; at: AxialCoord }[],
+    // True only on genuine total exhaustion (design doc §6) — every island
+    // either graduated or at zero open plots, so `suggestedStart` above came
+    // from the backend's own unfiltered fallback search rather than a real
+    // beginner-safe pick.
+    suggestedStartFallback: false,
     liveReady: false,
     // Whether the world currently accepts a new player, and why not if it
     // doesn't (admin-only fields from issue #27: JoinsClosed, StartsAt) —
@@ -366,6 +378,25 @@ export const useWorldStore = defineStore('world', {
         .map((pos) => ({ ...pos, distance: hexDistance(near, pos.at) }))
         .sort((a, b) => a.distance - b.distance)
         .slice(0, limit);
+    },
+    /**
+     * Issue #132 design doc §6: fetches the backend's ranked/filtered
+     * beginner-area candidates and stores them as `suggestedStart` — the
+     * landing page's new source for its preview/nearby-plot picks, replacing
+     * `nearestStartPosition`/`nearbyStartPositions`' client-side
+     * nearest-by-distance search over the full unfiltered `islands` list.
+     * The backend does the filtering; this just calls it and keeps what it
+     * hands back. A no-op in demo mode (no backend world to ask).
+     */
+    async fetchSuggestedStart(near: AxialCoord, count = 6) {
+      if (DEMO_MODE || !this.worldId) return;
+
+      const response = await api.getSuggestedStart(this.worldId, near, count);
+      this.suggestedStart = response.candidates.map((c) => ({
+        islandId: c.islandId,
+        at: { q: c.q, r: c.r },
+      }));
+      this.suggestedStartFallback = response.fallback;
     },
     /**
      * The unclaimed start position exactly at `at`, or `null` if that hex

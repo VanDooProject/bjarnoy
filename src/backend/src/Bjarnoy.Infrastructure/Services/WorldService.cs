@@ -55,11 +55,13 @@ public sealed record ReseedResult(
 public sealed class WorldService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
-    ILogger<WorldService> logger)
+    ILogger<WorldService> logger,
+    BeginnerSuggestionService beginnerSuggestions)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger<WorldService> _logger = logger;
+    private readonly BeginnerSuggestionService _beginnerSuggestions = beginnerSuggestions;
 
     /// <summary>
     /// Generates a world and persists it: the seed and its parameters, plus the
@@ -274,6 +276,10 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+        // Design doc §6: every island id (and hence ring/openPlots entry)
+        // from the old map is gone — see InvalidateAfterReseed's remarks.
+        _beginnerSuggestions.InvalidateAfterReseed(worldId);
+
         _logger.LogWarning(
             "World {WorldId} ({Name}) reseeded to seed {Seed} by admin {AdminId}: " +
             "{Islands} islands, {Deleted} settlement(s) destroyed.",
@@ -460,6 +466,7 @@ public sealed class WorldService(
     public async Task<WorldEntity?> UpdateAdminSettingsAsync(
         Guid worldId,
         double? speedFactor,
+        double? baseShieldDays,
         bool hasStartsAt,
         DateTimeOffset? startsAt,
         bool? joinsClosed,
@@ -478,6 +485,11 @@ public sealed class WorldService(
         if (speedFactor is { } factor)
         {
             world.SpeedFactor = factor;
+        }
+
+        if (baseShieldDays is { } shieldDays)
+        {
+            world.BaseShieldDays = shieldDays;
         }
 
         if (hasStartsAt)

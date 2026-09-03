@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Bjarnoy.Api.Json;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
+using Bjarnoy.Infrastructure.Services;
 
 namespace Bjarnoy.Api.Contracts;
 
@@ -12,15 +13,25 @@ public sealed record AdminWorldResponse(
     int MaxPlayers,
     int PlayerCount,
     double SpeedFactor,
+    double BaseShieldDays,
     DateTimeOffset? StartsAt,
     bool JoinsClosed,
     DateTimeOffset? EndbossAt,
     DateTimeOffset? EndbossTriggeredAt,
     string RunState,
     DateTimeOffset RunStateSince,
-    DateTimeOffset CreatedAt)
+    DateTimeOffset CreatedAt,
+    // Design doc §7: how many rings currently have beginner spare capacity,
+    // out of how many contain any island at all — the same "Players"/
+    // "Joinable"/"Endboss"-style at-a-glance health signal, for beginner
+    // spawn segregation (§6).
+    int BeginnerRingsWithCapacity,
+    int BeginnerRingsTotal,
+    // True on genuine total exhaustion (§6) — every island either graduated
+    // or at zero openPlots.
+    bool BeginnerTotalExhaustion)
 {
-    public static AdminWorldResponse From(WorldEntity world, int playerCount)
+    public static AdminWorldResponse From(WorldEntity world, int playerCount, BeginnerRingSummary? beginnerRings)
     {
         ArgumentNullException.ThrowIfNull(world);
 
@@ -31,17 +42,27 @@ public sealed record AdminWorldResponse(
             world.MaxPlayers,
             playerCount,
             world.SpeedFactor,
+            world.BaseShieldDays,
             world.StartsAt,
             world.JoinsClosed,
             world.EndbossAt,
             world.EndbossTriggeredAt,
             world.RunState.ToString().ToLowerInvariant(),
             world.RunStateSince,
-            world.CreatedAt);
+            world.CreatedAt,
+            beginnerRings?.RingsWithCapacity ?? 0,
+            beginnerRings?.RingsWithAnyIsland ?? 0,
+            beginnerRings?.TotalExhaustion ?? true);
     }
 }
 
 /// <param name="SpeedFactor">Omit to leave unchanged. Must be greater than 0 when sent.</param>
+/// <param name="BaseShieldDays">
+/// Omit to leave unchanged. Must be greater than 0 when sent — see
+/// <see cref="Bjarnoy.Infrastructure.Entities.WorldEntity.BaseShieldDays"/>.
+/// A settlement's actual shield length is computed once at founding and
+/// never re-derived from a later change to this value (design doc §1).
+/// </param>
 /// <param name="StartsAt">
 /// Omit to leave unchanged; send explicit <c>null</c> to open the world immediately.
 /// </param>
@@ -53,6 +74,7 @@ public sealed record AdminWorldResponse(
 /// </param>
 public sealed record UpdateWorldSettingsRequest(
     double? SpeedFactor,
+    double? BaseShieldDays = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     Optional<DateTimeOffset?> StartsAt = default,
     bool? JoinsClosed = null,
