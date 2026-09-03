@@ -6,24 +6,28 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 // Same submodule assets HexMapRenderer draws the map with (see
 // lib/map/textures.ts) — reused here rather than duplicated, so a doc-page
 // thumbnail is never out of sync with what a building actually looks like
-// in game. Lumberjack and Quarry have no building sprite of their own (the
-// map renders them as their terrain, forest/mountain, with no distinct
-// prop); their thumbnails use that terrain art instead.
+// in game. Quarry has no building sprite of its own (the map renders it as
+// its terrain, mountain, with no distinct prop); its thumbnail uses that
+// terrain art instead.
 import towerUrl from '../../vendor/bg_assets_hextile/hextiles/towerbuilding_SE_level000.png';
 import mountainUrl from '../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
 import grassBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/grasstile_SE_base.png';
-import forestBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/foresttile_SE_base.png';
-import forestTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/foresttile_SE.png';
 import farmBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/farm_crop_SE_base.png';
 import farmTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/farm_crop_SE_level001.png';
-import hutBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/vikinghut_SE_base.png';
-import hutTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/vikinghut_SE_level000.png';
 import longhouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/greathall_SE_base.png';
 import longhouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/greathall_SE_level004.png';
 import fishingHutUrl from '../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
 import magicTowerUrl from '../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 import pumpkinFarmBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/farm_pumpkin_SE_base.png';
 import pumpkinFarmTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/farm_pumpkin_SE_level001.png';
+import thorShrineBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/thorshrine_SE_base.png';
+import thorShrineTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/thorshrine_SE_level002.png';
+import freyjaShrineBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/freyjashrine_SE_base.png';
+import freyjaShrineTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/freyjashrine_SE_level002.png';
+import lumberjackBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/lumberjackhut_SE_base.png';
+import lumberjackTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/lumberjackhut_SE_level002.png';
+import storageHouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/storagebuilding_SE_base.png';
+import storageHouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/storagebuilding_SE_level004.png';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
@@ -37,14 +41,16 @@ interface BuildingArt {
 
 const ART: Record<string, BuildingArt> = {
   longhouse: { base: longhouseBaseUrl, top: longhouseTopUrl },
-  storagehouse: { base: hutBaseUrl, top: hutTopUrl },
+  storagehouse: { base: storageHouseBaseUrl, top: storageHouseTopUrl },
   farm: { base: farmBaseUrl, top: farmTopUrl },
-  lumberjack: { base: forestBaseUrl, top: forestTopUrl },
+  lumberjack: { base: lumberjackBaseUrl, top: lumberjackTopUrl },
   quarry: { base: mountainUrl },
   tower: { base: towerUrl },
   fishinghut: { base: fishingHutUrl },
   magictower: { base: magicTowerUrl },
   pumpkinfarm: { base: pumpkinFarmBaseUrl, top: pumpkinFarmTopUrl },
+  shrineofthor: { base: thorShrineBaseUrl, top: thorShrineTopUrl },
+  shrineoffreyja: { base: freyjaShrineBaseUrl, top: freyjaShrineTopUrl },
 };
 
 const LORE: Record<string, string> = {
@@ -58,6 +64,8 @@ const LORE: Record<string, string> = {
   fishinghut: 'A dock over shallow water, fishing the shallows a farm never could.',
   magictower: 'Arcane iron out of grassland — no ore, no vein, just the working.',
   pumpkinfarm: 'A second harvest for grass — pumpkins alongside the plain fields.',
+  shrineofthor: 'Raised to Thor on any land hex — its favour boosts Wood and Stone production.',
+  shrineoffreyja: 'Raised to Freyja on any land hex — its favour boosts Food production.',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -65,6 +73,8 @@ const TYPE_LABELS: Record<string, string> = {
   fishinghut: 'Fishing hut',
   magictower: 'Magic tower',
   pumpkinfarm: 'Pumpkin farm',
+  shrineofthor: 'Shrine of Thor',
+  shrineoffreyja: 'Shrine of Freyja',
 };
 
 function typeLabel(type: string): string {

@@ -103,6 +103,7 @@ const BUILDING_NAMES: Record<string, string> = {
   shrineoffreyja: 'Shrine of Freyja',
   lumberjack: 'Lumberjack',
   quarry: 'Quarry',
+  storagehouse: 'Storehouse',
 };
 
 const TERRAIN_NAMES: Record<string, string> = {

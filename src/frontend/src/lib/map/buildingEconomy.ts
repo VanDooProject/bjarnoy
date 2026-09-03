@@ -76,6 +76,9 @@ export function buildingStatsFor(
       return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
     case 'longhouse':
       return { output: `+${level * 100} storage capacity` };
+    // Mirrors BuildingCatalogue.cs's StorageHouse(level): ResourceAmounts.Uniform(1000) * level.
+    case 'storagehouse':
+      return { output: `+${level * 1000} storage capacity` };
     case 'pumpkinfarm': {
       const workersCap = level * 4;
       return { output: `+${level * 36} food/h`, workers: `${workersCap}/${workersCap}` };
@@ -145,6 +148,7 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   tower: { wood: 120, stone: 200, food: 0, iron: 10 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
+  storagehouse: { wood: 150, stone: 120, food: 0, iron: 0 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */

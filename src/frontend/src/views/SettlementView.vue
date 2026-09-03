@@ -332,7 +332,8 @@ type BuildableType =
   | 'shrineofthor'
   | 'shrineoffreyja'
   | 'lumberjack'
-  | 'quarry';
+  | 'quarry'
+  | 'storagehouse';
 
 interface BuildCategory {
   id: string;
@@ -376,6 +377,11 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'magictower', label: 'Magic Tower' },
       ],
     },
+    {
+      id: 'logistics',
+      label: 'Logistics',
+      buildings: [{ type: 'storagehouse', label: 'Storehouse' }],
+    },
     SHRINE_CATEGORY,
   ],
   sand: [
@@ -412,6 +418,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   resource: 'var(--food)',
   defense: 'var(--iron)',
   religion: 'var(--shrine)',
+  logistics: 'var(--stone)',
 };
 
 const rootActions = computed<RingAction[]>(() => {

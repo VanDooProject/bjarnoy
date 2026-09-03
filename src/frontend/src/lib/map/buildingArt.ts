@@ -15,13 +15,13 @@ import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower
 const BUILDING_ART_FAMILIES: Record<string, string> = {
   hut: 'vikinghut',
   longhouse: 'greathall',
-  // No shrine art in the pack yet (issue #53) — the hut family is the same
-  // placeholder textures.ts and WorldModel.ts already use on the map itself.
-  shrineofthor: 'vikinghut',
-  shrineoffreyja: 'vikinghut',
+  shrineofthor: 'thorshrine',
+  shrineoffreyja: 'freyjashrine',
   farm: 'farm_crop',
   tower: 'towerbuilding',
   pumpkinfarm: 'farm_pumpkin',
+  lumberjack: 'lumberjackhut',
+  storagehouse: 'storagebuilding',
 };
 
 // fishinghut/magictower have no level suffix at all — a single composited
@@ -40,7 +40,7 @@ export const TERRAIN_ART: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 

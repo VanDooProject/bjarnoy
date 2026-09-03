@@ -445,6 +445,7 @@ const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   shrineoffreyja: 'Shrine of Freyja',
   lumberjack: 'Lumberjack',
   quarry: 'Quarry',
+  storagehouse: 'Storehouse',
 };
 
 const TERRAIN_LABELS: Record<Terrain, string> = {

@@ -436,8 +436,7 @@ export class WorldModel {
    * `stores/world.ts`) — resources/rate/level and any buildings the queue has
    * completed since the last poll. Only building types this whitelist knows
    * about are placed on their hex; a type the frontend doesn't model yet
-   * (e.g. `storagehouse`, which isn't in `Tile['buildingType']` at all) is
-   * silently skipped rather than stored as an unrecognized string. A type
+   * is silently skipped rather than stored as an unrecognized string. A type
    * with no distinct sprite in the art pack (Lumberjack, Quarry) is still
    * safe to place — `textures.ts`'s `baseTextureFor` falls back to the
    * tile's bare terrain rather than throwing.
@@ -480,6 +479,7 @@ export class WorldModel {
       'shrineoffreyja',
       'lumberjack',
       'quarry',
+      'storagehouse',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
