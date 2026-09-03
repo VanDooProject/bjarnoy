@@ -173,10 +173,18 @@ Terrain is deterministic from the world seed on the client
 the same argument `shoreline.ts` already makes for computing coastal-ness
 client-side with no round trip. So:
 
-1. For each texel, world position → hex (the inverse of `isoGridPosition`;
-   the lattice is `colPitch = TILE_W * 0.75` by `TILE_H`, see
-   `coordsInRect`, `HexMapRenderer.ts:1631`) → `WorldModel.isLand`. Write A
-   and the B seed.
+1. For each texel, world position → hex via **`isoPixelToAxial`**
+   (`lib/hex/geometry.ts:65`) → `WorldModel.isLand`. Write A and the B seed.
+
+   This must be `isoPixelToAxial`, and **not** anything derived from sprite
+   bounds. `isoPixelToAxial` is defined in terms of the `isoTopPoints`
+   hexagon — the tile's flat top face, which "abuts its neighbours with no
+   gaps or overlaps" (its own comment) — so the mask's land/water boundary
+   lands exactly on the top-face polygon edge. §3.4 is the reason that
+   matters: it is also exactly where the *art's* land/water boundary lands,
+   so the two agree with no fudge factor. Bake from sprite extents instead
+   and every boundary shifts by up to 68px, detaching the foam from the
+   coastline it is supposed to trace.
 2. Run a **two-pass exact euclidean distance transform** (Felzenszwalb, or a
    3×3 chamfer if that proves good enough by eye) over the coverage bitmap,
    once outward for R and once inward for G. Linear in texels, and the whole
@@ -289,6 +297,19 @@ handling despite standing on coastal water.) Art above the top face overhangs
 the hex to the **north**, which draws earlier, so the artifact is: a coastal
 mountain with water to its north gets foam painted over its peak.
 
+The split families are exactly the ones with a `hextiles/base/` +
+`hextiles/top/` pair; the unsplit ones sit at `hextiles/` root, which is what
+`textures.ts`'s `ROOT_TERRAIN`/`ROOT_BUILDING_PLAIN`/`ROOT_BUILDING_LEVELED`
+globs pick up. So "root-level" *is* "legacy", and the legacy set is exactly
+`watertile`, `coastalwatertile`, `sandtile`, `mountaintile`,
+`fishinghutbuilding`, `magictower`, `towerbuilding`, `dockyard`. All of them
+are slated for conversion; new art already ships split.
+
+**But the table must stay measured, not keyed on legacy-ness.** Half that set
+is already flat — and `sandtile` in particular is both legacy and 1px, and is
+the most common terrain on a coastline. Treating "legacy" as "occluder" would
+suppress foam along every sandy shore, which is most of them.
+
 **Interim workaround**, to be deleted when the art split lands: a small table of
 `overhangPxAboveTopFace` per unsplit texture key, used to mark a water hex as
 "no water effects" when a tile with a non-zero entry sits to its south. Coarse —
@@ -296,7 +317,43 @@ it costs a hex of foam beside a coastal cliff — but it is one table and one
 predicate in the mask bake, and when every entry goes to zero the code deletes
 itself. See §9's phase 5.
 
-### 3.4 Foam bleed is clipped for free
+### 3.4 The skirt needs no handling — the depth sort already did it
+
+Every tile, water included, has a 68px skirt hanging below its top face
+(§3.3), and that skirt reaches into the hexes in front of it. Since the water
+mesh now draws above all of `terrainBase`, the natural worry is what the
+shader should do about a land tile's skirt lying over a water hex.
+
+**Nothing, and it cannot see it anyway.** The mesh composites onto an image in
+which `isoDepthKey` has already resolved the skirt: the tiles in front draw
+later and cover it. And they cover it *completely*, because the top faces
+tessellate exactly — a tile's skirt spans 68px below its own top face, while
+the tile directly in front starts its top face 92px lower and is opaque from
+there down. So a skirt is only ever a visible pixel where there is no tile in
+front of it at all.
+
+The consequence is the property the whole mask design rests on:
+
+> Because top faces tessellate and skirts are always covered, the **visible**
+> land/water boundary in the art falls exactly on the top-face polygon edge —
+> which is exactly the boundary the mask encodes (§2.3). Mask and art agree by
+> construction.
+
+That is why there is no half-tile offset anywhere in this design, and why the
+foam traces the painted coastline rather than floating a skirt's height away
+from it.
+
+Two bounded places where they *don't* agree, both already accounted for:
+
+1. **Art rising above the top face** overhangs the hex to the *north*, which
+   draws earlier — so the mesh can paint over it. That is §3.3's legacy set
+   and its interim table.
+2. **The frontmost rendered row**, where a skirt has nothing in front to cover
+   it: a ≤68px strip along the southern edge of the rebuild region. It sits
+   inside the fog cull margin under opaque mist, so it is not visible in
+   practice — named here so it isn't mistaken for a bug in the mask.
+
+### 3.5 Foam bleed is clipped for free
 
 The foam band is allowed to extend slightly *onto* land (the mask's G
 channel). In both views the land art draws **above** the water mesh, so that
@@ -305,7 +362,7 @@ the foam read as touching the beach rather than stopping short of it in a
 visible gap. Being generous with bleed is therefore cheap; being stingy costs
 a visible seam.
 
-### 3.5 Where the layer must be off
+### 3.6 Where the layer must be off
 
 - **Landing-page preview** (`previewCenter`, no settlement): water isn't drawn
   at all today (§1.2). The mesh is hidden.
@@ -380,7 +437,7 @@ and a **surge**.
 - **Two tiers**: a narrow, nearly opaque inner line hard against the shore,
   and a wider, thresholded-noise outer lace at lower alpha. The inner line is
   what makes the coast read as wet; the lace is what makes it read as foam.
-- Bleeds inward using G, clipped by the land art above (§3.4).
+- Bleeds inward using G, clipped by the land art above (§3.5).
 
 ### 4.4 Uniforms
 
@@ -471,7 +528,7 @@ exactly the kind of thing that regresses that, so:
 - fbm octave counts stay low (2 for foam, 1 for the sea mottle);
 - every expensive term is gated on the mask (`A`, then `R`) and early-outs
   over land and, for waves, along the coast;
-- the mesh is hidden entirely under `deepFogOnly` and in preview mode (§3.5);
+- the mesh is hidden entirely under `deepFogOnly` and in preview mode (§3.6);
 - the mask is re-baked on region change, not per frame (§2.2);
 - new `fogPerfStats` siblings — `waterMaskBakeMs`, `waterMaskTexels` — so the
   bake cost is measurable in `FogPerfPanel` rather than guessed at.
@@ -500,6 +557,11 @@ Unit (vitest, jsdom — no GPU, so these test our own logic, not Pixi):
   `world.children` is above `terrainBase` and below `terrainTop` in settlement
   mode, and below `terrainFlat` in world mode. This is the regression test for
   the whole of §3, and it is testing our stack, not a third-party library.
+- **A mask/art alignment test** — §3.4's property stated as an assertion:
+  `isoPixelToAxial` of a point just inside a hex's `isoTopPoints` polygon
+  returns that hex, and of a point in its skirt returns the hex in front. This
+  is the invariant that keeps foam on the painted coastline; it is cheap and it
+  fails loudly if the tile geometry constants ever move.
 - **An overhang-table test** — every unsplit texture key in §3.3's table
   suppresses effects on the water hex to its north, and every flat-topped one
   (`fishinghutbuilding`, `sandtile`, every split base) does not. This is the
@@ -546,8 +608,9 @@ Each phase is a separate commit and leaves the app buildable.
   is visible (tinted) in scouted-but-unseen water. That seems right — it's
   terrain motion, not information — but it's worth a look on a real map before
   calling it settled.
-- **Legacy art split.** `sand`, `mountain`, `magictower`, `towerbuilding` and
-  `dockyard` are pending a base/top split. When it lands, §3.3's interim
+- **Legacy art split.** The whole `hextiles/` root set is pending a base/top
+  split (§3.3); of it only `mountain`, `magictower`, `towerbuilding` and
+  `dockyard` actually stick up. When it lands, §3.3's interim
   overhang table should go to zero and be removed — worth linking this issue
   from that work so it isn't left behind as dead code that looks load-bearing.
 - **Mask resolution at low zoom.** `MASK_TEXELS_PER_TILE = 8` is a guess sized
