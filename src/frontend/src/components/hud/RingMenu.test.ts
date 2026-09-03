@@ -218,6 +218,24 @@ describe('RingMenu', () => {
     expect(labels(wrapper)).toEqual(['Details', 'Build']);
   });
 
+  it('exposes a disabled action\'s hint as a hoverable title, not the native disabled attribute', () => {
+    // A native `disabled` button doesn't fire mouse events in most browsers,
+    // so its `title` tooltip would never actually show on hover — this is
+    // what previously left players unable to see e.g. why Upgrade was
+    // unavailable. aria-disabled keeps the same "can't interact" semantics
+    // while leaving hover, and so the tooltip, working.
+    const wrapper = ring({
+      actions: [
+        { id: 'details', label: 'Details' },
+        { id: 'upgrade', label: 'Upgrade', disabled: true, hint: 'Not enough wood, stone' },
+      ],
+    });
+    const upgrade = bubble(wrapper, 'Upgrade');
+    expect(upgrade.attributes('title')).toBe('Not enough wood, stone');
+    expect(upgrade.attributes('disabled')).toBeUndefined();
+    expect(upgrade.attributes('aria-disabled')).toBe('true');
+  });
+
   it('stays one lane deep when it has no categories, for the onboarding ring', async () => {
     const wrapper = ring({
       categories: [],

@@ -35,7 +35,7 @@ import { foundSettlement } from './helpers';
  * panel wired in, and that the panel correctly stays hidden rather than
  * rendering broken/empty in a mode it has no data for.
  */
-test.describe('settlement expansion (issue #55)', () => {
+test.describe('settlement expansion (issue #55)', { tag: '@g2' }, () => {
   test('the expansion panel does not render in demo mode', async ({ page }) => {
     await foundSettlement(page);
 

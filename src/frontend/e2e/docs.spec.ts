@@ -12,7 +12,7 @@ import { expect, test } from './fixtures';
  * backend, which is exactly what `npm run test:e2e` runs against.
  */
 
-test.describe('docs pages scrolling', () => {
+test.describe('docs pages scrolling', { tag: '@g2' }, () => {
   test('tech tree page scrolls to reveal content below the fold', async ({ page }) => {
     await page.goto('/tech-tree');
     // Catalogue load is async even against the bundled fallback — wait for

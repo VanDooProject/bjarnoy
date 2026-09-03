@@ -75,7 +75,7 @@ const PREVIEW = {
   ],
 };
 
-test.describe('admin world reseed', () => {
+test.describe('admin world reseed', { tag: '@g2' }, () => {
   test('previews a candidate seed on the world map, then commits it behind two confirmations', async ({ page }) => {
     await loginAsAdmin(page);
     await page.route('**/api/v1/admin/worlds', (route: Route) => route.fulfill({ json: [WORLD] }));

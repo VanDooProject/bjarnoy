@@ -1002,6 +1002,15 @@ export const useWorldStore = defineStore('world', {
      */
     async fetchFogMask() {
       if (DEMO_MODE || !this.worldId || !this.ownerId) return;
+      // Guard re-entrancy: this is polled on a fixed LIVE_POLL_MS interval
+      // (startHudSync) with no relation to how long a fetch actually takes.
+      // Without this guard, a fetch slower than the poll interval (a slow
+      // network, or — see refreshDemoFogMask's own comment — a loaded main
+      // thread) lets the next tick start an overlapping fetch on top of it;
+      // each overlap adds more concurrent work, which makes the *next* one
+      // slower still, compounding without bound instead of settling back
+      // down once the slow patch passes.
+      if (fogPerfStats.maskFetchInFlight) return;
 
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
@@ -1032,6 +1041,21 @@ export const useWorldStore = defineStore('world', {
      */
     async refreshDemoFogMask() {
       if (!DEMO_MODE) return;
+      // Guard re-entrancy — see fetchFogMask's own comment for why this
+      // matters generally; it matters *more* here specifically. Baking a
+      // mask (generateCells' nested texel loop, then an OffscreenCanvas
+      // PNG encode/decode round trip through convertToBlob/createImageBitmap)
+      // is real synchronous+CPU work, not a network wait — measured at
+      // several *seconds* against DEMO_MASK_RADIUS on a loaded machine,
+      // i.e. comparable to or longer than LIVE_POLL_MS itself. With no
+      // guard, the interval fires again before the previous bake finishes,
+      // so a second bake's cell loop runs concurrently with the first —
+      // stealing the main thread from *everything* else (including, e.g., a
+      // building placement's own render and any pending input dispatch)
+      // and taking longer than either would alone, which only makes the
+      // next overlap worse. That runaway pile-up, not any single bake, is
+      // what could stall the page for tens of seconds under load.
+      if (fogPerfStats.maskFetchInFlight) return;
 
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();

@@ -13,6 +13,15 @@ export default defineConfig({
   // No retries, in CI or locally: a retry silently hides a flaky test
   // behind a green run instead of surfacing it.
   retries: 0,
+  // 1: GitHub's standard hosted runner is only 2 vCPUs, and these specs
+  // render real WebGL/PixiJS canvases without a GPU (CPU-bound software
+  // rendering) — even 2 in-process workers oversubscribe that CPU and start
+  // timing out under contention (confirmed on this repo's own runner: a
+  // 2-worker run took 19.4 minutes and still failed 9 tests to timeouts,
+  // worse than a clean serial run). The tests themselves have no shared
+  // state and are fine to parallelize — see frontend-ci.yml's `e2e` job,
+  // which shards across separate runners instead of adding in-process
+  // workers here.
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

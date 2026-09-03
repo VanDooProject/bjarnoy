@@ -18,8 +18,14 @@ import { distanceFrom, foundSettlement, rectsOf } from './helpers';
  * the concentric one it replaced: at most TWO lanes are ever on screen, so
  * drilling *swaps* the inner lane rather than adding an orbit outside it.
  */
+// Tagged per-test rather than once on the describe: three of these tests
+// (this one, "hovering a building shows its cost...", and touch build's
+// single test below) each individually run within ~15s of their 90s CI
+// budget, and bundling all three sequentially into one job compounds any
+// runner-load variance instead of diluting it — see
+// docs/ci/e2e-sharding.md for the CI run that motivated this split.
 test.describe('ring menu drill-down', () => {
-  test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', async ({ page }) => {
+  test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -135,7 +141,7 @@ test.describe('ring menu drill-down', () => {
     expect(drilled, 'no offset found an own, empty, buildable tile to drill into').toBe(true);
   });
 
-  test('hovering a building shows its cost, build time and longhouse gate, and a locked one cannot be placed', async ({ page }) => {
+  test('hovering a building shows its cost, build time and longhouse gate, and a locked one cannot be placed', { tag: '@g2' }, async ({ page }) => {
     // The detail card is what the redesign added on top of navigation: the
     // player asked to see "resource cost, build time, can I afford it" without
     // committing to anything. It must also be honest about the gate — the
@@ -229,7 +235,7 @@ test.describe('ring menu drill-down', () => {
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
 
-  test('the root Upgrade bubble is disabled with a reason when the settlement cannot afford it', async ({ page }) => {
+  test('the root Upgrade bubble is disabled with a reason when the settlement cannot afford it', { tag: '@g1' }, async ({ page }) => {
     // Regression: Upgrade used to carry no cost information at all — it
     // looked exactly as clickable as when affordable, and demo mode would
     // bump the level for free regardless. Same disabled+hint convention as
@@ -292,7 +298,7 @@ test.describe('ring menu drill-down', () => {
     await expect.poll(buildingLevel, { timeout: 5_000 }).toBe(levelBefore + 1);
   });
 
-  test('a mousedown outside a ring bubble closes the ring and starts dragging the map', async ({ page }) => {
+  test('a mousedown outside a ring bubble closes the ring and starts dragging the map', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -318,7 +324,7 @@ test.describe('ring menu drill-down', () => {
     expect(Buffer.compare(before, after), 'map did not visibly pan from the same gesture that closed the ring').not.toBe(0);
   });
 
-  test('hovering the map while a ring is open does not show the tile tooltip', async ({ page }) => {
+  test('hovering the map while a ring is open does not show the tile tooltip', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -337,7 +343,7 @@ test.describe('ring menu drill-down', () => {
     await expect(page.locator('.hex-tooltip')).toBeHidden();
   });
 
-  test('clicking "World map" in the header while a ring is open navigates instead of the ring intercepting it', async ({ page }) => {
+  test('clicking "World map" in the header while a ring is open navigates instead of the ring intercepting it', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -358,7 +364,7 @@ test.describe('ring menu drill-down', () => {
     await expect(page.locator('.ring-bubble')).toHaveCount(0);
   });
 
-  test('clicking elsewhere on the map with a ring open just closes it, instead of opening a new one there', async ({ page }) => {
+  test('clicking elsewhere on the map with a ring open just closes it, instead of opening a new one there', { tag: '@g3' }, async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -387,7 +393,7 @@ test.describe('ring menu drill-down', () => {
 
   // Issue #141: Escape had never been wired up anywhere the ring menu is
   // used — only an outside click/right-click on the backdrop closed it.
-  test('pressing Escape closes the ring menu', async ({ page }) => {
+  test('pressing Escape closes the ring menu', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -407,7 +413,7 @@ test.describe('ring menu drill-down', () => {
 // A real touch context (not a synthetic dispatchEvent) is what actually
 // exercises the browser's own pointerdown->click suppression this depends
 // on — see RingMenu.vue's onBuildingPointerDown.
-test.describe('ring menu touch build', () => {
+test.describe('ring menu touch build', { tag: '@g1' }, () => {
   test.use({ hasTouch: true });
 
   test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {

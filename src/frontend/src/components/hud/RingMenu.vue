@@ -334,6 +334,10 @@ function onBackdropPointerDown(e: PointerEvent) {
       <span v-if="hubSub" class="hub-sub">{{ hubSub }}</span>
     </button>
 
+    <!-- aria-disabled, not the native `disabled` attribute: a disabled
+         button doesn't fire mouse events in most browsers, so its `title`
+         tooltip (the hint below) would never show. onLaneClick/onLaneEnter
+         already guard on entry.item.disabled, so this stays inert. -->
     <button
       v-for="entry in lane1"
       :key="entry.item.id"
@@ -347,7 +351,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         fontSize: entry.item.label.length > 7 ? '8.2px' : '9.2px',
         '--tint': entry.color,
       }"
-      :disabled="entry.item.disabled"
+      :aria-disabled="entry.item.disabled || undefined"
       :title="entry.item.disabled ? entry.item.hint : layout.collapsed ? entry.item.label : undefined"
       :aria-label="entry.item.label"
       @click="onLaneClick(entry.item)"

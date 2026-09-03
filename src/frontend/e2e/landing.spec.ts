@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures';
 import { foundSettlement, waitForMapReady } from './helpers';
 
-test('landing page is the village view, not a marketing page in front of it', async ({ page }) => {
+test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/');
 
@@ -17,7 +17,7 @@ test('landing page is the village view, not a marketing page in front of it', as
   await expect(page).toHaveURL(/\/settlement$/);
 });
 
-test('onboarding build step offers a ring menu with the tile-appropriate guided building enabled and everything else disabled', async ({ page }) => {
+test('onboarding build step offers a ring menu with the tile-appropriate guided building enabled and everything else disabled', { tag: '@g3' }, async ({ page }) => {
   // Regression coverage: the onboarding build step used to pop a
   // BuildingModal with a single "Build here" button hardcoded to a type
   // ('farm') that fails outside grass terrain — "can't actually select the
@@ -95,7 +95,7 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
 });
 
-test('onboarding ring menu closes on an outside click and on Escape', async ({ page }) => {
+test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g3' }, async ({ page }) => {
   // Issue #141: the ring used to make its backdrop opt-in per instance, and
   // LandingView never opted in — so its backdrop rendered with
   // `pointer-events: none`, silently disabling the outside-click close (and
@@ -152,7 +152,7 @@ test('onboarding ring menu closes on an outside click and on Escape', async ({ p
   await expect(page.locator('.ring-bubble')).toHaveCount(0);
 });
 
-test('impressum page is reachable and links back', async ({ page }) => {
+test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {
   await page.goto('/impressum');
   await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();
   await page.getByRole('button', { name: /back/i }).click();
