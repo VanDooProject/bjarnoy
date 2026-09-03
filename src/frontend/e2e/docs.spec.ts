@@ -30,7 +30,11 @@ test.describe('docs pages scrolling', () => {
     await expect(lastSection).not.toBeInViewport();
 
     await root.hover();
-    await page.mouse.wheel(0, 5000);
+    // A large, deliberately overshooting delta rather than a value sized to
+    // the page's current content: the browser clamps scrollTop at the real
+    // max either way, and a snug value keeps needing bumping as the tech
+    // tree grows another building section (it has three times already).
+    await page.mouse.wheel(0, 100_000);
     await expect
       .poll(() => root.evaluate((el) => el.scrollTop))
       .toBeGreaterThan(0);
