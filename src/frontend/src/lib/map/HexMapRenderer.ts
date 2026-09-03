@@ -2089,6 +2089,7 @@ export class HexMapRenderer {
       const ownerLabel = this.acquireLabel();
       ownerLabel.text = settlement.ownerName;
       ownerLabel.style.fill = mine ? GOLD : RIVAL;
+      ownerLabel.style.fontFamily = 'sans-serif';
       ownerLabel.style.fontWeight = 'normal';
       ownerLabel.style.fontSize = 11;
       ownerLabel.style.letterSpacing = 0;
@@ -2114,6 +2115,11 @@ export class HexMapRenderer {
       // gray for other islands, gold + bold for the player's own.
       label.text = island.name.toUpperCase();
       label.style.fill = mineIsland ? GOLD : 0x8fa3af;
+      // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels)
+      // sets island names in 'Alegreya Sans SC' — a display small-caps face,
+      // distinct from the 'sans-serif' every other pooled label here uses —
+      // loaded alongside 'Outfit' in index.html's Google Fonts link.
+      label.style.fontFamily = "'Alegreya Sans SC', serif";
       label.style.fontWeight = mineIsland ? 'bold' : '600';
       label.style.fontSize = 13;
       label.style.letterSpacing = 1.5;
@@ -2159,6 +2165,7 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = formatEta(remainingMs);
       label.style.fill = 0xe8f0f5;
+      label.style.fontFamily = 'sans-serif';
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;
@@ -2193,6 +2200,7 @@ export class HexMapRenderer {
       const label = this.acquireLabel();
       label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
       label.style.fill = CART_COLOR;
+      label.style.fontFamily = 'sans-serif';
       label.style.fontWeight = 'normal';
       label.style.fontSize = 11;
       label.style.letterSpacing = 0;
@@ -2263,6 +2271,7 @@ export class HexMapRenderer {
       const nameLabel = this.acquireLabel();
       nameLabel.text = settlement.name;
       nameLabel.style.fill = 0xe8f0f5;
+      nameLabel.style.fontFamily = 'sans-serif';
       nameLabel.style.fontWeight = 'bold';
       nameLabel.style.fontSize = 13 * zoomScale;
       nameLabel.style.letterSpacing = 0;
@@ -2273,6 +2282,7 @@ export class HexMapRenderer {
       const suffixLabel = this.acquireLabel();
       suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
       suffixLabel.style.fill = 0xe8f0f5;
+      suffixLabel.style.fontFamily = 'sans-serif';
       suffixLabel.style.fontWeight = '400';
       suffixLabel.style.fontSize = 12 * zoomScale;
       suffixLabel.style.letterSpacing = 0;
