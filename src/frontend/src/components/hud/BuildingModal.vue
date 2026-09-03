@@ -104,6 +104,9 @@ const BUILDING_NAMES: Record<string, string> = {
   lumberjack: 'Lumberjack',
   quarry: 'Quarry',
   storagehouse: 'Storehouse',
+  archeryrange: 'Archery Range',
+  dockyard: 'Dockyard',
+  greatstorehouse: 'Great Storehouse',
 };
 
 const TERRAIN_NAMES: Record<string, string> = {

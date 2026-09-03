@@ -102,6 +102,9 @@ const TYPE_LABELS: Record<string, string> = {
   pumpkinfarm: 'Pumpkin farm',
   shrineofthor: 'Shrine of Thor',
   shrineoffreyja: 'Shrine of Freyja',
+  archeryrange: 'Archery range',
+  dockyard: 'Dockyard',
+  greatstorehouse: 'Great storehouse',
 };
 
 function typeLabel(type: string): string {

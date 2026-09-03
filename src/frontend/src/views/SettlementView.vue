@@ -333,7 +333,10 @@ type BuildableType =
   | 'shrineoffreyja'
   | 'lumberjack'
   | 'quarry'
-  | 'storagehouse';
+  | 'storagehouse'
+  | 'archeryrange'
+  | 'dockyard'
+  | 'greatstorehouse';
 
 interface BuildCategory {
   id: string;
@@ -375,12 +378,16 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       buildings: [
         { type: 'tower', label: 'Watchtower' },
         { type: 'magictower', label: 'Magic Tower' },
+        { type: 'archeryrange', label: 'Archery Range' },
       ],
     },
     {
       id: 'logistics',
       label: 'Logistics',
-      buildings: [{ type: 'storagehouse', label: 'Storehouse' }],
+      buildings: [
+        { type: 'storagehouse', label: 'Storehouse' },
+        { type: 'greatstorehouse', label: 'Great Storehouse' },
+      ],
     },
     SHRINE_CATEGORY,
   ],

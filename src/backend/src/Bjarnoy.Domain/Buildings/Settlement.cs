@@ -642,6 +642,15 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
         }
 
+        if (definition.RequiredBuildingType is { } requiredType)
+        {
+            var requiredLevel = Buildings.FirstOrDefault(b => b.Type == requiredType).Level;
+            if (requiredLevel < definition.RequiredBuildingLevel)
+            {
+                return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow);
+            }
+        }
+
         if (!Resources.CanAfford(definition.Cost, now))
         {
             return BuildDecision.Rejected(BuildRejection.NotEnoughResources);
@@ -1219,7 +1228,7 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.InvalidCount);
         }
 
-        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel))
+        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => Buildings.FirstOrDefault(b => b.Type == t).Level))
         {
             return TrainDecision.Rejected(TrainRejection.UnitNotAvailable);
         }

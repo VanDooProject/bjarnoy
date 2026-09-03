@@ -47,6 +47,9 @@ const BUILDING_LABELS: Record<string, string> = {
   pumpkinfarm: 'Pumpkin farm',
   shrineofthor: 'Shrine of Thor',
   shrineoffreyja: 'Shrine of Freyja',
+  archeryrange: 'Archery range',
+  dockyard: 'Dockyard',
+  greatstorehouse: 'Great storehouse',
 };
 
 // No backend concept of "how many build slots does this settlement have"

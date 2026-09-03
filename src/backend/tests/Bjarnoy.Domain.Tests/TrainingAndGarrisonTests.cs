@@ -15,7 +15,8 @@ public class TrainingAndGarrisonTests
     /// is never the thing under test unless the caller overrides
     /// <paramref name="stock"/>.
     /// </summary>
-    private static Settlement Found(int longhouseLevel = 1, double stock = 1_000_000)
+    private static Settlement Found(
+        int longhouseLevel = 1, double stock = 1_000_000, params IReadOnlyList<PlacedBuilding> extraBuildings)
     {
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, longhouseLevel)]);
 
@@ -24,7 +25,7 @@ public class TrainingAndGarrisonTests
             Id = Guid.CreateVersion7(),
             Name = "Bjornstad",
             Centre = Centre,
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel)],
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, longhouseLevel), .. extraBuildings],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(stock), production, capacity, T0),
         };
@@ -126,7 +127,7 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void Training_a_ship_at_a_non_coastal_settlement_is_refused()
     {
-        var settlement = Found(longhouseLevel: 5);
+        var settlement = Found(longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
 
         var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: false);
 
@@ -136,11 +137,43 @@ public class TrainingAndGarrisonTests
     [Fact]
     public void Training_a_ship_at_a_coastal_settlement_is_accepted()
     {
-        var settlement = Found(longhouseLevel: 5);
+        var settlement = Found(longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Dockyard, 1)]);
 
         var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    /// <summary>A land unit (the Archery Range roster) is gated by that building standing, not just the longhouse level.</summary>
+    [Fact]
+    public void A_land_unit_cannot_be_trained_without_an_archery_range()
+    {
+        var settlement = Found(longhouseLevel: 5);
+
+        var decision = settlement.PlanTrain(UnitType.Bowman, 1, T0, Guid.CreateVersion7());
+
+        Assert.Equal(TrainRejection.UnitNotAvailable, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_land_unit_can_be_trained_once_an_archery_range_stands()
+    {
+        var settlement = Found(
+            longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 1)]);
+
+        var decision = settlement.PlanTrain(UnitType.Bowman, 1, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_ship_cannot_be_trained_without_a_dockyard()
+    {
+        var settlement = Found(longhouseLevel: 5);
+
+        var decision = settlement.PlanTrain(UnitType.Karve, 1, T0, Guid.CreateVersion7(), hasShoreline: true);
+
+        Assert.Equal(TrainRejection.UnitNotAvailable, decision.Rejection);
     }
 
     [Fact]

@@ -81,15 +81,15 @@ const SPLIT_TERRAIN_TOP = import.meta.glob(
   { eager: true, import: 'default' },
 ) as AssetModules;
 const ROOT_BUILDING_LEVELED = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/towerbuilding_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{towerbuilding,dockyard}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding}_*_base.png',
+  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse}_*_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding}_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 // One glob per river shape (not a single `rivertile_*` prefix glob): the
@@ -234,6 +234,8 @@ const SOURCES = {
     pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
     lumberjack: buildPlain(SPLIT_BUILDING_BASE, 'lumberjackhut_'),
     storagehouse: buildPlain(SPLIT_BUILDING_BASE, 'storagebuilding_'),
+    archeryrange: buildPlain(SPLIT_BUILDING_BASE, 'archerybuilding_'),
+    greatstorehouse: buildPlain(SPLIT_BUILDING_BASE, 'bigstoragehouse_'),
     // Unlike towerbuilding, the pack draws the fishing hut with a real
     // per-orientation sprite (its dock visibly points a different way in
     // each of the six files) rather than one image reused at every
@@ -249,9 +251,10 @@ const SOURCES = {
    * `variant000`/`variant001`), same shape as grass/forest's top layer.
    */
   coastalBase: buildIndexed(ROOT_TERRAIN, 'coastalwatertile_'),
-  /** Tower isn't base/top split, so its level swap replaces the *base* texture. */
+  /** Tower and Dockyard aren't base/top split, so their level swap replaces the *base* texture. */
   baseIndexed: {
     tower: buildIndexed(ROOT_BUILDING_LEVELED, 'towerbuilding_'),
+    dockyard: buildIndexed(ROOT_BUILDING_LEVELED, 'dockyard_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   top: {
     grass: buildIndexed(SPLIT_TERRAIN_TOP, 'grasstile_'),
@@ -264,6 +267,8 @@ const SOURCES = {
     pumpkinfarm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_pumpkin_'),
     lumberjack: buildIndexed(SPLIT_BUILDING_TOP, 'lumberjackhut_'),
     storagehouse: buildIndexed(SPLIT_BUILDING_TOP, 'storagebuilding_'),
+    archeryrange: buildIndexed(SPLIT_BUILDING_TOP, 'archerybuilding_'),
+    greatstorehouse: buildIndexed(SPLIT_BUILDING_TOP, 'bigstoragehouse_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   /**
    * The art pack's four river shapes — a `RiverTileShape.Mouth` (see

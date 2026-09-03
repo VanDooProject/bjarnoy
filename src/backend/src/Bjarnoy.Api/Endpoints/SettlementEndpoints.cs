@@ -480,6 +480,7 @@ public static class SettlementEndpoints
         BuildRejection.LevelSkipped => "Levels must be built in order.",
         BuildRejection.LonghousePlacementNotAllowed =>
             "A settlement gets its longhouse from founding, not from the build queue.",
+        BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
         _ => "Refused.",
     };
 

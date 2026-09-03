@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Units;
 
 namespace Bjarnoy.Domain.Tests;
@@ -57,6 +58,39 @@ public class UnitCatalogueTests
     {
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Longship, 7));
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Longship, 8));
+    }
+
+    [Fact]
+    public void A_land_unit_needs_an_archery_range_when_a_building_lookup_is_supplied()
+    {
+        // No buildingLevelOf lookup: old longhouse-only behavior, unaffected
+        // by the new training-building gate.
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Spearman, 1));
+
+        // With a lookup, an absent Archery Range blocks a land unit even
+        // though the longhouse is high enough.
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Spearman, 1, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(
+            UnitType.Spearman, 1, t => t == BuildingType.ArcheryRange ? 1 : 0));
+    }
+
+    [Fact]
+    public void A_ship_needs_a_dockyard_when_a_building_lookup_is_supplied()
+    {
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Karve, 5));
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Karve, 5, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(
+            UnitType.Karve, 5, t => t == BuildingType.Dockyard ? 1 : 0));
+    }
+
+    [Fact]
+    public void A_civilian_only_needs_the_longhouse_even_with_a_building_lookup()
+    {
+        // Thrall defaults to RequiredBuildingType = Longhouse, so a lookup
+        // that reports no Archery Range/Dockyard still allows it as long as
+        // the longhouse itself is reported standing.
+        Assert.True(UnitCatalogue.IsAvailable(
+            UnitType.Thrall, 1, t => t == BuildingType.Longhouse ? 1 : 0));
     }
 
     [Fact]

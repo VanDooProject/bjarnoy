@@ -54,6 +54,9 @@ public static class BuildingCatalogue
             BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
+            BuildingType.GreatStorehouse => GreatStorehouse(level),
+            BuildingType.ArcheryRange => ArcheryRange(level),
+            BuildingType.Dockyard => Dockyard(level),
             _ => null,
         };
     }
@@ -298,5 +301,59 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// A flat level-10-only late-game storage tier: both the Longhouse and
+    /// the settlement's own <see cref="BuildingType.StorageHouse"/> must
+    /// already be level 10 (see <see cref="Settlement.PlanBuild"/>'s
+    /// <see cref="BuildingDefinition.RequiredBuildingType"/> check).
+    /// </summary>
+    private static BuildingDefinition GreatStorehouse(int level) => new()
+    {
+        Type = BuildingType.GreatStorehouse,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 300, Stone: 260, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(10, level),
+        StorageCapacity = ResourceAmounts.Uniform(2000) * level,
+        AllowedTerrain = Grass,
+        RequiredLonghouseLevel = 10,
+        RequiredBuildingType = BuildingType.StorageHouse,
+        RequiredBuildingLevel = 10,
+    };
+
+    /// <summary>
+    /// Trains the land combat/siege roster in place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>). No
+    /// production or storage of its own, and — unlike <see cref="Tower"/> —
+    /// no combat bonus; that is explicitly deferred.
+    /// </summary>
+    private static BuildingDefinition ArcheryRange(int level) => new()
+    {
+        Type = BuildingType.ArcheryRange,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 140, Stone: 100, Food: 0, Iron: 20) * CostFactor(level),
+        BuildDuration = Duration(7, level),
+        AllowedTerrain = SandOrGrass,
+        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+    };
+
+    // Same shape as FishingHut: RequiresCoastalWater rather than
+    // AllowedTerrain, the hex under it stays Terrain.Sea. No production or
+    // storage of its own — it trains the ship roster in place of the
+    // Longhouse (see Units.UnitDefinition.RequiredBuildingType).
+    //
+    // Deferred follow-up, not implemented here: ships departing a fleet
+    // should render from the Dockyard's own hex rather than the settlement
+    // centre — that needs an Army/pathing rendering change out of scope for
+    // this pass.
+    private static BuildingDefinition Dockyard(int level) => new()
+    {
+        Type = BuildingType.Dockyard,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 200, Stone: 120, Food: 0, Iron: 20) * CostFactor(level),
+        BuildDuration = Duration(9, level),
+        RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
     };
 }

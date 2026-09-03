@@ -28,6 +28,11 @@ import lumberjackBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/lumb
 import lumberjackTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/lumberjackhut_SE_level002.png';
 import storageHouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/storagebuilding_SE_base.png';
 import storageHouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/storagebuilding_SE_level004.png';
+import archeryRangeBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/archerybuilding_SE_base.png';
+import archeryRangeTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/archerybuilding_SE_level002.png';
+import dockyardUrl from '../../vendor/bg_assets_hextile/hextiles/dockyard_SE_level007.png';
+import greatStorehouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/bigstoragehouse_SE_base.png';
+import greatStorehouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/bigstoragehouse_SE_level004.png';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
@@ -51,6 +56,9 @@ const ART: Record<string, BuildingArt> = {
   pumpkinfarm: { base: pumpkinFarmBaseUrl, top: pumpkinFarmTopUrl },
   shrineofthor: { base: thorShrineBaseUrl, top: thorShrineTopUrl },
   shrineoffreyja: { base: freyjaShrineBaseUrl, top: freyjaShrineTopUrl },
+  archeryrange: { base: archeryRangeBaseUrl, top: archeryRangeTopUrl },
+  dockyard: { base: dockyardUrl },
+  greatstorehouse: { base: greatStorehouseBaseUrl, top: greatStorehouseTopUrl },
 };
 
 const LORE: Record<string, string> = {
@@ -66,6 +74,10 @@ const LORE: Record<string, string> = {
   pumpkinfarm: 'A second harvest for grass — pumpkins alongside the plain fields.',
   shrineofthor: 'Raised to Thor on any land hex — its favour boosts Wood and Stone production.',
   shrineoffreyja: 'Raised to Freyja on any land hex — its favour boosts Food production.',
+  archeryrange: 'Trains the land army — spearmen through catapults — on grass or sand, in place of the longhouse.',
+  dockyard: 'Trains ships on shallow (coastal) water, in place of the longhouse.',
+  greatstorehouse:
+    'A late-game storage tier on grass, needing both the longhouse and this settlement’s own storage house at level 10.',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -75,6 +87,9 @@ const TYPE_LABELS: Record<string, string> = {
   pumpkinfarm: 'Pumpkin farm',
   shrineofthor: 'Shrine of Thor',
   shrineoffreyja: 'Shrine of Freyja',
+  archeryrange: 'Archery range',
+  dockyard: 'Dockyard',
+  greatstorehouse: 'Great storehouse',
 };
 
 function typeLabel(type: string): string {
@@ -103,7 +118,10 @@ const CATEGORY_OF: Record<string, Category> = {
   fishinghut: 'production',
   magictower: 'production',
   tower: 'defense',
+  archeryrange: 'defense',
   storagehouse: 'logistics',
+  greatstorehouse: 'logistics',
+  dockyard: 'logistics',
 };
 
 function categoryOf(type: string): Category {

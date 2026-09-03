@@ -480,6 +480,9 @@ export class WorldModel {
       'lumberjack',
       'quarry',
       'storagehouse',
+      'archeryrange',
+      'dockyard',
+      'greatstorehouse',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);

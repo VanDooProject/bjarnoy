@@ -51,6 +51,7 @@ public enum BuildRejection
     AlreadyQueuedOnHex,
     MaxLevelReached,
     LonghousePlacementNotAllowed,
+    RequiredBuildingTooLow,
 }
 
 /// <summary>The outcome of asking to build something.</summary>

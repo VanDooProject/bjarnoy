@@ -22,6 +22,9 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjackhut',
   storagehouse: 'storagebuilding',
+  archeryrange: 'archerybuilding',
+  dockyard: 'dockyard',
+  greatstorehouse: 'bigstoragehouse',
 };
 
 // fishinghut/magictower have no level suffix at all — a single composited
@@ -40,7 +43,7 @@ export const TERRAIN_ART: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 

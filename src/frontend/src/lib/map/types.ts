@@ -133,7 +133,10 @@ export interface Tile {
     | 'shrineoffreyja'
     | 'lumberjack'
     | 'quarry'
-    | 'storagehouse';
+    | 'storagehouse'
+    | 'archeryrange'
+    | 'dockyard'
+    | 'greatstorehouse';
   buildingLevel?: number;
 }
 

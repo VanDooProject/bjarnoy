@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 
 namespace Bjarnoy.Domain.Units;
@@ -64,4 +65,12 @@ public sealed record UnitDefinition
     /// prerequisite chain, not "must currently own one".
     /// </summary>
     public UnitType? RequiredUnitType { get; init; }
+
+    /// <summary>
+    /// Which building type this unit trains at — the Longhouse for every
+    /// civilian, <see cref="BuildingType.ArcheryRange"/> for the land combat
+    /// roster, <see cref="BuildingType.Dockyard"/> for ships. Defaults to
+    /// the Longhouse.
+    /// </summary>
+    public BuildingType RequiredBuildingType { get; init; } = BuildingType.Longhouse;
 }
