@@ -85,11 +85,11 @@ const ROOT_BUILDING_LEVELED = import.meta.glob(
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,farm_crop,farm_pumpkin}_*_base.png',
+  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin}_*_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop,farm_pumpkin}_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 // One glob per river shape (not a single `rivertile_*` prefix glob): the
@@ -227,7 +227,7 @@ const SOURCES = {
     grass: buildPlain(SPLIT_TERRAIN_BASE, 'grasstile_'),
     forest: buildPlain(SPLIT_TERRAIN_BASE, 'foresttile_'),
     hut: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
-    longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
+    longhouse: buildPlain(SPLIT_BUILDING_BASE, 'greathall_'),
     // No shrine art exists in the pack yet (issue #53) — reusing the hut
     // sprite as a placeholder, the same stand-in longhouse already uses
     // above, rather than leaving the key unmapped (baseTextureFor's lookup
@@ -259,7 +259,7 @@ const SOURCES = {
     grass: buildIndexed(SPLIT_TERRAIN_TOP, 'grasstile_'),
     forest: buildIndexed(SPLIT_TERRAIN_TOP, 'foresttile_'),
     hut: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
-    longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
+    longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'greathall_'),
     shrineofthor: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     shrineoffreyja: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
     farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),

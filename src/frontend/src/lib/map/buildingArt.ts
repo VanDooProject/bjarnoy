@@ -3,7 +3,7 @@
 // the same building instead of two copies of this glob drifting apart.
 //
 // Each building family ships one composited (base + props already merged)
-// image per level, e.g. `vikinghut_SE_level000.png` .. `_level004.png`,
+// image per level, e.g. `greathall_SE_level000.png` .. `_level004.png`,
 // always the `_SE` rotation — the fixed camera angle both surfaces render at.
 import grassUrl from '../../../vendor/bg_assets_hextile/hextiles/grasstile_SE.png';
 import forestUrl from '../../../vendor/bg_assets_hextile/hextiles/foresttile_SE.png';
@@ -14,7 +14,7 @@ import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower
 
 const BUILDING_ART_FAMILIES: Record<string, string> = {
   hut: 'vikinghut',
-  longhouse: 'vikinghut',
+  longhouse: 'greathall',
   // No shrine art in the pack yet (issue #53) — the hut family is the same
   // placeholder textures.ts and WorldModel.ts already use on the map itself.
   shrineofthor: 'vikinghut',
@@ -40,7 +40,7 @@ export const TERRAIN_ART: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,farm_crop,towerbuilding,farm_pumpkin}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 

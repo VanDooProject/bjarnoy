@@ -18,7 +18,8 @@ import farmBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/farm_crop_
 import farmTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/farm_crop_SE_level001.png';
 import hutBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/vikinghut_SE_base.png';
 import hutTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/vikinghut_SE_level000.png';
-import longhouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/vikinghut_SE_level004.png';
+import longhouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/greathall_SE_base.png';
+import longhouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/greathall_SE_level004.png';
 import fishingHutUrl from '../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
 import magicTowerUrl from '../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 import pumpkinFarmBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/farm_pumpkin_SE_base.png';
@@ -35,7 +36,7 @@ interface BuildingArt {
 }
 
 const ART: Record<string, BuildingArt> = {
-  longhouse: { base: hutBaseUrl, top: longhouseTopUrl },
+  longhouse: { base: longhouseBaseUrl, top: longhouseTopUrl },
   storagehouse: { base: hutBaseUrl, top: hutTopUrl },
   farm: { base: farmBaseUrl, top: farmTopUrl },
   lumberjack: { base: forestBaseUrl, top: forestTopUrl },
