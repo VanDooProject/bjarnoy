@@ -258,18 +258,23 @@ art pack, so it is worth writing down what was measured rather than assumed.
 
 **The tile art is a flat-topped prism.** Native art is 200×300; the flat top
 face spans y 140–232 (`TILE_ART_TOPFACE_Y_FRAC`, `TILE_ART_TOPFACE_H_FRAC`).
-Measuring the opaque bounding box of every base-layer texture in the pack:
+Measuring every base-layer texture in the pack. **Measure by first row with
+at least ~5 opaque pixels, not by the raw alpha bounding box** — some files
+carry a near-transparent stray row at the very top, which a raw bbox reads as
+a full-height overhang. (`top/foresttile_*` measures 139px raw and 48px real;
+that mistake is what §11 records getting wrong.) A row pitch is 92px, so the
+last column is the number that matters:
 
-| base-layer family | px **above** the top face | px **below** |
-| --- | --- | --- |
-| `watertile`, `coastalwatertile` | 0 | 68 |
-| `grasstile`, `foresttile`, `rivertile`, every split building base | 1 | 68 |
-| `sandtile` | 1 | 68 |
-| `fishinghutbuilding` | 0 | 68 |
-| `towerbuilding` | 21 | 68 |
-| `dockyard` | 26 | 68 |
-| `mountaintile` | 67 | 68 |
-| `magictower` | 105 | 68 |
+| base-layer family | px **above** the top face | px **below** | rows up |
+| --- | --- | --- | --- |
+| `watertile`, `coastalwatertile` | 0 | 68 | 0 |
+| `grasstile`, `foresttile`, `rivertile`, every split building base | 1 | 68 | 0.01 |
+| `sandtile` | 1 | 68 | 0.01 |
+| `fishinghutbuilding` | 0 | 68 | 0 |
+| `towerbuilding` | 20 | 68 | 0.22 |
+| `dockyard` | 25 | 68 | 0.27 |
+| `mountaintile` | 66 | 68 | 0.72 |
+| `magictower` | 102 | 68 | **1.11** |
 
 Two things follow.
 
@@ -290,8 +295,8 @@ or `dockyard` — but every family that *is* split has a base of ≤1px above th
 top face, so once the legacy split lands `terrainBase` is uniformly flat-topped
 and this section reduces to "put the mesh above `terrainBase`", full stop.
 
-Until then, four families stick up: `mountaintile` (67px), `magictower`
-(105px), `dockyard` (26px), `towerbuilding` (21px). In practice
+Until then, four families stick up: `mountaintile` (66px), `magictower`
+(102px), `dockyard` (25px), `towerbuilding` (20px). In practice
 `mountaintile` is close to a non-case: the generator puts mountains in the
 island *interior* (`mountainThreshold` 0.4) while sand covers the whole outer
 band (`beachThreshold` 0.82), so a mountain would have to bridge a Δt > 0.6 in
@@ -319,7 +324,7 @@ suppress foam along every sandy shore, which is most of them.
 **Interim fix — do the split in code, at the same cut line the pack uses.**
 Not per-hex suppression, which was this plan's first answer and is wrong on
 two counts: it would delete foam from a whole coastal hex (the one place foam
-exists to be), and `magictower`'s 105px overhang exceeds the 92px row pitch,
+exists to be), and `magictower`'s 102px overhang exceeds the 92px row pitch,
 so it reaches two rows north and suppressing one hex would not even be
 sufficient.
 
@@ -535,8 +540,8 @@ navigation, which is the whole reason it exists — see its header).
 - **Fishing huts and dockyards** stand on coastal water
   (`WorldModel.ts:536`) — the one place a building sits where foam is drawn.
   `fishinghutbuilding` is flat-topped (0px above the top face, §3.3), so it
-  needs nothing; `dockyard` rises 26px and is covered by §3.3's interim table
-  until it gets a base/top split.
+  needs nothing; `dockyard` rises 25px and is covered by §3.3's code-side
+  split until it gets a real one.
 
 ---
 
@@ -660,28 +665,36 @@ confirmed the mechanism: along the coast there is no visible land skirt at all,
 because the water tiles in front cover it, exactly as §3.4 argues.
 
 **§3.3's overhang artifact is real, and the fix for it changed.** A
-`magictower` (105px) placed on a coastal hex with sea to its north has its
+`magictower` (102px) placed on a coastal hex with sea to its north has its
 spire and battlements washed over by the water layer, while its base — the
 part on the top face — is untouched: precisely the predicted failure mode.
-But seeing it also killed this plan's first answer to it (per-hex
-suppression), and three further measurements settled the replacement:
+Seeing it also killed this plan's first answer to it (per-hex suppression),
+for the reasons in §3.3, and the code-side split replaces it:
 
-- **Already-split art is immune, including art taller than the problem
-  cases.** `foresttile`'s tree layer stands **139px** above the top face —
-  more than `magictower`'s 105px, the tallest overhang in the pack — and
-  forest is common on coastlines (589 coastal forest hexes in the same scan).
-  With the water layer on, not one coastal tree is touched. So the artifact
-  is not about height at all; it is only about which layer the art is in.
-  That is what makes emulating the split the right fix rather than a
-  workaround: it moves the four unsplit families into the regime everything
-  else is already in.
-- **The code-side split fixes the tower** — spire clean, base unchanged.
+- **The split fixes the tower** — spire clean, base unchanged.
 - **And it is visually a no-op otherwise.** With the water layer off, turning
   the split on changes 875 pixels of a 1440×900 frame (0.068%), all inside the
   tower's own tile, 93% of them by ≤7/255. At 6× magnification the two are
   indistinguishable: no seam at the cut, no gap, no doubled row. The residual
   is resampling — two sub-sprites scaled from 200px-wide art to 168px land on
   a slightly different sampling grid than one.
+
+**Why it works is layer order, not a measurement.** In settlement mode
+`terrainTop` is added to `world` *after* the water mesh (§3.3's stack), so
+anything routed there draws above it, by construction. The split does not make
+the art shorter; it moves the overhanging part into the layer that is already
+above the water. Nothing about that depends on how tall the art is.
+
+**A control that did not control anything.** An earlier pass tried to
+demonstrate the same point from the other side, by finding already-split art on
+a coastline and showing the water layer never touches it. It used
+`top/foresttile_*` on the strength of a 139px raw-bbox reading, which is a
+stray near-transparent row: the real figure is 48px. At 48px — 0.52 of a 92px
+row pitch — a forest's trees barely reach the diagonal up-neighbour's edge at
+all, so the screenshot showed nothing either way and was not evidence of
+anything. `magictower`'s 1.11 rows is the only overhang in the pack that
+reaches well past its own hex, which is why it is the case worth testing and
+the before/after above is the real evidence.
 
 **Two things the spike changed our mind about:**
 

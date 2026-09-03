@@ -35,10 +35,15 @@ export const waterSpikeFlags: WaterSpikeFlags = {
 /**
  * The families the pack has no `top/` half for AND whose art rises above the
  * top face — the ones that need splitLegacyTexture. Measured from the art
- * (see scripts/measure-tile-overhang.mjs in the plan): mountaintile 67px,
- * magictower 105px, dockyard 26px, towerbuilding 21px. The other unsplit
- * families (watertile, coastalwatertile, sandtile, fishinghutbuilding) are
- * flat-topped at 0-1px and need nothing.
+ * (see scripts/measure-tile-overhang.mjs in the plan): mountaintile 66px,
+ * magictower 102px, dockyard 25px, towerbuilding 20px — measured by first row
+ * with >=5 opaque pixels, NOT by raw alpha bbox, which a stray near-transparent
+ * top row inflates (top/foresttile_* reads 139px raw and 48px real). The other
+ * unsplit families (watertile, coastalwatertile, sandtile, fishinghutbuilding)
+ * are flat-topped at 0-1px and need nothing.
+ *
+ * For scale: the row pitch is 92px, so only magictower (1.11 rows) reaches
+ * well past its own hex; mountaintile is 0.72 and the rest under a third.
  *
  * Empty once the pack ships these split, at which point this whole path goes.
  */
