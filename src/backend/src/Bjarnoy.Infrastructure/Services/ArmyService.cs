@@ -2,6 +2,7 @@ using Bjarnoy.Domain.Armies;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Combat;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
@@ -25,12 +26,28 @@ public enum RecallOutcome
     /// <summary>Already home (including "arrived home during this very settle") or already returning.</summary>
     NothingToRecall,
 
+    /// <summary>
+    /// The army could be recalled (it is mid-journey or supporting) but no
+    /// land/sea route home exists for it — distinct from
+    /// <see cref="NothingToRecall"/>, which means there was nothing to
+    /// recall in the first place (issue #159 part A). A crossing-cost river
+    /// never causes this on its own; it remains possible in principle (e.g.
+    /// a fleet with no adjacent open sea, or a guest's host settlement gone).
+    /// </summary>
+    NoRouteHome,
+
     Recalled,
 }
 
 public sealed record RecallResult(RecallOutcome Outcome, ArmyEntity? Army = null)
 {
     public bool Accepted => Outcome == RecallOutcome.Recalled && Army is not null;
+}
+
+/// <summary>The outcome of asking to redirect an in-transit founding convoy — mirrors <see cref="RecallResult"/>.</summary>
+public sealed record RetargetFoundingApiResult(RetargetFoundingRejection Rejection, ArmyEntity? Army = null, bool ArmyNotFound = false)
+{
+    public bool Accepted => Rejection == RetargetFoundingRejection.None && Army is not null;
 }
 
 /// <summary>Why an admin's direct army edit was refused.</summary>
@@ -58,7 +75,10 @@ public sealed record AdminArmyEditResult(
 /// <summary>
 /// Armies: dispatching them from a settlement's garrison, reading them
 /// (settling to now, folding a finished journey back into the garrison), and
-/// recalling one mid-flight (issue #40 phase 2).
+/// recalling one mid-flight (issue #40 phase 2). Also settlement-founding
+/// convoys (issue #55): a <see cref="ArmyMission.Found"/> army is dispatched,
+/// read, and recalled through these exact same methods — only its dispatch-
+/// time validation and arrival resolution differ, both handled inline below.
 /// </summary>
 /// <remarks>
 /// Mirrors <see cref="SettlementService"/>'s shape: every method converts
@@ -68,10 +88,14 @@ public sealed record AdminArmyEditResult(
 public sealed class ArmyService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
+    SettlementService settlementService,
+    RenownService renownService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly SettlementService _settlementService = settlementService;
+    private readonly RenownService _renownService = renownService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -199,13 +223,50 @@ public sealed class ArmyService(
         }
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
+        var riverTiles = await LoadRiverTilesAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
+
+        // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
+        // slot and target-hex spacing both need database access the pure
+        // Army.PlanDispatch cannot reach on its own, so they are resolved
+        // here, once, and threaded in as already-decided booleans/callbacks.
+        // A convoy already travelling is never re-checked against either rule
+        // later — only the target-still-foundable check is re-run, at
+        // arrival (Army.PlanFoundingArrival).
+        Func<HexCoord, bool>? isHexFoundable = null;
+        var renownAndSlotAllowed = true;
+        if (mission == ArmyMission.Found)
+        {
+            if (settlement.UserId == SystemUserIds.Abandoned)
+            {
+                await PersistIfSettledAsync(settlement, settled, cancellationToken).ConfigureAwait(false);
+                return new ArmyDispatchResult(DispatchRejection.RenownOrSettlementSlotRequirementNotMet);
+            }
+
+            var existingSettlementCount = await _settlementService
+                .GetSettlementCountAsync(settlement.UserId, settlement.WorldId, cancellationToken)
+                .ConfigureAwait(false);
+            // Accrue first, against this world's own game time, rather than
+            // trusting whatever RenownTotal happens to already be sitting in
+            // the row — same "settle before deciding" discipline
+            // QueueBuildAsync/TrainUnitsAsync apply to a settlement's own
+            // resource pool before every decision.
+            var renownTotal = await _renownService
+                .AccrueAsync(settlement.UserId, settlement.WorldId, now, cancellationToken)
+                .ConfigureAwait(false);
+            renownAndSlotAllowed = RenownThresholds.AllowsAnotherSettlement(existingSettlementCount, renownTotal);
+
+            var claimedSettlements = await _settlementService
+                .GetClaimedSettlementsAsync(settlement.WorldId, cancellationToken)
+                .ConfigureAwait(false);
+            isHexFoundable = target => Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing);
+        }
 
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
-            settlement.World.SpeedFactor);
+            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, riverTiles.Contains);
 
         if (!decision.Accepted)
         {
@@ -310,7 +371,9 @@ public sealed class ArmyService(
     /// Turns an army around mid-journey — or, for a <see cref="ArmyLocation.Supporting"/>
     /// guest, calls it home from its host (issue #40 phase 4 §4). Refused (as
     /// <see cref="RecallOutcome.NothingToRecall"/>) when it is already
-    /// returning, or arrived home during this very settle.
+    /// returning, or arrived home during this very settle; refused instead as
+    /// <see cref="RecallOutcome.NoRouteHome"/> when the army was actually
+    /// recallable but no route home exists (issue #159 part A).
     /// </summary>
     public async Task<RecallResult> RecallAsync(Guid armyId, CancellationToken cancellationToken = default)
     {
@@ -331,6 +394,7 @@ public sealed class ArmyService(
         }
 
         var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var domain = army.ToDomain();
@@ -351,7 +415,15 @@ public sealed class ArmyService(
             }
         }
 
-        var recalled = domain.Recall(now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor);
+        // Mirrors Army.Recall's own switch: only these two locations (with a
+        // resolved host hex for a guest) are recallable at all. Checked
+        // separately here so a null Recall result can be told apart as
+        // RecallOutcome.NoRouteHome rather than folded into NothingToRecall.
+        var isRecallable = domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false }
+            || (domain.Location is ArmyLocation.Supporting && currentHex is not null);
+
+        var recalled = domain.Recall(
+            now, home, sampler.TerrainAt, currentHex, army.Settlement.World.SpeedFactor, riverTiles.Contains);
 
         if (recalled is null)
         {
@@ -360,7 +432,7 @@ public sealed class ArmyService(
                 await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            return new RecallResult(RecallOutcome.NothingToRecall, army);
+            return new RecallResult(isRecallable ? RecallOutcome.NoRouteHome : RecallOutcome.NothingToRecall, army);
         }
 
         army.ApplyDomain(recalled);
@@ -369,6 +441,54 @@ public sealed class ArmyService(
         _logger.LogInformation("Army {ArmyId} recalled at {Now}, now heading home.", armyId, now);
 
         return new RecallResult(RecallOutcome.Recalled, army);
+    }
+
+    /// <summary>
+    /// Redirects an in-transit or parked <see cref="ArmyMission.Found"/>
+    /// convoy to a different target hex (issue #55 §6) — the "retargetable"
+    /// half of the mid-transit-claim edge case; <see cref="RecallAsync"/>
+    /// already covers "recallable" for any mission, Found included.
+    /// </summary>
+    public async Task<RetargetFoundingApiResult> RetargetFoundingAsync(
+        Guid armyId, HexCoord newTarget, CancellationToken cancellationToken = default)
+    {
+        var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
+        if (army?.Settlement?.World is null)
+        {
+            return new RetargetFoundingApiResult(RetargetFoundingRejection.NotAFoundingMission, ArmyNotFound: true);
+        }
+
+        var clock = army.Settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
+        if (outcome == ArmySettleOutcome.FoldedHome)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new RetargetFoundingApiResult(RetargetFoundingRejection.NothingToRetarget);
+        }
+
+        var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+
+        var result = Army.RetargetFounding(
+            army.ToDomain(), newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor);
+        if (!result.Accepted)
+        {
+            if (outcome == ArmySettleOutcome.Updated)
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new RetargetFoundingApiResult(result.Rejection);
+        }
+
+        army.ApplyDomain(result.Army!);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Founding convoy (army {ArmyId}) retargeted to {NewTarget} at {Now}.", armyId, newTarget, now);
+
+        return new RetargetFoundingApiResult(RetargetFoundingRejection.None, army);
     }
 
     /// <summary>
@@ -457,6 +577,7 @@ public sealed class ArmyService(
         if (teleportTo is { } destination)
         {
             var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+            var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
             var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
             // An explicit provisions value is the admin's final word, so it is
@@ -464,7 +585,8 @@ public sealed class ArmyService(
             // leg this teleport is throwing away.
             var teleported = domain.TeleportTo(
                 destination, home, now, sampler.TerrainAt,
-                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor);
+                provisions is { } given ? Math.Max(0, given) : null, army.Settlement.World.SpeedFactor,
+                riverTiles.Contains);
             if (teleported is null)
             {
                 return await RejectAsync(AdminArmyEditOutcome.UnreachableHex).ConfigureAwait(false);
@@ -549,6 +671,13 @@ public sealed class ArmyService(
             && now >= inTransit.Movement.ArrivesAt)
         {
             return await ResolveBattleAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (domain.Mission == ArmyMission.Found
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } foundTransit
+            && now >= foundTransit.Movement.ArrivesAt)
+        {
+            return await ResolveFoundingAsync(army, domain, now, cancellationToken).ConfigureAwait(false);
         }
 
         if (domain.Mission == ArmyMission.Support
@@ -697,6 +826,62 @@ public sealed class ArmyService(
     /// Continues settling a just-turned-around army onward to <paramref name="now"/>
     /// (it may already be home) and writes back whichever outcome results.
     /// </summary>
+    /// <summary>
+    /// Settles an <see cref="ArmyMission.Found"/> convoy's arrival (issue #55
+    /// §5/§6): re-checks the target hex's spacing rule as of <paramref name="now"/>
+    /// (not trusted from dispatch time — see
+    /// <see cref="Army.PlanFoundingArrival"/>'s remarks) and either founds the
+    /// new settlement, consuming the convoy, or — when the hex is no longer
+    /// foundable — falls back to plain <c>Army.SettleTo</c>, exactly the same
+    /// standing/auto-return/recall/retarget behaviour a <see cref="ArmyMission.Move"/>
+    /// army gets. That fallback is this issue's entire answer to "target hex
+    /// claimed mid-transit": nothing here ever discards the mission.
+    /// </summary>
+    private async Task<ArmySettleOutcome> ResolveFoundingAsync(
+        ArmyEntity armyEntity, Army domain, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var movement = ((ArmyLocation.InTransit)domain.Location).Movement;
+        var targetHex = movement.Path[^1];
+        var originSettlement = armyEntity.Settlement!;
+
+        var claimedSettlements = await _settlementService
+            .GetClaimedSettlementsAsync(originSettlement.WorldId, cancellationToken)
+            .ConfigureAwait(false);
+        var targetStillFoundable = Founding.IsHexFoundable(targetHex, claimedSettlements, SettlementService.MinimumSpacing);
+
+        var arrival = Army.PlanFoundingArrival(domain, now, targetStillFoundable);
+
+        if (!arrival.ShouldFound)
+        {
+            // Either not yet arrived (unreachable here — the caller only
+            // routes to this method once ArrivesAt has passed) or the hex is
+            // no longer foundable: fall through to the ordinary Move-shaped
+            // settle so the convoy stands, auto-returns by its own precomputed
+            // TurnAroundAt, or awaits a Recall/RetargetFounding — never lost.
+            return ApplyArmyOutcome(armyEntity, domain, now);
+        }
+
+        var newSettlement = await _settlementService.FoundFromConvoyAsync(
+            originSettlement.WorldId,
+            targetHex,
+            originSettlement.UserId,
+            originSettlement.OwnerName,
+            originSettlement.OwnerId,
+            $"{originSettlement.OwnerName}'s Settlement",
+            arrival.GarrisonForNewSettlement,
+            now,
+            originSettlement.World!.SpeedFactor,
+            cancellationToken).ConfigureAwait(false);
+
+        _dbContext.Armies.Remove(armyEntity);
+
+        _logger.LogInformation(
+            "Settler convoy (army {ArmyId}) founded settlement {NewSettlementId} at {Coord} for user {UserId}.",
+            armyEntity.Id, newSettlement.Id, targetHex, originSettlement.UserId);
+
+        return ArmySettleOutcome.FoldedHome;
+    }
+
     private ArmySettleOutcome ApplyArmyOutcome(ArmyEntity armyEntity, Army turnedArmy, DateTimeOffset now)
     {
         var result = turnedArmy.SettleTo(now);
@@ -776,6 +961,30 @@ public sealed class ArmyService(
             .Include(s => s.TrainingQueue)
             .Include(s => s.Runes)
             .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken);
+
+    /// <summary>
+    /// Every river tile across every island of <paramref name="worldId"/>, as
+    /// a flat set of hexes (issue #159 part A) — one query per request at
+    /// each of the three call sites that already build a
+    /// <see cref="TerrainSampler"/>, mirroring how terrain itself is sampled
+    /// once per request rather than per hex. <c>RiverTiles</c> is an
+    /// EF-converted column (<see cref="Persistence.RiverTileListConverter"/>),
+    /// so it can only be flattened client-side once each island's row is
+    /// materialized, not projected further in SQL.
+    /// </summary>
+    private async Task<HashSet<HexCoord>> LoadRiverTilesAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.RiverTiles)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return islands
+            .SelectMany(tiles => tiles)
+            .Select(t => new HexCoord(t.Q, t.R))
+            .ToHashSet();
+    }
 
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>
         _dbContext.Armies

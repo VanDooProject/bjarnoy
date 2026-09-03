@@ -10,6 +10,7 @@ Bjarnoy / fjordhold
 
 - src/frontend (current Vue 3 + TS + Vite frontend, see src/frontend/README.md)
 - src/backend (current .NET 10 + Aspire backend, see docs/tech/backend.md)
+- src/shared (data, not code, shared by both — currently just the river-pathing golden fixture read by HexPathfinderGoldenTests.cs and hexPath.golden.test.ts, issue #159 part B)
 
 - deploy (Dockerfile: builds the frontend into the backend, one image)
 

@@ -22,6 +22,19 @@ test('building a shrine from the ring menu places it without a rendering error',
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;
 
+  // Shrines are RequiredLonghouseLevel 3 (BuildingCatalogue.cs), and the ring
+  // menu now reads that gate off the building catalogue and refuses to place
+  // a locked building — so a fresh level-1 realm genuinely cannot build one.
+  // Level the longhouse up first, which is what a player would have to do,
+  // rather than weakening the gate for the test.
+  await page.evaluate(() => {
+    const world = (window as unknown as {
+      __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
+    }).__demoWorld();
+    world.model.getSettlement(world.selectedSettlementId).level = 3;
+    world.syncHud();
+  });
+
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new
   // "Shrines" category — see BUILD_CATEGORIES in SettlementView.vue) rather
@@ -63,15 +76,18 @@ test('building a shrine from the ring menu places it without a rendering error',
   const buildBox = (await buildBubble.boundingBox())!;
   await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
 
-  const shrineCategory = page.locator('.ring-bubble', { hasText: 'Shrines' }).first();
+  const shrineCategory = page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Shrines' }).first();
   await expect(shrineCategory).toBeVisible();
   const categoryBox = (await shrineCategory.boundingBox())!;
   await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
     steps: 6,
   });
 
-  const shrineBubble = page.locator('.ring-bubble', { hasText: 'Shrine of Thor' }).first();
+  const shrineBubble = page.locator('.ring-bubble.child', { hasText: 'Shrine of Thor' }).first();
   await expect(shrineBubble).toBeVisible();
+  // Unlocked at longhouse 3, so it is a normal buildable bubble, not the
+  // dashed locked treatment.
+  await expect(shrineBubble).not.toHaveClass(/locked/);
   await shrineBubble.click();
 
   await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);

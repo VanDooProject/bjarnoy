@@ -34,17 +34,17 @@
 // its whole tile, props included.
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexDistance, hexesInRadius } from '../hex/coords';
+import { coordKey, hexDistance, hexesInRadius, neighbors } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
-import type { Settlement, Terrain, Tile } from './types';
-import { BOOST_TERRAIN, buildingStatsFor, isNearAnyOf, matchingNeighbourCount } from './buildingEconomy';
+import type { RiverTile, Settlement, Terrain, Tile } from './types';
+import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
-import { FogMaskLayer, type FogMaskPlacement } from './fog/FogMaskLayer';
-import { worldMaskBounds } from './fog/fogMaskLayout';
+import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
+import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -65,6 +65,12 @@ const RIVAL = 0xe2705f;
 // carts belong to neither ownership axis, so they get their own color
 // rather than borrowing one that would otherwise read as an owner cue.
 const CART_COLOR = 0x8fd19e;
+// Issue #159 part B: a cool, low-saturation blue for the range tint — kept
+// distinct from GOLD (click-to-place highlight) and RIVAL/CART so it never
+// reads as any of those existing overlay meanings.
+const RANGE_TINT_COLOR = 0x5ab0e0;
+const RANGE_TINT_ALPHA = 0.16;
+const RANGE_OUTLINE_ALPHA = 0.55;
 const FOG_SCOUTED = 0x0b1116;
 // zip 9: "unexplored hexes are hidden" — a dense white mist, distinct from
 // the darker grey used for the scouted-but-not-visible ring (FOG_SCOUTED).
@@ -138,7 +144,28 @@ export interface FogDebugFlags {
   realmBorders: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
+  /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
+  waveCull: boolean;
 }
+/**
+ * Fog knobs that are a *value* rather than an on/off — same debug-only
+ * status as FogDebugFlags, kept separate so that interface stays all-boolean
+ * (FogDebugPanel renders it as a checkbox per key, and its LABELS map is
+ * typed off it).
+ */
+export interface FogDebugTuning {
+  /**
+   * Multiplier on the cloud field's wind speed (FogMaskLayer's WIND). 1 is
+   * the shipped rate; the panel offers a slider around it so a better one
+   * can be found by eye, on a live map, instead of by rebuilding between
+   * guesses. Not persisted — a reload is back to 1.
+   */
+  driftSpeed: number;
+}
+export const fogDebugTuning: FogDebugTuning = {
+  driftSpeed: 1,
+};
+
 export const fogDebugFlags: FogDebugFlags = {
   maskUnknown: true,
   maskOutOfSight: true,
@@ -147,6 +174,7 @@ export const fogDebugFlags: FogDebugFlags = {
   showRawMask: false,
   realmBorders: true,
   terrainCull: true,
+  waveCull: true,
 };
 
 // Per-rebuild/per-frame stats, read by FogPerfPanel — §2.8's "what's
@@ -174,6 +202,10 @@ export interface FogPerfStats {
   markersMs: number;
   /** rebuildWaves: world-mode open-water squiggle placement (world mode only; 0 in settlement mode). */
   wavesMs: number;
+  /** Wave squiggles kept by rebuildWaves — the ones drawWaves re-strokes every frame. */
+  waveDrawnCount: number;
+  /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
+  waveCulledCount: number;
   /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
   /** Hexes in the current viewport rect — the size the above times scale with. */
@@ -194,6 +226,8 @@ export const fogPerfStats: FogPerfStats = {
   borderedHexCount: 0,
   markersMs: 0,
   wavesMs: 0,
+  waveDrawnCount: 0,
+  waveCulledCount: 0,
   totalMs: 0,
   hexCount: 0,
   maskFetchMs: 0,
@@ -372,8 +406,8 @@ export interface ArmyOverlayFrame {
  * What the settlement view's hover tooltip needs, plus screen position to
  * anchor it. Issue #16 "better hover" wants a richer card for buildings
  * (title + level, an output rate, a modifier line, worker count, "click to
- * open") like the mockup's "Crop farm LEVEL 2 / Output +240 food/h /
- * Irrigated yes (+10%) / Workers 8/8 / CLICK TO OPEN". None of that is
+ * open") like the mockup's "Crop farm LEVEL 2 / Output +72 food/h /
+ * Workers 8/8 / CLICK TO OPEN". None of that is
  * tracked per-building anywhere (the backend/WorldModel only know a
  * settlement's *aggregate* rates, not a single building's own output) so
  * `output`/`modifier`/`workers` below are derived deterministically from
@@ -421,6 +455,19 @@ const TERRAIN_LABELS: Record<Terrain, string> = {
   mountain: 'Mountain',
 };
 
+/**
+ * The hover tooltip's terrain title (not shown at all if the tile has a
+ * building — see hoverInfoFor). A river tile's art fully overrides its
+ * underlying land terrain (see rebuildTerrain's `river` branch, which skips
+ * the plain terrain texture entirely), so the tooltip needs to say so too
+ * instead of naming whatever the river was drawn over — a river mouth on a
+ * sand tile hovered as "Shore" before this, since `river` wasn't threaded
+ * through to the tooltip at all.
+ */
+export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): string {
+  return river ? 'River' : TERRAIN_LABELS[tile.terrain];
+}
+
 // One tile-art size for both views — see the module comment above.
 const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
@@ -463,7 +510,7 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 // explored radius is ~5 hexes, which at 0.85 filled almost the entire
 // default viewport on its own, hiding the fog entirely until the player
 // panned. zoomForFogMargin picks the real initial zoom (usually well below
-// this) so FOG_MARGIN_HEXES of fog is guaranteed visible from frame one.
+// this) so FOG_ZOOM_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // zip 6a: the landing page's pre-founding preview is a bit wider than the
 // settlement view's own default, so the single starter island reads as a
@@ -480,24 +527,61 @@ const PREVIEW_ISLAND_RADIUS = 7;
 const CAMERA_TRANSITION_MS = 1400;
 // How many hexes of white (unexplored) fog zoomForFogMargin guarantees
 // visible past the settlement's explored ring, on every side, at rest.
-const FOG_MARGIN_HEXES = 10;
+// Deliberately *not* FOG_RAMP_MARGIN_HEXES below, though it used to be the
+// same constant: widening the ramp so the mist has more room to fray must
+// not also pull the starting camera further out, which is a framing
+// decision with nothing to do with how the fog is shaded.
+const FOG_ZOOM_MARGIN_HEXES = 10;
+// Width, in hexes, of the mask's unknown ramp — the distance past a
+// settlement's explored ring that the R channel spends going 0 -> 255, and
+// therefore the entire budget the shader has to work with: past it the mask
+// is saturated and no amount of edge shaping can reach (fogShader.ts works
+// in ramp units, where 1.0 is exactly this many hexes).
+//
+// Must stay equal to the backend generator's FogMaskOptions.UnknownMarginHexes
+// and demoFogMask.ts's UNKNOWN_MARGIN_HEXES — the three describe the same
+// ramp, and a mismatch silently puts the live and demo fog edges at
+// different distances. Nothing derives it from the mask itself; a PNG
+// carries no metadata beyond its pixel dimensions.
+const FOG_RAMP_MARGIN_HEXES = 14;
 // Floor for zoomForFogMargin — a very high-level settlement's explored ring
 // is already large, and without a floor the margin target would zoom out
 // far enough to make individual hexes too small to read or click precisely.
 const FOG_MARGIN_MIN_ZOOM = 0.22;
-// Extra headroom (in hexes) added past where the v2 unknown ramp itself
-// saturates (FOG_MARGIN_HEXES) before terrain/border drawing stops
-// bothering — see FOG_TERRAIN_CULL_HEXES.
-const FOG_CULL_HEADROOM_HEXES = 3;
+// Step count per unit of straight-line hex distance, worst case (2/sqrt(3)).
+// The fog mask measures distance the round way (hexEuclideanDistance) while
+// the cull below counts steps, and a hex at straight-line distance d can be
+// up to this many steps away — so the cull radius has to be scaled by it or
+// it would clip ground the mist has not covered yet.
+const STEPS_PER_HEX_UNIT = 2 / Math.sqrt(3);
 // Past this many hexes beyond the explored ring, terrain is guaranteed to
-// sit under fully opaque unknown fog (the shader's own ramp — see
-// fogShader.ts — saturates well before this, so the headroom above is
-// generous, not exact): rebuildTerrain/rebuildTerrainFlat stop drawing
-// sprites/fills there, and rebuildBorders stops drawing borders, since
-// nothing could show through the mesh sitting over the whole viewport
+// sit under fully opaque unknown fog: rebuildTerrain/rebuildTerrainFlat stop
+// drawing sprites/fills there, and rebuildBorders stops drawing borders,
+// since nothing could show through the mesh sitting over the whole viewport
 // either way. isEntirelyDeepFog reuses the same threshold to skip an entire
 // deep-ocean viewport's worth of terrain/wave work in world mode.
-const FOG_TERRAIN_CULL_HEXES = FOG_MARGIN_HEXES + FOG_CULL_HEADROOM_HEXES;
+//
+// Derived rather than guessed, because guessing it is expensive in both
+// directions. Too small and ground pops into view at the cull boundary
+// under mist that hasn't gone opaque yet; too large and every rebuild pays
+// for sprites nothing can ever see — this radius is squared in the hex
+// count, so the difference between a tight bound and a generous one
+// measured ~30ms a frame on a software-rendered runner, which was enough to
+// tip two timing-sensitive e2e specs over. FOG_MIST_OPAQUE_AT_RAMP is the
+// point past which the shader's edge noise is fully shut off and the mist
+// is provably alpha 1 (fogShader.ts's edgeBand), and the step-count
+// conversion above is what makes the bound safe rather than merely close.
+const FOG_TERRAIN_CULL_HEXES = Math.ceil(
+  FOG_RAMP_MARGIN_HEXES * FOG_MIST_OPAQUE_AT_RAMP * STEPS_PER_HEX_UNIT,
+);
+// §1c's live army-vision radius, in hexes — mirrors the backend's
+// FogVisionRadii.ArmyVisionRadiusHexes (used there for §1e's persisted-
+// history growth trigger; used here for the real-time shader reveal itself,
+// see fogShader.ts's own remarks on why the two stay out of sync-free of
+// each other despite sharing this one number). TILE_W approximates "one hex"
+// in world-space distance the same way NOISE_SCALE (FogMaskLayer.ts) does —
+// good enough for a soft visual radius, not a gameplay-precision distance.
+const ARMY_VISION_RADIUS_HEXES = 2;
 
 // --- Per-rebuild settlement pruning (see fogSourcesNear) -------------------
 //
@@ -685,6 +769,17 @@ export class HexMapRenderer {
   // is time-based, unlike everything else here which only redraws on a
   // cull rebuild (camera pan/zoom).
   private highlightLayer = new Graphics();
+  // Issue #159 part B: the composing-a-dispatch/field-order range tint —
+  // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
+  // an outline on the boundary edges (the edges whose neighbour isn't in the
+  // set), same "just stores data, drawn every tick" convention as
+  // `armyOverlay`. Sits directly below `highlightLayer` (both immediately
+  // above `terrainTop.container` — see mount()'s addChild order) so it tints
+  // the tile tops the way the hover/highlight layers do; fog sits above
+  // `world` entirely (see mount()'s own remarks), so this is automatically
+  // hidden under fog with no extra check needed here.
+  private rangeLayer = new Graphics();
+  private rangeOverlay: AxialCoord[] | null = null;
   // Fog v2 (docs/design/map-fog-v2.md §2.4/§4): two screen-space Pixi Mesh
   // layers sampling the fetched mask texture through a shared GLSL shader —
   // see fog/FogMaskLayer.ts. blackFogLayer (out-of-sight tint) sits between
@@ -828,7 +923,7 @@ export class HexMapRenderer {
   }
 
   /**
-   * Picks the initial settlement zoom so at least FOG_MARGIN_HEXES of white
+   * Picks the initial settlement zoom so at least FOG_ZOOM_MARGIN_HEXES of white
    * (unexplored) fog is visible past the settlement's explored ring on
    * every side, without the camera ever having to pan first — the map
    * should read as continuing under fog from the very first frame, not
@@ -840,7 +935,7 @@ export class HexMapRenderer {
   private zoomForFogMargin(settlement: Settlement, center: { x: number; y: number }): number {
     if (this.viewport.width === 0 || this.viewport.height === 0) return SETTLEMENT_DEFAULT_ZOOM;
 
-    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_MARGIN_HEXES;
+    const targetRadius = this.options.worldModel.exploredRadius(settlement) + FOG_ZOOM_MARGIN_HEXES;
     let maxDx = 0;
     let maxDy = 0;
     for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, targetRadius)) {
@@ -946,6 +1041,7 @@ export class HexMapRenderer {
       this.borderLayer,
       this.hoverLayer,
       this.terrainTop.container,
+      this.rangeLayer,
       this.highlightLayer,
     );
     // §4's layer stack: the two fog quads are the only genuinely
@@ -1016,8 +1112,9 @@ export class HexMapRenderer {
     const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
-    this.blackFogLayer.tick(now, fogDebugFlags.drift);
-    this.whiteMistLayer.tick(now, fogDebugFlags.drift);
+    this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
+    this.whiteMistLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
+    this.drawRangeOverlay();
     this.drawHighlight();
   };
 
@@ -1053,6 +1150,40 @@ export class HexMapRenderer {
    */
   private animateCameraTo(target: Camera, durationMs: number) {
     this.cameraAnim = { from: { ...this.camera }, to: target, startedAt: performance.now(), durationMs };
+  }
+
+  /**
+   * Issue #159 part B. `points[i]`/`points[(i+1)%6]` (see `isoTopPoints`) is
+   * the edge shared with `neighbors(c)[(i+3)%6]` — verified by construction:
+   * direction 0 (`{q:1,r:0}`)'s neighbour grid-lands exactly on this hex's
+   * edge 3, and every other direction/edge pair falls out of that one by the
+   * hexagon's 180°-rotational symmetry (opposite directions/edges are
+   * `+3 mod 6` apart).
+   */
+  private drawRangeOverlay() {
+    this.rangeLayer.clear();
+    const hexes = this.rangeOverlay;
+    if (!hexes || hexes.length === 0) return;
+
+    const inSet = new Set(hexes.map(coordKey));
+    const topPoints = isoTopPoints(TILE_W, TILE_H);
+
+    for (const at of hexes) {
+      const grid = isoGridPosition(at, TILE_W, TILE_H);
+      const flat = topPoints.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+      this.rangeLayer.poly(flat).fill({ color: RANGE_TINT_COLOR, alpha: RANGE_TINT_ALPHA });
+
+      const dirs = neighbors(at);
+      for (let j = 0; j < 6; j++) {
+        if (inSet.has(coordKey(dirs[j]))) continue;
+        const a = topPoints[(j + 3) % 6];
+        const b = topPoints[(j + 4) % 6];
+        this.rangeLayer
+          .moveTo(grid.x + a.x, grid.y + a.y)
+          .lineTo(grid.x + b.x, grid.y + b.y)
+          .stroke({ width: 2, color: RANGE_TINT_COLOR, alpha: RANGE_OUTLINE_ALPHA });
+      }
+    }
   }
 
   private drawHighlight() {
@@ -1293,7 +1424,10 @@ export class HexMapRenderer {
       .fill({ color: HOVER_FILL, alpha: 0.28 })
       .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
 
-    if (mode === 'settlement') this.options.onHoverChange?.(this.hoverInfoFor(tile, grid));
+    if (mode === 'settlement') {
+      const river = worldModel.getRiverTile(coord.q, coord.r);
+      this.options.onHoverChange?.(this.hoverInfoFor(tile, grid, river));
+    }
   }
 
   /**
@@ -1312,7 +1446,7 @@ export class HexMapRenderer {
     return this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
   }
 
-  private hoverInfoFor(tile: Tile, grid: { x: number; y: number }): HoverInfo {
+  private hoverInfoFor(tile: Tile, grid: { x: number; y: number }, river: RiverTile | undefined): HoverInfo {
     // Anchor at the tile's own right edge (not its centre) so the tooltip
     // — which grows rightward from screenX, see HexTooltip.vue — sits
     // clear of the hex instead of covering its right half. The edge itself
@@ -1342,12 +1476,13 @@ export class HexMapRenderer {
         cta: mine ? 'Click to open' : undefined,
       };
     }
+    const title = terrainTitleFor(tile, river);
     if (owner) {
       const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
       return {
         screenX: screen.x,
         screenY: screen.y,
-        title: TERRAIN_LABELS[tile.terrain],
+        title,
         subtitle,
         stat: mine ? 'Click to build here' : 'Claimed ground',
       };
@@ -1355,7 +1490,7 @@ export class HexMapRenderer {
     return {
       screenX: screen.x,
       screenY: screen.y,
-      title: TERRAIN_LABELS[tile.terrain],
+      title,
       subtitle: 'Unclaimed',
       stat: '',
     };
@@ -1364,10 +1499,9 @@ export class HexMapRenderer {
   /**
    * See the HoverInfo doc comment: output/modifier/workers aren't tracked
    * per-building anywhere, so these are derived deterministically from the
-   * building's own type/level (and, for the irrigation modifier, whether a
-   * neighbouring hex is shore/water) purely so the hover card has something
-   * concrete to show, matching the mockup's "Output +240 food/h / Irrigated
-   * yes (+10%) / Workers 8/8" for a farm. The formulas themselves live in
+   * building's own type/level/neighbours purely so the hover card has
+   * something concrete to show, matching the mockup's "Output +240 food/h /
+   * Workers 8/8" for a farm. The formulas themselves live in
    * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
   private buildingStats(
@@ -1377,11 +1511,7 @@ export class HexMapRenderer {
     if (!tile.buildingType) return {};
     const boostTerrain = BOOST_TERRAIN[tile.buildingType];
     const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
-    return buildingStatsFor(tile.buildingType, level, this.nearWater(tile), matchingNeighbours);
-  }
-
-  private nearWater(tile: Tile): boolean {
-    return isNearAnyOf(tile, ['sea', 'sand'], this.getTile);
+    return buildingStatsFor(tile.buildingType, level, matchingNeighbours);
   }
 
   private getTile = (q: number, r: number): Tile => this.options.worldModel.getTile(q, r);
@@ -1551,10 +1681,12 @@ export class HexMapRenderer {
       // the same opaque backdrop, so there's nothing to gain by refreshing
       // wavePoints for hexes that are entirely hidden.
       phaseStart = performance.now();
-      this.rebuildWaves();
+      this.rebuildWaves(coords, fogActive);
       fogPerfStats.wavesMs = performance.now() - phaseStart;
     } else {
       fogPerfStats.wavesMs = 0;
+      fogPerfStats.waveDrawnCount = 0;
+      fogPerfStats.waveCulledCount = 0;
     }
 
     fogPerfStats.hexCount = coords.length;
@@ -1683,7 +1815,11 @@ export class HexMapRenderer {
 
       const key = coordKey(c);
       if (river) {
-        const riverTextures = riverTexturesFor(textures, river);
+        // Only a Mouth's orientation actually needs this (see
+        // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
+        // for every other shape.
+        const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+        const riverTextures = riverTexturesFor(textures, river, seaDirection);
         baseEntries.set(key, { texture: riverTextures.base, coord: c });
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;
@@ -1760,10 +1896,30 @@ export class HexMapRenderer {
   // Recomputes which open-water grid points get a wave squiggle for the
   // current viewport — same cadence as terrain (only on a cull rebuild).
   // Animating them (drawWaves, every tick) is a separate, much cheaper step.
-  private rebuildWaves() {
+  //
+  // Cheap-first ordering matters here, because the grid this walks grows
+  // with the visible world rect and so with how far out the camera is
+  // zoomed: the density hash rejects ~38% for the cost of three multiplies,
+  // the fog cull is a few subtractions over an already-pruned source list,
+  // and isNearLand — 7 getTile lookups — runs only on what survives both.
+  private rebuildWaves(coords: AxialCoord[], fogActive: boolean) {
     const margin = TILE_W;
     const rect = visibleWorldRect(this.camera, this.viewport, margin);
     const points: WavePoint[] = [];
+    let culled = 0;
+
+    // Same threshold, and the same reasoning, as the terrain cull: past
+    // FOG_TERRAIN_CULL_HEXES the unknown ramp is saturated, so the mist
+    // mesh above these strokes is provably opaque and a wave drawn there
+    // cannot reach the screen. Unlike terrain this is not only a build-time
+    // saving — drawWaves re-strokes every surviving point *every frame*, so
+    // a wave kept here costs two quadratic curves per frame forever.
+    // rebuildAll's rect uses VISIBLE_RECT_MARGIN (2 * TILE_W) against this
+    // one's TILE_W, so coords strictly contains the wave grid and its
+    // bounds cannot prune a source that reaches a wave.
+    const fogSources =
+      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+    const culling = fogSources.length > 0;
 
     const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
     const xStart = Math.floor(rect.minX / WAVE_STEP_X) * WAVE_STEP_X;
@@ -1772,7 +1928,12 @@ export class HexMapRenderer {
         if (hash01(x, y, 1) > WAVE_DENSITY) continue;
         const jx = x + (hash01(x, y, 2) - 0.5) * WAVE_JITTER_X;
         const jy = y + (hash01(x, y, 3) - 0.5) * WAVE_JITTER_Y;
-        if (this.isNearLand(isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H))) continue;
+        const coord = isoPixelToAxial({ x: jx, y: jy }, TILE_W, TILE_H);
+        if (culling && this.isPastTerrainCull(coord.q, coord.r, fogSources)) {
+          culled++;
+          continue;
+        }
+        if (this.isNearLand(coord)) continue;
         points.push({
           x: jx,
           y: jy,
@@ -1782,6 +1943,8 @@ export class HexMapRenderer {
       }
     }
     this.wavePoints = points;
+    fogPerfStats.waveDrawnCount = points.length;
+    fogPerfStats.waveCulledCount = culled;
   }
 
   // zip 7 prototype's `vr-swell`: each wave nudges up-and-right and back,
@@ -2267,6 +2430,17 @@ export class HexMapRenderer {
   }
 
   /**
+   * Issue #159 part B: the reachable-range tint shown while composing a
+   * dispatch or field order — see `lib/map/hexPath.ts`'s `reachableRange`,
+   * which is what the store should feed in here. Pass `null` (or an empty
+   * array) to clear it. Like `setArmyOverlay`, this only stores the data;
+   * `onTick` (already running every frame) redraws it on the next tick.
+   */
+  setRangeOverlay(hexes: AxialCoord[] | null) {
+    this.rangeOverlay = hexes && hexes.length > 0 ? hexes : null;
+  }
+
+  /**
    * Fog v2 (docs/design/map-fog-v2.md §2.4/§3): hands the renderer a freshly
    * fetched (or, in demo mode, generated) mask bitmap for a world of the
    * given `radius`. `radius` picks the same world-to-mask-UV placement
@@ -2279,11 +2453,7 @@ export class HexMapRenderer {
   setFogMask(radius: number, bitmap: ImageBitmap | null) {
     if (!bitmap) return;
 
-    const bounds = worldMaskBounds(radius);
-    const placement: FogMaskPlacement = {
-      scale: [1 / (0.75 * TILE_W * bounds.width), 2 / (TILE_H * bounds.height)],
-      offset: [-bounds.minU / bounds.width, -bounds.minV / bounds.height],
-    };
+    const placement = fogMaskPlacement(radius, TILE_W, TILE_H);
     this.blackFogLayer.setPlacement(placement);
     this.whiteMistLayer.setPlacement(placement);
 
@@ -2531,8 +2701,14 @@ export class HexMapRenderer {
     // authoritative hex while standing. Gold for the one currently selected,
     // muted blue for everything else, grey for one already turned around and
     // heading home.
+    const armyVisionPoints: { x: number; y: number }[] = [];
     for (const army of overlay.armies) {
       const point = this.resolveArmyPoint(army, now);
+      // §1c: only a travelling army grants live vision — one standing at
+      // home or as a guest garrison already sits inside its settlement's own
+      // explored/visible rings, same scope as the backend's own in-transit-
+      // only condition (FogMaskService.GeneratePlayerMaskAsync).
+      if (army.movement) armyVisionPoints.push({ x: point.x, y: point.y });
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
@@ -2562,6 +2738,13 @@ export class HexMapRenderer {
       // pole drawn upward from the position reads as hovering above the map.
       this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
     }
+
+    // §1c: pushed every tick, independent of any mask fetch — see
+    // FogMaskLayer.setArmyVisionSources's own remarks on why this stays out
+    // of the cached mask texture entirely.
+    const armyVisionRadiusWorld = ARMY_VISION_RADIUS_HEXES * TILE_W;
+    this.blackFogLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
+    this.whiteMistLayer.setArmyVisionSources(armyVisionPoints, armyVisionRadiusWorld);
 
     // Armies that have gone away (arrived home and been folded back) would
     // otherwise keep their easing state forever.

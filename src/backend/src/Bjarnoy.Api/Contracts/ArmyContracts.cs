@@ -64,6 +64,9 @@ public sealed record DispatchArmyRequest(
     Guid? TargetSettlementId = null,
     HexPointRequest? TargetBuildingCoord = null);
 
+/// <summary>Redirects an in-transit or parked founding convoy to a different target hex (issue #55 §6).</summary>
+public sealed record RetargetFoundingRequest([property: Required] HexPointRequest Target);
+
 public sealed record ArmyUnitStackResponse(string Unit, int Count);
 
 public sealed record HexPointResponse(int Q, int R)

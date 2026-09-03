@@ -5,7 +5,7 @@
 // panel does both from a click. Mounted by SettlementView.vue only when the
 // URL has ?debug=1 (see its own `showFogDebug`).
 import { reactive, watch } from 'vue';
-import { fogDebugFlags, type FogDebugFlags } from '../../lib/map/HexMapRenderer';
+import { fogDebugFlags, fogDebugTuning, type FogDebugFlags } from '../../lib/map/HexMapRenderer';
 
 const emit = defineEmits<{ change: [] }>();
 
@@ -16,6 +16,15 @@ const emit = defineEmits<{ change: [] }>();
 // to the same underlying object HexMapRenderer reads from directly, so the
 // two stay in sync without HexMapRenderer.ts importing Vue at all.
 const flags = reactive(fogDebugFlags);
+// Same wrapping rationale as `flags` above, for the knobs that are a value
+// rather than a checkbox (FogDebugTuning).
+const tuning = reactive(fogDebugTuning);
+
+// Wide enough to bracket both "is it moving at all?" and "is this too
+// fast?" around the shipped rate, which sits at 1.
+const DRIFT_SPEED_MIN = 0;
+const DRIFT_SPEED_MAX = 5;
+const DRIFT_SPEED_STEP = 0.1;
 
 // Labelled to match FogPerfPanel's row names ("Terrain", "Borders", "Mask
 // fetch") so a toggle here and the number it moves there are easy to line
@@ -23,15 +32,16 @@ const flags = reactive(fogDebugFlags);
 const LABELS: Record<keyof FogDebugFlags, string> = {
   maskUnknown: 'Unexplored (white mist) tier enabled',
   maskOutOfSight: 'Out-of-sight (dark) tier enabled',
-  warp: 'UV warp (organic mist edge)',
-  drift: 'Wind drift (animates the warp)',
-  showRawMask: 'Debug: bypass warp, show raw mask',
+  warp: 'Edge noise (organic mist edge)',
+  drift: 'Wind drift (animates the edge)',
+  showRawMask: 'Debug: bypass edge shaping, show raw mask',
   realmBorders: 'Realm borders enabled',
   terrainCull: 'Terrain: cull past fog cutoff',
+  waveCull: 'Waves: cull past fog cutoff',
 };
 
 watch(
-  flags,
+  [flags, tuning],
   () => emit('change'),
   { flush: 'post' },
 );
@@ -44,6 +54,20 @@ watch(
       <input type="checkbox" v-model="flags[key]" />
       <span>{{ label }}</span>
     </label>
+    <div class="row slider-row" :class="{ disabled: !flags.drift }">
+      <span class="slider-label">
+        Drift speed
+        <span class="slider-value">{{ tuning.driftSpeed.toFixed(1) }}&times;</span>
+      </span>
+      <input
+        type="range"
+        :min="DRIFT_SPEED_MIN"
+        :max="DRIFT_SPEED_MAX"
+        :step="DRIFT_SPEED_STEP"
+        :disabled="!flags.drift"
+        v-model.number="tuning.driftSpeed"
+      />
+    </div>
   </div>
 </template>
 
@@ -75,5 +99,30 @@ watch(
 }
 .row input {
   cursor: pointer;
+}
+/* The slider stacks its label over a full-width track, unlike the checkbox
+   rows — a range input squeezed next to a label is unusable at this panel
+   width. */
+.slider-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding-top: 8px;
+  cursor: default;
+}
+.slider-row.disabled {
+  opacity: 0.45;
+}
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.slider-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.slider-row input {
+  width: 100%;
 }
 </style>

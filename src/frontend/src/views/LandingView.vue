@@ -161,6 +161,18 @@ const ringActions = computed<RingAction[]>(() =>
   }),
 );
 
+// The 2a ring's hub names the tile the menu is anchored to; onboarding has no
+// building on it yet, so it's the bare terrain plus the hex coordinate.
+const TERRAIN_LABELS: Record<Terrain, string> = {
+  sea: 'Open water',
+  sand: 'Shore',
+  grass: 'Grassland',
+  forest: 'Forest',
+  mountain: 'Mountain',
+};
+const ringTerrainLabel = computed(() => (ringTerrain.value ? TERRAIN_LABELS[ringTerrain.value] : ''));
+const ringCoordLabel = computed(() => (ringCoord.value ? `HEX ${ringCoord.value.q}, ${ringCoord.value.r}` : ''));
+
 function closeRing() {
   ringScreen.value = null;
   ringCoord.value = null;
@@ -317,6 +329,19 @@ function closePrompt() {
   player.completeOnboarding();
   router.push('/settlement');
 }
+
+// Fog v2 (map-fog-v2.md §3): same watcher as SettlementView.vue's — without
+// it, founding here (world.startHudSync() in foundHere, above) leaves the
+// fog quads on their opaque "fully unknown" placeholder forever, since
+// nothing else pushes a freshly built/fetched mask into the renderer once
+// isFogActive() flips true. Watching both together covers the renderer not
+// existing yet on the tick a mask resolves.
+watch(
+  [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
+  ([renderer, bitmap, radius]) => {
+    if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  },
+);
 </script>
 
 <template>
@@ -399,12 +424,15 @@ function closePrompt() {
     </div>
 
     <BuildQueuePanel v-if="player.hasFoundedSettlement" @select="onQueueSelect" />
+    <!-- Flat: no `categories`, so the ring stays one lane deep — onboarding
+         offers a handful of types, not a hierarchy. -->
     <RingMenu
       v-if="ringScreen"
       :x="ringScreen.x"
       :y="ringScreen.y"
       :actions="ringActions"
-      backdrop
+      :terrain-label="ringTerrainLabel"
+      :coord-label="ringCoordLabel"
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"

@@ -31,7 +31,13 @@
 // lumberjack/quarry art exists, for instance) are still never bundled.
 import { Assets, Texture } from 'pixi.js';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
-import { TILE_ORIENTATIONS } from './types';
+import {
+  bendOrientationOf,
+  mouthOrientationOf,
+  springOrientationOf,
+  straightOrientationOf,
+  TILE_ORIENTATIONS,
+} from './types';
 
 export const TILE_ART_NATIVE_W = 200;
 export const TILE_ART_NATIVE_H = 300;
@@ -426,25 +432,66 @@ export function topTextureFor(textures: TileTextures, tile: Tile): Texture | und
   return arr[clampIndex(index, arr.length)];
 }
 
-/** `RiverTileShape.Mouth` has no art of its own — it renders as a plain through-flow tile. */
-function riverArtShapeFor(river: RiverTile): 'straight' | 'bend' | 'spring' | 'confluence' {
-  return river.shape === 'mouth' ? 'straight' : river.shape;
+/**
+ * Which art file (family + rotation) a river tile renders with.
+ *
+ * None of these families' filename index matches the screen edge it
+ * actually touches (the isometric projection reflects direction indices,
+ * not just relabels them — see `docs/design/river-generation.md`'s "Art
+ * pack orientation convention"), so every shape resolves its orientation
+ * through the derived helpers in `types.ts` rather than using
+ * `inDirections`/`outDirection` as a `TileOrientation` directly.
+ *
+ * `bend` is directional (`bendOrientationOf`); `spring` has only an
+ * outflow (`springOrientationOf`); `straight` orients by whichever of
+ * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
+ * gives the same file either way (`docs/design/river-generation.md` again).
+ *
+ * `mouth` has no art of its own — it renders as `straight` or `bend`
+ * depending on the actual angle to the sea (`mouthOrientationOf`;
+ * `seaDirection` is the caller's own terrain lookup, since a `RiverTile`
+ * carries none), not the inflow's geometric opposite `straight` alone
+ * would assume.
+ *
+ * `confluence` (`y_narrow`) is asymmetric — two fixed arms plus a third at
+ * a fixed offset, not a simple rotated pair — and hasn't been pixel-verified
+ * the way the other three families have, so it keeps the untransformed
+ * `outDirection ?? inDirections[0]` this whole function used before this
+ * fix, rather than risk applying a derived formula that wasn't measured
+ * against it. Known-unfixed; see "Art pack orientation convention".
+ */
+function riverArtFor(
+  river: RiverTile,
+  seaDirection: TileOrientation | null,
+): { shape: 'straight' | 'bend' | 'spring' | 'confluence'; orientation: TileOrientation } {
+  if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
+    return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+  }
+  if (river.shape === 'spring' && river.outDirection) {
+    return { shape: 'spring', orientation: springOrientationOf(river.outDirection) };
+  }
+  if (river.shape === 'confluence') {
+    return { shape: 'confluence', orientation: river.outDirection ?? river.inDirections[0] ?? 'SE' };
+  }
+  if (river.shape === 'mouth' && river.inDirections[0]) {
+    return mouthOrientationOf(river.inDirections[0], seaDirection);
+  }
+
+  const direction = river.inDirections[0] ?? river.outDirection;
+  return { shape: 'straight', orientation: direction ? straightOrientationOf(direction) : 'SE' };
 }
 
 /**
- * Which of the six art-pack rotations a river tile renders with: the
- * direction its flow continues toward (`outDirection`), or — for a mouth,
- * or a confluence that's also a river's mouth (no outflow: see
- * `RiverGenerationTests.Confluence_tiles_have_exactly_two_inflows` on the
- * backend) — the direction it flows in from instead.
+ * A river tile's own base/top textures, overriding whatever the underlying
+ * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
+ * tile — see `riverArtFor`) is the caller's own terrain lookup
+ * (`WorldModel.seaFacingDirectionOf`), since a `RiverTile` carries none.
  */
-function riverOrientationOf(river: RiverTile): TileOrientation {
-  return river.outDirection ?? river.inDirections[0] ?? 'SE';
-}
-
-/** A river tile's own base/top textures, overriding whatever the underlying terrain would have drawn. */
-export function riverTexturesFor(textures: TileTextures, river: RiverTile): { base: Texture; top: Texture } {
-  const shape = riverArtShapeFor(river);
-  const orientation = riverOrientationOf(river);
+export function riverTexturesFor(
+  textures: TileTextures,
+  river: RiverTile,
+  seaDirection: TileOrientation | null = null,
+): { base: Texture; top: Texture } {
+  const { shape, orientation } = riverArtFor(river, seaDirection);
   return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
 }

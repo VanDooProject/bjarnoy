@@ -6,26 +6,36 @@ import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
 import TrainingModal from '../components/hud/TrainingModal.vue';
-import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
+import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { ApiError } from '../api/client';
 import { usePlayerStore } from '../stores/player';
+import { useUnitCatalogueStore } from '../stores/unitCatalogue';
+import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
-import type { AxialCoord } from '../lib/hex/coords';
+import { parseKey, type AxialCoord } from '../lib/hex/coords';
+import { buildingArt } from '../lib/map/buildingArt';
+import { BOOST_TERRAIN, buildingStatsFor, buildingUpgradeCost, matchingNeighbourCount } from '../lib/map/buildingEconomy';
+import { formatBuildTime, longhouseLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
+import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { reachableRange, type PathContext } from '../lib/map/hexPath';
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const unitCatalogue = useUnitCatalogueStore();
+const buildingCatalogue = useBuildingCatalogueStore();
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
 // but clickable, and not gated to demo mode: these are pure client-side
@@ -63,6 +73,7 @@ onMounted(async () => {
     await world.restoreLiveSettlement(player.id, player.settlementId);
   }
   world.startHudSync();
+  void unitCatalogue.load();
 
   // Same test/debug-hook idea as main.ts's __demoWorld: lets an e2e test
   // convert a real hex coordinate to an exact click point via the
@@ -162,6 +173,43 @@ watch(
   { immediate: true },
 );
 
+// Issue #159 part B: the reachable-range tint while composing a dispatch.
+// Origin and home are both the settlement's own hex — a field order from a
+// standing army (where they'd differ) is #156 phase 1, not built yet.
+// Rounded to the nearest tenth of an hour so a sub-pixel provisions-slider
+// twitch doesn't force a fresh flood-fill every frame.
+const rangeOverlayHexes = computed<AxialCoord[] | null>(() => {
+  const draft = world.dispatchDraft;
+  if (!draft || draft.mission !== 'move') return null;
+  if (!world.selectedSettlementId) return null;
+
+  const home = world.model.getSettlement(world.selectedSettlementId);
+  if (!home) return null;
+
+  const speed = totalSpeed(draft.unitCounts, unitCatalogue.byType);
+  const upkeep = totalUpkeepPerHour(draft.unitCounts, unitCatalogue.byType);
+  if (speed <= 0 || upkeep <= 0 || draft.provisions <= 0) return null;
+
+  const hoursOfFood = draft.provisions / upkeep;
+  const ctx: PathContext = {
+    terrainAt: (c) => world.model.getTile(c.q, c.r).terrain,
+    isRiver: (c) => world.model.getRiverTile(c.q, c.r) !== undefined,
+    rules: { land: world.movementRules.land, riverCrossingCost: world.movementRules.riverCrossingCost },
+    hexesPerHour: speed * world.worldSpeedFactor,
+  };
+  const origin = { q: home.q, r: home.r };
+  const range = reachableRange(origin, origin, hoursOfFood, ctx);
+  return [...range.keys()].map(parseKey);
+});
+
+watch(
+  [() => canvasRef.value?.renderer, rangeOverlayHexes],
+  ([renderer, hexes]) => {
+    renderer?.setRangeOverlay(hexes ?? null);
+  },
+  { immediate: true },
+);
+
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
@@ -180,10 +228,11 @@ function onHover(info: HoverInfo | null) {
 const selectedCoord = ref<AxialCoord | null>(null);
 const selectedTile = ref<Tile | null>(null);
 const modalBusy = ref(false);
-// Issue #158: a build/upgrade rejection's detail text (NoFreeSlot's premium
-// hint included) — cleared on every new attempt and whenever the modal
-// closes, so a stale error never lingers into an unrelated hex.
-const modalError = ref<string | null>(null);
+// Why the last build/upgrade attempt was rejected (NoFreeSlot's premium
+// hint included, issue #158) — surfaced in BuildingModal rather than only
+// `console.error`'d, and cleared whenever a fresh attempt starts, the modal
+// closes, or a different tile is selected.
+const actionError = ref<string | null>(null);
 // Issue #40 phase 1: a separate modal from BuildingModal (train has no
 // per-hex build/upgrade action, it lists the whole unit roster at once) —
 // see the ring's 'train' action below.
@@ -200,42 +249,58 @@ const modalOwnerLabel = computed(() => {
   return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
 });
 
-// Ring menu state. Each open level (root -> build-categories -> a
-// category's building list) is its own entry on `ringStack`, rendered as a
-// separate, wider RingMenu — concentric rings moving outward — rather than
-// one ring replacing another, per the issue's "build (which opens another
-// ring outside with available buildings on this spot, on grass it should
-// have multiple build categories/entries and real buildings in outer ring
-// each)".
-type RingLevel = 'root' | 'build-categories' | 'build-buildings';
-interface OpenRing {
-  level: RingLevel;
-  category?: string;
-  // The angle (degrees) of the specific parent bubble that was hovered/
-  // clicked to open this ring — set only when this ring ends up with a
-  // single action. A lone bubble has no "spread evenly around the circle"
-  // to do, so instead of defaulting to due north it lines up on the same
-  // ray as whatever was just hovered, keeping the mouse travel short.
-  originAngle?: number;
-}
+// Ring menu state. The 2a ring owns its own depth (root actions -> build
+// categories -> a category's buildings), so this only tracks *where* it is
+// open — the concentric ringStack/radius/angle-stagger machinery the
+// previous ring needed is gone with it.
 const ringScreen = ref<{ x: number; y: number } | null>(null);
-const ringStack = ref<OpenRing[]>([]);
-// Matches RingMenu's own default RADIUS — kept in sync there too. The root
-// ring only ever has 1-2 actions (see actionsForRing), so shrinking this
-// further doesn't risk crowding bubbles into each other the way an outer
-// 3-action ring would.
-const RING_BASE_RADIUS = 52;
-// Bigger than the previous pass (RingMenu's own default is 72px at scale
-// 1) — smaller bubbles were wrapping labels like "Watchtower" into an
-// awkward mid-word break. The radius/gap values here are pulled in tighter
-// to compensate, so the bigger bubbles don't just make the whole thing
-// bigger again.
-const RING_BUBBLE_SIZES = [72, 62, 54];
-// Gap between the outer edge of one ring's bubbles and the inner edge of
-// the next, rather than a flat centre-to-centre step — a flat step ignores
-// how much smaller the outer bubbles are, and ends up wasting space the
-// further out you go.
-const RING_GAP = 6;
+
+// The ring must stay clear of the HUD panels, which means knowing how big the
+// stage actually is. A ResizeObserver on the stage element rather than
+// window.innerWidth/Height: the window fires no resize when a surrounding
+// element changes size (an embedded or split view), which would freeze the
+// bounds at whatever they were on mount.
+const stageRef = ref<HTMLElement | null>(null);
+const stage = ref({ w: window.innerWidth, h: window.innerHeight });
+let stageObserver: ResizeObserver | null = null;
+onMounted(() => {
+  buildingCatalogue.load();
+  if (!stageRef.value) return;
+  stageObserver = new ResizeObserver(() => {
+    const rect = stageRef.value?.getBoundingClientRect();
+    if (rect) stage.value = { w: rect.width, h: rect.height };
+  });
+  stageObserver.observe(stageRef.value);
+});
+onUnmounted(() => stageObserver?.disconnect());
+
+// Every number below is traceable to a panel's own scoped style, so the ring
+// treats a panel as an edge rather than opening underneath it:
+//   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
+//   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
+//   RealmPanel      .realm-panel  left:16  bottom:16 min-w:220  (same column)
+//   TradePanel                    right:16 top:118   width:320  -> right -348
+//   TrainingQueuePanel            right:16 top:76    width:240
+//   ArmyPanel       .status-card  right:16 bottom:16 width:260
+//   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
+// These are worst-case constants: every panel is treated as present.
+const ringBounds = computed(() => ({
+  left: 268,
+  top: 76,
+  right: Math.max(420, stage.value.w - 348),
+  bottom: stage.value.h - 16,
+}));
+// The card gets its own, roomier area on purpose. What `ringBounds` leaves
+// over once every panel is reserved is about 308x404 at 1280x720 — too small
+// to hold the 200x222 card anywhere clear of the ring, so the card would end
+// up on top of the menu. A card briefly overlapping a panel is much less
+// harmful than one covering the menu.
+const ringCardBounds = computed(() => ({
+  left: 16,
+  top: 76,
+  right: stage.value.w - 16,
+  bottom: stage.value.h - 16,
+}));
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
@@ -275,15 +340,25 @@ interface BuildCategory {
   label: string;
   buildings: { type: BuildableType; label: string }[];
 }
-// Grass gets the full spread of categories (housing/resource/defense);
-// other buildable terrain only offers one outer ring rather than the same
-// multi-category spread — matches the issue calling out grass specifically.
-// fishinghut (sand-only, per BuildingCatalogue) lives in the "other" bucket
-// alongside the rest rather than getting its own sand-specific category —
-// same simplification the pre-existing buildings already made (this ring
-// doesn't filter its choices per exact terrain; the backend is the source
-// of truth and rejects a placement its catalogue's AllowedTerrain forbids).
-const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
+// Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
+// MagicTower are Grass-only, Lumberjack is Forest-only, Quarry is
+// Mountain-only, Tower is SandOrGrass, and a shrine is buildable on any land
+// hex. Offering a building the backend's own AllowedTerrain would reject is
+// what "messed up categories" on a shore (sand) tile meant — sand used to
+// fall into the same flat bucket as forest/mountain and offer Farm/
+// Lumberjack/Quarry, none of which the backend would ever accept there.
+// FishingHut isn't a land-terrain building at all (RequiresCoastalWater, on
+// a Sea hex) so it belongs in none of these — Build is disabled outright on
+// sea tiles below, so there is currently no ring path to it.
+const SHRINE_CATEGORY: BuildCategory = {
+  id: 'religion',
+  label: 'Shrines',
+  buildings: [
+    { type: 'shrineofthor', label: 'Shrine of Thor' },
+    { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
+  ],
+};
+const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
     { id: 'housing', label: 'Housing', buildings: [{ type: 'hut', label: 'Hut' }] },
     {
@@ -302,35 +377,25 @@ const BUILD_CATEGORIES: Record<'grass' | 'other', BuildCategory[]> = {
         { type: 'magictower', label: 'Magic Tower' },
       ],
     },
-    {
-      id: 'religion',
-      label: 'Shrines',
-      buildings: [
-        { type: 'shrineofthor', label: 'Shrine of Thor' },
-        { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
-      ],
-    },
+    SHRINE_CATEGORY,
   ],
-  other: [
-    {
-      id: 'buildings',
-      label: 'Build',
-      buildings: [
-        { type: 'hut', label: 'Hut' },
-        { type: 'farm', label: 'Farm' },
-        { type: 'tower', label: 'Watchtower' },
-        { type: 'fishinghut', label: 'Fishing Hut' },
-        { type: 'shrineofthor', label: 'Shrine of Thor' },
-        { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
-        { type: 'lumberjack', label: 'Lumberjack' },
-        { type: 'quarry', label: 'Quarry' },
-      ],
-    },
+  sand: [
+    { id: 'defense', label: 'Defense', buildings: [{ type: 'tower', label: 'Watchtower' }] },
+    SHRINE_CATEGORY,
+  ],
+  forest: [
+    { id: 'resource', label: 'Resource', buildings: [{ type: 'lumberjack', label: 'Lumberjack' }] },
+    SHRINE_CATEGORY,
+  ],
+  mountain: [
+    { id: 'resource', label: 'Resource', buildings: [{ type: 'quarry', label: 'Quarry' }] },
+    SHRINE_CATEGORY,
   ],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
-  return BUILD_CATEGORIES[tile.terrain === 'grass' ? 'grass' : 'other'];
+  if (tile.terrain === 'sea') return [];
+  return BUILD_CATEGORIES[tile.terrain];
 }
 
 const isEnemyTile = computed(
@@ -341,16 +406,19 @@ const isMineTile = computed(
 );
 const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.value.ownerId);
 
-function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
-  if (ring.level === 'build-categories') {
-    return categoriesFor(tile).map((cat) => ({ id: cat.id, label: cat.label }));
-  }
-  if (ring.level === 'build-buildings') {
-    const category = categoriesFor(tile).find((c) => c.id === ring.category);
-    return (category?.buildings ?? []).map((b) => ({ id: b.type, label: b.label }));
-  }
+// Category tints, carried into each category's own buildings so a building
+// bubble reads as belonging to the category it fanned out of.
+const CATEGORY_COLORS: Record<string, string> = {
+  housing: 'var(--gold)',
+  resource: 'var(--food)',
+  defense: 'var(--iron)',
+  religion: 'var(--shrine)',
+};
 
-  // root level
+const rootActions = computed<RingAction[]>(() => {
+  const tile = selectedTile.value;
+  if (!tile) return [];
+
   if (isEnemyTile.value) {
     return [
       { id: 'info', label: 'Info' },
@@ -370,23 +438,40 @@ function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
     ];
   }
   if (isMineTile.value && tile.buildingType) {
-    // "Upgrade" isn't one of the dark ring bubbles here — the reference
-    // shows the "Lv n / upgrade" badge above the ring *as* the upgrade
-    // control, so it's wired as `ringBadge` below instead of duplicated in
-    // this list.
+    // The previous ring floated "Lv n / upgrade" as a gold badge above the
+    // orbit, joined to it by a guide line. 2a has no badge — every action is
+    // a bubble on the inner lane — so upgrade becomes an ordinary bubble and
+    // the level it used to carry moves onto the hub (see ringCoordLabel),
+    // which is where the tile's own facts live now.
+    //
+    // Unlike a build bubble (which shows an affordable-or-not cost card once
+    // hovered — root actions carry no cost/card), Upgrade needs to say up
+    // front whether it's even possible: same disabled+hint pattern already
+    // used for Raze/Train/Attack above, not a new affordance.
+    const nextLevel = (tile.buildingLevel ?? 1) + 1;
+    const upgradeDefinition = buildingCatalogue.byType[tile.buildingType]?.find((d) => d.level === nextLevel);
+    const upgradeCost = upgradeDefinition?.cost ?? buildingUpgradeCost(tile.buildingType, nextLevel);
+    const stock = world.hud.resources;
+    const shortOf = (['wood', 'stone', 'food', 'iron'] as const).filter((key) => upgradeCost[key] > stock[key]);
     const actions: RingAction[] = [
+      {
+        id: 'upgrade',
+        label: 'Upgrade',
+        color: 'var(--gold)',
+        disabled: shortOf.length > 0,
+        hint: shortOf.length ? `Not enough ${shortOf.join(', ')}` : undefined,
+      },
+      { id: 'details', label: 'Details' },
       {
         id: 'raze',
         label: 'Raze',
         disabled: tile.buildingType === 'longhouse' || !DEMO_MODE,
         hint: tile.buildingType === 'longhouse' ? "Can't raze the longhouse" : 'Not wired to the backend yet',
       },
-      { id: 'details', label: 'Details' },
     ];
-    // Issue #40 phase 1: "build units in longhouse" — the longhouse is
-    // where training happens per the backend design (UnitDefinition's
-    // RequiredLonghouseLevel, TrainingOrder queued against the settlement),
-    // so it's the one building type that gets an extra ring action here.
+    // Issue #40 phase 1: "build units in longhouse" — training is queued
+    // against the settlement from its longhouse, so that one building type
+    // gets an extra action here.
     if (tile.buildingType === 'longhouse') {
       actions.push({ id: 'train', label: 'Train units' });
     }
@@ -399,80 +484,82 @@ function actionsForRing(tile: Tile, ring: OpenRing): RingAction[] {
     ];
   }
   return [{ id: 'details', label: 'Details' }];
-}
-
-const ringsToRender = computed(() => {
-  const tile = selectedTile.value;
-  if (!tile) return [];
-
-  // Ring 0's actual on-screen radius is bigger than RING_BASE_RADIUS when
-  // it's carrying the "upgrade" badge (see RingMenu's own effectiveRadius)
-  // — later rings' gap math needs to start from that real edge, not the
-  // bare base radius, or ring 1 would crowd the badge.
-  const ring0Effective = RING_BASE_RADIUS + (ringBadge.value ? 20 : 0);
-  let radius = ring0Effective;
-  let angleOffset = 0;
-
-  return ringStack.value.map((ring, i) => {
-    const actions = actionsForRing(tile, ring);
-    const bubbleSize = RING_BUBBLE_SIZES[Math.min(i, RING_BUBBLE_SIZES.length - 1)];
-    if (i > 0) {
-      const prevBubbleSize = RING_BUBBLE_SIZES[Math.min(i - 1, RING_BUBBLE_SIZES.length - 1)];
-      radius += prevBubbleSize / 2 + RING_GAP + bubbleSize / 2;
-    }
-    // A ring with exactly one action has nothing to "spread evenly" — snap
-    // it onto the same ray as whichever parent bubble was hovered/clicked
-    // to open it (see `originAngle`/`nextRingFrom`) rather than defaulting
-    // to due north, so the pointer barely has to move to reach it.
-    const thisAngleOffset =
-      actions.length === 1 && ring.originAngle !== undefined ? ring.originAngle + 90 : angleOffset;
-    const entry = {
-      ring,
-      actions,
-      radius: i === 0 ? RING_BASE_RADIUS : radius,
-      angleOffset: thisAngleOffset,
-      bubbleScale: bubbleSize / RING_BUBBLE_SIZES[0],
-      depth: i,
-    };
-    // Stagger the next ring by half of *this* ring's own angular spacing,
-    // so its bubbles land in the gaps between this ring's bubbles instead
-    // of lining up radially with them (a "bullseye" look otherwise).
-    angleOffset += 180 / Math.max(1, actions.length);
-    return entry;
-  });
 });
 
-// Mirrors RingMenu's own positioning formula (minus radius) so a parent
-// bubble's on-screen angle can be computed here, without RingMenu having to
-// report it back up. Keep in sync with RingMenu.vue's `positioned` computed.
-function angleForIndex(n: number, index: number, hasBadge: boolean, ringAngleOffset: number): number {
-  const angleStep = 360 / Math.max(1, n);
-  const rotationOffset = (n === 4 ? 45 : hasBadge ? -90 + angleStep / 2 : -90) + ringAngleOffset;
-  return angleStep * index + rotationOffset;
+function tileAt(q: number, r: number): Tile {
+  return world.model.getTile(q, r);
 }
 
-// Builds the next ring to push onto the stack, carrying the hovered/
-// clicked parent bubble's angle along so a single-action child ring (see
-// `originAngle` above) can align to it instead of defaulting to north.
-function nextRingFrom(i: number, id: string, level: RingLevel, category?: string): OpenRing {
-  const parent = ringsToRender.value[i];
-  const idx = parent.actions.findIndex((a) => a.id === id);
-  const hasBadge = i === 0 && !!ringBadge.value;
-  const originAngle = idx >= 0 ? angleForIndex(parent.actions.length, idx, hasBadge, parent.angleOffset) : undefined;
-  return { level, category, originAngle };
+// Cost, build time and the longhouse gate all come from the building
+// catalogue store, which serves the backend's own numbers (GET
+// /api/v1/buildings, or its bundled snapshot in demo mode) — so the card
+// can't drift from BuildingCatalogue.cs. "hut" is demo-only and has no
+// catalogue entry, hence the client-side cost fallback and no time/lock.
+function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord): RingBuilding {
+  const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
+  const boostTerrain = BOOST_TERRAIN[type];
+  const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
+  const stats = buildingStatsFor(type, 1, matching);
+  return {
+    id: type,
+    label,
+    cost: definition?.cost ?? buildingUpgradeCost(type, 1),
+    time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
+    gives: stats.output ?? stats.modifier,
+    lock: longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
+    art: buildingArt(type, 1),
+  };
 }
 
-// The badge belongs to the root ring, which is always the innermost ring
-// (index 0) for as long as any ring is open — it doesn't get replaced when
-// drilling into build-categories/build-buildings, so this doesn't need to
-// track which ring is currently "on top".
+const ringCategories = computed<RingCategory[]>(() => {
+  const tile = selectedTile.value;
+  const coord = selectedCoord.value;
+  if (!tile || !coord) return [];
+  return categoriesFor(tile).map((category) => ({
+    id: category.id,
+    label: category.label,
+    color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
+    buildings: category.buildings.map((b) => ringBuildingFor(b.type, b.label, coord)),
+  }));
+});
+
+const TERRAIN_LABELS: Record<string, string> = {
+  sea: 'Open water',
+  sand: 'Shore',
+  grass: 'Grassland',
+  forest: 'Forest',
+  mountain: 'Mountain',
+};
+const BUILDING_LABELS: Record<string, string> = {
+  hut: 'Hut',
+  farm: 'Farm',
+  tower: 'Watchtower',
+  longhouse: 'Longhouse',
+  fishinghut: 'Fishing Hut',
+  magictower: 'Magic Tower',
+  pumpkinfarm: 'Pumpkin Farm',
+  shrineofthor: 'Shrine of Thor',
+  shrineoffreyja: 'Shrine of Freyja',
+  lumberjack: 'Lumberjack',
+  quarry: 'Quarry',
+};
+
+// The hub names what was clicked: the building standing on the hex if there
+// is one, otherwise the bare terrain.
+const ringTerrainLabel = computed(() => {
+  const tile = selectedTile.value;
+  if (!tile) return '';
+  return (tile.buildingType ? BUILDING_LABELS[tile.buildingType] : undefined) ?? TERRAIN_LABELS[tile.terrain] ?? '';
+});
+const ringCoordLabel = computed(() => {
+  const coord = selectedCoord.value;
+  if (!coord) return '';
+  const hex = `HEX ${coord.q}, ${coord.r}`;
+  const level = selectedTile.value?.buildingType ? selectedTile.value.buildingLevel ?? 1 : null;
+  return level === null ? hex : `LV ${level} · ${hex}`;
+});
+
 const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
-
-const ringBadge = computed(() => {
-  const tile = selectedTile.value;
-  if (!isMineTile.value || !tile?.buildingType) return undefined;
-  return { id: 'upgrade', label: `Lv ${tile.buildingLevel ?? 1}`, sublabel: 'upgrade' };
-});
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
@@ -487,7 +574,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   selectedCoord.value = coord;
   selectedTile.value = tile;
   ringScreen.value = screen;
-  ringStack.value = [{ level: 'root' }];
+  actionError.value = null;
 }
 
 // Issue #93 "drag to move a placed waypoint": the renderer resolved the hex
@@ -501,74 +588,43 @@ function closeRing() {
   selectedCoord.value = null;
   selectedTile.value = null;
   ringScreen.value = null;
-  ringStack.value = [];
+  actionError.value = null;
 }
 
-// Issue #16 "build (which opens another ring outside with available
-// buildings on this spot)": drilling into the build-category/build-building
-// rings happens on hover, not click — only these two transitions (the root
-// "build" action, and picking a category) advance the ring; every other
-// action (info/details/upgrade/raze/attack/the final building choice) still
-// needs an actual click, since those either mutate state or are terminal.
-// Hovering pushes a new, wider ring onto the stack (concentric rings moving
-// outward) rather than replacing the current one — but only from the
-// outermost/most-recently-opened ring: hovering an inner ring's bubble
-// again (it's still visible and clickable) shouldn't push a duplicate.
-function onRingHover(i: number, id: string) {
-  if (i !== ringStack.value.length - 1) return;
-  const top = ringStack.value[i];
-  if (top.level === 'root' && id === 'build') {
-    ringStack.value = [...ringStack.value, nextRingFrom(i, id, 'build-categories')];
-    return;
-  }
-  if (top.level === 'build-categories') {
-    const category = categoriesFor(selectedTile.value!).find((c) => c.id === id);
-    if (category) {
-      ringStack.value = [...ringStack.value, nextRingFrom(i, id, 'build-buildings', id)];
-    }
-  }
-}
-
-async function onRingSelect(i: number, id: string) {
-  const ring = ringStack.value[i];
-  if (ring.level === 'build-categories') {
-    ringStack.value = [...ringStack.value.slice(0, i + 1), nextRingFrom(i, id, 'build-buildings', id)];
-    return;
-  }
-  if (ring.level === 'build-buildings') {
+// The ring owns its own drill-down now (hover a category, its buildings fan
+// out beside it), so only a committed choice reaches here: a building id from
+// the outer lane, or one of the root actions.
+async function onRingSelect(id: string) {
+  const tile = selectedTile.value;
+  if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
     await buildType(id as BuildableType);
-    // Issue #158: a rejection (NoFreeSlot's premium hint included) needs to
-    // stay visible — hand off to BuildingModal (same "ring closes, modal
-    // takes over" pattern as 'details'/'info' below) instead of closing the
-    // ring out from under an error the player never got to read.
-    if (modalError.value) {
-      ringScreen.value = null;
-    } else {
-      closeRing();
-    }
+    // A rejection (NoFreeSlot's premium hint included, issue #158) needs
+    // somewhere to show — fall back to BuildingModal (same tile, ring
+    // dismissed) instead of closing everything and losing it.
+    if (actionError.value) ringScreen.value = null;
+    else closeRing();
     return;
   }
   switch (id) {
     case 'details':
     case 'info':
-      // Falls through to BuildingModal below, ring stays "open" only long
+      // Falls through to BuildingModal below; the ring stays "open" only long
       // enough for the modal to take over the same selectedTile.
       ringScreen.value = null;
       return;
-    case 'build':
-      ringStack.value = [...ringStack.value.slice(0, i + 1), nextRingFrom(i, id, 'build-categories')];
-      return;
     case 'upgrade':
+      // upgrade() already closes on success (both branches); on failure it
+      // deliberately leaves selectedTile/ringScreen alone so this can drop
+      // through to BuildingModal instead, where the error renders.
       await upgrade();
-      if (modalError.value) {
+      if (actionError.value) {
         ringScreen.value = null;
       } else {
         closeRing();
       }
       return;
     case 'train':
-      // Falls through to TrainingModal below, same pattern as
-      // 'details'/'info' handing off to BuildingModal.
+      // Same hand-off pattern as 'details'/'info', to TrainingModal.
       ringScreen.value = null;
       trainModalOpen.value = true;
       return;
@@ -586,12 +642,19 @@ async function onRingSelect(i: number, id: string) {
 function closeModal() {
   closeRing();
   modalBusy.value = false;
-  modalError.value = null;
+  actionError.value = null;
 }
 
 function closeTrainModal() {
   closeRing();
   trainModalOpen.value = false;
+}
+
+// ApiError.problem.detail carries the backend's own human-readable
+// rejection reason (BuildRejection etc, ArmyEndpoints.Problem convention) —
+// mirrors world.ts's dispatchArmy/TrainingModal's own error-surfacing.
+function describeActionError(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? (err.problem?.detail ?? err.message) : fallback;
 }
 
 // Demo mode places the chosen building instantly; live mode queues that
@@ -602,20 +665,21 @@ function closeTrainModal() {
 // placement (wrong terrain, insufficient longhouse level, ...).
 async function buildType(type: BuildableType) {
   if (!world.selectedSettlementId || !selectedCoord.value) return;
+  actionError.value = null;
   if (DEMO_MODE) {
     world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
     return;
   }
   modalBusy.value = true;
-  modalError.value = null;
+  actionError.value = null;
   try {
     await world.queueBuildLive(type, selectedCoord.value);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
-    // Issue #158: surface the rejection's detail — NoFreeSlot's premium
-    // hint included — rather than leaving the player to guess why nothing
+    // Surface the rejection's detail — NoFreeSlot's premium hint included
+    // (issue #158) — rather than leaving the player to guess why nothing
     // happened.
-    modalError.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Could not queue that build.';
+    actionError.value = describeActionError(err, 'Could not queue that build.');
   } finally {
     modalBusy.value = false;
   }
@@ -627,13 +691,15 @@ async function buildType(type: BuildableType) {
 async function build() {
   await buildType('hut');
   // Only dismiss the modal on success — a rejection (e.g. NoFreeSlot) needs
-  // to stay visible via modalError rather than being closed out from under
+  // to stay visible via actionError rather than being closed out from under
   // the player before they can read it.
-  if (!modalError.value) closeModal();
+  if (actionError.value) return;
+  closeModal();
 }
 
 async function upgrade() {
   if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
+  actionError.value = null;
   if (DEMO_MODE) {
     const tile = world.model.getTile(selectedCoord.value.q, selectedCoord.value.r);
     tile.buildingLevel = (selectedTile.value.buildingLevel ?? 1) + 1;
@@ -641,20 +707,20 @@ async function upgrade() {
     return;
   }
   modalBusy.value = true;
-  modalError.value = null;
+  actionError.value = null;
   try {
     await world.queueBuildLive(selectedTile.value.buildingType, selectedCoord.value);
     closeModal();
   } catch (err) {
     console.error('Failed to queue upgrade against the backend', err);
-    modalError.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Could not queue that upgrade.';
+    actionError.value = describeActionError(err, 'Could not queue that upgrade.');
     modalBusy.value = false;
   }
 }
 </script>
 
 <template>
-  <div class="settlement">
+  <div ref="stageRef" class="settlement">
     <SettlementCanvas
       v-if="world.selectedSettlementId"
       ref="canvasRef"
@@ -682,36 +748,33 @@ async function upgrade() {
     </TopBar>
     <RealmPanel :ring-open="ringOpen" />
     <BuildQueuePanel @select="onQueueSelect" />
+    <ExpansionPanel />
     <TradePanel />
     <TrainingQueuePanel />
     <ArmyPanel />
     <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-    <template v-if="selectedTile && ringScreen">
-      <RingMenu
-        v-for="(entry, i) in ringsToRender"
-        :key="`${entry.ring.level}-${i}`"
-        :x="ringScreen.x"
-        :y="ringScreen.y"
-        :radius="entry.radius"
-        :backdrop="i === 0"
-        :angle-offset="entry.angleOffset"
-        :bubble-scale="entry.bubbleScale"
-        :depth="entry.depth"
-        :actions="entry.actions"
-        :badge-action="i === 0 ? ringBadge : undefined"
-        @select="(id: string) => onRingSelect(i, id)"
-        @hover="(id: string) => onRingHover(i, id)"
-        @close="closeRing"
-        @outside-pointer-down="onRingOutsidePointerDown"
-      />
-    </template>
+    <RingMenu
+      v-if="selectedTile && ringScreen"
+      :x="ringScreen.x"
+      :y="ringScreen.y"
+      :actions="rootActions"
+      :categories="ringCategories"
+      :terrain-label="ringTerrainLabel"
+      :coord-label="ringCoordLabel"
+      :bounds="ringBounds"
+      :card-bounds="ringCardBounds"
+      :stock="world.hud.resources"
+      @select="onRingSelect"
+      @close="closeRing"
+      @outside-pointer-down="onRingOutsidePointerDown"
+    />
     <BuildingModal
       v-if="selectedTile && !ringScreen && !trainModalOpen"
       :tile="selectedTile"
       :mine="modalMine"
       :owner-label="modalOwnerLabel"
       :busy="modalBusy"
-      :error="modalError"
+      :error="actionError"
       @close="closeModal"
       @build="build"
       @upgrade="upgrade"

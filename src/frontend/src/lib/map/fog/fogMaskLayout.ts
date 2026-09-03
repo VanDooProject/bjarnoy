@@ -14,6 +14,7 @@
 // would compute, with no extra request.
 import type { AxialCoord } from '../../hex/coords';
 import { axialToOddQ, hexesInRadius, oddQToAxial } from '../../hex/coords';
+import type { FogMaskPlacement } from './FogMaskLayer';
 
 export interface MaskTexel {
   u: number;
@@ -98,5 +99,34 @@ export function worldMaskBounds(radius: number): MaskBounds {
     maxV: boundsMaxV,
     width: boundsMaxU - boundsMinU,
     height: boundsMaxV - boundsMinV,
+  };
+}
+
+/**
+ * The world→mask-UV affine (map-fog-v2.md §2.1) for a world of the given
+ * `radius`, given the renderer's tile dimensions.
+ *
+ * Two half-cell corrections that are easy to miss, both of which displace
+ * the mask against the terrain it is supposed to be measuring:
+ *
+ * - `isoGridPosition` returns the **top-left of a hex's bounding box**, not
+ *   its centre (see hex/geometry.ts) — the centre of column C sits at
+ *   `C * colPitch + tileWidth / 2`. Mapping world coordinates straight
+ *   through `worldX / colPitch` therefore lands a hex's *corner* on its own
+ *   texel index, putting the hex centre 2/3 of a texel further along.
+ * - A texture samples texel `i` at UV `(i + 0.5) / size`, not `i / size`, so
+ *   the naive mapping is a further half-texel off on both axes.
+ *
+ * Netted out (2/3 − 1/2 = 1/6 of a texel in u, and 1 − 1/2 = 1/2 in v) the
+ * uncorrected affine reads the mask about 21 world units right and
+ * `tileHeight / 4` down of where the terrain actually is. Under the old
+ * ten-hex airbrush that was invisible; against a shaped vision edge it is a
+ * quarter-hex offset between the fog boundary and the ground it hides.
+ */
+export function fogMaskPlacement(radius: number, tileWidth: number, tileHeight: number): FogMaskPlacement {
+  const bounds = worldMaskBounds(radius);
+  return {
+    scale: [1 / (0.75 * tileWidth * bounds.width), 2 / (tileHeight * bounds.height)],
+    offset: [(-bounds.minU - 1 / 6) / bounds.width, (-bounds.minV - 0.5) / bounds.height],
   };
 }

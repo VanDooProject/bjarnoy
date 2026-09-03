@@ -37,6 +37,20 @@ public sealed record TrainingOrder
     /// <summary>Time to train a single unit; the batch trains one after another.</summary>
     public required TimeSpan PerUnitDuration { get; init; }
 
+    /// <summary>
+    /// Cost multiplier actually charged for this batch, on top of the
+    /// catalogue's flat per-unit <see cref="UnitDefinition.TrainingCost"/>
+    /// (issue #55 §4: settler-crew training escalates per settlement the
+    /// player already holds — see
+    /// <see cref="Settlers.Founding.CostMultiplier"/>). 1.0 for every
+    /// ordinary unit. Set once by <see cref="Settlement.PlanTrain"/> and must
+    /// be passed unchanged to <see cref="Settlement.EnqueueTraining"/> so the
+    /// two agree on what was actually affordable — not persisted to the
+    /// infrastructure layer's training-order entity: once paid for, nothing
+    /// downstream needs to know the multiplier that produced the charge.
+    /// </summary>
+    public double CostMultiplier { get; init; } = 1.0;
+
     /// <summary>The instant the last unit in the batch finishes.</summary>
     public DateTimeOffset CompletesAt =>
         StartedAt + TimeSpan.FromTicks(PerUnitDuration.Ticks * Count);

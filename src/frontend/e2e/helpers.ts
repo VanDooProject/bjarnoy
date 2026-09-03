@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 /**
  * Waits for the map container's own mount-complete signal (`data-map-ready`,
@@ -99,4 +99,55 @@ export async function foundSettlement(page: Page): Promise<void> {
   // renderer, not the landing page's preview one) — wait for its own
   // mount-complete signal instead of guessing how long that takes.
   await waitForMapReady(page);
+}
+
+/**
+ * Every matched element's on-screen box and visibility, read in **one**
+ * round trip.
+ *
+ * The obvious spelling — `expect(nth(i)).toBeVisible()` then
+ * `nth(i).boundingBox()` in a loop — costs two CDP round trips per element.
+ * That is cheap against an idle page and expensive against this app's
+ * canvas views, where a software-rendered runner can leave the main thread
+ * blocked for hundreds of milliseconds at a time and every round trip waits
+ * out whatever frame is in flight. `ring-menu.spec.ts`'s drill-down test
+ * asserts over two rings' worth of bubbles that way and spent its whole 90s
+ * budget doing it (issue #167).
+ *
+ * `evaluateAll` collapses that to a single call, and returns enough to make
+ * the same assertions: `visible` matches what Playwright's own visibility
+ * check means (a non-empty box, not `visibility: hidden` or
+ * `display: none`), and the box is in the same client coordinates
+ * `boundingBox()` reports.
+ */
+export interface ElementRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+  text: string;
+}
+
+export function rectsOf(locator: Locator): Promise<ElementRect[]> {
+  return locator.evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+        visible:
+          r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none',
+        text: (el.textContent ?? '').trim(),
+      };
+    }),
+  );
+}
+
+/** Centre-to-centre distance from `(x, y)` to a rect returned by rectsOf. */
+export function distanceFrom(rect: ElementRect, x: number, y: number): number {
+  return Math.hypot(rect.x + rect.width / 2 - x, rect.y + rect.height / 2 - y);
 }

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { hexesInRadius } from '../../hex/coords';
-import { diagonalNeighboursForInterpolation, isHexTexel, toHex, toTexel, worldMaskBounds } from './fogMaskLayout';
+import { axialToOddQ, hexesInRadius } from '../../hex/coords';
+import {
+  diagonalNeighboursForInterpolation,
+  fogMaskPlacement,
+  isHexTexel,
+  toHex,
+  toTexel,
+  worldMaskBounds,
+} from './fogMaskLayout';
 
 function contains(bounds: ReturnType<typeof worldMaskBounds>, u: number, v: number): boolean {
   return u >= bounds.minU && u < bounds.maxU && v >= bounds.minV && v < bounds.maxV;
@@ -77,5 +84,79 @@ describe('diagonalNeighboursForInterpolation', () => {
     expect(neighbours).toHaveLength(4);
     expect(new Set(neighbours.map((n) => `${n.u},${n.v}`)).size).toBe(4);
     for (const n of neighbours) expect(isHexTexel(n)).toBe(true);
+  });
+});
+
+describe('fogMaskPlacement', () => {
+  // HexMapRenderer's own tile constants (TILE_W, TILE_W * 92/200) — the
+  // placement affine is only ever correct relative to the geometry the
+  // terrain is actually drawn with, so the assertions below use the real
+  // numbers rather than round test values.
+  const TILE_W = 168;
+  const TILE_H = (TILE_W * 92) / 200;
+  const RADIUS = 12;
+
+  /** isoGridPosition's world point for a hex, plus half a tile — the centre of its top face. */
+  function hexCentreWorld(hex: { q: number; r: number }): { x: number; y: number } {
+    const { col, row } = axialToOddQ(hex);
+    return {
+      x: col * TILE_W * 0.75 + TILE_W / 2,
+      y: row * TILE_H + (col & 1 ? TILE_H / 2 : 0) + TILE_H / 2,
+    };
+  }
+
+  function toMaskUV(world: { x: number; y: number }, placement: ReturnType<typeof fogMaskPlacement>) {
+    return {
+      u: world.x * placement.scale[0] + placement.offset[0],
+      v: world.y * placement.scale[1] + placement.offset[1],
+    };
+  }
+
+  it('samples a hex centre at the centre of its own texel', () => {
+    // The regression this exists for: the affine used to map
+    // isoGridPosition's *bounding-box top-left* through `texel / size`,
+    // which lands a hex's corner on its texel index and then reads half a
+    // texel short of the texel's own centre. A hex centre sampled
+    // continuous texel (col + 1/6, 2*row + parity + 0.5) instead of
+    // (col, 2*row + parity) — about a quarter hex of drift between the fog
+    // boundary and the ground under it.
+    const bounds = worldMaskBounds(RADIUS);
+    const placement = fogMaskPlacement(RADIUS, TILE_W, TILE_H);
+
+    for (const hex of hexesInRadius({ q: 0, r: 0 }, RADIUS)) {
+      const texel = toTexel(hex);
+      const uv = toMaskUV(hexCentreWorld(hex), placement);
+
+      // A texture samples texel i at (i + 0.5) / size.
+      expect(uv.u * bounds.width).toBeCloseTo(texel.u - bounds.minU + 0.5, 10);
+      expect(uv.v * bounds.height).toBeCloseTo(texel.v - bounds.minV + 0.5, 10);
+    }
+  });
+
+  it('maps one hex step to exactly one texel step on each axis', () => {
+    // The scale half of the affine, independent of the offset half: a
+    // column step is one texel in u, and a row step is two in v (the
+    // doubled-row space of §2.1).
+    const bounds = worldMaskBounds(RADIUS);
+    const placement = fogMaskPlacement(RADIUS, TILE_W, TILE_H);
+
+    const u = (hex: { q: number; r: number }) => toMaskUV(hexCentreWorld(hex), placement).u * bounds.width;
+    const v = (hex: { q: number; r: number }) => toMaskUV(hexCentreWorld(hex), placement).v * bounds.height;
+
+    // +q in axial is +1 odd-q column; +r at fixed q is +1 odd-q row.
+    expect(u({ q: 1, r: 0 }) - u({ q: 0, r: 0 })).toBeCloseTo(1, 10);
+    expect(v({ q: 0, r: 1 }) - v({ q: 0, r: 0 })).toBeCloseTo(2, 10);
+  });
+
+  it('keeps every hex in the radius inside the 0..1 UV box', () => {
+    const placement = fogMaskPlacement(RADIUS, TILE_W, TILE_H);
+
+    for (const hex of hexesInRadius({ q: 0, r: 0 }, RADIUS)) {
+      const uv = toMaskUV(hexCentreWorld(hex), placement);
+      expect(uv.u).toBeGreaterThan(0);
+      expect(uv.u).toBeLessThan(1);
+      expect(uv.v).toBeGreaterThan(0);
+      expect(uv.v).toBeLessThan(1);
+    }
   });
 });

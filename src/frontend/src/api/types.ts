@@ -16,6 +16,28 @@ export interface WorldResponse {
   joinableReason: string;
   startsAt: string | null;
   endbossTriggered: boolean;
+  speedFactor: number;
+  generation: WorldGenerationResponse;
+  movement: WorldMovementResponse;
+}
+
+/** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
+export interface WorldGenerationResponse {
+  islandCellSize: number;
+  islandChance: number;
+  islandMinRadius: number;
+  islandMaxRadius: number;
+  beachThreshold: number;
+  mountainThreshold: number;
+  mountainRockiness: number;
+  forestRockiness: number;
+}
+
+/** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
+export interface WorldMovementResponse {
+  land: Record<string, number>;
+  sea: Record<string, number>;
+  riverCrossingCost: number;
 }
 
 export interface TileCoordinate {
@@ -153,6 +175,7 @@ export interface SettlementResponse {
   construction: ConstructionResponse;
   buildings: PlacedBuildingResponse[];
   queue: BuildOrderResponse[];
+  /** Units standing at this settlement (issue #55: includes trained `settlercrew`). */
   garrison: UnitStackResponse[];
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
@@ -167,6 +190,30 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+}
+
+// Settlement expansion (issue #55) — mirrors the settler-crew additions to
+// SettlementContracts.cs and ArmyContracts.cs. `UnitStackResponse`,
+// `TrainingOrderResponse`, `TrainUnitsRequest`, `UnitDefinitionResponse`,
+// `DispatchArmyRequest`, `MovementResponse`, `ArmyResponse` and `ArmySummary`
+// are declared once, further down, alongside the rest of the troop system's
+// types (issue #40) — a founding convoy is just an army on a `'found'`
+// mission, so it rides those same shapes rather than duplicating them; see
+// `HexPoint` there too (used in place of what used to be `HexPointRequest`).
+// `mission` on `DispatchArmyRequest` is `"move" | "attack" | "support" |
+// "raid" | "found"` — `found` requires exactly 3 `settlercrew` in `units`
+// (plus, for a sea convoy, enough Karve/Longship capacity to carry them) and
+// no `targetSettlementId`; `destination` is the target hex to colonise.
+
+export interface RetargetFoundingRequest {
+  target: HexPoint;
+}
+
+export interface RenownResponse {
+  total: number;
+  settlementCount: number;
+  requiredForNextSettlement: number;
+  canFoundAnother: boolean;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/TradeContracts.cs — see

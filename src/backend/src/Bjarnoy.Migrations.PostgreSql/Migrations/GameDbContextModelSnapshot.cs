@@ -662,6 +662,33 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Bits")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorldId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorldId", "OwnerId")
+                        .IsUnique();
+
+                    b.ToTable("player_explored", (string)null);
+                });
+
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -864,8 +891,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("WorldId", "OwnerId")
-                        .IsUnique();
+                    b.HasIndex("WorldId", "OwnerId");
 
                     b.HasIndex("WorldId", "CentreQ", "CentreR")
                         .IsUnique();
@@ -1144,6 +1170,12 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset>("RenownSettledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("RenownTotal")
+                        .HasColumnType("double precision");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
@@ -1180,6 +1212,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                             IsSystem = true,
                             NormalizedUserName = "abandoned",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            RenownSettledAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            RenownTotal = 0.0,
                             Role = 0,
                             Status = 0,
                             UserName = "Abandoned"
@@ -1192,6 +1226,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                             IsSystem = true,
                             NormalizedUserName = "barbarians",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            RenownSettledAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            RenownTotal = 0.0,
                             Role = 0,
                             Status = 0,
                             UserName = "Barbarians"
@@ -1204,6 +1240,8 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                             IsSystem = true,
                             NormalizedUserName = "endboss",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
+                            RenownSettledAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            RenownTotal = 0.0,
                             Role = 0,
                             Status = 0,
                             UserName = "Endboss"
@@ -1545,6 +1583,17 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                         .IsRequired();
 
                     b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
+                {
+                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
+                        .WithMany()
+                        .HasForeignKey("WorldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("World");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>

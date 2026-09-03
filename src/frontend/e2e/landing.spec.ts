@@ -96,12 +96,13 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
 });
 
 test('onboarding ring menu closes on an outside click and on Escape', async ({ page }) => {
-  // Issue #141: LandingView's RingMenu never passed `:backdrop`, and Vue
-  // implicitly defaults an unset, optional `boolean` prop to `false` — so
-  // the ring's backdrop rendered with `pointer-events: none`, silently
-  // disabling the outside-click close (and right-click) that
-  // SettlementView's own ring already had. Escape had never been wired up
-  // anywhere the ring menu is used.
+  // Issue #141: the ring used to make its backdrop opt-in per instance, and
+  // LandingView never opted in — so its backdrop rendered with
+  // `pointer-events: none`, silently disabling the outside-click close (and
+  // right-click) that SettlementView's own ring already had, and Escape had
+  // never been wired up anywhere the ring menu is used. There is one ring
+  // component per open menu now, and it always owns its backdrop, so there is
+  // no longer a way to render one without these.
   test.setTimeout(90_000);
   await page.goto('/');
   await waitForMapReady(page);

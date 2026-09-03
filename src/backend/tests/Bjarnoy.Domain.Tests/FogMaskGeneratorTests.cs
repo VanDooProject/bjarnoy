@@ -75,6 +75,78 @@ public class FogMaskGeneratorTests
     }
 
     [Fact]
+    public void Unknown_ramp_is_round_not_hexagonal()
+    {
+        // Every existing ramp test above walks the (d, 0) axis, where step
+        // count and straight-line distance happen to agree — so none of them
+        // can see the shape of the field at all. This one can: (4, 0) and
+        // (2, 2) are both four steps from the origin, but (2, 2) lies between
+        // two axes and is genuinely nearer in world space. A step-count ramp
+        // gives them the same value, which is what puts six corners on every
+        // contour and, once the client's edge shading is soft enough to show
+        // it, a hexagon where the fog should read as a circle.
+        var source = new FogVisionSource(HexCoord.Origin, ExploredRadius: 0, VisibleRadius: 0);
+        var bounds = FogMaskLayout.WorldBounds(8);
+
+        var mask = FogMaskGenerator.Generate(bounds, [source], new HashSet<HexCoord>(), Options);
+
+        var alongAxis = mask[FogMaskLayout.ToTexel(new HexCoord(4, 0))].Unknown;
+        var betweenAxes = mask[FogMaskLayout.ToTexel(new HexCoord(2, 2))].Unknown;
+
+        Assert.Equal(4, HexCoord.Distance(HexCoord.Origin, new HexCoord(4, 0)));
+        Assert.Equal(4, HexCoord.Distance(HexCoord.Origin, new HexCoord(2, 2)));
+        Assert.True(
+            betweenAxes < alongAxis,
+            $"same step count should not mean the same ramp value: {betweenAxes} vs {alongAxis}");
+    }
+
+    [Fact]
+    public void Unknown_ramp_is_a_function_of_straight_line_distance_alone()
+    {
+        // The stronger form of the test above, over every direction at once:
+        // the baked value depends on euclidean distance and nothing else, so
+        // the field is isotropic and its contours are circles. Radius 0 keeps
+        // the ring out of it, leaving the ramp itself under test.
+        var source = new FogVisionSource(HexCoord.Origin, ExploredRadius: 0, VisibleRadius: 0);
+        var bounds = FogMaskLayout.WorldBounds(8);
+
+        var mask = FogMaskGenerator.Generate(bounds, [source], new HashSet<HexCoord>(), Options);
+
+        foreach (var hex in HexCoord.Origin.WithinRadius(8))
+        {
+            var distance = HexCoord.EuclideanDistance(hex, HexCoord.Origin);
+            if (distance <= 0 || distance >= Options.UnknownMarginHexes)
+            {
+                continue;
+            }
+
+            var expected = (byte)Math.Round(255.0 * distance / Options.UnknownMarginHexes);
+            Assert.Equal(expected, mask[FogMaskLayout.ToTexel(hex)].Unknown);
+        }
+    }
+
+    [Fact]
+    public void Explored_ring_is_never_clipped_by_the_round_ramp()
+    {
+        // Radii stay whole hexes while the ramp is measured in straight-line
+        // units, which is only sound because every hex within a ring of
+        // radius r sits at euclidean distance <= r. If that ever stopped
+        // holding, hexes the player has explored would start picking up fog
+        // at the ring's corners.
+        const int radius = 5;
+        var source = new FogVisionSource(HexCoord.Origin, ExploredRadius: radius, VisibleRadius: radius);
+        var bounds = FogMaskLayout.WorldBounds(12);
+
+        var mask = FogMaskGenerator.Generate(bounds, [source], new HashSet<HexCoord>(), Options);
+
+        foreach (var hex in HexCoord.Origin.WithinRadius(radius))
+        {
+            Assert.Equal(0, mask[FogMaskLayout.ToTexel(hex)].Unknown);
+            Assert.Equal(0, mask[FogMaskLayout.ToTexel(hex)].OutOfSight);
+        }
+    }
+
+    [Fact]
     public void Two_sources_take_the_nearer_ones_ramp_value()
     {
         var near = new FogVisionSource(new HexCoord(-3, 0), ExploredRadius: 0, VisibleRadius: 0);

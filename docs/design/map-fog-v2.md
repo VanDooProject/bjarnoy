@@ -23,6 +23,45 @@ inversion needed. Confirmed before baking ramp/color logic into the backend
 generator, since flipping it later means redoing both the C# and TS ramp
 implementations.
 
+**The two tiers are nested, not adjacent.** Ground that was never scouted is
+also, necessarily, not in sight right now — "never been there" implies "can't
+see it now." So `unknown ⊆ outOfSight` as sets: **wherever white mist
+applies, black fog applies too.** The mask's own two channels already encode
+it that way — R (unknown) is measured past the *explored* ring, G
+(out-of-sight) past the *line-of-sight* ring, and the explored ring is
+always the outer of the two (`WorldModel.exploredRadius` is
+`borderRadius + FOG_SCOUT_RING`, `visibleHexes` only `borderRadius + 1`) —
+so any texel with R > 0 has G already saturated.
+
+That invariant is what makes the layer stack in §4 correct as a plain stack:
+
+- **The dark tier is a full underlay.** Everything outside current line of
+  sight is tinted, all the way out to the edge of the world. Its ramp
+  saturating a couple of hexes past the visible ring and then staying
+  saturated forever is the intended behaviour, not an unbounded-tint bug —
+  it is exactly "the whole world except what I can see".
+- **The mist quad simply covers it up** wherever the mist is opaque. The
+  dark band you actually see is therefore the window where the mist above
+  has not gone fully opaque yet — its width is set by where the mist ramp
+  turns over (`UNKNOWN_EDGE` in `FogMaskLayer.ts`), not by anything in the
+  G channel.
+
+Two consequences worth stating so they aren't "fixed" later by someone
+reading only one tier's code:
+
+- Masking the dark tier by the mist (`outOfSight * (1 - unknown)`), or
+  bounding it to the explored ring, is **wrong** — it deletes the underlay
+  the stack depends on and leaves the mist's own transition band sitting on
+  bare terrain.
+- §2.4's fragment pseudocode composites the two tiers in one expression
+  instead (`rgb = mix(SCOUTED, UNEXPLORED, unknown)`,
+  `alpha = max(unknown, outOfSight * SCOUTED_ALPHA)`), which is a *different*
+  result from stacking two premultiplied quads: the mix keeps more terrain
+  readable through the transition band, the stack is darker there. §4's
+  two-quad split (needed so troop markers can sit between the tiers) means
+  the shipped renderer is the stack. Deliberate — noted here because the
+  two are easy to mistake for each other.
+
 ### 1a. Guild shared vision — new requirement, not in the original plan
 
 As long as a player is in a guild, they share vision with guildmates. This
@@ -73,7 +112,17 @@ on every member's settlement change. Both are needed.
 
 ### 1c. Option C — live layer, never cached, composited in the shader
 
-Live army-granted vision — not implemented today, design for it anyway.
+**Implemented.** `fogShader.ts`'s `uArmyVisionSources`/`uArmyVisionCount`/
+`uArmyVisionRadius` uniforms, uploaded every tick by `HexMapRenderer` from
+its own already-computed live army render positions (`resolveArmyPoint`,
+reused as-is), composited as a multiplicative reveal on the ramp values —
+never written into `uMask`/`uMaskPrev`, exactly as designed below. The
+vision radius is a single flat constant (`ArmyVisionRadiusHexes`, backend;
+`ARMY_VISION_RADIUS_HEXES`, frontend) rather than per-unit-type, since no
+unit anywhere in `UnitCatalogue` carries a vision stat to draw a different
+number from.
+
+Live army-granted vision — the rest of this section is the original design.
 
 Checked: nothing in `WorldModel.ts` currently derives visibility from army
 position — `explored`/`visibleHexes` are purely settlement-derived. But
@@ -143,6 +192,20 @@ stays float and smooth; only the answer, when a hex-shaped answer is
 asked for, is hex-shaped.
 
 ### 1e. Persisted explored history — third input, adopted
+
+**Implemented, whole-world rather than per-chunk.** `PersistedExploredBitset`
+(pure bit-packing, `Bjarnoy.Domain.World`) + `PlayerExploredEntity`
+(`Bjarnoy.Infrastructure`, one row per `(WorldId, OwnerId)`) + `FogMaskService`
+OR-ing in each settlement's explored ring and each in-transit army's
+walked-over ground (§1c's radius, but only ever *appended*, never the live
+per-frame bonus itself) on every call, saved back only when it actually
+grew. Chunked delivery (§3) still isn't built anywhere in this codebase, so
+this keys by `(WorldId, OwnerId)` rather than the `(playerId, worldId,
+chunkCoord)` this section originally specified — splitting the bitset per
+chunk is real follow-up work for whenever §3 lands, not something to
+half-build ahead of it. Guild-wide merging (§1a) isn't implemented either —
+the persisted set today is exactly the requesting player's own history,
+same single-player scope as everything else in this file's §1a note.
 
 An external review of this doc caught a real gap: §1 defines black fog as
 *history* ("you've been here, can't see it now"), but Option B's cache key
@@ -366,6 +429,84 @@ a real, open gap — the pass needs its own perf measurement on
 software-rendered CI before Phase 4 ships, not deferred as a "measure it
 later" — but the mechanism itself is settled: unconditional, not
 test-gated.
+
+**Measured, and it does not pay — superseded.** The section above reasons
+from v1's `BlurFilter` incident and assumes the v2 shader pass is expensive
+for the same reason. It isn't. Measured on software-rendered headless
+Chromium at 1280x800, on the settlement view:
+
+| | median frame |
+|---|---|
+| both fog quads | 381 ms |
+| both quads, shader replaced by one texture sample (`showRawMask`) | 361 ms |
+| one quad instead of two | 318 ms |
+| both quads hidden | 260 ms |
+
+So each full-viewport quad costs ~60 ms of *compositing*, while the entire
+fragment-shader body — two multi-octave fbm evaluations and all the edge
+maths — accounts for ~20 ms across both. The pass is fill/blend bound, not
+ALU bound.
+
+Half-res was implemented against those numbers and made things very slightly
+*worse* (374 ms → 378 ms): rasterising at quarter the pixels saves a
+fraction of the 20 ms, and the upscale blit that replaces it is itself a
+full-viewport composite costing about what the direct draw cost. It was
+reverted rather than kept as machinery that loses.
+
+What did work, on the same measurements:
+
+- **Skipping the noise where its window is shut** (`edgeBand == 0`, i.e.
+  every pixel of solid mist and of clear ground). Most of a frame.
+- **Deriving the terrain cull radius** from where the mist is provably
+  opaque instead of from a generous margin. The radius is squared in the hex
+  count, so this was worth ~30 ms a frame on its own — more than the whole
+  shader body.
+- **Not evaluating both tiers on both quads**, and dropping octaves that
+  carry 1/32 of the amplitude.
+
+Together: 374 ms → 328 ms, against a 311 ms baseline on `main`.
+
+**The same cull radius applies to the world map's wave strokes**, and there
+it is worth more than it is for terrain. `rebuildWaves` places squiggles
+across `visibleWorldRect`, whose area grows as the square of zooming out —
+and unlike terrain sprites, which are placed once and then just sit in the
+scene graph, `drawWaves` re-strokes *every* surviving point on every tick.
+A wave kept past the cull is therefore not a one-off placement cost but two
+quadratic curves per frame, forever, underneath mist that is provably
+opaque. Culling them (`fogDebugFlags.waveCull`) leaves the drawn count
+roughly flat as the camera pulls back while the culled count grows with the
+viewport — which is the shape to look for in `FogPerfPanel`'s wave rows.
+
+Measured on the world map, one settlement founded, same session (the frame
+times are software-rendered and noisy; the stroke counts are exact):
+
+| zoom | `waveCull` | viewport hexes | strokes redrawn/frame | culled | median frame |
+|---|---|---|---|---|---|
+| start | on | 4030 | 212 | 650 | 250 ms |
+| start | off | 3965 | 567 | 0 | 300 ms |
+| ~4x out | on | 21895 | 220 | 5553 | 383 ms |
+| ~4x out | off | 21895 | **3139** | 0 | **1217 ms** |
+| ~8x out | on | 58310 | 220 | 15588 | 200 ms |
+| ~8x out | off | 58065 | **9173** | 0 | **1333 ms** |
+
+Culled, the per-frame stroke count is flat at ~220 however far the camera
+pulls back — every extra wave the wider viewport exposes is one the mist
+already hides. Unculled it grows with the viewport (567 → 3139 → 9173) and
+takes frame time with it, which is what made zooming out feel progressively
+heavier. `rebuildWaves` itself also stops scaling: 105 ms → 13 ms at the
+widest, because the fog test is cheap and runs *before* `isNearLand`'s
+seven `getTile` lookups.
+
+Note that the viewport hex count the panel reports is *not* a workload: it
+counts hexes in `visibleWorldRect`, so it rises on zoom-out by construction
+(`camera.ts`'s `viewport / 2 / camera.zoom`). Drawn-vs-culled is the number
+that says what is actually being paid for.
+
+The general lesson is worth keeping even though the specific remedy was
+wrong: the fog's cost lives in how many full-viewport layers get composited
+and how much ground is drawn underneath them, not in how clever the shader
+is. Reach for the layer count and the cull radius before the shader body.
+
 
 ### 2.6 Reveal cross-fade (also serves §1e's "fog can light up animated")
 

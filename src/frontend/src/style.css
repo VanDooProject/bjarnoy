@@ -14,6 +14,10 @@
   --stone: #9aa7ad;
   --food: #8fc35a;
   --iron: #6f8fa8;
+  /* Shrines have no resource of their own to borrow a colour from, but the
+     ring menu tints each build category and its buildings by category — see
+     `Tile Menu 2a`. */
+  --shrine: #b391d4;
 
   --sans: 'Outfit', system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
