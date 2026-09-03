@@ -2079,8 +2079,17 @@ export class HexMapRenderer {
       const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const mine = settlement.ownerId === playerId;
+      // Reference draws settlements as a diamond (prototypes/worldmap/Viking
+      // Realm.dc.html's `world.marks`: `<polygon points="0,-8 8,0 0,8 -8,0">`),
+      // not a plain dot.
+      const markerR = 5 * this.camera.zoom + 3;
       this.markerLayer
-        .circle(center.x, center.y, 5 * this.camera.zoom + 3)
+        .poly([
+          center.x, center.y - markerR,
+          center.x + markerR, center.y,
+          center.x, center.y + markerR,
+          center.x - markerR, center.y,
+        ])
         .fill({ color: mine ? GOLD : RIVAL })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
