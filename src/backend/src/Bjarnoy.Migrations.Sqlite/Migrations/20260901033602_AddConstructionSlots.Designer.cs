@@ -3,6 +3,7 @@ using System;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    partial class GameDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260901033602_AddConstructionSlots")]
+    partial class AddConstructionSlots
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -657,33 +660,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.ToTable("placed_buildings", (string)null);
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<byte[]>("Bits")
-                        .IsRequired()
-                        .HasColumnType("BLOB");
-
-                    b.Property<string>("OwnerId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("WorldId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorldId", "OwnerId")
-                        .IsUnique();
-
-                    b.ToTable("player_explored", (string)null);
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -886,7 +862,8 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("WorldId", "OwnerId");
+                    b.HasIndex("WorldId", "OwnerId")
+                        .IsUnique();
 
                     b.HasIndex("WorldId", "CentreQ", "CentreR")
                         .IsUnique();
@@ -1165,12 +1142,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("RenownSettledAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<double>("RenownTotal")
-                        .HasColumnType("REAL");
-
                     b.Property<int>("Role")
                         .HasColumnType("INTEGER");
 
@@ -1207,8 +1178,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                             IsSystem = true,
                             NormalizedUserName = "abandoned",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
-                            RenownSettledAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            RenownTotal = 0.0,
                             Role = 0,
                             Status = 0,
                             UserName = "Abandoned"
@@ -1221,8 +1190,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                             IsSystem = true,
                             NormalizedUserName = "barbarians",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
-                            RenownSettledAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            RenownTotal = 0.0,
                             Role = 0,
                             Status = 0,
                             UserName = "Barbarians"
@@ -1235,8 +1202,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                             IsSystem = true,
                             NormalizedUserName = "endboss",
                             PasswordHash = "SYSTEM-ACCOUNT-NO-LOGIN",
-                            RenownSettledAt = new DateTimeOffset(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            RenownTotal = 0.0,
                             Role = 0,
                             Status = 0,
                             UserName = "Endboss"
@@ -1578,17 +1543,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired();
 
                     b.Navigation("Settlement");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.PlayerExploredEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.WorldEntity", "World")
-                        .WithMany()
-                        .HasForeignKey("WorldId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("World");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.RefreshTokenEntity", b =>

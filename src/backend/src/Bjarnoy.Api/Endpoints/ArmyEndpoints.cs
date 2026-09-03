@@ -360,7 +360,7 @@ public static class ArmyEndpoints
                 DispatchRejection.NoUnitsRequested => "At least one unit must be requested.",
                 DispatchRejection.InsufficientGarrison => "The garrison does not hold that many of one or more requested unit types.",
                 DispatchRejection.ProvisionsExceedCarryCapacity => "The requested provisions exceed what these units can carry.",
-                DispatchRejection.InsufficientResources => "Not enough food to load the requested provisions.",
+                DispatchRejection.InsufficientResources => "Not enough food to load the requested provisions (some may be reserved for queued construction).",
                 DispatchRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
                 DispatchRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
                 DispatchRejection.UnreachableLeg => "No land route exists for one or more legs of the journey.",

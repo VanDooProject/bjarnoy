@@ -25,6 +25,9 @@ const props = defineProps<{
   mine: boolean;
   ownerLabel: string | null;
   busy: boolean;
+  // Issue #158: the caller (SettlementView) surfaces a queue rejection's
+  // detail text here (NoFreeSlot's premium hint included) rather than this
+  // modal reaching into the API layer itself.
   /** Why the last build/upgrade attempt was rejected by the backend, or null once dismissed by a fresh attempt. */
   error?: string | null;
 }>();
@@ -173,6 +176,38 @@ const costLine = computed(() =>
     .map((key) => `${upgradeCost.value[key]} ${RESOURCE_LABELS[key]}`)
     .join(' · '),
 );
+
+// Issue #158: affordability is checked against `available` (stock minus
+// what the waiting build queue has reserved), not raw stock — a reservation
+// that could still be spent here would not be a reservation. Demo mode has
+// no reservation concept (`hud.available` mirrors `hud.resources` there —
+// see stores/world.ts), so this degrades to the old plain-stock check for
+// free.
+const canAfford = computed(() =>
+  (Object.keys(upgradeCost.value) as (keyof ResourceLine)[]).every(
+    (key) => world.hud.available[key] >= upgradeCost.value[key],
+  ),
+);
+
+// A hex already holding a waiting order (this settlement's premium queue,
+// still on this same hex) shows a distinct "queued, no slot yet" state
+// instead of a build/upgrade button — cancelling it is BuildQueuePanel's
+// job, not this modal's.
+const waitingOrderHere = computed(() =>
+  world.hud.queue.find((o) => o.q === props.tile.q && o.r === props.tile.r && o.state === 'waiting'),
+);
+
+// No free construction slot right now (every slot occupied by an
+// already-building order) — the action still submits, but as a premium
+// waiting-queue request rather than an immediate build, so the button copy
+// says so up front instead of surprising the player with a 409.
+const noFreeSlot = computed(() => world.hud.construction.slotsUsed >= world.hud.construction.slots);
+
+const actionLabel = computed(() => {
+  if (props.busy) return 'Queuing…';
+  if (noFreeSlot.value) return 'Queue build';
+  return props.tile.buildingType ? `Upgrade to level ${level.value + 1}` : 'Build here';
+});
 </script>
 
 <template>
@@ -249,14 +284,20 @@ const costLine = computed(() =>
           </template>
         </div>
 
-        <div v-if="mine && buildable" class="actions">
-          <p v-if="error" class="action-error">{{ error }}</p>
+        <div v-if="mine && buildable && waitingOrderHere" class="actions">
+          <p class="desc queued-note">Queued — waiting for a construction slot.</p>
+        </div>
+        <div v-else-if="mine && buildable" class="actions">
           <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
-          <button v-if="tile.buildingType" class="primary" :disabled="busy" @click="emit('upgrade')">
-            {{ busy ? 'Queuing…' : `Upgrade to level ${level + 1}` }}
+          <p v-if="!canAfford" class="desc afford-note">
+            Not enough resources available (some may be reserved for queued construction).
+          </p>
+          <p v-if="error" class="desc afford-note">{{ error }}</p>
+          <button v-if="tile.buildingType" class="primary" :disabled="busy || !canAfford" @click="emit('upgrade')">
+            {{ actionLabel }}
           </button>
-          <button v-else class="primary" :disabled="busy" @click="emit('build')">
-            {{ busy ? 'Queuing…' : 'Build here' }}
+          <button v-else class="primary" :disabled="busy || !canAfford" @click="emit('build')">
+            {{ actionLabel }}
           </button>
         </div>
       </div>
@@ -375,6 +416,15 @@ const costLine = computed(() =>
   margin-bottom: 10px;
   font-size: 13px;
   color: var(--gold);
+}
+.afford-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #e07a5f;
+  max-width: 380px;
+}
+.queued-note {
+  color: var(--muted);
 }
 .primary {
   padding: 12px 22px;

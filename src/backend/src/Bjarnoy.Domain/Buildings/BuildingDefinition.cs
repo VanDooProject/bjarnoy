@@ -76,6 +76,22 @@ public sealed record BuildingDefinition
     /// <summary>The level <see cref="RequiredBuildingType"/> must reach. Meaningless when that is <see langword="null"/>.</summary>
     public int RequiredBuildingLevel { get; init; } = 1;
 
+    /// <summary>
+    /// How many construction slots one order for this building occupies while
+    /// it is actively building (issue #158). Ignored when
+    /// <see cref="OccupiesAllSlots"/> is set.
+    /// </summary>
+    public int SlotCost { get; init; } = 1;
+
+    /// <summary>
+    /// When set, a building order for this level always occupies every slot
+    /// the settlement currently has (<see cref="Settlement.ConstructionSlots"/>),
+    /// rather than <see cref="SlotCost"/> — the Longhouse's rule: an upgrade
+    /// can only start with every slot free, and blocks everything else queued
+    /// behind it while it runs.
+    /// </summary>
+    public bool OccupiesAllSlots { get; init; }
+
     /// <summary>Whether this building may stand on <paramref name="terrain"/>.</summary>
     public bool AllowsTerrain(Terrain terrain)
     {

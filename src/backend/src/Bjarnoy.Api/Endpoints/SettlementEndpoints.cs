@@ -212,13 +212,21 @@ public static class SettlementEndpoints
         if (result.Accepted)
         {
             var order = result.Order!;
+            var definition = BuildingCatalogue.Get(order.Type, order.TargetLevel);
+            var totalSeconds = order.IsWaiting
+                ? order.BaseDuration.TotalSeconds
+                : (order.CompletesAt!.Value - order.StartedAt!.Value).TotalSeconds;
+
             return TypedResults.Accepted(
                 $"/api/v1/settlements/{settlementId}",
                 new BuildOrderResponse(
                     order.Id, order.Coord.Q, order.Coord.R, order.Type.ToWireName(),
-                    order.TargetLevel, order.CompletesAt,
-                    (order.CompletesAt - order.StartedAt).TotalSeconds,
-                    (order.CompletesAt - order.StartedAt).TotalSeconds));
+                    order.TargetLevel,
+                    order.IsWaiting ? "waiting" : "building",
+                    definition.SlotCost,
+                    order.CompletesAt,
+                    order.IsWaiting ? null : totalSeconds,
+                    totalSeconds));
         }
 
         var problem = new ProblemDetails
@@ -227,6 +235,10 @@ public static class SettlementEndpoints
             Detail = Describe(result.Rejection),
             Status = StatusCodes.Status409Conflict,
         };
+        // Machine-readable, same pattern as founding's Problem(...) — the
+        // frontend needs to tell NoFreeSlot (premium upsell) apart from
+        // AlreadyQueuedOnHex/QueueFull without parsing Detail text.
+        problem.Extensions["rejection"] = result.Rejection.ToString();
 
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
@@ -472,15 +484,18 @@ public static class SettlementEndpoints
         BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
         BuildRejection.HexOccupied => "Another building already stands there.",
-        BuildRejection.NotEnoughResources => "Not enough resources.",
+        BuildRejection.NotEnoughResources =>
+            "Not enough resources (some may be reserved for queued construction).",
         BuildRejection.LonghouseTooLow => "The longhouse is not high enough level yet.",
-        BuildRejection.QueueFull => $"The build queue is full (max {Settlement.MaxQueueLength}).",
-        BuildRejection.AlreadyQueuedOnHex => "Something is already queued on that hex.",
+        BuildRejection.QueueFull => $"The waiting queue is full (max {Settlement.MaxWaitingOrders}).",
+        BuildRejection.AlreadyQueuedOnHex => "That hex is already at its construction-order limit.",
         BuildRejection.MaxLevelReached => "That building is already at its maximum level.",
         BuildRejection.LevelSkipped => "Levels must be built in order.",
         BuildRejection.LonghousePlacementNotAllowed =>
             "A settlement gets its longhouse from founding, not from the build queue.",
         BuildRejection.RequiredBuildingTooLow => "A required building is not high enough level yet.",
+        BuildRejection.NoFreeSlot =>
+            "Every construction slot is busy. Premium settlements can queue extra builds to wait for a free slot.",
         _ => "Refused.",
     };
 
@@ -489,7 +504,8 @@ public static class SettlementEndpoints
         TrainRejection.UnitNotAvailable => "That unit is not available at this longhouse level yet.",
         TrainRejection.TrainingQueueFull =>
             $"The training queue is full (max {Settlement.MaxTrainingQueueLength}).",
-        TrainRejection.NotEnoughResources => "Not enough resources.",
+        TrainRejection.NotEnoughResources =>
+            "Not enough resources (some may be reserved for queued construction).",
         TrainRejection.InvalidCount => "Count must be at least 1.",
         TrainRejection.SettlementNotCoastal => "Ships can only be trained at a settlement that claims a shoreline hex.",
         _ => "Refused.",

@@ -107,7 +107,9 @@ public sealed record TradeOffer
             return TradeDecision.Rejected(TradeRejection.NotEnoughCarts);
         }
 
-        if (!offerer.Resources.CanAfford(offeredResource.Only(offeredAmount), now))
+        // Issue #158 stage 1c: what is reserved for the waiting build queue
+        // cannot be offered up for trade either.
+        if (!offerer.CanAffordAvailable(offeredResource.Only(offeredAmount), now))
         {
             return TradeDecision.Rejected(TradeRejection.NotEnoughResources);
         }
@@ -135,7 +137,7 @@ public sealed record TradeOffer
     {
         ArgumentNullException.ThrowIfNull(plannedOffer);
 
-        if (!offerer.Resources.TrySpend(plannedOffer.OfferedResource.Only(plannedOffer.OfferedAmount), now, out var paid))
+        if (!offerer.TrySpendAvailable(plannedOffer.OfferedResource.Only(plannedOffer.OfferedAmount), now, out var paid))
         {
             throw new InvalidOperationException("Cannot post an offer that is not affordable; call Plan first.");
         }
@@ -187,7 +189,8 @@ public sealed record TradeOffer
             return TradeAcceptDecision.Rejected(TradeRejection.NotEnoughCarts);
         }
 
-        if (!acceptor.Resources.CanAfford(RequestedResource.Only(RequestedAmount), now))
+        // Issue #158 stage 1c.
+        if (!acceptor.CanAffordAvailable(RequestedResource.Only(RequestedAmount), now))
         {
             return TradeAcceptDecision.Rejected(TradeRejection.NotEnoughResources);
         }
@@ -216,7 +219,7 @@ public sealed record TradeOffer
             throw new InvalidOperationException("Cannot accept a decision that was not produced by PlanAccept.");
         }
 
-        if (!acceptor.Resources.TrySpend(decision.ToPoster.CargoResource.Only(decision.ToPoster.CargoAmount), now, out var paid))
+        if (!acceptor.TrySpendAvailable(decision.ToPoster.CargoResource.Only(decision.ToPoster.CargoAmount), now, out var paid))
         {
             throw new InvalidOperationException("Cannot accept an offer that is not affordable; call PlanAccept first.");
         }

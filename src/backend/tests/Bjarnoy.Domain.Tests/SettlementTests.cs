@@ -521,7 +521,7 @@ public class SettlementTests
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
-        var justBefore = queued.SettleTo(order.CompletesAt.AddSeconds(-1));
+        var justBefore = queued.SettleTo(order.CompletesAt!.Value.AddSeconds(-1));
 
         Assert.False(justBefore.Changed);
         Assert.Empty(justBefore.Settlement.Completed());
@@ -535,7 +535,7 @@ public class SettlementTests
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
-        var result = queued.SettleTo(order.CompletesAt);
+        var result = queued.SettleTo(order.CompletesAt!.Value);
 
         Assert.True(result.Changed);
         Assert.Empty(result.Settlement.Queue);
@@ -566,7 +566,7 @@ public class SettlementTests
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
-        var readLate = order.CompletesAt.AddHours(5);
+        var readLate = order.CompletesAt!.Value.AddHours(5);
         var settled = queued.SettleTo(readLate).Settlement;
 
         var foodAtCompletion = settled.Resources.Stock.Food;
@@ -592,8 +592,8 @@ public class SettlementTests
         // Every neighbour of the lumberjack's hex is Forest, so the boost caps at +50%.
         Func<HexCoord, Terrain> allForest = _ => Terrain.Forest;
 
-        var boosted = queued.SettleTo(order.CompletesAt, terrainAt: allForest).Settlement;
-        var unboosted = queued.SettleTo(order.CompletesAt).Settlement;
+        var boosted = queued.SettleTo(order.CompletesAt!.Value, terrainAt: allForest).Settlement;
+        var unboosted = queued.SettleTo(order.CompletesAt!.Value).Settlement;
 
         // Only the lumberjack's own share of the wood rate is boosted; the
         // longhouse's flat contribution is unaffected — so the two rates
@@ -611,10 +611,10 @@ public class SettlementTests
         var settlement = Found();
         var coord = new HexCoord(1, 0);
         var order = Plan(settlement, BuildingType.Lumberjack, coord, Terrain.Forest, T0);
-        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         Func<HexCoord, Terrain> allForest = _ => Terrain.Forest;
-        var result = built.SetBuildingLevel(coord, level: 2, order.CompletesAt, terrainAt: allForest);
+        var result = built.SetBuildingLevel(coord, level: 2, order.CompletesAt!.Value, terrainAt: allForest);
 
         Assert.True(result.Accepted);
         var expectedWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 2).ProductionPerHour.Wood * 1.50
@@ -640,10 +640,13 @@ public class SettlementTests
     }
 
     [Fact]
-    public void The_queue_is_capped()
+    public void The_queue_is_capped_by_free_slots_for_a_non_premium_settlement()
     {
+        // Only 2 construction slots at longhouse level 1 (issue #158). With
+        // maxWaitingOrders defaulting to 0 (non-premium/anonymous play), a
+        // third simultaneous build has nowhere to go once both slots are busy.
         var settlement = Found();
-        var coords = new[] { new HexCoord(1, 0), new HexCoord(0, 1), new HexCoord(-1, 1) };
+        var coords = new[] { new HexCoord(1, 0), new HexCoord(0, 1) };
 
         foreach (var coord in coords)
         {
@@ -651,12 +654,13 @@ public class SettlementTests
             settlement = settlement.Enqueue(order, T0);
         }
 
-        Assert.Equal(Settlement.MaxQueueLength, settlement.Queue.Count);
+        Assert.Equal(2, settlement.Queue.Count(o => !o.IsWaiting));
+        Assert.Equal(0, settlement.FreeSlots);
 
         var overflow = settlement.PlanBuild(
-            BuildingType.Farm, new HexCoord(1, -1), Terrain.Grass, T0, Guid.CreateVersion7());
+            BuildingType.Farm, new HexCoord(-1, 1), Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.Equal(BuildRejection.QueueFull, overflow.Rejection);
+        Assert.Equal(BuildRejection.NoFreeSlot, overflow.Rejection);
     }
 
     [Fact]
@@ -679,10 +683,10 @@ public class SettlementTests
         var settlement = Found();
         var coord = new HexCoord(1, 0);
         var order = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
-        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         var decision = built.PlanBuild(
-            BuildingType.StorageHouse, coord, Terrain.Grass, order.CompletesAt, Guid.CreateVersion7());
+            BuildingType.StorageHouse, coord, Terrain.Grass, order.CompletesAt!.Value, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.HexOccupied, decision.Rejection);
     }
@@ -693,10 +697,10 @@ public class SettlementTests
         var settlement = Found();
         var coord = new HexCoord(1, 0);
         var first = Plan(settlement, BuildingType.Farm, coord, Terrain.Grass, T0);
-        var built = settlement.Enqueue(first, T0).SettleTo(first.CompletesAt).Settlement;
+        var built = settlement.Enqueue(first, T0).SettleTo(first.CompletesAt!.Value).Settlement;
 
         var upgrade = built.PlanBuild(
-            BuildingType.Farm, coord, Terrain.Grass, first.CompletesAt, Guid.CreateVersion7());
+            BuildingType.Farm, coord, Terrain.Grass, first.CompletesAt!.Value, Guid.CreateVersion7());
 
         Assert.True(upgrade.Accepted);
         Assert.Equal(2, upgrade.Order!.TargetLevel);
@@ -847,9 +851,9 @@ public class SettlementTests
     {
         var settlement = Found();
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
-        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
-        var result = built.CancelBuild(order.Id, order.CompletesAt);
+        var result = built.CancelBuild(order.Id, order.CompletesAt!.Value);
 
         Assert.Equal(CancelBuildRejection.OrderNotFound, result.Rejection);
     }
@@ -859,9 +863,9 @@ public class SettlementTests
     {
         var settlement = Found();
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
-        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
-        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 3, order.CompletesAt);
+        var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 3, order.CompletesAt!.Value);
 
         Assert.True(result.Accepted);
         var farm = result.Settlement!.Buildings.Single(b => b.Type == BuildingType.Farm);
@@ -878,11 +882,11 @@ public class SettlementTests
     {
         var settlement = Found();
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
-        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt).Settlement;
+        var built = settlement.Enqueue(order, T0).SettleTo(order.CompletesAt!.Value).Settlement;
 
         // Two hours of accrued production at the level-1 rate must survive the
         // level-set, exactly like a normal SettleTo would preserve it.
-        var now = order.CompletesAt.AddHours(2);
+        var now = order.CompletesAt!.Value.AddHours(2);
         var stockJustBefore = built.Resources.At(now);
 
         var result = built.SetBuildingLevel(new HexCoord(1, 0), level: 2, now);
@@ -924,8 +928,8 @@ public class SettlementTests
         var doubled = settlement.PlanBuild(
             BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), speedFactor: 2.0);
 
-        var baseDuration = normal.Order!.CompletesAt - T0;
-        var doubledDuration = doubled.Order!.CompletesAt - T0;
+        var baseDuration = normal.Order!.CompletesAt!.Value - T0;
+        var doubledDuration = doubled.Order!.CompletesAt!.Value - T0;
 
         Assert.Equal((double)(baseDuration.Ticks / 2), doubledDuration.Ticks, 1);
     }
@@ -937,8 +941,8 @@ public class SettlementTests
         var order = Plan(settlement, BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0);
         var queued = settlement.Enqueue(order, T0);
 
-        var normal = queued.SettleTo(order.CompletesAt).Settlement;
-        var doubled = queued.SettleTo(order.CompletesAt, speedFactor: 2.0).Settlement;
+        var normal = queued.SettleTo(order.CompletesAt!.Value).Settlement;
+        var doubled = queued.SettleTo(order.CompletesAt!.Value, speedFactor: 2.0).Settlement;
 
         Assert.Equal(normal.Resources.RatePerHour.Food * 2, doubled.Resources.RatePerHour.Food, 6);
     }
@@ -994,7 +998,7 @@ public class SettlementTests
         // doubles the speed and the settlement is re-rated from "now" (this is
         // what SettlementService.RetuneSpeedAsync does): the stock already
         // earned at 1x must be untouched, only the rate going forward changes.
-        var now = order.CompletesAt.AddHours(2);
+        var now = order.CompletesAt!.Value.AddHours(2);
         var settledAtOldSpeed = queued.SettleTo(now, speedFactor: 1.0).Settlement;
         var stockBeforeRetune = settledAtOldSpeed.Resources.At(now);
 

@@ -245,11 +245,17 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTimeOffset>("CompletesAt")
+                    b.Property<TimeSpan>("BaseDuration")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTimeOffset?>("CompletesAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Q")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("QueuedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("R")
                         .HasColumnType("integer");
@@ -257,7 +263,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTimeOffset>("StartedAt")
+                    b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("TargetLevel")
@@ -268,7 +274,7 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SettlementId", "Q", "R")
+                    b.HasIndex("SettlementId", "Q", "R", "TargetLevel")
                         .IsUnique();
 
                     b.ToTable("build_orders", (string)null);

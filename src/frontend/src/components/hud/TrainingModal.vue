@@ -74,7 +74,12 @@ const rows = computed(() =>
     const needsCoast = definition.class === 'ship';
     const coastal = isCoastal.value !== false; // unknown (null) treated as coastal, see isCoastal's comment
     const available = meetsLevel && (!needsCoast || coastal);
-    const affordable = canAfford(cost, world.hud.resources);
+    // Issue #158: available (stock minus what the waiting build queue has
+    // reserved), not raw stock — a reservation the player could still train
+    // troops with would not be a reservation. `hud.available` mirrors
+    // `hud.resources` in demo mode (no reservation concept there), so this
+    // degrades to the old plain-stock check for free.
+    const affordable = canAfford(cost, world.hud.available);
     return {
       definition,
       count,
@@ -96,6 +101,14 @@ const rows = computed(() =>
 
 const training = ref<string | null>(null);
 const errorText = ref<string | null>(null);
+
+// Issue #158: a note when something is actually reserved, so a training
+// rejection that's really "some of that is spoken for" reads as expected
+// rather than a mystery insufficient-resources error.
+const reservedTotal = computed(() => {
+  const r = world.hud.reserved;
+  return r.wood + r.stone + r.food + r.iron;
+});
 
 async function train(type: string, count: number) {
   errorText.value = null;
@@ -129,6 +142,9 @@ async function train(type: string, count: number) {
         Training requires the live backend and isn't wired up in demo mode yet.
       </p>
       <p v-if="errorText" class="desc error-note">{{ errorText }}</p>
+      <p v-if="reservedTotal > 0" class="desc reserved-note">
+        {{ reservedTotal.toFixed(0) }} resources reserved for queued construction.
+      </p>
 
       <div class="roster">
         <div
@@ -230,6 +246,10 @@ async function train(type: string, count: number) {
 }
 .error-note {
   color: #e08a8a;
+}
+.reserved-note {
+  color: var(--muted);
+  font-size: 12px;
 }
 .roster {
   margin-top: 18px;

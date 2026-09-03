@@ -94,8 +94,10 @@ function setQuantity(unit: string, value: string, max: number) {
   // rather than leaving whatever was typed before a unit count changed the
   // carry capacity out from under it — the player can still edit it after.
   if (draft.value) {
+    // Issue #158: provisions come out of `available`, not raw stock — food
+    // reserved for the waiting build queue is not free to load onto an army.
     world.setDispatchProvisions(
-      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.resources.food),
+      maxAffordableProvisions(draft.value.unitCounts, catalogue.byType, world.hud.available.food),
     );
   }
 }

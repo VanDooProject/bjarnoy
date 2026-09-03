@@ -23,15 +23,49 @@ public sealed record BuildOrder
     /// <summary>The hex the building stands on.</summary>
     public required HexCoord Coord { get; init; }
 
-    public required DateTimeOffset StartedAt { get; init; }
+    /// <summary>
+    /// When the player ordered this — the stable sort/FIFO key for waiting
+    /// orders (<see cref="IsWaiting"/>), and for the same-hex contiguity rule
+    /// once <c>maxOrdersPerHex &gt; 1</c> is switched on. Never changes once set.
+    /// </summary>
+    public required DateTimeOffset QueuedAt { get; init; }
 
-    public required DateTimeOffset CompletesAt { get; init; }
+    /// <summary>
+    /// The catalogue's unscaled build duration for this order's level —
+    /// consulted only while <see cref="IsWaiting"/>, since a waiting order
+    /// must be timed by the speed factor in force when it actually starts,
+    /// not the one in force when it was queued
+    /// (<c>Settlement.PromoteWaitingOrders</c>). Once started,
+    /// <see cref="StartedAt"/>/<see cref="CompletesAt"/> are authoritative and
+    /// this becomes vestigial.
+    /// </summary>
+    public required TimeSpan BaseDuration { get; init; }
 
-    public bool IsComplete(DateTimeOffset now) => now >= CompletesAt;
+    /// <summary><see langword="null"/> while waiting for a construction slot — see <see cref="IsWaiting"/>.</summary>
+    public DateTimeOffset? StartedAt { get; init; }
+
+    /// <summary>
+    /// A stored value, stamped once at promotion from the speed factor in
+    /// force at that instant — never derived from <see cref="StartedAt"/> and
+    /// <see cref="BaseDuration"/>, or a later world speed retune would
+    /// silently move every in-flight order's completion. <see langword="null"/>
+    /// while <see cref="IsWaiting"/>.
+    /// </summary>
+    public DateTimeOffset? CompletesAt { get; init; }
+
+    /// <summary>True when this order has not yet started — waiting for a free construction slot in the premium queue.</summary>
+    public bool IsWaiting => StartedAt is null;
+
+    public bool IsComplete(DateTimeOffset now) => CompletesAt is { } c && now >= c;
 
     public TimeSpan RemainingAt(DateTimeOffset now)
     {
-        var remaining = CompletesAt - now;
+        if (CompletesAt is not { } c)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var remaining = c - now;
         return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
     }
 }
@@ -46,12 +80,19 @@ public enum BuildRejection
     HexOccupied,
     NotEnoughResources,
     LonghouseTooLow,
+
+    /// <summary>The premium waiting queue itself is full — a slot never freed up, but the player could still queue if it had room.</summary>
     QueueFull,
     LevelSkipped,
+
+    /// <summary>The hex is already at its <c>maxOrdersPerHex</c> limit of queued/building orders.</summary>
     AlreadyQueuedOnHex,
     MaxLevelReached,
     LonghousePlacementNotAllowed,
     RequiredBuildingTooLow,
+
+    /// <summary>No construction slot is free, and there is no waiting-queue room either (the non-premium wall).</summary>
+    NoFreeSlot,
 }
 
 /// <summary>The outcome of asking to build something.</summary>
