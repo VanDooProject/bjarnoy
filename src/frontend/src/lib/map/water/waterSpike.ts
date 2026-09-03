@@ -7,7 +7,9 @@
 // Deliberately garish and hard-edged — a soft, pretty foam band would hide
 // exactly the misalignment this is meant to expose. Delete before phase 1.
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
+import { Rectangle } from 'pixi.js';
 import { isoPixelToAxial } from '../../hex/geometry';
+import { TILE_ART_NATIVE_H, TILE_ART_NATIVE_W, TILE_ART_TOPFACE_Y_FRAC } from '../textures';
 
 export interface WaterSpikeFlags {
   enabled: boolean;
@@ -15,13 +17,84 @@ export interface WaterSpikeFlags {
   waves: boolean;
   /** Render the mask's channels raw instead of water — the alignment check. */
   showMask: boolean;
+  /**
+   * Cut the unsplit tall families into base/top halves in code
+   * (splitLegacyTexture) so their overhang sits above the water mesh. Off
+   * reproduces the artifact this exists to fix.
+   */
+  legacySplit: boolean;
 }
 export const waterSpikeFlags: WaterSpikeFlags = {
   enabled: true,
   foam: true,
   waves: true,
   showMask: false,
+  legacySplit: true,
 };
+
+/**
+ * The families the pack has no `top/` half for AND whose art rises above the
+ * top face — the ones that need splitLegacyTexture. Measured from the art
+ * (see scripts/measure-tile-overhang.mjs in the plan): mountaintile 67px,
+ * magictower 105px, dockyard 26px, towerbuilding 21px. The other unsplit
+ * families (watertile, coastalwatertile, sandtile, fishinghutbuilding) are
+ * flat-topped at 0-1px and need nothing.
+ *
+ * Empty once the pack ships these split, at which point this whole path goes.
+ */
+export const LEGACY_TALL_KEYS: ReadonlySet<string> = new Set([
+  'mountain',
+  'magictower',
+  'tower',
+  'dockyard',
+]);
+
+/**
+ * Emulates the art pack's base/top split in code, for the families that do not
+ * have one yet — cutting at exactly the y the pack itself cuts at, so this
+ * behaves like a real split and can be deleted, unchanged, once the art ships
+ * split.
+ *
+ * The lower piece (top face + skirt) keeps its place in `terrainBase`, so all
+ * the existing isoDepthKey occlusion is untouched. The upper piece — the part
+ * that rises above the top face and overhangs the hex to the north — goes to
+ * `terrainTop`, above the water mesh, which is the whole point.
+ */
+const SPLIT_Y = Math.round(TILE_ART_NATIVE_W * TILE_ART_TOPFACE_Y_FRAC); // 140
+
+export interface LegacySplit {
+  /** Native-pixel y where this piece starts inside the 200x300 art. */
+  nativeY: number;
+  /** Native-pixel height of the piece. */
+  nativeH: number;
+  texture: Texture;
+}
+
+const splitCache = new WeakMap<Texture, { base: LegacySplit; top: LegacySplit }>();
+
+/** Cut one unsplit tile texture into its below-top-face and above-top-face halves. */
+export function splitLegacyTexture(texture: Texture): { base: LegacySplit; top: LegacySplit } {
+  const cached = splitCache.get(texture);
+  if (cached) return cached;
+  const f = texture.frame;
+  const made = {
+    top: {
+      nativeY: 0,
+      nativeH: SPLIT_Y,
+      texture: new Texture({ source: texture.source, frame: new Rectangle(f.x, f.y, f.width, SPLIT_Y) }),
+    },
+    base: {
+      nativeY: SPLIT_Y,
+      nativeH: TILE_ART_NATIVE_H - SPLIT_Y,
+      texture: new Texture({
+        source: texture.source,
+        frame: new Rectangle(f.x, f.y + SPLIT_Y, f.width, f.height - SPLIT_Y),
+      }),
+    },
+  };
+  splitCache.set(texture, made);
+  return made;
+}
 
 /** Texels per tile width. 8 → one texel ≈ 1/8 hex (see the doc's §2.2). */
 const TEXELS_PER_TILE = 8;

@@ -45,7 +45,7 @@ import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 // SPIKE — see lib/map/water/waterSpike.ts. Remove with it.
-import { bakeWaterMask, WaterSpikeLayer, waterSpikeFlags } from './water/waterSpike';
+import { bakeWaterMask, LEGACY_TALL_KEYS, splitLegacyTexture, WaterSpikeLayer, waterSpikeFlags } from './water/waterSpike';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
@@ -55,6 +55,7 @@ import {
   baseTextureFor,
   loadTileTextures,
   riverTexturesFor,
+  textureKeyFor,
   topTextureFor,
   type TileTextures,
 } from './textures';
@@ -1806,8 +1807,9 @@ export class HexMapRenderer {
 
     const { worldModel } = this.options;
     const textures = this.textures!;
-    const baseEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
-    const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
+    type Entry = { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number } };
+    const baseEntries = new Map<string, Entry>();
+    const topEntries = new Map<string, Entry>();
     const settlement = this.settlement();
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
@@ -1859,9 +1861,21 @@ export class HexMapRenderer {
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;
       }
-      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const baseTexture = baseTextureFor(textures, tile);
       const topTexture = topTextureFor(textures, tile);
-      if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
+      if (topTexture) {
+        baseEntries.set(key, { texture: baseTexture, coord: c });
+        topEntries.set(key, { texture: topTexture, coord: c });
+      } else if (waterSpikeFlags.legacySplit && LEGACY_TALL_KEYS.has(textureKeyFor(tile))) {
+        // SPIKE: no `top` half in the pack for this family, and its art rises
+        // above the top face — cut it in code so the overhanging part sits in
+        // terrainTop, above the water mesh, instead of being painted over.
+        const split = splitLegacyTexture(baseTexture);
+        baseEntries.set(key, { texture: split.base.texture, coord: c, crop: split.base });
+        topEntries.set(key, { texture: split.top.texture, coord: c, crop: split.top });
+      } else {
+        baseEntries.set(key, { texture: baseTexture, coord: c });
+      }
       fogPerfStats.terrainDrawnCount++;
     }
 
@@ -2006,9 +2020,13 @@ export class HexMapRenderer {
 
   private syncSpriteLayer(
     layer: SpriteLayer,
-    entries: Map<string, { texture: Texture; coord: AxialCoord }>,
+    // SPIKE: `crop` carries a code-side base/top split (waterSpike.ts's
+    // splitLegacyTexture) for art the pack hasn't split yet — native-pixel
+    // offset and height inside the 200x300 tile, so the piece lands exactly
+    // where the whole sprite would have.
+    entries: Map<string, { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number } }>,
   ) {
-    for (const [key, { texture, coord }] of entries) {
+    for (const [key, { texture, coord, crop }] of entries) {
       let sprite = layer.active.get(key);
       const isNew = !sprite;
       if (!sprite) {
@@ -2017,9 +2035,10 @@ export class HexMapRenderer {
       }
       sprite.texture = texture;
       sprite.width = TILE_W;
-      sprite.height = TILE_CANVAS_H;
+      sprite.height = crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H;
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET);
+      const cropOffsetY = crop ? (TILE_W * crop.nativeY) / TILE_ART_NATIVE_W : 0;
+      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET + cropOffsetY);
       sprite.zIndex = isoDepthKey(coord);
       if (isNew) layer.container.addChild(sprite);
     }

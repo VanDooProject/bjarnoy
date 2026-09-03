@@ -316,12 +316,29 @@ is already flat — and `sandtile` in particular is both legacy and 1px, and is
 the most common terrain on a coastline. Treating "legacy" as "occluder" would
 suppress foam along every sandy shore, which is most of them.
 
-**Interim workaround**, to be deleted when the art split lands: a small table of
-`overhangPxAboveTopFace` per unsplit texture key, used to mark a water hex as
-"no water effects" when a tile with a non-zero entry sits to its south. Coarse —
-it costs a hex of foam beside a coastal cliff — but it is one table and one
-predicate in the mask bake, and when every entry goes to zero the code deletes
-itself. See §9's phase 5.
+**Interim fix — do the split in code, at the same cut line the pack uses.**
+Not per-hex suppression, which was this plan's first answer and is wrong on
+two counts: it would delete foam from a whole coastal hex (the one place foam
+exists to be), and `magictower`'s 105px overhang exceeds the 92px row pitch,
+so it reaches two rows north and suppressing one hex would not even be
+sufficient.
+
+Instead, for a family with no `top/` half whose art rises above the top face,
+cut the texture at native y = 140 (`TILE_ART_TOPFACE_Y_FRAC`, exactly where
+the pack cuts) into two sub-texture views and route them like a real split:
+the lower piece (top face + skirt) stays in `terrainBase`, so every existing
+`isoDepthKey` occlusion is untouched; the upper piece — the part that
+overhangs north — goes to `terrainTop`, above the water mesh.
+
+This is not a hack around the art, it is the art split done in code ahead of
+time, so it can be deleted unchanged once the pack ships. The predicate is
+structural, not a pixel measurement: `topTextureFor` returning nothing already
+*means* "unsplit". The measured height table survives only as a perf filter
+(`LEGACY_TALL_KEYS`) so the flat unsplit families — water, coastal water,
+sand, fishing hut — don't pay for a second, empty sprite.
+
+§11 verifies all of this on screen, including that the split is visually a
+no-op and that already-split art is immune.
 
 ### 3.4 The skirt needs no handling — the depth sort already did it
 
@@ -568,10 +585,12 @@ Unit (vitest, jsdom — no GPU, so these test our own logic, not Pixi):
   returns that hex, and of a point in its skirt returns the hex in front. This
   is the invariant that keeps foam on the painted coastline; it is cheap and it
   fails loudly if the tile geometry constants ever move.
-- **An overhang-table test** — every unsplit texture key in §3.3's table
-  suppresses effects on the water hex to its north, and every flat-topped one
-  (`fishinghutbuilding`, `sandtile`, every split base) does not. This is the
-  test that goes green-and-then-deletable when the art split lands.
+- **A legacy-split test** — `splitLegacyTexture` cuts at `TILE_ART_TOPFACE_Y_FRAC`
+  and the two pieces' native offsets/heights sum back to the whole tile, so the
+  halves abut exactly rather than overlapping or leaving a gap; and every key in
+  `LEGACY_TALL_KEYS` routes a top piece into `terrainTop` while a split family
+  (`grass`, `forest`) still takes the ordinary path. This is the test that goes
+  green-and-then-deletable when the art split lands.
 
 E2E (`e2e/water-shader.spec.ts`, in the style of `fog-drift.spec.ts`): load
 each view with `?debug=1`, toggle `shorelineFoam` and `midWaterWaves` from the
@@ -596,7 +615,7 @@ Each phase is a separate commit and leaves the app buildable.
    `legacyWaveSquiggles`.
 4. **Shoreline foam** — §4.3.
 5. **Settlement view** — insert the mesh between `terrainBase` and
-   `borderLayer`, plus §3.3's interim overhang table. Verify against a coastal
+   `borderLayer`, plus §3.3's code-side legacy split. Verify against a coastal
    mountain and a coastal dockyard; re-check that sea↔land occlusion at the
    shoreline is byte-for-byte what it was (nothing is reordered, so it should
    be). Delete the table when the legacy art split lands.
@@ -616,7 +635,9 @@ Each phase is a separate commit and leaves the app buildable.
   calling it settled.
 - **Legacy art split.** The whole `hextiles/` root set is pending a base/top
   split (§3.3); of it only `mountain`, `magictower`, `towerbuilding` and
-  `dockyard` actually stick up. When it lands, §3.3's interim
+  `dockyard` actually stick up. When it lands, `LEGACY_TALL_KEYS` empties and
+  `splitLegacyTexture` and its routing branch delete with no behaviour change —
+  they were emulating that split all along. When it lands, §3.3's interim
   overhang table should go to zero and be removed — worth linking this issue
   from that work so it isn't left behind as dead code that looks load-bearing.
 - **Mask resolution at low zoom.** `MASK_TEXELS_PER_TILE = 8` is a guess sized
@@ -638,12 +659,29 @@ that would have been needed if the claim were wrong. The settlement view also
 confirmed the mechanism: along the coast there is no visible land skirt at all,
 because the water tiles in front cover it, exactly as §3.4 argues.
 
-**§3.3's overhang artifact is real, and looks as bad as expected.** A
-`magictower` (105px, the worst in the pack) placed on a coastal hex with sea to
-its north has its spire and battlements washed over by the water layer, while
-its base — the part on the top face — is untouched. That is precisely the
-predicted failure mode, so the interim table is doing real work and is not
-defensive over-engineering.
+**§3.3's overhang artifact is real, and the fix for it changed.** A
+`magictower` (105px) placed on a coastal hex with sea to its north has its
+spire and battlements washed over by the water layer, while its base — the
+part on the top face — is untouched: precisely the predicted failure mode.
+But seeing it also killed this plan's first answer to it (per-hex
+suppression), and three further measurements settled the replacement:
+
+- **Already-split art is immune, including art taller than the problem
+  cases.** `foresttile`'s tree layer stands **139px** above the top face —
+  more than `magictower`'s 105px, the tallest overhang in the pack — and
+  forest is common on coastlines (589 coastal forest hexes in the same scan).
+  With the water layer on, not one coastal tree is touched. So the artifact
+  is not about height at all; it is only about which layer the art is in.
+  That is what makes emulating the split the right fix rather than a
+  workaround: it moves the four unsplit families into the regime everything
+  else is already in.
+- **The code-side split fixes the tower** — spire clean, base unchanged.
+- **And it is visually a no-op otherwise.** With the water layer off, turning
+  the split on changes 875 pixels of a 1440×900 frame (0.068%), all inside the
+  tower's own tile, 93% of them by ≤7/255. At 6× magnification the two are
+  indistinguishable: no seam at the cut, no gap, no doubled row. The residual
+  is resampling — two sub-sprites scaled from 200px-wide art to 168px land on
+  a slightly different sampling grid than one.
 
 **Two things the spike changed our mind about:**
 
