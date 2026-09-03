@@ -247,6 +247,7 @@ async function onRingSelect(type: string) {
   if (!world.selectedSettlementId || !coord) return;
   if (DEMO_MODE) {
     world.model.placeBuilding(world.selectedSettlementId, coord, type as OnboardingBuildType);
+    canvasRef.value?.renderer?.forceRebuild();
     world.syncHud();
     closeRing();
     return;
@@ -340,6 +341,19 @@ watch(
   [() => canvasRef.value?.renderer, () => world.fogMaskBitmap, () => world.worldRadius],
   ([renderer, bitmap, radius]) => {
     if (renderer && bitmap && radius !== null) renderer.setFogMask(radius, bitmap);
+  },
+);
+
+// Live mode: same "a fresh settlement snapshot arrived, force a redraw"
+// wiring as SettlementView.vue — without it, a building that finishes (or
+// one just queued, which should show its level-0 foundation immediately)
+// keeps showing its old texture here too until a real camera pan happens
+// to come along, since `refreshLiveSettlement` only ever touches
+// `world.model`'s tile data, never the renderer.
+watch(
+  [() => canvasRef.value?.renderer, () => world.hud.buildings],
+  ([renderer]) => {
+    renderer?.forceRebuild();
   },
 );
 </script>
