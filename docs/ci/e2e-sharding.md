@@ -136,6 +136,48 @@ npx playwright test --grep-invert "@g1|@g2|@g3" --list | tail -1
 npx playwright test --list | tail -1   # should equal the sum of the four above
 ```
 
+## Follow-up: de-clustering budget-tight tests within a group
+
+Duration-balancing groups isn't the whole story — *how many tight-margin
+tests land sequentially in the same job* matters too, independent of the
+group's total duration.
+
+Shortly after the groups above first shipped, `@g1` (all of
+`ring-menu.spec.ts`, 9 tests) started failing on
+`ring-menu.spec.ts:138` ("hovering a building shows its cost, build time
+and longhouse gate, and a locked one cannot be placed") — a 90s-budget
+timeout, on unmodified test code, reproducing identically on one re-run.
+That test measured at 66s in the reference run that produced the table
+above (73% of its budget already used) — tight enough that ordinary
+CI-runner load variance was enough to tip it over. `main`'s own CI (still
+running the whole 56-test suite as one serial job at the time) had passed
+the same, unmodified test a few hours earlier the same day, which is good
+evidence this wasn't a regression in the test or the app — just an
+unlucky moment for a test with little headroom to begin with.
+
+`@g1` had three of the suite's tightest-margin tests back to back:
+`ring-menu.spec.ts:22` (56.8s), `:138` (66.0s), and `ring menu touch
+build`'s single test (54.6s) — each using more than half of its 90s
+budget. Bundling several such tests sequentially in one job means a single
+bout of runner slowness has more chances to tip *one of them* over, even
+if the group's *average* duration is perfectly balanced against the other
+three groups.
+
+The fix was to stop tagging at the `describe` level for
+`'ring menu drill-down'` and tag its 8 tests individually instead, moving
+`:138` (the one that actually failed) into `@g2` — a group of 30 mostly
+small/fast tests, where it's no longer sequentially adjacent to another
+tight-margin test — and `:361` ("clicking elsewhere...", 26.4s) into
+`@g3`, to keep `@g1`'s total from swinging too far from the others. `@g1`
+kept `:22` and the touch-build test (`:413`) since both had passed
+consistently.
+
+This is a real, if partial, lesson for future re-balancing: when moving a
+test between groups, look at the tests it would be sequentially adjacent
+to, not just the group's running total — a duration-balanced group can
+still concentrate risk if too many of its tests are individually close to
+the timeout.
+
 ## When to re-balance
 
 The group durations above are a snapshot, not a guarantee — they'll drift as
