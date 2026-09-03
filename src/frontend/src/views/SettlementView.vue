@@ -210,6 +210,24 @@ watch(
   { immediate: true },
 );
 
+// Live mode: `refreshLiveSettlement` (the poll loop, and the immediate
+// re-fetch after queueBuildLive/cancelBuildLive/upgrade) writes completed
+// levels and new/removed foundation stubs straight into `world.model`'s
+// tiles, but the renderer only ever redraws sprites on a real camera pan/
+// zoom (`cameraMovedEnough`) — nothing tied a data refresh to a redraw, so
+// a building that finished (or one just queued, which should show its
+// level-0 foundation immediately) kept showing its old texture until the
+// player happened to pan far enough by coincidence. `world.hud.buildings`
+// is reassigned to a fresh array on every `refreshLiveSettlement` call
+// (whether or not anything actually changed), so watching it is a cheap,
+// reliable "the settlement snapshot moved" signal to force a redraw on.
+watch(
+  [() => canvasRef.value?.renderer, () => world.hud.buildings],
+  ([renderer]) => {
+    renderer?.forceRebuild();
+  },
+);
+
 const hoverInfo = ref<HoverInfo | null>(null);
 function onHover(info: HoverInfo | null) {
   // The renderer's pointer tracking is a window-level listener (see
@@ -661,6 +679,7 @@ async function onRingSelect(id: string) {
     case 'raze':
       if (world.selectedSettlementId && selectedCoord.value) {
         world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
+        canvasRef.value?.renderer?.forceRebuild();
       }
       closeRing();
       return;
@@ -697,6 +716,7 @@ async function buildType(type: BuildableType) {
   actionError.value = null;
   if (DEMO_MODE) {
     world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
+    canvasRef.value?.renderer?.forceRebuild();
     return;
   }
   modalBusy.value = true;
@@ -724,6 +744,7 @@ async function upgrade() {
   if (DEMO_MODE) {
     const tile = world.model.getTile(selectedCoord.value.q, selectedCoord.value.r);
     tile.buildingLevel = (selectedTile.value.buildingLevel ?? 1) + 1;
+    canvasRef.value?.renderer?.forceRebuild();
     closeModal();
     return;
   }

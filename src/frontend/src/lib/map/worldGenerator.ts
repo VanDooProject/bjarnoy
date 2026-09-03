@@ -3,9 +3,9 @@
 // mockup) rather than one continuous landmass. Tiles are generated on demand
 // from (q, r) and a seed, so nothing needs to be precomputed or stored for
 // the whole map — memory is bounded by hexes actually visited.
-import { axialToOddQ, neighbors } from '../hex/coords';
+import { axialToOddQ, hexDistance, oddQToAxial, neighbors } from '../hex/coords';
 import { TILE_ORIENTATIONS } from './types';
-import type { Terrain, Tile, TileOrientation } from './types';
+import type { IslandLabel, Terrain, Tile, TileOrientation } from './types';
 
 function hash2(x: number, y: number, seed: number): number {
   let h = x * 374761393 + y * 668265263 + seed * 2147483647;
@@ -95,6 +95,68 @@ function closestIsland(col: number, row: number, seed: number, gen: WorldGenerat
     }
   }
   return best;
+}
+
+// Deterministic Norse-flavoured island names, mirroring the backend's
+// `Bjarnoy.Domain.World.IslandNames` (the stem/ending lists are copy-kept in
+// sync by eye, not shared code — demo mode has no access to backend code and
+// only ever needs *a* name, not the exact same one a live world would pick).
+const NAME_STEMS = [
+  'Bjorn', 'Fjord', 'Grim', 'Hav', 'Isa', 'Jarl', 'Kettil', 'Lyng',
+  'Mork', 'Nord', 'Orm', 'Rav', 'Sig', 'Thor', 'Ulf', 'Vald',
+  'Ymir', 'Aske', 'Brand', 'Dyr', 'Eik', 'Frost', 'Gard', 'Hjalm',
+];
+const NAME_ENDINGS = [
+  'ey', 'holm', 'vik', 'nes', 'fjell', 'sund', 'strand', 'berg',
+  'havn', 'skar', 'oy', 'dal',
+];
+
+function islandNameFor(cellCol: number, cellRow: number, seed: number): string {
+  const stem = NAME_STEMS[Math.floor(hash2(cellCol, cellRow, seed + 101) * NAME_STEMS.length) % NAME_STEMS.length];
+  const ending =
+    NAME_ENDINGS[Math.floor(hash2(cellCol, cellRow, seed + 103) * NAME_ENDINGS.length) % NAME_ENDINGS.length];
+  return stem + ending;
+}
+
+/**
+ * Enumerates the islands the demo generator places within `radius` hexes of
+ * the origin, with a dummy Norse-flavoured name for each — demo mode has no
+ * backend `GET /worlds/{id}/islands` to ask (unlike a live world's own init
+ * in `stores/world.ts`, which calls that and feeds the response straight
+ * into `WorldModel.setIslands`), so without this the world map's island-name
+ * labels (`HexMapRenderer`'s `worldModel.listIslands()` loop) simply have
+ * nothing to draw in demo mode. Replays `closestIsland`'s own per-cell roll
+ * to find each island's jittered centre rather than inventing a second
+ * scheme, so a demo island's label always sits over the same island
+ * `terrainAt`/`isLand` actually generate there.
+ */
+export function enumerateIslands(world: WorldSeed, radius: number): IslandLabel[] {
+  const gen = world.generation;
+  const cellSpan = Math.ceil(radius / gen.islandCellSize) + 1;
+  const islands: IslandLabel[] = [];
+  for (let cellCol = -cellSpan; cellCol <= cellSpan; cellCol++) {
+    for (let cellRow = -cellSpan; cellRow <= cellSpan; cellRow++) {
+      if (hash2(cellCol, cellRow, world.seed) > gen.islandChance) continue;
+      const jitter = gen.islandCellSize * 0.55;
+      const centerCol =
+        cellCol * gen.islandCellSize +
+        gen.islandCellSize / 2 +
+        (hash2(cellCol, cellRow, world.seed + 11) - 0.5) * jitter;
+      const centerRow =
+        cellRow * gen.islandCellSize +
+        gen.islandCellSize / 2 +
+        (hash2(cellCol, cellRow, world.seed + 13) - 0.5) * jitter;
+      const center = oddQToAxial({ col: Math.round(centerCol), row: Math.round(centerRow) });
+      if (hexDistance({ q: 0, r: 0 }, center) > radius) continue;
+      islands.push({
+        id: `demo-${cellCol}-${cellRow}`,
+        name: islandNameFor(cellCol, cellRow, world.seed),
+        q: center.q,
+        r: center.r,
+      });
+    }
+  }
+  return islands;
 }
 
 export function terrainAt(q: number, r: number, world: WorldSeed): Terrain {
