@@ -2084,16 +2084,20 @@ export class HexMapRenderer {
         .fill({ color: mine ? GOLD : RIVAL })
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
-      // Settlers-II-style owner label under the marker (see
-      // prototypes/worldmap, `world()`'s `owners`/`labels` rendering).
+      // Settlers-II-style owner label under the marker. Reference styling
+      // (prototypes/worldmap/Viking Realm.dc.html's `world.owners`):
+      // `font:600 12.5px Barlow,sans-serif` plus a soft drop shadow for
+      // legibility over the water/terrain behind it — same treatment as the
+      // island-name labels above, just without their uppercase/letter-spaced
+      // small-caps look (owners read as plain names, not headings).
       const ownerLabel = this.acquireLabel();
       ownerLabel.text = settlement.ownerName;
       ownerLabel.style.fill = mine ? GOLD : RIVAL;
-      ownerLabel.style.fontFamily = 'sans-serif';
-      ownerLabel.style.fontWeight = 'normal';
-      ownerLabel.style.fontSize = 11;
+      ownerLabel.style.fontFamily = "'Barlow', sans-serif";
+      ownerLabel.style.fontWeight = '600';
+      ownerLabel.style.fontSize = 12.5;
       ownerLabel.style.letterSpacing = 0;
-      ownerLabel.style.dropShadow = false;
+      ownerLabel.style.dropShadow = { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 };
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
