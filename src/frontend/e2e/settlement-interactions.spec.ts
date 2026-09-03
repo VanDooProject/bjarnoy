@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 
-test.describe('settlement view interactions', () => {
+test.describe('settlement view interactions', { tag: '@g2' }, () => {
   test('hovering a hex renders a highlight that follows the cursor', async ({ page }) => {
     // foundSettlement() alone (page load + a real PixiJS/texture mount) can
     // already run close to the global 45s budget under software-rendered

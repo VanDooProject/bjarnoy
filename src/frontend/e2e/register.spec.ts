@@ -27,7 +27,7 @@ async function seedPlayerId(page: Page) {
   await page.addInitScript((id) => localStorage.setItem('bjarnoy.playerId', id), PLAYER_ID);
 }
 
-test('register creates an account, claims the local settlement id, and logs in', async ({ page }) => {
+test('register creates an account, claims the local settlement id, and logs in', { tag: '@g2' }, async ({ page }) => {
   await seedPlayerId(page);
 
   let requestBody: { userName: string; password: string; existingOwnerId: string | null } | undefined;
@@ -60,7 +60,7 @@ test('register creates an account, claims the local settlement id, and logs in',
     .toBe('e2e-refresh-token');
 });
 
-test('register catches a mismatched confirmation before sending a request', async ({ page }) => {
+test('register catches a mismatched confirmation before sending a request', { tag: '@g2' }, async ({ page }) => {
   await seedPlayerId(page);
   let requested = false;
   await page.route('**/api/v1/auth/register', (route: Route) => {
@@ -78,7 +78,7 @@ test('register catches a mismatched confirmation before sending a request', asyn
   expect(requested).toBe(false);
 });
 
-test('login and register link to each other', async ({ page }) => {
+test('login and register link to each other', { tag: '@g2' }, async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Playing anonymously? Create an account' }).click();
   await expect(page).toHaveURL(/\/register$/);

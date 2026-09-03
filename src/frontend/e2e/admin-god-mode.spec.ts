@@ -258,7 +258,7 @@ async function openSettlementPanel(page: Page) {
   await expect(page.getByText('Settlement editor')).toBeVisible();
 }
 
-test.describe('admin god mode', () => {
+test.describe('admin god mode', { tag: '@g2' }, () => {
   test('finishes a queued build instantly and reports what it built', async ({ page }) => {
     await loginAsAdmin(page);
     await mockSettlementsApi(page);
