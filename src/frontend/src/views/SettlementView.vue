@@ -336,7 +336,8 @@ type BuildableType =
   | 'storagehouse'
   | 'archeryrange'
   | 'dockyard'
-  | 'greatstorehouse';
+  | 'greatstorehouse'
+  | 'fishinghut';
 
 interface BuildCategory {
   id: string;
@@ -345,20 +346,30 @@ interface BuildCategory {
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
 // MagicTower are Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, Tower is SandOrGrass, and a shrine is buildable on any land
-// hex. Offering a building the backend's own AllowedTerrain would reject is
-// what "messed up categories" on a shore (sand) tile meant — sand used to
-// fall into the same flat bucket as forest/mountain and offer Farm/
-// Lumberjack/Quarry, none of which the backend would ever accept there.
-// FishingHut isn't a land-terrain building at all (RequiresCoastalWater, on
-// a Sea hex) so it belongs in none of these — Build is disabled outright on
-// sea tiles below, so there is currently no ring path to it.
+// Mountain-only, Tower/ArcheryRange are SandOrGrass, and a shrine is
+// buildable on any land hex. Offering a building the backend's own
+// AllowedTerrain would reject is what "messed up categories" on a shore
+// (sand) tile meant — sand used to fall into the same flat bucket as
+// forest/mountain and offer Farm/Lumberjack/Quarry, none of which the
+// backend would ever accept there.
+// FishingHut and Dockyard aren't land-terrain buildings at all
+// (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
+// path to them, offered only on a coastal-water sea tile (see
+// categoriesFor), not through this land-terrain table.
 const SHRINE_CATEGORY: BuildCategory = {
   id: 'religion',
   label: 'Shrines',
   buildings: [
     { type: 'shrineofthor', label: 'Shrine of Thor' },
     { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
+  ],
+};
+const WATER_CATEGORY: BuildCategory = {
+  id: 'water',
+  label: 'Water',
+  buildings: [
+    { type: 'fishinghut', label: 'Fishing Hut' },
+    { type: 'dockyard', label: 'Dockyard' },
   ],
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
@@ -406,7 +417,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
-  if (tile.terrain === 'sea') return [];
+  if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
   return BUILD_CATEGORIES[tile.terrain];
 }
 
@@ -426,6 +437,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   defense: 'var(--iron)',
   religion: 'var(--shrine)',
   logistics: 'var(--stone)',
+  water: 'var(--water)',
 };
 
 const rootActions = computed<RingAction[]>(() => {
@@ -491,9 +503,10 @@ const rootActions = computed<RingAction[]>(() => {
     return actions;
   }
   if (isMineTile.value) {
+    const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
     return [
       { id: 'details', label: 'Details' },
-      { id: 'build', label: 'Build', disabled: tile.terrain === 'sea', hint: 'Open water' },
+      { id: 'build', label: 'Build', disabled: !buildableSea, hint: buildableSea ? undefined : 'Open water' },
     ];
   }
   return [{ id: 'details', label: 'Details' }];
