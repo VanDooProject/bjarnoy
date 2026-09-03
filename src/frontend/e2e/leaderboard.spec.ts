@@ -118,7 +118,7 @@ async function gotoLeaderboards(page: Page) {
   await page.getByRole('button', { name: 'Score' }).first().waitFor();
 }
 
-test.describe('leaderboards', () => {
+test.describe('leaderboards', { tag: '@g2' }, () => {
   test('is reachable via the HUD nav link from the world map', async ({ page }) => {
     test.setTimeout(90_000);
     // foundSettlement/gotoWorldMap would also work, but the nav link itself

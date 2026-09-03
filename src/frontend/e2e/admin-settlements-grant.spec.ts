@@ -63,7 +63,7 @@ function settlementResponse(stock: ReturnType<typeof resourceLine>) {
   };
 }
 
-test.describe('admin settlements: grant resources honors real storage capacity', () => {
+test.describe('admin settlements: grant resources honors real storage capacity', { tag: '@g2' }, () => {
   test('a grant clamped by capacity shows the true cap and reports the clamp, not a silent partial grant', async ({
     page,
   }) => {

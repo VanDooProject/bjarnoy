@@ -51,7 +51,7 @@ async function mockActivityApi(page: Page) {
   );
 }
 
-test('admin pages scroll to reveal content below the fold', async ({ page }) => {
+test('admin pages scroll to reveal content below the fold', { tag: '@g2' }, async ({ page }) => {
   await loginAsAdmin(page);
   await mockActivityApi(page);
 

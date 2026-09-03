@@ -18,7 +18,7 @@ import { distanceFrom, foundSettlement, rectsOf } from './helpers';
  * the concentric one it replaced: at most TWO lanes are ever on screen, so
  * drilling *swaps* the inner lane rather than adding an orbit outside it.
  */
-test.describe('ring menu drill-down', () => {
+test.describe('ring menu drill-down', { tag: '@g1' }, () => {
   test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', async ({ page }) => {
     test.setTimeout(90_000);
     await foundSettlement(page);
@@ -407,7 +407,7 @@ test.describe('ring menu drill-down', () => {
 // A real touch context (not a synthetic dispatchEvent) is what actually
 // exercises the browser's own pointerdown->click suppression this depends
 // on — see RingMenu.vue's onBuildingPointerDown.
-test.describe('ring menu touch build', () => {
+test.describe('ring menu touch build', { tag: '@g1' }, () => {
   test.use({ hasTouch: true });
 
   test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {

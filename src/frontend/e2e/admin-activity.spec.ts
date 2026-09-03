@@ -80,7 +80,7 @@ async function mockActivityApi(page: Page) {
   );
 }
 
-test.describe('admin activity view', () => {
+test.describe('admin activity view', { tag: '@g2' }, () => {
   test('shows the logged-in admin as a recently active user and renders the aggregate chart', async ({ page }) => {
     await loginAsAdmin(page);
     await mockActivityApi(page);

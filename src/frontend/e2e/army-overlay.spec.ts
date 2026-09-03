@@ -38,7 +38,7 @@ declare global {
   }
 }
 
-test.describe('army overlay on the settlement map', () => {
+test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   test('a plotted waypoint can be dragged onto another hex', async ({ page }) => {
     // Same budget as the other tests that both found a settlement AND drive
     // real pointer interaction through the live PixiJS scene — see

@@ -51,29 +51,38 @@ jobs:
       - name: Typecheck & build
         run: npm run build
 
+  # See docs/ci/e2e-sharding.md for the full story of how this job's split
+  # was chosen (plain --shard, why it was uneven, and how these 4 groups
+  # were measured and balanced).
+  #
+  # 4 duration-tagged groups instead of plain --shard=N/4: --shard splits
+  # the test list contiguously in file-discovery (alphabetical) order, not
+  # by duration, and this suite's heaviest specs sort together
+  # alphabetically — an earlier plain 3-way shard dumped nearly all of them
+  # into one shard (14min) while the others sat idle; even 6-way still left
+  # one shard at 8.5min against a ~2min fastest. Every test in the suite
+  # carries at most one of the @g1/@g2/@g3 tags (see the individual spec
+  # files); "rest" runs everything NOT carrying one of those tags via
+  # --grep-invert, so it is the safety net — a newly added spec file that
+  # nobody tags still runs (in "rest"), it just isn't guaranteed to be
+  # perfectly balanced until someone tags it. Groups were bin-packed by
+  # hand against real per-file CI durations (see the doc) to land within
+  # ~35s of each other; re-measure and re-tag if the suite's shape changes
+  # significantly (e.g. a new consistently-slow spec file).
   e2e:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # 6-way shard rather than more in-process workers: each shard gets its
-      # own runner (GitHub's standard hosted runner is only 2 vCPUs), so
-      # this is real parallelism instead of oversubscribing one runner's
-      # CPU — these specs render real WebGL/PixiJS canvases, which without
-      # a GPU is CPU-bound (see playwright.config.ts's `workers` comment for
-      # what happened when this ran 2 in-process workers on one runner).
-      #
-      # 6, not 3: --shard splits the test list contiguously in file-discovery
-      # (alphabetical) order, not by duration, and this suite's heaviest
-      # specs (ring-menu, settlement-interactions, shrine-build, trade,
-      # world-map-interactions) all sort late alphabetically — a 3-way split
-      # dumped nearly all of them into one shard, which alone took as long as
-      # a big chunk of the old single-job run while the other two shards sat
-      # idle after a few minutes. More, smaller shards bound how much of that
-      # imbalance any single shard can absorb, without hand-listing files per
-      # shard (which would silently drop a newly added spec from CI if no
-      # one remembers to add it to a group).
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        include:
+          - name: g1
+            args: --grep @g1
+          - name: g2
+            args: --grep @g2
+          - name: g3
+            args: --grep @g3
+          - name: rest
+            args: --grep-invert "@g1|@g2|@g3"
     steps:
       - uses: actions/checkout@v4
 
@@ -100,12 +109,12 @@ jobs:
       - run: npm run build
 
       - name: E2E tests
-        run: npx playwright test --shard=${{ matrix.shard }}/6
+        run: npx playwright test ${{ matrix.args }}
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report-${{ matrix.shard }}
+          name: playwright-report-${{ matrix.name }}
           path: |
             src/frontend/playwright-report/
             src/frontend/test-results/
