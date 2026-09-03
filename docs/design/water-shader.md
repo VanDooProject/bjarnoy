@@ -230,41 +230,71 @@ polygons cover the shader wherever there is land. Keep the CSS gradient in
 switched-off `seaBody` flag; it should be tuned to match the shader's own deep
 colour so flipping the flag is a small change, not a jarring one.
 
-### 3.3 Settlement mode — and why `terrainBase` has to be split
+### 3.3 Settlement mode — above `terrainBase`, and the legacy-art caveat
 
-The obvious insertion point is "above `terrainBase`, below `terrainTop`". It
-is wrong, and the reason is worth writing down because it is easy to
-rediscover the hard way:
-
-**`terrainBase` is not all flat ground.** `sand` and `mountain` are not
-base/top split in the art pack — they have no `top` entry at all
-(`textures.ts`'s `SOURCES.base` vs `SOURCES.top`) — so a mountain's full
-silhouette, height and all, lives in `terrainBase`. Isometric tile art
-overhangs the neighbouring hex to its north. A water mesh drawn above the
-whole of `terrainBase` would paint foam over the bottom of every coastal
-mountain.
-
-So `terrainBase` is split into two sprite layers with the water mesh between
-them:
+The insertion point is **between `terrainBase` and `borderLayer`** — above all
+the ground art, below the tall art in `terrainTop`:
 
 ```
 world
- ├─ terrainSea      NEW: sea + coastal-water sprites (flat, never overhang)
+ ├─ terrainBase     ground art (incl. water tiles)
  ├─ waterLayer.mesh ← NEW
- ├─ terrainLand     the rest of today's terrainBase
- ├─ ...
- └─ terrainTop
+ ├─ borderLayer
+ ├─ hoverLayer
+ ├─ terrainTop      tall art — draws over the water effects
+ └─ ...
 ```
 
-This is correct, not just a workaround: water tiles are flat and never
-occlude anything, land tiles do and must draw over the water effects. The
-existing `isoDepthKey` z-sorting stays *within* each container; splitting on
-sea/land cannot reorder two tiles that could ever occlude each other, because
-a flat sea tile is never the occluder.
+No container split, no reordering. That this works at all is a property of the
+art pack, so it is worth writing down what was measured rather than assumed.
 
-`syncSpriteLayer` already takes the layer as a parameter
-(`HexMapRenderer.ts:1976`), so this is a routing change in `rebuildTerrain`
-plus one more `createSpriteLayer()`, not a rewrite.
+**The tile art is a flat-topped prism.** Native art is 200×300; the flat top
+face spans y 140–232 (`TILE_ART_TOPFACE_Y_FRAC`, `TILE_ART_TOPFACE_H_FRAC`).
+Measuring the opaque bounding box of every base-layer texture in the pack:
+
+| base-layer family | px **above** the top face | px **below** |
+| --- | --- | --- |
+| `watertile`, `coastalwatertile` | 0 | 68 |
+| `grasstile`, `foresttile`, `rivertile`, every split building base | 1 | 68 |
+| `sandtile` | 1 | 68 |
+| `fishinghutbuilding` | 0 | 68 |
+| `towerbuilding` | 21 | 68 |
+| `dockyard` | 26 | 68 |
+| `mountaintile` | 67 | 68 |
+| `magictower` | 105 | 68 |
+
+Two things follow.
+
+**Every tile has a 68px skirt below its top face — water included.** So an
+earlier draft of this plan that split `terrainBase` into `terrainSea` and
+`terrainLand` with the mesh between them was **wrong**, and the reason is worth
+keeping: drawing all sea before all land breaks sea↔land occlusion at the
+coastline. A land tile's skirt reaches 46px into the top face of the water hex
+diagonally in front of it, which today is covered because that water tile draws
+later (`isoDepthKey`). Group the sea first and the coastal cliff paints over the
+water in front of it instead — a wedge of wrong occlusion along every shore,
+which is precisely where the foam is. **Do not split `terrainBase`.**
+
+**Only art that rises *above* the top face can be over-painted**, and after the
+legacy art is split that set is empty. `sand` and `mountain` have no base/top
+split today, and neither do `fishinghutbuilding`, `magictower`, `towerbuilding`
+or `dockyard` — but every family that *is* split has a base of ≤1px above the
+top face, so once the legacy split lands `terrainBase` is uniformly flat-topped
+and this section reduces to "put the mesh above `terrainBase`", full stop.
+
+Until then, four families stick up: `mountaintile` (67px), `magictower`
+(105px), `dockyard` (26px), `towerbuilding` (21px). (`sandtile`'s 1px and
+`fishinghutbuilding`'s 0px are already flat — a fishing hut needs no special
+handling despite standing on coastal water.) Art above the top face overhangs
+the hex to the **north**, which draws earlier, so the artifact is: a coastal
+mountain with water to its north gets foam painted over its peak.
+
+**Interim workaround**, to be deleted when the art split lands: a small table of
+`overhangPxAboveTopFace` per unsplit texture key, used to mark a water hex as
+"no water effects" when a tile with a non-zero entry sits to its south. Coarse —
+it costs a hex of foam beside a coastal cliff — but it is one table and one
+predicate in the mask bake, and when every entry goes to zero the code deletes
+itself. See §9's phase 5.
 
 ### 3.4 Foam bleed is clipped for free
 
@@ -423,9 +453,10 @@ navigation, which is the whole reason it exists — see its header).
   the shader's foam animates *over* it, anchored to the same coastline,
   because both derive from the same `isCoastalWater`/`isLand` terrain.
 - **Fishing huts and dockyards** stand on coastal water
-  (`WorldModel.ts:536`). Their sprites live in `terrainBase` → they route to
-  `terrainLand` (they are buildings, not water) and so draw above the mesh,
-  which is what we want: foam should lap around a dock, not over it.
+  (`WorldModel.ts:536`) — the one place a building sits where foam is drawn.
+  `fishinghutbuilding` is flat-topped (0px above the top face, §3.3), so it
+  needs nothing; `dockyard` rises 26px and is covered by §3.3's interim table
+  until it gets a base/top split.
 
 ---
 
@@ -466,9 +497,13 @@ Unit (vitest, jsdom — no GPU, so these test our own logic, not Pixi):
 - `WaterLayer.test.ts` — flags map onto uniforms; `mesh.eventMode === 'none'`;
   geometry vertices follow the camera.
 - **A layer-order test on `HexMapRenderer`** — assert the water mesh's index in
-  `world.children` is above `terrainSea` and below `terrainLand`/`terrainFlat`.
-  This is the regression test for the whole of §3 and it is testing our stack,
-  not a third-party library.
+  `world.children` is above `terrainBase` and below `terrainTop` in settlement
+  mode, and below `terrainFlat` in world mode. This is the regression test for
+  the whole of §3, and it is testing our stack, not a third-party library.
+- **An overhang-table test** — every unsplit texture key in §3.3's table
+  suppresses effects on the water hex to its north, and every flat-topped one
+  (`fishinghutbuilding`, `sandtile`, every split base) does not. This is the
+  test that goes green-and-then-deletable when the art split lands.
 
 E2E (`e2e/water-shader.spec.ts`, in the style of `fog-drift.spec.ts`): load
 each view with `?debug=1`, toggle `shorelineFoam` and `midWaterWaves` from the
@@ -492,9 +527,11 @@ Each phase is a separate commit and leaves the app buildable.
 3. **Mid-water waves** — §4.2; put the existing squiggles behind
    `legacyWaveSquiggles`.
 4. **Shoreline foam** — §4.3.
-5. **Settlement view** — split `terrainBase` into `terrainSea`/`terrainLand`,
-   insert the mesh between them, verify against a coastal mountain
-   (the §3.3 case).
+5. **Settlement view** — insert the mesh between `terrainBase` and
+   `borderLayer`, plus §3.3's interim overhang table. Verify against a coastal
+   mountain and a coastal dockyard; re-check that sea↔land occlusion at the
+   shoreline is byte-for-byte what it was (nothing is reordered, so it should
+   be). Delete the table when the legacy art split lands.
 6. **Tuning + screenshots + e2e**, and the perf-panel counters.
 
 ---
@@ -509,6 +546,10 @@ Each phase is a separate commit and leaves the app buildable.
   is visible (tinted) in scouted-but-unseen water. That seems right — it's
   terrain motion, not information — but it's worth a look on a real map before
   calling it settled.
+- **Legacy art split.** `sand`, `mountain`, `magictower`, `towerbuilding` and
+  `dockyard` are pending a base/top split. When it lands, §3.3's interim
+  overhang table should go to zero and be removed — worth linking this issue
+  from that work so it isn't left behind as dead code that looks load-bearing.
 - **Mask resolution at low zoom.** `MASK_TEXELS_PER_TILE = 8` is a guess sized
   against a half-hex foam band. If foam looks blocky when zoomed in on a
   settlement, the honest fix is more texels per tile there, not more blur.
