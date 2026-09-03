@@ -74,8 +74,22 @@ export function buildingStatsFor(
       return { output: `+${level * 5} population capacity` };
     case 'tower':
       return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
+    // No production/storage of its own — trains the land combat/siege
+    // roster in place of the Longhouse. No combat bonus (deferred), unlike
+    // Tower, which is why this reads the same as Tower's own "no output"
+    // shape rather than inventing a stat line with nothing behind it.
+    case 'archeryrange':
+      return { modifier: 'Trains land troops' };
+    case 'dockyard':
+      return { modifier: 'Trains ships' };
     case 'longhouse':
       return { output: `+${level * 100} storage capacity` };
+    // Mirrors BuildingCatalogue.cs's StorageHouse(level): ResourceAmounts.Uniform(1000) * level.
+    case 'storagehouse':
+      return { output: `+${level * 1000} storage capacity` };
+    // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): ResourceAmounts.Uniform(2000) * level.
+    case 'greatstorehouse':
+      return { output: `+${level * 2000} storage capacity` };
     case 'pumpkinfarm': {
       const workersCap = level * 4;
       return { output: `+${level * 36} food/h`, workers: `${workersCap}/${workersCap}` };
@@ -145,6 +159,10 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   tower: { wood: 120, stone: 200, food: 0, iron: 10 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
+  storagehouse: { wood: 150, stone: 120, food: 0, iron: 0 },
+  greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
+  archeryrange: { wood: 140, stone: 100, food: 0, iron: 20 },
+  dockyard: { wood: 200, stone: 120, food: 0, iron: 20 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */

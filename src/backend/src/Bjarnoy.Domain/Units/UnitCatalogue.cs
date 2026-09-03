@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 
 namespace Bjarnoy.Domain.Units;
@@ -44,6 +45,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
             RequiredLonghouseLevel = 1,
+            RequiredBuildingType = BuildingType.ArcheryRange,
         },
         [UnitType.Axeman] = new UnitDefinition
         {
@@ -58,6 +60,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 3,
+            RequiredBuildingType = BuildingType.ArcheryRange,
         },
         [UnitType.Bowman] = new UnitDefinition
         {
@@ -72,6 +75,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 60, Food: 20, Iron: 50),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 4,
+            RequiredBuildingType = BuildingType.ArcheryRange,
         },
         [UnitType.Berserker] = new UnitDefinition
         {
@@ -87,6 +91,7 @@ public static class UnitCatalogue
             TrainingDuration = TimeSpan.FromMinutes(35),
             RequiredLonghouseLevel = 6,
             RequiredUnitType = UnitType.Axeman,
+            RequiredBuildingType = BuildingType.ArcheryRange,
         },
         [UnitType.Provisioner] = new UnitDefinition
         {
@@ -148,6 +153,7 @@ public static class UnitCatalogue
             TrainingDuration = TimeSpan.FromHours(1),
             RequiredLonghouseLevel = 10,
             RequiredUnitType = UnitType.Berserker,
+            RequiredBuildingType = BuildingType.ArcheryRange,
         },
         [UnitType.Karve] = new UnitDefinition
         {
@@ -162,6 +168,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 250, Stone: 100, Food: 40, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(45),
             RequiredLonghouseLevel = 5,
+            RequiredBuildingType = BuildingType.Dockyard,
         },
         [UnitType.Longship] = new UnitDefinition
         {
@@ -177,6 +184,7 @@ public static class UnitCatalogue
             TrainingDuration = TimeSpan.FromHours(1.5),
             RequiredLonghouseLevel = 8,
             RequiredUnitType = UnitType.Karve,
+            RequiredBuildingType = BuildingType.Dockyard,
         },
     };
 
@@ -188,16 +196,24 @@ public static class UnitCatalogue
 
     /// <summary>
     /// Whether <paramref name="type"/> is trainable at <paramref name="longhouseLevel"/>:
-    /// the longhouse is high enough, and (recursively) any prerequisite unit is
-    /// itself available at that same longhouse level.
+    /// the longhouse is high enough, its training building (see
+    /// <see cref="UnitDefinition.RequiredBuildingType"/>) stands if
+    /// <paramref name="buildingLevelOf"/> is supplied, and (recursively) any
+    /// prerequisite unit is itself available under the same conditions.
     /// </summary>
+    /// <param name="buildingLevelOf">
+    /// Looks up a settlement's level of a given building type (0 if it has
+    /// none). <see langword="null"/> skips the training-building check
+    /// entirely — the old longhouse-only behavior — so existing callers that
+    /// have no settlement to check against keep working unchanged.
+    /// </param>
     /// <remarks>
     /// "Available" means "unlockable here", not "one stands in the garrison" —
     /// Berserker only needs Axeman to be a buildable option, not an owned unit.
     /// The roster has no cycles, so plain recursion terminates; a cycle would
     /// be a data bug, not something this needs to guard against defensively.
     /// </remarks>
-    public static bool IsAvailable(UnitType type, int longhouseLevel)
+    public static bool IsAvailable(UnitType type, int longhouseLevel, Func<BuildingType, int>? buildingLevelOf = null)
     {
         var definition = Get(type);
         if (longhouseLevel < definition.RequiredLonghouseLevel)
@@ -205,7 +221,12 @@ public static class UnitCatalogue
             return false;
         }
 
+        if (buildingLevelOf is not null && buildingLevelOf(definition.RequiredBuildingType) < 1)
+        {
+            return false;
+        }
+
         return definition.RequiredUnitType is not { } prerequisite
-            || IsAvailable(prerequisite, longhouseLevel);
+            || IsAvailable(prerequisite, longhouseLevel, buildingLevelOf);
     }
 }

@@ -64,6 +64,19 @@ public sealed record BuildingDefinition
     public int RequiredLonghouseLevel { get; init; } = 1;
 
     /// <summary>
+    /// Another of this settlement's own buildings that must stand at
+    /// <see cref="RequiredBuildingLevel"/> or higher before this one may be
+    /// built — a cross-building prerequisite alongside (not instead of)
+    /// <see cref="RequiredLonghouseLevel"/>. <see langword="null"/> (the
+    /// default) means no such prerequisite. Mirrors
+    /// <see cref="Units.UnitDefinition.RequiredUnitType"/>'s shape for units.
+    /// </summary>
+    public BuildingType? RequiredBuildingType { get; init; }
+
+    /// <summary>The level <see cref="RequiredBuildingType"/> must reach. Meaningless when that is <see langword="null"/>.</summary>
+    public int RequiredBuildingLevel { get; init; } = 1;
+
+    /// <summary>
     /// How many construction slots one order for this building occupies while
     /// it is actively building (issue #158). Ignored when
     /// <see cref="OccupiesAllSlots"/> is set.

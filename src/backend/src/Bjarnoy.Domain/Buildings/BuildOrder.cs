@@ -89,6 +89,7 @@ public enum BuildRejection
     AlreadyQueuedOnHex,
     MaxLevelReached,
     LonghousePlacementNotAllowed,
+    RequiredBuildingTooLow,
 
     /// <summary>No construction slot is free, and there is no waiting-queue room either (the non-premium wall).</summary>
     NoFreeSlot,

@@ -354,7 +354,8 @@ public sealed record UnitDefinitionResponse(
     ResourceLine TrainingCost,
     double TrainingSeconds,
     int RequiredLonghouseLevel,
-    string? RequiredUnitType)
+    string? RequiredUnitType,
+    string RequiredBuildingType)
 {
     public static UnitDefinitionResponse From(UnitDefinition definition)
     {
@@ -372,6 +373,7 @@ public sealed record UnitDefinitionResponse(
             ResourceLine.From(definition.TrainingCost),
             definition.TrainingDuration.TotalSeconds,
             definition.RequiredLonghouseLevel,
-            definition.RequiredUnitType?.ToWireName());
+            definition.RequiredUnitType?.ToWireName(),
+            definition.RequiredBuildingType.ToWireName());
     }
 }

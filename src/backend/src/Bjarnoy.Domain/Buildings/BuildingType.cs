@@ -53,6 +53,26 @@ public enum BuildingType
     /// production (issue #53).
     /// </summary>
     ShrineOfFreyja = 10,
+
+    /// <summary>
+    /// A late-game storage tier on grass, gated behind both a level-10
+    /// Longhouse and a level-10 <see cref="StorageHouse"/> of its own — see
+    /// <see cref="BuildingDefinition.RequiredBuildingType"/>.
+    /// </summary>
+    GreatStorehouse = 11,
+
+    /// <summary>
+    /// Trains land troops (the combat/siege roster) in place of the
+    /// Longhouse. No production/storage of its own, and no combat bonus
+    /// (deferred) — unlike <see cref="Tower"/>.
+    /// </summary>
+    ArcheryRange = 12,
+
+    /// <summary>
+    /// Trains ships in place of the Longhouse. Placed on shallow (coastal)
+    /// water, like <see cref="FishingHut"/>.
+    /// </summary>
+    Dockyard = 13,
 }
 
 public static class BuildingTypeExtensions
@@ -70,6 +90,9 @@ public static class BuildingTypeExtensions
         BuildingType.PumpkinFarm => "pumpkinfarm",
         BuildingType.ShrineOfThor => "shrineofthor",
         BuildingType.ShrineOfFreyja => "shrineoffreyja",
+        BuildingType.GreatStorehouse => "greatstorehouse",
+        BuildingType.ArcheryRange => "archeryrange",
+        BuildingType.Dockyard => "dockyard",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

@@ -351,7 +351,12 @@ type BuildableType =
   | 'shrineofthor'
   | 'shrineoffreyja'
   | 'lumberjack'
-  | 'quarry';
+  | 'quarry'
+  | 'storagehouse'
+  | 'archeryrange'
+  | 'dockyard'
+  | 'greatstorehouse'
+  | 'fishinghut';
 
 interface BuildCategory {
   id: string;
@@ -360,20 +365,30 @@ interface BuildCategory {
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
 // MagicTower are Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, Tower is SandOrGrass, and a shrine is buildable on any land
-// hex. Offering a building the backend's own AllowedTerrain would reject is
-// what "messed up categories" on a shore (sand) tile meant — sand used to
-// fall into the same flat bucket as forest/mountain and offer Farm/
-// Lumberjack/Quarry, none of which the backend would ever accept there.
-// FishingHut isn't a land-terrain building at all (RequiresCoastalWater, on
-// a Sea hex) so it belongs in none of these — Build is disabled outright on
-// sea tiles below, so there is currently no ring path to it.
+// Mountain-only, Tower/ArcheryRange are SandOrGrass, and a shrine is
+// buildable on any land hex. Offering a building the backend's own
+// AllowedTerrain would reject is what "messed up categories" on a shore
+// (sand) tile meant — sand used to fall into the same flat bucket as
+// forest/mountain and offer Farm/Lumberjack/Quarry, none of which the
+// backend would ever accept there.
+// FishingHut and Dockyard aren't land-terrain buildings at all
+// (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
+// path to them, offered only on a coastal-water sea tile (see
+// categoriesFor), not through this land-terrain table.
 const SHRINE_CATEGORY: BuildCategory = {
   id: 'religion',
   label: 'Shrines',
   buildings: [
     { type: 'shrineofthor', label: 'Shrine of Thor' },
     { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
+  ],
+};
+const WATER_CATEGORY: BuildCategory = {
+  id: 'water',
+  label: 'Water',
+  buildings: [
+    { type: 'fishinghut', label: 'Fishing Hut' },
+    { type: 'dockyard', label: 'Dockyard' },
   ],
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
@@ -393,6 +408,15 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       buildings: [
         { type: 'tower', label: 'Watchtower' },
         { type: 'magictower', label: 'Magic Tower' },
+        { type: 'archeryrange', label: 'Archery Range' },
+      ],
+    },
+    {
+      id: 'logistics',
+      label: 'Logistics',
+      buildings: [
+        { type: 'storagehouse', label: 'Storehouse' },
+        { type: 'greatstorehouse', label: 'Great Storehouse' },
       ],
     },
     SHRINE_CATEGORY,
@@ -412,7 +436,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
-  if (tile.terrain === 'sea') return [];
+  if (tile.terrain === 'sea') return tile.isCoastalWater ? [WATER_CATEGORY] : [];
   return BUILD_CATEGORIES[tile.terrain];
 }
 
@@ -431,6 +455,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   resource: 'var(--food)',
   defense: 'var(--iron)',
   religion: 'var(--shrine)',
+  logistics: 'var(--stone)',
+  water: 'var(--water)',
 };
 
 const rootActions = computed<RingAction[]>(() => {
@@ -487,18 +513,28 @@ const rootActions = computed<RingAction[]>(() => {
         hint: tile.buildingType === 'longhouse' ? "Can't raze the longhouse" : 'Not wired to the backend yet',
       },
     ];
-    // Issue #40 phase 1: "build units in longhouse" — training is queued
-    // against the settlement from its longhouse, so that one building type
-    // gets an extra action here.
-    if (tile.buildingType === 'longhouse') {
+    // Training is queued against the settlement, not a specific hex, so the
+    // action itself is the same TrainingModal regardless of which building
+    // opens it (see onRingSelect's 'train' case) — only which tiles offer the
+    // action changes. Originally longhouse-only (issue #40 phase 1); the
+    // archery range and dockyard now train land troops and ships
+    // respectively (UnitDefinition.RequiredBuildingType), so they get the
+    // same action. The backend enforces the real gate either way — this is
+    // just where the UI surfaces the button.
+    if (
+      tile.buildingType === 'longhouse'
+      || tile.buildingType === 'archeryrange'
+      || tile.buildingType === 'dockyard'
+    ) {
       actions.push({ id: 'train', label: 'Train units' });
     }
     return actions;
   }
   if (isMineTile.value) {
+    const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
     return [
       { id: 'details', label: 'Details' },
-      { id: 'build', label: 'Build', disabled: tile.terrain === 'sea', hint: 'Open water' },
+      { id: 'build', label: 'Build', disabled: !buildableSea, hint: buildableSea ? undefined : 'Open water' },
     ];
   }
   return [{ id: 'details', label: 'Details' }];

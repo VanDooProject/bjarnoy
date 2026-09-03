@@ -28,7 +28,7 @@
 // covered), each asset *family* actually used — e.g. every `grasstile_*`
 // file — is pulled in with one `import.meta.glob`, scoped to that family's
 // filename prefix so unused families (of which the pack has a few — no
-// lumberjack/quarry art exists, for instance) are still never bundled.
+// quarry art exists, for instance) are still never bundled.
 import { Assets, Texture } from 'pixi.js';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
@@ -81,15 +81,15 @@ const SPLIT_TERRAIN_TOP = import.meta.glob(
   { eager: true, import: 'default' },
 ) as AssetModules;
 const ROOT_BUILDING_LEVELED = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/towerbuilding_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{towerbuilding,dockyard}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,farm_crop,farm_pumpkin}_*_base.png',
+  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse}_*_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,farm_crop,farm_pumpkin}_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse}_*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 // One glob per river shape (not a single `rivertile_*` prefix glob): the
@@ -227,15 +227,15 @@ const SOURCES = {
     grass: buildPlain(SPLIT_TERRAIN_BASE, 'grasstile_'),
     forest: buildPlain(SPLIT_TERRAIN_BASE, 'foresttile_'),
     hut: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
-    longhouse: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
-    // No shrine art exists in the pack yet (issue #53) — reusing the hut
-    // sprite as a placeholder, the same stand-in longhouse already uses
-    // above, rather than leaving the key unmapped (baseTextureFor's lookup
-    // is a non-null assertion, so an unmapped key would crash rendering).
-    shrineofthor: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
-    shrineoffreyja: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
+    longhouse: buildPlain(SPLIT_BUILDING_BASE, 'greathall_'),
+    shrineofthor: buildPlain(SPLIT_BUILDING_BASE, 'thorshrine_'),
+    shrineoffreyja: buildPlain(SPLIT_BUILDING_BASE, 'freyjashrine_'),
     farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
     pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
+    lumberjack: buildPlain(SPLIT_BUILDING_BASE, 'lumberjackhut_'),
+    storagehouse: buildPlain(SPLIT_BUILDING_BASE, 'storagebuilding_'),
+    archeryrange: buildPlain(SPLIT_BUILDING_BASE, 'archerybuilding_'),
+    greatstorehouse: buildPlain(SPLIT_BUILDING_BASE, 'bigstoragehouse_'),
     // Unlike towerbuilding, the pack draws the fishing hut with a real
     // per-orientation sprite (its dock visibly points a different way in
     // each of the six files) rather than one image reused at every
@@ -251,19 +251,24 @@ const SOURCES = {
    * `variant000`/`variant001`), same shape as grass/forest's top layer.
    */
   coastalBase: buildIndexed(ROOT_TERRAIN, 'coastalwatertile_'),
-  /** Tower isn't base/top split, so its level swap replaces the *base* texture. */
+  /** Tower and Dockyard aren't base/top split, so their level swap replaces the *base* texture. */
   baseIndexed: {
     tower: buildIndexed(ROOT_BUILDING_LEVELED, 'towerbuilding_'),
+    dockyard: buildIndexed(ROOT_BUILDING_LEVELED, 'dockyard_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   top: {
     grass: buildIndexed(SPLIT_TERRAIN_TOP, 'grasstile_'),
     forest: buildIndexed(SPLIT_TERRAIN_TOP, 'foresttile_'),
     hut: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
-    longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
-    shrineofthor: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
-    shrineoffreyja: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
+    longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'greathall_'),
+    shrineofthor: buildIndexed(SPLIT_BUILDING_TOP, 'thorshrine_'),
+    shrineoffreyja: buildIndexed(SPLIT_BUILDING_TOP, 'freyjashrine_'),
     farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),
     pumpkinfarm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_pumpkin_'),
+    lumberjack: buildIndexed(SPLIT_BUILDING_TOP, 'lumberjackhut_'),
+    storagehouse: buildIndexed(SPLIT_BUILDING_TOP, 'storagebuilding_'),
+    archeryrange: buildIndexed(SPLIT_BUILDING_TOP, 'archerybuilding_'),
+    greatstorehouse: buildIndexed(SPLIT_BUILDING_TOP, 'bigstoragehouse_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   /**
    * The art pack's four river shapes — a `RiverTileShape.Mouth` (see

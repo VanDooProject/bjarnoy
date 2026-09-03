@@ -70,10 +70,12 @@ public class BuildingCatalogueTests
         Assert.False(definition.AllowsTerrain(Terrain.Sea));
     }
 
-    [Fact]
-    public void The_tower_is_gated_to_grass_or_sand()
+    [Theory]
+    [InlineData(BuildingType.Tower)]
+    [InlineData(BuildingType.ArcheryRange)]
+    public void The_tower_and_archery_range_are_gated_to_grass_or_sand(BuildingType type)
     {
-        var definition = BuildingCatalogue.Get(BuildingType.Tower, 1);
+        var definition = BuildingCatalogue.Get(type, 1);
 
         Assert.True(definition.AllowsTerrain(Terrain.Grass));
         Assert.True(definition.AllowsTerrain(Terrain.Sand));
@@ -82,12 +84,24 @@ public class BuildingCatalogueTests
         Assert.False(definition.AllowsTerrain(Terrain.Sea));
     }
 
-    [Fact]
-    public void The_fishing_hut_requires_coastal_water_instead_of_a_land_terrain()
+    [Theory]
+    [InlineData(BuildingType.FishingHut)]
+    [InlineData(BuildingType.Dockyard)]
+    public void The_fishing_hut_and_dockyard_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
     {
-        var definition = BuildingCatalogue.Get(BuildingType.FishingHut, 1);
+        var definition = BuildingCatalogue.Get(type, 1);
 
         Assert.True(definition.RequiresCoastalWater);
+    }
+
+    [Fact]
+    public void The_great_storehouse_requires_a_level_10_storage_house_alongside_the_longhouse()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1);
+
+        Assert.Equal(10, definition.RequiredLonghouseLevel);
+        Assert.Equal(BuildingType.StorageHouse, definition.RequiredBuildingType);
+        Assert.Equal(10, definition.RequiredBuildingLevel);
     }
 
     [Fact]
@@ -702,6 +716,52 @@ public class SettlementTests
             BuildingType.Tower, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.LonghouseTooLow, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_great_storehouse_is_refused_below_storage_house_level_10()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 9),
+            ],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 9)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 9)]).Capacity,
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.GreatStorehouse, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_great_storehouse_is_accepted_once_the_storage_house_reaches_level_10()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 10),
+            ],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 10)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 10), (BuildingType.StorageHouse, 10)]).Capacity,
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.GreatStorehouse, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]

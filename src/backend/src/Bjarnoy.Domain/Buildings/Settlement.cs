@@ -956,6 +956,15 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
         }
 
+        if (definition.RequiredBuildingType is { } requiredType)
+        {
+            var requiredLevel = Buildings.FirstOrDefault(b => b.Type == requiredType).Level;
+            if (requiredLevel < definition.RequiredBuildingLevel)
+            {
+                return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow);
+            }
+        }
+
         // A voluntary spend — including a brand-new build order — must not
         // dip into what is already reserved for the waiting queue (issue #158
         // stage 1c).
@@ -1691,7 +1700,7 @@ public sealed record Settlement
             return TrainDecision.Rejected(TrainRejection.InvalidCount);
         }
 
-        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel))
+        if (!UnitCatalogue.IsAvailable(type, LonghouseLevel, t => Buildings.FirstOrDefault(b => b.Type == t).Level))
         {
             return TrainDecision.Rejected(TrainRejection.UnitNotAvailable);
         }
