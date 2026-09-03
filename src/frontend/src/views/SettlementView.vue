@@ -494,10 +494,19 @@ const rootActions = computed<RingAction[]>(() => {
         hint: tile.buildingType === 'longhouse' ? "Can't raze the longhouse" : 'Not wired to the backend yet',
       },
     ];
-    // Issue #40 phase 1: "build units in longhouse" — training is queued
-    // against the settlement from its longhouse, so that one building type
-    // gets an extra action here.
-    if (tile.buildingType === 'longhouse') {
+    // Training is queued against the settlement, not a specific hex, so the
+    // action itself is the same TrainingModal regardless of which building
+    // opens it (see onRingSelect's 'train' case) — only which tiles offer the
+    // action changes. Originally longhouse-only (issue #40 phase 1); the
+    // archery range and dockyard now train land troops and ships
+    // respectively (UnitDefinition.RequiredBuildingType), so they get the
+    // same action. The backend enforces the real gate either way — this is
+    // just where the UI surfaces the button.
+    if (
+      tile.buildingType === 'longhouse'
+      || tile.buildingType === 'archeryrange'
+      || tile.buildingType === 'dockyard'
+    ) {
       actions.push({ id: 'train', label: 'Train units' });
     }
     return actions;
