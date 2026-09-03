@@ -72,8 +72,8 @@ Grain also feeds population; a settlement that runs its grain to zero stops grow
 
 - **Longhouse** — the anchor. Its level sets claim radius, build slots and settlement cap.
 - **Production** — lumber camp, quarry, farm, fishing dock. Placed on the matching terrain hex.
-- **Military** — barracks, shipyard, wall. Walls are placed on a border hex and only defend that approach, which is what makes the choice of *which* border hex interesting.
-- **Logistics** — warehouse, harbour, market.
+- **Military** — the archery range trains the land army (spearmen through catapults) instead of the longhouse; the dockyard trains ships instead of the longhouse and, like the fishing hut, must stand on shallow (coastal) water. Neither carries a combat bonus of its own yet — that's a later pass. Wall is placed on a border hex and only defends that approach, which is what makes the choice of *which* border hex interesting.
+- **Logistics** — warehouse, harbour, market. The great storehouse is a late-game storage tier gated behind both a level-10 longhouse *and* a level-10 storage house of the settlement's own — the first cross-building prerequisite in the tech tree, not just a longhouse-level gate.
 
 Buildings occupy a hex. There are more useful hexes than build slots, so expansion and demolition are both real decisions.
 
