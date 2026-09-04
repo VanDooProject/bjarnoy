@@ -20,6 +20,7 @@ vi.hoisted(() => {
 });
 
 const TILE_W = 168;
+const TILE_H = (TILE_W * 92) / 200;
 
 function maskOver(minX: number, minY: number, maxX: number, maxY: number): WaterMask {
   const region = waterMaskRegion({ minX, minY, maxX, maxY }, TILE_W);
@@ -47,11 +48,11 @@ describe('WaterLayer', () => {
   it('never eats a hex click', () => {
     // The mesh covers the whole viewport and sits over every hex, army marker
     // and waypoint pin under it — same reason the fog quads are eventMode none.
-    expect(new WaterLayer('world', TILE_W).mesh.eventMode).toBe('none');
+    expect(new WaterLayer('world', TILE_W, TILE_H).mesh.eventMode).toBe('none');
   });
 
   it('stays hidden until a mask has been baked', () => {
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     layer.tick(0);
     expect(layer.mesh.visible).toBe(false);
     layer.setMask(maskOver(-500, -300, 500, 300));
@@ -60,7 +61,7 @@ describe('WaterLayer', () => {
   });
 
   it('hides when suppressed or when the water flag is off (§3.6)', () => {
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     layer.setMask(maskOver(-500, -300, 500, 300));
 
     layer.setSuppressed(true);
@@ -74,7 +75,7 @@ describe('WaterLayer', () => {
   });
 
   it('maps the effect flags onto their uniforms', () => {
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     const u = uniformsOf(layer);
 
     layer.tick(0);
@@ -92,14 +93,14 @@ describe('WaterLayer', () => {
   });
 
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {
-    const layer = new WaterLayer('settlement', TILE_W);
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
     waterDebugFlags.seaBody = true;
     layer.tick(0);
     expect(uniformsOf(layer).uSeaBody).toBe(0);
   });
 
   it('advances the wave clock at waveSpeed and the base clock at 1x', () => {
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     const u = uniformsOf(layer);
     layer.tick(1000);
     waterDebugTuning.waveSpeed = 2;
@@ -110,7 +111,7 @@ describe('WaterLayer', () => {
   });
 
   it('places the quad on exactly the world rect its mask was baked over', () => {
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     const mask = maskOver(-400, -250, 600, 350);
     layer.setMask(mask);
 
@@ -124,7 +125,7 @@ describe('WaterLayer', () => {
     // The mesh is a child of the camera-transformed `world` container, so it
     // must never carry a transform of its own — mask UV and world position stay
     // locked together only because the quad *is* the baked rect.
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     layer.setMask(maskOver(-400, -250, 600, 350));
     const first = Array.from(layer.mesh.geometry.getBuffer('aPosition').data);
 
@@ -141,7 +142,7 @@ describe('WaterLayer', () => {
     // A pan at the same zoom re-bakes at the same texel dimensions; allocating
     // a fresh GPU texture per pan (and destroying one still bound to a shader)
     // is what this avoids.
-    const layer = new WaterLayer('world', TILE_W);
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
     layer.setMask(maskOver(-400, -250, 600, 350));
     const before = layer.mesh.shader!.resources.uWaterMask;
     layer.setMask(maskOver(-380, -230, 620, 370));

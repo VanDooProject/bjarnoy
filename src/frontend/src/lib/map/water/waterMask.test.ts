@@ -5,6 +5,9 @@ import {
   euclideanDistanceTransform,
   FOAM_BLEED_TILES,
   FOAM_REACH_TILES,
+  groundSquash,
+  hexMitreDistance,
+  topFaceHalfPlanes,
   waterNoiseSeed,
   type TerrainLookup,
 } from './waterMask';
@@ -28,6 +31,28 @@ function region(): WaterMaskRegion {
 function channel(mask: ReturnType<typeof bakeWaterMask>, x: number, y: number, c: 0 | 1 | 2 | 3): number {
   return mask.data[(y * mask.width + x) * 4 + c];
 }
+
+/** The R channel at a world point. */
+function sample(mask: ReturnType<typeof bakeWaterMask>, r: WaterMaskRegion, worldX: number, worldY: number): number {
+  return channel(
+    mask,
+    Math.floor((worldX - r.rect.minX) / r.texelWorldSize),
+    Math.floor((worldY - r.rect.minY) / r.texelWorldSize),
+    0,
+  );
+}
+
+/**
+ * One texel's worth of the R ramp, in channel units. The mask stores one value
+ * per texel and these tests read the texel a point falls in, so nothing can be
+ * asserted tighter than this without testing the raster rather than the metric.
+ */
+function texelSlack(r: WaterMaskRegion): number {
+  return (255 * r.texelWorldSize) / (FOAM_REACH_TILES * TILE_W);
+}
+
+/** A single land hex with open water all round it — the cleanest shape to measure a metric against. */
+const ONE_HEX_ISLAND: TerrainLookup = { isLand: (q, r) => q === 0 && r === 0 };
 
 describe('euclideanDistanceTransform', () => {
   it('is zero on the seeds and exact off them', () => {
@@ -106,26 +131,47 @@ describe('bakeWaterMask', () => {
     expect(sawLand && sawWater).toBe(true);
   });
 
-  it('ramps R over FOAM_REACH_TILES, so a texel one tile offshore reads ~1/1.5', () => {
+  it('ramps R over FOAM_REACH_TILES, measured perpendicular to the edge the art draws', () => {
+    // Measured out from a real top-face edge rather than by counting texels
+    // from the first water texel: the coastline of a hex grid zig-zags, so "one
+    // tile east of the first water texel" is not one tile from land.
     const r = region();
-    const mask = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
-    const texelsPerTile = TILE_W / r.texelWorldSize;
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const squash = groundSquash(TILE_W, TILE_H);
 
-    // Walk east along one scanline from the first water texel.
-    const y = Math.floor(mask.height / 2);
-    let firstWater = -1;
-    for (let x = 0; x < mask.width; x++) {
-      if (channel(mask, x, y, 3) === 255) {
-        firstWater = x;
-        break;
-      }
+    for (const tilesOut of [0.25, 0.5, 1.0]) {
+      // Straight up from the middle of the hex's flat top edge. The offset is a
+      // ground distance, so on screen it is foreshortened by `squash`.
+      const value = sample(mask, r, grid.x + TILE_W / 2, grid.y - tilesOut * TILE_W * squash);
+      const expected = (255 * tilesOut) / FOAM_REACH_TILES;
+      expect(Math.abs(value - expected)).toBeLessThan(texelSlack(r));
     }
-    expect(firstWater).toBeGreaterThan(0);
+  });
 
-    const oneTileOut = firstWater + Math.round(texelsPerTile) - 1;
-    const expected = 255 / FOAM_REACH_TILES;
-    expect(channel(mask, oneTileOut, y, 0)).toBeGreaterThan(expected * 0.85);
-    expect(channel(mask, oneTileOut, y, 0)).toBeLessThan(expected * 1.15);
+  it('measures distance along the ground, not on screen — so the band is not painted on the glass', () => {
+    // The isometric projection squashes the ground to ~53% in y. A band of
+    // constant *screen* distance around a tile is not the projection of a band
+    // of constant ground distance, and reads as a decal in front of the map
+    // rather than as foam lying on the water. So the same ground distance north
+    // of a hex must come out at the same value as east of it — which on screen
+    // is a visibly smaller offset.
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+    const squash = groundSquash(TILE_W, TILE_H);
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const out = 0.4 * TILE_W;
+
+    const north = sample(mask, r, grid.x + TILE_W / 2, grid.y - out * squash);
+    // Perpendicular to the upper-right edge, whose ground-space outward normal
+    // is 30 degrees above the x axis.
+    const nx = Math.cos(Math.PI / 6);
+    const ny = -Math.sin(Math.PI / 6);
+    const edgeMid = { x: grid.x + (7 * TILE_W) / 8, y: grid.y + TILE_H / 4 };
+    const diagonal = sample(mask, r, edgeMid.x + nx * out, edgeMid.y + ny * out * squash);
+
+    expect(Math.abs(north - diagonal)).toBeLessThan(texelSlack(r) * 1.5);
+    expect(squash).toBeLessThan(0.6);
   });
 
   it('is monotonic outward from the coast and saturates past the reach', () => {
@@ -264,5 +310,80 @@ describe('mask/art alignment (§3.4)', () => {
       expect(at(skirt)).not.toEqual(hex);
       expect(at(skirt)).toEqual({ q: hex.q, r: hex.r + 1 });
     }
+  });
+});
+
+describe('mitred hex-edge distance', () => {
+  // Why the field is not a plain euclidean distance transform: a euclidean band
+  // rounds every convex corner over a radius equal to its own width, and a hex
+  // edge is half a tile long while the foam band is a third of one — so on a hex
+  // coastline the corners dominate and the band reads as a soft blob rather than
+  // as something following the shoreline.
+  const r = waterMaskRegion({ minX: -600, maxX: 600, minY: -400, maxY: 400 }, TILE_W);
+  const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+  const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+  const squash = groundSquash(TILE_W, TILE_H);
+
+  it('is constant along a straight run parallel to a tile edge', () => {
+    // Sampling parallel to the flat top edge at a fixed perpendicular offset
+    // must read the same value all the way along. That is what "straight edges"
+    // means: the band's outer boundary is a line parallel to the tile edge, not
+    // an arc swung from its endpoints.
+    const offset = 0.3 * TILE_W * squash;
+    const y = grid.y - offset;
+    const values = [0.3, 0.45, 0.5, 0.6, 0.7].map((t) => sample(mask, r, grid.x + TILE_W * t, y));
+    for (const value of values) expect(Math.abs(value - values[0])).toBeLessThan(texelSlack(r));
+  });
+
+  it('mitres the corners instead of rounding them off', () => {
+    // Asserted on the metric itself rather than through the mask: the raster
+    // stores one value per texel, and the difference this is about is smaller
+    // than a texel's worth of the ramp.
+    //
+    // Straight out along a corner's bisector a mitred field reads *lower* than a
+    // euclidean one by cos(30 degrees) — which is the same thing as saying its
+    // level set reaches 1/cos(30) further out there, so the band comes to a
+    // point at the corner instead of being cut off by an arc.
+    const planes = topFaceHalfPlanes(TILE_W, TILE_H);
+    const groundGrid = { x: grid.x, y: grid.y / squash };
+    const out = 0.3 * TILE_W;
+
+    // Perpendicular from the middle of the flat top edge, and along the east
+    // vertex's bisector — the same ground distance in both cases.
+    const groundH = TILE_H / squash;
+    const fromEdge = hexMitreDistance(grid.x + TILE_W / 2, groundGrid.y - out, groundGrid.x, groundGrid.y, planes);
+    const fromCorner = hexMitreDistance(
+      grid.x + TILE_W + out,
+      groundGrid.y + groundH / 2,
+      groundGrid.x,
+      groundGrid.y,
+      planes,
+    );
+
+    expect(fromEdge).toBeCloseTo(out, 6);
+    expect(fromCorner).toBeCloseTo(out * Math.cos(Math.PI / 6), 6);
+  });
+
+  it('is zero exactly on a top-face edge, which is where the art\'s coastline is', () => {
+    const planes = topFaceHalfPlanes(TILE_W, TILE_H);
+    const groundGrid = { x: grid.x, y: grid.y / squash };
+    for (const t of [0.3, 0.5, 0.7]) {
+      expect(hexMitreDistance(grid.x + TILE_W * t, groundGrid.y, groundGrid.x, groundGrid.y, planes)).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('is negative inside the hex', () => {
+    const planes = topFaceHalfPlanes(TILE_W, TILE_H);
+    const groundGrid = { x: grid.x, y: grid.y / squash };
+    const centre = hexMitreDistance(
+      grid.x + TILE_W / 2,
+      groundGrid.y + TILE_H / squash / 2,
+      groundGrid.x,
+      groundGrid.y,
+      planes,
+    );
+    expect(centre).toBeLessThan(0);
+    // A regular flat-top hexagon's inradius is w * sqrt(3) / 4.
+    expect(-centre).toBeCloseTo((TILE_W * Math.sqrt(3)) / 4, 6);
   });
 });

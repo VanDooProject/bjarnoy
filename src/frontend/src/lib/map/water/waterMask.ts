@@ -6,7 +6,8 @@
 // So the shader needs a distance field, and that means a CPU-baked data
 // texture — the same shape of thing `demoFogMask` bakes, over a different
 // grid (waterMaskLayout.ts) and with a different transform.
-import { isoPixelToAxial } from '../../hex/geometry';
+import { hexesInRadius } from '../../hex/coords';
+import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
 import type { WaterMaskRegion } from './waterMaskLayout';
 
 /**
@@ -43,6 +44,86 @@ export interface WaterMask {
 }
 
 const EDT_INF = 1e20;
+
+/**
+ * How far out the exact hex-edge distance below is computed, in hexes. Three
+ * covers FOAM_REACH_TILES with room to spare; past it the raster transform's
+ * value is used, and since R saturates at 1.5 tiles there is no seam where the
+ * two meet.
+ */
+const MITRE_REFINE_HEXES = 3;
+
+/**
+ * How much the isometric projection squashes the ground plane vertically.
+ *
+ * A regular flat-top hexagon of width `w` is `w * sqrt(3)/2` tall; the tile art
+ * draws it `TILE_H` tall, which is 0.46 `w`. So the ground is foreshortened to
+ * about 53% in y, and anything that is supposed to *lie on* that ground —
+ * a foam band of constant width, a caustic ribbon — has to be built in a space
+ * where y is divided by this before it will look like it is lying on it rather
+ * than painted on the glass in front of it.
+ */
+export function groundSquash(tileWidth: number, tileHeight: number): number {
+  return tileHeight / ((tileWidth * Math.sqrt(3)) / 2);
+}
+
+export interface HalfPlane {
+  nx: number;
+  ny: number;
+  /** Dot of the normal with a point on the edge — the plane's own offset. */
+  d: number;
+}
+
+/**
+ * The six outward half-planes of a top-face hexagon **in ground space**,
+ * relative to a hex's grid position. Identical for every hex, so computed once
+ * per bake.
+ *
+ * Ground space is screen space with y divided by `groundSquash`, which
+ * un-foreshortens the isometric projection — so in it the top face is a regular
+ * hexagon and a distance is a real distance along the ground.
+ */
+export function topFaceHalfPlanes(tileWidth: number, tileHeight: number): HalfPlane[] {
+  const points = isoTopPoints(tileWidth, tileHeight / groundSquash(tileWidth, tileHeight));
+  return points.map((a, i) => {
+    const b = points[(i + 1) % points.length];
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const length = Math.hypot(ex, ey);
+    // isoTopPoints runs clockwise in screen space (y down), so (ey, -ex) points
+    // out of the hexagon.
+    const nx = ey / length;
+    const ny = -ex / length;
+    return { nx, ny, d: nx * a.x + ny * a.y };
+  });
+}
+
+/**
+ * Distance from a world point to one hex's top face, as the **max over its six
+ * outward half-planes** — negative inside, positive outside.
+ *
+ * This is a mitre distance, not a euclidean one, and that is the entire point.
+ * A euclidean distance field rounds every convex corner over a radius equal to
+ * the band drawn from it, and a hex edge is only half a tile long while the foam
+ * band is a third of one — so on a hex coastline the corners dominate and a
+ * euclidean band reads as a soft blob rather than as something following the
+ * shoreline. Level sets of this are the hexagon scaled outward with the corners
+ * kept sharp, so a band drawn from it has straight edges parallel to the tile
+ * edges and mitred joins, which is what the shoreline actually looks like.
+ *
+ * It agrees with the euclidean distance exactly along every edge (both are the
+ * perpendicular distance there) and is zero on the edge itself, so §3.4's
+ * mask/art alignment is unaffected — if anything it is sharper, since this is
+ * exact at every texel rather than quantised to the texel raster.
+ */
+export function hexMitreDistance(x: number, y: number, originX: number, originY: number, planes: HalfPlane[]): number {
+  let best = -Infinity;
+  for (const plane of planes) {
+    const value = plane.nx * (x - originX) + plane.ny * (y - originY) - plane.d;
+    if (value > best) best = value;
+  }
+  return best;
+}
 
 /**
  * Felzenszwalb & Huttenlocher's exact 1D squared-distance transform:
@@ -161,18 +242,62 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
     }
   }
 
+  // The raster transform gives every texel a distance cheaply. Near a coast it
+  // is then replaced by the exact hex-edge distance below — that is where the
+  // shader actually reads the field, and where a euclidean metric's rounded
+  // corners are visible.
   const distanceFromLand = euclideanDistanceTransform(land, width, height);
   const distanceFromWater = euclideanDistanceTransform(water, width, height);
 
-  const reach = (FOAM_REACH_TILES * tileWidth) / texelWorldSize;
-  const bleed = (FOAM_BLEED_TILES * tileWidth) / texelWorldSize;
+  const planes = topFaceHalfPlanes(tileWidth, tileHeight);
+  const squash = groundSquash(tileWidth, tileHeight);
+  const refineWithin = (FOAM_REACH_TILES + 0.5) * tileWidth;
+  const disc = hexesInRadius({ q: 0, r: 0 }, MITRE_REFINE_HEXES);
+
+  const reachWorld = FOAM_REACH_TILES * tileWidth;
+  const bleedWorld = FOAM_BLEED_TILES * tileWidth;
 
   const data = new Uint8Array(count * 4);
-  for (let i = 0; i < count; i++) {
-    data[i * 4 + 0] = Math.round(255 * Math.min(1, distanceFromLand[i] / reach));
-    data[i * 4 + 1] = Math.round(255 * Math.min(1, distanceFromWater[i] / bleed));
-    data[i * 4 + 2] = seed[i];
-    data[i * 4 + 3] = water[i] ? 255 : 0;
+  for (let y = 0; y < height; y++) {
+    const wy = rect.minY + (y + 0.5) * texelWorldSize;
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const isWater = water[i] === 1;
+      let outward = distanceFromLand[i] * texelWorldSize;
+      let inward = distanceFromWater[i] * texelWorldSize;
+
+      // Only texels near a coast pay for the exact metric: far out to sea both
+      // channels are saturated anyway, and on a large zoomed-out world map that
+      // is almost every texel.
+      const nearCoast = isWater ? outward : inward;
+      if (nearCoast < refineWithin) {
+        const wx = rect.minX + (x + 0.5) * texelWorldSize;
+        const hex = isoPixelToAxial({ x: wx, y: wy }, tileWidth, tileHeight);
+        let best = Infinity;
+        for (const offset of disc) {
+          const q = hex.q + offset.q;
+          const r = hex.r + offset.r;
+          if (terrain.isLand(q, r) === isWater) {
+            const origin = isoGridPosition({ q, r }, tileWidth, tileHeight);
+            // Both the sample point and the hex are lifted into ground space,
+            // so the resulting band is a constant width *on the ground* and
+            // therefore reads as lying on it.
+            const d = hexMitreDistance(wx, wy / squash, origin.x, origin.y / squash, planes);
+            if (d < best) best = d;
+          }
+        }
+        if (best !== Infinity) {
+          const exact = Math.max(0, best);
+          if (isWater) outward = exact;
+          else inward = exact;
+        }
+      }
+
+      data[i * 4 + 0] = Math.round(255 * Math.min(1, outward / reachWorld));
+      data[i * 4 + 1] = Math.round(255 * Math.min(1, inward / bleedWorld));
+      data[i * 4 + 2] = seed[i];
+      data[i * 4 + 3] = isWater ? 255 : 0;
+    }
   }
   return { data, width, height, region };
 }

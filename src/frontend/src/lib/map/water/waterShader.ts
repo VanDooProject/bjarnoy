@@ -90,6 +90,7 @@ uniform float uFoamSurge;
 uniform float uSurgeRate;
 uniform vec2 uFoamWind;
 uniform vec2 uCoastRange;
+uniform float uGroundSquash;
 uniform float uCaustics;
 uniform float uCausticScale;
 uniform float uCausticBands;
@@ -256,8 +257,8 @@ float waveField(vec2 world, float t) {
 // of them. Scattered arcs read as an ocean seen from orbit and are what
 // docs/design/img/worldmap.png shows; ribbons read as shallow water seen from a
 // few metres up. Which one a view gets is uSurface, set from the view's mode.
-float causticField(vec2 world, float t) {
-  vec2 p = world * uCausticScale;
+float causticField(vec2 ground, float t) {
+  vec2 p = ground * uCausticScale;
 
   // Two counter-drifting samples of the same field: the loops reshape as they
   // move instead of sliding across the water as a rigid pattern.
@@ -294,6 +295,15 @@ vec4 maskDebugColor(vec4 m) {
 
 void main() {
   vec4 m = sampleMask();
+
+  // Ground space: world space with y un-foreshortened, so a pattern built here
+  // reads as lying on the isometric ground plane rather than painted on the
+  // glass in front of it. Everything with a shape of its own — the caustic
+  // ribbons, the foam's ragged edge, the sea mottle — is evaluated here rather
+  // than in vWorld. (The wave arcs of §4.2 are the deliberate exception: they
+  // are the prototype's stroked marks *on* the sea, and it draws them in screen
+  // space.)
+  vec2 vGround = vec2(vWorld.x, vWorld.y / uGroundSquash);
 
   if (uShowMask > 0.5) {
     vec4 dbg = maskDebugColor(m);
@@ -332,7 +342,7 @@ void main() {
     // job is that a large expanse of open water isn't a flat fill; the finer
     // octaves would cost the same each and be invisible under the waves and
     // foam drawn on top.
-    float mottle = noise(vWorld * uMottleScale) - 0.5;
+    float mottle = noise(vGround * uMottleScale) - 0.5;
     col += mottle * uSeaMottle;
     alpha = 1.0;
   }
@@ -352,7 +362,7 @@ void main() {
     if (uCaustics > 0.5) {
       // Close up. No coast fade: in the reference look the ribbons run right up
       // to the foam, and the foam composites over them below anyway.
-      float ribbon = causticField(vWorld, uWaveTime) * uCausticAlpha;
+      float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha;
       acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
     } else {
       float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.r);
@@ -381,7 +391,7 @@ void main() {
     // World-anchored, slowly drifting — the same reasoning as fog's cloud
     // field: anchored to the world rather than the screen, the pattern neither
     // stretches with world size nor slides out from under a camera pan.
-    vec2 np = vWorld * uFoamNoiseScale;
+    vec2 np = vGround * uFoamNoiseScale;
     float d = dist + uFoamNoise * uFoamWidth * (fbm(np + uFoamWind * uTime) - 0.5);
 
     // The band's width breathes. The low-frequency term de-synchronises the
