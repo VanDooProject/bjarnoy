@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Issue #53: shrines are new BuildingTypes with no dedicated art in the
@@ -17,7 +18,7 @@ test('building a shrine from the ring menu places it without a rendering error',
   // Same reasoning as settlement-interactions.spec.ts's building-placement
   // test: foundSettlement() plus driving a real click through the render
   // runs close to (and on CI, over) the global 45s budget.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;

@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { distanceFrom, foundSettlement, rectsOf } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
@@ -26,7 +27,7 @@ import { distanceFrom, foundSettlement, rectsOf } from './helpers';
 // docs/ci/e2e-sharding.md for the CI run that motivated this split.
 test.describe('ring menu drill-down', () => {
   test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', { tag: '@g1' }, async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -148,7 +149,7 @@ test.describe('ring menu drill-down', () => {
     // watchtower is RequiredLonghouseLevel 2 (BuildingCatalogue.cs), so a
     // fresh level-1 realm cannot place one, and the ring says why rather than
     // letting the click silently do nothing.
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -240,7 +241,7 @@ test.describe('ring menu drill-down', () => {
     // looked exactly as clickable as when affordable, and demo mode would
     // bump the level for free regardless. Same disabled+hint convention as
     // Raze/Train/the sea-tile Build action, not a new affordance.
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -299,7 +300,7 @@ test.describe('ring menu drill-down', () => {
   });
 
   test('a mousedown outside a ring bubble closes the ring and starts dragging the map', { tag: '@g1' }, async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -325,7 +326,7 @@ test.describe('ring menu drill-down', () => {
   });
 
   test('hovering the map while a ring is open does not show the tile tooltip', { tag: '@g1' }, async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -344,7 +345,7 @@ test.describe('ring menu drill-down', () => {
   });
 
   test('clicking "World map" in the header while a ring is open navigates instead of the ring intercepting it', { tag: '@g1' }, async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -365,7 +366,7 @@ test.describe('ring menu drill-down', () => {
   });
 
   test('clicking elsewhere on the map with a ring open just closes it, instead of opening a new one there', { tag: '@g3' }, async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -394,7 +395,7 @@ test.describe('ring menu drill-down', () => {
   // Issue #141: Escape had never been wired up anywhere the ring menu is
   // used — only an outside click/right-click on the backdrop closed it.
   test('pressing Escape closes the ring menu', { tag: '@g1' }, async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -417,7 +418,7 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
   test.use({ hasTouch: true });
 
   test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;

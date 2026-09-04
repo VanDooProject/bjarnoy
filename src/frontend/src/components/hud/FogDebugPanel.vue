@@ -5,6 +5,7 @@
 // panel does both from a click. Mounted by SettlementView.vue only when the
 // URL has ?debug=1 (see its own `showFogDebug`).
 import { reactive, watch } from 'vue';
+import DebugPanel from './DebugPanel.vue';
 import { fogDebugFlags, fogDebugTuning, type FogDebugFlags } from '../../lib/map/HexMapRenderer';
 
 const emit = defineEmits<{ change: [] }>();
@@ -48,8 +49,7 @@ watch(
 </script>
 
 <template>
-  <div class="fog-debug panel">
-    <div class="title">Fog debug</div>
+  <DebugPanel class="fog-debug" title="Fog debug" storage-key="fog">
     <label v-for="(label, key) in LABELS" :key="key" class="row">
       <input type="checkbox" v-model="flags[key]" />
       <span>{{ label }}</span>
@@ -68,26 +68,14 @@ watch(
         v-model.number="tuning.driftSpeed"
       />
     </div>
-  </div>
+  </DebugPanel>
 </template>
 
 <style scoped>
-.fog-debug {
-  /* Positioned by the caller — both SettlementView and WorldMapView place
-     this inside a `.fog-debug-stack` flex column alongside FogPerfPanel
-     (that wrapper carries the position: absolute), so this stays a normal
-     flex child rather than positioning itself. */
-  padding: 12px 14px;
-  min-width: 230px;
-}
-.title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
+/* Positioned by the caller — both views place this inside a `.fog-debug-stack`
+   flex column (that wrapper carries the position: absolute), so this stays a
+   normal flex child. Padding and the collapsible header come from
+   DebugPanel.vue; what is left here is this panel's own rows. */
 .row {
   display: flex;
   align-items: center;

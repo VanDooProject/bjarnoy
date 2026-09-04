@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Issue: coastal-water tiles had no ring-menu build path at all — even the
@@ -13,7 +14,7 @@ import { foundSettlement } from './helpers';
  */
 test('building a dockyard from the ring menu on coastal water places it', async ({ page }) => {
   // Same budget reasoning as shrine-build.spec.ts's test.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;

@@ -25,6 +25,7 @@
 // interval is the simplest correct way to observe an external mutable
 // object like this without pulling Vue into the renderer.
 import { onMounted, onUnmounted, reactive, computed } from 'vue';
+import DebugPanel from './DebugPanel.vue';
 import { fogPerfStats, type FogPerfStats } from '../../lib/map/HexMapRenderer';
 
 const POLL_MS = 250;
@@ -119,8 +120,7 @@ function share(v: number, of: number): number {
 </script>
 
 <template>
-  <div class="fog-perf panel">
-    <div class="title">Fog perf (last rebuild)</div>
+  <DebugPanel class="fog-perf" title="Fog perf (last rebuild)" storage-key="fogPerf">
     <template v-for="row in ROWS" :key="row.key">
       <div class="row">
         <span class="label">{{ row.label }}</span>
@@ -170,26 +170,18 @@ function share(v: number, of: number): number {
       slice of its ms. `shaderPassMs`/`cacheHitRate` (real §2.8 stats — the fog shader's own GPU cost, and the
       server-side compute cache's hit rate) aren't measurable yet and are left off rather than faked.
     </div>
-  </div>
+  </DebugPanel>
 </template>
 
 <style scoped>
+/* Fixed (not min-) width: the legend text below has no natural wrap point of
+   its own, so a min-width lets the flex column's stretch sizing blow the whole
+   panel out to the legend's unwrapped max-content width. A definite width
+   forces the legend to wrap inside it instead. Vue puts this component's scope
+   id on DebugPanel's root, so the class lands on the shell and overrides its
+   min-width; the padding and the header come from the shell. */
 .fog-perf {
-  /* Fixed (not min-) width: the legend text below has no natural wrap
-     point of its own, so a min-width lets the flex column's stretch
-     sizing blow the whole panel out to the legend's unwrapped
-     max-content width. A definite width forces the legend to wrap
-     inside it instead. */
   width: 300px;
-  padding: 12px 14px;
-}
-.title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
 }
 .row {
   display: flex;

@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 test('clicking an island founds a settlement and opens the village view', async ({ page }) => {
   // foundSettlement() alone — page load plus a real PixiJS/texture mount —
@@ -8,7 +9,7 @@ test('clicking an island founds a settlement and opens the village view', async 
   // variance is wider than the margin 45s leaves for this test, even before
   // its own assertions run. See settlement-interactions.spec.ts's matching
   // comments for the other tests that share this same root cause.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);
   await expect(page).toHaveURL(/\/settlement$/);
 

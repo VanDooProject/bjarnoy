@@ -16,6 +16,8 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
+import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
+import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { ApiError } from '../api/client';
 import { usePlayerStore } from '../stores/player';
@@ -806,6 +808,8 @@ async function upgrade() {
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
       <FogDebugPanel @change="onFogDebugChange" />
+      <WaterDebugPanel @change="onFogDebugChange" />
+      <WaterPerfPanel />
       <FogPerfPanel />
     </div>
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
@@ -885,5 +889,17 @@ async function upgrade() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* The stack has outgrown the viewport: three panels, and the water one alone
+     carries ten checkboxes and six sliders. Without this the bottom handles are
+     simply unreachable at 900px tall, which is the height the screenshot
+     helpers run at. `bottom` matches the `top` above so it clears the HUD at
+     both ends. */
+  max-height: calc(100vh - 136px);
+  overflow-y: auto;
+}
+/* Scroll the column, not the panels: flex items shrink to fit a constrained
+   cross-size by default, which squashes the slider rows instead of scrolling. */
+.fog-debug-stack > * {
+  flex-shrink: 0;
 }
 </style>

@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Demo-mode trade flow (PR 2): post an offer, see it land in "My offers",
@@ -12,7 +13,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
   // Same rationale as found-settlement.spec.ts: founding a settlement is a
   // real page load plus a PixiJS mount, which alone can approach the
   // global 45s default on a loaded CI runner.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);
 
   const toggle = page.locator('.trade-toggle');
@@ -83,7 +84,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
  * accounting (covered by the test above).
  */
 test('accepting an offer drops a cart shipment onto the world map', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);
 
   await page.locator('.trade-toggle').click();

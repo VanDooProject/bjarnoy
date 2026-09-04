@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Demo mode (what `npm run test:e2e` runs against — see playwright.config.ts
@@ -120,7 +121,7 @@ async function gotoLeaderboards(page: Page) {
 
 test.describe('leaderboards', { tag: '@g2' }, () => {
   test('is reachable via the HUD nav link from the world map', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     // foundSettlement/gotoWorldMap would also work, but the nav link itself
     // is rendered by HudNav regardless of a founded settlement — landing is
     // the lightest view that mounts it (see HudNav.vue's `v-if` guarding

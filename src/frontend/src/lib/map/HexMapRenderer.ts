@@ -44,6 +44,11 @@ import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from './build
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
+import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
+import { WaterLayer } from './water/WaterLayer';
+import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
+import { bakeWaterMask } from './water/waterMask';
+import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import {
   TILE_ART_NATIVE_H,
@@ -53,6 +58,7 @@ import {
   baseTextureFor,
   loadTileTextures,
   riverTexturesFor,
+  textureKeyFor,
   topTextureFor,
   type TileTextures,
 } from './textures';
@@ -752,6 +758,57 @@ const ROUTE_ARROW_PX = 13;
 const ROUTE_ARROW_MIN_SEGMENT_PX = 26;
 /** Pointer distance (screen px) within which a pointerdown counts as grabbing a draft waypoint pin. */
 const WAYPOINT_GRAB_RADIUS_PX = 16;
+/** One child of the camera-transformed `world` container — see `worldLayerOrder`. */
+export type WorldLayerName =
+  | 'water'
+  | 'terrainBase'
+  | 'waves'
+  | 'terrainFlat'
+  | 'borders'
+  | 'hover'
+  | 'terrainTop'
+  | 'range'
+  | 'highlight';
+
+/**
+ * The order `world`'s children are added in — docs/design/water-shader.md §3.2
+ * and §3.3.
+ *
+ * Extracted as a pure function purely so it can be asserted on without a real
+ * canvas or Pixi renderer, the same trick `terrainTitleFor` uses. That is worth
+ * doing here because layering is the hard part of the water feature and getting
+ * it wrong fails *silently* — water over the tall art, or under the islands it
+ * is supposed to lap against, both just look like a bad shader.
+ *
+ * **World mode**: first child. There is no water in the world-map canvas today
+ * at all — the sea is a CSS gradient on the container div behind it, and open
+ * sea hexes are skipped outright — so the water mesh has an empty canvas to
+ * fill, and the opaque island polygons in `terrainFlat` cover it wherever there
+ * is land.
+ *
+ * **Settlement mode**: between `terrainBase` and `borderLayer` — above all the
+ * ground art (the painted water tiles included; the shader composites over
+ * them rather than replacing them), below the tall art in `terrainTop`, which
+ * therefore draws over the water. No container split and no reordering of
+ * anything that existed, so the coastline's sea/land occlusion is exactly what
+ * it was.
+ *
+ * Note what is deliberately *not* here: `terrainBase` is not split into sea and
+ * land halves with the mesh between them. Every tile in the pack, water
+ * included, has a 68px skirt below its top face, and a land tile's skirt reaches
+ * 46px into the top face of the water hex diagonally in front of it — covered
+ * today because that water tile draws later under `isoDepthKey`. Group all the
+ * sea before all the land and the coastal cliff paints over the water in front
+ * of it instead: a wedge of wrong occlusion along every shore, which is exactly
+ * where the foam is.
+ */
+export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] {
+  const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'range', 'highlight'];
+  return mode === 'world'
+    ? ['water', 'terrainBase', 'waves', 'terrainFlat', ...rest]
+    : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
+}
+
 /** How long an army marker takes to ease across when its leg is replaced (recall/turn-around) — see `armyPoints`. */
 const ARMY_RESYNC_MS = 450;
 
@@ -762,6 +819,15 @@ export class HexMapRenderer {
   private terrainTop = createSpriteLayer();
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
+  // docs/design/water-shader.md. Constructed in the constructor rather than
+  // here because which view this is decides whether it draws a sea body at all
+  // (§4.1), and `options` isn't in scope for a field initialiser.
+  private waterLayer: WaterLayer;
+  // The world rect the current water mask was baked over — `null` until the
+  // first bake. Re-baked only when the viewport leaves it (§2.2), not per
+  // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
+  // margin is three tiles.
+  private waterMaskRegionBuilt: WaterMaskRegion | null = null;
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
   // onTick's per-frame drawWaves call can skip redrawing wave strokes the
@@ -897,6 +963,7 @@ export class HexMapRenderer {
 
   constructor(options: HexMapRendererOptions) {
     this.options = options;
+    this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
     this.idleDrift = options.mode === 'world';
     this.camera =
       options.mode === 'settlement'
@@ -1041,16 +1108,23 @@ export class HexMapRenderer {
     }
     if (this.destroyed) return;
 
-    this.world.addChild(
-      this.terrainBase.container,
-      this.waveLayer,
-      this.terrainFlat,
-      this.borderLayer,
-      this.hoverLayer,
-      this.terrainTop.container,
-      this.rangeLayer,
-      this.highlightLayer,
-    );
+    // §3's layer stack, as an ordered list of names so the ordering itself is
+    // testable without a canvas (see `worldLayerOrder`) — the whole of §3 is
+    // about where in this stack the water mesh goes, and getting it wrong is
+    // silent.
+    const byName: Record<WorldLayerName, Container> = {
+      water: this.waterLayer.mesh,
+      terrainBase: this.terrainBase.container,
+      waves: this.waveLayer,
+      terrainFlat: this.terrainFlat,
+      borders: this.borderLayer,
+      hover: this.hoverLayer,
+      terrainTop: this.terrainTop.container,
+      range: this.rangeLayer,
+      highlight: this.highlightLayer,
+    };
+    this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => byName[name]));
+
     // §4's layer stack: the two fog quads are the only genuinely
     // screen-space `app.stage` children — everything else (terrain,
     // borders, buildings) stays nested inside `world`, camera-transformed
@@ -1100,7 +1174,8 @@ export class HexMapRenderer {
     // than snapping.
     const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
     this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
-    if (this.options.mode === 'world' && !this.deepFogOnly) this.drawWaves();
+    if (this.options.mode === 'world' && !this.deepFogOnly && waterDebugFlags.legacyWaveSquiggles) this.drawWaves();
+    this.waterLayer.tick(performance.now());
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
       this.applyCameraTransform();
@@ -1696,6 +1771,28 @@ export class HexMapRenderer {
       fogPerfStats.waveCulledCount = 0;
     }
 
+    // §3.6: the water mesh is off entirely where it would be invisible — the
+    // landing page's preview (which draws no water at all today) and a
+    // deepFogOnly viewport, where it would be both hidden under opaque mist and
+    // the most expensive thing on screen.
+    const waterSuppressed = deepFogOnly || !this.isFogActive();
+    this.waterLayer.setSuppressed(waterSuppressed);
+    if (!waterSuppressed && (!this.waterMaskRegionBuilt || !waterMaskCovers(this.waterMaskRegionBuilt, rect))) {
+      const region = waterMaskRegion(rect, TILE_W);
+      // Timed rather than estimated: the bake is one isoPixelToAxial per texel
+      // plus three distance transforms, and it is the only CPU work this
+      // feature does — everything else it costs is on the GPU, where this
+      // codebase has no timer to read (see waterPerfStats).
+      const bakeStart = performance.now();
+      const mask = bakeWaterMask(region, TILE_W, TILE_H, this.options.worldModel);
+      waterPerfStats.bakeMs = performance.now() - bakeStart;
+      waterPerfStats.maskWidth = mask.width;
+      waterPerfStats.maskHeight = mask.height;
+      waterPerfStats.bakes += 1;
+      this.waterLayer.setMask(mask);
+      this.waterMaskRegionBuilt = region;
+    }
+
     fogPerfStats.hexCount = coords.length;
     fogPerfStats.totalMs = performance.now() - rebuildStart;
   }
@@ -1778,8 +1875,9 @@ export class HexMapRenderer {
 
     const { worldModel } = this.options;
     const textures = this.textures!;
-    const baseEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
-    const topEntries = new Map<string, { texture: Texture; coord: AxialCoord }>();
+    type Entry = { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number } };
+    const baseEntries = new Map<string, Entry>();
+    const topEntries = new Map<string, Entry>();
     const settlement = this.settlement();
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
@@ -1843,9 +1941,22 @@ export class HexMapRenderer {
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;
       }
-      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const baseTexture = baseTextureFor(textures, tile);
       const topTexture = topTextureFor(textures, tile);
-      if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
+      if (topTexture) {
+        baseEntries.set(key, { texture: baseTexture, coord: c });
+        topEntries.set(key, { texture: topTexture, coord: c });
+      } else if (waterDebugFlags.legacyTileSplit && LEGACY_TALL_KEYS.has(textureKeyFor(tile))) {
+        // No `top` half in the pack for this family, and its art rises above
+        // the top face — cut it in code (legacyTileSplit.ts) so the overhanging
+        // part sits in terrainTop, above the water mesh, instead of being
+        // painted over by it.
+        const split = splitLegacyTexture(baseTexture);
+        baseEntries.set(key, { texture: split.base.texture, coord: c, crop: split.base });
+        topEntries.set(key, { texture: split.top.texture, coord: c, crop: split.top });
+      } else {
+        baseEntries.set(key, { texture: baseTexture, coord: c });
+      }
       fogPerfStats.terrainDrawnCount++;
     }
 
@@ -1990,9 +2101,13 @@ export class HexMapRenderer {
 
   private syncSpriteLayer(
     layer: SpriteLayer,
-    entries: Map<string, { texture: Texture; coord: AxialCoord }>,
+    // `crop` carries a code-side base/top split (legacyTileSplit.ts's
+    // splitLegacyTexture) for art the pack hasn't split yet — native-pixel
+    // offset and height inside the 200x300 tile, so the piece lands exactly
+    // where the whole sprite would have.
+    entries: Map<string, { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number } }>,
   ) {
-    for (const [key, { texture, coord }] of entries) {
+    for (const [key, { texture, coord, crop }] of entries) {
       let sprite = layer.active.get(key);
       const isNew = !sprite;
       if (!sprite) {
@@ -2001,9 +2116,10 @@ export class HexMapRenderer {
       }
       sprite.texture = texture;
       sprite.width = TILE_W;
-      sprite.height = TILE_CANVAS_H;
+      sprite.height = crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H;
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
-      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET);
+      const cropOffsetY = crop ? (TILE_W * crop.nativeY) / TILE_ART_NATIVE_W : 0;
+      sprite.position.set(grid.x, grid.y - TILE_TOPFACE_Y_OFFSET + cropOffsetY);
       sprite.zIndex = isoDepthKey(coord);
       if (isNew) layer.container.addChild(sprite);
     }
@@ -2433,6 +2549,12 @@ export class HexMapRenderer {
    */
   forceRebuild() {
     if (!this.app) return;
+    // The water mask is normally only re-baked when the viewport leaves the
+    // region it covers (rebuildAll), since terrain is deterministic from the
+    // seed and a hex never stops being land. A *forced* rebuild is the one
+    // place that assumption can be wrong — a debug flag flip, or the world
+    // model being reseeded under us — so drop it and bake fresh.
+    this.waterMaskRegionBuilt = null;
     this.rebuildAll();
   }
 
@@ -2853,6 +2975,7 @@ export class HexMapRenderer {
     this.previousFogMaskTexture = null;
     this.blackFogLayer.destroy();
     this.whiteMistLayer.destroy();
+    this.waterLayer.destroy();
     this.app?.destroy(false, { children: true });
     this.app = null;
   }

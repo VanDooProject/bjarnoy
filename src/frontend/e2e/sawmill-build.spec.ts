@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Sawmill is new (BuildingType.Sawmill) and is built directly on a river
@@ -18,7 +19,7 @@ import { foundSettlement } from './helpers';
  */
 test('building a sawmill from the ring menu places it without a rendering error', async ({ page }) => {
   // Same budget reasoning as shrine-build.spec.ts's test.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await foundSettlement(page);
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;

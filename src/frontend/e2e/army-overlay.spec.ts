@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Issues #93 and #94: the settlement map's army/route overlay — draggable
@@ -43,7 +44,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // Same budget as the other tests that both found a settlement AND drive
     // real pointer interaction through the live PixiJS scene — see
     // settlement-interactions.spec.ts's own comments.
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -122,7 +123,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('a waypoint can be removed by index, not just undone from the end', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     const plotted = await page.evaluate(() => {
@@ -143,7 +144,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('an attack draft marks its target settlement on the map', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -197,7 +198,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('an in-transit army is drawn between hexes and keeps advancing', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     // A march that started a moment ago and has half a minute to run, over
@@ -268,11 +269,30 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     );
     expect(hexSpacing).toBeGreaterThan(10);
 
-    const first = await marker();
-    expect(first.interpolated).toBe(true);
     // The concrete claim of issue #94: the marker is at a fractional point
     // *between* two hex centres, not on any of them.
-    expect(distanceToNearestHexCentre(first)).toBeGreaterThan(hexSpacing * 0.2);
+    //
+    // Polled rather than asserted on one arbitrary sample. The route runs
+    // *through* hex centres, so a marker travelling it is legitimately within
+    // 0.2 spacings of one for about two fifths of every segment — a single
+    // snapshot is close to a coin flip, and which side it lands on moves with
+    // however long the setup above happened to take. (That is how this surfaced:
+    // the water shader made the settlement view slower to reach, and the test
+    // went from passing to failing two runs in three without its own code
+    // changing.) Polling asserts what the issue actually claims — that the
+    // marker *is drawn* at fractional positions — which one good sample proves
+    // and no sampling phase can defeat.
+    let first = await marker();
+    await expect
+      .poll(
+        async () => {
+          first = await marker();
+          return distanceToNearestHexCentre(first);
+        },
+        { timeout: 5_000 },
+      )
+      .toBeGreaterThan(hexSpacing * 0.2);
+    expect(first.interpolated).toBe(true);
 
     // ...and it keeps moving between polls, with nothing re-fetched (demo
     // mode has no backend): the interpolation itself is what advances it.
@@ -282,7 +302,12 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     const travelledFirst = Math.hypot(first.x - seeded.hexCentres[0].x, first.y - seeded.hexCentres[0].y);
     const travelledSecond = Math.hypot(second.x - seeded.hexCentres[0].x, second.y - seeded.hexCentres[0].y);
     expect(travelledSecond).toBeGreaterThan(travelledFirst + hexSpacing * 0.02);
-    expect(distanceToNearestHexCentre(second)).toBeGreaterThan(hexSpacing * 0.2);
+    // No between-hexes assertion on this second sample. It is the same coin
+    // flip as above with no way to re-roll it — this sample has to be the one
+    // taken 3s after the first, or "it kept moving" means nothing — and it adds
+    // nothing: `onSegment` below pins the marker to within a pixel of a route
+    // segment, which is a stronger statement about fractional positioning than
+    // "not near a centre" is.
 
     // The marker stays on the route it is travelling: the point must lie on
     // one of the path's own segments (within a pixel), not merely somewhere
@@ -299,7 +324,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('an army standing at home stays on its settlement hex', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     const home = await page.evaluate(() => {
