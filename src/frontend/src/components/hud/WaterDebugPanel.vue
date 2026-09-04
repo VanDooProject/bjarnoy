@@ -40,6 +40,13 @@ const WAVE_SPEED = { min: 0, max: 3, step: 0.1 };
 // Up to the mask's own far range: past 1.5 hexes the distance channel is
 // saturated and the handle would stop doing anything.
 const CAUSTIC_CULL = { min: 0, max: 1.5, step: 0.05 };
+// Multipliers on the shipped constants, so 1.00 is what ships and either
+// direction is a comparison against it. Thickness stops at 3x because past
+// that neighbouring ribbons merge and the net stops being a net; brightness at
+// 2x because the coarse net's alpha is 0.38 and anything approaching opaque
+// white reads as foam rather than as a caustic.
+const CAUSTIC_THICKNESS = { min: 0.25, max: 3, step: 0.05 };
+const CAUSTIC_BRIGHTNESS = { min: 0, max: 2, step: 0.05 };
 
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
@@ -92,6 +99,34 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
         :step="CAUSTIC_CULL.step"
         :disabled="!flags.midWaterWaves"
         v-model.number="tuning.causticCullHexes"
+      />
+    </div>
+    <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">
+      <span class="slider-label">
+        Caustic thickness
+        <span class="slider-value">{{ tuning.causticThickness.toFixed(2) }}&times;</span>
+      </span>
+      <input
+        type="range"
+        :min="CAUSTIC_THICKNESS.min"
+        :max="CAUSTIC_THICKNESS.max"
+        :step="CAUSTIC_THICKNESS.step"
+        :disabled="!flags.midWaterWaves"
+        v-model.number="tuning.causticThickness"
+      />
+    </div>
+    <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">
+      <span class="slider-label">
+        Caustic brightness
+        <span class="slider-value">{{ tuning.causticBrightness.toFixed(2) }}&times;</span>
+      </span>
+      <input
+        type="range"
+        :min="CAUSTIC_BRIGHTNESS.min"
+        :max="CAUSTIC_BRIGHTNESS.max"
+        :step="CAUSTIC_BRIGHTNESS.step"
+        :disabled="!flags.midWaterWaves"
+        v-model.number="tuning.causticBrightness"
       />
     </div>
     <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">

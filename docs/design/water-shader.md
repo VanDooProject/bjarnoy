@@ -866,6 +866,16 @@ export interface WaterDebugTuning {
                             //        (§4.2b); clamped to FOAM_REACH_TILES, past
                             //        which the far channel is saturated and the
                             //        handle is inert.
+  causticThickness: number; // 1 — multiplier on the ribbon width, applied to
+                            //     both light nets (§4.2c) together. A
+                            //     multiplier and not an absolute width: the
+                            //     shipped widths are fractions of each net's
+                            //     *own* band spacing, so one absolute number
+                            //     would mean two different-looking ribbons.
+  causticBrightness: number; // 1 — multiplier on the ribbons' alpha, both light
+                             //     nets together. Not the shadow blobs: they
+                             //     darken, and a "brightness" handle that makes
+                             //     the water darker does not say what it does.
 }
 ```
 

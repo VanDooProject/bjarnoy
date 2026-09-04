@@ -340,6 +340,8 @@ export class WaterLayer {
       uCaustics: { value: 0, type: 'f32' },
       uCausticScale: { value: CAUSTIC_SCALE, type: 'f32' },
       uCausticBands: { value: CAUSTIC_BANDS, type: 'f32' },
+      // Width and alpha are set per frame from the panel's own multipliers, so
+      // these are only the value before the first tick.
       uCausticWidth: { value: CAUSTIC_WIDTH, type: 'f32' },
       uCausticAlpha: { value: CAUSTIC_ALPHA, type: 'f32' },
       uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
@@ -494,6 +496,14 @@ export class WaterLayer {
     // larger value would silently mean "never fade in" rather than "start
     // further out".
     u.uCausticCull = Math.min(waterDebugTuning.causticCullHexes, FOAM_REACH_TILES);
+    // Two knobs across both light nets rather than four across one each: the
+    // coarse and fine nets are a *pair*, and the whole point of the fine one is
+    // that it is thinner and brighter than the other. Multipliers keep that
+    // relationship through any drag of either handle.
+    u.uCausticWidth = CAUSTIC_WIDTH * waterDebugTuning.causticThickness;
+    u.uCausticFineWidth = CAUSTIC_FINE_WIDTH * waterDebugTuning.causticThickness;
+    u.uCausticAlpha = CAUSTIC_ALPHA * waterDebugTuning.causticBrightness;
+    u.uCausticFineAlpha = CAUSTIC_FINE_ALPHA * waterDebugTuning.causticBrightness;
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.
     u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);

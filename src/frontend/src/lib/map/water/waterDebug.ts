@@ -125,6 +125,24 @@ export interface WaterDebugTuning {
    * the distance channel is saturated and moving this further has no effect.
    */
   causticCullHexes: number;
+  /**
+   * Multiplier on how thick the caustic ribbons are drawn, applied to both
+   * light nets (§4.2c) at once so their relationship survives the drag.
+   *
+   * A multiplier and not an absolute width, because the two nets are banded at
+   * different scales: the shipped widths are fractions of each net's *own* band
+   * spacing, and one absolute number would mean two different-looking ribbons.
+   * Same reasoning as `foamWidthHexes` scaling both foam tiers together.
+   */
+  causticThickness: number;
+  /**
+   * Multiplier on the caustic ribbons' alpha, again both light nets together.
+   *
+   * The shadow blobs are deliberately not on it: they darken, so turning
+   * "brightness" up would make the water darker, which is not what the handle
+   * says it does.
+   */
+  causticBrightness: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -132,4 +150,6 @@ export const waterDebugTuning: WaterDebugTuning = {
   foamSurge: 0.18,
   waveSpeed: 1,
   causticCullHexes: 0.35,
+  causticThickness: 1,
+  causticBrightness: 1,
 };
