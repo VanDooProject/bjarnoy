@@ -239,6 +239,30 @@ describe('bakeWaterMask', () => {
     expect(sawSaturated).toBe(true);
   });
 
+  it('measures the far field along the ground too, not on the glass', () => {
+    // The same failure the signed near field had before it was lifted into
+    // ground space: a distance measured in screen pixels puts its level sets
+    // 1/squash further out on a north-facing shore than an east-facing one, so
+    // anything keyed off it — the wave coast fade, the caustics' keep-off — sits
+    // at a different distance depending on which way the coast happens to run.
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+    const squash = groundSquash(TILE_W, TILE_H);
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const out = 0.9 * TILE_W;
+
+    // Straight up from the middle of the flat top edge, and straight out from
+    // the middle of the east point — the same ground distance either way.
+    const north = sample(mask, r, grid.x + TILE_W / 2, grid.y - out * squash);
+    const east = sample(mask, r, grid.x + TILE_W + out, grid.y + TILE_H / 2);
+
+    expect(north).toBeGreaterThan(0);
+    expect(north).toBeLessThan(255);
+    // Within a couple of levels: G is the raster transform, so a texel of
+    // disagreement is expected — a factor of 1/squash (1.9x) is not.
+    expect(Math.abs(north - east)).toBeLessThan(16);
+  });
+
   it('is symmetric across a straight coast', () => {
     // Two coasts the same distance apart on either side of a land strip must
     // produce mirrored ramps — an asymmetric transform (a one-pass chamfer,
@@ -530,14 +554,19 @@ describe("the mask's prop-tile mute (A)", () => {
         3,
       );
 
-    // Straight out along +x: inside the hex, then across the fade, then clear.
-    const inside = at(TILE_W * 0.3);
-    const justOutside = at(TILE_W * 0.65);
-    const clear = at(TILE_W * (0.5 + PROP_MUTE_FADE_TILES + 0.25));
-    expect(inside).toBe(255);
-    expect(justOutside).toBeGreaterThan(0);
-    expect(justOutside).toBeLessThan(255);
-    expect(clear).toBe(0);
+    // Straight out along +x: full strength inside the hex, nothing well past the
+    // fade, and somewhere in between at least one texel that is neither — which
+    // is the whole claim. Sampled as a walk rather than at three chosen offsets:
+    // the fade is only a couple of texels wide, so a fixed offset is a test of
+    // where the texel grid happens to fall.
+    expect(at(TILE_W * 0.3)).toBe(255);
+    expect(at(TILE_W * (0.5 + PROP_MUTE_FADE_TILES + 0.3))).toBe(0);
+
+    const ramp: number[] = [];
+    for (let t = 0.5; t <= 0.5 + PROP_MUTE_FADE_TILES; t += 0.02) ramp.push(at(TILE_W * t));
+    expect(ramp.some((v) => v > 0 && v < 255)).toBe(true);
+    // ...and it only ever falls as you go out.
+    for (let i = 1; i < ramp.length; i++) expect(ramp[i]).toBeLessThanOrEqual(ramp[i - 1]);
   });
 
   it('leaves the distance channels alone — the mute is a separate quantity', () => {

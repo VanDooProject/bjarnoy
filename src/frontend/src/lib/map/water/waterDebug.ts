@@ -91,7 +91,11 @@ export interface WaterDebugTuning {
    * whole coastal hexes white in a settlement.
    */
   foamWidthHexes: number;
-  /** How much the band's width breathes, as a fraction of itself. 0 freezes the surge. */
+  /**
+   * How much the band's width breathes, as a fraction of itself. 0 freezes the
+   * surge. Well under half: the surge is meant to be felt rather than seen, and
+   * a band whose width swings by a third reads as an animation error.
+   */
   foamSurge: number;
   /** Multiplier on the wave swell rate. 1 is the shipped rate, matching the Graphics squiggles' own periods. */
   waveSpeed: number;
@@ -110,7 +114,7 @@ export interface WaterDebugTuning {
 
 export const waterDebugTuning: WaterDebugTuning = {
   foamWidthHexes: 0.3,
-  foamSurge: 0.35,
+  foamSurge: 0.18,
   waveSpeed: 1,
-  causticCullHexes: 0.45,
+  causticCullHexes: 0.35,
 };

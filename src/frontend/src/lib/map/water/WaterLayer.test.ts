@@ -107,12 +107,30 @@ describe('WaterLayer', () => {
     const settlement = uniformsOf(new WaterLayer('settlement', TILE_W, TILE_H));
 
     expect((world.uFoamAlpha as Float32Array)[1]).toBe(0);
+    expect((world.uFoamAlpha as Float32Array)[0]).toBeLessThan((settlement.uFoamAlpha as Float32Array)[0]);
     expect((settlement.uFoamAlpha as Float32Array)[1]).toBeGreaterThan(0);
     expect(world.uFoamInner as number).toBeGreaterThan(settlement.uFoamInner as number);
     expect(world.uFoamLandReach as number).toBeLessThan(settlement.uFoamLandReach as number);
     // ...and GLSL leaves smoothstep undefined when its edges coincide, which is
     // what a land reach of exactly zero would produce.
     expect(world.uFoamLandReach as number).toBeGreaterThan(0);
+  });
+
+  it('draws a narrower rim on the world map than up close, off one slider', () => {
+    // The band is in world units, so the width that is a believable surf line in
+    // a settlement is a thick white outline from orbit. One knob, scaled by mode,
+    // rather than two knobs to keep in step.
+    const world = new WaterLayer('world', TILE_W, TILE_H);
+    const settlement = new WaterLayer('settlement', TILE_W, TILE_H);
+    waterDebugTuning.foamWidthHexes = 0.4;
+    world.tick(0);
+    settlement.tick(0);
+
+    const worldWidth = uniformsOf(world).uFoamWidth as number;
+    const closeWidth = uniformsOf(settlement).uFoamWidth as number;
+    expect(closeWidth).toBe(0.4);
+    expect(worldWidth).toBeGreaterThan(0);
+    expect(worldWidth).toBeLessThan(closeWidth / 2);
   });
 
   it('never eats a hex click', () => {

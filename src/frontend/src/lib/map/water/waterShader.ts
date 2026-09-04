@@ -99,8 +99,7 @@ uniform float uCausticAlpha;
 uniform vec3 uCausticColor;
 uniform float uCausticCull;
 uniform float uCausticCullSoften;
-uniform float uCausticCullJitter;
-uniform float uCausticCullJitterScale;
+uniform float uCausticCullSpread;
 uniform float uFarReach;
 uniform float uPropMute;
 uniform float uPropFoamScale;
@@ -264,7 +263,7 @@ float waveField(vec2 world, float t) {
 // of them. Scattered arcs read as an ocean seen from orbit and are what
 // docs/design/img/worldmap.png shows; ribbons read as shallow water seen from a
 // few metres up. Which one a view gets is uSurface, set from the view's mode.
-float causticField(vec2 ground, float t) {
+float causticField(vec2 ground, float t, float offshore) {
   vec2 p = ground * uCausticScale;
   vec2 drift = vec2(t * 0.021, t * -0.014);
 
@@ -278,6 +277,24 @@ float causticField(vec2 ground, float t) {
   // which is what makes the ribbons breathe rather than merely translate.
   float bands = n * uCausticBands + t * 0.05;
   float band = abs(fract(bands) - 0.5) * 2.0;
+
+  // Each ribbon gets its own keep-off distance from the shore, and this is the
+  // line that makes that possible: rounding the banding coordinate gives the
+  // index of the *nearest contour*, which is the same integer everywhere along
+  // that contour and in the neighbourhood either side of it. A fragment shader
+  // has no connectivity — it cannot ask whether the loop through this pixel
+  // touches land somewhere else on the map — but it can ask which loop this is,
+  // and that is enough to decide something consistently for the whole of it.
+  //
+  // So instead of every ribbon stopping on one line a fixed distance offshore,
+  // each one stops at its own distance, spread over uCausticCullSpread. Loops
+  // that lie entirely inside their own keep-off never appear at all, which is
+  // the "remove the ones that touch the shore" case; the rest end at distances
+  // that have nothing to do with each other, so there is no line to see.
+  float ribbon = floor(bands + 0.5);
+  float keepOff = uCausticCull + hash(vec2(ribbon, 17.0)) * uCausticCullSpread;
+  float clearOfCoast = smoothstep(keepOff, keepOff + uCausticCullSoften, offshore);
+  if (clearOfCoast <= 0.0) return 0.0;
 
   // Divide by the field's own gradient so every ribbon comes out the same
   // thickness. Without this the "thickness" is measured in *field* units, so
@@ -298,7 +315,7 @@ float causticField(vec2 ground, float t) {
 
   // The band is in field units; dividing by the gradient converts it to a
   // distance in p-space, which uCausticWidth is then a plain width in.
-  return 1.0 - smoothstep(uCausticWidth * 0.55, uCausticWidth, band / grad);
+  return (1.0 - smoothstep(uCausticWidth * 0.55, uCausticWidth, band / grad)) * clearOfCoast;
 }
 
 // The mask's channels, named. R: the **signed** near distance, 0.5 exactly on
@@ -410,30 +427,18 @@ void main() {
   // coarsest, so a narrow one would show the mask's own texel stepping.
   if (water && uMidWaterWaves > 0.5) {
     if (uCaustics > 0.5) {
-      // Close up, and simply absent within uCausticCull of the shore. Running the
-      // ribbons right up to the coastline puts two bright white patterns on top
-      // of each other in the one place the eye is already reading an edge: the
-      // foam band stops looking like the boundary of the water and starts
-      // looking like the brightest part of a texture.
+      // Close up, and kept off the shore. Running the ribbons right up to the
+      // coastline puts two bright white patterns on top of each other in the one
+      // place the eye is already reading an edge: the foam band stops looking
+      // like the boundary of the water and starts looking like the brightest
+      // part of a texture.
       //
-      // Cut rather than faded. A long fade dims a whole belt of ribbons to half
-      // strength, and a half-strength ribbon reads as a smudge rather than as a
-      // ribbon further away — the ramp itself becomes visible as a second, softer
-      // coastline. uCausticCullSoften is a couple of pixels of antialiasing on
-      // the cut, not a fade.
-      //
-      // The cut line is displaced by its own low-frequency noise, so it is a
-      // wandering edge rather than a clean offset curve of the coastline. Without
-      // that, every ribbon in the view ends at the same distance from land and
-      // the boundary reads as drawn.
-      //
-      // Off the far channel, not the signed near one: the cut sits past where R
-      // saturates.
+      // How far off is decided per ribbon inside causticField, not here — see
+      // there. Off the far channel rather than the signed near one, since the
+      // keep-off sits past where R saturates.
       float offshore = m.g * uFarReach;
-      float cut = uCausticCull + (noise(vGround * uCausticCullJitterScale) - 0.5) * uCausticCullJitter;
-      float clearOfCoast = smoothstep(cut, cut + uCausticCullSoften, offshore);
-      if (clearOfCoast > 0.004) {
-        float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha * clearOfCoast * (1.0 - mute);
+      float ribbon = causticField(vGround, uWaveTime, offshore) * uCausticAlpha * (1.0 - mute);
+      if (ribbon > 0.004) {
         acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
       }
     } else {
@@ -464,12 +469,20 @@ void main() {
     // field: anchored to the world rather than the screen, the pattern neither
     // stretches with world size nor slides out from under a camera pan.
     vec2 np = vGround * uFoamNoiseScale;
-    float d = dist + uFoamNoise * uFoamWidth * (fbm(np + uFoamWind * uTime) - 0.5);
 
-    // The band's width breathes. The low-frequency term de-synchronises the
-    // surge along a coastline so it laps rather than pulsing as one ring, and
-    // the mask's per-hex seed adds grain on top of that.
-    float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + m.b) * 6.2831853;
+    // The band's width breathes, out of step along the coast so it laps rather
+    // than pulsing as one ring. Two scales of de-synchronisation: one at about
+    // seven hexes, which is the swell, and one at about one hex, which is the
+    // individual lap.
+    //
+    // Deliberately *not* the mask's per-hex seed, which is what this used to
+    // use. A per-hex value sampled with linear filtering is a step, and a step
+    // in the surge phase is a step in the band's width: measured on screen the
+    // foam ran at one width along a hex edge and 1.9x that (3.3x at the 90th
+    // percentile) along the next, changing over the ~12px that one mask texel
+    // interpolates across. That is why the band read as drawn rather than as
+    // water — its only variation was per-hex and discontinuous.
+    float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + noise(np * 1.6)) * 6.2831853;
     // ...and narrows to uPropFoamScale of itself over a prop tile, so the
     // coastline keeps an unbroken outline while the boat or rock keeps its own
     // patch of still water.
@@ -488,16 +501,37 @@ void main() {
     // land side is really drawn over the sand — the ground art is *below* the
     // mesh there, only the tall art in terrainTop is above it — so this is what
     // decides how far up the beach the foam runs.
-    float shore = d >= 0.0
-      ? 1.0 - smoothstep(width * uFoamInner, width, d)
-      : 1.0 - smoothstep(0.0, width * uFoamLandReach, -d);
+    // The *outer* edge is displaced by noise; the inner one is not. Both tore
+    // together in the first version — one displaced distance fed both ends — so
+    // the band slid back and forth across the coastline instead of changing
+    // shape, and displacing it enough to see was enough to lift its inner edge
+    // off the tile edge. Held apart, the outer edge can be as ragged as it needs
+    // to be while the inner one stays exactly on the coast, which is where the
+    // whole signed-field design put it.
+    //
+    // Two octaves: the coarse one tears the boundary at the scale of a cove, the
+    // fine one at the scale of the band's own width. uFoamNoise is in tile
+    // widths, so this displacement does not shrink as the band narrows over a
+    // prop tile.
+    float edge = (fbm(np + uFoamWind * uTime) - 0.5) * 2.0
+               + (noise(np * 4.0 + uFoamWind * uTime * 2.2) - 0.5);
+    float reach = max(width + uFoamNoise * edge, width * uFoamInner + 0.001);
+
+    float shore = dist >= 0.0
+      ? 1.0 - smoothstep(width * uFoamInner, reach, dist)
+      : 1.0 - smoothstep(0.0, width * uFoamLandReach, -dist);
 
     // Two tiers. The inner line is nearly opaque and hard against the shore —
     // it is what makes the coast read as wet. The outer lace is wider, fainter
     // and broken up by thresholded noise — it is what makes it read as foam.
     float inner = smoothstep(0.55, 0.95, shore);
     float lace = smoothstep(0.40, 0.72, fbm(np * 2.7 + uFoamWind * uTime * 1.6));
-    float outer = smoothstep(0.02, 0.5, shore) * lace;
+    // The lace starts at 0.12 of the proximity rather than 0.02. Near-white at
+    // low alpha over navy is not faint foam, it is grey: measured, the tail of
+    // the lace sat at (98,116,133) against water at (35,56,80) — nothing darker
+    // than the water, but desaturated from 0.57 to 0.28, which reads as murk.
+    // Cutting the tail and carrying the rest at a higher alpha keeps it blue-white.
+    float outer = smoothstep(0.12, 0.55, shore) * lace;
 
     float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y);
     acc = vec4(uFoamColor * foam, foam) + acc * (1.0 - foam);

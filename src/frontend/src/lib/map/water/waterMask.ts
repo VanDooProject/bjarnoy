@@ -70,11 +70,14 @@ export const NEAR_SPAN_TILES = 0.6;
  * Faded rather than switched. A per-hex boolean would cut the foam collar off
  * at a hexagon edge, and a hexagonal hole in a coastline is far more visible
  * than either the prop or the foam — the same failure mode `isNearLand` has in
- * the wave field, and the reason §4.2's coast fade is continuous too. 0.4 tiles
- * is a little over a third of a hex: enough that the ramp reads as the effect
- * thinning out, not enough to strip the neighbouring tiles' foam as well.
+ * the wave field, and the reason §4.2's coast fade is continuous too.
+ *
+ * 0.2 tiles, cut back from 0.4: measured on screen, the longer ramp left 30% of
+ * one island's coastline at muted width and another 31% part-way, because a
+ * single prop reaches over 1.8 hex edges of coast. A fifth of a tile is still
+ * several mask texels, which is all the ramp needs to not read as an edge.
  */
-export const PROP_MUTE_FADE_TILES = 0.4;
+export const PROP_MUTE_FADE_TILES = 0.2;
 
 /**
  * Whether a tile renders with one of the coastal-water props, and so wants the
@@ -195,16 +198,24 @@ export function hexMitreDistance(x: number, y: number, originX: number, originY:
  * intersection below stays finite: with two infinite costs the numerator would
  * be Infinity - Infinity = NaN, and the whole scanline would collapse.
  */
-function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array): void {
+function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array, curvature = 1): void {
+  // The parabolas are `curvature * (p - q)^2 + f(q)` rather than the textbook's
+  // unit-curvature ones, so a step along this axis can be worth more or less
+  // than a step along the other — which is how the transform ends up measuring
+  // ground distance on an axis that the isometric projection foreshortens. The
+  // intersection formula picks up the same factor; with curvature 1 it is the
+  // textbook algorithm unchanged.
   let k = 0;
   v[0] = 0;
   z[0] = -EDT_INF;
   z[1] = EDT_INF;
+  const intersect = (q: number, w: number) =>
+    (f[q] + curvature * q * q - (f[w] + curvature * w * w)) / (2 * curvature * (q - w));
   for (let q = 1; q < n; q++) {
-    let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    let s = intersect(q, v[k]);
     while (s <= z[k]) {
       k--;
-      s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      s = intersect(q, v[k]);
     }
     k++;
     v[k] = q;
@@ -214,7 +225,7 @@ function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Fl
   k = 0;
   for (let q = 0; q < n; q++) {
     while (z[k + 1] < q) k++;
-    d[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+    d[q] = curvature * (q - v[k]) * (q - v[k]) + f[v[k]];
   }
 }
 
@@ -223,7 +234,7 @@ function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Fl
  * with `seeds[i] !== 0`. Separable: `edt1d` down every column, then across
  * every row of the result.
  */
-export function euclideanDistanceTransform(seeds: Uint8Array, width: number, height: number): Float32Array {
+export function euclideanDistanceTransform(seeds: Uint8Array, width: number, height: number, yCurvature = 1): Float32Array {
   const n = Math.max(width, height);
   const f = new Float64Array(n);
   const d = new Float64Array(n);
@@ -233,7 +244,7 @@ export function euclideanDistanceTransform(seeds: Uint8Array, width: number, hei
 
   for (let x = 0; x < width; x++) {
     for (let y = 0; y < height; y++) f[y] = seeds[y * width + x] ? 0 : EDT_INF;
-    edt1d(f, height, d, v, z);
+    edt1d(f, height, d, v, z, yCurvature);
     for (let y = 0; y < height; y++) squared[y * width + x] = d[y];
   }
   for (let y = 0; y < height; y++) {
@@ -323,11 +334,19 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   // is then replaced by the exact hex-edge distance below — that is where the
   // shader actually reads the field, and where a euclidean metric's rounded
   // corners are visible.
-  const distanceFromLand = euclideanDistanceTransform(land, width, height);
-  const distanceFromWater = euclideanDistanceTransform(water, width, height);
+  const squash = groundSquash(tileWidth, tileHeight);
+  // Ground space, not screen space: a step in y covers 1/squash as much ground
+  // as a step in x, so the transform has to weight it that way. Baked flat, the
+  // far field is a distance *on the glass* — which puts its level sets 1.9x
+  // further out on a north-facing shore than an east-facing one, measured on the
+  // ground. Everything else in this file is already in ground space (§2.3); this
+  // channel was the last thing that wasn't, and the caustics' keep-off distance
+  // reads it.
+  const yCurvature = 1 / (squash * squash);
+  const distanceFromLand = euclideanDistanceTransform(land, width, height, yCurvature);
+  const distanceFromWater = euclideanDistanceTransform(water, width, height, yCurvature);
 
   const planes = topFaceHalfPlanes(tileWidth, tileHeight);
-  const squash = groundSquash(tileWidth, tileHeight);
   // A little past the signed field's own span: past that it is saturated and
   // the exact value cannot change what is drawn.
   const refineWithin = (NEAR_SPAN_TILES + 0.2) * tileWidth;
@@ -341,7 +360,7 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   // and skipped outright on the common region with no prop tile in it, which is
   // most of them (only ~20% of coastal hexes carry a prop, and coastal hexes
   // are a thin set to begin with).
-  const distanceFromProp = propTexels > 0 ? euclideanDistanceTransform(prop, width, height) : null;
+  const distanceFromProp = propTexels > 0 ? euclideanDistanceTransform(prop, width, height, yCurvature) : null;
   const propFadeWorld = PROP_MUTE_FADE_TILES * tileWidth;
 
   const data = new Uint8Array(count * 4);

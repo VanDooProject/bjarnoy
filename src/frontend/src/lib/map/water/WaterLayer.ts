@@ -87,7 +87,7 @@ const FOAM_INNER_FRACTION = 0.35;
 const FOAM_LAND_REACH = 0.12;
 
 /** Peak alpha of the two tiers: [inner line, outer lace]. */
-const FOAM_ALPHA: [number, number] = [0.9, 0.42];
+const FOAM_ALPHA: [number, number] = [0.9, 0.6];
 
 /**
  * The world map's foam, which is a different drawing rather than the same one
@@ -106,23 +106,45 @@ const FOAM_ALPHA: [number, number] = [0.9, 0.42];
  * is a smoothstep over this, and GLSL leaves smoothstep undefined when its two
  * edges are equal.
  */
-const FOAM_ALPHA_WORLD: [number, number] = [0.95, 0];
+const FOAM_ALPHA_WORLD: [number, number] = [0.72, 0];
 const FOAM_INNER_WORLD = 0.75;
 const FOAM_LAND_REACH_WORLD = 0.02;
 
 /**
- * How far the band's edge is displaced by the drifting noise, in tile widths,
- * and the reciprocal of that noise's feature size in world units. 0.14 tiles is
- * about a quarter of the default band width, which is enough to tear the
- * boundary into a ragged line rather than merely wobbling it; 1/260 puts one
- * blob at about one and a half hexes, so the raggedness reads at the scale of
- * a cove rather than as fizz.
+ * What fraction of `foamWidthHexes` the world map's rim actually uses.
+ *
+ * The band is in world units, so the same 0.3 tiles that is a believable surf
+ * line up close is a 10-15px pure-white outline from orbit — and measured
+ * against docs/design/img/worldmap.png, the art direction of record has no white
+ * outline around its islands at all, only a faint halo. A third of the width, at
+ * FOAM_ALPHA_WORLD rather than full, keeps the coastline legible as a coastline
+ * without drawing a cartoon stroke around it.
  */
-const FOAM_NOISE = 0.14;
+const FOAM_WIDTH_WORLD_SCALE = 0.35;
+
+/**
+ * How far the band's **outer** edge is displaced by the drifting noise, in tile
+ * widths, and the reciprocal of that noise's feature size in world units.
+ *
+ * A real distance, not a fraction of the band. It used to be multiplied by the
+ * width as well, which with both constants below 1 made the actual displacement
+ * about a fiftieth of a tile — one or two pixels, invisible — so the band had no
+ * structure at any scale between "per hex" and "sub-pixel", which is why it read
+ * as a drawn stroke. 0.09 tiles is around 15px in the settlement view, enough to
+ * tear the boundary rather than merely wobble it. 1/260 puts one blob at about
+ * one and a half hexes, so the coarse octave reads at the scale of a cove; the
+ * shader adds a finer one at the band's own scale on top.
+ */
+const FOAM_NOISE = 0.09;
 const FOAM_NOISE_SCALE = 1 / 260;
 
-/** Surge rate in radians/second, and the noise field's drift in noise-space units/second. */
-const FOAM_SURGE_RATE = 1.1;
+/**
+ * Surge rate in radians/second, and the noise field's drift in noise-space
+ * units/second. Slower than it was: with the surge de-synchronised along the
+ * coast by a continuous field rather than a per-hex one, the same rate reads as
+ * the whole band shimmering rather than as separate laps.
+ */
+const FOAM_SURGE_RATE = 0.8;
 const FOAM_WIND: [number, number] = [0.03, -0.02];
 
 /**
@@ -156,17 +178,24 @@ const CAUSTIC_COLOR = 0xdff4ff;
 const CAUSTIC_CULL_SOFTEN_TILES = 0.03;
 
 /**
- * How far the cull line wanders either side of `causticCullHexes`, in tile
- * widths, and the reciprocal of the wander's feature size in world units.
+ * How much further out than `causticCullHexes` a ribbon's own keep-off distance
+ * may fall, in tile widths — each ribbon draws one value from this range and
+ * holds it along its whole length (see `causticField`).
  *
- * Without it every ribbon in the view stops at the same distance from land and
- * the boundary reads as drawn — a second, softer coastline, which is the exact
- * thing culling instead of fading was meant to avoid. 1/420 puts one wander at
- * about two and a half hexes, so the line meanders at the scale of a bay rather
- * than fraying.
+ * Without a spread, every ribbon in the view stops at the same distance from
+ * land and the boundary reads as drawn: a second, softer coastline, which is the
+ * exact thing culling instead of fading was meant to avoid. Displacing one
+ * shared cut line by position-noise fixes the straightness but not the fact that
+ * it is one line; a per-ribbon distance means there is no line at all, and loops
+ * that fall entirely inside their own keep-off are gone rather than clipped.
+ *
+ * 0.5 tiles is wide relative to the 0.35 default keep-off on purpose: the range
+ * has to be several ribbon spacings across before neighbouring ribbons stop
+ * ending at visibly similar distances. Not wider, though — the mask's far field
+ * saturates at 1.5 tiles, and a keep-off anywhere near that means the ribbon is
+ * missing from the whole of the water the eye takes in around an island.
  */
-const CAUSTIC_CULL_JITTER_TILES = 0.28;
-const CAUSTIC_CULL_JITTER_SCALE = 1 / 420;
+const CAUSTIC_CULL_SPREAD_TILES = 0.5;
 
 /**
  * What fraction of its width the foam keeps over a prop tile (§4.4b).
@@ -174,10 +203,17 @@ const CAUSTIC_CULL_JITTER_SCALE = 1 / 420;
  * Not zero. Taking the foam off the tile entirely was the first attempt and it
  * was worse than the artifact: foam is the coastline's outline as much as it is
  * water, so a bare stretch of shore is found by the eye immediately — much
- * faster than a ribbon crossing a rock. A quarter width still closes the outline
- * while leaving the boat or rock its own patch of still water.
+ * faster than a ribbon crossing a rock. Half width still leaves the boat or rock
+ * its own patch of still water while keeping the outline closed.
+ *
+ * Half rather than the quarter this started at, because a quarter was too thin
+ * to survive the art. Measured, it put the band at 3-4 screen pixels on a
+ * north-facing edge — thinner than the sand prism's own painted side face — so
+ * on one tile the whole band landed on the beach with bare water below it. A
+ * band has to stay wider than the art's own edge features to stay on the right
+ * side of them.
  */
-const PROP_FOAM_SCALE = 0.25;
+const PROP_FOAM_SCALE = 0.5;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -264,8 +300,7 @@ export class WaterLayer {
       uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
       uCausticCull: { value: 0, type: 'f32' },
       uCausticCullSoften: { value: CAUSTIC_CULL_SOFTEN_TILES, type: 'f32' },
-      uCausticCullJitter: { value: CAUSTIC_CULL_JITTER_TILES, type: 'f32' },
-      uCausticCullJitterScale: { value: CAUSTIC_CULL_JITTER_SCALE, type: 'f32' },
+      uCausticCullSpread: { value: CAUSTIC_CULL_SPREAD_TILES, type: 'f32' },
       uPropMute: { value: 0, type: 'f32' },
       uPropFoamScale: { value: PROP_FOAM_SCALE, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
@@ -399,7 +434,7 @@ export class WaterLayer {
     u.uCausticCull = Math.min(waterDebugTuning.causticCullHexes, FOAM_REACH_TILES);
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.
-    u.uFoamWidth = waterDebugTuning.foamWidthHexes;
+    u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);
     u.uFoamSurge = waterDebugTuning.foamSurge;
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
 

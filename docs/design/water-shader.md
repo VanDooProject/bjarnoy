@@ -138,8 +138,8 @@ An RGBA8 texture over a world-space rect:
 | Channel | Meaning |
 | --- | --- |
 | **R** | The **signed** near distance from the coastline, `0.5 + d / (2 * NEAR_SPAN_TILES)`. 0.5 is exactly the coastline, below it is land, above it is water. |
-| **G** | Unsigned distance from the nearest land, normalised over `FOAM_REACH_TILES` — the far field, which is all §4.2's wave coast-fade needs. |
-| **B** | Per-hex pseudo-random seed, exactly as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`) — per-hex variation in wave phase and foam ruggedness so the coast isn't uniform. |
+| **G** | Unsigned distance from the nearest land, **in ground space**, normalised over `FOAM_REACH_TILES` — the far field, read by §4.2's wave coast-fade and §4.2b's caustic keep-off. |
+| **B** | Per-hex pseudo-random seed, as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`). **Nothing samples it any more** — see §4.3 on why a per-hex value is the wrong shape for anything the foam does — and it is kept for the debug view and for whatever wants a per-hex constant next. |
 | **A** | The prop-tile mute (§4.4b): `1` over a coastal water tile whose art carries a boat or a rock, ramping to `0` over `PROP_MUTE_FADE_TILES` outside it. |
 
 **No channel is a step**, and that is the point. An earlier version stored two
@@ -158,10 +158,20 @@ edge, and interpolation *helps* instead of blurring a silhouette.
 about 0.8 world units per level, against the ~2 a single channel spanning the
 whole `FOAM_REACH` would give.
 
-A is a *ramp* for the same reason, not a per-hex flag. It exists to switch the
-shader off over a tile, and a switch with a hexagonal edge puts a hexagonal hole
-in the foam collar — which is much more visible than whatever it was protecting.
+A is a *ramp* for the same reason, not a per-hex flag. It exists to quieten the
+shader over a tile, and a switch with a hexagonal edge puts a hexagonal hole in
+the foam collar — which is much more visible than whatever it was protecting.
 See §4.4b.
+
+**G is baked in ground space too.** The raster transform runs with its y axis
+weighted by `1 / squash²`, so a step in y costs what it covers on the ground
+rather than what it covers on the glass. Left flat — which it was, while every
+other field in this file had already been lifted — its level sets sat 1.9× further
+out on a north-facing shore than an east-facing one, and the caustics' keep-off
+band inherited exactly that: the same width in screen pixels all the way round an
+island, therefore the wrong width on the ground. Felzenszwalb's 1D transform
+takes the weight as a curvature on its parabolas, so this is one extra parameter,
+not a second algorithm.
 
 ### 2.2 Layout — its own grid, not the fog mask's
 
@@ -548,10 +558,25 @@ ramp itself became the artifact: a whole belt of ribbons at half strength, and a
 half-strength ribbon does not read as a ribbon further away, it reads as a
 smudge — so the fade drew a second, softer coastline just outside the first.
 `CAUSTIC_CULL_SOFTEN_TILES` is a couple of pixels of antialiasing on the cut, not
-a fade. The cut line is then displaced by its own low-frequency noise
-(`CAUSTIC_CULL_JITTER_TILES` at `CAUSTIC_CULL_JITTER_SCALE`, about two and a half
-hexes per wander), because a cut at a *constant* distance from land is a clean
-offset curve of the coastline and reads as drawn just as much as the ramp did.
+a fade.
+
+**And the keep-off distance is per ribbon, not per pixel.** A cut at a constant
+distance from land is a clean offset curve of the coastline and reads as drawn
+just as much as the ramp did; displacing that one line by position-noise
+straightens out the *shape* but not the fact that it is one line, and measured on
+screen the ribbon ends still clustered at 60 ± 15px because the noise's feature
+size was six times the ribbon spacing.
+
+The fix is that a fragment shader *can* identify which ribbon it is on, even
+though it has no connectivity: `floor(bands + 0.5)` is the index of the nearest
+contour, and it is the same integer everywhere along that contour. Hashing it
+gives each ribbon one keep-off distance, held along its whole length, drawn from
+`causticCullHexes` → `+ CAUSTIC_CULL_SPREAD_TILES`. Loops that lie entirely inside
+their own keep-off never appear at all — which is the "remove the ones that touch
+the shore" case, as far as it is expressible without a second pass — and the rest
+end at distances that have nothing to do with each other, so there is no line
+left to see. Cost is one `hash`, against the four `fbm` evaluations the field
+already does.
 
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
@@ -578,19 +603,42 @@ learned by measuring the first attempt on screen rather than looking at it:
 
 On top of that:
 
-- **Ragged edge**: the distance is perturbed by a world-anchored, slowly
-  drifting fbm, at an amplitude expressed as a **fraction of the band's own
-  width**. Absolute amplitudes do not survive a width change — an amplitude
-  that is a gentle wobble on a wide band erases a narrow one entirely.
-  World-anchored for the same reason fog's cloud field is: so the pattern
-  neither stretches with world size nor slides under a camera pan.
+- **Ragged edge, on the outer boundary only.** Two octaves of a world-anchored,
+  slowly drifting noise displace where the band ends: a coarse one at about one
+  and a half hexes, which tears the boundary at the scale of a cove, and a fine
+  one at the band's own width, which tears it at the scale of a lap. The inner
+  edge is *not* displaced. Perturbing one shared distance moves both ends
+  together, so the band slides across the coastline rather than changing shape —
+  and displacing it enough to see lifts the inner edge off the tile edge, which
+  is the one thing the whole signed-field design exists to nail down.
+
+  The amplitude is in **tile widths**, not a fraction of the band. It was a
+  fraction, and with both constants below 1 the real displacement came out around
+  a fiftieth of a tile: one or two screen pixels. That is the answer to "why does
+  the band read as a drawn stroke" — it had no structure at any scale between
+  per-hex and sub-pixel. A ragged edge does have to be re-checked when the band
+  narrows (§4.4b halves it over a prop tile), but clamping the reach to stay
+  outside the plateau covers that, and it is worth the clamp to keep the
+  raggedness at a size the eye can read.
 - **Surge**: the band's width breathes, `width = FOAM_WIDTH * (1 + FOAM_SURGE *
-  sin(t * SURGE_RATE + lowFreqNoise(p) + seed))`. The low-frequency term
-  de-synchronises the surge along a coastline so it laps rather than pulsing
-  as one ring; the mask's B seed adds per-hex grain on top.
+  sin(t * SURGE_RATE + coarseNoise(p) + hexScaleNoise(p)))`. Two scales of
+  de-synchronisation — about seven hexes for the swell, about one for the
+  individual lap — so it laps along a coastline rather than pulsing as one ring.
+
+  The mask's **B seed used to be one of those terms, and that was a bug.** A
+  per-hex value sampled with linear filtering is a step, and a step in the surge
+  phase is a step in the band's width: measured, the foam ran at one width along
+  a hex edge and 1.9× that (3.3× at p90) along the next, switching over the ~12px
+  that one mask texel interpolates across. The band's only variation was per-hex
+  and discontinuous, which is precisely how a drawn outline behaves and how water
+  does not. Nothing per-hex belongs in a continuous quantity.
 - **Two tiers**: a nearly-opaque inner line on the plateau, and a wider
   thresholded-noise outer lace at lower alpha. The inner line is what makes the
-  coast read as wet; the lace is what makes it read as foam.
+  coast read as wet; the lace is what makes it read as foam. The lace starts part
+  way up the proximity rather than at its very tail — near-white at low alpha
+  over navy is not faint foam, it is grey (measured: saturation 0.57 → 0.28,
+  nothing actually darker than the water), so the tail is cut and the rest
+  carried at a higher alpha.
 
 #### The world map's foam is a different drawing
 
@@ -601,8 +649,16 @@ view is close enough to see it. From orbit that treatment has nothing to resolve
 into: a two-tier band a few pixels wide is a blurred white glow around every
 island, which reads as a drop shadow under a sticker rather than as surf. So
 world mode drops the lace (`FOAM_ALPHA_WORLD`'s second tier is 0), holds the
-inner line at full strength across nearly the whole width
-(`FOAM_INNER_WORLD` 0.75), and keeps essentially nothing on the land side.
+inner line across nearly the whole width (`FOAM_INNER_WORLD` 0.75), and keeps
+essentially nothing on the land side.
+
+It is also **narrower and not pure white**: `FOAM_WIDTH_WORLD_SCALE` takes a
+third of the settlement's width off the same slider, and the inner tier runs at
+0.72 rather than 0.95. The band is in world units, so the width that is a
+believable surf line up close is a 10–15px white outline from orbit — and
+`docs/design/img/worldmap.png`, the art direction of record, has no white outline
+around its islands at all, only a faint halo, which §4.1's shallow-water ramp
+already provides.
 
 `FOAM_LAND_REACH_WORLD` is small rather than zero deliberately: the land-side
 term is a `smoothstep` over it, and GLSL leaves `smoothstep` undefined when its
@@ -619,13 +675,20 @@ A drifting surface pattern running across one of those objects reads as painted
 *onto* it rather than flowing around it, which is exactly the illusion the prop
 is there to create. So over those tiles the shader quietens down: the mask bakes
 A as 1 over the hex, the surface pattern is multiplied out by it, and the foam
-**narrows to `PROP_FOAM_SCALE` (a quarter) of its width**.
+**narrows to `PROP_FOAM_SCALE` (a half) of its width**.
 
 Narrowed, not removed. Removing it was the first attempt and it was worse than
 the artifact it fixed: foam is the coastline's *outline* as much as it is water,
 so a bare stretch of shore is found by the eye immediately — much faster than it
-finds a ribbon crossing a rock. A thin line still closes the outline while
+finds a ribbon crossing a rock. A thinner line still closes the outline while
 leaving the boat or rock its own patch of still water.
+
+Half rather than the quarter this started at, because a quarter was too thin to
+survive the art: measured, it put the band at 3–4 screen pixels on a north-facing
+edge — thinner than the sand prism's own painted side face — and on one tile the
+whole band ended up on the beach with bare water below it. A band has to stay
+wider than the art's own edge features to stay reliably on the right side of
+them.
 
 Three details are load-bearing:
 
@@ -637,7 +700,9 @@ Three details are load-bearing:
   Smoothstep rather than linear so the *rate* also goes to zero at the far end:
   a linear ramp meets the unmuted water at a corner, and a corner in a
   multiplier applied to a bright band is visible as a ring even though the value
-  is continuous there.
+  is continuous there. The fade is 0.2 tiles, cut back from 0.4 — measured, the
+  longer one left 30% of one island's coastline at reduced width and another 31%
+  part way there, because a single prop reaches over 1.8 hex edges of coast.
 - **The sea body is not muted.** It is a flat colour with no motion in it, so
   there is nothing for the prop to be at odds with; muting it would only punch a
   hole in the world map's water.
@@ -668,7 +733,7 @@ vec3  uWaveColor;  float uWaveAlpha;  vec2 uWaveCoastFade;  float uWaveScale
 float uCausticScale, uCausticBands, uCausticWidth, uCausticAlpha; vec3 uCausticColor
 float uCausticCull                keep-off distance from shore, in tile widths
 float uCausticCullSoften          antialiasing on that cut, not a fade
-float uCausticCullJitter, uCausticCullJitterScale   how the cut line wanders
+float uCausticCullSpread          spread of the per-ribbon keep-off distance
 float uFarReach                   what G is normalised over, so G decodes to tiles
 float uPropMute                   0/1: honour the mask's A channel (§4.4b)
 float uPropFoamScale              width the foam keeps over a prop tile
@@ -722,9 +787,12 @@ export interface WaterDebugTuning {
                            //       against the settlement view, not the world map:
                            //       the 0.5 this plan first specified washes whole
                            //       coastal hexes white up close.
-  foamSurge: number;       // 0.35
+  foamSurge: number;       // 0.18 — well under half; the surge is meant to be
+                           //        felt rather than seen.
   waveSpeed: number;       // 1
-  causticCullHexes: number; // 0.45 — how close to shore the ribbons may come
+  causticCullHexes: number; // 0.35 — the *closest* a ribbon may come to shore;
+                            //        each one takes its own distance from here
+                            //        up to + CAUSTIC_CULL_SPREAD_TILES
                             //        (§4.2b); clamped to FOAM_REACH_TILES, past
                             //        which the far channel is saturated and the
                             //        handle is inert.
