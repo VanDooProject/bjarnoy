@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-04T07:17:12.695Z"
+    "generatedAt": "2026-09-04T23:15:24.900Z"
   },
   "data": [
     {
@@ -32,7 +32,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 2
     },
     {
       "type": "longhouse",
@@ -62,7 +63,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 3
     },
     {
       "type": "longhouse",
@@ -92,7 +94,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 3
     },
     {
       "type": "longhouse",
@@ -122,7 +125,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 4
     },
     {
       "type": "longhouse",
@@ -152,7 +156,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 4
     },
     {
       "type": "longhouse",
@@ -182,7 +187,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 5
     },
     {
       "type": "longhouse",
@@ -212,7 +218,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 5
     },
     {
       "type": "longhouse",
@@ -242,7 +249,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 6
     },
     {
       "type": "longhouse",
@@ -272,7 +280,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 6
     },
     {
       "type": "longhouse",
@@ -302,7 +311,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": true
+      "occupiesAllSlots": true,
+      "claimRadius": 7
     },
     {
       "type": "lumberjack",
@@ -332,7 +342,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -362,7 +373,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -392,7 +404,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -422,7 +435,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -452,7 +466,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -482,7 +497,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -512,7 +528,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -542,7 +559,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -572,7 +590,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "lumberjack",
@@ -602,7 +621,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -632,7 +652,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -662,7 +683,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -692,7 +714,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -722,7 +745,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -752,7 +776,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -782,7 +807,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -812,7 +838,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -842,7 +869,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -872,7 +900,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "quarry",
@@ -902,7 +931,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -932,7 +962,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -962,7 +993,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -992,7 +1024,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1022,7 +1055,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1052,7 +1086,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1082,7 +1117,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1112,7 +1148,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1142,7 +1179,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1172,7 +1210,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "farm",
@@ -1202,7 +1241,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1232,7 +1272,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1262,7 +1303,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1292,7 +1334,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1322,7 +1365,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1352,7 +1396,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1382,7 +1427,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1412,7 +1458,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1442,7 +1489,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1472,7 +1520,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "storagehouse",
@@ -1502,7 +1551,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "tower",
@@ -1533,7 +1583,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "tower",
@@ -1564,7 +1615,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 1
     },
     {
       "type": "tower",
@@ -1595,7 +1647,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 1
     },
     {
       "type": "tower",
@@ -1626,7 +1679,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 2
     },
     {
       "type": "tower",
@@ -1657,7 +1711,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 2
     },
     {
       "type": "tower",
@@ -1688,7 +1743,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 3
     },
     {
       "type": "tower",
@@ -1719,7 +1775,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 3
     },
     {
       "type": "tower",
@@ -1750,7 +1807,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 4
     },
     {
       "type": "tower",
@@ -1781,7 +1839,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 4
     },
     {
       "type": "tower",
@@ -1812,7 +1871,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 5
     },
     {
       "type": "fishinghut",
@@ -1840,7 +1900,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -1868,7 +1929,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -1896,7 +1958,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -1924,7 +1987,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -1952,7 +2016,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -1980,7 +2045,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -2008,7 +2074,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -2036,7 +2103,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -2064,7 +2132,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fishinghut",
@@ -2092,7 +2161,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2122,7 +2192,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2152,7 +2223,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2182,7 +2254,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2212,7 +2285,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2242,7 +2316,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2272,7 +2347,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2302,7 +2378,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2332,7 +2409,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2362,7 +2440,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "magictower",
@@ -2392,7 +2471,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2422,7 +2502,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2452,7 +2533,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2482,7 +2564,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2512,7 +2595,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2542,7 +2626,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2572,7 +2657,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2602,7 +2688,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2632,7 +2719,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2662,7 +2750,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "pumpkinfarm",
@@ -2692,7 +2781,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2722,7 +2812,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2752,7 +2843,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2782,7 +2874,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2812,7 +2905,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2842,7 +2936,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2872,7 +2967,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2902,7 +2998,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2932,7 +3029,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2962,7 +3060,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineofthor",
@@ -2992,7 +3091,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3022,7 +3122,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3052,7 +3153,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3082,7 +3184,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3112,7 +3215,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3142,7 +3246,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3172,7 +3277,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3202,7 +3308,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3232,7 +3339,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3262,7 +3370,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "shrineoffreyja",
@@ -3292,7 +3401,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3322,7 +3432,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3352,7 +3463,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3382,7 +3494,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3412,7 +3525,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3442,7 +3556,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3472,7 +3587,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3502,7 +3618,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3532,7 +3649,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3562,7 +3680,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "greatstorehouse",
@@ -3592,7 +3711,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3623,7 +3743,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3654,7 +3775,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3685,7 +3807,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3716,7 +3839,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3747,7 +3871,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3778,7 +3903,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3809,7 +3935,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3840,7 +3967,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3871,7 +3999,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "archeryrange",
@@ -3902,7 +4031,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -3930,7 +4060,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -3958,7 +4089,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -3986,7 +4118,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4014,7 +4147,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4042,7 +4176,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4070,7 +4205,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4098,7 +4234,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4126,7 +4263,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4154,7 +4292,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "dockyard",
@@ -4182,7 +4321,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4213,7 +4353,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4244,7 +4385,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4275,7 +4417,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4306,7 +4449,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4337,7 +4481,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4368,7 +4513,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4399,7 +4545,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4430,7 +4577,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4461,7 +4609,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "barracks",
@@ -4492,7 +4641,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4520,7 +4670,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4548,7 +4699,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4576,7 +4728,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4604,7 +4757,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4632,7 +4786,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4660,7 +4815,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4688,7 +4844,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4716,7 +4873,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4744,7 +4902,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "fisherhut",
@@ -4772,7 +4931,8 @@
       "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4802,7 +4962,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4832,7 +4993,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4862,7 +5024,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4892,7 +5055,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4922,7 +5086,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4952,7 +5117,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -4982,7 +5148,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -5012,7 +5179,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -5042,7 +5210,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     },
     {
       "type": "sawmill",
@@ -5072,7 +5241,8 @@
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
-      "occupiesAllSlots": false
+      "occupiesAllSlots": false,
+      "claimRadius": 0
     }
   ]
 }

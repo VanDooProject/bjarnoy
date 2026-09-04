@@ -863,6 +863,14 @@ export interface BuildingDefinitionResponse {
   slotCost: number;
   /** When set, an order for this level always occupies every slot the settlement currently has (the Longhouse's rule). */
   occupiesAllSlots: boolean;
+  /**
+   * Radius (in hexes) of the claim disc this building/level contributes, or
+   * 0 for a building that contributes none — see BuildingDefinition.ClaimRadius.
+   * Non-zero only for `longhouse` (the settlement's own centre-disc radius)
+   * and `tower` (that tower's own satellite-disc radius, centred on the
+   * tower itself).
+   */
+  claimRadius: number;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.
