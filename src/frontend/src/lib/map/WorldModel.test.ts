@@ -142,6 +142,77 @@ describe('WorldModel applyServerSnapshot renders under-construction buildings', 
   });
 });
 
+// The first owned hex matching `predicate`, or throws — same "pick a
+// different seed if this starts failing" shape as findLandBorderEdge above.
+function findOwnedHex(
+  model: WorldModel,
+  settlement: ReturnType<WorldModel['foundSettlement']>,
+  radius: number,
+  predicate: (c: AxialCoord) => boolean,
+): AxialCoord {
+  for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, radius)) {
+    if (model.getTile(c.q, c.r).ownerId === settlement.id && predicate(c)) return c;
+  }
+  throw new Error('no matching owned hex found — pick a different test seed');
+}
+
+describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
+  it('places a fisher hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
+
+    expect(model.placeBuilding(settlement.id, coastal, 'fisherhut')).toBe(true);
+    expect(model.getTile(coastal.q, coastal.r).buildingType).toBe('fisherhut');
+  });
+
+  it('refuses a fisher hut on plain land, even a buildable Grass hex', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+
+    expect(model.placeBuilding(settlement.id, grass, 'fisherhut')).toBe(false);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
+  });
+
+  it('places a sawmill directly on a straight or bend river tile', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+    model.setRiverTiles([riverTile(grass, 'bend')]);
+
+    expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(true);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBe('sawmill');
+  });
+
+  it('refuses a sawmill on plain grass with no river at all', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+
+    expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
+    expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
+  });
+
+  it.each(['spring', 'confluence', 'mouth'] as const)(
+    'refuses a sawmill on a %s river tile — only straight/bend have matching art',
+    (shape) => {
+      const model = new WorldModel(20260825);
+      const { settlement } = foundLandedSettlement(model);
+      const radius = model.borderRadius(settlement);
+      const grass = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).terrain === 'grass');
+      model.setRiverTiles([riverTile(grass, shape)]);
+
+      expect(model.placeBuilding(settlement.id, grass, 'sawmill')).toBe(false);
+      expect(model.getTile(grass.q, grass.r).buildingType).toBeUndefined();
+    },
+  );
+});
+
 describe('WorldModel longhouse placement', () => {
   it('refuses to place a longhouse on an otherwise-buildable owned hex — founding is the only source of one', () => {
     const model = new WorldModel(20260825);
@@ -161,42 +232,44 @@ function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
 }
 
 describe('WorldModel.sawmillArtVariantOf', () => {
-  it('falls back to the riverside family when no neighbour has a river (a Sawmill is never actually placed here, but the query has to answer something)', () => {
+  // A Sawmill is built directly on a river tile (placeBuilding only accepts
+  // a straight/bend one), so this reads that same hex's own river shape —
+  // not a neighbour's.
+  it('falls back to the riverside family when its own hex has no river at all (a Sawmill is never actually placed here, but the query has to answer something)', () => {
     const model = new WorldModel(20260825);
     expect(model.sawmillArtVariantOf({ q: 0, r: 0 })).toBe('sawmillriver');
   });
 
-  it('is the riverside family when a neighbour has a straight river', () => {
+  it('is the riverside family on a straight river tile', () => {
     const model = new WorldModel(20260825);
     const at = { q: 0, r: 0 };
-    model.setRiverTiles([riverTile(neighbors(at)[0], 'straight')]);
+    model.setRiverTiles([riverTile(at, 'straight')]);
     expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
   });
 
-  it('is the bend family when a neighbour has a river bend, even alongside a straight one', () => {
-    const model = new WorldModel(20260825);
-    const at = { q: 0, r: 0 };
-    const around = neighbors(at);
-    model.setRiverTiles([riverTile(around[0], 'straight'), riverTile(around[1], 'bend')]);
-    expect(model.sawmillArtVariantOf(at)).toBe('sawmillbend');
-  });
-
-  it.each(['spring', 'confluence', 'mouth'] as const)(
-    'falls back to the riverside family for a %s neighbour — no dedicated art exists for it',
-    (shape) => {
-      const model = new WorldModel(20260825);
-      const at = { q: 0, r: 0 };
-      model.setRiverTiles([riverTile(neighbors(at)[0], shape)]);
-      expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
-    },
-  );
-
-  it('ignores a river tile on its own hex — a building tile is never itself a river tile', () => {
+  it('is the bend family on a bend river tile', () => {
     const model = new WorldModel(20260825);
     const at = { q: 0, r: 0 };
     model.setRiverTiles([riverTile(at, 'bend')]);
+    expect(model.sawmillArtVariantOf(at)).toBe('sawmillbend');
+  });
+
+  it('ignores a river tile on a neighbouring hex — only its own hex counts', () => {
+    const model = new WorldModel(20260825);
+    const at = { q: 0, r: 0 };
+    model.setRiverTiles([riverTile(neighbors(at)[0], 'bend')]);
     expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
   });
+
+  it.each(['spring', 'confluence', 'mouth', 'bend60'] as const)(
+    'falls back to the riverside family on a %s river tile — no dedicated art exists for it (also not a valid Sawmill placement to begin with)',
+    (shape) => {
+      const model = new WorldModel(20260825);
+      const at = { q: 0, r: 0 };
+      model.setRiverTiles([riverTile(at, shape)]);
+      expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
+    },
+  );
 });
 
 describe('WorldModel.seaFacingDirectionOf', () => {

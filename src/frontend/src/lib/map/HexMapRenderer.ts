@@ -1821,6 +1821,18 @@ export class HexMapRenderer {
       const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
+      // A Sawmill is built directly on a river tile (WorldModel.placeBuilding
+      // only accepts a straight/bend one) — its sawmill+river composite art
+      // replaces the plain river art the `river` branch below would
+      // otherwise draw, so this has to be checked first.
+      if (river && tile.buildingType === 'sawmill') {
+        const sawmillVariant = worldModel.sawmillArtVariantOf(c);
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillVariant), coord: c });
+        const topTexture = topTextureFor(textures, tile, sawmillVariant);
+        if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
       if (river) {
         // Only a Mouth's orientation actually needs this (see
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan
@@ -1831,14 +1843,8 @@ export class HexMapRenderer {
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;
       }
-      // A Sawmill's own hex is never itself a river tile (the `continue`
-      // above renders a river's own art in that case), so "which of its two
-      // art families" is read off its neighbours instead — see
-      // WorldModel.sawmillArtVariantOf.
-      const sawmillVariant =
-        tile.buildingType === 'sawmill' ? worldModel.sawmillArtVariantOf(c) : undefined;
-      baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillVariant), coord: c });
-      const topTexture = topTextureFor(textures, tile, sawmillVariant);
+      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+      const topTexture = topTextureFor(textures, tile);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
       fogPerfStats.terrainDrawnCount++;
     }

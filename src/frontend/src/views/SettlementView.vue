@@ -23,10 +23,10 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
-import { neighbors, parseKey, type AxialCoord } from '../lib/hex/coords';
+import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import { BOOST_TERRAIN, buildingStatsFor, buildingUpgradeCost, matchingNeighbourCount } from '../lib/map/buildingEconomy';
-import { adjacencyLock, formatBuildTime, longhouseLock } from '../lib/map/ringCatalogue';
+import { formatBuildTime, longhouseLock, riverShapeLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
@@ -374,7 +374,7 @@ interface BuildCategory {
 // (sand) tile meant — sand used to fall into the same flat bucket as
 // forest/mountain and offer Farm/Lumberjack/Quarry, none of which the
 // backend would ever accept there.
-// FishingHut and Dockyard aren't land-terrain buildings at all
+// FishingHut, Dockyard, and FisherHut aren't land-terrain buildings at all
 // (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
 // path to them, offered only on a coastal-water sea tile (see
 // categoriesFor), not through this land-terrain table.
@@ -386,12 +386,16 @@ const SHRINE_CATEGORY: BuildCategory = {
     { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
   ],
 };
+// Fisher Hut is built directly on a coastal-water hex, exactly like Fishing
+// Hut/Dockyard (BuildingDefinition.RequiresCoastalWater) — not on Grass, so
+// it lives in the water category rather than the grass one below.
 const WATER_CATEGORY: BuildCategory = {
   id: 'water',
   label: 'Water',
   buildings: [
     { type: 'fishinghut', label: 'Fishing Hut' },
     { type: 'dockyard', label: 'Dockyard' },
+    { type: 'fisherhut', label: 'Fisher Hut' },
   ],
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
@@ -403,7 +407,11 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       buildings: [
         { type: 'farm', label: 'Farm' },
         { type: 'pumpkinfarm', label: 'Pumpkin Farm' },
-        { type: 'fisherhut', label: 'Fisher Hut' },
+        // Sawmill is only actually buildable on a Grass hex that is itself a
+        // Straight/Bend river tile (BuildingDefinition.RequiresRiverShape) —
+        // still offered here (this bucket is terrain-keyed, not hex-specific)
+        // and locked per-hex instead, same as the longhouse-level gate below
+        // (see ringBuildingFor's riverShapeLock call).
         { type: 'sawmill', label: 'Sawmill' },
       ],
     },
@@ -560,16 +568,14 @@ function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord):
   const boostTerrain = BOOST_TERRAIN[type];
   const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
   const stats = buildingStatsFor(type, 1, matching);
-  // Fisher Hut/Sawmill also need a qualifying neighbour (coastal water /
-  // river respectively) — mirrors WorldModel.placeBuilding's own check, so
-  // the ring shows it locked rather than accepting a click the backend/demo
-  // model would then reject.
-  const hasQualifyingNeighbour =
-    type === 'fisherhut'
-      ? neighbors(coord).some((n) => tileAt(n.q, n.r).isCoastalWater)
-      : type === 'sawmill'
-        ? neighbors(coord).some((n) => world.model.getRiverTile(n.q, n.r))
-        : true;
+  // Sawmill is built directly on a river tile, and only a Straight/Bend one
+  // has matching art — mirrors WorldModel.placeBuilding's own check, so the
+  // ring shows it locked rather than accepting a click the backend/demo
+  // model would then reject. Fisher Hut needs no such per-hex check: it
+  // lives in the water category (see WATER_CATEGORY), only ever offered on
+  // a coastal-water hex to begin with.
+  const riverShape = type === 'sawmill' ? world.model.getRiverTile(coord.q, coord.r)?.shape : undefined;
+  const hasRiverShape = riverShape === 'straight' || riverShape === 'bend';
   return {
     id: type,
     label,
@@ -578,7 +584,7 @@ function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord):
     gives: stats.output ?? stats.modifier,
     lock:
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
-      ?? adjacencyLock(type, hasQualifyingNeighbour),
+      ?? riverShapeLock(type, hasRiverShape),
     art: buildingArt(type, 1),
   };
 }
