@@ -66,12 +66,18 @@ out vec4 finalColor;
 uniform sampler2D uWaterMask;
 
 uniform float uTime;
+uniform float uWaveTime;
 uniform float uSeaBody;
+uniform float uMidWaterWaves;
 uniform float uShowMask;
 uniform vec3 uShallowColor;
 uniform vec3 uDeepColor;
 uniform float uSeaMottle;
 uniform float uMottleScale;
+uniform vec3 uWaveColor;
+uniform float uWaveAlpha;
+uniform vec2 uWaveCoastFade;
+uniform float uWaveScale;
 
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
@@ -92,6 +98,121 @@ float noise(vec2 p) {
   float d = hash(i + vec2(1.0, 1.0));
   vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+// --- §4.2 mid-water waves -------------------------------------------------
+//
+// A per-pixel port of the Graphics squiggles this replaces, not a new look:
+// zip 7's prototype (prototypes/worldmap/Viking Realm.dc.html, sea()) is the
+// art direction of record and docs/design/img/worldmap.png is what the result
+// gets compared against. So the numbers below are the prototype's own, in its
+// own 40px hex, scaled by uWaveScale exactly the way HexMapRenderer's
+// WAVE_STEP_X/WAVE_WIDTH/... constants are — they are meant to be read
+// side by side with those.
+const float PROTO_HEX_W = 40.0;
+const float PROTO_STEP_X = 46.0;
+const float PROTO_STEP_Y = 26.0;
+const float PROTO_WIDTH = 26.0;
+const float PROTO_STROKE = 2.0;
+const float PROTO_JITTER_X = 16.0;
+const float PROTO_JITTER_Y = 12.0;
+const float PROTO_BUMP = 4.5;
+const float PROTO_SWELL_X = 7.0;
+const float PROTO_SWELL_Y = -3.0;
+const float WAVE_DENSITY = 0.62;
+
+// What the shader cannot reproduce is HexMapRenderer's \`hash01\`, which is
+// 32-bit integer arithmetic (Math.imul, >>>) and has no equivalent in the
+// GL1-compatible GLSL Pixi may compile this down to. So the *field* here has
+// the same grid, density, jitter range and period range as the Graphics one,
+// but individual crests land in different places. That is the intended
+// relationship: \`legacyWaveSquiggles\` exists to A/B the look against the
+// reference screenshot, not to overlay two copies of the same wave.
+float cellHash(vec2 cell, float salt) {
+  return hash(cell * 1.13 + salt * 17.31 + 3.7);
+}
+
+/**
+ * Distance from \`p\` to one wave arc that starts at \`a\` and is \`w\` wide.
+ *
+ * The prototype strokes two quadratic Beziers — a -> (a + (w/4, -bump)) ->
+ * (a + (w/2, 0)), then -> (a + (3w/4, +bump)) -> (a + (w, 0)). Each one's
+ * control point sits at the horizontal midpoint of its span, which makes x
+ * exactly linear in the Bezier parameter; so the arc is a plain graph y(x)
+ * built of two parabolas, and its distance needs no curve-fitting iteration
+ * at all. Its peak displacement is bump/2, not bump — worth stating because
+ * the plan's prose called it "amplitude bump".
+ */
+float waveArcDistance(vec2 p, vec2 a, float w, float bump) {
+  float v = (p.x - a.x) / w;
+
+  // Past either end, the nearest point is the endpoint itself — which is what
+  // gives the stroke the prototype's round cap.
+  if (v < 0.0 || v > 1.0) {
+    vec2 end = a + vec2(clamp(v, 0.0, 1.0) * w, 0.0);
+    return length(p - end);
+  }
+
+  float second = step(0.5, v);
+  float u = v * 2.0 - second;          // 0..1 within whichever half
+  float sign_ = second * 2.0 - 1.0;    // first half dips, second half rises
+  float offset = sign_ * 2.0 * bump * u * (1.0 - u);
+  float dOffset = sign_ * 4.0 * bump * (1.0 - 2.0 * u);
+
+  // Vertical distance alone would make the stroke visibly fatten where the arc
+  // is steep (the slope reaches ~0.7 at the ends); dividing by the gradient's
+  // length converts it to the perpendicular distance and keeps the stroke one
+  // width all the way along.
+  float slope = dOffset / w;
+  return abs(p.y - (a.y + offset)) * inversesqrt(1.0 + slope * slope);
+}
+
+// Coverage of the wave field at \`world\`, 0..1. The most expensive thing in
+// this shader — 3x3 cells, each up to one arc — so every caller gates it on
+// water coverage first and on being clear of the coast second.
+float waveField(vec2 world, float t) {
+  float stepX = PROTO_STEP_X * uWaveScale;
+  float stepY = PROTO_STEP_Y * uWaveScale;
+  float width = PROTO_WIDTH * uWaveScale;
+  float stroke = PROTO_STROKE * uWaveScale;
+  float bump = PROTO_BUMP * uWaveScale;
+
+  vec2 base = floor(vec2(world.x / stepX, world.y / stepY));
+  float covered = 0.0;
+
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      vec2 cell = base + vec2(float(dx), float(dy));
+      if (cellHash(cell, 1.0) > WAVE_DENSITY) continue;
+
+      vec2 anchor = vec2(cell.x * stepX, cell.y * stepY);
+      anchor.x += (cellHash(cell, 2.0) - 0.5) * PROTO_JITTER_X * uWaveScale;
+      anchor.y += (cellHash(cell, 3.0) - 0.5) * PROTO_JITTER_Y * uWaveScale;
+
+      // The prototype's swell: each crest nudges up-and-right and back on its
+      // own clock, in place — not a drifting or scrolling pattern.
+      float phase = cellHash(cell, 4.0) * 6.2831853;
+      float period = 3.4 + cellHash(cell, 5.0) * 3.2;
+      float swell = (sin(t / period * 6.2831853 + phase) + 1.0) * 0.5;
+      anchor += vec2(PROTO_SWELL_X, PROTO_SWELL_Y) * uWaveScale * swell;
+
+      float d = waveArcDistance(world, anchor, width, bump);
+      // Feather either side of the stroke so the crest has the anti-aliased
+      // edge a stroked Graphics path gets for free. Kept narrow: a wide
+      // feather eats into the opaque core and the crest reads visibly thinner
+      // and fainter than the Graphics squiggle of the same nominal width,
+      // which is the first thing the legacyWaveSquiggles A/B shows up.
+      float alias = stroke * 0.2;
+      float hit = 1.0 - smoothstep(stroke * 0.5 - alias, stroke * 0.5 + alias, d);
+      // Alpha breathes with the swell as well as the position moving, so
+      // crests read as swelling in place rather than only sliding. Bounded
+      // well above zero — they should never blink out entirely — and biased
+      // high, so the field's mean alpha stays close to the flat WAVE_ALPHA the
+      // Graphics squiggles use rather than reading as a dimmer sea.
+      covered = max(covered, hit * (0.7 + 0.3 * swell));
+    }
+  }
+  return covered;
 }
 
 // The mask's channels, named. R: distance from land, 0 at the coastline and 1
@@ -152,7 +273,25 @@ void main() {
     alpha = 1.0;
   }
 
-  if (alpha < 0.004) discard;
-  finalColor = vec4(col * alpha, alpha);
+  // Everything from here composites over what is already there, so carry it
+  // premultiplied — one \`src + dst * (1 - srcA)\` per term.
+  vec4 acc = vec4(col * alpha, alpha);
+
+  // --- §4.2 mid-water waves ----------------------------------------------
+  // Suppressed near the coast by the mask's R channel: the continuous
+  // successor to \`isNearLand\`, which is a hard per-hex boolean today and
+  // leaves a visibly hexagonal hole in the wave field around every island.
+  // The fade is deliberately wide — it is read out where the distance field is
+  // coarsest, so a narrow one would show the mask's own texel stepping.
+  if (uMidWaterWaves > 0.5) {
+    float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.r);
+    if (clearOfCoast > 0.004) {
+      float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha;
+      acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);
+    }
+  }
+
+  if (acc.a < 0.004) discard;
+  finalColor = acc;
 }
 `;

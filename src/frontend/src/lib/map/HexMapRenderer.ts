@@ -960,7 +960,7 @@ export class HexMapRenderer {
 
   constructor(options: HexMapRendererOptions) {
     this.options = options;
-    this.waterLayer = new WaterLayer(options.mode);
+    this.waterLayer = new WaterLayer(options.mode, TILE_W);
     this.idleDrift = options.mode === 'world';
     this.camera =
       options.mode === 'settlement'

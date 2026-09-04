@@ -4,17 +4,27 @@
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
 import type { WaterMask } from './waterMask';
-import { waterDebugFlags } from './waterDebug';
+import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 
 /** Which view this layer is drawing for — decides whether the sea body term is available at all (§4.1). */
 export type WaterMode = 'world' | 'settlement';
 
-// WorldMapCanvas.vue's `.map-container` gradient endpoints. Kept in sync with
-// it deliberately: with `seaBody` off the CSS gradient is what shows through,
-// so the two want to be the same water.
+// The first two stops of WorldMapCanvas.vue's `.map-container` gradient
+// (#2a92ae -> #14657f -> #0b3c50). Kept in sync with it deliberately: with
+// `seaBody` off that gradient is what shows through, so the two want to be the
+// same water.
+//
+// The third stop is deliberately *not* used. The CSS gradient is radial in
+// **screen** space, so its darkest stop is a vignette at the viewport corners;
+// this ramp is relative to the **coastline**, and saturates at FOAM_REACH_TILES
+// — 1.5 tiles offshore. Ramping all the way to #0b3c50 over that distance
+// paints essentially the whole ocean at the darkest stop, which is much darker
+// than the sea in docs/design/img/worldmap.png, the art direction of record.
+// Ending at the middle stop puts open water at the reference's own blue and
+// keeps the lighter teal as what it reads as there: a shelf hugging the shore.
 const SHALLOW_COLOR = 0x2a92ae;
-const DEEP_COLOR = 0x0b3c50;
+const DEEP_COLOR = 0x14657f;
 
 /**
  * Peak-to-peak brightness of the open-water mottle, and the reciprocal of its
@@ -25,6 +35,33 @@ const DEEP_COLOR = 0x0b3c50;
  */
 const SEA_MOTTLE = 0.03;
 const SEA_MOTTLE_SCALE = 1 / 1400;
+
+/**
+ * The wave crests' colour and peak alpha — HexMapRenderer's own WAVE_COLOR and
+ * WAVE_ALPHA, so flipping `legacyWaveSquiggles` on next to the shader waves
+ * compares two wave fields and not two palettes.
+ */
+const WAVE_COLOR = 0xffffff;
+const WAVE_ALPHA = 0.42;
+
+/**
+ * Where the wave field fades in, measured in the mask's R channel (0 at the
+ * coastline, 1 at FOAM_REACH_TILES = 1.5 tiles). So crests start appearing a
+ * third of a hex offshore and reach full strength just short of one — about
+ * where today's per-hex `isNearLand` cull draws its hard line, but continuous,
+ * which is what removes the hexagonal hole that cull leaves around every
+ * island.
+ *
+ * Deliberately wide rather than tight. This is the one term that reads the
+ * distance field out in the middle of its range, where the mask is coarsest;
+ * the spike saw the field's texel stepping through a narrow fade here, and
+ * spreading the fade over more distance is half the fix (raising
+ * MASK_MAX_TEXELS is the other half).
+ */
+const WAVE_COAST_FADE: [number, number] = [0.22, 0.62];
+
+/** The prototype's own hex width — every wave constant in the shader is in these units. See waterShader.ts. */
+const WAVE_PROTOTYPE_HEX_W = 40;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -65,21 +102,30 @@ export class WaterLayer {
   // whole elapsed clock and teleporting every crest on each drag of the handle.
   private lastTickAtMs: number | null = null;
   private clock = 0;
+  // The waves' own clock, advanced at `waveSpeed` times the rate of `clock`.
+  private waveClock = 0;
   private suppressed = false;
 
-  constructor(mode: WaterMode) {
+  constructor(mode: WaterMode, tileWidth: number) {
     this.mode = mode;
     const [shallowR, shallowG, shallowB] = hexToRgb01(SHALLOW_COLOR);
     const [deepR, deepG, deepB] = hexToRgb01(DEEP_COLOR);
+    const [waveR, waveG, waveB] = hexToRgb01(WAVE_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
+      uWaveTime: { value: 0, type: 'f32' },
       uSeaBody: { value: 0, type: 'f32' },
+      uMidWaterWaves: { value: 0, type: 'f32' },
       uShowMask: { value: 0, type: 'f32' },
       uShallowColor: { value: new Float32Array([shallowR, shallowG, shallowB]), type: 'vec3<f32>' },
       uDeepColor: { value: new Float32Array([deepR, deepG, deepB]), type: 'vec3<f32>' },
       uSeaMottle: { value: SEA_MOTTLE, type: 'f32' },
       uMottleScale: { value: SEA_MOTTLE_SCALE, type: 'f32' },
+      uWaveColor: { value: new Float32Array([waveR, waveG, waveB]), type: 'vec3<f32>' },
+      uWaveAlpha: { value: WAVE_ALPHA, type: 'f32' },
+      uWaveCoastFade: { value: new Float32Array(WAVE_COAST_FADE), type: 'vec2<f32>' },
+      uWaveScale: { value: tileWidth / WAVE_PROTOTYPE_HEX_W, type: 'f32' },
     });
 
     this.geometry = new MeshGeometry({
@@ -165,12 +211,16 @@ export class WaterLayer {
   tick(nowMs: number): void {
     const sinceLast = this.lastTickAtMs === null ? 0 : nowMs - this.lastTickAtMs;
     this.lastTickAtMs = nowMs;
-    this.clock += sinceLast / 1000;
+    const elapsed = sinceLast / 1000;
+    this.clock += elapsed;
+    this.waveClock += elapsed * waterDebugTuning.waveSpeed;
 
     const u = this.uniforms.uniforms;
     u.uTime = this.clock;
+    u.uWaveTime = this.waveClock;
     // Settlement mode never draws a sea body: the painted water tiles are it.
     u.uSeaBody = this.mode === 'world' && waterDebugFlags.seaBody ? 1 : 0;
+    u.uMidWaterWaves = waterDebugFlags.midWaterWaves ? 1 : 0;
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
