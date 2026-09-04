@@ -401,7 +401,7 @@ async function confirmFieldOrderClick() {
       </div>
     </template>
 
-    <template v-else>
+    <template v-else-if="draft">
       <div class="dispatch-form">
         <p v-if="draft.error" class="status-subtext error-note">{{ draft.error }}</p>
 
