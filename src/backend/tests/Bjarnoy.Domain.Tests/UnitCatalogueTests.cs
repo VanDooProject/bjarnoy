@@ -63,15 +63,36 @@ public class UnitCatalogueTests
     [Fact]
     public void A_land_unit_needs_an_archery_range_when_a_building_lookup_is_supplied()
     {
+        // Bowman is the archer/siege slice of the roster — still gated on
+        // ArcheryRange, unlike the basic melee units (see
+        // A_basic_melee_unit_needs_a_barracks_when_a_building_lookup_is_supplied).
+
+        // No buildingLevelOf lookup: old longhouse-only behavior, unaffected
+        // by the new training-building gate.
+        Assert.True(UnitCatalogue.IsAvailable(UnitType.Bowman, 4));
+
+        // With a lookup, an absent Archery Range blocks a land unit even
+        // though the longhouse is high enough.
+        Assert.False(UnitCatalogue.IsAvailable(UnitType.Bowman, 4, _ => 0));
+        Assert.True(UnitCatalogue.IsAvailable(
+            UnitType.Bowman, 4, t => t == BuildingType.ArcheryRange ? 1 : 0));
+    }
+
+    [Fact]
+    public void A_basic_melee_unit_needs_a_barracks_when_a_building_lookup_is_supplied()
+    {
+        // Spearman is the basic melee slice of the roster — gated on
+        // Barracks, not ArcheryRange (which now only trains Bowman/Catapult).
+
         // No buildingLevelOf lookup: old longhouse-only behavior, unaffected
         // by the new training-building gate.
         Assert.True(UnitCatalogue.IsAvailable(UnitType.Spearman, 1));
 
-        // With a lookup, an absent Archery Range blocks a land unit even
-        // though the longhouse is high enough.
+        // With a lookup, an absent Barracks blocks a land unit even though
+        // the longhouse is high enough.
         Assert.False(UnitCatalogue.IsAvailable(UnitType.Spearman, 1, _ => 0));
         Assert.True(UnitCatalogue.IsAvailable(
-            UnitType.Spearman, 1, t => t == BuildingType.ArcheryRange ? 1 : 0));
+            UnitType.Spearman, 1, t => t == BuildingType.Barracks ? 1 : 0));
     }
 
     [Fact]
@@ -94,16 +115,17 @@ public class UnitCatalogueTests
     }
 
     [Fact]
-    public void No_unit_requires_a_barracks_yet()
+    public void The_basic_melee_roster_requires_a_barracks()
     {
-        // Barracks (BuildingType.Barracks) has no unit-training hook of its
-        // own — ArcheryRange already owns the land combat/siege roster's
-        // RequiredBuildingType gate. Documents that scope boundary so a
-        // future change wiring Barracks into training updates this test
-        // deliberately rather than by accident.
-        Assert.DoesNotContain(
-            Enum.GetValues<UnitType>(),
-            type => UnitCatalogue.Get(type).RequiredBuildingType == BuildingType.Barracks);
+        // Barracks (BuildingType.Barracks) trains the basic melee slice of
+        // the land roster; ArcheryRange keeps the archer/siege slice
+        // (Bowman, Catapult). Documents that split so a future roster change
+        // updates this test deliberately rather than by accident.
+        Assert.Equal(
+            [UnitType.Spearman, UnitType.Axeman, UnitType.Berserker],
+            Enum.GetValues<UnitType>()
+                .Where(type => UnitCatalogue.Get(type).RequiredBuildingType == BuildingType.Barracks)
+                .ToArray());
     }
 
     [Fact]

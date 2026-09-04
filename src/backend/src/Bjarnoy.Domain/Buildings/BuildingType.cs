@@ -62,9 +62,10 @@ public enum BuildingType
     GreatStorehouse = 11,
 
     /// <summary>
-    /// Trains land troops (the combat/siege roster) in place of the
-    /// Longhouse. No production/storage of its own, and no combat bonus
-    /// (deferred) — unlike <see cref="Tower"/>.
+    /// Trains the archer/siege slice of the land roster (Bowman, Catapult)
+    /// in place of the Longhouse. No production/storage of its own, and no
+    /// combat bonus (deferred) — unlike <see cref="Tower"/>. See
+    /// <see cref="Barracks"/> for the basic-melee half of the split.
     /// </summary>
     ArcheryRange = 12,
 
@@ -75,11 +76,11 @@ public enum BuildingType
     Dockyard = 13,
 
     /// <summary>
-    /// A garrison building on land. No unit-training hook of its own yet —
-    /// <see cref="ArcheryRange"/> already owns the land combat/siege
-    /// roster's <see cref="Units.UnitDefinition.RequiredBuildingType"/> gate,
-    /// so Barracks is buildable/leveling only for now (deferred: a garrison
-    /// capacity or second training track, once one exists to hang it off).
+    /// Trains the basic melee slice of the land roster (Spearman, Axeman,
+    /// Berserker) in place of the Longhouse — <see cref="ArcheryRange"/>
+    /// keeps the archer/siege units (Bowman, Catapult). A garrison building
+    /// on land otherwise: no production/storage of its own, and no combat
+    /// bonus (deferred: a garrison capacity, once one exists to hang it off).
     /// </summary>
     Barracks = 14,
 

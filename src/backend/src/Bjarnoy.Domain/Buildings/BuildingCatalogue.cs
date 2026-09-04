@@ -334,8 +334,10 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the land combat/siege roster in place of the Longhouse (see
-    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>). No
+    /// Trains the archer/siege slice of the land roster — Bowman, Catapult —
+    /// in place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>);
+    /// <see cref="Barracks"/> trains the basic melee slice instead. No
     /// production or storage of its own, and — unlike <see cref="Tower"/> —
     /// no combat bonus; that is explicitly deferred.
     /// </summary>
@@ -369,9 +371,12 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// A garrison building with no production/storage of its own and no
-    /// unit-training hook yet — see <see cref="BuildingType.Barracks"/>'s
-    /// doc comment for why. Buildable/leveling like <see cref="Tower"/> and
+    /// Trains the basic melee slice of the land roster — Spearman, Axeman,
+    /// Berserker — in place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>);
+    /// <see cref="ArcheryRange"/> keeps the archer/siege slice. Otherwise a
+    /// garrison building with no production/storage of its own and no combat
+    /// bonus (deferred). Buildable/leveling like <see cref="Tower"/> and
     /// <see cref="ArcheryRange"/>, same terrain and cost tier.
     /// </summary>
     private static BuildingDefinition Barracks(int level) => new()
