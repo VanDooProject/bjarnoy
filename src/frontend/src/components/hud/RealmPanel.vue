@@ -20,7 +20,7 @@ const settlement = computed(() =>
   world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined,
 );
 const claimedHexes = computed(() =>
-  settlement.value ? world.model.borderRadius(settlement.value) : 0,
+  settlement.value ? world.model.claimedHexCount(settlement.value.id) : 0,
 );
 </script>
 
@@ -30,7 +30,7 @@ const claimedHexes = computed(() =>
       <span class="name">{{ settlement.name }}</span>
       <span class="level pill">Lv {{ settlement.level }}</span>
     </div>
-    <p class="sub">Longhouse claims a border-{{ claimedHexes }} realm</p>
+    <p class="sub">Realm claims {{ claimedHexes }} hexes</p>
     <button class="back" :disabled="props.ringOpen" @click="router.push('/world')">← World map</button>
   </div>
 </template>

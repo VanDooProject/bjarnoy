@@ -5,6 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { claimDiscs, claimRadiusForLevel } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import { DEFAULT_GENERATION, generateTile, type WorldGenerationConstants } from './worldGenerator';
 import {
@@ -79,7 +80,6 @@ const DEMO_CART_TRAVEL_MS = 8000;
 // rival's offer itself.
 const DEMO_RIVAL_CART_OFFSET: AxialCoord = { q: 6, r: -4 };
 
-const BASE_BORDER_RADIUS = 2;
 // zip 9: "unexplored hexes are hidden; scouted but not currently-visible
 // hexes are greyed out" — three distinct rings, not two. Ownership only ever
 // reaches borderRadius, visibleHexes (line-of-sight) reaches one hex further,
@@ -87,14 +87,6 @@ const BASE_BORDER_RADIUS = 2;
 // scouted terrain between the clear realm and the hidden unknown, instead of
 // unexplored starting immediately at the border.
 const FOG_SCOUT_RING = 3;
-// Border-anchoring (docs/design decision: "Border radius grows with
-// longhouse level and with border-anchoring buildings (watchtower)"). A
-// tower can only be placed inside the settlement's existing border (see the
-// hexDistance guard in placeBuilding), so claiming a ring around it only
-// ever pushes the border outward in whichever direction the tower faces —
-// the settlement's owned-tile silhouette stops being a pure hex and gains a
-// bump wherever a tower sits near the edge.
-const TOWER_CLAIM_RADIUS = 1;
 
 export class WorldModel {
   readonly seed: number;
@@ -122,6 +114,14 @@ export class WorldModel {
    * this settlement simply never reported — see `applyServerSnapshot`.
    */
   private renderedBuildingCoords = new Map<string, Set<string>>();
+  /**
+   * Every standing Tower per settlement — the frontend's own mirror of the
+   * backend's per-settlement `Buildings` list, kept just for the one field
+   * (`q`/`r`/`level`) `claimDiscsFor` needs to extend a realm's border by
+   * its towers (`Settlement.ClaimDiscsFor`'s satellite discs). Updated from
+   * `applyServerSnapshot` (live mode) and `placeBuilding` (demo mode).
+   */
+  private settlementTowers = new Map<string, { q: number; r: number; level: number }[]>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -306,7 +306,7 @@ export class WorldModel {
     home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
     home.buildingLevel = 1;
-    for (const c of hexesInRadius(at, this.borderRadius(settlement))) {
+    for (const c of this.claimedHexes(settlement)) {
       const tile = this.getTile(c.q, c.r);
       if (!tile.ownerId) tile.ownerId = settlement.id;
     }
@@ -331,7 +331,7 @@ export class WorldModel {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return 0;
     let count = 0;
-    for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.borderRadius(settlement))) {
+    for (const c of this.claimedHexes(settlement)) {
       if (this.getTile(c.q, c.r).ownerId === settlementId && this.getTile(c.q, c.r).buildingType) count++;
     }
     return count;
@@ -402,8 +402,57 @@ export class WorldModel {
     return settlement?.capacity ?? this.storageCapFor(settlementId);
   }
 
+  /**
+   * Radius of the settlement's own centre disc — see `claimRadiusForLevel`.
+   * This is only the centre disc: a settlement's full claimed territory
+   * also includes one satellite disc per standing Tower (see
+   * `claimDiscsFor`/`claimedHexes`), so this alone under-covers a
+   * territory with towers. Kept for callers that only ever cared about the
+   * centre disc (fog radius, the realm-panel label).
+   */
   borderRadius(settlement: Settlement): number {
-    return BASE_BORDER_RADIUS + Math.floor(settlement.level / 2);
+    return claimRadiusForLevel(settlement.level);
+  }
+
+  /** Every claim disc — the centre disc plus one per standing Tower — making up this settlement's full claimed territory. */
+  private claimDiscsFor(settlement: Settlement) {
+    return claimDiscs(
+      { q: settlement.q, r: settlement.r },
+      settlement.level,
+      this.settlementTowers.get(settlement.id) ?? [],
+    );
+  }
+
+  /**
+   * The union of every hex within each of `claimDiscsFor`'s discs — this
+   * settlement's actual claimed territory, towers included, rather than
+   * just the centre disc `borderRadius` alone describes.
+   */
+  private claimedHexes(settlement: Settlement): AxialCoord[] {
+    const seen = new Set<string>();
+    const hexes: AxialCoord[] = [];
+    for (const disc of this.claimDiscsFor(settlement)) {
+      for (const c of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius)) {
+        const key = coordKey(c);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hexes.push(c);
+      }
+    }
+    return hexes;
+  }
+
+  /** Whether `at` is inside this settlement's claimed territory — see `claimedHexes`. */
+  private claims(settlement: Settlement, at: AxialCoord): boolean {
+    return this.claimDiscsFor(settlement).some(
+      (disc) => hexDistance({ q: disc.q, r: disc.r }, at) <= disc.radius,
+    );
+  }
+
+  /** Total hexes this settlement has claimed — the centre disc plus every Tower's own satellite disc (see `claimedHexes`). */
+  claimedHexCount(settlementId: string): number {
+    const settlement = this.settlements.get(settlementId);
+    return settlement ? this.claimedHexes(settlement).length : 0;
   }
 
   /** Hexes visible right now (line-of-sight radius around a settlement). */
@@ -468,9 +517,23 @@ export class WorldModel {
     const settlement = this.settlements.get(settlementId);
     if (!settlement) return;
 
-    if (snapshot.level > settlement.level) {
-      settlement.level = snapshot.level;
-      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.borderRadius(settlement))) {
+    const previousTowers = this.settlementTowers.get(settlementId) ?? [];
+    const towers = snapshot.buildings
+      .filter((b) => b.type === 'tower' && b.level >= 1)
+      .map((b) => ({ q: b.q, r: b.r, level: b.level }));
+    const towersChanged =
+      towers.length !== previousTowers.length ||
+      towers.some((t, i) => t.q !== previousTowers[i]?.q || t.r !== previousTowers[i]?.r || t.level !== previousTowers[i]?.level);
+    this.settlementTowers.set(settlementId, towers);
+
+    const levelIncreased = snapshot.level > settlement.level;
+    if (levelIncreased) settlement.level = snapshot.level;
+
+    // Re-claim whenever the centre disc grew (a longhouse level-up) or the
+    // set of Tower satellite discs changed (a new/levelled-up tower) — not
+    // every poll, since claiming is otherwise pure repeated work.
+    if (levelIncreased || towersChanged) {
+      for (const c of this.claimedHexes(settlement)) {
         const tile = this.getTile(c.q, c.r);
         if (!tile.ownerId) tile.ownerId = settlementId;
       }
@@ -544,7 +607,7 @@ export class WorldModel {
     // above), never from placing a building — matches the backend rule in
     // Settlement.PlanBuild (BuildRejection.LonghousePlacementNotAllowed).
     if (type === 'longhouse') return false;
-    if (hexDistance({ q: settlement.q, r: settlement.r }, at) > this.borderRadius(settlement)) {
+    if (!this.claims(settlement, at)) {
       return false;
     }
     const tile = this.getTile(at.q, at.r);
@@ -567,7 +630,10 @@ export class WorldModel {
     tile.buildingType = type;
     tile.buildingLevel = 1;
     if (type === 'tower') {
-      for (const c of hexesInRadius(at, TOWER_CLAIM_RADIUS)) {
+      const towers = this.settlementTowers.get(settlementId) ?? [];
+      towers.push({ q: at.q, r: at.r, level: 1 });
+      this.settlementTowers.set(settlementId, towers);
+      for (const c of this.claimedHexes(settlement)) {
         const claimed = this.getTile(c.q, c.r);
         if (!claimed.ownerId) claimed.ownerId = settlementId;
       }

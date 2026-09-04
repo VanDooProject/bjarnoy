@@ -19,7 +19,7 @@ test('clicking an island founds a settlement and opens the village view', async 
   const realmPanel = page.locator('.realm-panel');
   await expect(realmPanel.getByText('Unnamed realm')).toBeVisible();
   await expect(realmPanel.getByText('Lv 1')).toBeVisible();
-  await expect(realmPanel.getByText(/Longhouse claims a border-\d+ realm/)).toBeVisible();
+  await expect(realmPanel.getByText(/Realm claims \d+ hexes/)).toBeVisible();
 
   // resource bar: four resources plus the population pill, each a
   // positive, growing number

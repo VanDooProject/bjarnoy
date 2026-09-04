@@ -27,27 +27,19 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 }
 
 describe('WorldModel border-anchoring (watchtower)', () => {
-  it('placing a tower claims a ring beyond the settlement itself, breaking the pure-hex border', () => {
+  it('a freshly placed (level-1) tower claims no extra ground — Settlement.TowerClaimRadius(1) == 0', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
     const edge = findLandBorderEdge(model, at, radius);
 
-    const placed = model.placeBuilding(settlement.id, edge, 'tower');
-    expect(placed).toBe(true);
+    expect(model.placeBuilding(settlement.id, edge, 'tower')).toBe(true);
 
+    // Nothing past the centre disc's own radius is newly claimed — a
+    // level-1 tower's own satellite disc has radius 0.
     const beyond = hexesInRadius(edge, 1).filter((c) => hexDistance(at, c) === radius + 1);
     expect(beyond.length).toBeGreaterThan(0);
-    const nowOwned = beyond.filter((c) => model.getTile(c.q, c.r).ownerId === settlement.id);
-    expect(nowOwned.length).toBeGreaterThan(0);
-
-    // The silhouette is no longer a pure hex-radius disc: some hexes at
-    // radius+1 (in the tower's direction) are owned, others at the same
-    // radius+1 (elsewhere around the settlement) are not.
-    const untouchedFarSide = hexesInRadius(at, radius + 1).filter(
-      (c) => hexDistance(at, c) === radius + 1 && !beyond.some((b) => b.q === c.q && b.r === c.r),
-    );
-    expect(untouchedFarSide.some((c) => model.getTile(c.q, c.r).ownerId !== settlement.id)).toBe(true);
+    expect(beyond.every((c) => model.getTile(c.q, c.r).ownerId !== settlement.id)).toBe(true);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
@@ -58,6 +50,45 @@ describe('WorldModel border-anchoring (watchtower)', () => {
 
     expect(model.placeBuilding(settlement.id, outside, 'tower')).toBe(false);
     expect(model.getTile(outside.q, outside.r).ownerId).toBeUndefined();
+  });
+
+  // Regression: applyServerSnapshot (the live-mode poll path, not
+  // placeBuilding's demo-only path) used to ignore Tower buildings
+  // entirely — a settlement's realm border rendered as the longhouse's
+  // centre disc alone no matter how many towers stood, even though the
+  // backend's own claim (Settlement.Claims/ClaimDiscsFor) already counted
+  // each Tower's satellite disc. That mismatch is what let the frontend
+  // show a tile as "inside the realm" while the backend rejected building
+  // there.
+  it('applyServerSnapshot extends the claimed territory by a live Tower satellite disc, breaking the pure-hex border', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const radius = model.borderRadius(settlement);
+    const towerAt = findLandBorderEdge(model, at, radius);
+
+    // A level-4 tower's own satellite disc has radius 2 (TowerClaimRadius(4)
+    // == 2), reaching well past the centre disc alone from a tower sitting
+    // right on the border's own edge.
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.capacity ?? { wood: 0, stone: 0, food: 0, iron: 0 },
+      buildings: [{ q: towerAt.q, r: towerAt.r, type: 'tower', level: 4 }],
+    });
+
+    const beyondCentreDisc = hexesInRadius(towerAt, 2).filter((c) => hexDistance(at, c) > radius);
+    expect(beyondCentreDisc.length).toBeGreaterThan(0);
+    const nowOwned = beyondCentreDisc.filter((c) => model.getTile(c.q, c.r).ownerId === settlement.id);
+    expect(nowOwned.length).toBeGreaterThan(0);
+
+    // The silhouette is no longer a pure hex-radius disc: some hexes past
+    // the centre disc's radius (in the tower's direction) are owned, others
+    // at the same distance elsewhere around the settlement are not.
+    const untouchedFarSide = hexesInRadius(at, radius + 1).filter(
+      (c) => hexDistance(at, c) === radius + 1 && !beyondCentreDisc.some((b) => b.q === c.q && b.r === c.r),
+    );
+    expect(untouchedFarSide.some((c) => model.getTile(c.q, c.r).ownerId !== settlement.id)).toBe(true);
   });
 });
 
