@@ -85,8 +85,8 @@ const LORE: Record<string, string> = {
   fishinghut: 'A dock over shallow water, fishing the shallows a farm never could.',
   magictower: 'Arcane iron out of grassland — no ore, no vein, just the working.',
   pumpkinfarm: 'A second harvest for grass — pumpkins alongside the plain fields.',
-  shrineofthor: 'Raised to Thor on any land hex — its favour boosts Wood and Stone production.',
-  shrineoffreyja: 'Raised to Freyja on any land hex — its favour boosts Food production.',
+  shrineofthor: 'Raised to Thor on grass — its favour boosts Wood and Stone production.',
+  shrineoffreyja: 'Raised to Freyja on grass — its favour boosts Food production.',
   archeryrange: 'Trains the land army — spearmen through catapults — on grass or sand, in place of the longhouse.',
   dockyard: 'Trains ships on shallow (coastal) water, in place of the longhouse.',
   greatstorehouse:
@@ -117,13 +117,13 @@ function typeLabel(type: string): string {
 // Mirrors prototypes/MECHANICS.md's building categories (anchor / production
 // / military / logistics) — the closest thing this codebase has to a
 // canonical grouping — rather than inventing a new taxonomy for this page.
-const CATEGORY_ORDER = ['anchor', 'production', 'defense', 'logistics'] as const;
+const CATEGORY_ORDER = ['anchor', 'production', 'military', 'logistics'] as const;
 type Category = (typeof CATEGORY_ORDER)[number];
 
 const CATEGORY_LABELS: Record<Category, string> = {
   anchor: 'Anchor',
   production: 'Production',
-  defense: 'Defense',
+  military: 'Military',
   logistics: 'Logistics',
 };
 
@@ -137,9 +137,9 @@ const CATEGORY_OF: Record<string, Category> = {
   magictower: 'production',
   fisherhut: 'production',
   sawmill: 'production',
-  tower: 'defense',
-  archeryrange: 'defense',
-  barracks: 'defense',
+  tower: 'military',
+  archeryrange: 'military',
+  barracks: 'military',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   dockyard: 'logistics',

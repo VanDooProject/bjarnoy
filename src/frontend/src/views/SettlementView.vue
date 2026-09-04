@@ -367,13 +367,12 @@ interface BuildCategory {
   buildings: { type: BuildableType; label: string }[];
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
-// MagicTower are Grass-only, Lumberjack is Forest-only, Quarry is
-// Mountain-only, Tower/ArcheryRange are SandOrGrass, and a shrine is
-// buildable on any land hex. Offering a building the backend's own
-// AllowedTerrain would reject is what "messed up categories" on a shore
-// (sand) tile meant — sand used to fall into the same flat bucket as
-// forest/mountain and offer Farm/Lumberjack/Quarry, none of which the
-// backend would ever accept there.
+// MagicTower/Shrine are Grass-only, Lumberjack is Forest-only, Quarry is
+// Mountain-only, and Tower/ArcheryRange are SandOrGrass. Offering a building
+// the backend's own AllowedTerrain would reject is what "messed up
+// categories" on a shore (sand) tile meant — sand used to fall into the same
+// flat bucket as forest/mountain and offer Farm/Lumberjack/Quarry, none of
+// which the backend would ever accept there.
 // FishingHut, Dockyard, and FisherHut aren't land-terrain buildings at all
 // (RequiresCoastalWater, on a Sea hex) — WATER_CATEGORY below is the ring
 // path to them, offered only on a coastal-water sea tile (see
@@ -416,8 +415,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       ],
     },
     {
-      id: 'defense',
-      label: 'Defense',
+      id: 'military',
+      label: 'Military',
       buildings: [
         { type: 'tower', label: 'Watchtower' },
         { type: 'magictower', label: 'Magic Tower' },
@@ -436,17 +435,10 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
     SHRINE_CATEGORY,
   ],
   sand: [
-    { id: 'defense', label: 'Defense', buildings: [{ type: 'tower', label: 'Watchtower' }] },
-    SHRINE_CATEGORY,
+    { id: 'military', label: 'Military', buildings: [{ type: 'tower', label: 'Watchtower' }] },
   ],
-  forest: [
-    { id: 'resource', label: 'Resource', buildings: [{ type: 'lumberjack', label: 'Lumberjack' }] },
-    SHRINE_CATEGORY,
-  ],
-  mountain: [
-    { id: 'resource', label: 'Resource', buildings: [{ type: 'quarry', label: 'Quarry' }] },
-    SHRINE_CATEGORY,
-  ],
+  forest: [{ id: 'resource', label: 'Resource', buildings: [{ type: 'lumberjack', label: 'Lumberjack' }] }],
+  mountain: [{ id: 'resource', label: 'Resource', buildings: [{ type: 'quarry', label: 'Quarry' }] }],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
@@ -467,7 +459,7 @@ const isUnclaimedTile = computed(() => !!selectedTile.value && !selectedTile.val
 const CATEGORY_COLORS: Record<string, string> = {
   housing: 'var(--gold)',
   resource: 'var(--food)',
-  defense: 'var(--iron)',
+  military: 'var(--iron)',
   religion: 'var(--shrine)',
   logistics: 'var(--stone)',
   water: 'var(--water)',
