@@ -134,6 +134,15 @@ const RIVER_BASE_BEND = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend_{E,NE,NW,W,SW,SE}_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
+// The 120°-off-straight turn (RiverTileShape.Bend60) — a distinct art family
+// from the 60°-off-straight `bend` above, not a variant of it. Its filename
+// prefix is `rivertile_bend60_`, which the plain `bend` glob above can't
+// match (`bend_` requires an underscore right after "bend", and "60" sits
+// there instead), so it needs its own glob rather than colliding with it.
+const RIVER_BASE_BEND60 = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend60_{E,NE,NW,W,SW,SE}_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
 const RIVER_BASE_SPRING = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_spring_{E,NE,NW,W,SW,SE}_base.png',
   { eager: true, import: 'default' },
@@ -148,6 +157,10 @@ const RIVER_TOP_STRAIGHT = import.meta.glob(
 ) as AssetModules;
 const RIVER_TOP_BEND = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend_{E,NE,NW,W,SW,SE}.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const RIVER_TOP_BEND60 = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend60_{E,NE,NW,W,SW,SE}.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const RIVER_TOP_SPRING = import.meta.glob(
@@ -324,19 +337,21 @@ const SOURCES = {
   riverBase: {
     straight: buildPlain(RIVER_BASE_STRAIGHT, ''),
     bend: buildPlain(RIVER_BASE_BEND, ''),
+    bend60: buildPlain(RIVER_BASE_BEND60, ''),
     spring: buildPlain(RIVER_BASE_SPRING, ''),
     confluence: buildPlain(RIVER_BASE_CONFLUENCE, ''),
   } satisfies Record<RiverArtShape, OrientationMap<string>>,
   riverTop: {
     straight: buildPlain(RIVER_TOP_STRAIGHT, ''),
     bend: buildPlain(RIVER_TOP_BEND, ''),
+    bend60: buildPlain(RIVER_TOP_BEND60, ''),
     spring: buildPlain(RIVER_TOP_SPRING, ''),
     confluence: buildPlain(RIVER_TOP_CONFLUENCE, ''),
   } satisfies Record<RiverArtShape, OrientationMap<string>>,
 };
 
-/** The art pack's river shapes — `RiverTileShape`'s `mouth` maps onto `straight` (see `SOURCES.riverBase`). */
-type RiverArtShape = 'straight' | 'bend' | 'spring' | 'confluence';
+/** The art pack's river shapes — `RiverTileShape`'s `mouth` maps onto `straight`/`bend` (see `SOURCES.riverBase`). */
+type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
 
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
@@ -510,8 +525,11 @@ export function topTextureFor(
  * through the derived helpers in `types.ts` rather than using
  * `inDirections`/`outDirection` as a `TileOrientation` directly.
  *
- * `bend` is directional (`bendOrientationOf`); `spring` has only an
- * outflow (`springOrientationOf`); `straight` orients by whichever of
+ * `bend` is directional (`bendOrientationOf`); `bend60` — the sharper
+ * 120°-off-straight turn, a separate art family from `bend` — is directional
+ * the same way, reusing `bendOrientationOf` (it takes an in/out direction
+ * pair, not an angle, so the same anchor logic applies); `spring` has only
+ * an outflow (`springOrientationOf`); `straight` orients by whichever of
  * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
  * gives the same file either way (`docs/design/river-generation.md` again).
  *
@@ -528,12 +546,19 @@ export function topTextureFor(
  * fix, rather than risk applying a derived formula that wasn't measured
  * against it. Known-unfixed; see "Art pack orientation convention".
  */
-function riverArtFor(
+// Exported (only) so textures.test.ts can check the shape/orientation this
+// picks without going through loadTileTextures' real asset pipeline
+// (Pixi's Assets.load needs a browser `document`, which this repo's node-
+// environment vitest config doesn't provide).
+export function riverArtFor(
   river: RiverTile,
   seaDirection: TileOrientation | null,
-): { shape: 'straight' | 'bend' | 'spring' | 'confluence'; orientation: TileOrientation } {
+): { shape: 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence'; orientation: TileOrientation } {
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
     return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+  }
+  if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
+    return { shape: 'bend60', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'spring' && river.outDirection) {
     return { shape: 'spring', orientation: springOrientationOf(river.outDirection) };

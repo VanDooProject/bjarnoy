@@ -138,7 +138,7 @@ public sealed record IslandResponse(
 
 public sealed record TileCoordinate(int Q, int R);
 
-/// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>.</param>
+/// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>, <c>bend60</c>.</param>
 /// <param name="InDirections">
 /// The orientations (<c>E</c>/<c>NE</c>/<c>NW</c>/<c>W</c>/<c>SW</c>/<c>SE</c>) this tile's river
 /// flows in from — empty for a spring, two entries for a confluence, one otherwise.
@@ -154,7 +154,10 @@ public sealed record RiverTileResponse(
     IReadOnlyList<string> InDirections,
     string? OutDirection)
 {
-    private static readonly string[] ShapeNames = ["spring", "straight", "bend", "confluence", "mouth"];
+    // Indexed by RiverTileShape's own int values — bend60 sits last (not next
+    // to bend) because RiverTileShape.Bend60's doc comment explains why it
+    // was appended rather than inserted.
+    private static readonly string[] ShapeNames = ["spring", "straight", "bend", "confluence", "mouth", "bend60"];
 
     /// <summary>
     /// The domain's own <see cref="RiverTile"/>, for a map that was generated
