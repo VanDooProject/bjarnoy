@@ -12,8 +12,18 @@
 export interface WaterDebugFlags {
   /** The whole water layer. Off hides the mesh entirely — the pre-shader look. */
   water: boolean;
-  /** Shader mid-water wave crests (§4.2). */
+  /**
+   * The water's surface pattern: caustic ribbons in a settlement, the
+   * prototype's scattered wave arcs on the world map (§4.2/§4.2b). One flag,
+   * because a view only ever draws one of them — which one is decided by the
+   * view, not here.
+   */
   midWaterWaves: boolean;
+  /**
+   * Debug: draw the settlement's caustic ribbons on the world map too, so the
+   * two idioms can be judged at the same scale instead of one per view.
+   */
+  causticsEverywhere: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
   /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
@@ -46,6 +56,7 @@ export interface WaterDebugFlags {
 export const waterDebugFlags: WaterDebugFlags = {
   water: true,
   midWaterWaves: true,
+  causticsEverywhere: false,
   shorelineFoam: true,
   seaBody: true,
   legacyWaveSquiggles: false,
@@ -77,7 +88,7 @@ export interface WaterDebugTuning {
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
-  foamWidthHexes: 0.22,
+  foamWidthHexes: 0.3,
   foamSurge: 0.35,
   waveSpeed: 1,
 };

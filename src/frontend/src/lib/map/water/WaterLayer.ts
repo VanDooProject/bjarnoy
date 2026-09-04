@@ -70,8 +70,21 @@ const WAVE_PROTOTYPE_HEX_W = 40;
  */
 const FOAM_COLOR = 0xf2fbff;
 
-/** Fraction of the band's width taken by the near-opaque inner line, the rest being the outer lace. */
-const FOAM_INNER_FRACTION = 0.3;
+/**
+ * Fraction of the band's width, out from the coastline, over which the foam
+ * stays at full strength before it starts falling off. The near-opaque inner
+ * line lives on this plateau.
+ */
+const FOAM_INNER_FRACTION = 0.35;
+
+/**
+ * How far the band runs onto the land, as a fraction of its reach into the
+ * water. Well under 1: foam belongs on the water licking the beach, not on the
+ * beach. The first version had this effectively inverted — the land side ran
+ * further than the water side and at full strength — which put the whole band
+ * on the sand.
+ */
+const FOAM_LAND_REACH = 0.35;
 
 /** Peak alpha of the two tiers: [inner line, outer lace]. */
 const FOAM_ALPHA: [number, number] = [0.9, 0.42];
@@ -84,7 +97,7 @@ const FOAM_ALPHA: [number, number] = [0.9, 0.42];
  * blob at about one and a half hexes, so the raggedness reads at the scale of
  * a cove rather than as fizz.
  */
-const FOAM_NOISE = 0.07;
+const FOAM_NOISE = 0.35;
 const FOAM_NOISE_SCALE = 1 / 260;
 
 /** Surge rate in radians/second, and the noise field's drift in noise-space units/second. */
@@ -97,6 +110,25 @@ const FOAM_WIND: [number, number] = [0.03, -0.02];
  * cut off where G saturates.
  */
 const FOAM_BLEED_FRACTION = 0.7;
+
+/**
+ * Caustic ribbons (§4.2b) — the close-up surface pattern, contour lines of a
+ * churning noise field.
+ *
+ * `SCALE` is the reciprocal of the field's feature size in world units, so
+ * 1/130 makes the field's own blobs roughly three quarters of a hex across; `BANDS` is how
+ * many nested contours that field is sliced into, and `WIDTH` how thick each
+ * one is as a fraction of the gap between them. Together those three are the
+ * whole look, and they trade off against each other: few thick bands read as a
+ * pale haze on the water rather than as ribbons at all, many thin ones as
+ * fizz.
+ */
+const CAUSTIC_SCALE = 1 / 130;
+const CAUSTIC_BANDS = 5.5;
+const CAUSTIC_WIDTH = 0.22;
+const CAUSTIC_ALPHA = 0.4;
+/** Slightly cooler than the foam, so ribbons crossing a foam band still read as behind it. */
+const CAUSTIC_COLOR = 0xdff4ff;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -147,6 +179,7 @@ export class WaterLayer {
     const [deepR, deepG, deepB] = hexToRgb01(DEEP_COLOR);
     const [waveR, waveG, waveB] = hexToRgb01(WAVE_COLOR);
     const [foamR, foamG, foamB] = hexToRgb01(FOAM_COLOR);
+    const [causticR, causticG, causticB] = hexToRgb01(CAUSTIC_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
@@ -166,12 +199,19 @@ export class WaterLayer {
       uFoamColor: { value: new Float32Array([foamR, foamG, foamB]), type: 'vec3<f32>' },
       uFoamWidth: { value: 0, type: 'f32' },
       uFoamInner: { value: FOAM_INNER_FRACTION, type: 'f32' },
+      uFoamLandReach: { value: FOAM_LAND_REACH, type: 'f32' },
       uFoamAlpha: { value: new Float32Array(FOAM_ALPHA), type: 'vec2<f32>' },
       uFoamNoise: { value: FOAM_NOISE, type: 'f32' },
       uFoamNoiseScale: { value: FOAM_NOISE_SCALE, type: 'f32' },
       uFoamSurge: { value: 0, type: 'f32' },
       uSurgeRate: { value: FOAM_SURGE_RATE, type: 'f32' },
       uFoamWind: { value: new Float32Array(FOAM_WIND), type: 'vec2<f32>' },
+      uCaustics: { value: 0, type: 'f32' },
+      uCausticScale: { value: CAUSTIC_SCALE, type: 'f32' },
+      uCausticBands: { value: CAUSTIC_BANDS, type: 'f32' },
+      uCausticWidth: { value: CAUSTIC_WIDTH, type: 'f32' },
+      uCausticAlpha: { value: CAUSTIC_ALPHA, type: 'f32' },
+      uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
       // The two ramps the mask bakes, so the shader can turn its normalised
       // channels back into tile widths and work in one signed distance.
       uCoastRange: {
@@ -279,6 +319,10 @@ export class WaterLayer {
     // Settlement mode never draws a sea body: the painted water tiles are it.
     u.uSeaBody = this.mode === 'world' && waterDebugFlags.seaBody ? 1 : 0;
     u.uMidWaterWaves = waterDebugFlags.midWaterWaves ? 1 : 0;
+    // Which surface pattern this view uses: caustic ribbons close up, the
+    // prototype's scattered arcs from orbit. Two idioms rather than one tuned
+    // two ways — see waterShader.ts's causticField.
+    u.uCaustics = this.mode === 'settlement' || waterDebugFlags.causticsEverywhere ? 1 : 0;
     u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.

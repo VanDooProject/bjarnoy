@@ -20,7 +20,8 @@ const tuning = reactive(waterDebugTuning);
 
 const LABELS: Record<keyof WaterDebugFlags, string> = {
   water: 'Water layer enabled',
-  midWaterWaves: 'Mid-water waves',
+  midWaterWaves: 'Surface pattern (caustics close / waves far)',
+  causticsEverywhere: 'Debug: caustics on the world map too',
   shorelineFoam: 'Shoreline foam',
   seaBody: 'Sea body (world map; off = CSS gradient)',
   legacyWaveSquiggles: 'Legacy Graphics wave squiggles',

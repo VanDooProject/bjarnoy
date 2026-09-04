@@ -31,7 +31,8 @@ Decisions taken up front (asked and answered before writing this):
 | --- | --- |
 | Where do the toggles live? | The `?debug=1` panel, same pattern as `FogDebugPanel`/`fogDebugFlags`. No player-facing settings menu exists today and this feature is not the place to invent one. |
 | World map sea | The shader draws **both** the sea body and the mid-water waves. The existing Graphics wave squiggles are **kept**, behind their own flag, so the new look can be A/B'd against the prototype rather than deleted sight-unseen. |
-| Settlement sea | The shader draws **over** the hand-painted water tile art (`watertile_*`, `coastalwatertile_*`), it does not replace it. |
+| Settlement sea | The shader draws **over** the hand-painted water tile art (`watertile_*`, `coastalwatertile_*`), it does not replace it. Reaffirmed during implementation against reference art with a bright cyan sea: if the settlement's water should be cyan, that is new `watertile_*` art, not a shader tint. |
+| Surface pattern | **Two idioms, one per view**: caustic ribbons close up (settlement), the prototype's scattered wave arcs from orbit (world map). Decided during implementation, against reference art — §4.2b. |
 
 Explicitly **out of scope**: any backend work (the mask is baked client-side,
 see §2.3), rivers (they are land hexes with their own art — see §6), and a
@@ -381,14 +382,28 @@ Two bounded places where they *don't* agree, both already accounted for:
    inside the fog cull margin under opaque mist, so it is not visible in
    practice — named here so it isn't mistaken for a bug in the mask.
 
-### 3.5 Foam bleed is clipped for free
+### 3.5 Foam bleed onto the land — drawn in one view, clipped in the other
 
 The foam band is allowed to extend slightly *onto* land (the mask's G
-channel). In both views the land art draws **above** the water mesh, so that
-bleed is clipped by real geometry with no extra work — and it is what makes
-the foam read as touching the beach rather than stopping short of it in a
-visible gap. Being generous with bleed is therefore cheap; being stingy costs
-a visible seam.
+channel), which is what makes it read as touching the beach rather than
+stopping short of it in a visible gap.
+
+An earlier version of this section claimed the bleed was clipped by real
+geometry in **both** views, so it cost nothing to be generous with. That is
+half right, and the wrong half matters:
+
+- **World map**: `terrainFlat`'s opaque island polygons are above the mesh
+  (§3.2), so the bleed is genuinely clipped. Nothing of it is visible.
+- **Settlement**: only the *tall* art in `terrainTop` is above the mesh. The
+  ground art in `terrainBase` — the sand a beach is made of — is **below** it
+  (§3.3's own stack says so). The bleed is therefore *drawn* over the sand, not
+  clipped.
+
+The effect is right and only the reasoning was wrong: painting over the sand is
+exactly how foam ends up licking the beach. But it means the land-side reach is
+a **visible art parameter in the settlement view**, not a free safety margin,
+and it has to be tuned rather than made generous. §4.3 states it as a fraction
+of the water-side reach for that reason.
 
 ### 3.6 Where the layer must be off
 
@@ -447,39 +462,88 @@ Cost note: 9 cells × one arc each is the most expensive term in the shader.
 It is gated on `A > 0` (water) and on R being past the foam band, so it early-
 outs over land and along the whole coast.
 
+### 4.2b Caustic ribbons — the close-up surface (`uCaustics`)
+
+A settlement is a few metres above the water, not in orbit, and scattered arcs
+read as an ocean seen from very far away. Up close the reference look is a
+connected, branching network of pale ribbons — loops, some nested inside others.
+
+That shape is exactly the set of **contour lines of a slowly churning noise
+field**, so that is literally what this draws: level sets of an fbm, banded with
+`fract()` so one field yields a whole family of nested contours for the price of
+one, with a slow time term walking the level set through the field so the loops
+breathe rather than merely translate. No attempt at real refraction, which would
+need a surface normal this shader has no business inventing.
+
+Deliberately a **different idiom** from §4.2's arcs rather than a tuning of
+them, and which one a view gets is decided by the view: `settlement` →
+ribbons, `world` → arcs. `causticsEverywhere` is a debug flag for judging the
+two at the same scale.
+
+Three constants are the whole look and they trade off against each other: the
+field's feature size, how many contours it is sliced into, and how thick each
+one is. Few thick bands read as a pale haze on the water rather than as ribbons
+at all; many thin ones as fizz.
+
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
 Foam is not an outline. A single band at a fixed offset from the coast reads
 as a sticker; the two things that make it read as water are a **ragged edge**
 and a **surge**.
 
-- `d = R` (distance from land), perturbed by a world-anchored, slowly drifting
-  fbm: `d' = d + FOAM_NOISE * (fbm(p * FOAM_NOISE_SCALE + wind * t) - 0.5)`.
-  World-anchored for the same reason fog's cloud field is (`uNoiseScale`'s
-  comment): so the pattern neither stretches with world size nor slides under
-  a camera pan.
+Everything is a function of one **shore proximity**: 1 on the coastline, 0 at
+`FOAM_WIDTH` out into the water and at `FOAM_WIDTH * FOAM_LAND_REACH` into the
+land. Two properties of that formulation are load-bearing, and both were
+learned by measuring the first attempt on screen rather than looking at it:
+
+- **A plateau, not a peak.** Full strength from the coastline out to
+  `FOAM_INNER` of the band, then a falloff. A proximity that peaks at the
+  coastline and falls off both ways is a knife edge only a sub-texel sliver of
+  pixels sits on, and the edge noise then wobbles even that off the shore —
+  measured, that left 1–3px of foam on a 24px band.
+- **Asymmetric, biased to the water.** The land reach is a fraction of the
+  water reach, with no plateau. The first attempt thresholded the signed
+  distance directly, which is a half-plane: everything on the land side sat at
+  full strength while the water side got a sliver. Measured at the art's own
+  waterline that put **0px of foam on the water and 8px on the beach** — the
+  exact inverse of the intended look.
+
+On top of that:
+
+- **Ragged edge**: the distance is perturbed by a world-anchored, slowly
+  drifting fbm, at an amplitude expressed as a **fraction of the band's own
+  width**. Absolute amplitudes do not survive a width change — an amplitude
+  that is a gentle wobble on a wide band erases a narrow one entirely.
+  World-anchored for the same reason fog's cloud field is: so the pattern
+  neither stretches with world size nor slides under a camera pan.
 - **Surge**: the band's width breathes, `width = FOAM_WIDTH * (1 + FOAM_SURGE *
-  sin(t * SURGE_RATE + lowFreqFbm(p) + seed))`. The low-frequency term
+  sin(t * SURGE_RATE + lowFreqNoise(p) + seed))`. The low-frequency term
   de-synchronises the surge along a coastline so it laps rather than pulsing
   as one ring; the mask's B seed adds per-hex grain on top.
-- **Two tiers**: a narrow, nearly opaque inner line hard against the shore,
-  and a wider, thresholded-noise outer lace at lower alpha. The inner line is
-  what makes the coast read as wet; the lace is what makes it read as foam.
-- Bleeds inward using G, clipped by the land art above (§3.5).
+- **Two tiers**: a nearly-opaque inner line on the plateau, and a wider
+  thresholded-noise outer lace at lower alpha. The inner line is what makes the
+  coast read as wet; the lace is what makes it read as foam.
 
 ### 4.4 Uniforms
 
 ```
 sampler2D uWaterMask
-vec2  uMaskScale, uMaskOffset   world → mask UV affine
-float uTime
-float uSeaBody, uMidWaterWaves, uShorelineFoam   0/1 toggles
-float uShowMask                  debug: render the mask channels raw
-vec3  uShallowColor, uDeepColor, uFoamColor
-vec2  uFoamWidth                 inner line, outer lace (world units)
-float uFoamNoise, uFoamNoiseScale, uFoamSurge, uSurgeRate
-vec2  uFoamWind
-float uWaveSpeed, uWaveCoastFade
+float uTime, uWaveTime            base clock; wave clock, scaled by waveSpeed
+float uSeaBody, uMidWaterWaves, uShorelineFoam, uCaustics   0/1
+float uShowMask                   debug: render the mask channels raw
+vec3  uShallowColor, uDeepColor   sea body ramp (world mode only)
+float uSeaMottle, uMottleScale
+vec3  uWaveColor;  float uWaveAlpha;  vec2 uWaveCoastFade;  float uWaveScale
+float uCausticScale, uCausticBands, uCausticWidth, uCausticAlpha; vec3 uCausticColor
+vec3  uFoamColor
+float uFoamWidth                  water-side reach, in tile widths
+float uFoamInner                  plateau, as a fraction of the width
+float uFoamLandReach              land-side reach, as a fraction of the width
+vec2  uFoamAlpha                  inner line, outer lace
+float uFoamNoise                  edge displacement, as a fraction of the width
+float uFoamNoiseScale, uFoamSurge, uSurgeRate;  vec2 uFoamWind
+vec2  uCoastRange                 the mask's two ramps, in tile widths, so the
+                                  shader can work in one signed distance
 ```
 
 Same in-place `UniformGroup` mutation as `FogMaskLayer` — no per-frame
@@ -497,8 +561,12 @@ non-reactive object the panel wraps in `reactive()` the same way
 
 ```ts
 export interface WaterDebugFlags {
-  /** Shader mid-water wave crests (§4.2). */
+  /** The whole layer. */
+  water: boolean;               // default true
+  /** The water's surface pattern — caustics close, wave arcs far (§4.2/§4.2b). */
   midWaterWaves: boolean;       // default true
+  /** Debug: draw the caustics on the world map too, to judge both idioms at one scale. */
+  causticsEverywhere: boolean;  // default false
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
@@ -507,9 +575,14 @@ export interface WaterDebugFlags {
   legacyWaveSquiggles: boolean; // default false
   /** Debug: render the water mask's channels instead of water. */
   showWaterMask: boolean;       // default false
+  /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
+  legacyTileSplit: boolean;     // default true
 }
 export interface WaterDebugTuning {
-  foamWidthHexes: number;  // 0.5
+  foamWidthHexes: number;  // 0.3 — the band is in world units, so this is sized
+                           //       against the settlement view, not the world map:
+                           //       the 0.5 this plan first specified washes whole
+                           //       coastal hexes white up close.
   foamSurge: number;       // 0.35
   waveSpeed: number;       // 1
 }

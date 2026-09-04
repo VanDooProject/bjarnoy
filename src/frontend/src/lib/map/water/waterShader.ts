@@ -82,6 +82,7 @@ uniform float uShorelineFoam;
 uniform vec3 uFoamColor;
 uniform float uFoamWidth;
 uniform float uFoamInner;
+uniform float uFoamLandReach;
 uniform vec2 uFoamAlpha;
 uniform float uFoamNoise;
 uniform float uFoamNoiseScale;
@@ -89,6 +90,12 @@ uniform float uFoamSurge;
 uniform float uSurgeRate;
 uniform vec2 uFoamWind;
 uniform vec2 uCoastRange;
+uniform float uCaustics;
+uniform float uCausticScale;
+uniform float uCausticBands;
+uniform float uCausticWidth;
+uniform float uCausticAlpha;
+uniform vec3 uCausticColor;
 
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
@@ -236,6 +243,34 @@ float waveField(vec2 world, float t) {
   return covered;
 }
 
+// --- §4.2b caustic ribbons ------------------------------------------------
+//
+// The close-up look — a connected, branching network of pale ribbons over the
+// water, some loops nested inside others. That shape is exactly the set of
+// *contour lines* of a slowly churning noise field, so that is literally what
+// this draws: level sets of an fbm, banded with fract(). No attempt at real
+// refraction, which would need a surface normal this shader has no business
+// inventing.
+//
+// Deliberately a different idiom from the wave arcs above rather than a tuning
+// of them. Scattered arcs read as an ocean seen from orbit and are what
+// docs/design/img/worldmap.png shows; ribbons read as shallow water seen from a
+// few metres up. Which one a view gets is uSurface, set from the view's mode.
+float causticField(vec2 world, float t) {
+  vec2 p = world * uCausticScale;
+
+  // Two counter-drifting samples of the same field: the loops reshape as they
+  // move instead of sliding across the water as a rigid pattern.
+  float n = fbm(p + vec2(t * 0.021, t * -0.014));
+  n += 0.35 * noise(p * 2.1 + vec2(t * -0.017, t * 0.011));
+
+  // fract() turns one field into a whole family of nested contours for the
+  // price of one; the time term walks the level set slowly through the field,
+  // which is what makes the ribbons breathe rather than merely translate.
+  float d = abs(fract(n * uCausticBands + t * 0.05) - 0.5) * 2.0;
+  return 1.0 - smoothstep(0.0, uCausticWidth, d);
+}
+
 // The mask's channels, named. R: distance from land, 0 at the coastline and 1
 // at FOAM_REACH_TILES. G: distance from water, ramped inward over
 // FOAM_BLEED_TILES. B: per-hex seed. A: water coverage.
@@ -314,24 +349,40 @@ void main() {
   // The fade is deliberately wide — it is read out where the distance field is
   // coarsest, so a narrow one would show the mask's own texel stepping.
   if (water && uMidWaterWaves > 0.5) {
-    float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.r);
-    if (clearOfCoast > 0.004) {
-      float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha;
-      acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);
+    if (uCaustics > 0.5) {
+      // Close up. No coast fade: in the reference look the ribbons run right up
+      // to the foam, and the foam composites over them below anyway.
+      float ribbon = causticField(vWorld, uWaveTime) * uCausticAlpha;
+      acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
+    } else {
+      float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.r);
+      if (clearOfCoast > 0.004) {
+        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha;
+        acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);
+      }
     }
   }
 
   // --- §4.3 shoreline foam -----------------------------------------------
   //
-  // Foam is not an outline. A single band at a fixed offset from the coast
-  // reads as a sticker; the two things that make it read as water are a ragged
-  // edge and a surge, and both are here.
+  // Foam is not an outline. A band at a fixed offset from the coast reads as a
+  // sticker; the two things that make it read as water are a ragged edge and a
+  // surge, and both are here.
+  //
+  // Everything is a function of one *shore proximity* — 1 exactly on the
+  // coastline, falling to 0 at uFoamWidth out into the water and at
+  // uFoamWidth * uFoamLandReach into the land. Building it this way rather than
+  // thresholding the signed distance directly is what keeps the band centred on
+  // the coastline: the first version tested a plain 'd less than something', which is a
+  // half-plane, so everything on the land side sat at full strength while the
+  // water side got a sliver the edge noise then erased. Measured on screen it
+  // put 0 pixels of foam on the water and 8 on the beach.
   if (uShorelineFoam > 0.5) {
     // World-anchored, slowly drifting — the same reasoning as fog's cloud
     // field: anchored to the world rather than the screen, the pattern neither
     // stretches with world size nor slides out from under a camera pan.
     vec2 np = vWorld * uFoamNoiseScale;
-    float d = dist + uFoamNoise * (fbm(np + uFoamWind * uTime) - 0.5);
+    float d = dist + uFoamNoise * uFoamWidth * (fbm(np + uFoamWind * uTime) - 0.5);
 
     // The band's width breathes. The low-frequency term de-synchronises the
     // surge along a coastline so it laps rather than pulsing as one ring, and
@@ -339,21 +390,31 @@ void main() {
     float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + m.b) * 6.2831853;
     float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase));
 
-    // Fades out as it runs inland, so the bleed onto the beach ends in foam
-    // rather than a cut edge. In the settlement view this is actually drawn
-    // over the sand — the ground art is *below* the mesh there (only the tall
-    // art in terrainTop is above it), which is what makes foam look like it is
-    // licking the beach rather than stopping at its edge.
-    float ashore = smoothstep(-uCoastRange.y, -uCoastRange.y * 0.2, d);
+    // Shore proximity: a *plateau* at 1 from the coastline out to
+    // uFoamInner of the band, then a falloff to 0 at its edge. The plateau is
+    // the point — a proximity that peaks at d = 0 and falls off both ways is a
+    // knife edge only a sub-texel sliver of pixels ever sits on, and the edge
+    // noise below then wobbles even that off the coastline. Measured on screen,
+    // that version left 1-3px of foam on a 24px band.
+    //
+    // Asymmetric on purpose: foam belongs on the water, licking the beach
+    // rather than covering it, so the land side gets uFoamLandReach of the
+    // water side's reach and no plateau at all. In the settlement view that
+    // land side is really drawn over the sand — the ground art is *below* the
+    // mesh there, only the tall art in terrainTop is above it — so this is what
+    // decides how far up the beach the foam runs.
+    float shore = d >= 0.0
+      ? 1.0 - smoothstep(width * uFoamInner, width, d)
+      : 1.0 - smoothstep(0.0, width * uFoamLandReach, -d);
 
     // Two tiers. The inner line is nearly opaque and hard against the shore —
     // it is what makes the coast read as wet. The outer lace is wider, fainter
     // and broken up by thresholded noise — it is what makes it read as foam.
-    float inner = 1.0 - smoothstep(width * uFoamInner * 0.5, width * uFoamInner, d);
+    float inner = smoothstep(0.55, 0.95, shore);
     float lace = smoothstep(0.40, 0.72, fbm(np * 2.7 + uFoamWind * uTime * 1.6));
-    float outer = (1.0 - smoothstep(width * 0.45, width, d)) * lace;
+    float outer = smoothstep(0.02, 0.5, shore) * lace;
 
-    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * ashore;
+    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y);
     acc = vec4(uFoamColor * foam, foam) + acc * (1.0 - foam);
   }
 
