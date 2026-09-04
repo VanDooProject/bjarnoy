@@ -872,6 +872,19 @@ public sealed record Settlement
     /// (the fishing hut) cares; <paramref name="terrain"/> alone can't say,
     /// since it reports plain <see cref="Terrain.Sea"/> either way.
     /// </param>
+    /// <param name="hasAdjacentWater">
+    /// Whether <paramref name="coord"/> itself is land with at least one sea
+    /// neighbour — distinct from <paramref name="isCoastalWater"/>, which is
+    /// about <paramref name="coord"/> being water. Only a
+    /// <see cref="BuildingDefinition.RequiresAdjacentToWater"/> building (the
+    /// Fisher Hut) cares.
+    /// </param>
+    /// <param name="hasAdjacentRiver">
+    /// Whether <paramref name="coord"/> has at least one river-tile neighbour,
+    /// of any <see cref="World.RiverTileShape"/>. Only a
+    /// <see cref="BuildingDefinition.RequiresAdjacentRiver"/> building (the
+    /// Sawmill) cares.
+    /// </param>
     /// <param name="maxWaitingOrders">
     /// How many orders may sit in the waiting queue at once — 0 for
     /// non-premium/anonymous play, <see cref="MaxWaitingOrders"/> for premium
@@ -892,7 +905,9 @@ public sealed record Settlement
         double speedFactor = 1.0,
         bool isCoastalWater = false,
         int maxWaitingOrders = 0,
-        int maxOrdersPerHex = DefaultMaxOrdersPerHex)
+        int maxOrdersPerHex = DefaultMaxOrdersPerHex,
+        bool hasAdjacentWater = false,
+        bool hasAdjacentRiver = false)
     {
         if (!Claims(coord))
         {
@@ -938,6 +953,16 @@ public sealed record Settlement
             ? isCoastalWater
             : definition.AllowsTerrain(terrain);
         if (!terrainOk)
+        {
+            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        if (definition.RequiresAdjacentToWater && !hasAdjacentWater)
+        {
+            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        if (definition.RequiresAdjacentRiver && !hasAdjacentRiver)
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }

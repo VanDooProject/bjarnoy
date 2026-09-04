@@ -58,8 +58,13 @@ public static class BuildingCatalogue
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
-            BuildingType.FisherHut => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0)),
-            BuildingType.Sawmill => Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0)),
+            // Grass qualifies terrain-wise, but only a hex next to water (Fisher
+            // Hut) or a river (Sawmill) is actually buildable — see
+            // BuildingDefinition.RequiresAdjacentToWater/RequiresAdjacentRiver.
+            BuildingType.FisherHut =>
+                Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0)) with { RequiresAdjacentToWater = true },
+            BuildingType.Sawmill =>
+                Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0)) with { RequiresAdjacentRiver = true },
             _ => null,
         };
     }

@@ -143,6 +143,25 @@ public sealed class TerrainSampler
     }
 
     /// <summary>
+    /// A land hex with at least one sea neighbour — the Fisher Hut's
+    /// buildability rule (<see cref="Buildings.BuildingDefinition.RequiresAdjacentToWater"/>).
+    /// Unlike <see cref="IsCoastalWater"/>, <paramref name="coord"/> itself is
+    /// the land hex here, not the water.
+    /// </summary>
+    public bool HasAdjacentWater(HexCoord coord)
+    {
+        foreach (var neighbour in coord.Neighbours())
+        {
+            if (TerrainAt(neighbour) == Terrain.Sea)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Which of the six art-pack rotations a hex renders with. Coastal water
     /// faces the land it borders; everything else gets a cosmetic, seed-stable
     /// rotation so the map doesn't read as one repeated tile stamped everywhere.

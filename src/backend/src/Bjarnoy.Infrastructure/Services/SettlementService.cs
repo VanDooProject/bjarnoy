@@ -1026,10 +1026,14 @@ public sealed class SettlementService(
         var maxWaitingOrders = (settlement.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
+        var hasAdjacentRiver = await HasAdjacentRiverAsync(settlement.WorldId, coord, cancellationToken)
+            .ConfigureAwait(false);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
-            maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex);
+            maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
+            hasAdjacentWater: sampler.HasAdjacentWater(coord),
+            hasAdjacentRiver: hasAdjacentRiver);
 
         if (!decision.Accepted)
         {
@@ -1274,6 +1278,29 @@ public sealed class SettlementService(
     /// </summary>
     private static Func<HexCoord, Terrain> TerrainAt(WorldEntity world) =>
         new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
+
+    /// <summary>
+    /// Whether <paramref name="coord"/> has at least one river-tile neighbour
+    /// of any shape — the Sawmill's buildability rule (see
+    /// <see cref="BuildingDefinition.RequiresAdjacentRiver"/>). Rivers are
+    /// generated once per island and persisted (<see cref="IslandEntity.RiverTiles"/>),
+    /// not derivable from the seed the way plain terrain is, so — unlike
+    /// <see cref="TerrainSampler.HasAdjacentWater"/> — this needs a query.
+    /// </summary>
+    private async Task<bool> HasAdjacentRiverAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var neighbours = coord.Neighbours().ToHashSet();
+
+        var riverTileLists = await _dbContext.Islands
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.RiverTiles)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return riverTileLists
+            .SelectMany(tiles => tiles)
+            .Any(tile => neighbours.Contains(new HexCoord(tile.Q, tile.R)));
+    }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>
         _dbContext.Settlements

@@ -786,9 +786,54 @@ public class SettlementTests
                 T0),
         };
 
-        var decision = settlement.PlanBuild(type, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        // FisherHut/Sawmill also need an adjacency flag set (water/river
+        // respectively) — Barracks needs neither, and passing both true is a
+        // no-op for it.
+        var decision = settlement.PlanBuild(
+            type, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            hasAdjacentWater: true, hasAdjacentRiver: true);
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_fisher_hut_is_refused_on_grass_with_no_water_neighbour()
+    {
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 5)],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).Capacity,
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FisherHut, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            hasAdjacentWater: false);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_sawmill_is_refused_on_grass_with_no_river_neighbour()
+    {
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 5)],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).Capacity,
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            hasAdjacentRiver: false);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }
 
     [Fact]

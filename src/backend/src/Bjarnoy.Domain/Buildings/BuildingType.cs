@@ -86,17 +86,23 @@ public enum BuildingType
 
     /// <summary>
     /// Food, on grass — a third food-producer variant alongside
-    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/>. Flat/inland art
-    /// only (unlike <see cref="FishingHut"/>, it doesn't stand on water).
+    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/>. Unlike
+    /// <see cref="FishingHut"/> it doesn't stand on water itself, but its
+    /// hex must be adjacent to some (see
+    /// <see cref="BuildingDefinition.RequiresAdjacentToWater"/>). Flat/inland
+    /// art only.
     /// </summary>
     FisherHut = 15,
 
     /// <summary>
     /// Wood, on grass — refines what a <see cref="Lumberjack"/> cuts, so it
     /// shares that building's Forest-neighbour boost (see
-    /// <see cref="BuildingCatalogue.Boosts"/>). Ships with three art
-    /// families keyed off river adjacency (flat/riverside/river-bend) —
-    /// cosmetic only on the frontend, not modelled here.
+    /// <see cref="BuildingCatalogue.Boosts"/>). Its hex must be adjacent to a
+    /// river of any shape (see
+    /// <see cref="BuildingDefinition.RequiresAdjacentRiver"/>). Ships with
+    /// art keyed off which river shape the adjacency comes from
+    /// (flat/riverside/river-bend) — cosmetic only on the frontend, not
+    /// modelled here.
     /// </summary>
     Sawmill = 16,
 }
