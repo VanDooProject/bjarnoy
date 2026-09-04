@@ -24,6 +24,19 @@ export interface WaterDebugFlags {
    * two idioms can be judged at the same scale instead of one per view.
    */
   causticsEverywhere: boolean;
+  /**
+   * The second, finer caustic net drawn over the first (§4.2c) — smaller cells,
+   * brighter. A sub-layer of the surface pattern: it only draws where the
+   * caustics themselves do, so this does nothing on the world map unless
+   * `causticsEverywhere` is on too.
+   */
+  fineCaustics: boolean;
+  /**
+   * The drifting dark blobs under the caustics (§4.2c) — the one water layer
+   * that darkens rather than lightens. Same sub-layer relationship as
+   * `fineCaustics`: off leaves the two light nets over flat water.
+   */
+  causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
   /**
@@ -66,6 +79,8 @@ export const waterDebugFlags: WaterDebugFlags = {
   water: true,
   midWaterWaves: true,
   causticsEverywhere: false,
+  fineCaustics: true,
+  causticShadows: true,
   shorelineFoam: true,
   propTileMute: true,
   seaBody: true,

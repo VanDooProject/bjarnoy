@@ -100,6 +100,17 @@ uniform vec3 uCausticColor;
 uniform float uCausticCull;
 uniform float uCausticCullSoften;
 uniform float uCausticCullSpread;
+uniform float uCausticFine;
+uniform float uCausticFineScale;
+uniform float uCausticFineBands;
+uniform float uCausticFineWidth;
+uniform float uCausticFineAlpha;
+uniform vec3 uCausticFineColor;
+uniform float uCausticBlobs;
+uniform float uCausticBlobScale;
+uniform float uCausticBlobDensity;
+uniform float uCausticBlobAlpha;
+uniform vec3 uCausticBlobColor;
 uniform float uFarReach;
 uniform float uPropMute;
 uniform float uPropFoamScale;
@@ -263,9 +274,18 @@ float waveField(vec2 world, float t) {
 // of them. Scattered arcs read as an ocean seen from orbit and are what
 // docs/design/img/worldmap.png shows; ribbons read as shallow water seen from a
 // few metres up. Which one a view gets is uSurface, set from the view's mode.
-float causticField(vec2 ground, float t, float offshore) {
-  vec2 p = ground * uCausticScale;
-  vec2 drift = vec2(t * 0.021, t * -0.014);
+// Parameterised rather than wired straight to one set of uniforms, because
+// §4.2b draws this twice: a coarse net, and a smaller, brighter one over it.
+// \`seed\` shifts the field's domain *and* the per-ribbon keep-off hash and
+// \`rate\` its clock, so the second net is an unrelated field rather than a
+// scaled copy of the first — two copies of one field at different sizes read as
+// a moire, not as two layers of caustics.
+float causticNet(
+  vec2 ground, float t, float offshore,
+  float scale, float bandCount, float width, float rate, float seed
+) {
+  vec2 p = ground * scale + seed;
+  vec2 drift = vec2(t * 0.021, t * -0.014) * rate;
 
   // Two counter-drifting samples of the same field: the loops reshape as they
   // move instead of sliding across the water as a rigid pattern.
@@ -275,7 +295,7 @@ float causticField(vec2 ground, float t, float offshore) {
   // fract() turns one field into a whole family of nested contours for the
   // price of one; the time term walks the level set slowly through the field,
   // which is what makes the ribbons breathe rather than merely translate.
-  float bands = n * uCausticBands + t * 0.05;
+  float bands = n * bandCount + t * 0.05 * rate;
   float band = abs(fract(bands) - 0.5) * 2.0;
 
   // Each ribbon gets its own keep-off distance from the shore, and this is the
@@ -292,7 +312,7 @@ float causticField(vec2 ground, float t, float offshore) {
   // the "remove the ones that touch the shore" case; the rest end at distances
   // that have nothing to do with each other, so there is no line to see.
   float ribbon = floor(bands + 0.5);
-  float keepOff = uCausticCull + hash(vec2(ribbon, 17.0)) * uCausticCullSpread;
+  float keepOff = uCausticCull + hash(vec2(ribbon, 17.0 + seed)) * uCausticCullSpread;
   float clearOfCoast = smoothstep(keepOff, keepOff + uCausticCullSoften, offshore);
   if (clearOfCoast <= 0.0) return 0.0;
 
@@ -311,11 +331,71 @@ float causticField(vec2 ground, float t, float offshore) {
   float e = 0.06;
   float gx = fbm(p + vec2(e, 0.0) + drift) - base;
   float gy = fbm(p + vec2(0.0, e) + drift) - base;
-  float grad = max(length(vec2(gx, gy)) / e * uCausticBands, 1e-3);
+  float grad = max(length(vec2(gx, gy)) / e * bandCount, 1e-3);
 
   // The band is in field units; dividing by the gradient converts it to a
   // distance in p-space, which uCausticWidth is then a plain width in.
-  return (1.0 - smoothstep(uCausticWidth * 0.55, uCausticWidth, band / grad)) * clearOfCoast;
+  return (1.0 - smoothstep(width * 0.55, width, band / grad)) * clearOfCoast;
+}
+
+// --- §4.2c drifting shadows ------------------------------------------------
+//
+// The third caustic layer, and the only one that darkens rather than lightens:
+// soft dark patches wandering under the surface. Reference art builds its water
+// out of light cells *and* deeper pools between them, and two white nets over a
+// flat ground only ever add — the water ends up brighter overall and no
+// deeper.
+//
+// A cell grid rather than a thresholded noise field, for the same reason the
+// ribbons band a field instead of scattering sprites: this needs per-blob
+// identity. A blob is one cell, so it can draw its own keep-off distance from
+// the shore the way a ribbon does, and blobs whose keep-off falls beyond them
+// are simply absent instead of every blob being clipped along one contour.
+//
+// Nothing inside the loop is more than a hash and a length — no fbm — so nine
+// cells here cost about what one of the two nets above does.
+float blobField(vec2 ground, float t, float offshore) {
+  float cellSize = 1.0 / uCausticBlobScale;
+
+  // One domain warp for the whole field, outside the loop, so nine perfect
+  // circles come out as nine irregular pools for the price of two noise
+  // lookups. Without it the layer reads as bubbles rather than as deeper water.
+  vec2 wp = ground / cellSize * 0.7;
+  vec2 warp = vec2(noise(wp + vec2(t * 0.013, 0.0)), noise(wp.yx + vec2(0.0, t * -0.011))) - 0.5;
+  ground += warp * cellSize * 0.5;
+
+  vec2 base = floor(ground / cellSize);
+  float covered = 0.0;
+
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      vec2 cell = base + vec2(float(dx), float(dy));
+      if (cellHash(cell, 21.0) > uCausticBlobDensity) continue;
+
+      float keepOff = uCausticCull + cellHash(cell, 22.0) * uCausticCullSpread;
+      float clearOfCoast = smoothstep(keepOff, keepOff + uCausticCullSoften, offshore);
+      if (clearOfCoast <= 0.0) continue;
+
+      // Centre jittered anywhere in its cell, then walking a slow circle of its
+      // own — this is the "floating" part, and it is per blob rather than one
+      // drift applied to the whole field so they slide past each other.
+      vec2 centre = (cell + vec2(cellHash(cell, 23.0), cellHash(cell, 24.0))) * cellSize;
+      float phase = cellHash(cell, 25.0) * 6.2831853;
+      float rate = 0.05 + cellHash(cell, 26.0) * 0.06;
+      centre += vec2(cos(t * rate + phase), sin(t * rate + phase)) * cellSize * 0.22;
+
+      // Up to a bit over half a cell — with the centre anywhere in its own cell
+      // that still keeps every blob inside the 3x3 neighbourhood this loop
+      // looks at, so none is ever cut off at a cell boundary, while leaving them
+      // wide enough to overlap. Overlap is the point: \`max\` merges neighbours
+      // into one irregular pool, which is what the reference art has between its
+      // light cells. Sparse, separate discs read as bubbles.
+      float radius = cellSize * (0.28 + cellHash(cell, 27.0) * 0.28);
+      float d = length(ground - centre);
+      covered = max(covered, (1.0 - smoothstep(radius * 0.45, radius, d)) * clearOfCoast);
+    }
+  }
+  return covered;
 }
 
 // The mask's channels, named. R: the **signed** near distance, 0.5 exactly on
@@ -433,13 +513,41 @@ void main() {
       // like the boundary of the water and starts looking like the brightest
       // part of a texture.
       //
-      // How far off is decided per ribbon inside causticField, not here — see
+      // How far off is decided per ribbon inside causticNet, not here — see
       // there. Off the far channel rather than the signed near one, since the
       // keep-off sits past where R saturates.
       float offshore = m.g * uFarReach;
-      float ribbon = causticField(vGround, uWaveTime, offshore) * uCausticAlpha * (1.0 - mute);
+      float quiet = 1.0 - mute;
+
+      // Three layers, dark to light, in that order: the shadows are depth *in*
+      // the water, so both light nets draw over them, and the fine net is the
+      // highlight on top of the coarse one.
+      if (uCausticBlobs > 0.5) {
+        float shade = blobField(vGround, uWaveTime, offshore) * uCausticBlobAlpha * quiet;
+        if (shade > 0.004) {
+          acc = vec4(uCausticBlobColor * shade, shade) + acc * (1.0 - shade);
+        }
+      }
+
+      float ribbon = causticNet(
+        vGround, uWaveTime, offshore,
+        uCausticScale, uCausticBands, uCausticWidth, 1.0, 0.0
+      ) * uCausticAlpha * quiet;
       if (ribbon > 0.004) {
         acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
+      }
+
+      if (uCausticFine > 0.5) {
+        // Faster clock as well as a smaller field: a fine net drifting at the
+        // coarse one's rate reads as one pattern that happens to have two
+        // frequencies in it rather than as a second layer of water.
+        float fine = causticNet(
+          vGround, uWaveTime, offshore,
+          uCausticFineScale, uCausticFineBands, uCausticFineWidth, 1.7, 11.0
+        ) * uCausticFineAlpha * quiet;
+        if (fine > 0.004) {
+          acc = vec4(uCausticFineColor * fine, fine) + acc * (1.0 - fine);
+        }
       }
     } else {
       float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.g);
@@ -485,8 +593,10 @@ void main() {
     float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + noise(np * 1.6)) * 6.2831853;
     // ...and narrows to uPropFoamScale of itself over a prop tile, so the
     // coastline keeps an unbroken outline while the boat or rock keeps its own
-    // patch of still water.
-    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase)) * mix(1.0, uPropFoamScale, mute);
+    // patch of still water. One factor, applied to the ragged edge below as
+    // well: it is the whole band that shrinks, not only its centre line.
+    float shrink = mix(1.0, uPropFoamScale, mute);
+    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase)) * shrink;
 
     // Shore proximity: a *plateau* at 1 from the coastline out to
     // uFoamInner of the band, then a falloff to 0 at its edge. The plateau is
@@ -511,11 +621,14 @@ void main() {
     //
     // Two octaves: the coarse one tears the boundary at the scale of a cove, the
     // fine one at the scale of the band's own width. uFoamNoise is in tile
-    // widths, so this displacement does not shrink as the band narrows over a
-    // prop tile.
+    // widths — an absolute displacement rather than a fraction of the band — so
+    // it takes the same \`shrink\` the width does. Left absolute it swamped the
+    // narrowed band over a prop tile: measured, 0.08 tiles of wander on a
+    // 0.15-tile band, which undid most of the narrowing and put the foam back on
+    // the rock on every positive excursion.
     float edge = (fbm(np + uFoamWind * uTime) - 0.5) * 2.0
                + (noise(np * 4.0 + uFoamWind * uTime * 2.2) - 0.5);
-    float reach = max(width + uFoamNoise * edge, width * uFoamInner + 0.001);
+    float reach = max(width + uFoamNoise * shrink * edge, width * uFoamInner + 0.001);
 
     float shore = dist >= 0.0
       ? 1.0 - smoothstep(width * uFoamInner, reach, dist)

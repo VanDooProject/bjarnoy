@@ -22,6 +22,8 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   water: 'Water layer enabled',
   midWaterWaves: 'Surface pattern (caustics close / waves far)',
   causticsEverywhere: 'Debug: caustics on the world map too',
+  fineCaustics: 'Caustics: fine highlight net',
+  causticShadows: 'Caustics: drifting dark blobs',
   shorelineFoam: 'Shoreline foam',
   propTileMute: 'Quieten the shader over boat/rock tiles',
   seaBody: 'Sea body (world map; off = CSS gradient)',

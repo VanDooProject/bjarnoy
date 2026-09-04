@@ -84,6 +84,17 @@ for (let i = 0; i < 3; i++) {
 }
 await page.waitForTimeout(1200);
 await shoot(page, 'settlement_close');
+// The two extra caustic layers (§4.2c), each dropped on its own and then both
+// together — the only way to see what each is actually contributing, since they
+// composite under and over the base net rather than beside it.
+await setFlags(page, { fineCaustics: false });
+await shoot(page, 'settlement_close_no_fine');
+await setFlags(page, { fineCaustics: true, causticShadows: false });
+await shoot(page, 'settlement_close_no_blobs');
+await setFlags(page, { fineCaustics: false });
+await shoot(page, 'settlement_close_base_caustics');
+await setFlags(page, { fineCaustics: true, causticShadows: true });
+
 await setFlags(page, { water: false });
 await shoot(page, 'settlement_close_off');
 // The prop-tile mute (§4.4b) is only judgeable as an A/B at one camera: with it
@@ -99,7 +110,7 @@ await page.evaluate(() => {
 });
 await shoot(page, 'settlement_close_no_caustic_cull');
 await page.evaluate(() => {
-  window.__waterTuning.causticCullHexes = 0.45;
+  window.__waterTuning.causticCullHexes = 0.35;
 });
 
 await page.getByRole('button', { name: /world map/i }).first().click();

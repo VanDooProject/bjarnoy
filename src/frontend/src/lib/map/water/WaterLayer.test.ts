@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WaterLayer } from './WaterLayer';
+import { WATER_FRAGMENT } from './waterShader';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
@@ -182,6 +183,44 @@ describe('WaterLayer', () => {
     expect(u.uSeaBody).toBe(0);
     expect(u.uMidWaterWaves).toBe(0);
     expect(u.uShowMask).toBe(1);
+  });
+
+  it('switches the two extra caustic layers independently of the pattern itself', () => {
+    // Both are sub-layers of the caustic pattern — the shader only reaches them
+    // inside its caustic branch — so each has to be switchable without taking
+    // the other, or the base net, with it.
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    const u = uniformsOf(layer);
+    layer.tick(0);
+    expect(u.uCaustics).toBe(1);
+    expect(u.uCausticFine).toBe(1);
+    expect(u.uCausticBlobs).toBe(1);
+
+    waterDebugFlags.fineCaustics = false;
+    layer.tick(16);
+    expect(u.uCaustics).toBe(1);
+    expect(u.uCausticFine).toBe(0);
+    expect(u.uCausticBlobs).toBe(1);
+
+    waterDebugFlags.causticShadows = false;
+    layer.tick(32);
+    expect(u.uCausticBlobs).toBe(0);
+  });
+
+  it('shrinks the foam band and its ragged edge by the same factor over a prop tile', () => {
+    // A regression guard on GLSL, which is the honest place for it: there is no
+    // CPU-side copy of this arithmetic to test, and the bug it guards was
+    // invisible to every uniform-level assertion.
+    //
+    // uFoamNoise is an *absolute* displacement in tile widths, so when the band
+    // narrows over a boat or rock the displacement has to narrow with it. It
+    // did not, and at a quarter width the 0.09-tile edge noise was over a third
+    // of the band's whole reach: measured on screen the foam swung back onto
+    // the rock on every positive excursion of the noise, which is exactly the
+    // artifact the narrowing exists to remove.
+    const reach = WATER_FRAGMENT.split('\n').find((line) => line.includes('float reach ='));
+    expect(reach).toBeDefined();
+    expect(reach).toContain('uFoamNoise * shrink * edge');
   });
 
   it('never draws a sea body in settlement mode — the painted water tiles are it', () => {

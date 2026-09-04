@@ -32,7 +32,7 @@ Decisions taken up front (asked and answered before writing this):
 | Where do the toggles live? | The `?debug=1` panel, same pattern as `FogDebugPanel`/`fogDebugFlags`. No player-facing settings menu exists today and this feature is not the place to invent one. |
 | World map sea | The shader draws **both** the sea body and the mid-water waves. The existing Graphics wave squiggles are **kept**, behind their own flag, so the new look can be A/B'd against the prototype rather than deleted sight-unseen. |
 | Settlement sea | The shader draws **over** the hand-painted water tile art (`watertile_*`, `coastalwatertile_*`), it does not replace it. Reaffirmed during implementation against reference art with a bright cyan sea: if the settlement's water should be cyan, that is new `watertile_*` art, not a shader tint. |
-| Surface pattern | **Two idioms, one per view**: caustic ribbons close up (settlement), the prototype's scattered wave arcs from orbit (world map). Decided during implementation, against reference art — §4.2b. |
+| Surface pattern | **Two idioms, one per view**: caustic ribbons close up (settlement), the prototype's scattered wave arcs from orbit (world map). Decided during implementation, against reference art — §4.2b. The close-up idiom is three layers — a coarse net, a finer brighter one, and drifting shadow blobs under both — §4.2c. |
 
 Explicitly **out of scope**: any backend work (the mask is baked client-side,
 see §2.3), rivers (they are land hexes with their own art — see §6), and a
@@ -578,6 +578,55 @@ end at distances that have nothing to do with each other, so there is no line
 left to see. Cost is one `hash`, against the four `fbm` evaluations the field
 already does.
 
+### 4.2c The other two caustic layers — `uCausticFine`, `uCausticBlobs`
+
+One net of ribbons over flat water is a pattern; the reference art is a *depth*.
+Its water is built from light cells at more than one size with deeper pools
+between them, and a single contour field can only ever supply one size and only
+ever add light. So the close-up surface is three layers, composited dark to
+light, each behind its own flag.
+
+**The fine net (`fineCaustics`).** The same `causticNet` at 2.4× the scale, in
+white instead of the coarse net's cooler blue, at a lower alpha, on a 1.7× clock.
+Every one of those is doing something:
+
+- *An awkward scale ratio.* At 2× or 3× the two fields' contours coincide often
+  enough to read as one field drawn twice — a moiré rather than two layers.
+- *A different domain and a different clock.* `causticNet` takes a `seed` that
+  offsets the field **and** the per-ribbon keep-off hash, and a `rate` that
+  scales the drift. Without both, the fine net is a scaled copy of the coarse one
+  that moves with it, and the eye reads them as one object.
+- *Brighter but thinner.* A brighter colour carried at a lower alpha reads as a
+  highlight catching the surface. The same white at the coarse net's alpha just
+  doubles the total white on the water and washes the sea out.
+
+**The shadow blobs (`causticShadows`).** The one water layer that darkens. A cell
+grid — the `waveField` idiom, not the contour one — because this needs *per-blob*
+identity: a blob is one cell, so it draws its own keep-off distance from the
+shore the way a ribbon draws one from `floor(bands + 0.5)`, and blobs inside
+their own keep-off are simply absent rather than every blob being clipped along a
+common contour. Nothing inside the loop is heavier than a `hash` and a `length`,
+so nine cells cost about what one contour net does.
+
+Three things had to be got right, and two of them were wrong first:
+
+- **Chosen by luminance, not by looking dark.** The first colour was `0x0a3b4d` —
+  which reads as deep water written down, but carries most of its weight in green
+  and measures 49.9 against the painted settlement water's 51.1. It composited at
+  full strength and changed nothing: the 5th percentile of water luminance was
+  *identical* with the layer on and off. The shipped `0x0d1728` is the water's own
+  hue at about half its brightness. Not a neutral grey either — a desaturated
+  shadow over a navy sea reads as haze, not as depth.
+- **Big enough to overlap.** At radius 0.16–0.36 of a cell and 55% density the
+  blobs covered about 4% of the water and read as bubbles. At 0.28–0.56 and 90%,
+  `max` merges neighbours into irregular pools, which is what the reference has
+  between its light cells. Measured after: the water's 2nd percentile drops 41.8 →
+  35.6 and the 10th 44.7 → 40.8 with the layer on, having not moved at all before.
+- **One domain warp for the whole field.** Two `noise` lookups before the loop,
+  displacing the sample point by half a cell, turn nine perfect circles into nine
+  irregular pools. Per-blob deformation would cost nine times as much for the same
+  effect.
+
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
 Foam is not an outline. A single band at a fixed offset from the coast reads
@@ -617,9 +666,11 @@ On top of that:
   a fiftieth of a tile: one or two screen pixels. That is the answer to "why does
   the band read as a drawn stroke" — it had no structure at any scale between
   per-hex and sub-pixel. A ragged edge does have to be re-checked when the band
-  narrows (§4.4b halves it over a prop tile), but clamping the reach to stay
-  outside the plateau covers that, and it is worth the clamp to keep the
-  raggedness at a size the eye can read.
+  narrows (§4.4b takes it to a quarter over a prop tile) — and re-checking it is
+  how the prop-tile regression was found: the clamp keeping the reach outside the
+  plateau bounds the *inner* edge, and nothing was bounding the outer one. It is
+  scaled by the same factor as the width now, so the raggedness stays in
+  proportion to the band it is tearing.
 - **Surge**: the band's width breathes, `width = FOAM_WIDTH * (1 + FOAM_SURGE *
   sin(t * SURGE_RATE + coarseNoise(p) + hexScaleNoise(p)))`. Two scales of
   de-synchronisation — about seven hexes for the swell, about one for the
@@ -675,7 +726,7 @@ A drifting surface pattern running across one of those objects reads as painted
 *onto* it rather than flowing around it, which is exactly the illusion the prop
 is there to create. So over those tiles the shader quietens down: the mask bakes
 A as 1 over the hex, the surface pattern is multiplied out by it, and the foam
-**narrows to `PROP_FOAM_SCALE` (a half) of its width**.
+**narrows to `PROP_FOAM_SCALE` (a quarter) of its width**.
 
 Narrowed, not removed. Removing it was the first attempt and it was worse than
 the artifact it fixed: foam is the coastline's *outline* as much as it is water,
@@ -683,12 +734,19 @@ so a bare stretch of shore is found by the eye immediately — much faster than 
 finds a ribbon crossing a rock. A thinner line still closes the outline while
 leaving the boat or rock its own patch of still water.
 
-Half rather than the quarter this started at, because a quarter was too thin to
-survive the art: measured, it put the band at 3–4 screen pixels on a north-facing
-edge — thinner than the sand prism's own painted side face — and on one tile the
-whole band ended up on the beach with bare water below it. A band has to stay
-wider than the art's own edge features to stay reliably on the right side of
-them.
+**And the ragged edge narrows with it.** `uFoamNoise` is an *absolute*
+displacement in tile widths (§4.3), so it has to be multiplied by the same factor
+the width is — one `shrink`, applied to both. Left absolute it swamped the very
+band it was decorating: 0.09 tiles of wander either side of a 0.15-tile band, so
+on every positive excursion of the noise the foam reached ~0.23 tiles and went
+straight back onto the rock. That is the whole reason a half looked like it
+worked better than a quarter for a while: at a half the mean width was wide
+enough to hide the fact that the narrowing was only happening to the mean.
+
+With the edge scaled too, a quarter is a quarter along the whole band rather than
+only at its centre line, and the earlier reading that a quarter was "too thin to
+survive the art" — 3–4 screen pixels on a north-facing edge, on one tile the
+whole band up on the beach — was measuring the unscaled noise, not the width.
 
 Three details are load-bearing:
 
@@ -734,6 +792,13 @@ float uCausticScale, uCausticBands, uCausticWidth, uCausticAlpha; vec3 uCausticC
 float uCausticCull                keep-off distance from shore, in tile widths
 float uCausticCullSoften          antialiasing on that cut, not a fade
 float uCausticCullSpread          spread of the per-ribbon keep-off distance
+float uCausticFine                0/1: the fine highlight net (§4.2c)
+float uCausticFineScale, uCausticFineBands, uCausticFineWidth, uCausticFineAlpha
+vec3  uCausticFineColor
+float uCausticBlobs               0/1: the drifting shadow blobs (§4.2c)
+float uCausticBlobScale           reciprocal of the blob cell size
+float uCausticBlobDensity         fraction of cells carrying a blob
+float uCausticBlobAlpha;  vec3 uCausticBlobColor
 float uFarReach                   what G is normalised over, so G decodes to tiles
 float uPropMute                   0/1: honour the mask's A channel (§4.4b)
 float uPropFoamScale              width the foam keeps over a prop tile
@@ -742,7 +807,8 @@ float uFoamWidth                  water-side reach, in tile widths
 float uFoamInner                  plateau, as a fraction of the width
 float uFoamLandReach              land-side reach, as a fraction of the width
 vec2  uFoamAlpha                  inner line, outer lace
-float uFoamNoise                  edge displacement, as a fraction of the width
+float uFoamNoise                  edge displacement, in tile widths — scaled by
+                                  the same factor as the width over a prop tile
 float uFoamNoiseScale, uFoamSurge, uSurgeRate;  vec2 uFoamWind
 vec2  uCoastRange                 the mask's two ramps, in tile widths, so the
                                   shader can work in one signed distance
@@ -769,9 +835,13 @@ export interface WaterDebugFlags {
   midWaterWaves: boolean;       // default true
   /** Debug: draw the caustics on the world map too, to judge both idioms at one scale. */
   causticsEverywhere: boolean;  // default false
+  /** The second, finer caustic net over the first (§4.2c). */
+  fineCaustics: boolean;
+  /** The drifting dark blobs under the caustics (§4.2c). */
+  causticShadows: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
-  /** Quieten the shader over the boat/rock coastal tiles (§4.4b): no surface pattern, quarter-width foam. */
+  /** Quieten the shader over the boat/rock coastal tiles (§4.4b): no surface pattern, quarter-width foam (edge noise included). */
   propTileMute: boolean;        // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
   seaBody: boolean;             // default true

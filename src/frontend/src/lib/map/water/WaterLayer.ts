@@ -198,6 +198,48 @@ const CAUSTIC_CULL_SOFTEN_TILES = 0.03;
 const CAUSTIC_CULL_SPREAD_TILES = 0.5;
 
 /**
+ * The second, finer caustic net (§4.2c) — same idiom as the one above, at a
+ * smaller feature size and in a brighter colour.
+ *
+ * Scale is a multiple of the coarse net's rather than an absolute number, so the
+ * two stay in the same relationship when the coarse one is retuned. 2.4x is
+ * chosen to be an awkward ratio: at 2 or 3 the two nets' contours line up often
+ * enough to read as one field drawn twice.
+ *
+ * Pure white against the coarse net's cooler `CAUSTIC_COLOR`, at a lower alpha.
+ * That ordering is the point — a brighter colour carried thinly reads as a
+ * highlight catching the surface, where the same white at the coarse net's alpha
+ * just doubles the amount of white on the water and washes the sea out.
+ */
+const CAUSTIC_FINE_SCALE = CAUSTIC_SCALE * 2.4;
+const CAUSTIC_FINE_BANDS = 2.2;
+const CAUSTIC_FINE_WIDTH = 0.1;
+const CAUSTIC_FINE_ALPHA = 0.26;
+const CAUSTIC_FINE_COLOR = 0xffffff;
+
+/**
+ * The drifting shadow blobs (§4.2c) — the one caustic layer that darkens.
+ *
+ * `SCALE` is the reciprocal of the cell size, so 1/210 puts one blob every
+ * ~1.25 hexes; `DENSITY` is the fraction of cells that carry one at all, which
+ * with the in-cell jitter is what keeps them from reading as a grid. Radius is
+ * a fraction of the cell (see `blobField`), so those two numbers set the whole
+ * distribution.
+ *
+ * The colour is the settlement water's own hue at about half its brightness, not
+ * a neutral grey: a desaturated shadow over a navy sea reads as haze rather than
+ * as depth. It has to be chosen by *luminance* rather than by looking dark —
+ * the first attempt here was 0x0a3b4d, which looks like deep water written down
+ * but carries most of its weight in green and measured 49.9 against the painted
+ * water's 51.1. It composited at full strength and changed nothing at all: the
+ * 5th percentile of water luminance was identical with the layer on and off.
+ */
+const CAUSTIC_BLOB_SCALE = 1 / 210;
+const CAUSTIC_BLOB_DENSITY = 0.9;
+const CAUSTIC_BLOB_ALPHA = 0.42;
+const CAUSTIC_BLOB_COLOR = 0x0d1728;
+
+/**
  * What fraction of its width the foam keeps over a prop tile (§4.4b).
  *
  * Not zero. Taking the foam off the tile entirely was the first attempt and it
@@ -206,14 +248,15 @@ const CAUSTIC_CULL_SPREAD_TILES = 0.5;
  * faster than a ribbon crossing a rock. Half width still leaves the boat or rock
  * its own patch of still water while keeping the outline closed.
  *
- * Half rather than the quarter this started at, because a quarter was too thin
- * to survive the art. Measured, it put the band at 3-4 screen pixels on a
- * north-facing edge — thinner than the sand prism's own painted side face — so
- * on one tile the whole band landed on the beach with bare water below it. A
- * band has to stay wider than the art's own edge features to stay on the right
- * side of them.
+ * A quarter, and the shader scales the band's ragged edge by the same factor
+ * (see `shrink` in waterShader.ts). Half was tried in between and read as no
+ * narrowing at all next to a rock: the edge noise is an absolute 0.09 tiles, so
+ * left unscaled it swung a nominally 0.15-tile band out past 0.23 and back into
+ * the stone. With the edge scaled too, a quarter is a quarter everywhere along
+ * the band rather than only at its mean, which is what the earlier "too thin to
+ * survive the art" reading was actually measuring.
  */
-const PROP_FOAM_SCALE = 0.5;
+const PROP_FOAM_SCALE = 0.25;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -266,6 +309,8 @@ export class WaterLayer {
     const [waveR, waveG, waveB] = hexToRgb01(WAVE_COLOR);
     const [foamR, foamG, foamB] = hexToRgb01(FOAM_COLOR);
     const [causticR, causticG, causticB] = hexToRgb01(CAUSTIC_COLOR);
+    const [fineR, fineG, fineB] = hexToRgb01(CAUSTIC_FINE_COLOR);
+    const [blobR, blobG, blobB] = hexToRgb01(CAUSTIC_BLOB_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
@@ -301,6 +346,17 @@ export class WaterLayer {
       uCausticCull: { value: 0, type: 'f32' },
       uCausticCullSoften: { value: CAUSTIC_CULL_SOFTEN_TILES, type: 'f32' },
       uCausticCullSpread: { value: CAUSTIC_CULL_SPREAD_TILES, type: 'f32' },
+      uCausticFine: { value: 0, type: 'f32' },
+      uCausticFineScale: { value: CAUSTIC_FINE_SCALE, type: 'f32' },
+      uCausticFineBands: { value: CAUSTIC_FINE_BANDS, type: 'f32' },
+      uCausticFineWidth: { value: CAUSTIC_FINE_WIDTH, type: 'f32' },
+      uCausticFineAlpha: { value: CAUSTIC_FINE_ALPHA, type: 'f32' },
+      uCausticFineColor: { value: new Float32Array([fineR, fineG, fineB]), type: 'vec3<f32>' },
+      uCausticBlobs: { value: 0, type: 'f32' },
+      uCausticBlobScale: { value: CAUSTIC_BLOB_SCALE, type: 'f32' },
+      uCausticBlobDensity: { value: CAUSTIC_BLOB_DENSITY, type: 'f32' },
+      uCausticBlobAlpha: { value: CAUSTIC_BLOB_ALPHA, type: 'f32' },
+      uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
       uPropMute: { value: 0, type: 'f32' },
       uPropFoamScale: { value: PROP_FOAM_SCALE, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
@@ -421,6 +477,12 @@ export class WaterLayer {
     // prototype's scattered arcs from orbit. Two idioms rather than one tuned
     // two ways — see waterShader.ts's causticField.
     u.uCaustics = this.mode === 'settlement' || waterDebugFlags.causticsEverywhere ? 1 : 0;
+    // The two extra caustic layers are sub-layers of that pattern, not effects
+    // of their own: the shader only reaches them inside the caustic branch, so
+    // these flags say "and this layer too" rather than turning anything on by
+    // themselves.
+    u.uCausticFine = waterDebugFlags.fineCaustics ? 1 : 0;
+    u.uCausticBlobs = waterDebugFlags.causticShadows ? 1 : 0;
     u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
     // Settlement mode only. The mute protects the boat and rock painted on the
     // coastal water art, and world mode does not draw sea tiles at all
