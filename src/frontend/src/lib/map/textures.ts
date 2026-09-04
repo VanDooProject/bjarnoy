@@ -53,7 +53,11 @@ export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
 export const TILE_ART_TOPFACE_H_FRAC = 92 / 200;
 
-export type TextureKey = Terrain | NonNullable<Tile['buildingType']>;
+// 'sawmillriver'/'sawmillbend' aren't real `Tile['buildingType']` values —
+// a Sawmill's wire building type always stays 'sawmill' (see
+// `WorldModel.sawmillArtVariantOf`) — they're purely extra texture-lookup
+// keys for its two river-adjacent art families.
+export type TextureKey = Terrain | NonNullable<Tile['buildingType']> | 'sawmillriver' | 'sawmillbend';
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
@@ -85,11 +89,28 @@ const ROOT_BUILDING_LEVELED = import.meta.glob(
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse}_*_base.png',
+  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse,barracks,sawmill}_*_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse}_*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse,barracks,sawmill}_*.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+// fisherhut/sawmillriver/sawmillbend are also base/top split, but — unlike
+// every family above, whose base is one level-invariant tint — their *base*
+// layer itself carries a level rung too (e.g.
+// `base/fisherhut_E_level000_base.png`), so it needs `buildIndexed` (like
+// `ROOT_BUILDING_LEVELED` below) rather than `buildPlain`. Their glob is
+// `sawmill_*` (not `sawmillriver_*`)-safe because the pack always puts an
+// underscore right after the family name — "sawmillriver_..." never matches
+// a "sawmill_*" pattern, so this doesn't collide with plain `sawmill`'s own
+// glob above.
+const SPLIT_BUILDING_BASE_LEVELED = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/{fisherhut,sawmillriver,sawmillbend}_*_level*_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
+const SPLIT_BUILDING_TOP_LEVELED = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/{fisherhut,sawmillriver,sawmillbend}_*_level*.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
 // One glob per river shape (not a single `rivertile_*` prefix glob): the
@@ -113,6 +134,15 @@ const RIVER_BASE_BEND = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend_{E,NE,NW,W,SW,SE}_base.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
+// The 120°-off-straight turn (RiverTileShape.Bend60) — a distinct art family
+// from the 60°-off-straight `bend` above, not a variant of it. Its filename
+// prefix is `rivertile_bend60_`, which the plain `bend` glob above can't
+// match (`bend_` requires an underscore right after "bend", and "60" sits
+// there instead), so it needs its own glob rather than colliding with it.
+const RIVER_BASE_BEND60 = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend60_{E,NE,NW,W,SW,SE}_base.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
 const RIVER_BASE_SPRING = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_spring_{E,NE,NW,W,SW,SE}_base.png',
   { eager: true, import: 'default' },
@@ -129,6 +159,10 @@ const RIVER_TOP_BEND = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend_{E,NE,NW,W,SW,SE}.png',
   { eager: true, import: 'default' },
 ) as AssetModules;
+const RIVER_TOP_BEND60 = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend60_{E,NE,NW,W,SW,SE}.png',
+  { eager: true, import: 'default' },
+) as AssetModules;
 const RIVER_TOP_SPRING = import.meta.glob(
   '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_spring_{E,NE,NW,W,SW,SE}.png',
   { eager: true, import: 'default' },
@@ -142,8 +176,12 @@ const RIVER_TOP_CONFLUENCE = import.meta.glob(
 const ORIENTATION_RE = /_(NE|NW|SW|SE|E|W)(?:_|\.)/;
 /** A numbered terrain-variant suffix, e.g. `_variant001.png`. */
 const VARIANT_RE = /_variant(\d{3})\.png$/;
-/** A numbered building-level suffix, e.g. `_level004.png`. */
-const LEVEL_RE = /_level(\d{3})\.png$/;
+/**
+ * A numbered building-level suffix, e.g. `_level004.png` (a top/root file)
+ * or `_level004_base.png` (a leveled base file — see
+ * `SPLIT_BUILDING_BASE_LEVELED`).
+ */
+const LEVEL_RE = /_level(\d{3})(?:_base)?\.png$/;
 
 function basename(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
@@ -236,6 +274,11 @@ const SOURCES = {
     storagehouse: buildPlain(SPLIT_BUILDING_BASE, 'storagebuilding_'),
     archeryrange: buildPlain(SPLIT_BUILDING_BASE, 'archerybuilding_'),
     greatstorehouse: buildPlain(SPLIT_BUILDING_BASE, 'bigstoragehouse_'),
+    barracks: buildPlain(SPLIT_BUILDING_BASE, 'barracks_'),
+    // Flat/inland sawmill only — 'sawmillriver'/'sawmillbend' are separate
+    // TextureKeys below (baseIndexed), since (unlike this family) their base
+    // layer varies by level too.
+    sawmill: buildPlain(SPLIT_BUILDING_BASE, 'sawmill_'),
     // Unlike towerbuilding, the pack draws the fishing hut with a real
     // per-orientation sprite (its dock visibly points a different way in
     // each of the six files) rather than one image reused at every
@@ -251,10 +294,21 @@ const SOURCES = {
    * `variant000`/`variant001`), same shape as grass/forest's top layer.
    */
   coastalBase: buildIndexed(ROOT_TERRAIN, 'coastalwatertile_'),
-  /** Tower and Dockyard aren't base/top split, so their level swap replaces the *base* texture. */
+  /**
+   * Tower and Dockyard aren't base/top split, so their level swap replaces
+   * the *base* texture outright, with no top layer at all. FisherHut and
+   * Sawmill's two river-adjacent families (`sawmillriver`/`sawmillbend`)
+   * are base/top split like most buildings — they just also need their
+   * *base* layer indexed by level (see `SPLIT_BUILDING_BASE_LEVELED`), so
+   * they belong here too, each paired with its own leveled `top` entry
+   * below rather than going without one.
+   */
   baseIndexed: {
     tower: buildIndexed(ROOT_BUILDING_LEVELED, 'towerbuilding_'),
     dockyard: buildIndexed(ROOT_BUILDING_LEVELED, 'dockyard_'),
+    fisherhut: buildIndexed(SPLIT_BUILDING_BASE_LEVELED, 'fisherhut_'),
+    sawmillriver: buildIndexed(SPLIT_BUILDING_BASE_LEVELED, 'sawmillriver_'),
+    sawmillbend: buildIndexed(SPLIT_BUILDING_BASE_LEVELED, 'sawmillbend_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   top: {
     grass: buildIndexed(SPLIT_TERRAIN_TOP, 'grasstile_'),
@@ -269,6 +323,11 @@ const SOURCES = {
     storagehouse: buildIndexed(SPLIT_BUILDING_TOP, 'storagebuilding_'),
     archeryrange: buildIndexed(SPLIT_BUILDING_TOP, 'archerybuilding_'),
     greatstorehouse: buildIndexed(SPLIT_BUILDING_TOP, 'bigstoragehouse_'),
+    barracks: buildIndexed(SPLIT_BUILDING_TOP, 'barracks_'),
+    sawmill: buildIndexed(SPLIT_BUILDING_TOP, 'sawmill_'),
+    fisherhut: buildIndexed(SPLIT_BUILDING_TOP_LEVELED, 'fisherhut_'),
+    sawmillriver: buildIndexed(SPLIT_BUILDING_TOP_LEVELED, 'sawmillriver_'),
+    sawmillbend: buildIndexed(SPLIT_BUILDING_TOP_LEVELED, 'sawmillbend_'),
   } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
   /**
    * The art pack's four river shapes — a `RiverTileShape.Mouth` (see
@@ -278,19 +337,21 @@ const SOURCES = {
   riverBase: {
     straight: buildPlain(RIVER_BASE_STRAIGHT, ''),
     bend: buildPlain(RIVER_BASE_BEND, ''),
+    bend60: buildPlain(RIVER_BASE_BEND60, ''),
     spring: buildPlain(RIVER_BASE_SPRING, ''),
     confluence: buildPlain(RIVER_BASE_CONFLUENCE, ''),
   } satisfies Record<RiverArtShape, OrientationMap<string>>,
   riverTop: {
     straight: buildPlain(RIVER_TOP_STRAIGHT, ''),
     bend: buildPlain(RIVER_TOP_BEND, ''),
+    bend60: buildPlain(RIVER_TOP_BEND60, ''),
     spring: buildPlain(RIVER_TOP_SPRING, ''),
     confluence: buildPlain(RIVER_TOP_CONFLUENCE, ''),
   } satisfies Record<RiverArtShape, OrientationMap<string>>,
 };
 
-/** The art pack's river shapes — `RiverTileShape`'s `mouth` maps onto `straight` (see `SOURCES.riverBase`). */
-type RiverArtShape = 'straight' | 'bend' | 'spring' | 'confluence';
+/** The art pack's river shapes — `RiverTileShape`'s `mouth` maps onto `straight`/`bend` (see `SOURCES.riverBase`). */
+type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
 
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
@@ -389,7 +450,16 @@ function mapOrientationArrays<T, U>(
   return result;
 }
 
-export function textureKeyFor(tile: Tile): TextureKey {
+/**
+ * `sawmillVariant` overrides a Sawmill tile's texture key to one of its two
+ * river-adjacent families — see `WorldModel.sawmillArtVariantOf`, which
+ * derives it from the tile's neighbours (a Sawmill's own hex is never
+ * itself a river tile — `HexMapRenderer.rebuildTerrain` renders a river
+ * tile's own art instead of any building standing "on" it). Ignored for
+ * every other building/terrain.
+ */
+export function textureKeyFor(tile: Tile, sawmillVariant?: 'sawmillriver' | 'sawmillbend'): TextureKey {
+  if (tile.buildingType === 'sawmill' && sawmillVariant) return sawmillVariant;
   return tile.buildingType ?? tile.terrain;
 }
 
@@ -408,13 +478,17 @@ function clampIndex(index: number, length: number): number {
  * layering on top of it, since the pack draws the hut with its own base
  * already included.
  */
-export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
+export function baseTextureFor(
+  textures: TileTextures,
+  tile: Tile,
+  sawmillVariant?: 'sawmillriver' | 'sawmillbend',
+): Texture {
   const orientation = tile.orientation ?? 'SE';
   if (tile.terrain === 'sea' && tile.isCoastalWater && !tile.buildingType) {
     const arr = textures.coastalBase[orientation];
     return arr[clampIndex(tile.variant ?? 0, arr.length)];
   }
-  const key = textureKeyFor(tile);
+  const key = textureKeyFor(tile, sawmillVariant);
   const indexed = textures.baseIndexed[key];
   if (indexed) {
     const arr = indexed[orientation];
@@ -428,8 +502,12 @@ export function baseTextureFor(textures: TileTextures, tile: Tile): Texture {
 }
 
 /** The top (props/building) layer texture for a tile, or `undefined` if this key has no top layer. */
-export function topTextureFor(textures: TileTextures, tile: Tile): Texture | undefined {
-  const key = textureKeyFor(tile);
+export function topTextureFor(
+  textures: TileTextures,
+  tile: Tile,
+  sawmillVariant?: 'sawmillriver' | 'sawmillbend',
+): Texture | undefined {
+  const key = textureKeyFor(tile, sawmillVariant);
   const orientation = tile.orientation ?? 'SE';
   const arr = textures.top[key]?.[orientation];
   if (!arr) return undefined;
@@ -447,8 +525,11 @@ export function topTextureFor(textures: TileTextures, tile: Tile): Texture | und
  * through the derived helpers in `types.ts` rather than using
  * `inDirections`/`outDirection` as a `TileOrientation` directly.
  *
- * `bend` is directional (`bendOrientationOf`); `spring` has only an
- * outflow (`springOrientationOf`); `straight` orients by whichever of
+ * `bend` is directional (`bendOrientationOf`); `bend60` — the sharper
+ * 120°-off-straight turn, a separate art family from `bend` — is directional
+ * the same way, reusing `bendOrientationOf` (it takes an in/out direction
+ * pair, not an angle, so the same anchor logic applies); `spring` has only
+ * an outflow (`springOrientationOf`); `straight` orients by whichever of
  * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
  * gives the same file either way (`docs/design/river-generation.md` again).
  *
@@ -465,12 +546,19 @@ export function topTextureFor(textures: TileTextures, tile: Tile): Texture | und
  * fix, rather than risk applying a derived formula that wasn't measured
  * against it. Known-unfixed; see "Art pack orientation convention".
  */
-function riverArtFor(
+// Exported (only) so textures.test.ts can check the shape/orientation this
+// picks without going through loadTileTextures' real asset pipeline
+// (Pixi's Assets.load needs a browser `document`, which this repo's node-
+// environment vitest config doesn't provide).
+export function riverArtFor(
   river: RiverTile,
   seaDirection: TileOrientation | null,
-): { shape: 'straight' | 'bend' | 'spring' | 'confluence'; orientation: TileOrientation } {
+): { shape: 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence'; orientation: TileOrientation } {
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
     return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
+  }
+  if (river.shape === 'bend60' && river.outDirection && river.inDirections[0]) {
+    return { shape: 'bend60', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'spring' && river.outDirection) {
     return { shape: 'spring', orientation: springOrientationOf(river.outDirection) };

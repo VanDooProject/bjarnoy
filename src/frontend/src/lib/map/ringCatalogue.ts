@@ -28,3 +28,21 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
   if (requiredLevel === undefined || requiredLevel <= currentLevel) return undefined;
   return `Requires longhouse ${requiredLevel}`;
 }
+
+/**
+ * The reason a Sawmill can't be placed on this specific Grass hex, or
+ * undefined when it can — the same `lock` mechanism `longhouseLock` feeds, so
+ * it shows as the same disabled-bubble/tooltip the ring already has. A
+ * Sawmill is built directly on a river tile (`WorldModel.placeBuilding`
+ * mirrors `BuildingDefinition.RequiresRiverShape`), and only a
+ * `straight`/`bend` shaped one has matching art — `hasRiverShape` is whether
+ * this hex's own river tile (if any) is one of those two shapes. Every other
+ * buildable type has no such requirement, so this is a no-op for it (Fisher
+ * Hut moved to the water category instead — see `RingMenu`'s `WATER_CATEGORY` —
+ * since it's now built on coastal water itself, exactly like Fishing
+ * Hut/Dockyard, with no separate lock needed).
+ */
+export function riverShapeLock(type: string, hasRiverShape: boolean): string | undefined {
+  if (type === 'sawmill' && !hasRiverShape) return 'Needs to stand on a river';
+  return undefined;
+}

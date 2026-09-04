@@ -71,8 +71,8 @@ Grain also feeds population; a settlement that runs its grain to zero stops grow
 ## 7. Buildings
 
 - **Longhouse** — the anchor. Its level sets claim radius, build slots and settlement cap.
-- **Production** — lumber camp, quarry, farm, fishing dock. Placed on the matching terrain hex.
-- **Military** — the archery range trains the land army (spearmen through catapults) instead of the longhouse; the dockyard trains ships instead of the longhouse and, like the fishing hut, must stand on shallow (coastal) water. Neither carries a combat bonus of its own yet — that's a later pass. Wall is placed on a border hex and only defends that approach, which is what makes the choice of *which* border hex interesting.
+- **Production** — lumber camp, quarry, farm, fishing dock, fisher hut (a third food producer on grass, alongside farm/pumpkin farm), sawmill (wood, on grass, boosted by a neighbouring forest same as the lumber camp — it refines what that building cuts). Placed on the matching terrain hex.
+- **Military** — the archery range trains the land army (spearmen through catapults) instead of the longhouse; the dockyard trains ships instead of the longhouse and, like the fishing hut, must stand on shallow (coastal) water. Neither carries a combat bonus of its own yet — that's a later pass. The barracks is buildable/leveling on grass or sand alongside them, but has no unit-training hook of its own yet (the archery range already owns the land roster's gate) — deferred until a garrison-capacity or second training-track mechanic exists to hang one off. Wall is placed on a border hex and only defends that approach, which is what makes the choice of *which* border hex interesting.
 - **Logistics** — warehouse, harbour, market. The great storehouse is a late-game storage tier gated behind both a level-10 longhouse *and* a level-10 storage house of the settlement's own — the first cross-building prerequisite in the tech tree, not just a longhouse-level gate.
 
 Buildings occupy a hex. There are more useful hexes than build slots, so expansion and demolition are both real decisions.

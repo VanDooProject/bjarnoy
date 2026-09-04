@@ -455,6 +455,9 @@ const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   archeryrange: 'Archery Range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great Storehouse',
+  barracks: 'Barracks',
+  fisherhut: 'Fisher Hut',
+  sawmill: 'Sawmill',
 };
 
 const TERRAIN_LABELS: Record<Terrain, string> = {
@@ -1916,6 +1919,18 @@ export class HexMapRenderer {
       const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
+      // A Sawmill is built directly on a river tile (WorldModel.placeBuilding
+      // only accepts a straight/bend one) — its sawmill+river composite art
+      // replaces the plain river art the `river` branch below would
+      // otherwise draw, so this has to be checked first.
+      if (river && tile.buildingType === 'sawmill') {
+        const sawmillVariant = worldModel.sawmillArtVariantOf(c);
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillVariant), coord: c });
+        const topTexture = topTextureFor(textures, tile, sawmillVariant);
+        if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
       if (river) {
         // Only a Mouth's orientation actually needs this (see
         // riverTexturesFor/mouthOrientationOf) — skip the neighbour scan

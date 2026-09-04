@@ -45,7 +45,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 80, Stone: 40, Food: 20, Iron: 40),
             TrainingDuration = TimeSpan.FromMinutes(15),
             RequiredLonghouseLevel = 1,
-            RequiredBuildingType = BuildingType.ArcheryRange,
+            RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Axeman] = new UnitDefinition
         {
@@ -60,7 +60,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 100, Stone: 30, Food: 20, Iron: 60),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 3,
-            RequiredBuildingType = BuildingType.ArcheryRange,
+            RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Bowman] = new UnitDefinition
         {
@@ -91,7 +91,7 @@ public static class UnitCatalogue
             TrainingDuration = TimeSpan.FromMinutes(35),
             RequiredLonghouseLevel = 6,
             RequiredUnitType = UnitType.Axeman,
-            RequiredBuildingType = BuildingType.ArcheryRange,
+            RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Provisioner] = new UnitDefinition
         {

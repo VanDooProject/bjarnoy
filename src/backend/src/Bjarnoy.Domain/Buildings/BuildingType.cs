@@ -62,9 +62,10 @@ public enum BuildingType
     GreatStorehouse = 11,
 
     /// <summary>
-    /// Trains land troops (the combat/siege roster) in place of the
-    /// Longhouse. No production/storage of its own, and no combat bonus
-    /// (deferred) — unlike <see cref="Tower"/>.
+    /// Trains the archer/siege slice of the land roster (Bowman, Catapult)
+    /// in place of the Longhouse. No production/storage of its own, and no
+    /// combat bonus (deferred) — unlike <see cref="Tower"/>. See
+    /// <see cref="Barracks"/> for the basic-melee half of the split.
     /// </summary>
     ArcheryRange = 12,
 
@@ -73,6 +74,37 @@ public enum BuildingType
     /// water, like <see cref="FishingHut"/>.
     /// </summary>
     Dockyard = 13,
+
+    /// <summary>
+    /// Trains the basic melee slice of the land roster (Spearman, Axeman,
+    /// Berserker) in place of the Longhouse — <see cref="ArcheryRange"/>
+    /// keeps the archer/siege units (Bowman, Catapult). A garrison building
+    /// on land otherwise: no production/storage of its own, and no combat
+    /// bonus (deferred: a garrison capacity, once one exists to hang it off).
+    /// </summary>
+    Barracks = 14,
+
+    /// <summary>
+    /// Food, on grass — a third food-producer variant alongside
+    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/>. Unlike
+    /// <see cref="FishingHut"/> it doesn't stand on water itself, but its
+    /// hex must be adjacent to some (see
+    /// <see cref="BuildingDefinition.RequiresAdjacentToWater"/>). Flat/inland
+    /// art only.
+    /// </summary>
+    FisherHut = 15,
+
+    /// <summary>
+    /// Wood, on grass — refines what a <see cref="Lumberjack"/> cuts, so it
+    /// shares that building's Forest-neighbour boost (see
+    /// <see cref="BuildingCatalogue.Boosts"/>). Its hex must be adjacent to a
+    /// river of any shape (see
+    /// <see cref="BuildingDefinition.RequiresAdjacentRiver"/>). Ships with
+    /// art keyed off which river shape the adjacency comes from
+    /// (flat/riverside/river-bend) — cosmetic only on the frontend, not
+    /// modelled here.
+    /// </summary>
+    Sawmill = 16,
 }
 
 public static class BuildingTypeExtensions
@@ -93,6 +125,9 @@ public static class BuildingTypeExtensions
         BuildingType.GreatStorehouse => "greatstorehouse",
         BuildingType.ArcheryRange => "archeryrange",
         BuildingType.Dockyard => "dockyard",
+        BuildingType.Barracks => "barracks",
+        BuildingType.FisherHut => "fisherhut",
+        BuildingType.Sawmill => "sawmill",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

@@ -121,9 +121,12 @@ internal static class RiverGenerator
     /// plus a meander noise term, and stops the step *before* it would leave
     /// land, so the last tile in the path is always the river's mouth. Once
     /// the walk already has an inflow direction, a step that would turn 120°
-    /// off straight-ahead is excluded — the single bend art asset can only
-    /// render a straight continuation or a 60°-off-straight curve, never a
-    /// sharp 120° one (see <c>docs/design/river-generation.md</c>).
+    /// off straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) is a
+    /// legal candidate, just scored down by
+    /// <see cref="WorldGenerationOptions.SharpBendPenalty"/> so it stays
+    /// rarer than a straight continuation or the gentler 60°-off
+    /// <see cref="RiverTileShape.Bend"/> curve (see
+    /// <c>docs/design/river-generation.md</c>).
     /// </summary>
     private static List<HexCoord> TracePath(
         HexCoord spring,
@@ -159,16 +162,18 @@ internal static class RiverGenerator
 
             // The two candidate directions a 120°-off-straight-ahead turn
             // would take, once there's a previous tile to measure "straight
-            // ahead" from. The direction straight back to that previous tile
-            // is excluded anyway by the `visited` check below.
-            int? disallowedA = null;
-            int? disallowedB = null;
+            // ahead" from — scored down below rather than excluded, so a
+            // Bend60 tile stays possible but rarer. The direction straight
+            // back to that previous tile is excluded anyway by the `visited`
+            // check below.
+            int? sharpTurnA = null;
+            int? sharpTurnB = null;
             if (path.Count >= 2)
             {
                 var inIndex = DirectionIndex(current, path[^2]);
                 var straightAhead = (inIndex + 3) % 6;
-                disallowedA = (straightAhead + 2) % 6;
-                disallowedB = (straightAhead + 4) % 6;
+                sharpTurnA = (straightAhead + 2) % 6;
+                sharpTurnB = (straightAhead + 4) % 6;
             }
 
             var currentDepth = sampler.IslandDepthAt(current) ?? 0.0;
@@ -183,11 +188,6 @@ internal static class RiverGenerator
                     continue;
                 }
 
-                if (i == disallowedA || i == disallowedB)
-                {
-                    continue;
-                }
-
                 var depth = sampler.IslandDepthAt(neighbour);
                 if (depth is null || depth < currentDepth)
                 {
@@ -196,6 +196,10 @@ internal static class RiverGenerator
 
                 var noise = ValueNoise.Hash2(neighbour.Q, neighbour.R, seed + 43);
                 var score = depth.Value + (options.RiverMeanderWeight * noise);
+                if (i == sharpTurnA || i == sharpTurnB)
+                {
+                    score -= options.SharpBendPenalty;
+                }
 
                 if (score > bestScore)
                 {
@@ -323,8 +327,19 @@ internal static class RiverGenerator
             }
             else
             {
+                // 0°: continues straight through. 60° either side: a gentle
+                // Bend. 120° either side: the sharper Bend60 — legal since
+                // TracePath no longer excludes it, just scores it down.
                 var opposite = ((int)ins[0] + 3) % 6;
-                shape = opposite == (int)outDir ? RiverTileShape.Straight : RiverTileShape.Bend;
+                var turn = Math.Min(
+                    ((int)outDir - opposite + 6) % 6,
+                    (opposite - (int)outDir + 6) % 6);
+                shape = turn switch
+                {
+                    0 => RiverTileShape.Straight,
+                    2 => RiverTileShape.Bend60,
+                    _ => RiverTileShape.Bend,
+                };
             }
 
             result.Add(new RiverTile(tile, shape, ins, hasOut ? outDir : null));

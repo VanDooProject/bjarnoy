@@ -50,6 +50,9 @@ const BUILDING_LABELS: Record<string, string> = {
   archeryrange: 'Archery range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
+  barracks: 'Barracks',
+  fisherhut: 'Fisher hut',
+  sawmill: 'Sawmill',
 };
 
 function fmt(seconds: number): string {

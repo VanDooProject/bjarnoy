@@ -883,6 +883,12 @@ public sealed record Settlement
     /// <see cref="DefaultMaxOrdersPerHex"/> (1) everywhere today; the seam a
     /// future per-hex-stacking tier switches on (issue #158 stage 1d).
     /// </param>
+    /// <param name="riverShapeAt">
+    /// The shape of the river tile standing on <paramref name="coord"/>
+    /// itself, or <see langword="null"/> if there is none there. Only a
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/> building (the
+    /// Sawmill, built directly on a river tile) cares.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -892,7 +898,8 @@ public sealed record Settlement
         double speedFactor = 1.0,
         bool isCoastalWater = false,
         int maxWaitingOrders = 0,
-        int maxOrdersPerHex = DefaultMaxOrdersPerHex)
+        int maxOrdersPerHex = DefaultMaxOrdersPerHex,
+        RiverTileShape? riverShapeAt = null)
     {
         if (!Claims(coord))
         {
@@ -938,6 +945,12 @@ public sealed record Settlement
             ? isCoastalWater
             : definition.AllowsTerrain(terrain);
         if (!terrainOk)
+        {
+            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        if (definition.RequiresRiverShape is { } requiredShapes
+            && (riverShapeAt is not { } actualShape || !requiredShapes.Contains(actualShape)))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }

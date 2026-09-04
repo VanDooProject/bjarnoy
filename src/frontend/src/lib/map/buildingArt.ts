@@ -25,6 +25,13 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   archeryrange: 'archerybuilding',
   dockyard: 'dockyard',
   greatstorehouse: 'bigstoragehouse',
+  barracks: 'barracks',
+  fisherhut: 'fisherhut',
+  // The preview card always shows the flat/inland family, regardless of
+  // where (or whether) the actual tile sits next to a river — see
+  // textures.ts's textureKeyFor/WorldModel.sawmillArtVariantOf for the
+  // adjacency-aware picker the world-map renderer uses instead.
+  sawmill: 'sawmill',
 };
 
 // fishinghut/magictower have no level suffix at all — a single composited
@@ -43,7 +50,7 @@ export const TERRAIN_ART: Record<string, string> = {
 
 const LEVEL_RE = /_level(\d{3})\.png$/;
 const buildingArtModules = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse}_SE_level*.png',
+  '../../../vendor/bg_assets_hextile/hextiles/{vikinghut,greathall,farm_crop,towerbuilding,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,dockyard,bigstoragehouse,barracks,fisherhut,sawmill}_SE_level*.png',
   { eager: true, import: 'default' },
 ) as Record<string, string>;
 

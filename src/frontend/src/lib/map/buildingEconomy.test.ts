@@ -74,4 +74,17 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
   it('magictower matches BuildingCatalogue.cs’s 6 iron/level', () => {
     expect(buildingStatsFor('magictower', 1, 0)).toEqual({ output: '+6 iron/h', modifier: 'Arcane' });
   });
+
+  it('fisherhut ignores terrain adjacency, like farm/pumpkinfarm', () => {
+    expect(buildingStatsFor('fisherhut', 1, 6)).toEqual({ output: '+32 food/h', workers: '4/4' });
+  });
+
+  it('sawmill scales 10%/matching forest neighbour, mirroring lumberjack', () => {
+    expect(buildingStatsFor('sawmill', 1, 0)).toEqual({ output: '+26 wood/h', modifier: undefined });
+    expect(buildingStatsFor('sawmill', 1, 5)).toEqual({ output: '+39 wood/h', modifier: 'Forest (+50%)' });
+  });
+
+  it('barracks has no production/storage of its own yet', () => {
+    expect(buildingStatsFor('barracks', 1, 0)).toEqual({ modifier: 'Garrison' });
+  });
 });

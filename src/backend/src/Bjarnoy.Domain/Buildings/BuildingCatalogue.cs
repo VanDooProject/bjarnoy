@@ -57,6 +57,14 @@ public static class BuildingCatalogue
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
+            BuildingType.Barracks => Barracks(level),
+            BuildingType.FisherHut => FisherHut(level),
+            // Grass qualifies terrain-wise, but only a hex that is itself a
+            // Straight/Bend river tile is actually buildable — see
+            // BuildingDefinition.RequiresRiverShape.
+            BuildingType.Sawmill =>
+                Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
+                    with { RequiresRiverShape = SawmillRiverShapes },
             _ => null,
         };
     }
@@ -194,6 +202,10 @@ public static class BuildingCatalogue
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
             [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
+            // Refines what a neighbouring Lumberjack cuts — same boost shape,
+            // same terrain, as a second demand on the forest ring rather than
+            // a resource of its own.
+            [BuildingType.Sawmill] = new(Forest, PerTilePercent: 0.10, CapPercent: 0.50),
         };
 
     /// <summary>
@@ -291,12 +303,31 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
+    /// A second, later coastal food producer alongside <see cref="FishingHut"/> —
+    /// same shape (RequiresCoastalWater, the hex under it stays plain
+    /// <see cref="World.Terrain.Sea"/>), just its own cost/production tier.
+    /// </summary>
+    private static BuildingDefinition FisherHut(int level) => new()
+    {
+        Type = BuildingType.FisherHut,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 100, Stone: 80, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(4, level),
+        ProductionPerHour = new ResourceAmounts(0, 0, Food: 32, 0) * level,
+        RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
+    };
+
+    /// <summary>The only two river shapes the Sawmill's vendor art has a dedicated composite for — see <see cref="BuildingDefinition.RequiresRiverShape"/>.</summary>
+    private static readonly IReadOnlySet<RiverTileShape> SawmillRiverShapes =
+        new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend };
+
+    /// <summary>
     /// A shrine contributes no flat production or storage of its own — its
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
-    /// here alongside the additive totals. Buildable on any land hex, like
-    /// the anchor buildings before terrain was tightened to Grass-only —
-    /// a shrine has no production to protect by terrain-gating it.
+    /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm/
+    /// MagicTower.
     /// </summary>
     private static BuildingDefinition Shrine(BuildingType type, int level) => new()
     {
@@ -305,6 +336,7 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+        AllowedTerrain = Grass,
     };
 
     /// <summary>
@@ -327,8 +359,10 @@ public static class BuildingCatalogue
     };
 
     /// <summary>
-    /// Trains the land combat/siege roster in place of the Longhouse (see
-    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>). No
+    /// Trains the archer/siege slice of the land roster — Bowman, Catapult —
+    /// in place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>);
+    /// <see cref="Barracks"/> trains the basic melee slice instead. No
     /// production or storage of its own, and — unlike <see cref="Tower"/> —
     /// no combat bonus; that is explicitly deferred.
     /// </summary>
@@ -358,6 +392,25 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 200, Stone: 120, Food: 0, Iron: 20) * CostFactor(level),
         BuildDuration = Duration(9, level),
         RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// Trains the basic melee slice of the land roster — Spearman, Axeman,
+    /// Berserker — in place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>);
+    /// <see cref="ArcheryRange"/> keeps the archer/siege slice. Otherwise a
+    /// garrison building with no production/storage of its own and no combat
+    /// bonus (deferred). Buildable/leveling like <see cref="Tower"/> and
+    /// <see cref="ArcheryRange"/>, same terrain and cost tier.
+    /// </summary>
+    private static BuildingDefinition Barracks(int level) => new()
+    {
+        Type = BuildingType.Barracks,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 15) * CostFactor(level),
+        BuildDuration = Duration(7, level),
+        AllowedTerrain = SandOrGrass,
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
     };
 }

@@ -12,7 +12,7 @@ public enum RiverTileShape
     /// <summary>Flows straight through: one inflow, one outflow 180° opposite it.</summary>
     Straight,
 
-    /// <summary>One inflow, one outflow in any other direction.</summary>
+    /// <summary>One inflow, one outflow 60° off straight (a gentle curve).</summary>
     Bend,
 
     /// <summary>The Y tile: two rivers merging into one, capped at two inflows.</summary>
@@ -20,6 +20,16 @@ public enum RiverTileShape
 
     /// <summary>The last tile before the coast: one inflow, no outflow.</summary>
     Mouth,
+
+    /// <summary>
+    /// One inflow, one outflow 120° off straight — a sharper curve than
+    /// <see cref="Bend"/>. Appended after the other four rather than sorted
+    /// in next to <see cref="Bend"/>: this enum's numeric values are
+    /// persisted as plain ints (<c>Persistence.RiverTileRecord.Shape</c>),
+    /// so inserting a value in the middle would silently reinterpret every
+    /// already-stored river tile's shape.
+    /// </summary>
+    Bend60,
 }
 
 /// <summary>

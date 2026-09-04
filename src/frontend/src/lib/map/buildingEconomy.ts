@@ -26,6 +26,8 @@ export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain>> = {
   // The hut itself already stands on coastal water; more open sea around it
   // is what the backend rewards, not the land it backs onto.
   fishinghut: 'sea',
+  // Refines what a neighbouring Lumberjack cuts — see BuildingCatalogue.cs's Boosts table.
+  sawmill: 'forest',
 };
 
 /** Mirrors `BuildingCatalogue.BoostMultiplier`'s 10%-per-neighbour curve, capped at 50% (5 of 6 neighbours). */
@@ -82,6 +84,25 @@ export function buildingStatsFor(
       return { modifier: 'Trains land troops' };
     case 'dockyard':
       return { modifier: 'Trains ships' };
+    // No production/storage of its own and no unit-training hook yet — see
+    // BuildingType.Barracks's doc comment on the backend.
+    case 'barracks':
+      return { modifier: 'Garrison' };
+    // A third food-producer variant alongside Farm/PumpkinFarm — same
+    // fixed-field shape, no terrain/adjacency boost (mirrors those two's
+    // exclusion from BuildingCatalogue.cs's Boosts table).
+    case 'fisherhut': {
+      const workersCap = level * 4;
+      return { output: `+${level * 32} food/h`, workers: `${workersCap}/${workersCap}` };
+    }
+    case 'sawmill': {
+      const multiplier = boostMultiplier(matchingNeighbours);
+      const output = Math.round(level * 26 * multiplier);
+      return {
+        output: `+${output} wood/h`,
+        modifier: multiplier > 1 ? `Forest (+${Math.round((multiplier - 1) * 100)}%)` : undefined,
+      };
+    }
     case 'longhouse':
       return { output: `+${level * 100} storage capacity` };
     // Mirrors BuildingCatalogue.cs's StorageHouse(level): ResourceAmounts.Uniform(1000) * level.
@@ -163,6 +184,9 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 20 },
   dockyard: { wood: 200, stone: 120, food: 0, iron: 20 },
+  barracks: { wood: 130, stone: 110, food: 0, iron: 15 },
+  fisherhut: { wood: 100, stone: 80, food: 0, iron: 0 },
+  sawmill: { wood: 100, stone: 80, food: 0, iron: 0 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */
