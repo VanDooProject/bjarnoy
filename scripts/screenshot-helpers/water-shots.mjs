@@ -92,24 +92,27 @@ await shoot(page, 'settlement_close_off');
 await setFlags(page, { water: true, propTileMute: false });
 await shoot(page, 'settlement_close_no_mute');
 await setFlags(page, { propTileMute: true });
-// And the same for the caustics' offshore fade — at 0 they run to the coastline
-// and sit on top of the foam.
-await setFlags(page, {});
+// And the same for the caustics' keep-off distance — at 0 they run to the
+// coastline and sit on top of the foam.
 await page.evaluate(() => {
-  window.__waterTuning.causticFadeHexes = 0;
+  window.__waterTuning.causticCullHexes = 0;
 });
-await shoot(page, 'settlement_close_no_caustic_fade');
+await shoot(page, 'settlement_close_no_caustic_cull');
 await page.evaluate(() => {
-  window.__waterTuning.causticFadeHexes = 0.4;
+  window.__waterTuning.causticCullHexes = 0.45;
 });
 
 await page.getByRole('button', { name: /world map/i }).first().click();
 await page.waitForTimeout(2500);
 await setFlags(page, {}, { maskUnknown: false, maskOutOfSight: false });
+// Shipped: the Graphics squiggles on their own layer above the mesh, with the
+// shader supplying the sea body and a crisp foam rim under them.
 await shoot(page, 'world');
-await setFlags(page, { midWaterWaves: false, legacyWaveSquiggles: true });
-await shoot(page, 'world_legacy_squiggles');
-await setFlags(page, { midWaterWaves: true, legacyWaveSquiggles: false, seaBody: false });
+// The shader drawing its own arcs instead — the A/B against
+// docs/design/img/worldmap.png that legacyWaveSquiggles exists for.
+await setFlags(page, { legacyWaveSquiggles: false });
+await shoot(page, 'world_shader_waves');
+await setFlags(page, { legacyWaveSquiggles: true, seaBody: false });
 await shoot(page, 'world_no_sea_body');
 await setFlags(page, { seaBody: true, showWaterMask: true });
 await shoot(page, 'world_mask');

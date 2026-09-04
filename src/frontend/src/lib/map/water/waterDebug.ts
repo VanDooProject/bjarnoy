@@ -27,20 +27,23 @@ export interface WaterDebugFlags {
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
   /**
-   * Fade the whole shader out over the coastal water tiles whose art carries a
-   * prop — a beached boat or a rock (§4.4). Off draws foam and caustics straight
-   * across them, which is the artifact this exists to fix.
+   * Quieten the shader over the coastal water tiles whose art carries a prop — a
+   * beached boat or a rock (§4.4b): the surface pattern goes, and the foam
+   * narrows to a quarter of its width rather than disappearing. Off draws both
+   * straight across the prop, which is the artifact this exists to fix.
    */
   propTileMute: boolean;
   /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
   seaBody: boolean;
   /**
-   * The pre-shader Graphics wave squiggles (HexMapRenderer's waveLayer).
-   * Defaults **off** so the two wave systems don't double-draw; the point of
-   * keeping it at all is that flipping it on next to
-   * docs/design/img/worldmap.png is how the shader's waves get signed off. If
-   * they can't be made to match, this flag is the decision point rather than
-   * a silent regression.
+   * The Graphics wave squiggles (HexMapRenderer's waveLayer) — world map only,
+   * and **on**: they are the world map's surface pattern of record. They live on
+   * their own layer above the water mesh, so they draw over the shader's sea
+   * body and foam rather than under them.
+   *
+   * The two wave systems never double-draw: with this on, the shader stops
+   * drawing its own arcs in world mode (see WaterLayer.tick). Off is how the
+   * shader's arcs get looked at next to docs/design/img/worldmap.png.
    */
   legacyWaveSquiggles: boolean;
   /**
@@ -66,7 +69,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   shorelineFoam: true,
   propTileMute: true,
   seaBody: true,
-  legacyWaveSquiggles: false,
+  legacyWaveSquiggles: true,
   showWaterMask: false,
   legacyTileSplit: true,
 };
@@ -93,19 +96,21 @@ export interface WaterDebugTuning {
   /** Multiplier on the wave swell rate. 1 is the shipped rate, matching the Graphics squiggles' own periods. */
   waveSpeed: number;
   /**
-   * How far offshore the caustic ribbons start fading in, in hexes; they reach
-   * full strength a fixed CAUSTIC_FADE_WIDTH_TILES further out. 0 puts them
-   * right up against the coastline, which is where they compete with the foam.
+   * How close to the shore the caustic ribbons are allowed to come, in hexes.
+   * Inside it they are simply absent — cut, not faded, since a half-strength
+   * ribbon reads as a smudge and a belt of them reads as a second coastline. The
+   * cut line wanders by CAUSTIC_CULL_JITTER_TILES either side of this so it
+   * isn't a clean offset curve of the coast.
    *
    * Capped by the mask's own far range (FOAM_REACH_TILES, 1.5 hexes): past that
    * the distance channel is saturated and moving this further has no effect.
    */
-  causticFadeHexes: number;
+  causticCullHexes: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
   foamWidthHexes: 0.3,
   foamSurge: 0.35,
   waveSpeed: 1,
-  causticFadeHexes: 0.4,
+  causticCullHexes: 0.45,
 };

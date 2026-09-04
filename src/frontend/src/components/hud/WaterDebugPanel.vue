@@ -23,9 +23,9 @@ const LABELS: Record<keyof WaterDebugFlags, string> = {
   midWaterWaves: 'Surface pattern (caustics close / waves far)',
   causticsEverywhere: 'Debug: caustics on the world map too',
   shorelineFoam: 'Shoreline foam',
-  propTileMute: 'Mute the shader over boat/rock tiles',
+  propTileMute: 'Quieten the shader over boat/rock tiles',
   seaBody: 'Sea body (world map; off = CSS gradient)',
-  legacyWaveSquiggles: 'Legacy Graphics wave squiggles',
+  legacyWaveSquiggles: 'World map: Graphics wave squiggles',
   showWaterMask: 'Debug: show the raw water mask',
   legacyTileSplit: 'Split unsplit tall art in code',
 };
@@ -37,7 +37,7 @@ const FOAM_SURGE = { min: 0, max: 1, step: 0.05 };
 const WAVE_SPEED = { min: 0, max: 3, step: 0.1 };
 // Up to the mask's own far range: past 1.5 hexes the distance channel is
 // saturated and the handle would stop doing anything.
-const CAUSTIC_FADE = { min: 0, max: 1.5, step: 0.05 };
+const CAUSTIC_CULL = { min: 0, max: 1.5, step: 0.05 };
 
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
@@ -80,16 +80,16 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
     </div>
     <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">
       <span class="slider-label">
-        Caustic fade-in
-        <span class="slider-value">{{ tuning.causticFadeHexes.toFixed(2) }} hex</span>
+        Caustic keep-off
+        <span class="slider-value">{{ tuning.causticCullHexes.toFixed(2) }} hex</span>
       </span>
       <input
         type="range"
-        :min="CAUSTIC_FADE.min"
-        :max="CAUSTIC_FADE.max"
-        :step="CAUSTIC_FADE.step"
+        :min="CAUSTIC_CULL.min"
+        :max="CAUSTIC_CULL.max"
+        :step="CAUSTIC_CULL.step"
         :disabled="!flags.midWaterWaves"
-        v-model.number="tuning.causticFadeHexes"
+        v-model.number="tuning.causticCullHexes"
       />
     </div>
     <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">

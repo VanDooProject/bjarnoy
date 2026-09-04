@@ -535,18 +535,23 @@ local extremum, which is everywhere the noise has one — a whole basin falls
 inside a single band and paints as a filled smudge or a stray dot. Those smudges
 were the majority of what was on screen; the readable loops were the minority.
 
-The ribbons **fade in with distance from the shore**, over
-`causticFadeHexes` → `+ CAUSTIC_FADE_WIDTH_TILES`, read off G rather than the
-signed near field (the fade has to run well past where R saturates). Running
-them right up to the coastline stacks two bright white patterns in the one place
-the eye is already reading an edge, and the foam band stops looking like the
-boundary of the water and starts looking like the brightest part of a texture.
-Holding them off gives the coast a band of plain water to sit against, and reads
-as the surface only catching the light once there is some depth under it. The
-fade *width* is not on a slider: too narrow and the ribbons appear along a line
-parallel to the shore, which reads as a second, softer coastline; too wide and
-there is nowhere left inside the mask's 1.5-tile far range for them to reach
-full strength.
+The ribbons **keep off the shore**: within `causticCullHexes` of land there are
+none, read off G rather than the signed near field (the cut sits past where R
+saturates). Running them right up to the coastline stacks two bright white
+patterns in the one place the eye is already reading an edge, and the foam band
+stops looking like the boundary of the water and starts looking like the
+brightest part of a texture. A band of plain water against the coast reads as
+the surface only catching the light once there is some depth under it.
+
+**Cut, not faded.** The first version ramped them in over half a hex, and the
+ramp itself became the artifact: a whole belt of ribbons at half strength, and a
+half-strength ribbon does not read as a ribbon further away, it reads as a
+smudge — so the fade drew a second, softer coastline just outside the first.
+`CAUSTIC_CULL_SOFTEN_TILES` is a couple of pixels of antialiasing on the cut, not
+a fade. The cut line is then displaced by its own low-frequency noise
+(`CAUSTIC_CULL_JITTER_TILES` at `CAUSTIC_CULL_JITTER_SCALE`, about two and a half
+hexes per wander), because a cut at a *constant* distance from land is a clean
+offset curve of the coastline and reads as drawn just as much as the ramp did.
 
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
@@ -587,6 +592,22 @@ On top of that:
   thresholded-noise outer lace at lower alpha. The inner line is what makes the
   coast read as wet; the lace is what makes it read as foam.
 
+#### The world map's foam is a different drawing
+
+Same shader, two sets of constants, chosen by mode at construction. Up close the
+band is soft — a bright inner line, a broken outer lace over it, a short lick
+onto the sand — because that is what water does at a beach and the settlement
+view is close enough to see it. From orbit that treatment has nothing to resolve
+into: a two-tier band a few pixels wide is a blurred white glow around every
+island, which reads as a drop shadow under a sticker rather than as surf. So
+world mode drops the lace (`FOAM_ALPHA_WORLD`'s second tier is 0), holds the
+inner line at full strength across nearly the whole width
+(`FOAM_INNER_WORLD` 0.75), and keeps essentially nothing on the land side.
+
+`FOAM_LAND_REACH_WORLD` is small rather than zero deliberately: the land-side
+term is a `smoothstep` over it, and GLSL leaves `smoothstep` undefined when its
+two edges coincide.
+
 ### 4.4b Prop-tile mute — `uPropMute`
 
 Two of the three `coastalwatertile_*` variants aren't plain water. `variant000`
@@ -594,14 +615,19 @@ paints a beached boat, `variant001` a rock — both lit and shaded as solid obje
 sitting *in* the water. `worldGenerator`'s weights make them 10% each of the
 coastline, the plain tile the other 80%.
 
-Animated foam and caustic ribbons drawn flat across one of those objects read as
-painted *onto* it rather than flowing around it, which is exactly the illusion
-the prop is there to create. So the shader steps back over those tiles: the mask
-bakes A as 1 over the hex, and the fragment shader's last act is
-`acc *= 1.0 - m.a * uPropMute`. Everything the shader draws goes with it — sea
-body, waves, ribbons, foam — which is what "mute" means here.
+A drifting surface pattern running across one of those objects reads as painted
+*onto* it rather than flowing around it, which is exactly the illusion the prop
+is there to create. So over those tiles the shader quietens down: the mask bakes
+A as 1 over the hex, the surface pattern is multiplied out by it, and the foam
+**narrows to `PROP_FOAM_SCALE` (a quarter) of its width**.
 
-Two details are load-bearing:
+Narrowed, not removed. Removing it was the first attempt and it was worse than
+the artifact it fixed: foam is the coastline's *outline* as much as it is water,
+so a bare stretch of shore is found by the eye immediately — much faster than it
+finds a ribbon crossing a rock. A thin line still closes the outline while
+leaving the boat or rock its own patch of still water.
+
+Three details are load-bearing:
 
 - **The ramp, not the hex.** A per-hex boolean cuts the foam collar off at a
   hexagon edge, and a hexagonal hole in a coastline is far more visible than the
@@ -612,9 +638,9 @@ Two details are load-bearing:
   a linear ramp meets the unmuted water at a corner, and a corner in a
   multiplier applied to a bright band is visible as a ring even though the value
   is continuous there.
-- **It costs a foam gap.** A muted tile has no foam along its own shoreline, and
-  its neighbours' foam is thinned across the fade. That is the trade the mute
-  makes, and `propTileMute` is the flag to see both sides of it.
+- **The sea body is not muted.** It is a flat colour with no motion in it, so
+  there is nothing for the prop to be at odds with; muting it would only punch a
+  hole in the world map's water.
 - **Settlement mode only.** World mode draws no sea tiles at all
   (`rebuildTerrainFlat` skips them; the sea there is §4.1's body), so there is no
   boat or rock on screen to protect — and honouring the mute would thin the foam
@@ -640,9 +666,12 @@ vec3  uShallowColor, uDeepColor   sea body ramp (world mode only)
 float uSeaMottle, uMottleScale
 vec3  uWaveColor;  float uWaveAlpha;  vec2 uWaveCoastFade;  float uWaveScale
 float uCausticScale, uCausticBands, uCausticWidth, uCausticAlpha; vec3 uCausticColor
-float uCausticFadeStart, uCausticFadeWidth   offshore fade-in, in tile widths
+float uCausticCull                keep-off distance from shore, in tile widths
+float uCausticCullSoften          antialiasing on that cut, not a fade
+float uCausticCullJitter, uCausticCullJitterScale   how the cut line wanders
 float uFarReach                   what G is normalised over, so G decodes to tiles
 float uPropMute                   0/1: honour the mask's A channel (§4.4b)
+float uPropFoamScale              width the foam keeps over a prop tile
 vec3  uFoamColor
 float uFoamWidth                  water-side reach, in tile widths
 float uFoamInner                  plateau, as a fraction of the width
@@ -677,12 +706,12 @@ export interface WaterDebugFlags {
   causticsEverywhere: boolean;  // default false
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
-  /** Fade the shader out over the boat/rock coastal tiles (§4.4b). Off draws straight across them. */
+  /** Quieten the shader over the boat/rock coastal tiles (§4.4b): no surface pattern, quarter-width foam. */
   propTileMute: boolean;        // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
   seaBody: boolean;             // default true
-  /** The pre-shader Graphics wave squiggles (waveLayer). Kept for A/B against docs/design/img/worldmap.png. */
-  legacyWaveSquiggles: boolean; // default false
+  /** The world map's Graphics wave squiggles (waveLayer) — its surface pattern of record. */
+  legacyWaveSquiggles: boolean; // default true
   /** Debug: render the water mask's channels instead of water. */
   showWaterMask: boolean;       // default false
   /** §3.3's code-side split of the unsplit tall art. Off reproduces the artifact it fixes. */
@@ -695,16 +724,22 @@ export interface WaterDebugTuning {
                            //       coastal hexes white up close.
   foamSurge: number;       // 0.35
   waveSpeed: number;       // 1
-  causticFadeHexes: number; // 0.4 — where the ribbons start fading in (§4.2b);
-                            //       clamped to FOAM_REACH_TILES, past which the
-                            //       far channel is saturated and the handle is inert.
+  causticCullHexes: number; // 0.45 — how close to shore the ribbons may come
+                            //        (§4.2b); clamped to FOAM_REACH_TILES, past
+                            //        which the far channel is saturated and the
+                            //        handle is inert.
 }
 ```
 
-`legacyWaveSquiggles` defaults **off** so the two wave systems don't
-double-draw; the point of keeping it is that flipping it on next to the
-reference screenshot is how the shader waves get signed off. If they can't be
-made to match, that flag becomes the decision point, not a silent regression.
+`legacyWaveSquiggles` defaults **on**, and it is the world map's surface pattern:
+the squiggles are crisp Graphics strokes on their own layer, which
+`worldLayerOrder` places *above* the water mesh, so they draw over the shader's
+sea body and foam rather than under them. The two wave systems never
+double-draw — with this on, `WaterLayer.tick` stops the shader drawing its own
+arcs in world mode. Turning it off is the A/B against
+`docs/design/img/worldmap.png` that decides whether the shader's arcs could ever
+replace them. Settlement mode is untouched either way: the squiggle layer is
+world-only, and up close the surface pattern is §4.2b's ribbons.
 
 A new `components/hud/WaterDebugPanel.vue` sits alongside `FogDebugPanel`,
 mounted by **both** `SettlementView.vue` and `WorldMapView.vue` under

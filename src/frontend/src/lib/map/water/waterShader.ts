@@ -97,10 +97,13 @@ uniform float uCausticBands;
 uniform float uCausticWidth;
 uniform float uCausticAlpha;
 uniform vec3 uCausticColor;
-uniform float uCausticFadeStart;
-uniform float uCausticFadeWidth;
+uniform float uCausticCull;
+uniform float uCausticCullSoften;
+uniform float uCausticCullJitter;
+uniform float uCausticCullJitterScale;
 uniform float uFarReach;
 uniform float uPropMute;
+uniform float uPropFoamScale;
 
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
@@ -354,16 +357,21 @@ void main() {
 
   // --- §4.4 prop-tile mute -------------------------------------------------
   // Two of the three coastal water variants paint a solid object sitting in the
-  // water: a beached boat, a rock. Animated foam and caustics drawn flat across
-  // one read as painted onto the object rather than flowing around it, so the
-  // shader steps back over those tiles entirely. A is baked as a ramp that is 1
-  // on the tile and fades out just past it, so the handover is a soft edge
-  // rather than a hexagon stamped into the coastline.
+  // water: a beached boat, a rock. A drifting surface pattern running across one
+  // reads as painted onto the object rather than flowing around it, so over
+  // those tiles the shader quietens down: the surface pattern goes entirely and
+  // the foam narrows to uPropFoamScale of its width.
   //
-  // Read here rather than folded in at the end so a fully muted pixel can leave
-  // before evaluating the fbm-heavy fields it is about to multiply by zero.
+  // Narrowed rather than removed, because removing it was worse than the artifact.
+  // Foam is the coastline's outline as much as it is water, and taking it off one
+  // hex leaves a bare stretch of shore that the eye finds immediately — much
+  // faster than it finds a ribbon crossing a rock. A thin line still closes the
+  // outline while leaving the prop its own patch of still water.
+  //
+  // A is baked as a ramp (1 on the tile, 0 just past it) rather than a per-hex
+  // flag, so the handover is a soft edge rather than a hexagon stamped into the
+  // coast.
   float mute = m.a * uPropMute;
-  if (mute > 0.996) discard;
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
@@ -402,27 +410,36 @@ void main() {
   // coarsest, so a narrow one would show the mask's own texel stepping.
   if (water && uMidWaterWaves > 0.5) {
     if (uCaustics > 0.5) {
-      // Close up, and faded in with distance from the shore. Running the
+      // Close up, and simply absent within uCausticCull of the shore. Running the
       // ribbons right up to the coastline puts two bright white patterns on top
       // of each other in the one place the eye is already reading an edge: the
       // foam band stops looking like the boundary of the water and starts
-      // looking like the brightest part of a texture. Holding them off until
-      // the foam has finished gives the coast a band of plain water to sit
-      // against, and reads as the surface only catching the light once there is
-      // some depth under it.
+      // looking like the brightest part of a texture.
       //
-      // Off the far channel, not the signed near one: the fade has to run well
-      // past where R saturates.
+      // Cut rather than faded. A long fade dims a whole belt of ribbons to half
+      // strength, and a half-strength ribbon reads as a smudge rather than as a
+      // ribbon further away — the ramp itself becomes visible as a second, softer
+      // coastline. uCausticCullSoften is a couple of pixels of antialiasing on
+      // the cut, not a fade.
+      //
+      // The cut line is displaced by its own low-frequency noise, so it is a
+      // wandering edge rather than a clean offset curve of the coastline. Without
+      // that, every ribbon in the view ends at the same distance from land and
+      // the boundary reads as drawn.
+      //
+      // Off the far channel, not the signed near one: the cut sits past where R
+      // saturates.
       float offshore = m.g * uFarReach;
-      float clearOfCoast = smoothstep(uCausticFadeStart, uCausticFadeStart + uCausticFadeWidth, offshore);
+      float cut = uCausticCull + (noise(vGround * uCausticCullJitterScale) - 0.5) * uCausticCullJitter;
+      float clearOfCoast = smoothstep(cut, cut + uCausticCullSoften, offshore);
       if (clearOfCoast > 0.004) {
-        float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha * clearOfCoast;
+        float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha * clearOfCoast * (1.0 - mute);
         acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
       }
     } else {
       float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.g);
       if (clearOfCoast > 0.004) {
-        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha;
+        float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha * (1.0 - mute);
         acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);
       }
     }
@@ -453,7 +470,10 @@ void main() {
     // surge along a coastline so it laps rather than pulsing as one ring, and
     // the mask's per-hex seed adds grain on top of that.
     float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + m.b) * 6.2831853;
-    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase));
+    // ...and narrows to uPropFoamScale of itself over a prop tile, so the
+    // coastline keeps an unbroken outline while the boat or rock keeps its own
+    // patch of still water.
+    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase)) * mix(1.0, uPropFoamScale, mute);
 
     // Shore proximity: a *plateau* at 1 from the coastline out to
     // uFoamInner of the band, then a falloff to 0 at its edge. The plateau is
@@ -482,9 +502,6 @@ void main() {
     float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y);
     acc = vec4(uFoamColor * foam, foam) + acc * (1.0 - foam);
   }
-
-  // Premultiplied, so one multiply mutes colour and coverage together.
-  acc *= 1.0 - mute;
 
   if (acc.a < 0.004) discard;
   finalColor = acc;

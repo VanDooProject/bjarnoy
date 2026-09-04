@@ -90,6 +90,27 @@ const FOAM_LAND_REACH = 0.12;
 const FOAM_ALPHA: [number, number] = [0.9, 0.42];
 
 /**
+ * The world map's foam, which is a different drawing rather than the same one
+ * scaled down.
+ *
+ * Up close the band is soft: a bright inner line, a broken outer lace fading
+ * out over it, and a short lick onto the sand. That is what water does at a
+ * beach, and the settlement view is close enough to see it. From orbit the same
+ * treatment has nothing to resolve into — a two-tier band a few pixels wide is
+ * just a blurred white glow around every island, which reads as a drop shadow
+ * on a sticker rather than as surf. So world mode drops the lace entirely,
+ * holds the inner line at full strength across nearly the whole width, and
+ * keeps essentially nothing on the land side: a crisp rim, drawn once.
+ *
+ * LAND_REACH is small rather than zero on purpose — the shader's land-side term
+ * is a smoothstep over this, and GLSL leaves smoothstep undefined when its two
+ * edges are equal.
+ */
+const FOAM_ALPHA_WORLD: [number, number] = [0.95, 0];
+const FOAM_INNER_WORLD = 0.75;
+const FOAM_LAND_REACH_WORLD = 0.02;
+
+/**
  * How far the band's edge is displaced by the drifting noise, in tile widths,
  * and the reciprocal of that noise's feature size in world units. 0.14 tiles is
  * about a quarter of the default band width, which is enough to tear the
@@ -132,7 +153,31 @@ const CAUSTIC_COLOR = 0xdff4ff;
  * between the fade and the mask's 1.5-tile far range for them to actually be at
  * full strength.
  */
-const CAUSTIC_FADE_WIDTH_TILES = 0.55;
+const CAUSTIC_CULL_SOFTEN_TILES = 0.03;
+
+/**
+ * How far the cull line wanders either side of `causticCullHexes`, in tile
+ * widths, and the reciprocal of the wander's feature size in world units.
+ *
+ * Without it every ribbon in the view stops at the same distance from land and
+ * the boundary reads as drawn — a second, softer coastline, which is the exact
+ * thing culling instead of fading was meant to avoid. 1/420 puts one wander at
+ * about two and a half hexes, so the line meanders at the scale of a bay rather
+ * than fraying.
+ */
+const CAUSTIC_CULL_JITTER_TILES = 0.28;
+const CAUSTIC_CULL_JITTER_SCALE = 1 / 420;
+
+/**
+ * What fraction of its width the foam keeps over a prop tile (§4.4b).
+ *
+ * Not zero. Taking the foam off the tile entirely was the first attempt and it
+ * was worse than the artifact: foam is the coastline's outline as much as it is
+ * water, so a bare stretch of shore is found by the eye immediately — much
+ * faster than a ribbon crossing a rock. A quarter width still closes the outline
+ * while leaving the boat or rock its own patch of still water.
+ */
+const PROP_FOAM_SCALE = 0.25;
 
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
@@ -179,6 +224,7 @@ export class WaterLayer {
 
   constructor(mode: WaterMode, tileWidth: number, tileHeight: number) {
     this.mode = mode;
+    const world = mode === 'world';
     const [shallowR, shallowG, shallowB] = hexToRgb01(SHALLOW_COLOR);
     const [deepR, deepG, deepB] = hexToRgb01(DEEP_COLOR);
     const [waveR, waveG, waveB] = hexToRgb01(WAVE_COLOR);
@@ -202,9 +248,9 @@ export class WaterLayer {
       uShorelineFoam: { value: 0, type: 'f32' },
       uFoamColor: { value: new Float32Array([foamR, foamG, foamB]), type: 'vec3<f32>' },
       uFoamWidth: { value: 0, type: 'f32' },
-      uFoamInner: { value: FOAM_INNER_FRACTION, type: 'f32' },
-      uFoamLandReach: { value: FOAM_LAND_REACH, type: 'f32' },
-      uFoamAlpha: { value: new Float32Array(FOAM_ALPHA), type: 'vec2<f32>' },
+      uFoamInner: { value: world ? FOAM_INNER_WORLD : FOAM_INNER_FRACTION, type: 'f32' },
+      uFoamLandReach: { value: world ? FOAM_LAND_REACH_WORLD : FOAM_LAND_REACH, type: 'f32' },
+      uFoamAlpha: { value: new Float32Array(world ? FOAM_ALPHA_WORLD : FOAM_ALPHA), type: 'vec2<f32>' },
       uFoamNoise: { value: FOAM_NOISE, type: 'f32' },
       uFoamNoiseScale: { value: FOAM_NOISE_SCALE, type: 'f32' },
       uFoamSurge: { value: 0, type: 'f32' },
@@ -216,9 +262,12 @@ export class WaterLayer {
       uCausticWidth: { value: CAUSTIC_WIDTH, type: 'f32' },
       uCausticAlpha: { value: CAUSTIC_ALPHA, type: 'f32' },
       uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
-      uCausticFadeStart: { value: 0, type: 'f32' },
-      uCausticFadeWidth: { value: CAUSTIC_FADE_WIDTH_TILES, type: 'f32' },
+      uCausticCull: { value: 0, type: 'f32' },
+      uCausticCullSoften: { value: CAUSTIC_CULL_SOFTEN_TILES, type: 'f32' },
+      uCausticCullJitter: { value: CAUSTIC_CULL_JITTER_TILES, type: 'f32' },
+      uCausticCullJitterScale: { value: CAUSTIC_CULL_JITTER_SCALE, type: 'f32' },
       uPropMute: { value: 0, type: 'f32' },
+      uPropFoamScale: { value: PROP_FOAM_SCALE, type: 'f32' },
       // What the mask's far channel is normalised over, so the shader can decode
       // G back into tile widths the same way uNearSpan decodes R.
       uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
@@ -326,7 +375,13 @@ export class WaterLayer {
     u.uWaveTime = this.waveClock;
     // Settlement mode never draws a sea body: the painted water tiles are it.
     u.uSeaBody = this.mode === 'world' && waterDebugFlags.seaBody ? 1 : 0;
-    u.uMidWaterWaves = waterDebugFlags.midWaterWaves ? 1 : 0;
+    // World mode hands the surface pattern back to HexMapRenderer's Graphics
+    // squiggles whenever those are on: they are crisp strokes on their own layer
+    // *above* this mesh (worldLayerOrder puts `waves` after `water`), and two
+    // wave fields drawn at once is neither look. Settlement mode is unaffected —
+    // the squiggle layer is world-only.
+    const squigglesOwnTheSurface = this.mode === 'world' && waterDebugFlags.legacyWaveSquiggles;
+    u.uMidWaterWaves = waterDebugFlags.midWaterWaves && !squigglesOwnTheSurface ? 1 : 0;
     // Which surface pattern this view uses: caustic ribbons close up, the
     // prototype's scattered arcs from orbit. Two idioms rather than one tuned
     // two ways — see waterShader.ts's causticField.
@@ -341,7 +396,7 @@ export class WaterLayer {
     // Clamped to the far channel's own range: past it G is saturated, so a
     // larger value would silently mean "never fade in" rather than "start
     // further out".
-    u.uCausticFadeStart = Math.min(waterDebugTuning.causticFadeHexes, FOAM_REACH_TILES);
+    u.uCausticCull = Math.min(waterDebugTuning.causticCullHexes, FOAM_REACH_TILES);
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.
     u.uFoamWidth = waterDebugTuning.foamWidthHexes;

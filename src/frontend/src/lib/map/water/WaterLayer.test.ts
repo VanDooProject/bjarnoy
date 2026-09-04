@@ -64,18 +64,55 @@ describe('WaterLayer', () => {
     expect(uniformsOf(layer).uPropMute).toBe(0);
   });
 
-  it('clamps the caustic fade-in to the range the mask can actually express', () => {
-    // Past FOAM_REACH_TILES the far channel is saturated, so a larger start
-    // would quietly mean "never fade in" rather than "start further out".
+  it("clamps the caustics' keep-off distance to the range the mask can express", () => {
+    // Past FOAM_REACH_TILES the far channel is saturated, so a larger value
+    // would quietly mean "never draw them" rather than "keep them further out".
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
 
-    waterDebugTuning.causticFadeHexes = 0.75;
+    waterDebugTuning.causticCullHexes = 0.75;
     layer.tick(0);
-    expect(uniformsOf(layer).uCausticFadeStart).toBe(0.75);
+    expect(uniformsOf(layer).uCausticCull).toBe(0.75);
 
-    waterDebugTuning.causticFadeHexes = 99;
+    waterDebugTuning.causticCullHexes = 99;
     layer.tick(16);
-    expect(uniformsOf(layer).uCausticFadeStart).toBe(FOAM_REACH_TILES);
+    expect(uniformsOf(layer).uCausticCull).toBe(FOAM_REACH_TILES);
+  });
+
+  it('hands the world map surface to the squiggle layer when that layer is drawing', () => {
+    // The two wave fields must never draw at once: worldLayerOrder puts the
+    // Graphics squiggles above this mesh, so both on means one over the other.
+    const world = new WaterLayer('world', TILE_W, TILE_H);
+    waterDebugFlags.legacyWaveSquiggles = true;
+    world.tick(0);
+    expect(uniformsOf(world).uMidWaterWaves).toBe(0);
+
+    waterDebugFlags.legacyWaveSquiggles = false;
+    world.tick(16);
+    expect(uniformsOf(world).uMidWaterWaves).toBe(1);
+  });
+
+  it('leaves the settlement surface alone whatever the squiggle flag says', () => {
+    // The squiggle layer is world-only, so it can't be covering anything here.
+    const settlement = new WaterLayer('settlement', TILE_W, TILE_H);
+    waterDebugFlags.legacyWaveSquiggles = true;
+    settlement.tick(0);
+    expect(uniformsOf(settlement).uMidWaterWaves).toBe(1);
+  });
+
+  it('draws a crisp rim on the world map and a soft band up close', () => {
+    // A two-tier band with a lace edge has nothing to resolve into at world
+    // zoom; it just reads as a blurred glow around every island. Same shader,
+    // two sets of constants — chosen once, by mode, at construction.
+    const world = uniformsOf(new WaterLayer('world', TILE_W, TILE_H));
+    const settlement = uniformsOf(new WaterLayer('settlement', TILE_W, TILE_H));
+
+    expect((world.uFoamAlpha as Float32Array)[1]).toBe(0);
+    expect((settlement.uFoamAlpha as Float32Array)[1]).toBeGreaterThan(0);
+    expect(world.uFoamInner as number).toBeGreaterThan(settlement.uFoamInner as number);
+    expect(world.uFoamLandReach as number).toBeLessThan(settlement.uFoamLandReach as number);
+    // ...and GLSL leaves smoothstep undefined when its edges coincide, which is
+    // what a land reach of exactly zero would produce.
+    expect(world.uFoamLandReach as number).toBeGreaterThan(0);
   });
 
   it('never eats a hex click', () => {
@@ -110,6 +147,10 @@ describe('WaterLayer', () => {
   it('maps the effect flags onto their uniforms', () => {
     const layer = new WaterLayer('world', TILE_W, TILE_H);
     const u = uniformsOf(layer);
+    // The world map's own surface pattern is the Graphics squiggle layer, which
+    // takes uMidWaterWaves off the shader; this test is about the flag-to-uniform
+    // mapping, so hand the surface back to the shader first.
+    waterDebugFlags.legacyWaveSquiggles = false;
 
     layer.tick(0);
     expect(u.uSeaBody).toBe(1);
