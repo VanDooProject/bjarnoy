@@ -9,13 +9,24 @@
 // and integration test you could write about the uniform passed. Only
 // looking at consecutive frames catches it, which is what this does.
 //
-// The camera is deliberately left untouched between frames: nothing else in
-// the settlement view animates on its own at rest, so any pixel that
-// changes is the fog. The `drift: false` half of the test is what makes
+// The camera is deliberately left untouched between frames, so that any pixel
+// that changes is the fog. The `drift: false` half of the test is what makes
 // that claim measurable rather than assumed — it must come out at exactly
 // zero, and if some other idle animation is ever added to this view it will
 // fail there first and loudly, instead of quietly propping up the on/off
 // comparison above.
+//
+// That is exactly what happened: the water shader
+// (docs/design/water-shader.md) put a second, permanently animating layer in
+// this view — caustics drifting, foam surging — and the frozen half came out
+// at 29% moved instead of 0. The mechanism worked as designed, so the fix is
+// the one it was pointing at: this test turns the water off and goes back to
+// measuring only the fog.
+//
+// Note that it has to be off for *both* halves, not just the frozen one. The
+// drifted half asserts that something moved, and a layer that always moves
+// would satisfy it whatever the fog did — the "quietly propping up" failure
+// this comment warned about.
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
@@ -23,6 +34,7 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 declare global {
   interface Window {
     __fogDebug: { drift: boolean };
+    __waterDebug: { water: boolean };
   }
 }
 
@@ -67,6 +79,13 @@ test.describe('fog wind drift', { tag: '@g3' }, () => {
     // on purpose — the thing under test is elapsed time.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
+
+    // The only other thing in this view that animates at rest — see the note
+    // at the top of the file. Off, so both halves below measure the fog.
+    await page.evaluate(() => {
+      window.__waterDebug.water = false;
+    });
+    await page.waitForTimeout(500);
 
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
