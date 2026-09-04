@@ -89,7 +89,7 @@ uniform float uFoamNoiseScale;
 uniform float uFoamSurge;
 uniform float uSurgeRate;
 uniform vec2 uFoamWind;
-uniform vec2 uCoastRange;
+uniform float uNearSpan;
 uniform float uGroundSquash;
 uniform float uCaustics;
 uniform float uCausticScale;
@@ -259,26 +259,52 @@ float waveField(vec2 world, float t) {
 // few metres up. Which one a view gets is uSurface, set from the view's mode.
 float causticField(vec2 ground, float t) {
   vec2 p = ground * uCausticScale;
+  vec2 drift = vec2(t * 0.021, t * -0.014);
 
   // Two counter-drifting samples of the same field: the loops reshape as they
   // move instead of sliding across the water as a rigid pattern.
-  float n = fbm(p + vec2(t * 0.021, t * -0.014));
-  n += 0.35 * noise(p * 2.1 + vec2(t * -0.017, t * 0.011));
+  float base = fbm(p + drift);
+  float n = base + 0.35 * noise(p * 2.1 + vec2(t * -0.017, t * 0.011));
 
   // fract() turns one field into a whole family of nested contours for the
   // price of one; the time term walks the level set slowly through the field,
   // which is what makes the ribbons breathe rather than merely translate.
-  float d = abs(fract(n * uCausticBands + t * 0.05) - 0.5) * 2.0;
-  return 1.0 - smoothstep(0.0, uCausticWidth, d);
+  float bands = n * uCausticBands + t * 0.05;
+  float band = abs(fract(bands) - 0.5) * 2.0;
+
+  // Divide by the field's own gradient so every ribbon comes out the same
+  // thickness. Without this the "thickness" is measured in *field* units, so
+  // wherever the field is flat — at every local maximum and minimum, which is
+  // everywhere the noise has an extremum — a whole basin falls inside one band
+  // and paints as a filled smudge or a stray dot. Those were most of the fizz;
+  // the big readable loops were only ever the minority of what was drawn.
+  //
+  // Forward differences rather than fwidth(): dFdx/dFdy need
+  // GL_OES_standard_derivatives on a WebGL1 context, and nothing else in this
+  // codebase's shaders relies on it.
+  // Forward differences, two extra fbm evaluations rather than four: this runs
+  // on every water pixel of a settlement view.
+  float e = 0.06;
+  float gx = fbm(p + vec2(e, 0.0) + drift) - base;
+  float gy = fbm(p + vec2(0.0, e) + drift) - base;
+  float grad = max(length(vec2(gx, gy)) / e * uCausticBands, 1e-3);
+
+  // The band is in field units; dividing by the gradient converts it to a
+  // distance in p-space, which uCausticWidth is then a plain width in.
+  return 1.0 - smoothstep(uCausticWidth * 0.55, uCausticWidth, band / grad);
 }
 
-// The mask's channels, named. R: distance from land, 0 at the coastline and 1
-// at FOAM_REACH_TILES. G: distance from water, ramped inward over
-// FOAM_BLEED_TILES. B: per-hex seed. A: water coverage.
+// The mask's channels, named. R: the **signed** near distance, 0.5 exactly on
+// the coastline, below it land and above it water. G: unsigned distance from
+// land over the far range, which is all the wave coast-fade needs. B: per-hex
+// seed. A: water coverage, used only by the debug view.
 //
-// Sampled with linear filtering, which is what makes the land/water boundary
-// land on a sub-texel position rather than a texel edge — see WaterLayer's
-// own note on the sampler's scale mode.
+// Nothing here branches on A. It is a 0/255 step, and sampled with linear
+// filtering a step's crossing is decided by the texel raster rather than by the
+// hexagon the art draws — which is exactly what made the foam's inner edge
+// wobble around the tile edge instead of sitting on it. The signed channel is
+// continuous across the boundary, so filtering places its zero crossing within
+// a fraction of a texel of the real edge.
 vec4 sampleMask() {
   return texture(uWaterMask, vUV);
 }
@@ -311,17 +337,14 @@ void main() {
     return;
   }
 
-  bool water = m.a >= 0.5;
-
   // Signed distance from the coastline, in tile widths: positive out into the
-  // water (the mask's R, ramped over uCoastRange.x), negative into the land
-  // (its G, ramped over uCoastRange.y). Everything below is a function of this
-  // one number, which is the whole reason the mask exists.
-  float dist = water ? m.r * uCoastRange.x : -m.g * uCoastRange.y;
+  // water, negative into the land. Everything below is a function of this one
+  // number, which is the whole reason the mask exists.
+  float dist = (m.r - 0.5) * uNearSpan * 2.0;
+  bool water = dist > 0.0;
 
-  // On land, only the foam's inward bleed has anything to draw — and only
-  // within the G ramp, which saturates well under a hex from the water.
-  if (!water && (uShorelineFoam < 0.5 || m.g >= 1.0)) discard;
+  // On land, only the foam's short reach onto the beach has anything to draw.
+  if (!water && (uShorelineFoam < 0.5 || -dist > uFoamWidth * uFoamLandReach)) discard;
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
@@ -336,7 +359,7 @@ void main() {
   // gradient's own middle stop (#14657f), which is why a two-stop ramp
   // reproduces a three-stop gradient here.
   if (water && uSeaBody > 0.5) {
-    float depth = smoothstep(0.0, 1.0, m.r);
+    float depth = smoothstep(0.0, 1.0, m.g);
     col = mix(uShallowColor, uDeepColor, depth);
     // One octave, not three. This is a very low-frequency mottle whose whole
     // job is that a large expanse of open water isn't a flat fill; the finer
@@ -365,7 +388,7 @@ void main() {
       float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha;
       acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
     } else {
-      float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.r);
+      float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.g);
       if (clearOfCoast > 0.004) {
         float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha;
         acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);

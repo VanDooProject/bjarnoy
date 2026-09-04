@@ -3,7 +3,7 @@ import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../../hex/geomet
 import {
   bakeWaterMask,
   euclideanDistanceTransform,
-  FOAM_BLEED_TILES,
+  NEAR_SPAN_TILES,
   FOAM_REACH_TILES,
   groundSquash,
   hexMitreDistance,
@@ -32,14 +32,25 @@ function channel(mask: ReturnType<typeof bakeWaterMask>, x: number, y: number, c
   return mask.data[(y * mask.width + x) * 4 + c];
 }
 
-/** The R channel at a world point. */
+/** The far-field (G) channel at a world point — unsigned distance from land over FOAM_REACH_TILES. */
 function sample(mask: ReturnType<typeof bakeWaterMask>, r: WaterMaskRegion, worldX: number, worldY: number): number {
   return channel(
     mask,
     Math.floor((worldX - r.rect.minX) / r.texelWorldSize),
     Math.floor((worldY - r.rect.minY) / r.texelWorldSize),
+    1,
+  );
+}
+
+/** The signed near field (R) at a world point, decoded back into tile widths. */
+function signedAt(mask: ReturnType<typeof bakeWaterMask>, r: WaterMaskRegion, worldX: number, worldY: number): number {
+  const raw = channel(
+    mask,
+    Math.floor((worldX - r.rect.minX) / r.texelWorldSize),
+    Math.floor((worldY - r.rect.minY) / r.texelWorldSize),
     0,
   );
+  return (raw / 255 - 0.5) * 2 * NEAR_SPAN_TILES;
 }
 
 /**
@@ -120,19 +131,40 @@ describe('bakeWaterMask', () => {
         if (hex.q <= 0) {
           sawLand = true;
           expect(channel(mask, x, y, 3)).toBe(0);
-          expect(channel(mask, x, y, 0)).toBe(0);
+          // Land: the signed near field is at or below the coastline, and the
+          // far field (distance from land) is zero.
+          expect(channel(mask, x, y, 0)).toBeLessThanOrEqual(128);
+          expect(channel(mask, x, y, 1)).toBe(0);
         } else {
           sawWater = true;
           expect(channel(mask, x, y, 3)).toBe(255);
-          expect(channel(mask, x, y, 1)).toBe(0);
+          expect(channel(mask, x, y, 0)).toBeGreaterThanOrEqual(128);
         }
       }
     }
     expect(sawLand && sawWater).toBe(true);
   });
 
-  it('ramps R over FOAM_REACH_TILES, measured perpendicular to the edge the art draws', () => {
-    // Measured out from a real top-face edge rather than by counting texels
+  it('puts the signed near field at exactly 0.5 on the coastline', () => {
+    // The property the whole inner-edge fix rests on: R crosses 0.5 on the tile
+    // edge the art draws, so linear filtering places the crossing within a
+    // fraction of a texel of it instead of on a texel boundary.
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const squash = groundSquash(TILE_W, TILE_H);
+
+    for (const t of [0.35, 0.5, 0.65]) {
+      const onEdge = signedAt(mask, r, grid.x + TILE_W * t, grid.y);
+      expect(Math.abs(onEdge)).toBeLessThan((r.texelWorldSize / TILE_W) * 1.5);
+    }
+    // And it is signed the right way either side of that edge.
+    expect(signedAt(mask, r, grid.x + TILE_W / 2, grid.y - 0.3 * TILE_W * squash)).toBeGreaterThan(0.2);
+    expect(signedAt(mask, r, grid.x + TILE_W / 2, grid.y + TILE_H / 2)).toBeLessThan(-0.2);
+  });
+
+  it('ramps the signed near field linearly in ground units out from a real tile edge', () => {
+    // Measured out from an actual top-face edge rather than by counting texels
     // from the first water texel: the coastline of a hex grid zig-zags, so "one
     // tile east of the first water texel" is not one tile from land.
     const r = region();
@@ -140,12 +172,11 @@ describe('bakeWaterMask', () => {
     const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
     const squash = groundSquash(TILE_W, TILE_H);
 
-    for (const tilesOut of [0.25, 0.5, 1.0]) {
+    for (const tilesOut of [0.15, 0.3, 0.45]) {
       // Straight up from the middle of the hex's flat top edge. The offset is a
       // ground distance, so on screen it is foreshortened by `squash`.
-      const value = sample(mask, r, grid.x + TILE_W / 2, grid.y - tilesOut * TILE_W * squash);
-      const expected = (255 * tilesOut) / FOAM_REACH_TILES;
-      expect(Math.abs(value - expected)).toBeLessThan(texelSlack(r));
+      const value = signedAt(mask, r, grid.x + TILE_W / 2, grid.y - tilesOut * TILE_W * squash);
+      expect(Math.abs(value - tilesOut)).toBeLessThan(r.texelWorldSize / TILE_W);
     }
   });
 
@@ -154,27 +185,34 @@ describe('bakeWaterMask', () => {
     // constant *screen* distance around a tile is not the projection of a band
     // of constant ground distance, and reads as a decal in front of the map
     // rather than as foam lying on the water. So the same ground distance north
-    // of a hex must come out at the same value as east of it — which on screen
-    // is a visibly smaller offset.
+    // of a hex must come out at the same value as diagonally out from it —
+    // which on screen is a visibly smaller offset.
     const r = region();
     const mask = bakeWaterMask(r, TILE_W, TILE_H, ONE_HEX_ISLAND);
     const squash = groundSquash(TILE_W, TILE_H);
     const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
-    const out = 0.4 * TILE_W;
+    const out = 0.35 * TILE_W;
 
-    const north = sample(mask, r, grid.x + TILE_W / 2, grid.y - out * squash);
+    const north = signedAt(mask, r, grid.x + TILE_W / 2, grid.y - out * squash);
     // Perpendicular to the upper-right edge, whose ground-space outward normal
     // is 30 degrees above the x axis.
-    const nx = Math.cos(Math.PI / 6);
-    const ny = -Math.sin(Math.PI / 6);
     const edgeMid = { x: grid.x + (7 * TILE_W) / 8, y: grid.y + TILE_H / 4 };
-    const diagonal = sample(mask, r, edgeMid.x + nx * out, edgeMid.y + ny * out * squash);
+    const diagonal = signedAt(
+      mask,
+      r,
+      edgeMid.x + Math.cos(Math.PI / 6) * out,
+      edgeMid.y - Math.sin(Math.PI / 6) * out * squash,
+    );
 
-    expect(Math.abs(north - diagonal)).toBeLessThan(texelSlack(r) * 1.5);
+    expect(Math.abs(north - diagonal)).toBeLessThan(r.texelWorldSize / TILE_W);
     expect(squash).toBeLessThan(0.6);
   });
 
-  it('is monotonic outward from the coast and saturates past the reach', () => {
+  it('has a far field that is monotonic outward from the coast and saturates past the reach', () => {
+    // G is the raster transform, deliberately approximate: it only feeds the
+    // wave coast-fade, which reads it out in the middle of its range where a
+    // texel of error is invisible. The exact metric is reserved for R, near the
+    // shore, where the foam is.
     const r = region();
     const mask = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(-2));
     const y = Math.floor(mask.height / 2);
@@ -183,7 +221,7 @@ describe('bakeWaterMask', () => {
     let sawSaturated = false;
     for (let x = 0; x < mask.width; x++) {
       if (channel(mask, x, y, 3) !== 255) continue;
-      const value = channel(mask, x, y, 0);
+      const value = channel(mask, x, y, 1);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;
       if (value === 255) sawSaturated = true;
@@ -206,8 +244,8 @@ describe('bakeWaterMask', () => {
     for (let x = 0; x < mask.width; x++) {
       const isLand = channel(mask, x, y, 3) === 0;
       if (isLand) inLand = true;
-      else if (!inLand) rowLeft.push(channel(mask, x, y, 0));
-      else rowRight.push(channel(mask, x, y, 0));
+      else if (!inLand) rowLeft.push(channel(mask, x, y, 1));
+      else rowRight.push(channel(mask, x, y, 1));
     }
     const n = Math.min(rowLeft.length, rowRight.length, 8);
     for (let i = 0; i < n; i++) {
@@ -216,34 +254,22 @@ describe('bakeWaterMask', () => {
     }
   });
 
-  it('ramps G inward over FOAM_BLEED_TILES so foam can lick onto the beach', () => {
-    const r = region();
-    const mask = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
-    const bleedTexels = (FOAM_BLEED_TILES * TILE_W) / r.texelWorldSize;
-    const y = Math.floor(mask.height / 2);
-
-    let lastLand = -1;
-    for (let x = 0; x < mask.width; x++) if (channel(mask, x, y, 3) === 0) lastLand = x;
-    // Just inside the coast: partway up the ramp. Well inland: saturated.
-    expect(channel(mask, lastLand, y, 1)).toBeGreaterThan(0);
-    expect(channel(mask, lastLand, y, 1)).toBeLessThan(255);
-    expect(channel(mask, Math.max(0, lastLand - Math.ceil(bleedTexels) - 2), y, 1)).toBe(255);
-  });
-
-  it('saturates R across a region with no land in it at all', () => {
+  it('saturates across a region with no land in it at all', () => {
     const r = region();
     const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
     for (let i = 0; i < mask.width * mask.height; i++) {
       expect(mask.data[i * 4 + 0]).toBe(255);
+      expect(mask.data[i * 4 + 1]).toBe(255);
       expect(mask.data[i * 4 + 3]).toBe(255);
     }
   });
 
-  it('saturates G across a region with no water in it at all', () => {
+  it('saturates across a region with no water in it at all', () => {
     const r = region();
     const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_LAND);
     for (let i = 0; i < mask.width * mask.height; i++) {
-      expect(mask.data[i * 4 + 1]).toBe(255);
+      expect(mask.data[i * 4 + 0]).toBe(0);
+      expect(mask.data[i * 4 + 1]).toBe(0);
       expect(mask.data[i * 4 + 3]).toBe(0);
     }
   });

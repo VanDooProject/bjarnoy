@@ -28,15 +28,29 @@ export interface TerrainLookup {
 export const FOAM_REACH_TILES = 1.5;
 
 /**
- * How far *into* land the G channel ramps, in tile widths. Under half a hex —
- * this only exists so foam can lick onto the beach rather than stopping short
- * of it in a visible gap, and the land art above the mesh clips it anyway
- * (§3.5).
+ * Half-range of the mask's **signed** near field, in tile widths — R stores
+ * `0.5 + d / (2 * NEAR_SPAN_TILES)`, so 0.5 is exactly the coastline, below it
+ * is land and above it is water.
+ *
+ * One signed channel rather than an unsigned distance per side plus a coverage
+ * bit, because the coverage bit was the thing wrecking the foam's inner edge.
+ * A 0/255 step sampled with linear filtering is a *texel-quantised* silhouette:
+ * whichever side of 0.5 a pixel lands on is decided by the texel raster, not by
+ * the hexagon the art actually draws, so the band alternately overlapped the
+ * sand by several pixels and left a sliver of bare water between itself and the
+ * shore, stair-stepping along every diagonal. A signed field has no such
+ * decision in it — it is continuous across the boundary, so its zero crossing
+ * lands within a fraction of a texel of the true tile edge, and interpolation
+ * *helps* rather than blurring a silhouette.
+ *
+ * 0.6 tiles either way spends the byte where the foam is: about 0.8 world units
+ * per level, against the ~2 a single channel spanning the full FOAM_REACH would
+ * give.
  */
-export const FOAM_BLEED_TILES = 0.35;
+export const NEAR_SPAN_TILES = 0.6;
 
 export interface WaterMask {
-  /** RGBA8, `width * height * 4`. R: distance from land. G: distance from water. B: per-hex seed. A: water coverage. */
+  /** RGBA8, `width * height * 4`. R: signed near distance (0.5 = coastline). G: far distance from land. B: per-hex seed. A: water coverage, for the debug view only. */
   data: Uint8Array;
   width: number;
   height: number;
@@ -251,11 +265,13 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
 
   const planes = topFaceHalfPlanes(tileWidth, tileHeight);
   const squash = groundSquash(tileWidth, tileHeight);
-  const refineWithin = (FOAM_REACH_TILES + 0.5) * tileWidth;
+  // A little past the signed field's own span: past that it is saturated and
+  // the exact value cannot change what is drawn.
+  const refineWithin = (NEAR_SPAN_TILES + 0.2) * tileWidth;
   const disc = hexesInRadius({ q: 0, r: 0 }, MITRE_REFINE_HEXES);
 
   const reachWorld = FOAM_REACH_TILES * tileWidth;
-  const bleedWorld = FOAM_BLEED_TILES * tileWidth;
+  const nearSpanWorld = NEAR_SPAN_TILES * tileWidth;
 
   const data = new Uint8Array(count * 4);
   for (let y = 0; y < height; y++) {
@@ -263,14 +279,15 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
       const isWater = water[i] === 1;
-      let outward = distanceFromLand[i] * texelWorldSize;
-      let inward = distanceFromWater[i] * texelWorldSize;
+      const rasterOutward = distanceFromLand[i] * texelWorldSize;
+      const rasterInward = distanceFromWater[i] * texelWorldSize;
 
-      // Only texels near a coast pay for the exact metric: far out to sea both
-      // channels are saturated anyway, and on a large zoomed-out world map that
-      // is almost every texel.
-      const nearCoast = isWater ? outward : inward;
-      if (nearCoast < refineWithin) {
+      // Only texels near a coast pay for the exact metric: further out the
+      // signed channel is saturated and the far channel is all the shader
+      // reads, so on a large zoomed-out world map this loop is skipped for
+      // almost every texel.
+      let near = isWater ? rasterOutward : -rasterInward;
+      if (Math.abs(near) < refineWithin) {
         const wx = rect.minX + (x + 0.5) * texelWorldSize;
         const hex = isoPixelToAxial({ x: wx, y: wy }, tileWidth, tileHeight);
         let best = Infinity;
@@ -286,15 +303,14 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
             if (d < best) best = d;
           }
         }
-        if (best !== Infinity) {
-          const exact = Math.max(0, best);
-          if (isWater) outward = exact;
-          else inward = exact;
-        }
+        // Distance to the nearest hex of the opposite kind is the distance to
+        // the coastline from either side, and it goes to zero on the shared
+        // edge from both — which is what makes the signed field continuous.
+        if (best !== Infinity) near = isWater ? Math.max(0, best) : -Math.max(0, best);
       }
 
-      data[i * 4 + 0] = Math.round(255 * Math.min(1, outward / reachWorld));
-      data[i * 4 + 1] = Math.round(255 * Math.min(1, inward / bleedWorld));
+      data[i * 4 + 0] = Math.round(255 * Math.min(1, Math.max(0, 0.5 + near / (2 * nearSpanWorld))));
+      data[i * 4 + 1] = Math.round(255 * Math.min(1, rasterOutward / reachWorld));
       data[i * 4 + 2] = seed[i];
       data[i * 4 + 3] = isWater ? 255 : 0;
     }

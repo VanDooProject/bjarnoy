@@ -137,10 +137,26 @@ An RGBA8 texture over a world-space rect:
 
 | Channel | Meaning |
 | --- | --- |
-| **R** | Distance from the nearest land, outward into water, normalised over `FOAM_REACH_HEXES`. `0` at the coastline, `255` at or past the reach. |
-| **G** | Distance from the nearest water, inward into land, normalised over `FOAM_BLEED_HEXES` (well under one hex). Lets foam lick a little onto the beach — see §3.4 for why that bleed is free. |
+| **R** | The **signed** near distance from the coastline, `0.5 + d / (2 * NEAR_SPAN_TILES)`. 0.5 is exactly the coastline, below it is land, above it is water. |
+| **G** | Unsigned distance from the nearest land, normalised over `FOAM_REACH_TILES` — the far field, which is all §4.2's wave coast-fade needs. |
 | **B** | Per-hex pseudo-random seed, exactly as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`) — per-hex variation in wave phase and foam ruggedness so the coast isn't uniform. |
-| **A** | Water coverage: `255` water, `0` land. Derivable from R at most texels, but a dedicated channel removes the ambiguity exactly at the boundary, and it is free. |
+| **A** | Water coverage: `255` water, `0` land. Used **only** by the raw-mask debug view. |
+
+**Nothing branches on A**, and that is the point. An earlier version stored two
+unsigned distances (outward and inward) and had the shader pick between them on
+`A >= 0.5`. A 0/255 step sampled with linear filtering is a *texel-quantised*
+silhouette: which side of the step a pixel falls on is decided by the texel
+raster, not by the hexagon the art draws. Measured on screen, that made the
+foam's inner edge alternately overlap the sand by up to 8px and leave a 1–3px
+sliver of bare water between itself and the shore, stair-stepping along every
+diagonal — a "lick onto the beach" that was really just mask blur. A signed
+field has no such decision in it: it is continuous across the boundary, so
+filtering places its zero crossing within a fraction of a texel of the real tile
+edge, and interpolation *helps* instead of blurring a silhouette.
+
+`NEAR_SPAN_TILES` is 0.6 either way, which spends the byte where the foam is —
+about 0.8 world units per level, against the ~2 a single channel spanning the
+whole `FOAM_REACH` would give.
 
 ### 2.2 Layout — its own grid, not the fog mask's
 
@@ -186,10 +202,33 @@ client-side with no round trip. So:
    so the two agree with no fudge factor. Bake from sprite extents instead
    and every boundary shifts by up to 68px, detaching the foam from the
    coastline it is supposed to trace.
-2. Run a **two-pass exact euclidean distance transform** (Felzenszwalb, or a
-   3×3 chamfer if that proves good enough by eye) over the coverage bitmap,
-   once outward for R and once inward for G. Linear in texels, and the whole
-   mask is at most ~1M texels in the worst clamped case, typically far less.
+2. Run a **two-pass exact euclidean distance transform** (Felzenszwalb) over
+   the coverage bitmap. Linear in texels, and exact rather than the 3-4 chamfer
+   the spike used — a chamfer's error is *directional*, and the spike showed it
+   as faint radial streaks fanning out from every coast.
+
+   That gives the far field (G). Near a coast it is **replaced** by an exact
+   metric, because a euclidean field is the wrong shape there: it rounds every
+   convex corner over a radius equal to the band drawn from it, and a hex edge
+   is half a tile long while the foam band is a third of one — so on a hex
+   coastline the corners dominate and any band drawn from it reads as a soft
+   blob rather than as something following the shoreline.
+
+   The replacement is the **max over a tile's six outward half-planes**, whose
+   level sets are the hexagon scaled outward with its corners kept sharp:
+   straight runs parallel to each tile edge, mitred joins. It agrees with the
+   euclidean distance exactly along every edge and is zero on the edge itself,
+   so §3.4's alignment is unaffected — if anything sharper, being exact per
+   texel rather than quantised to the raster. Only texels within
+   `NEAR_SPAN_TILES` of a coast pay for it, so on a zoomed-out world map the
+   loop is skipped for almost every texel.
+
+   Both are computed in **ground space** — world space with y divided by the
+   isometric foreshortening (`TILE_H / (TILE_W * sqrt(3)/2)`, about 0.53). A
+   band of constant *screen* distance around a tile is not the projection of one
+   of constant ground distance, and reads as a decal in front of the map rather
+   than as foam lying on the water.
+
 3. Upload via `BufferImageSource`, the same way `demoFogMask` does.
 
 Point 2 is what buys smooth, non-hexagonal contours out of a hex world, and

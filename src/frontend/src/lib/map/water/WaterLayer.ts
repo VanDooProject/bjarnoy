@@ -3,7 +3,7 @@
 // container rather than on the stage the way fog's two quads do (waterShader.ts
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
-import { FOAM_BLEED_TILES, FOAM_REACH_TILES, groundSquash, type WaterMask } from './waterMask';
+import { NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 
@@ -46,7 +46,7 @@ const WAVE_ALPHA = 0.42;
 
 /**
  * Where the wave field fades in, measured in the mask's R channel (0 at the
- * coastline, 1 at FOAM_REACH_TILES = 1.5 tiles). So crests start appearing a
+ * coastline, 1 at 1.5 tiles). So crests start appearing a
  * third of a hex offshore and reach full strength just short of one — about
  * where today's per-hex `isNearLand` cull draws its hard line, but continuous,
  * which is what removes the hexagonal hole that cull leaves around every
@@ -105,13 +105,6 @@ const FOAM_SURGE_RATE = 1.1;
 const FOAM_WIND: [number, number] = [0.03, -0.02];
 
 /**
- * How far the foam is allowed to run inland, as a fraction of the mask's G
- * ramp. Under 1 so the fade always completes inside the ramp rather than being
- * cut off where G saturates.
- */
-const FOAM_BLEED_FRACTION = 0.7;
-
-/**
  * Caustic ribbons (§4.2b) — the close-up surface pattern, contour lines of a
  * churning noise field.
  *
@@ -125,8 +118,8 @@ const FOAM_BLEED_FRACTION = 0.7;
  */
 const CAUSTIC_SCALE = 1 / 130;
 const CAUSTIC_BANDS = 2.6;
-const CAUSTIC_WIDTH = 0.22;
-const CAUSTIC_ALPHA = 0.32;
+const CAUSTIC_WIDTH = 0.115;
+const CAUSTIC_ALPHA = 0.38;
 /** Slightly cooler than the foam, so ribbons crossing a foam band still read as behind it. */
 const CAUSTIC_COLOR = 0xdff4ff;
 
@@ -212,13 +205,10 @@ export class WaterLayer {
       uCausticWidth: { value: CAUSTIC_WIDTH, type: 'f32' },
       uCausticAlpha: { value: CAUSTIC_ALPHA, type: 'f32' },
       uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
-      // The two ramps the mask bakes, so the shader can turn its normalised
-      // channels back into tile widths and work in one signed distance.
       uGroundSquash: { value: groundSquash(tileWidth, tileHeight), type: 'f32' },
-      uCoastRange: {
-        value: new Float32Array([FOAM_REACH_TILES, FOAM_BLEED_TILES * FOAM_BLEED_FRACTION]),
-        type: 'vec2<f32>',
-      },
+      // Half-range of the mask's signed near field, so the shader can decode R
+      // back into tile widths.
+      uNearSpan: { value: NEAR_SPAN_TILES, type: 'f32' },
     });
 
     this.geometry = new MeshGeometry({
