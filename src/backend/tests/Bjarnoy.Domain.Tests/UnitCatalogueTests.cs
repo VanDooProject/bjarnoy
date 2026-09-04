@@ -94,6 +94,19 @@ public class UnitCatalogueTests
     }
 
     [Fact]
+    public void No_unit_requires_a_barracks_yet()
+    {
+        // Barracks (BuildingType.Barracks) has no unit-training hook of its
+        // own — ArcheryRange already owns the land combat/siege roster's
+        // RequiredBuildingType gate. Documents that scope boundary so a
+        // future change wiring Barracks into training updates this test
+        // deliberately rather than by accident.
+        Assert.DoesNotContain(
+            Enum.GetValues<UnitType>(),
+            type => UnitCatalogue.Get(type).RequiredBuildingType == BuildingType.Barracks);
+    }
+
+    [Fact]
     public void The_catapult_has_a_positive_siege_power_and_nothing_else_does()
     {
         // Only the Catapult contributes to SiegeResolver's building-damage

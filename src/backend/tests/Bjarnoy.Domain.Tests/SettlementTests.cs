@@ -49,6 +49,10 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Tower, Terrain.Sand, true)]
     [InlineData(BuildingType.Tower, Terrain.Grass, true)]
     [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
+    [InlineData(BuildingType.FisherHut, Terrain.Grass, true)]
+    [InlineData(BuildingType.FisherHut, Terrain.Sand, false)]
+    [InlineData(BuildingType.Sawmill, Terrain.Grass, true)]
+    [InlineData(BuildingType.Sawmill, Terrain.Forest, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -73,6 +77,7 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Tower)]
     [InlineData(BuildingType.ArcheryRange)]
+    [InlineData(BuildingType.Barracks)]
     public void The_tower_and_archery_range_are_gated_to_grass_or_sand(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
@@ -203,6 +208,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Lumberjack, Terrain.Forest)]
     [InlineData(BuildingType.Quarry, Terrain.Mountain)]
     [InlineData(BuildingType.FishingHut, Terrain.Sea)]
+    [InlineData(BuildingType.Sawmill, Terrain.Forest)]
     public void BoostMultiplier_only_counts_each_buildings_own_matching_terrain(BuildingType type, Terrain matching)
     {
         var terrainAt = TerrainWithMatchingNeighbours(matching, 6);
@@ -760,6 +766,27 @@ public class SettlementTests
 
         var decision = settlement.PlanBuild(
             BuildingType.GreatStorehouse, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Barracks)]
+    [InlineData(BuildingType.FisherHut)]
+    [InlineData(BuildingType.Sawmill)]
+    public void Barracks_fisherhut_and_sawmill_are_buildable_once_their_longhouse_gate_is_met(BuildingType type)
+    {
+        var settlement = Found() with
+        {
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 5)],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).Capacity,
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(type, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }

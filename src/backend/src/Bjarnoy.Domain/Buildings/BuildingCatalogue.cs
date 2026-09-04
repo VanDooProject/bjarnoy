@@ -57,6 +57,9 @@ public static class BuildingCatalogue
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
+            BuildingType.Barracks => Barracks(level),
+            BuildingType.FisherHut => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0)),
+            BuildingType.Sawmill => Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0)),
             _ => null,
         };
     }
@@ -194,6 +197,10 @@ public static class BuildingCatalogue
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
             [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
+            // Refines what a neighbouring Lumberjack cuts — same boost shape,
+            // same terrain, as a second demand on the forest ring rather than
+            // a resource of its own.
+            [BuildingType.Sawmill] = new(Forest, PerTilePercent: 0.10, CapPercent: 0.50),
         };
 
     /// <summary>
@@ -358,6 +365,22 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 200, Stone: 120, Food: 0, Iron: 20) * CostFactor(level),
         BuildDuration = Duration(9, level),
         RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// A garrison building with no production/storage of its own and no
+    /// unit-training hook yet — see <see cref="BuildingType.Barracks"/>'s
+    /// doc comment for why. Buildable/leveling like <see cref="Tower"/> and
+    /// <see cref="ArcheryRange"/>, same terrain and cost tier.
+    /// </summary>
+    private static BuildingDefinition Barracks(int level) => new()
+    {
+        Type = BuildingType.Barracks,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 15) * CostFactor(level),
+        BuildDuration = Duration(7, level),
+        AllowedTerrain = SandOrGrass,
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
     };
 }

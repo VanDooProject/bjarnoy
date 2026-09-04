@@ -73,6 +73,31 @@ public enum BuildingType
     /// water, like <see cref="FishingHut"/>.
     /// </summary>
     Dockyard = 13,
+
+    /// <summary>
+    /// A garrison building on land. No unit-training hook of its own yet —
+    /// <see cref="ArcheryRange"/> already owns the land combat/siege
+    /// roster's <see cref="Units.UnitDefinition.RequiredBuildingType"/> gate,
+    /// so Barracks is buildable/leveling only for now (deferred: a garrison
+    /// capacity or second training track, once one exists to hang it off).
+    /// </summary>
+    Barracks = 14,
+
+    /// <summary>
+    /// Food, on grass — a third food-producer variant alongside
+    /// <see cref="Farm"/> and <see cref="PumpkinFarm"/>. Flat/inland art
+    /// only (unlike <see cref="FishingHut"/>, it doesn't stand on water).
+    /// </summary>
+    FisherHut = 15,
+
+    /// <summary>
+    /// Wood, on grass — refines what a <see cref="Lumberjack"/> cuts, so it
+    /// shares that building's Forest-neighbour boost (see
+    /// <see cref="BuildingCatalogue.Boosts"/>). Ships with three art
+    /// families keyed off river adjacency (flat/riverside/river-bend) —
+    /// cosmetic only on the frontend, not modelled here.
+    /// </summary>
+    Sawmill = 16,
 }
 
 public static class BuildingTypeExtensions
@@ -93,6 +118,9 @@ public static class BuildingTypeExtensions
         BuildingType.GreatStorehouse => "greatstorehouse",
         BuildingType.ArcheryRange => "archeryrange",
         BuildingType.Dockyard => "dockyard",
+        BuildingType.Barracks => "barracks",
+        BuildingType.FisherHut => "fisherhut",
+        BuildingType.Sawmill => "sawmill",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }
