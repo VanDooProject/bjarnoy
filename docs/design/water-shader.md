@@ -664,10 +664,28 @@ Two consequences, both counter-intuitive enough to invite wasted work:
 
 On a GPU a blended full-screen quad is a fraction of a millisecond, so this is a
 software-rasteriser figure and not a shipping one. The only lever with the right
-magnitude is *fewer fragments*: geometry covering the water rather than the
-viewport — a coarse grid over the mask region emitting only cells that hold
-water — would save whatever fraction of the frame is land, with no visual change
-at all, since those fragments discard today.
+magnitude is *fewer fragments*.
+
+**And the obvious way to get them does not work here — measured, not assumed.**
+Covering the water with geometry instead of the viewport (a coarse grid over the
+mask region, emitting only the cells that hold water) is exactly the right shape
+of fix: those land fragments discard today, so dropping their cells changes
+nothing on screen. Built and measured, at one tile per cell, it dropped **2-3% of
+cells** — 640 of 660, 351 of 357 — and moved the frame by nothing.
+
+The reason is the safety margin, and it is structural rather than a tuning
+problem. A cell can only be dropped when it and all eight neighbours are pure
+land, because the foam licks onto the beach and the mask's own filtering reaches
+a texel past the coast. That keeps a ring one tile wide around every coastline,
+so the saving is the land's *area minus its perimeter* — and this game's islands
+are about six to eight tiles across, which is nearly all perimeter. It would pay
+on a continent and does not pay on an archipelago. Finer cells do not rescue it:
+the ring is one cell wide either way, so shrinking cells shrinks the ring and the
+dropped interior together.
+
+What is left, then, is not an optimisation but a choice about the feature: accept
+that the settlement view costs a full-screen blended pass on a software
+rasteriser (free on any GPU), or do not draw water there.
 
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
