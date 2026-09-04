@@ -687,6 +687,44 @@ What is left, then, is not an optimisation but a choice about the feature: accep
 that the settlement view costs a full-screen blended pass on a software
 rasteriser (free on any GPU), or do not draw water there.
 
+#### The breakdown is a button now
+
+Every figure above came from toggling a flag by hand and watching the frame
+interval. `perfSweep.ts` automates that loop and WaterPerfPanel offers it as
+**Measure breakdown**: baseline, then one sample per flag with that flag off,
+then a second baseline. Nothing new is measured — it is the same wall-clock A/B —
+but it is repeatable, and it reports two things a person doing it by eye skips.
+
+Each row carries the **noise floor** it was measured against (the wider of the
+two samples' median absolute deviations, and the drift between the two
+baselines). A delta smaller than that is printed as *< noise* rather than as a
+small number, and a *negative* delta — which the very first run against the real
+renderer produced, a "+15.8 ms" surface pattern — is printed as *not resolved*,
+because switching work off cannot make a renderer slower and such a row has
+measured the machine.
+
+That matters because of what the sweep actually finds. In this sandbox
+(1440×900, software rasteriser, ~550 ms/frame), across three runs:
+
+| row | delta |
+|---|---|
+| water layer, all of it | −125 / −152 / −144 ms |
+| fog, both tiers | −122 / −119 ms |
+| every individual water effect | not resolved |
+
+The first two are stable and the second is the useful surprise: **the fog costs
+about what the water does**, which no amount of staring at the water shader would
+have told you. The per-effect rows being unresolvable is not a defect of the
+sweep — §4.2d already says every effect together is ~14 ms against a fixed cost
+of ~84 ms, and 14 ms spread over five rows is well inside a ±16 ms wobble. The
+panel says so instead of printing five plausible-looking numbers.
+
+One limitation stated in the panel itself, because it bites hardest on the
+machine most likely to run it: **on a GPU with vsync the frame finishes early and
+waits**, so every row comes out flat regardless of what the shader costs. The
+panel detects a baseline at or under 17.5 ms and says the map is not what is
+pacing the frame, rather than letting the result read as "everything is free".
+
 ### 4.2e Keeping the two nets out of step — `uCausticFinePhase`
 
 The nets are built to be *independent* — different domain, different band count,
