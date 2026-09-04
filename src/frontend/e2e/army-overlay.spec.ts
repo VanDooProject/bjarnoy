@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 /**
  * Issues #93 and #94: the settlement map's army/route overlay — draggable
@@ -43,7 +44,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // Same budget as the other tests that both found a settlement AND drive
     // real pointer interaction through the live PixiJS scene — see
     // settlement-interactions.spec.ts's own comments.
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -122,7 +123,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('a waypoint can be removed by index, not just undone from the end', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     const plotted = await page.evaluate(() => {
@@ -143,7 +144,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('an attack draft marks its target settlement on the map', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -197,7 +198,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('an in-transit army is drawn between hexes and keeps advancing', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     // A march that started a moment ago and has half a minute to run, over
@@ -299,7 +300,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   });
 
   test('an army standing at home stays on its settlement hex', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     const home = await page.evaluate(() => {

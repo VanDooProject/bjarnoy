@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { HEAVY_MAP_SPEC_TIMEOUT_MS, MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 test.describe('settlement view interactions', { tag: '@g2' }, () => {
   test('hovering a hex renders a highlight that follows the cursor', async ({ page }) => {
@@ -7,7 +8,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // already run close to the global 45s budget under software-rendered
     // headless Chromium, before this test's own interaction — see the
     // panning test's comment below for the same reasoning.
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -56,7 +57,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // Same reasoning as the hover/panning tests above: foundSettlement()
     // plus driving a real click through the render runs close to (and on
     // CI, over) the global 45s budget.
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -155,7 +156,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
   test('placing a lumberjack on a forest hex is a real, terrain-gated building', async ({ page }) => {
     // Same reasoning as the other tests here: foundSettlement() plus driving
     // a real click through the render runs close to the global 45s budget.
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -229,7 +230,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // the backend's AllowedTerrain would ever accept on sand (Farm is
     // Grass-only, Lumberjack Forest-only, Quarry Mountain-only). Sand only
     // carries Tower (SandOrGrass) and the two shrines (any land hex).
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -288,7 +289,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // rendering (and painting over the panel) while the player worked inside
     // it. This is the regression guard for the real hit-test fix
     // (`document.elementFromPoint` in updateHover).
-    test.setTimeout(90_000);
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
@@ -338,7 +339,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // completing locally in 72-78s both times — CI's run-to-run variance
     // is evidently wider than 90s leaves room for. 120s rather than
     // shrugging this off as a repeat flake.
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;

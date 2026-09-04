@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { foundSettlement, gotoWorldMap } from './helpers';
+import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 // Mirrors settlement-interactions.spec.ts but for the world map: hover
 // highlighting and panning both go through the same HexMapRenderer code
@@ -17,7 +18,7 @@ import { foundSettlement, gotoWorldMap } from './helpers';
 // extra headroom under this suite's software-rendered headless Chromium.
 test.describe('world map interactions', () => {
   test('world map drifts on its own before any input', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     await gotoWorldMap(page);
 
@@ -39,7 +40,7 @@ test.describe('world map interactions', () => {
   });
 
   test('hovering an island renders a highlight that follows the cursor', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     await gotoWorldMap(page);
     const canvas = page.locator('canvas');
@@ -75,7 +76,7 @@ test.describe('world map interactions', () => {
   });
 
   test('panning the world map does not error and moves the camera', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     await gotoWorldMap(page);
     const canvas = page.locator('canvas');
@@ -97,7 +98,7 @@ test.describe('world map interactions', () => {
   });
 
   test('zooming with the wheel does not error', async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
     await gotoWorldMap(page);
     const canvas = page.locator('canvas');

@@ -1,8 +1,9 @@
 import { expect, test } from './fixtures';
 import { foundSettlement, waitForMapReady } from './helpers';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.goto('/');
 
   // zip 6a: a real plot of terrain is on screen immediately — no world map,
@@ -27,7 +28,7 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   // terrain* is enabled (Farm needs grass, Lumberjack needs forest) —
   // enabling both regardless of terrain would just reintroduce the same
   // silent-failure bug for whichever one doesn't fit.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.goto('/');
   await waitForMapReady(page);
 
@@ -103,7 +104,7 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
   // never been wired up anywhere the ring menu is used. There is one ring
   // component per open menu now, and it always owns its backdrop, so there is
   // no longer a way to render one without these.
-  test.setTimeout(90_000);
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await page.goto('/');
   await waitForMapReady(page);
 

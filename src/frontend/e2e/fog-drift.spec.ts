@@ -18,6 +18,7 @@
 // comparison above.
 import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
+import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 
 declare global {
   interface Window {
@@ -64,7 +65,7 @@ test.describe('fog wind drift', { tag: '@g3' }, () => {
     // already run close to the global 45s budget under software-rendered
     // headless Chromium, and this test then sits still for several seconds
     // on purpose — the thing under test is elapsed time.
-    test.setTimeout(120_000);
+    test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     await foundSettlement(page);
 
     const canvas = page.locator('canvas');
