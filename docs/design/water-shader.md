@@ -687,6 +687,40 @@ What is left, then, is not an optimisation but a choice about the feature: accep
 that the settlement view costs a full-screen blended pass on a software
 rasteriser (free on any GPU), or do not draw water there.
 
+### 4.2e Keeping the two nets out of step — `uCausticFinePhase`
+
+The nets are built to be *independent* — different domain, different band count,
+an awkward scale ratio, their own drift rate — and that turned out not to be the
+same thing as being **out of step**. Each one breathes as its level set walks
+through its field, and with both clocks started together the busy and empty
+moments coincide: the water goes from bare to crowded and back with both nets
+doing it at once. No amount of making the fields more different from each other
+fixes that. Only offsetting one in time does.
+
+So `causticNet` takes a `phase` added to `t` before anything reads it, and the
+fine net gets 17 s of it — a little over half the ~30 s breathing period, so the
+two are close to opposed rather than merely unequal. It is on a slider, because
+the right offset is a matter of taste and depends on the other six handles.
+
+Measured over 24 samples a second apart, on the bright-pixel fraction of a patch
+of open water with the pools switched off:
+
+| | mean lit | min | max | swing |
+|---|---|---|---|---|
+| in step (phase 0) | 16.85% | 14.29 | 18.95 | 4.66 pp |
+| offset (phase 17 s) | 18.23% | 16.75 | 19.95 | **3.20 pp** |
+
+Peak-to-trough falls by about a third, and — the part that matters for the
+complaint this fixes — almost all of that comes from the *empty* moments: the
+floor rises 2.5 points while the ceiling barely moves. Worth stating plainly
+that this evens the extremes out rather than removing the breathing: the
+standard deviation only goes 0.92 → 0.89, which is inside the noise.
+
+One real bug turned up on the way. The counter-drifting second term inside
+`causticNet` was not multiplied by `rate`, so it moved at exactly the same speed
+and heading in both nets — a good half of each field's motion was common to the
+two, which is an efficient way to make two independent fields look like one.
+
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
 Foam is not an outline. A single band at a fixed offset from the coast reads
@@ -895,6 +929,8 @@ export interface WaterDebugFlags {
   midWaterWaves: boolean;       // default true
   /** Debug: draw the caustics on the world map too, to judge both idioms at one scale. */
   causticsEverywhere: boolean;  // default false
+  /** The coarse caustic net — the base surface pattern of §4.2b. */
+  coarseCaustics: boolean;
   /** The second, finer caustic net over the first (§4.2c). */
   fineCaustics: boolean;
   /** The drifting dark blobs under the caustics (§4.2c). */
@@ -926,26 +962,26 @@ export interface WaterDebugTuning {
                             //        (§4.2b); clamped to FOAM_REACH_TILES, past
                             //        which the far channel is saturated and the
                             //        handle is inert.
-  causticThickness: number; // 1 — multiplier on the ribbon width, applied to
-                            //     both light nets (§4.2c) together. A
-                            //     multiplier and not an absolute width: the
-                            //     shipped widths are fractions of each net's
-                            //     *own* band spacing, so one absolute number
-                            //     would mean two different-looking ribbons.
-  causticBrightness: number; // 1 — multiplier on the ribbons' alpha, both light
-                             //     nets together. Not the shadow blobs: they
-                             //     darken, and a "brightness" handle that makes
-                             //     the water darker does not say what it does.
-  causticDensity: number;    // 1 — multiplier on each net's band count, i.e.
-                             //     ribbons per unit of water. Orthogonal to
-                             //     causticThickness by construction: the band
-                             //     count sets the spacing between contours and
-                             //     the shader measures ribbon width as a plain
-                             //     distance in field space, not as a fraction of
-                             //     that spacing. Also not the shadow blobs —
-                             //     their density is a per-cell probability
-                             //     already at 0.9, so a multiplier would work
-                             //     downward and do nothing upward.
+  // Three per net, all multipliers on the shipped constants so 1.00x is what
+  // ships and either direction is a comparison against it. They started shared
+  // across the two nets, on the reasoning that the fine one is *defined* by
+  // being thinner and brighter and that one handle preserves that at every
+  // setting — true, and it also made the relationship the one thing that could
+  // not be adjusted, which is most of what there is to tune once both exist.
+  causticThickness: number;      // 1
+  causticBrightness: number;     // 1
+  causticDensity: number;        // 1 — band count, i.e. ribbons per unit of
+                                 //     water. Orthogonal to thickness by
+                                 //     construction: the band count sets the
+                                 //     spacing between contours and the shader
+                                 //     measures ribbon width as a distance in
+                                 //     field space, not as a fraction of it.
+  causticFineThickness: number;  // 1
+  causticFineBrightness: number; // 1
+  causticFineDensity: number;    // 1
+  causticFinePhase: number;      // 17s — see §4.2e.
+  // None of the seven touches the shadow pools. Brightness would darken the
+  // water if it did, and the pools' density is a level in a field, not a count.
 }
 ```
 

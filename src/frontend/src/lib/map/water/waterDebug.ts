@@ -25,6 +25,12 @@ export interface WaterDebugFlags {
    */
   causticsEverywhere: boolean;
   /**
+   * The coarse caustic net — the base surface pattern of §4.2b. A sub-layer of
+   * `midWaterWaves` like the two below, so that the finer net and the pools can
+   * be judged without it rather than only on top of it.
+   */
+  coarseCaustics: boolean;
+  /**
    * The second, finer caustic net drawn over the first (§4.2c) — smaller cells,
    * brighter. A sub-layer of the surface pattern: it only draws where the
    * caustics themselves do, so this does nothing on the world map unless
@@ -79,6 +85,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   water: true,
   midWaterWaves: true,
   causticsEverywhere: false,
+  coarseCaustics: true,
   fineCaustics: true,
   causticShadows: true,
   shorelineFoam: true,
@@ -126,37 +133,47 @@ export interface WaterDebugTuning {
    */
   causticCullHexes: number;
   /**
-   * Multiplier on how thick the caustic ribbons are drawn, applied to both
-   * light nets (§4.2c) at once so their relationship survives the drag.
+   * Multipliers on the **coarse** caustic net's ribbon thickness, alpha and band
+   * count (§4.2b), and the same three for the **fine** net over it (§4.2c).
    *
-   * A multiplier and not an absolute width, because the two nets are banded at
+   * Multipliers and not absolute values, because the two nets are banded at
    * different scales: the shipped widths are fractions of each net's *own* band
-   * spacing, and one absolute number would mean two different-looking ribbons.
-   * Same reasoning as `foamWidthHexes` scaling both foam tiers together.
+   * spacing, so one absolute number would mean two different-looking ribbons.
+   * 1.00x is what ships, which makes either direction a comparison against it.
+   *
+   * Per net rather than shared. They started shared, on the reasoning that the
+   * fine net is *defined* by being thinner and brighter than the coarse one and
+   * that one multiplier keeps that relationship through any drag. True, but it
+   * also makes the relationship unadjustable, and the relationship is most of
+   * what there is to tune once both nets exist.
+   *
+   * Density is orthogonal to thickness by construction: the band count sets the
+   * spacing between contours, and the shader measures ribbon width as a plain
+   * distance in field space rather than as a fraction of that spacing. So it
+   * moves the ribbons closer together without fattening them, and past about 2x
+   * they start to touch — the useful end of the range, not a bug.
+   *
+   * None of the six touches the shadow pools. Brightness would darken the water
+   * if it did, and the pools' density is a level in a field rather than a count.
    */
   causticThickness: number;
-  /**
-   * Multiplier on the caustic ribbons' alpha, again both light nets together.
-   *
-   * The shadow blobs are deliberately not on it: they darken, so turning
-   * "brightness" up would make the water darker, which is not what the handle
-   * says it does.
-   */
   causticBrightness: number;
-  /**
-   * Multiplier on how many nested contours each light net is sliced into —
-   * ribbons per unit of water, which is what "density" means here. Both nets
-   * again, and again not the shadow blobs: their density is a *probability* per
-   * cell that already sits at 0.9, so a multiplier would work downward and do
-   * nothing upward, which is a handle that lies about half its range.
-   *
-   * Orthogonal to `causticThickness` by construction: the band count sets the
-   * spacing between contours, and the shader measures ribbon width as a plain
-   * distance in field space rather than as a fraction of that spacing. So this
-   * moves the ribbons closer together without fattening them, and past about 2x
-   * they start to touch — which is the useful end of the range, not a bug.
-   */
   causticDensity: number;
+  causticFineThickness: number;
+  causticFineBrightness: number;
+  causticFineDensity: number;
+  /**
+   * How far the fine net is slid along its own clock, in seconds, relative to
+   * the coarse one.
+   *
+   * The two nets are independent fields, but independent is not the same as out
+   * of step: each breathes as its level set walks, and with the clocks aligned
+   * the busy and empty moments coincide — the water goes bare and then crowded
+   * with both nets doing it at once, which is what this exists to break. No
+   * amount of making the fields more different from each other fixes that; only
+   * offsetting one in time does.
+   */
+  causticFinePhase: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -167,4 +184,46 @@ export const waterDebugTuning: WaterDebugTuning = {
   causticThickness: 1,
   causticBrightness: 1,
   causticDensity: 1,
+  causticFineThickness: 1,
+  causticFineBrightness: 1,
+  causticFineDensity: 1,
+  // A little over half the coarse net's ~30s breathing period, so the two are
+  // close to opposed rather than merely unequal.
+  causticFinePhase: 17,
+};
+
+/**
+ * What the water layer cost on its last bake and its last frame, for
+ * WaterPerfPanel — the `fogPerfStats` idea applied to this feature.
+ *
+ * A plain object mutated directly by the writers and polled by the panel, for
+ * the same reason `fogPerfStats` is: HexMapRenderer and WaterLayer stay free of
+ * Vue reactivity, and a raw write would never trip a proxy trap anyway.
+ *
+ * Only things that are actually measured. The bake is CPU work this code owns,
+ * so it is timed directly; the frame interval is what the browser reports. What
+ * is deliberately *not* here is the shader's own GPU cost — measuring that needs
+ * a timer query this codebase has no plumbing for, and §4.2d's numbers came from
+ * toggling the layer and watching the frame interval rather than from anything
+ * the running app can report. FogPerfPanel leaves `shaderPassMs` off for exactly
+ * that reason and this follows it: an honest gap beats a fabricated row.
+ */
+export interface WaterPerfStats {
+  /** Wall-clock of the last `bakeWaterMask`, in ms. */
+  bakeMs: number;
+  /** Texel dimensions of that bake, and their product. */
+  maskWidth: number;
+  maskHeight: number;
+  /** How many bakes have happened this session — a re-bake is a camera leaving its region, so this rising while the camera sits still is a bug. */
+  bakes: number;
+  /** Median frame interval over the last second, in ms, sampled by the panel itself. */
+  frameMs: number;
+}
+
+export const waterPerfStats: WaterPerfStats = {
+  bakeMs: 0,
+  maskWidth: 0,
+  maskHeight: 0,
+  bakes: 0,
+  frameMs: 0,
 };

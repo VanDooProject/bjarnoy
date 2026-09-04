@@ -100,7 +100,9 @@ uniform vec3 uCausticColor;
 uniform float uCausticCull;
 uniform float uCausticCullSoften;
 uniform float uCausticCullSpread;
+uniform float uCausticCoarse;
 uniform float uCausticFine;
+uniform float uCausticFinePhase;
 uniform float uCausticFineScale;
 uniform float uCausticFineBands;
 uniform float uCausticFineWidth;
@@ -332,17 +334,29 @@ float waveField(vec2 world, float t) {
 // a moire, not as two layers of caustics.
 float causticNet(
   vec2 ground, float t, float offshore,
-  float scale, float bandCount, float width, float rate, float seed
+  float scale, float bandCount, float width, float rate, float seed, float phase
 ) {
   vec2 p = ground * scale + seed;
-  vec2 drift = vec2(t * 0.021, t * -0.014) * rate;
+  // Every time term below reads this, not \`t\`, so one net can be slid along its
+  // own history relative to the other. The two are built to be independent
+  // fields, but independent is not the same as *out of step*: both breathe as
+  // their level set walks, and with the clocks aligned the busy and empty
+  // moments line up, so the water goes from bare to crowded and back with both
+  // nets doing it together. A phase offset is the one thing that cannot be
+  // fixed by making the fields more different from each other.
+  float ct = t + phase;
+  vec2 drift = vec2(ct * 0.021, ct * -0.014) * rate;
 
   // Two counter-drifting samples of the same field: the loops reshape as they
   // move instead of sliding across the water as a rigid pattern. Taken with
   // their derivatives, because the ribbon width below needs the field's
   // gradient and getting it this way is free — see \`noised\`.
   vec3 coarse = fbmd(p + drift);
-  vec3 fine = noised(p * 2.1 + vec2(t * -0.017, t * 0.011));
+  // \`rate\` here too. It was missing, so this counter-drifting term moved at
+  // exactly the same speed and heading in both nets — half of each field's
+  // motion was common to the two, which is a good way to make two independent
+  // fields look like one.
+  vec3 fine = noised(p * 2.1 + vec2(ct * -0.017, ct * 0.011) * rate);
   float n = coarse.x + 0.35 * fine.x;
   // Chain rule on the fine octave's own 2.1 scaling. The forward-difference
   // version this replaces only ever measured the coarse term's slope and
@@ -353,7 +367,7 @@ float causticNet(
   // fract() turns one field into a whole family of nested contours for the
   // price of one; the time term walks the level set slowly through the field,
   // which is what makes the ribbons breathe rather than merely translate.
-  float bands = n * bandCount + t * 0.05 * rate;
+  float bands = n * bandCount + ct * 0.05 * rate;
   float band = abs(fract(bands) - 0.5) * 2.0;
 
   // Each ribbon gets its own keep-off distance from the shore, and this is the
@@ -556,12 +570,14 @@ void main() {
         }
       }
 
-      float ribbon = causticNet(
-        vGround, uWaveTime, offshore,
-        uCausticScale, uCausticBands, uCausticWidth, 1.0, 0.0
-      ) * uCausticAlpha * quiet;
-      if (ribbon > 0.004) {
-        acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
+      if (uCausticCoarse > 0.5) {
+        float ribbon = causticNet(
+          vGround, uWaveTime, offshore,
+          uCausticScale, uCausticBands, uCausticWidth, 1.0, 0.0, 0.0
+        ) * uCausticAlpha * quiet;
+        if (ribbon > 0.004) {
+          acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
+        }
       }
 
       if (uCausticFine > 0.5) {
@@ -570,7 +586,7 @@ void main() {
         // frequencies in it rather than as a second layer of water.
         float fine = causticNet(
           vGround, uWaveTime, offshore,
-          uCausticFineScale, uCausticFineBands, uCausticFineWidth, 1.7, 11.0
+          uCausticFineScale, uCausticFineBands, uCausticFineWidth, 1.7, 11.0, uCausticFinePhase
         ) * uCausticFineAlpha * quiet;
         if (fine > 0.004) {
           acc = vec4(uCausticFineColor * fine, fine) + acc * (1.0 - fine);

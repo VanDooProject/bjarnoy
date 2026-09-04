@@ -46,7 +46,7 @@ import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './marker
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
-import { waterDebugFlags } from './water/waterDebug';
+import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
 import { bakeWaterMask } from './water/waterMask';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
@@ -1776,7 +1776,17 @@ export class HexMapRenderer {
     this.waterLayer.setSuppressed(waterSuppressed);
     if (!waterSuppressed && (!this.waterMaskRegionBuilt || !waterMaskCovers(this.waterMaskRegionBuilt, rect))) {
       const region = waterMaskRegion(rect, TILE_W);
-      this.waterLayer.setMask(bakeWaterMask(region, TILE_W, TILE_H, this.options.worldModel));
+      // Timed rather than estimated: the bake is one isoPixelToAxial per texel
+      // plus three distance transforms, and it is the only CPU work this
+      // feature does — everything else it costs is on the GPU, where this
+      // codebase has no timer to read (see waterPerfStats).
+      const bakeStart = performance.now();
+      const mask = bakeWaterMask(region, TILE_W, TILE_H, this.options.worldModel);
+      waterPerfStats.bakeMs = performance.now() - bakeStart;
+      waterPerfStats.maskWidth = mask.width;
+      waterPerfStats.maskHeight = mask.height;
+      waterPerfStats.bakes += 1;
+      this.waterLayer.setMask(mask);
       this.waterMaskRegionBuilt = region;
     }
 

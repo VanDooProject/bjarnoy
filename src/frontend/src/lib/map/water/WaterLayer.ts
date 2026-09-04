@@ -350,7 +350,9 @@ export class WaterLayer {
       uCausticCull: { value: 0, type: 'f32' },
       uCausticCullSoften: { value: CAUSTIC_CULL_SOFTEN_TILES, type: 'f32' },
       uCausticCullSpread: { value: CAUSTIC_CULL_SPREAD_TILES, type: 'f32' },
+      uCausticCoarse: { value: 0, type: 'f32' },
       uCausticFine: { value: 0, type: 'f32' },
+      uCausticFinePhase: { value: 0, type: 'f32' },
       uCausticFineScale: { value: CAUSTIC_FINE_SCALE, type: 'f32' },
       uCausticFineBands: { value: CAUSTIC_FINE_BANDS, type: 'f32' },
       uCausticFineWidth: { value: CAUSTIC_FINE_WIDTH, type: 'f32' },
@@ -486,6 +488,7 @@ export class WaterLayer {
     // of their own: the shader only reaches them inside the caustic branch, so
     // these flags say "and this layer too" rather than turning anything on by
     // themselves.
+    u.uCausticCoarse = waterDebugFlags.coarseCaustics ? 1 : 0;
     u.uCausticFine = waterDebugFlags.fineCaustics ? 1 : 0;
     u.uCausticBlobs = waterDebugFlags.causticShadows ? 1 : 0;
     u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
@@ -499,16 +502,20 @@ export class WaterLayer {
     // larger value would silently mean "never fade in" rather than "start
     // further out".
     u.uCausticCull = Math.min(waterDebugTuning.causticCullHexes, FOAM_REACH_TILES);
-    // Two knobs across both light nets rather than four across one each: the
-    // coarse and fine nets are a *pair*, and the whole point of the fine one is
-    // that it is thinner and brighter than the other. Multipliers keep that
-    // relationship through any drag of either handle.
+    // Three knobs per net rather than three shared. The nets are a pair and the
+    // fine one is defined by being thinner and brighter, so shared multipliers
+    // preserved that relationship — and made it the one thing that could not be
+    // adjusted, which is most of what there is to tune once both exist.
     u.uCausticWidth = CAUSTIC_WIDTH * waterDebugTuning.causticThickness;
-    u.uCausticFineWidth = CAUSTIC_FINE_WIDTH * waterDebugTuning.causticThickness;
     u.uCausticAlpha = CAUSTIC_ALPHA * waterDebugTuning.causticBrightness;
-    u.uCausticFineAlpha = CAUSTIC_FINE_ALPHA * waterDebugTuning.causticBrightness;
     u.uCausticBands = CAUSTIC_BANDS * waterDebugTuning.causticDensity;
-    u.uCausticFineBands = CAUSTIC_FINE_BANDS * waterDebugTuning.causticDensity;
+    u.uCausticFineWidth = CAUSTIC_FINE_WIDTH * waterDebugTuning.causticFineThickness;
+    u.uCausticFineAlpha = CAUSTIC_FINE_ALPHA * waterDebugTuning.causticFineBrightness;
+    u.uCausticFineBands = CAUSTIC_FINE_BANDS * waterDebugTuning.causticFineDensity;
+    // Seconds, and it only ever offsets the fine net — one relative shift is
+    // what "out of step" needs; two absolute ones would just be the same handle
+    // twice.
+    u.uCausticFinePhase = waterDebugTuning.causticFinePhase;
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.
     u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);

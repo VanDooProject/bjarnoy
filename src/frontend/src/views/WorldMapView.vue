@@ -8,6 +8,7 @@ import ResourceBar from '../components/hud/ResourceBar.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
+import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { useFogDebug } from '../composables/useFogDebug';
@@ -70,6 +71,7 @@ function onHexClick() {
     <div v-if="showFogDebug" class="fog-debug-stack">
       <FogDebugPanel @change="onFogDebugChange" />
       <WaterDebugPanel @change="onFogDebugChange" />
+      <WaterPerfPanel />
       <FogPerfPanel />
     </div>
     <TopBar>
