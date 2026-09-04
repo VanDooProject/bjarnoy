@@ -161,9 +161,9 @@ function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
 }
 
 describe('WorldModel.sawmillArtVariantOf', () => {
-  it('is the flat family when no neighbour has a river', () => {
+  it('falls back to the riverside family when no neighbour has a river (a Sawmill is never actually placed here, but the query has to answer something)', () => {
     const model = new WorldModel(20260825);
-    expect(model.sawmillArtVariantOf({ q: 0, r: 0 })).toBe('sawmill');
+    expect(model.sawmillArtVariantOf({ q: 0, r: 0 })).toBe('sawmillriver');
   });
 
   it('is the riverside family when a neighbour has a straight river', () => {
@@ -181,11 +181,21 @@ describe('WorldModel.sawmillArtVariantOf', () => {
     expect(model.sawmillArtVariantOf(at)).toBe('sawmillbend');
   });
 
+  it.each(['spring', 'confluence', 'mouth'] as const)(
+    'falls back to the riverside family for a %s neighbour — no dedicated art exists for it',
+    (shape) => {
+      const model = new WorldModel(20260825);
+      const at = { q: 0, r: 0 };
+      model.setRiverTiles([riverTile(neighbors(at)[0], shape)]);
+      expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
+    },
+  );
+
   it('ignores a river tile on its own hex — a building tile is never itself a river tile', () => {
     const model = new WorldModel(20260825);
     const at = { q: 0, r: 0 };
     model.setRiverTiles([riverTile(at, 'bend')]);
-    expect(model.sawmillArtVariantOf(at)).toBe('sawmill');
+    expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
   });
 });
 

@@ -28,3 +28,18 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
   if (requiredLevel === undefined || requiredLevel <= currentLevel) return undefined;
   return `Requires longhouse ${requiredLevel}`;
 }
+
+/**
+ * The reason a Fisher Hut or Sawmill can't be placed on an otherwise-buildable
+ * Grass hex, or undefined when its adjacency requirement is met — the same
+ * `lock` mechanism `longhouseLock` feeds, so it shows as the same
+ * disabled-bubble/tooltip the ring already has (see `WorldModel.placeBuilding`
+ * for the rule this mirrors: `RequiresAdjacentToWater`/`RequiresAdjacentRiver`).
+ * Every other buildable type has no adjacency requirement, so this is a no-op
+ * for it.
+ */
+export function adjacencyLock(type: string, hasQualifyingNeighbour: boolean): string | undefined {
+  if (type === 'fisherhut' && !hasQualifyingNeighbour) return 'Needs a coastal-water neighbour';
+  if (type === 'sawmill' && !hasQualifyingNeighbour) return 'Needs a river neighbour';
+  return undefined;
+}

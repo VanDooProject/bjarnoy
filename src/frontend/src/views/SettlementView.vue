@@ -23,10 +23,10 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
-import { parseKey, type AxialCoord } from '../lib/hex/coords';
+import { neighbors, parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import { BOOST_TERRAIN, buildingStatsFor, buildingUpgradeCost, matchingNeighbourCount } from '../lib/map/buildingEconomy';
-import { formatBuildTime, longhouseLock } from '../lib/map/ringCatalogue';
+import { adjacencyLock, formatBuildTime, longhouseLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
 import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
@@ -560,13 +560,25 @@ function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord):
   const boostTerrain = BOOST_TERRAIN[type];
   const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
   const stats = buildingStatsFor(type, 1, matching);
+  // Fisher Hut/Sawmill also need a qualifying neighbour (coastal water /
+  // river respectively) — mirrors WorldModel.placeBuilding's own check, so
+  // the ring shows it locked rather than accepting a click the backend/demo
+  // model would then reject.
+  const hasQualifyingNeighbour =
+    type === 'fisherhut'
+      ? neighbors(coord).some((n) => tileAt(n.q, n.r).isCoastalWater)
+      : type === 'sawmill'
+        ? neighbors(coord).some((n) => world.model.getRiverTile(n.q, n.r))
+        : true;
   return {
     id: type,
     label,
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
     time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
     gives: stats.output ?? stats.modifier,
-    lock: longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
+    lock:
+      longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
+      ?? adjacencyLock(type, hasQualifyingNeighbour),
     art: buildingArt(type, 1),
   };
 }

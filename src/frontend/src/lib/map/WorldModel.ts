@@ -251,26 +251,32 @@ export class WorldModel {
   }
 
   /**
-   * Which of a Sawmill's three art families a Sawmill standing on
-   * `coord` should render with. A Sawmill's own hex is always ordinary
-   * land — `HexMapRenderer.rebuildTerrain` draws a river tile's own art and
-   * skips whatever building tile data says entirely, so "river-adjacent"
-   * has to mean a river on a *neighbouring* hex, not this one (see
-   * `textures.ts`'s `textureKeyFor`). A bend on any neighbour wins over a
-   * merely-straight one, since the art can only pick one variant.
-   * Live-mode-only, like every other `RiverTile` lookup: demo mode never
-   * calls `setRiverTiles`, so this always falls back to the flat family
-   * there.
+   * Which of a Sawmill's two art families a Sawmill standing on `coord`
+   * should render with. A Sawmill's own hex is always ordinary land —
+   * `HexMapRenderer.rebuildTerrain` draws a river tile's own art and skips
+   * whatever building tile data says entirely, so "river-adjacent" has to
+   * mean a river on a *neighbouring* hex, not this one (see `textures.ts`'s
+   * `textureKeyFor`). A Sawmill is only buildable next to a river at all
+   * (`WorldModel.placeBuilding`'s adjacency check, mirroring
+   * `BuildingDefinition.RequiresAdjacentRiver`), so there is no flat/no-river
+   * variant left to pick here.
+   *
+   * The vendor art pack only shipped dedicated Sawmill art for a `Bend`
+   * (120°-interior turn) or `Straight` river neighbour. A `Spring`,
+   * `Confluence`, `Mouth`, or the sharper `Bend60` turn has no matching art —
+   * rather than making those shapes un-buildable too, they fall back to the
+   * plainer `sawmillriver` look, same as a `Straight` neighbour. `Bend` wins
+   * over every other shape found among the neighbours, since the art can
+   * only pick one variant.
    */
-  sawmillArtVariantOf(coord: AxialCoord): 'sawmill' | 'sawmillriver' | 'sawmillbend' {
-    let adjacentRiver = false;
+  sawmillArtVariantOf(coord: AxialCoord): 'sawmillriver' | 'sawmillbend' {
+    let sawBend = false;
     for (const neighbour of neighbors(coord)) {
       const river = this.getRiverTile(neighbour.q, neighbour.r);
       if (!river) continue;
-      if (river.shape === 'bend') return 'sawmillbend';
-      adjacentRiver = true;
+      if (river.shape === 'bend') sawBend = true;
     }
-    return adjacentRiver ? 'sawmillriver' : 'sawmill';
+    return sawBend ? 'sawmillbend' : 'sawmillriver';
   }
 
   isLand(q: number, r: number): boolean {
@@ -561,6 +567,18 @@ export class WorldModel {
     // the exceptions, and only on the coastal ring of the sea, not open water.
     const seaOk = (type === 'fishinghut' || type === 'dockyard') && tile.isCoastalWater;
     if ((tile.terrain === 'sea' && !seaOk) || tile.buildingType) return false;
+    // The Fisher Hut stands on land, unlike the Fishing Hut, but still needs
+    // a coastal-water neighbour — a plain inland Grass hex doesn't qualify
+    // (matches BuildingDefinition.RequiresAdjacentToWater).
+    if (type === 'fisherhut' && !neighbors(at).some((n) => this.getTile(n.q, n.r).isCoastalWater)) {
+      return false;
+    }
+    // The Sawmill needs a river neighbour of any shape — matches
+    // BuildingDefinition.RequiresAdjacentRiver. sawmillArtVariantOf does the
+    // same neighbour walk to pick its (purely cosmetic) art variant.
+    if (type === 'sawmill' && !neighbors(at).some((n) => this.getRiverTile(n.q, n.r))) {
+      return false;
+    }
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;

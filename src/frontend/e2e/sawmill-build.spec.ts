@@ -2,15 +2,16 @@ import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 
 /**
- * Sawmill is new (BuildingType.Sawmill) and, unlike every other building
- * added so far, ships three separate art families keyed off river
- * adjacency (flat/riverside/river-bend — see WorldModel.sawmillArtVariantOf
- * and textures.ts's SPLIT_BUILDING_BASE_LEVELED). Demo mode never calls
- * setRiverTiles, so a demo settlement's sawmill always resolves the flat
- * family — this exercises exactly that path end to end: pick "Sawmill"
- * from the ring menu's "Resource" category and place it, with the suite's
- * autouse `forbidConsoleErrors` fixture (see fixtures.ts) as the real
- * regression guard for the new baseIndexed/leveled-base texture wiring —
+ * Sawmill is new (BuildingType.Sawmill), requires a river-tile neighbour of
+ * any shape to be buildable at all (BuildingDefinition.RequiresAdjacentRiver),
+ * and ships two separate art families keyed off that same river adjacency
+ * (riverside/river-bend — see WorldModel.sawmillArtVariantOf and
+ * textures.ts's SPLIT_BUILDING_BASE_LEVELED). Demo mode never calls
+ * setRiverTiles on its own, so this test injects a straight river tile next
+ * to the target hex itself — exercising the riverside family end to end:
+ * pick "Sawmill" from the ring menu's "Resource" category and place it, with
+ * the suite's autouse `forbidConsoleErrors` fixture (see fixtures.ts) as the
+ * real regression guard for the new baseIndexed/leveled-base texture wiring —
  * a bad texture key throws in baseTextureFor, which would fail this test
  * even though nothing here asserts on pixels.
  */
@@ -35,6 +36,10 @@ test('building a sawmill from the ring menu places it without a rendering error'
 
   // Same approach as shrine-build.spec.ts's grass-hex search — Sawmill
   // lives in the "Resource" category alongside Farm/PumpkinFarm/FisherHut.
+  // Since it's only buildable next to a river (RequiresAdjacentRiver), this
+  // also injects a straight river tile onto one of the chosen hex's own six
+  // neighbours (NEIGHBOR_DIRS' first entry, {q:+1, r:0} — see
+  // src/lib/hex/coords.ts) via setRiverTiles, same as WorldModel.test.ts does.
   const target = await page.evaluate(() => {
     const win = window as unknown as {
       __demoWorld: () => { model: any; selectedSettlementId: string };
@@ -49,6 +54,10 @@ test('building a sawmill from the ring menu places it without a rendering error'
         const at = { q: settlement.q + dq, r: settlement.r + dr };
         const tile = world.model.getTile(at.q, at.r);
         if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
+          const riverNeighbour = { q: at.q + 1, r: at.r };
+          world.model.setRiverTiles([
+            { q: riverNeighbour.q, r: riverNeighbour.r, shape: 'straight', inDirections: [], outDirection: null },
+          ]);
           return { screen: win.__settlementRenderer().hexCenterScreen(at), hex: at };
         }
       }

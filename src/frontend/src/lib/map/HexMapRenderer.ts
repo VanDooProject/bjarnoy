@@ -1832,14 +1832,13 @@ export class HexMapRenderer {
         continue;
       }
       // A Sawmill's own hex is never itself a river tile (the `continue`
-      // above renders a river's own art in that case), so "which of its
-      // three art families" is read off its neighbours instead — see
+      // above renders a river's own art in that case), so "which of its two
+      // art families" is read off its neighbours instead — see
       // WorldModel.sawmillArtVariantOf.
       const sawmillVariant =
         tile.buildingType === 'sawmill' ? worldModel.sawmillArtVariantOf(c) : undefined;
-      const sawmillOverride = sawmillVariant === 'sawmill' ? undefined : sawmillVariant;
-      baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillOverride), coord: c });
-      const topTexture = topTextureFor(textures, tile, sawmillOverride);
+      baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillVariant), coord: c });
+      const topTexture = topTextureFor(textures, tile, sawmillVariant);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
       fogPerfStats.terrainDrawnCount++;
     }
