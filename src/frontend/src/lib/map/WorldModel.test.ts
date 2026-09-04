@@ -6,8 +6,9 @@
 // (HexMapRenderer's outerEdgesOf) against a non-convex shape, not just the
 // perfect hexagon every other settlement in the demo produces.
 import { describe, expect, it } from 'vitest';
-import { hexDistance, hexesInRadius, type AxialCoord } from '../hex/coords';
+import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { WorldModel } from './WorldModel';
+import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
   const at = model.findLandfall({ q: 0, r: 0 });
@@ -81,6 +82,28 @@ describe('WorldModel applyServerSnapshot renders every backend building type', (
     expect(model.getTile(lumberjackCoord.q, lumberjackCoord.r).buildingType).toBe('lumberjack');
     expect(model.getTile(quarryCoord.q, quarryCoord.r).buildingType).toBe('quarry');
   });
+
+  it('places a barracks, fisher hut and sawmill from a snapshot', () => {
+    const model = new WorldModel(20260825);
+    const { settlement, at } = foundLandedSettlement(model);
+    const coords = neighbors(at).slice(0, 3);
+
+    model.applyServerSnapshot(settlement.id, {
+      level: settlement.level,
+      resources: settlement.resources,
+      rates: settlement.rates,
+      capacity: settlement.resources,
+      buildings: [
+        { q: coords[0].q, r: coords[0].r, type: 'barracks', level: 1 },
+        { q: coords[1].q, r: coords[1].r, type: 'fisherhut', level: 1 },
+        { q: coords[2].q, r: coords[2].r, type: 'sawmill', level: 1 },
+      ],
+    });
+
+    expect(model.getTile(coords[0].q, coords[0].r).buildingType).toBe('barracks');
+    expect(model.getTile(coords[1].q, coords[1].r).buildingType).toBe('fisherhut');
+    expect(model.getTile(coords[2].q, coords[2].r).buildingType).toBe('sawmill');
+  });
 });
 
 // Issue #97: the backend now stakes a level-0 foundation for a brand-new
@@ -128,6 +151,41 @@ describe('WorldModel longhouse placement', () => {
 
     expect(model.placeBuilding(settlement.id, edge, 'longhouse')).toBe(false);
     expect(model.getTile(edge.q, edge.r).buildingType).toBeUndefined();
+  });
+});
+
+// A minimal RiverTile, filling in only the shape this test cares about —
+// setRiverTiles/sawmillArtVariantOf never look at inDirections/outDirection.
+function riverTile(at: AxialCoord, shape: RiverTile['shape']): RiverTile {
+  return { q: at.q, r: at.r, shape, inDirections: [], outDirection: null };
+}
+
+describe('WorldModel.sawmillArtVariantOf', () => {
+  it('is the flat family when no neighbour has a river', () => {
+    const model = new WorldModel(20260825);
+    expect(model.sawmillArtVariantOf({ q: 0, r: 0 })).toBe('sawmill');
+  });
+
+  it('is the riverside family when a neighbour has a straight river', () => {
+    const model = new WorldModel(20260825);
+    const at = { q: 0, r: 0 };
+    model.setRiverTiles([riverTile(neighbors(at)[0], 'straight')]);
+    expect(model.sawmillArtVariantOf(at)).toBe('sawmillriver');
+  });
+
+  it('is the bend family when a neighbour has a river bend, even alongside a straight one', () => {
+    const model = new WorldModel(20260825);
+    const at = { q: 0, r: 0 };
+    const around = neighbors(at);
+    model.setRiverTiles([riverTile(around[0], 'straight'), riverTile(around[1], 'bend')]);
+    expect(model.sawmillArtVariantOf(at)).toBe('sawmillbend');
+  });
+
+  it('ignores a river tile on its own hex — a building tile is never itself a river tile', () => {
+    const model = new WorldModel(20260825);
+    const at = { q: 0, r: 0 };
+    model.setRiverTiles([riverTile(at, 'bend')]);
+    expect(model.sawmillArtVariantOf(at)).toBe('sawmill');
   });
 });
 

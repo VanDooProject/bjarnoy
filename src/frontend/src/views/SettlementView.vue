@@ -356,7 +356,10 @@ type BuildableType =
   | 'archeryrange'
   | 'dockyard'
   | 'greatstorehouse'
-  | 'fishinghut';
+  | 'fishinghut'
+  | 'barracks'
+  | 'fisherhut'
+  | 'sawmill';
 
 interface BuildCategory {
   id: string;
@@ -400,6 +403,8 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
       buildings: [
         { type: 'farm', label: 'Farm' },
         { type: 'pumpkinfarm', label: 'Pumpkin Farm' },
+        { type: 'fisherhut', label: 'Fisher Hut' },
+        { type: 'sawmill', label: 'Sawmill' },
       ],
     },
     {
@@ -409,6 +414,7 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'tower', label: 'Watchtower' },
         { type: 'magictower', label: 'Magic Tower' },
         { type: 'archeryrange', label: 'Archery Range' },
+        { type: 'barracks', label: 'Barracks' },
       ],
     },
     {

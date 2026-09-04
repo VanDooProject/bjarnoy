@@ -136,7 +136,10 @@ export interface Tile {
     | 'storagehouse'
     | 'archeryrange'
     | 'dockyard'
-    | 'greatstorehouse';
+    | 'greatstorehouse'
+    | 'barracks'
+    | 'fisherhut'
+    | 'sawmill';
   buildingLevel?: number;
 }
 

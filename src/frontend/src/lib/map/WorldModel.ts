@@ -250,6 +250,29 @@ export class WorldModel {
     return null;
   }
 
+  /**
+   * Which of a Sawmill's three art families a Sawmill standing on
+   * `coord` should render with. A Sawmill's own hex is always ordinary
+   * land — `HexMapRenderer.rebuildTerrain` draws a river tile's own art and
+   * skips whatever building tile data says entirely, so "river-adjacent"
+   * has to mean a river on a *neighbouring* hex, not this one (see
+   * `textures.ts`'s `textureKeyFor`). A bend on any neighbour wins over a
+   * merely-straight one, since the art can only pick one variant.
+   * Live-mode-only, like every other `RiverTile` lookup: demo mode never
+   * calls `setRiverTiles`, so this always falls back to the flat family
+   * there.
+   */
+  sawmillArtVariantOf(coord: AxialCoord): 'sawmill' | 'sawmillriver' | 'sawmillbend' {
+    let adjacentRiver = false;
+    for (const neighbour of neighbors(coord)) {
+      const river = this.getRiverTile(neighbour.q, neighbour.r);
+      if (!river) continue;
+      if (river.shape === 'bend') return 'sawmillbend';
+      adjacentRiver = true;
+    }
+    return adjacentRiver ? 'sawmillriver' : 'sawmill';
+  }
+
   isLand(q: number, r: number): boolean {
     return this.getTile(q, r).terrain !== 'sea';
   }
@@ -483,6 +506,9 @@ export class WorldModel {
       'archeryrange',
       'dockyard',
       'greatstorehouse',
+      'barracks',
+      'fisherhut',
+      'sawmill',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);

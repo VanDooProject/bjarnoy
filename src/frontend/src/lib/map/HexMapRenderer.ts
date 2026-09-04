@@ -449,6 +449,9 @@ const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
   archeryrange: 'Archery Range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great Storehouse',
+  barracks: 'Barracks',
+  fisherhut: 'Fisher Hut',
+  sawmill: 'Sawmill',
 };
 
 const TERRAIN_LABELS: Record<Terrain, string> = {
@@ -1828,8 +1831,15 @@ export class HexMapRenderer {
         topEntries.set(key, { texture: riverTextures.top, coord: c });
         continue;
       }
-      baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
-      const topTexture = topTextureFor(textures, tile);
+      // A Sawmill's own hex is never itself a river tile (the `continue`
+      // above renders a river's own art in that case), so "which of its
+      // three art families" is read off its neighbours instead — see
+      // WorldModel.sawmillArtVariantOf.
+      const sawmillVariant =
+        tile.buildingType === 'sawmill' ? worldModel.sawmillArtVariantOf(c) : undefined;
+      const sawmillOverride = sawmillVariant === 'sawmill' ? undefined : sawmillVariant;
+      baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillOverride), coord: c });
+      const topTexture = topTextureFor(textures, tile, sawmillOverride);
       if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
       fogPerfStats.terrainDrawnCount++;
     }

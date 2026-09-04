@@ -33,6 +33,16 @@ import archeryRangeTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/arch
 import dockyardUrl from '../../vendor/bg_assets_hextile/hextiles/dockyard_SE_level007.png';
 import greatStorehouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/bigstoragehouse_SE_base.png';
 import greatStorehouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/bigstoragehouse_SE_level004.png';
+import barracksBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/barracks_SE_base.png';
+import barracksTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/barracks_SE_level002.png';
+// Fisher Hut's *base* layer is itself leveled (unlike every family above) —
+// see textures.ts's SPLIT_BUILDING_BASE_LEVELED doc comment.
+import fisherHutBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/fisherhut_SE_level002_base.png';
+import fisherHutTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/fisherhut_SE_level002.png';
+// Flat/inland family only — same simplification buildingArt.ts's preview
+// card makes, regardless of where the actual tile sits next to a river.
+import sawmillBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/sawmill_SE_base.png';
+import sawmillTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/sawmill_SE_level002.png';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
@@ -59,6 +69,9 @@ const ART: Record<string, BuildingArt> = {
   archeryrange: { base: archeryRangeBaseUrl, top: archeryRangeTopUrl },
   dockyard: { base: dockyardUrl },
   greatstorehouse: { base: greatStorehouseBaseUrl, top: greatStorehouseTopUrl },
+  barracks: { base: barracksBaseUrl, top: barracksTopUrl },
+  fisherhut: { base: fisherHutBaseUrl, top: fisherHutTopUrl },
+  sawmill: { base: sawmillBaseUrl, top: sawmillTopUrl },
 };
 
 const LORE: Record<string, string> = {
@@ -78,6 +91,10 @@ const LORE: Record<string, string> = {
   dockyard: 'Trains ships on shallow (coastal) water, in place of the longhouse.',
   greatstorehouse:
     'A late-game storage tier on grass, needing both the longhouse and this settlement’s own storage house at level 10.',
+  barracks: 'A garrison raised on grass or sand at the border.',
+  fisherhut: 'A second dock for the table, working grassland like a farm rather than the shallows.',
+  sawmill:
+    'Refines timber on grass, alongside a neighbouring Lumberjack — its look changes when built next to a river or a river bend.',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -90,6 +107,7 @@ const TYPE_LABELS: Record<string, string> = {
   archeryrange: 'Archery range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
+  fisherhut: 'Fisher hut',
 };
 
 function typeLabel(type: string): string {
@@ -117,8 +135,11 @@ const CATEGORY_OF: Record<string, Category> = {
   quarry: 'production',
   fishinghut: 'production',
   magictower: 'production',
+  fisherhut: 'production',
+  sawmill: 'production',
   tower: 'defense',
   archeryrange: 'defense',
+  barracks: 'defense',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   dockyard: 'logistics',

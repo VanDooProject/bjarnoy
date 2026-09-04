@@ -110,6 +110,9 @@ const BUILDING_NAMES: Record<string, string> = {
   archeryrange: 'Archery Range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great Storehouse',
+  barracks: 'Barracks',
+  fisherhut: 'Fisher Hut',
+  sawmill: 'Sawmill',
 };
 
 const TERRAIN_NAMES: Record<string, string> = {
