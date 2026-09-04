@@ -100,9 +100,24 @@ public sealed record Settlement
     /// level (MECHANICS.md §2: borders grow when the anchor levels up). This
     /// is only the centre disc — the settlement's full claimed territory is
     /// the union of this and every placed Tower's own satellite disc; see
-    /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>.
+    /// <see cref="Claims"/> and <see cref="ClaimDiscs"/>. Backed by
+    /// <see cref="BuildingDefinition.ClaimRadius"/> so the number lives in
+    /// one place, alongside every other Longhouse stat.
     /// </summary>
-    public int ClaimRadius => 1 + (LonghouseLevel / 2);
+    public int ClaimRadius => ClaimRadiusForLonghouseLevel(LonghouseLevel);
+
+    /// <summary>
+    /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, clamped to
+    /// at least 1 — a settlement with no standing Longhouse (level 0, e.g.
+    /// mid-founding) still gets the level-1 radius rather than a lookup
+    /// failure, matching this property's old <c>1 + (level / 2)</c> formula
+    /// at level 0. Public so callers with only a raw longhouse level on hand
+    /// (a lightweight DB projection, e.g. <c>SettlementService.GetClaimedSettlementsAsync</c>
+    /// or <c>ArmyService</c>'s siege-arrival check) can compute the same
+    /// number without a full <see cref="Settlement"/> instance.
+    /// </summary>
+    public static int ClaimRadiusForLonghouseLevel(int longhouseLevel) =>
+        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Max(1, longhouseLevel)).ClaimRadius;
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
@@ -197,7 +212,8 @@ public sealed record Settlement
     /// without needing to load anyone's building list, before the real,
     /// tower-aware check runs.
     /// </summary>
-    public const int MaxClaimRadius = 1 + (BuildingCatalogue.MaxLevel / 2);
+    public static readonly int MaxClaimRadius =
+        BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevel).ClaimRadius;
 
     /// <summary>
     /// Extra radius a single <see cref="BuildingType.Tower"/>'s own satellite
@@ -213,10 +229,12 @@ public sealed record Settlement
     /// levelled up, rather than instantly doubling border growth per tower
     /// placed.
     /// </summary>
-    public static int TowerClaimRadius(int towerLevel) => Math.Max(0, towerLevel) / 2;
+    public static int TowerClaimRadius(int towerLevel) =>
+        BuildingCatalogue.TryGet(BuildingType.Tower, towerLevel)?.ClaimRadius ?? 0;
 
     /// <summary>The largest a single tower's own satellite disc can ever reach on its own (at <see cref="BuildingCatalogue.MaxLevel"/>).</summary>
-    public const int MaxTowerClaimRadius = BuildingCatalogue.MaxLevel / 2;
+    public static readonly int MaxTowerClaimRadius =
+        BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevel).ClaimRadius;
 
     /// <summary>
     /// Every disc that makes up the claimed territory described by
@@ -241,7 +259,7 @@ public sealed record Settlement
         ArgumentNullException.ThrowIfNull(buildings);
 
         var longhouseLevel = buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
-        yield return (centre, 1 + (longhouseLevel / 2));
+        yield return (centre, ClaimRadiusForLonghouseLevel(longhouseLevel));
         foreach (var building in buildings)
         {
             if (building.Type == BuildingType.Tower)

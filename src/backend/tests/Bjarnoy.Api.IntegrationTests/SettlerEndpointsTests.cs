@@ -55,10 +55,10 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     /// guessed coordinate) that clears the founding minimum-spacing rule
     /// (issue #55 §4). <c>SettlementService.MinimumSpacing</c> is sized off
     /// the *maximum possible* claim radius (<c>2 * Settlement.MaxClaimRadius
-    /// + 1</c> — a level-10 Longhouse's radius of 6, so 13), not the
+    /// + 1</c> — a level-10 Longhouse's radius of 7, so 15), not the
     /// dispatching settlement's current one, so the real minimum distance
-    /// here is <c>currentClaimRadius (3, level 5) + MinimumSpacing (13) =
-    /// 16</c>, not just <c>currentClaimRadius + currentClaimRadius</c>.
+    /// here is <c>currentClaimRadius (4, level 5) + MinimumSpacing (15) =
+    /// 19</c>, not just <c>currentClaimRadius + currentClaimRadius</c>.
     /// <c>island.StartPositions</c> alone can't be trusted for this: they're
     /// curated "good building spot" tiles and can all sit well inside that
     /// radius of each other. Picks the *closest* qualifying hex, to keep the
@@ -78,9 +78,9 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var queue = new Queue<(int Q, int R)>();
         queue.Enqueue(start);
 
-        // Level-5 Longhouse ClaimRadius (1 + level/2 = 3) + the world's
-        // MinimumSpacing (2 * MaxClaimRadius(6) + 1 = 13).
-        const int MinFoundingDistance = 16;
+        // Level-5 Longhouse ClaimRadius (2 + level/2 = 4) + the world's
+        // MinimumSpacing (2 * MaxClaimRadius(7) + 1 = 15).
+        const int MinFoundingDistance = 19;
 
         (int Q, int R)? best = null;
         while (queue.Count > 0)

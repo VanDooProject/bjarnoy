@@ -174,7 +174,7 @@ public sealed class SettlementService(
     /// obviously-too-close case before that real check has to run — it is
     /// not itself a completeness guarantee.
     /// </remarks>
-    public const int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
+    public static readonly int MinimumSpacing = (2 * Settlement.MaxClaimRadius) + 1;
 
     /// <summary>
     /// Fixed safety cushion (in hexes) phase 2 of <see cref="FoundAsync"/>'s
@@ -495,7 +495,7 @@ public sealed class SettlementService(
             })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        return [.. rows.Select(r => (new HexCoord(r.CentreQ, r.CentreR), 1 + (r.LonghouseLevel / 2)))]; // mirrors Settlement.ClaimRadius
+        return [.. rows.Select(r => (new HexCoord(r.CentreQ, r.CentreR), Settlement.ClaimRadiusForLonghouseLevel(r.LonghouseLevel)))];
     }
 
     /// <summary>

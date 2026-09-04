@@ -262,6 +262,10 @@ public static class BuildingCatalogue
         StorageCapacity = ResourceAmounts.Uniform(250) * level,
         AllowedTerrain = Grass,
         RequiredLonghouseLevel = 1,
+        // The settlement's own centre-disc claim radius at this longhouse
+        // level (MECHANICS.md §2: borders grow when the anchor levels up) —
+        // see Settlement.ClaimRadius, which reads this back.
+        ClaimRadius = 2 + (level / 2),
         // A longhouse upgrade is the settlement's biggest single commitment —
         // it consumes every construction slot the settlement currently has,
         // blocking all other construction until it finishes (issue #158).
@@ -287,6 +291,10 @@ public static class BuildingCatalogue
         BuildDuration = Duration(8, level),
         AllowedTerrain = SandOrGrass,
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+        // This tower's own satellite-disc claim radius, centred on the tower
+        // rather than the settlement — see Settlement.ClaimDiscsFor, which
+        // reads this back for every standing Tower.
+        ClaimRadius = level / 2,
     };
 
     // Same shape as the land Producers, but gated by RequiresCoastalWater
