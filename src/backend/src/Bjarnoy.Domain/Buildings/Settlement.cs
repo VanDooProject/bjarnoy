@@ -872,19 +872,6 @@ public sealed record Settlement
     /// (the fishing hut) cares; <paramref name="terrain"/> alone can't say,
     /// since it reports plain <see cref="Terrain.Sea"/> either way.
     /// </param>
-    /// <param name="hasAdjacentWater">
-    /// Whether <paramref name="coord"/> itself is land with at least one sea
-    /// neighbour — distinct from <paramref name="isCoastalWater"/>, which is
-    /// about <paramref name="coord"/> being water. Only a
-    /// <see cref="BuildingDefinition.RequiresAdjacentToWater"/> building (the
-    /// Fisher Hut) cares.
-    /// </param>
-    /// <param name="hasAdjacentRiver">
-    /// Whether <paramref name="coord"/> has at least one river-tile neighbour,
-    /// of any <see cref="World.RiverTileShape"/>. Only a
-    /// <see cref="BuildingDefinition.RequiresAdjacentRiver"/> building (the
-    /// Sawmill) cares.
-    /// </param>
     /// <param name="maxWaitingOrders">
     /// How many orders may sit in the waiting queue at once — 0 for
     /// non-premium/anonymous play, <see cref="MaxWaitingOrders"/> for premium
@@ -896,6 +883,12 @@ public sealed record Settlement
     /// <see cref="DefaultMaxOrdersPerHex"/> (1) everywhere today; the seam a
     /// future per-hex-stacking tier switches on (issue #158 stage 1d).
     /// </param>
+    /// <param name="riverShapeAt">
+    /// The shape of the river tile standing on <paramref name="coord"/>
+    /// itself, or <see langword="null"/> if there is none there. Only a
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/> building (the
+    /// Sawmill, built directly on a river tile) cares.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -906,8 +899,7 @@ public sealed record Settlement
         bool isCoastalWater = false,
         int maxWaitingOrders = 0,
         int maxOrdersPerHex = DefaultMaxOrdersPerHex,
-        bool hasAdjacentWater = false,
-        bool hasAdjacentRiver = false)
+        RiverTileShape? riverShapeAt = null)
     {
         if (!Claims(coord))
         {
@@ -957,12 +949,8 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }
 
-        if (definition.RequiresAdjacentToWater && !hasAdjacentWater)
-        {
-            return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
-        }
-
-        if (definition.RequiresAdjacentRiver && !hasAdjacentRiver)
+        if (definition.RequiresRiverShape is { } requiredShapes
+            && (riverShapeAt is not { } actualShape || !requiredShapes.Contains(actualShape)))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
         }

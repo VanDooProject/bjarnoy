@@ -49,8 +49,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Tower, Terrain.Sand, true)]
     [InlineData(BuildingType.Tower, Terrain.Grass, true)]
     [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
-    [InlineData(BuildingType.FisherHut, Terrain.Grass, true)]
-    [InlineData(BuildingType.FisherHut, Terrain.Sand, false)]
     [InlineData(BuildingType.Sawmill, Terrain.Grass, true)]
     [InlineData(BuildingType.Sawmill, Terrain.Forest, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
@@ -92,11 +90,34 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Dockyard)]
-    public void The_fishing_hut_and_dockyard_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
+    [InlineData(BuildingType.FisherHut)]
+    public void The_fishing_hut_dockyard_and_fisher_hut_require_coastal_water_instead_of_a_land_terrain(BuildingType type)
     {
         var definition = BuildingCatalogue.Get(type, 1);
 
         Assert.True(definition.RequiresCoastalWater);
+    }
+
+    [Fact]
+    public void The_sawmill_requires_its_own_hex_to_be_a_straight_or_bend_river_tile()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Sawmill, 1);
+
+        Assert.NotNull(definition.RequiresRiverShape);
+        Assert.Equal(
+            new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend },
+            definition.RequiresRiverShape);
+        Assert.DoesNotContain(RiverTileShape.Spring, definition.RequiresRiverShape);
+        Assert.DoesNotContain(RiverTileShape.Confluence, definition.RequiresRiverShape);
+        Assert.DoesNotContain(RiverTileShape.Mouth, definition.RequiresRiverShape);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Barracks)]
+    [InlineData(BuildingType.FisherHut)]
+    public void Barracks_and_fisher_hut_have_no_river_requirement(BuildingType type)
+    {
+        Assert.Null(BuildingCatalogue.Get(type, 1).RequiresRiverShape);
     }
 
     [Fact]
@@ -770,70 +791,106 @@ public class SettlementTests
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
-    [Theory]
-    [InlineData(BuildingType.Barracks)]
-    [InlineData(BuildingType.FisherHut)]
-    [InlineData(BuildingType.Sawmill)]
-    public void Barracks_fisherhut_and_sawmill_are_buildable_once_their_longhouse_gate_is_met(BuildingType type)
+    /// <summary>A settlement with the given longhouse level and a lot of stock, so affordability is never the thing under test.</summary>
+    private static Settlement FoundAtLonghouseLevel(int level)
     {
-        var settlement = Found() with
+        return Found() with
         {
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 5)],
+            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, level)],
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).Capacity,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).ProductionPerHour,
+                BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity,
                 T0),
         };
+    }
 
-        // FisherHut/Sawmill also need an adjacency flag set (water/river
-        // respectively) — Barracks needs neither, and passing both true is a
-        // no-op for it.
-        var decision = settlement.PlanBuild(
-            type, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
-            hasAdjacentWater: true, hasAdjacentRiver: true);
+    [Fact]
+    public void Barracks_is_buildable_once_its_longhouse_gate_is_met()
+    {
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]
-    public void A_fisher_hut_is_refused_on_grass_with_no_water_neighbour()
+    public void A_fisher_hut_is_refused_on_land_even_when_affordable()
     {
-        var settlement = Found() with
-        {
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 5)],
-            Resources = ResourcePool.Create(
-                ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).Capacity,
-                T0),
-        };
+        // Same rule as FishingHut/Dockyard — a Fisher Hut is built directly
+        // on a coastal-water hex, not next to one.
+        var settlement = FoundAtLonghouseLevel(5);
 
-        var decision = settlement.PlanBuild(
-            BuildingType.FisherHut, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
-            hasAdjacentWater: false);
+        var decision = settlement.PlanBuild(BuildingType.FisherHut, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }
 
     [Fact]
-    public void A_sawmill_is_refused_on_grass_with_no_river_neighbour()
+    public void A_fisher_hut_is_refused_on_open_sea_that_is_not_coastal()
     {
-        var settlement = Found() with
-        {
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, 5)],
-            Resources = ResourcePool.Create(
-                ResourceAmounts.Uniform(1_000_000),
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).ProductionPerHour,
-                BuildingCatalogue.Totals([(BuildingType.Longhouse, 5)]).Capacity,
-                T0),
-        };
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FisherHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: false);
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_fisher_hut_may_be_built_on_coastal_water()
+    {
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.FisherHut, new HexCoord(1, 0), Terrain.Sea, T0, Guid.CreateVersion7(),
+            speedFactor: 1.0, isCoastalWater: true);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_sawmill_is_refused_on_plain_grass_with_no_river_at_all()
+    {
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData(RiverTileShape.Spring)]
+    [InlineData(RiverTileShape.Confluence)]
+    [InlineData(RiverTileShape.Mouth)]
+    public void A_sawmill_is_refused_on_a_river_tile_whose_shape_has_no_sawmill_art(RiverTileShape shape)
+    {
+        // Only Straight/Bend river tiles have a matching sawmill+river art
+        // composite — a Spring/Confluence/Mouth hex doesn't qualify even
+        // though it is a river tile.
+        var settlement = FoundAtLonghouseLevel(5);
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
-            hasAdjacentRiver: false);
+            riverShapeAt: shape);
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData(RiverTileShape.Straight)]
+    [InlineData(RiverTileShape.Bend)]
+    public void A_sawmill_may_be_built_on_a_straight_or_bend_river_tile(RiverTileShape shape)
+    {
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(
+            BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            riverShapeAt: shape);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]

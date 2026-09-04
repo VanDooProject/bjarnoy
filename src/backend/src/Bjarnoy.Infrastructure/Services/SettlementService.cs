@@ -1026,14 +1026,13 @@ public sealed class SettlementService(
         var maxWaitingOrders = (settlement.Owner?.IsPremium ?? false) ? Settlement.MaxWaitingOrders : 0;
 
         var terrain = sampler.TerrainAt(coord);
-        var hasAdjacentRiver = await HasAdjacentRiverAsync(settlement.WorldId, coord, cancellationToken)
+        var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
-            hasAdjacentWater: sampler.HasAdjacentWater(coord),
-            hasAdjacentRiver: hasAdjacentRiver);
+            riverShapeAt: riverShapeAt);
 
         if (!decision.Accepted)
         {
@@ -1280,26 +1279,31 @@ public sealed class SettlementService(
         new TerrainSampler(world.ToGenerationOptions()).TerrainAt;
 
     /// <summary>
-    /// Whether <paramref name="coord"/> has at least one river-tile neighbour
-    /// of any shape — the Sawmill's buildability rule (see
-    /// <see cref="BuildingDefinition.RequiresAdjacentRiver"/>). Rivers are
-    /// generated once per island and persisted (<see cref="IslandEntity.RiverTiles"/>),
-    /// not derivable from the seed the way plain terrain is, so — unlike
-    /// <see cref="TerrainSampler.HasAdjacentWater"/> — this needs a query.
+    /// The shape of the river tile standing on <paramref name="coord"/>
+    /// itself, or <see langword="null"/> if there is none there — the
+    /// Sawmill's buildability rule (see
+    /// <see cref="BuildingDefinition.RequiresRiverShape"/>: it's built
+    /// directly on a river tile). Rivers are generated once per island and
+    /// persisted (<see cref="IslandEntity.RiverTiles"/>), not derivable from
+    /// the seed the way plain terrain is, so this needs a query.
     /// </summary>
-    private async Task<bool> HasAdjacentRiverAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
+    private async Task<RiverTileShape?> RiverShapeAtAsync(Guid worldId, HexCoord coord, CancellationToken cancellationToken)
     {
-        var neighbours = coord.Neighbours().ToHashSet();
-
         var riverTileLists = await _dbContext.Islands
             .Where(i => i.WorldId == worldId)
             .Select(i => i.RiverTiles)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return riverTileLists
-            .SelectMany(tiles => tiles)
-            .Any(tile => neighbours.Contains(new HexCoord(tile.Q, tile.R)));
+        foreach (var tile in riverTileLists.SelectMany(tiles => tiles))
+        {
+            if (tile.Q == coord.Q && tile.R == coord.R)
+            {
+                return (RiverTileShape)tile.Shape;
+            }
+        }
+
+        return null;
     }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>

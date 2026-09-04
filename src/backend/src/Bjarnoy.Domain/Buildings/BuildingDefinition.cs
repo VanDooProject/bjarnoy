@@ -58,22 +58,18 @@ public sealed record BuildingDefinition
     public bool RequiresCoastalWater { get; init; }
 
     /// <summary>
-    /// This building's own hex must have at least one water (sea) neighbour —
-    /// unlike <see cref="RequiresCoastalWater"/>, the building itself still
-    /// stands on land and is still gated by <see cref="AllowedTerrain"/>; this
-    /// is an additional, separate check. The Fisher Hut's rule: any Grass hex
-    /// qualifies terrain-wise, but only a coastal one is buildable.
+    /// This building's own hex must itself be a river tile of one of these
+    /// shapes — <see langword="null"/> (the default) means no river
+    /// requirement at all. The Sawmill's rule: it's built directly on a
+    /// river tile (replacing that tile's plain art with a sawmill+river
+    /// composite — see <see cref="World.RiverTileShape"/>'s
+    /// <c>Straight</c>/<c>Bend</c>), and only those two shapes have matching
+    /// art, so a <c>Spring</c>/<c>Confluence</c>/<c>Mouth</c> river hex (or
+    /// plain land with no river at all) doesn't qualify. Checked against
+    /// whatever river tile (if any) stands on the target hex itself, the
+    /// same own-hex shape <see cref="RequiresCoastalWater"/> checks.
     /// </summary>
-    public bool RequiresAdjacentToWater { get; init; }
-
-    /// <summary>
-    /// This building's own hex must have at least one river-tile neighbour,
-    /// of any <see cref="World.RiverTileShape"/> — same shape as
-    /// <see cref="RequiresAdjacentToWater"/>, but for rivers instead of the
-    /// sea. The Sawmill's rule: any Grass hex qualifies terrain-wise, but
-    /// only one next to a river is buildable.
-    /// </summary>
-    public bool RequiresAdjacentRiver { get; init; }
+    public IReadOnlySet<RiverTileShape>? RequiresRiverShape { get; init; }
 
     /// <summary>
     /// Longhouse level required before this may be built, so the anchor gates

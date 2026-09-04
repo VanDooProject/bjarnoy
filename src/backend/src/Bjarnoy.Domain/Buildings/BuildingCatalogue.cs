@@ -58,13 +58,13 @@ public static class BuildingCatalogue
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
             BuildingType.Barracks => Barracks(level),
-            // Grass qualifies terrain-wise, but only a hex next to water (Fisher
-            // Hut) or a river (Sawmill) is actually buildable — see
-            // BuildingDefinition.RequiresAdjacentToWater/RequiresAdjacentRiver.
-            BuildingType.FisherHut =>
-                Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0)) with { RequiresAdjacentToWater = true },
+            BuildingType.FisherHut => FisherHut(level),
+            // Grass qualifies terrain-wise, but only a hex that is itself a
+            // Straight/Bend river tile is actually buildable — see
+            // BuildingDefinition.RequiresRiverShape.
             BuildingType.Sawmill =>
-                Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0)) with { RequiresAdjacentRiver = true },
+                Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
+                    with { RequiresRiverShape = SawmillRiverShapes },
             _ => null,
         };
     }
@@ -301,6 +301,26 @@ public static class BuildingCatalogue
         RequiresCoastalWater = true,
         RequiredLonghouseLevel = 1 + ((level - 1) / 2),
     };
+
+    /// <summary>
+    /// A second, later coastal food producer alongside <see cref="FishingHut"/> —
+    /// same shape (RequiresCoastalWater, the hex under it stays plain
+    /// <see cref="World.Terrain.Sea"/>), just its own cost/production tier.
+    /// </summary>
+    private static BuildingDefinition FisherHut(int level) => new()
+    {
+        Type = BuildingType.FisherHut,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 100, Stone: 80, Food: 0, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(4, level),
+        ProductionPerHour = new ResourceAmounts(0, 0, Food: 32, 0) * level,
+        RequiresCoastalWater = true,
+        RequiredLonghouseLevel = 1 + ((level - 1) / 2),
+    };
+
+    /// <summary>The only two river shapes the Sawmill's vendor art has a dedicated composite for — see <see cref="BuildingDefinition.RequiresRiverShape"/>.</summary>
+    private static readonly IReadOnlySet<RiverTileShape> SawmillRiverShapes =
+        new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend };
 
     /// <summary>
     /// A shrine contributes no flat production or storage of its own — its
