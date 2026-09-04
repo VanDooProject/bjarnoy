@@ -16,6 +16,7 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
+import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { ApiError } from '../api/client';
 import { usePlayerStore } from '../stores/player';
@@ -790,6 +791,7 @@ async function upgrade() {
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
       <FogDebugPanel @change="onFogDebugChange" />
+      <WaterDebugPanel @change="onFogDebugChange" />
       <FogPerfPanel />
     </div>
     <!-- The white unexplored-fog fill (HexMapRenderer's FOG_UNEXPLORED) is
