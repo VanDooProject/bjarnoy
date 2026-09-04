@@ -326,9 +326,8 @@ public static class BuildingCatalogue
     /// A shrine contributes no flat production or storage of its own — its
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
-    /// here alongside the additive totals. Buildable on any land hex, like
-    /// the anchor buildings before terrain was tightened to Grass-only —
-    /// a shrine has no production to protect by terrain-gating it.
+    /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm/
+    /// MagicTower.
     /// </summary>
     private static BuildingDefinition Shrine(BuildingType type, int level) => new()
     {
@@ -337,6 +336,7 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+        AllowedTerrain = Grass,
     };
 
     /// <summary>

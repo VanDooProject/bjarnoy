@@ -51,6 +51,12 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Tower, Terrain.Mountain, false)]
     [InlineData(BuildingType.Sawmill, Terrain.Grass, true)]
     [InlineData(BuildingType.Sawmill, Terrain.Forest, false)]
+    [InlineData(BuildingType.ShrineOfThor, Terrain.Grass, true)]
+    [InlineData(BuildingType.ShrineOfThor, Terrain.Sand, false)]
+    [InlineData(BuildingType.ShrineOfThor, Terrain.Forest, false)]
+    [InlineData(BuildingType.ShrineOfThor, Terrain.Mountain, false)]
+    [InlineData(BuildingType.ShrineOfFreyja, Terrain.Grass, true)]
+    [InlineData(BuildingType.ShrineOfFreyja, Terrain.Sand, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -813,6 +819,29 @@ public class SettlementTests
         var decision = settlement.PlanBuild(BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_shrine_is_buildable_on_grass_once_its_longhouse_gate_is_met()
+    {
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Theory]
+    [InlineData(Terrain.Sand)]
+    [InlineData(Terrain.Forest)]
+    [InlineData(Terrain.Mountain)]
+    public void A_shrine_is_refused_off_grass(Terrain terrain)
+    {
+        var settlement = FoundAtLonghouseLevel(5);
+
+        var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), terrain, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
     }
 
     [Fact]

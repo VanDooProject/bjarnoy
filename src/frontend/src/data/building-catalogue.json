@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-04T05:02:25.620Z"
+    "generatedAt": "2026-09-04T07:17:12.695Z"
   },
   "data": [
     {
@@ -2716,7 +2716,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
@@ -2744,7 +2746,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
@@ -2772,7 +2776,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
@@ -2800,7 +2806,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
@@ -2828,7 +2836,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
@@ -2856,7 +2866,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
@@ -2884,7 +2896,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
@@ -2912,7 +2926,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
@@ -2940,7 +2956,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
@@ -2968,7 +2986,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
@@ -2996,7 +3016,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
@@ -3024,7 +3046,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
@@ -3052,7 +3076,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
@@ -3080,7 +3106,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
@@ -3108,7 +3136,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
@@ -3136,7 +3166,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
@@ -3164,7 +3196,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
@@ -3192,7 +3226,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 6,
       "slotCost": 1,
@@ -3220,7 +3256,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
@@ -3248,7 +3286,9 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [],
+      "allowedTerrain": [
+        "grass"
+      ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 7,
       "slotCost": 1,
@@ -4476,10 +4516,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4506,10 +4544,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 1,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4536,10 +4572,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4566,10 +4600,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 2,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4596,10 +4628,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4626,10 +4656,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 3,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4656,10 +4684,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4686,10 +4712,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 4,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4716,10 +4740,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesAllSlots": false
@@ -4746,10 +4768,8 @@
         "food": 0,
         "iron": 0
       },
-      "allowedTerrain": [
-        "grass"
-      ],
-      "requiresCoastalWater": false,
+      "allowedTerrain": [],
+      "requiresCoastalWater": true,
       "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesAllSlots": false
