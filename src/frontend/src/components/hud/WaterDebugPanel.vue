@@ -47,6 +47,10 @@ const CAUSTIC_CULL = { min: 0, max: 1.5, step: 0.05 };
 // white reads as foam rather than as a caustic.
 const CAUSTIC_THICKNESS = { min: 0.25, max: 3, step: 0.05 };
 const CAUSTIC_BRIGHTNESS = { min: 0, max: 2, step: 0.05 };
+// Down to a third, where the net thins out to a few big loops, and up to 2.5x,
+// where the ribbons start to touch and the water reads as a lace rather than a
+// network. Both ends are worth being able to reach.
+const CAUSTIC_DENSITY = { min: 0.3, max: 2.5, step: 0.05 };
 
 watch([flags, tuning], () => emit('change'), { flush: 'post' });
 </script>
@@ -127,6 +131,20 @@ watch([flags, tuning], () => emit('change'), { flush: 'post' });
         :step="CAUSTIC_BRIGHTNESS.step"
         :disabled="!flags.midWaterWaves"
         v-model.number="tuning.causticBrightness"
+      />
+    </div>
+    <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">
+      <span class="slider-label">
+        Caustic density
+        <span class="slider-value">{{ tuning.causticDensity.toFixed(2) }}&times;</span>
+      </span>
+      <input
+        type="range"
+        :min="CAUSTIC_DENSITY.min"
+        :max="CAUSTIC_DENSITY.max"
+        :step="CAUSTIC_DENSITY.step"
+        :disabled="!flags.midWaterWaves"
+        v-model.number="tuning.causticDensity"
       />
     </div>
     <div class="row slider-row" :class="{ disabled: !flags.midWaterWaves }">

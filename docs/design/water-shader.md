@@ -876,6 +876,16 @@ export interface WaterDebugTuning {
                              //     nets together. Not the shadow blobs: they
                              //     darken, and a "brightness" handle that makes
                              //     the water darker does not say what it does.
+  causticDensity: number;    // 1 — multiplier on each net's band count, i.e.
+                             //     ribbons per unit of water. Orthogonal to
+                             //     causticThickness by construction: the band
+                             //     count sets the spacing between contours and
+                             //     the shader measures ribbon width as a plain
+                             //     distance in field space, not as a fraction of
+                             //     that spacing. Also not the shadow blobs —
+                             //     their density is a per-cell probability
+                             //     already at 0.9, so a multiplier would work
+                             //     downward and do nothing upward.
 }
 ```
 

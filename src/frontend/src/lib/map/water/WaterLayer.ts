@@ -340,8 +340,8 @@ export class WaterLayer {
       uCaustics: { value: 0, type: 'f32' },
       uCausticScale: { value: CAUSTIC_SCALE, type: 'f32' },
       uCausticBands: { value: CAUSTIC_BANDS, type: 'f32' },
-      // Width and alpha are set per frame from the panel's own multipliers, so
-      // these are only the value before the first tick.
+      // Band count, width and alpha are all set per frame from the panel's own
+      // multipliers, so these are only the value before the first tick.
       uCausticWidth: { value: CAUSTIC_WIDTH, type: 'f32' },
       uCausticAlpha: { value: CAUSTIC_ALPHA, type: 'f32' },
       uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
@@ -504,6 +504,8 @@ export class WaterLayer {
     u.uCausticFineWidth = CAUSTIC_FINE_WIDTH * waterDebugTuning.causticThickness;
     u.uCausticAlpha = CAUSTIC_ALPHA * waterDebugTuning.causticBrightness;
     u.uCausticFineAlpha = CAUSTIC_FINE_ALPHA * waterDebugTuning.causticBrightness;
+    u.uCausticBands = CAUSTIC_BANDS * waterDebugTuning.causticDensity;
+    u.uCausticFineBands = CAUSTIC_FINE_BANDS * waterDebugTuning.causticDensity;
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.
     u.uFoamWidth = waterDebugTuning.foamWidthHexes * (this.mode === 'world' ? FOAM_WIDTH_WORLD_SCALE : 1);

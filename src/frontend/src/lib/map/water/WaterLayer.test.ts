@@ -207,8 +207,8 @@ describe('WaterLayer', () => {
     expect(u.uCausticBlobs).toBe(0);
   });
 
-  it('scales both caustic nets off one thickness knob and one brightness knob', () => {
-    // Two handles across a pair of nets, not four across one each: the fine net
+  it('scales both caustic nets off the thickness, brightness and density knobs', () => {
+    // Three handles across a pair of nets, not six across one each: the fine net
     // is defined by being thinner and brighter than the coarse one, so the knobs
     // have to be multipliers that preserve that ordering at every setting.
     const layer = new WaterLayer('settlement', TILE_W, TILE_H);
@@ -218,16 +218,25 @@ describe('WaterLayer', () => {
     const fineWidth = u.uCausticFineWidth as number;
     const alpha = u.uCausticAlpha as number;
     const fineAlpha = u.uCausticFineAlpha as number;
+    const bands = u.uCausticBands as number;
+    const fineBands = u.uCausticFineBands as number;
     expect(fineWidth).toBeLessThan(width);
     expect(fineAlpha).toBeLessThan(alpha);
 
     waterDebugTuning.causticThickness = 2;
     waterDebugTuning.causticBrightness = 0.5;
+    waterDebugTuning.causticDensity = 1.5;
     layer.tick(16);
     expect(u.uCausticWidth).toBeCloseTo(width * 2);
     expect(u.uCausticFineWidth).toBeCloseTo(fineWidth * 2);
     expect(u.uCausticAlpha).toBeCloseTo(alpha * 0.5);
     expect(u.uCausticFineAlpha).toBeCloseTo(fineAlpha * 0.5);
+    expect(u.uCausticBands).toBeCloseTo(bands * 1.5);
+    expect(u.uCausticFineBands).toBeCloseTo(fineBands * 1.5);
+    // Density must not move the width: the shader measures ribbon thickness as a
+    // distance in field space, not as a fraction of the gap between contours, so
+    // the two handles are independent and have to stay that way.
+    expect(u.uCausticWidth).toBeCloseTo(width * 2);
   });
 
   it('shrinks the foam band and its ragged edge by the same factor over a prop tile', () => {

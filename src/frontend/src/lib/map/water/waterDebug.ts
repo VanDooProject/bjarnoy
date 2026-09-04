@@ -143,6 +143,20 @@ export interface WaterDebugTuning {
    * says it does.
    */
   causticBrightness: number;
+  /**
+   * Multiplier on how many nested contours each light net is sliced into —
+   * ribbons per unit of water, which is what "density" means here. Both nets
+   * again, and again not the shadow blobs: their density is a *probability* per
+   * cell that already sits at 0.9, so a multiplier would work downward and do
+   * nothing upward, which is a handle that lies about half its range.
+   *
+   * Orthogonal to `causticThickness` by construction: the band count sets the
+   * spacing between contours, and the shader measures ribbon width as a plain
+   * distance in field space rather than as a fraction of that spacing. So this
+   * moves the ribbons closer together without fattening them, and past about 2x
+   * they start to touch — which is the useful end of the range, not a bug.
+   */
+  causticDensity: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
@@ -152,4 +166,5 @@ export const waterDebugTuning: WaterDebugTuning = {
   causticCullHexes: 0.35,
   causticThickness: 1,
   causticBrightness: 1,
+  causticDensity: 1,
 };
