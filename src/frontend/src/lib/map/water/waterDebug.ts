@@ -60,7 +60,15 @@ export const waterDebugFlags: WaterDebugFlags = {
  * it, so that interface has to stay all-boolean.
  */
 export interface WaterDebugTuning {
-  /** Foam band width, in hexes. Scales both tiers (§4.3's inner line and outer lace) together. */
+  /**
+   * Foam band width, in hexes. Scales both tiers (§4.3's inner line and outer
+   * lace) together.
+   *
+   * The band is in *world* units, so it is the same water at every zoom — which
+   * is exactly why this has to be sized against the close-up view rather than
+   * the world map. The plan's 0.5 reads as a modest rim from orbit and washes
+   * whole coastal hexes white in a settlement.
+   */
   foamWidthHexes: number;
   /** How much the band's width breathes, as a fraction of itself. 0 freezes the surge. */
   foamSurge: number;
@@ -69,7 +77,7 @@ export interface WaterDebugTuning {
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
-  foamWidthHexes: 0.5,
+  foamWidthHexes: 0.22,
   foamSurge: 0.35,
   waveSpeed: 1,
 };

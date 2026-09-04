@@ -3,7 +3,7 @@
 // container rather than on the stage the way fog's two quads do (waterShader.ts
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
-import type { WaterMask } from './waterMask';
+import { FOAM_BLEED_TILES, FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 
@@ -63,6 +63,41 @@ const WAVE_COAST_FADE: [number, number] = [0.22, 0.62];
 /** The prototype's own hex width — every wave constant in the shader is in these units. See waterShader.ts. */
 const WAVE_PROTOTYPE_HEX_W = 40;
 
+/**
+ * Foam colour — not pure white. The crests are white (WAVE_COLOR); giving the
+ * foam the faintest blue cast keeps the two readable as different things where
+ * they meet, and keeps a bright coastline from reading as a drawn outline.
+ */
+const FOAM_COLOR = 0xf2fbff;
+
+/** Fraction of the band's width taken by the near-opaque inner line, the rest being the outer lace. */
+const FOAM_INNER_FRACTION = 0.3;
+
+/** Peak alpha of the two tiers: [inner line, outer lace]. */
+const FOAM_ALPHA: [number, number] = [0.9, 0.42];
+
+/**
+ * How far the band's edge is displaced by the drifting noise, in tile widths,
+ * and the reciprocal of that noise's feature size in world units. 0.14 tiles is
+ * about a quarter of the default band width, which is enough to tear the
+ * boundary into a ragged line rather than merely wobbling it; 1/260 puts one
+ * blob at about one and a half hexes, so the raggedness reads at the scale of
+ * a cove rather than as fizz.
+ */
+const FOAM_NOISE = 0.07;
+const FOAM_NOISE_SCALE = 1 / 260;
+
+/** Surge rate in radians/second, and the noise field's drift in noise-space units/second. */
+const FOAM_SURGE_RATE = 1.1;
+const FOAM_WIND: [number, number] = [0.03, -0.02];
+
+/**
+ * How far the foam is allowed to run inland, as a fraction of the mask's G
+ * ramp. Under 1 so the fade always completes inside the ramp rather than being
+ * cut off where G saturates.
+ */
+const FOAM_BLEED_FRACTION = 0.7;
+
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
@@ -111,6 +146,7 @@ export class WaterLayer {
     const [shallowR, shallowG, shallowB] = hexToRgb01(SHALLOW_COLOR);
     const [deepR, deepG, deepB] = hexToRgb01(DEEP_COLOR);
     const [waveR, waveG, waveB] = hexToRgb01(WAVE_COLOR);
+    const [foamR, foamG, foamB] = hexToRgb01(FOAM_COLOR);
 
     this.uniforms = new UniformGroup({
       uTime: { value: 0, type: 'f32' },
@@ -126,6 +162,22 @@ export class WaterLayer {
       uWaveAlpha: { value: WAVE_ALPHA, type: 'f32' },
       uWaveCoastFade: { value: new Float32Array(WAVE_COAST_FADE), type: 'vec2<f32>' },
       uWaveScale: { value: tileWidth / WAVE_PROTOTYPE_HEX_W, type: 'f32' },
+      uShorelineFoam: { value: 0, type: 'f32' },
+      uFoamColor: { value: new Float32Array([foamR, foamG, foamB]), type: 'vec3<f32>' },
+      uFoamWidth: { value: 0, type: 'f32' },
+      uFoamInner: { value: FOAM_INNER_FRACTION, type: 'f32' },
+      uFoamAlpha: { value: new Float32Array(FOAM_ALPHA), type: 'vec2<f32>' },
+      uFoamNoise: { value: FOAM_NOISE, type: 'f32' },
+      uFoamNoiseScale: { value: FOAM_NOISE_SCALE, type: 'f32' },
+      uFoamSurge: { value: 0, type: 'f32' },
+      uSurgeRate: { value: FOAM_SURGE_RATE, type: 'f32' },
+      uFoamWind: { value: new Float32Array(FOAM_WIND), type: 'vec2<f32>' },
+      // The two ramps the mask bakes, so the shader can turn its normalised
+      // channels back into tile widths and work in one signed distance.
+      uCoastRange: {
+        value: new Float32Array([FOAM_REACH_TILES, FOAM_BLEED_TILES * FOAM_BLEED_FRACTION]),
+        type: 'vec2<f32>',
+      },
     });
 
     this.geometry = new MeshGeometry({
@@ -185,6 +237,12 @@ export class WaterLayer {
           // clamping is belt-and-braces against a filter tap at the very edge
           // wrapping around to the far side of the mask.
           addressMode: 'clamp-to-edge',
+          // This is data, not an image. Without this Pixi premultiplies RGB by
+          // A on upload — and A here is water coverage, so every land texel
+          // would arrive with R = G = 0: "exactly on the coastline", which
+          // paints full-strength foam across every land hex in the world. The
+          // fog mask never hit this because it bakes A = 255 everywhere.
+          alphaMode: 'no-premultiply-alpha',
         }),
       });
       this.mesh.shader!.resources.uWaterMask = this.texture.source;
@@ -221,6 +279,11 @@ export class WaterLayer {
     // Settlement mode never draws a sea body: the painted water tiles are it.
     u.uSeaBody = this.mode === 'world' && waterDebugFlags.seaBody ? 1 : 0;
     u.uMidWaterWaves = waterDebugFlags.midWaterWaves ? 1 : 0;
+    u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
+    // The panel's knob is in hexes; the shader's signed distance is in tile
+    // widths, which for a flat-top hex is the same unit.
+    u.uFoamWidth = waterDebugTuning.foamWidthHexes;
+    u.uFoamSurge = waterDebugTuning.foamSurge;
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;

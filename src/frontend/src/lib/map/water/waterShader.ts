@@ -78,6 +78,17 @@ uniform vec3 uWaveColor;
 uniform float uWaveAlpha;
 uniform vec2 uWaveCoastFade;
 uniform float uWaveScale;
+uniform float uShorelineFoam;
+uniform vec3 uFoamColor;
+uniform float uFoamWidth;
+uniform float uFoamInner;
+uniform vec2 uFoamAlpha;
+uniform float uFoamNoise;
+uniform float uFoamNoiseScale;
+uniform float uFoamSurge;
+uniform float uSurgeRate;
+uniform vec2 uFoamWind;
+uniform vec2 uCoastRange;
 
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
@@ -98,6 +109,16 @@ float noise(vec2 p) {
   float d = hash(i + vec2(1.0, 1.0));
   vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+
+// Two octaves, normalised back to roughly 0..1. Two and not fog's three: this
+// is evaluated per-pixel along every coastline, and the third octave would
+// carry an eighth of the amplitude at a scale finer than the foam band is
+// wide. An octave that cannot be seen is not free detail.
+float fbm(vec2 p) {
+  float sum = noise(p) * 0.5 + noise(p * 2.03) * 0.25;
+  return sum / 0.75;
 }
 
 // --- §4.2 mid-water waves -------------------------------------------------
@@ -245,9 +266,17 @@ void main() {
     return;
   }
 
-  // Land per the mask. Nothing this shader draws belongs on land except the
-  // foam's inward bleed (§3.5), which reads G rather than getting here.
-  if (m.a < 0.5) discard;
+  bool water = m.a >= 0.5;
+
+  // Signed distance from the coastline, in tile widths: positive out into the
+  // water (the mask's R, ramped over uCoastRange.x), negative into the land
+  // (its G, ramped over uCoastRange.y). Everything below is a function of this
+  // one number, which is the whole reason the mask exists.
+  float dist = water ? m.r * uCoastRange.x : -m.g * uCoastRange.y;
+
+  // On land, only the foam's inward bleed has anything to draw — and only
+  // within the G ramp, which saturates well under a hex from the water.
+  if (!water && (uShorelineFoam < 0.5 || m.g >= 1.0)) discard;
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
@@ -261,7 +290,7 @@ void main() {
   // their linear midpoint (#1a677f) lands within a couple of levels of that
   // gradient's own middle stop (#14657f), which is why a two-stop ramp
   // reproduces a three-stop gradient here.
-  if (uSeaBody > 0.5) {
+  if (water && uSeaBody > 0.5) {
     float depth = smoothstep(0.0, 1.0, m.r);
     col = mix(uShallowColor, uDeepColor, depth);
     // One octave, not three. This is a very low-frequency mottle whose whole
@@ -277,18 +306,55 @@ void main() {
   // premultiplied — one \`src + dst * (1 - srcA)\` per term.
   vec4 acc = vec4(col * alpha, alpha);
 
-  // --- §4.2 mid-water waves ----------------------------------------------
+
+// --- §4.2 mid-water waves ----------------------------------------------
   // Suppressed near the coast by the mask's R channel: the continuous
   // successor to \`isNearLand\`, which is a hard per-hex boolean today and
   // leaves a visibly hexagonal hole in the wave field around every island.
   // The fade is deliberately wide — it is read out where the distance field is
   // coarsest, so a narrow one would show the mask's own texel stepping.
-  if (uMidWaterWaves > 0.5) {
+  if (water && uMidWaterWaves > 0.5) {
     float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.r);
     if (clearOfCoast > 0.004) {
       float crest = waveField(vWorld, uWaveTime) * clearOfCoast * uWaveAlpha;
       acc = vec4(uWaveColor * crest, crest) + acc * (1.0 - crest);
     }
+  }
+
+  // --- §4.3 shoreline foam -----------------------------------------------
+  //
+  // Foam is not an outline. A single band at a fixed offset from the coast
+  // reads as a sticker; the two things that make it read as water are a ragged
+  // edge and a surge, and both are here.
+  if (uShorelineFoam > 0.5) {
+    // World-anchored, slowly drifting — the same reasoning as fog's cloud
+    // field: anchored to the world rather than the screen, the pattern neither
+    // stretches with world size nor slides out from under a camera pan.
+    vec2 np = vWorld * uFoamNoiseScale;
+    float d = dist + uFoamNoise * (fbm(np + uFoamWind * uTime) - 0.5);
+
+    // The band's width breathes. The low-frequency term de-synchronises the
+    // surge along a coastline so it laps rather than pulsing as one ring, and
+    // the mask's per-hex seed adds grain on top of that.
+    float surgePhase = uTime * uSurgeRate + (noise(np * 0.22) + m.b) * 6.2831853;
+    float width = uFoamWidth * (1.0 + uFoamSurge * sin(surgePhase));
+
+    // Fades out as it runs inland, so the bleed onto the beach ends in foam
+    // rather than a cut edge. In the settlement view this is actually drawn
+    // over the sand — the ground art is *below* the mesh there (only the tall
+    // art in terrainTop is above it), which is what makes foam look like it is
+    // licking the beach rather than stopping at its edge.
+    float ashore = smoothstep(-uCoastRange.y, -uCoastRange.y * 0.2, d);
+
+    // Two tiers. The inner line is nearly opaque and hard against the shore —
+    // it is what makes the coast read as wet. The outer lace is wider, fainter
+    // and broken up by thresholded noise — it is what makes it read as foam.
+    float inner = 1.0 - smoothstep(width * uFoamInner * 0.5, width * uFoamInner, d);
+    float lace = smoothstep(0.40, 0.72, fbm(np * 2.7 + uFoamWind * uTime * 1.6));
+    float outer = (1.0 - smoothstep(width * 0.45, width, d)) * lace;
+
+    float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y) * ashore;
+    acc = vec4(uFoamColor * foam, foam) + acc * (1.0 - foam);
   }
 
   if (acc.a < 0.004) discard;
