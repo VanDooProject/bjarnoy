@@ -108,7 +108,8 @@ uniform float uCausticFineAlpha;
 uniform vec3 uCausticFineColor;
 uniform float uCausticBlobs;
 uniform float uCausticBlobScale;
-uniform float uCausticBlobDensity;
+uniform float uCausticBlobLevel;
+uniform float uCausticBlobSoft;
 uniform float uCausticBlobAlpha;
 uniform vec3 uCausticBlobColor;
 uniform float uFarReach;
@@ -144,6 +145,55 @@ float noise(vec2 p) {
 float fbm(vec2 p) {
   float sum = noise(p) * 0.5 + noise(p * 2.03) * 0.25;
   return sum / 0.75;
+}
+
+// The same value noise, returning its **analytic derivative** alongside its
+// value: vec3(value, d/dx, d/dy).
+//
+// Value noise is a bilinear blend of four corner hashes under a smoothstep
+// weight, and a bilinear blend is a closed-form polynomial — so its gradient
+// falls out of the same four hashes that produced the value, for a handful of
+// multiplies and no extra memory traffic at all. \`noised(p).x\` is bit-for-bit
+// \`noise(p)\`: expand \`mix(a,b,ux) + (c-a)uy(1-ux) + (d-b)ux·uy\` and it is the
+// standard \`a + (b-a)ux + (c-a)uy + (a-b-c+d)ux·uy\`, which is what is
+// differentiated here.
+//
+// This exists because the caustic ribbons need the field's gradient to hold
+// their thickness (§4.2b), and the first version got it from two extra forward
+// differences — three fbm evaluations where one would do. That is 24 hashes per
+// net where 8 suffice, on every water pixel of a settlement view, twice over
+// now that §4.2c draws a second net. The exact derivative is also strictly
+// better than a difference quotient at e = 0.06.
+vec3 noised(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 du = 6.0 * f * (1.0 - f);
+  float k1 = b - a;
+  float k2 = c - a;
+  float k3 = a - b - c + d;
+  return vec3(
+    a + k1 * u.x + k2 * u.y + k3 * u.x * u.y,
+    du.x * (k1 + k3 * u.y),
+    du.y * (k2 + k3 * u.x)
+  );
+}
+
+// fbm's value and gradient together, same two octaves and same normalisation.
+// The second octave's gradient carries the chain rule's 2.03, which is why it
+// contributes more to the slope than its 0.25 amplitude suggests — and why
+// dropping it to save four hashes would misjudge ribbon thickness by half.
+vec3 fbmd(vec2 p) {
+  vec3 n0 = noised(p);
+  vec3 n1 = noised(p * 2.03);
+  return vec3(
+    (n0.x * 0.5 + n1.x * 0.25) / 0.75,
+    (n0.yz * 0.5 + n1.yz * 0.25 * 2.03) / 0.75
+  );
 }
 
 // --- §4.2 mid-water waves -------------------------------------------------
@@ -288,9 +338,17 @@ float causticNet(
   vec2 drift = vec2(t * 0.021, t * -0.014) * rate;
 
   // Two counter-drifting samples of the same field: the loops reshape as they
-  // move instead of sliding across the water as a rigid pattern.
-  float base = fbm(p + drift);
-  float n = base + 0.35 * noise(p * 2.1 + vec2(t * -0.017, t * 0.011));
+  // move instead of sliding across the water as a rigid pattern. Taken with
+  // their derivatives, because the ribbon width below needs the field's
+  // gradient and getting it this way is free — see \`noised\`.
+  vec3 coarse = fbmd(p + drift);
+  vec3 fine = noised(p * 2.1 + vec2(t * -0.017, t * 0.011));
+  float n = coarse.x + 0.35 * fine.x;
+  // Chain rule on the fine octave's own 2.1 scaling. The forward-difference
+  // version this replaces only ever measured the coarse term's slope and
+  // pretended the fine one was flat, which made the ribbons run visibly thin
+  // wherever the two disagreed.
+  vec2 dn = coarse.yz + 0.35 * 2.1 * fine.yz;
 
   // fract() turns one field into a whole family of nested contours for the
   // price of one; the time term walks the level set slowly through the field,
@@ -323,15 +381,12 @@ float causticNet(
   // and paints as a filled smudge or a stray dot. Those were most of the fizz;
   // the big readable loops were only ever the minority of what was drawn.
   //
-  // Forward differences rather than fwidth(): dFdx/dFdy need
-  // GL_OES_standard_derivatives on a WebGL1 context, and nothing else in this
-  // codebase's shaders relies on it.
-  // Forward differences, two extra fbm evaluations rather than four: this runs
-  // on every water pixel of a settlement view.
-  float e = 0.06;
-  float gx = fbm(p + vec2(e, 0.0) + drift) - base;
-  float gy = fbm(p + vec2(0.0, e) + drift) - base;
-  float grad = max(length(vec2(gx, gy)) / e * bandCount, 1e-3);
+  // Analytic, not fwidth(): dFdx/dFdy need GL_OES_standard_derivatives on a
+  // WebGL1 context and nothing else in this codebase's shaders relies on it.
+  // And not forward differences either, which is what this was — two extra fbm
+  // evaluations, tripling the field's cost on every water pixel of a settlement
+  // view, twice over once §4.2c added a second net.
+  float grad = max(length(dn) * bandCount, 1e-3);
 
   // The band is in field units; dividing by the gradient converts it to a
   // distance in p-space, which uCausticWidth is then a plain width in.
@@ -340,62 +395,34 @@ float causticNet(
 
 // --- §4.2c drifting shadows ------------------------------------------------
 //
-// The third caustic layer, and the only one that darkens rather than lightens:
-// soft dark patches wandering under the surface. Reference art builds its water
-// out of light cells *and* deeper pools between them, and two white nets over a
-// flat ground only ever add — the water ends up brighter overall and no
-// deeper.
+// The third caustic layer, and the only one that darkens: soft dark pools
+// wandering under the surface. Reference art builds its water out of light
+// cells *and* deeper pools between them, and two white nets over a flat ground
+// only ever add — the water ends up brighter overall and no deeper.
 //
-// A cell grid rather than a thresholded noise field, for the same reason the
-// ribbons band a field instead of scattering sprites: this needs per-blob
-// identity. A blob is one cell, so it can draw its own keep-off distance from
-// the shore the way a ribbon does, and blobs whose keep-off falls beyond them
-// are simply absent instead of every blob being clipped along one contour.
+// The pools are the low ground of one drifting fbm. That is a rewrite of the
+// first version, which scattered discs on a 3x3 cell grid so that each blob
+// could draw its own keep-off distance from the shore: nine cells of hashing
+// plus a sine and a cosine each, about eight times this, on every water pixel
+// of the view. And it had to be tuned until the discs were big enough to merge
+// into pools — at which point a thresholded field is what it was approximating
+// anyway.
 //
-// Nothing inside the loop is more than a hash and a length — no fbm — so nine
-// cells here cost about what one of the two nets above does.
+// The per-pool keep-off survives the rewrite for free. \`n\` is what defines this
+// pool, so using it as the jitter gives each one its own distance from land
+// instead of a single cut line running along the whole coast — the same idea as
+// the ribbons' contour index, off a value that is already in hand.
 float blobField(vec2 ground, float t, float offshore) {
-  float cellSize = 1.0 / uCausticBlobScale;
+  vec2 p = ground * uCausticBlobScale;
+  float n = fbm(p + vec2(t * 0.011, t * -0.008));
 
-  // One domain warp for the whole field, outside the loop, so nine perfect
-  // circles come out as nine irregular pools for the price of two noise
-  // lookups. Without it the layer reads as bubbles rather than as deeper water.
-  vec2 wp = ground / cellSize * 0.7;
-  vec2 warp = vec2(noise(wp + vec2(t * 0.013, 0.0)), noise(wp.yx + vec2(0.0, t * -0.011))) - 0.5;
-  ground += warp * cellSize * 0.5;
+  float keepOff = uCausticCull + n * uCausticCullSpread;
+  float clearOfCoast = smoothstep(keepOff, keepOff + uCausticCullSoften, offshore);
+  if (clearOfCoast <= 0.0) return 0.0;
 
-  vec2 base = floor(ground / cellSize);
-  float covered = 0.0;
-
-  for (int dy = -1; dy <= 1; dy++) {
-    for (int dx = -1; dx <= 1; dx++) {
-      vec2 cell = base + vec2(float(dx), float(dy));
-      if (cellHash(cell, 21.0) > uCausticBlobDensity) continue;
-
-      float keepOff = uCausticCull + cellHash(cell, 22.0) * uCausticCullSpread;
-      float clearOfCoast = smoothstep(keepOff, keepOff + uCausticCullSoften, offshore);
-      if (clearOfCoast <= 0.0) continue;
-
-      // Centre jittered anywhere in its cell, then walking a slow circle of its
-      // own — this is the "floating" part, and it is per blob rather than one
-      // drift applied to the whole field so they slide past each other.
-      vec2 centre = (cell + vec2(cellHash(cell, 23.0), cellHash(cell, 24.0))) * cellSize;
-      float phase = cellHash(cell, 25.0) * 6.2831853;
-      float rate = 0.05 + cellHash(cell, 26.0) * 0.06;
-      centre += vec2(cos(t * rate + phase), sin(t * rate + phase)) * cellSize * 0.22;
-
-      // Up to a bit over half a cell — with the centre anywhere in its own cell
-      // that still keeps every blob inside the 3x3 neighbourhood this loop
-      // looks at, so none is ever cut off at a cell boundary, while leaving them
-      // wide enough to overlap. Overlap is the point: \`max\` merges neighbours
-      // into one irregular pool, which is what the reference art has between its
-      // light cells. Sparse, separate discs read as bubbles.
-      float radius = cellSize * (0.28 + cellHash(cell, 27.0) * 0.28);
-      float d = length(ground - centre);
-      covered = max(covered, (1.0 - smoothstep(radius * 0.45, radius, d)) * clearOfCoast);
-    }
-  }
-  return covered;
+  // Below the level, not above it: the pools are where the field is low, so the
+  // smoothstep runs downward and the deepest ground is the most opaque.
+  return smoothstep(uCausticBlobLevel, uCausticBlobLevel - uCausticBlobSoft, n) * clearOfCoast;
 }
 
 // The mask's channels, named. R: the **signed** near distance, 0.5 exactly on
@@ -572,7 +599,16 @@ void main() {
   // half-plane, so everything on the land side sat at full strength while the
   // water side got a sliver the edge noise then erased. Measured on screen it
   // put 0 pixels of foam on the water and 8 on the beach.
-  if (uShorelineFoam > 0.5) {
+  //
+  // Gated on the band's own widest possible outer edge — full surge, full
+  // positive noise excursion — because past that \`shore\` is 0 and every one of
+  // the four noise fields below is dead work. It was ungated, so a third of a
+  // tile's worth of foam was costing four fbm-scale evaluations on every water
+  // pixel of the viewport, and open sea is most of a settlement view. The bound
+  // is deliberately loose (it ignores the prop-tile narrowing, which can only
+  // make the real band smaller) so it can never clip the band it is skipping.
+  float foamReach = uFoamWidth * (1.0 + uFoamSurge) + uFoamNoise;
+  if (uShorelineFoam > 0.5 && dist < foamReach) {
     // World-anchored, slowly drifting — the same reasoning as fog's cloud
     // field: anchored to the world rather than the screen, the pattern neither
     // stretches with world size nor slides out from under a camera pan.

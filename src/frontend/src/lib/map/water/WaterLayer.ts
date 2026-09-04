@@ -220,11 +220,12 @@ const CAUSTIC_FINE_COLOR = 0xffffff;
 /**
  * The drifting shadow blobs (§4.2c) — the one caustic layer that darkens.
  *
- * `SCALE` is the reciprocal of the cell size, so 1/210 puts one blob every
- * ~1.25 hexes; `DENSITY` is the fraction of cells that carry one at all, which
- * with the in-cell jitter is what keeps them from reading as a grid. Radius is
- * a fraction of the cell (see `blobField`), so those two numbers set the whole
- * distribution.
+ * `SCALE` is the reciprocal of the field's feature size, so 1/190 makes a pool
+ * about a hex across; `LEVEL` is the height below which the field counts as a
+ * pool, and `SOFT` how far under that it takes to reach full strength. Those
+ * three are the whole distribution — there is no density any more, because
+ * there are no discs to count: `LEVEL` sets what fraction of the water is pool
+ * directly.
  *
  * The colour is the settlement water's own hue at about half its brightness, not
  * a neutral grey: a desaturated shadow over a navy sea reads as haze rather than
@@ -234,8 +235,9 @@ const CAUSTIC_FINE_COLOR = 0xffffff;
  * water's 51.1. It composited at full strength and changed nothing at all: the
  * 5th percentile of water luminance was identical with the layer on and off.
  */
-const CAUSTIC_BLOB_SCALE = 1 / 210;
-const CAUSTIC_BLOB_DENSITY = 0.9;
+const CAUSTIC_BLOB_SCALE = 1 / 190;
+const CAUSTIC_BLOB_LEVEL = 0.44;
+const CAUSTIC_BLOB_SOFT = 0.18;
 const CAUSTIC_BLOB_ALPHA = 0.42;
 const CAUSTIC_BLOB_COLOR = 0x0d1728;
 
@@ -356,7 +358,8 @@ export class WaterLayer {
       uCausticFineColor: { value: new Float32Array([fineR, fineG, fineB]), type: 'vec3<f32>' },
       uCausticBlobs: { value: 0, type: 'f32' },
       uCausticBlobScale: { value: CAUSTIC_BLOB_SCALE, type: 'f32' },
-      uCausticBlobDensity: { value: CAUSTIC_BLOB_DENSITY, type: 'f32' },
+      uCausticBlobLevel: { value: CAUSTIC_BLOB_LEVEL, type: 'f32' },
+      uCausticBlobSoft: { value: CAUSTIC_BLOB_SOFT, type: 'f32' },
       uCausticBlobAlpha: { value: CAUSTIC_BLOB_ALPHA, type: 'f32' },
       uCausticBlobColor: { value: new Float32Array([blobR, blobG, blobB]), type: 'vec3<f32>' },
       uPropMute: { value: 0, type: 'f32' },

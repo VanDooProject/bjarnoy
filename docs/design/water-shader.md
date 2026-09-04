@@ -627,6 +627,48 @@ Three things had to be got right, and two of them were wrong first:
   irregular pools. Per-blob deformation would cost nine times as much for the same
   effect.
 
+The cell grid is gone now — merged discs are what a thresholded field already is,
+so the pools are the low ground of one drifting `fbm`: ~8 hashes against the
+grid's ~60 plus a sine and a cosine per cell. The per-pool keep-off survives for
+free, because `n` is what defines the pool, so using it as the jitter gives each
+one its own distance from land — the ribbons' contour-index trick, off a value
+already in hand.
+
+### 4.2d What the shader's cost actually is
+
+Measured on the production build under the same software renderer CI uses
+(1280×800, settlement view zoomed so water fills the frame), toggling terms off
+one at a time:
+
+| | frame |
+|---|---|
+| water layer off | 141 ms |
+| whole layer on | 247 ms |
+| every effect off, mesh still drawn | 240 ms |
+| **constant colour, no mask fetch, no maths** | **226 ms** |
+
+So of the layer's ~99 ms, about **84 ms is rasterising and alpha-blending one
+full-viewport quad**, before the shader computes anything at all. The mask fetch
+is ~14 ms and every effect in §4.2–4.4 together is the remaining ~14 ms. Quarter
+the viewport's area and the whole figure quarters with it (99 → 25 ms), which is
+what fill rate does and nothing else would.
+
+Two consequences, both counter-intuitive enough to invite wasted work:
+
+- **Optimising the fragment maths cannot pay for this feature.** The savings
+  above are real and worth having, but they are a seventh of the layer's cost on
+  this renderer.
+- **Rendering the water at half resolution would make it slower, not faster.**
+  The upsample blit is itself a full-viewport blended textured quad — exactly the
+  thing that costs 84 ms.
+
+On a GPU a blended full-screen quad is a fraction of a millisecond, so this is a
+software-rasteriser figure and not a shipping one. The only lever with the right
+magnitude is *fewer fragments*: geometry covering the water rather than the
+viewport — a coarse grid over the mask region emitting only cells that hold
+water — would save whatever fraction of the frame is land, with no visual change
+at all, since those fragments discard today.
+
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
 Foam is not an outline. A single band at a fixed offset from the coast reads
