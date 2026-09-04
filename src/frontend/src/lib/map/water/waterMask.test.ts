@@ -6,7 +6,10 @@ import {
   NEAR_SPAN_TILES,
   FOAM_REACH_TILES,
   groundSquash,
+  hasWaterProp,
   hexMitreDistance,
+  propMute,
+  PROP_MUTE_FADE_TILES,
   topFaceHalfPlanes,
   waterNoiseSeed,
   type TerrainLookup,
@@ -30,6 +33,15 @@ function region(): WaterMaskRegion {
 
 function channel(mask: ReturnType<typeof bakeWaterMask>, x: number, y: number, c: 0 | 1 | 2 | 3): number {
   return mask.data[(y * mask.width + x) * 4 + c];
+}
+
+/**
+ * Whether a texel reads as water, off the signed near field (R). R is the
+ * mask's only land/water statement — A used to be a coverage bit and is now the
+ * prop-tile mute, which says nothing about terrain.
+ */
+function isWaterTexel(mask: ReturnType<typeof bakeWaterMask>, x: number, y: number): boolean {
+  return channel(mask, x, y, 0) > 128;
 }
 
 /** The far-field (G) channel at a world point — unsigned distance from land over FOAM_REACH_TILES. */
@@ -117,7 +129,7 @@ describe('waterNoiseSeed', () => {
 });
 
 describe('bakeWaterMask', () => {
-  it('marks land as A=0 R=0 and open water as A=255', () => {
+  it('puts every land texel below the coastline in R and every water texel above it', () => {
     const r = region();
     const mask = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
 
@@ -130,14 +142,12 @@ describe('bakeWaterMask', () => {
         const hex = isoPixelToAxial({ x: worldX, y: worldY }, TILE_W, TILE_H);
         if (hex.q <= 0) {
           sawLand = true;
-          expect(channel(mask, x, y, 3)).toBe(0);
           // Land: the signed near field is at or below the coastline, and the
           // far field (distance from land) is zero.
           expect(channel(mask, x, y, 0)).toBeLessThanOrEqual(128);
           expect(channel(mask, x, y, 1)).toBe(0);
         } else {
           sawWater = true;
-          expect(channel(mask, x, y, 3)).toBe(255);
           expect(channel(mask, x, y, 0)).toBeGreaterThanOrEqual(128);
         }
       }
@@ -220,7 +230,7 @@ describe('bakeWaterMask', () => {
     let previous = -1;
     let sawSaturated = false;
     for (let x = 0; x < mask.width; x++) {
-      if (channel(mask, x, y, 3) !== 255) continue;
+      if (!isWaterTexel(mask, x, y)) continue;
       const value = channel(mask, x, y, 1);
       expect(value).toBeGreaterThanOrEqual(previous);
       previous = value;
@@ -242,7 +252,7 @@ describe('bakeWaterMask', () => {
     const rowRight: number[] = [];
     let inLand = false;
     for (let x = 0; x < mask.width; x++) {
-      const isLand = channel(mask, x, y, 3) === 0;
+      const isLand = !isWaterTexel(mask, x, y);
       if (isLand) inLand = true;
       else if (!inLand) rowLeft.push(channel(mask, x, y, 1));
       else rowRight.push(channel(mask, x, y, 1));
@@ -260,7 +270,6 @@ describe('bakeWaterMask', () => {
     for (let i = 0; i < mask.width * mask.height; i++) {
       expect(mask.data[i * 4 + 0]).toBe(255);
       expect(mask.data[i * 4 + 1]).toBe(255);
-      expect(mask.data[i * 4 + 3]).toBe(255);
     }
   });
 
@@ -270,7 +279,6 @@ describe('bakeWaterMask', () => {
     for (let i = 0; i < mask.width * mask.height; i++) {
       expect(mask.data[i * 4 + 0]).toBe(0);
       expect(mask.data[i * 4 + 1]).toBe(0);
-      expect(mask.data[i * 4 + 3]).toBe(0);
     }
   });
 
@@ -411,5 +419,144 @@ describe('mitred hex-edge distance', () => {
     expect(centre).toBeLessThan(0);
     // A regular flat-top hexagon's inradius is w * sqrt(3) / 4.
     expect(-centre).toBeCloseTo((TILE_W * Math.sqrt(3)) / 4, 6);
+  });
+});
+
+describe('hasWaterProp', () => {
+  const coastal = (variant: number) => ({ q: 0, r: 0, terrain: 'sea' as const, isCoastalWater: true, variant });
+
+  it('is false for the plain coastal tile, which is most of the coast', () => {
+    expect(hasWaterProp(coastal(0))).toBe(false);
+  });
+
+  it('is true for the two variants the art pack draws a boat and a rock on', () => {
+    expect(hasWaterProp(coastal(1))).toBe(true);
+    expect(hasWaterProp(coastal(2))).toBe(true);
+  });
+
+  it('is false for open sea, however its cosmetic variant rolled', () => {
+    // watertile_* has no variants at all, so a non-zero index here is just the
+    // shared per-hex roll and must not be read as a prop.
+    expect(hasWaterProp({ q: 0, r: 0, terrain: 'sea', isCoastalWater: false, variant: 2 })).toBe(false);
+  });
+
+  it('is false for land', () => {
+    expect(hasWaterProp({ q: 0, r: 0, terrain: 'grass', variant: 2 })).toBe(false);
+  });
+
+  it('is false once a building stands on the tile', () => {
+    // A fishing hut replaces the coastal art with its own, prop included — so
+    // there is nothing left to mute the shader for.
+    expect(hasWaterProp({ ...coastal(1), buildingType: 'fishinghut' })).toBe(false);
+  });
+});
+
+describe('propMute', () => {
+  it('is fully on over the tile itself and fully off past the fade', () => {
+    expect(propMute(0, 60)).toBe(1);
+    expect(propMute(-5, 60)).toBe(1);
+    expect(propMute(60, 60)).toBe(0);
+    expect(propMute(200, 60)).toBe(0);
+  });
+
+  it('falls monotonically across the fade', () => {
+    let previous = 1;
+    for (let d = 0; d <= 60; d += 5) {
+      const value = propMute(d, 60);
+      expect(value).toBeLessThanOrEqual(previous);
+      previous = value;
+    }
+  });
+
+  it('flattens out at both ends rather than meeting the unmuted water at a corner', () => {
+    // The property the smoothstep is there for: a linear ramp would put the
+    // same drop in the first and last twentieth of the fade, and that corner is
+    // visible as a ring in a bright foam band.
+    const fade = 60;
+    const atEdge = propMute(0, fade) - propMute(fade * 0.05, fade);
+    const inMiddle = propMute(fade * 0.475, fade) - propMute(fade * 0.525, fade);
+    expect(atEdge).toBeLessThan(inMiddle * 0.5);
+  });
+});
+
+describe("the mask's prop-tile mute (A)", () => {
+  /** A world where the single hex `(q, r)` is coastal water carrying a prop; everything else is plain open sea. */
+  function oneProp(q: number, r: number): TerrainLookup {
+    return {
+      isLand: () => false,
+      getTile: (tq, tr) => ({ q: tq, r: tr, terrain: 'sea', isCoastalWater: tq === q && tr === r, variant: tq === q && tr === r ? 1 : 0 }),
+    };
+  }
+
+  it('is zero everywhere when the lookup cannot report tiles', () => {
+    // The interface's getTile is optional, and a caller without one must get a
+    // mask that mutes nothing rather than one that mutes everything.
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, ALL_WATER);
+    for (let i = 3; i < mask.data.length; i += 4) expect(mask.data[i]).toBe(0);
+  });
+
+  it('is zero everywhere when no tile carries a prop', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, {
+      isLand: () => false,
+      getTile: (q, tr) => ({ q, r: tr, terrain: 'sea', isCoastalWater: true, variant: 0 }),
+    });
+    for (let i = 3; i < mask.data.length; i += 4) expect(mask.data[i]).toBe(0);
+  });
+
+  it('is full strength at the prop hex centre', () => {
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, oneProp(0, 0));
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const at = (x: number, y: number) =>
+      channel(mask, Math.floor((x - r.rect.minX) / r.texelWorldSize), Math.floor((y - r.rect.minY) / r.texelWorldSize), 3);
+    expect(at(grid.x + TILE_W / 2, grid.y + TILE_H / 2)).toBe(255);
+  });
+
+  it('fades out with distance instead of stopping at the hex edge', () => {
+    // The whole point of baking a ramp rather than a per-hex flag: a hard cutoff
+    // would put a hexagon-shaped hole in the foam collar, which is far more
+    // visible than the prop it is protecting.
+    const r = region();
+    const mask = bakeWaterMask(r, TILE_W, TILE_H, oneProp(0, 0));
+    const grid = isoGridPosition({ q: 0, r: 0 }, TILE_W, TILE_H);
+    const centre = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+    const at = (dx: number) =>
+      channel(
+        mask,
+        Math.floor((centre.x + dx - r.rect.minX) / r.texelWorldSize),
+        Math.floor((centre.y - r.rect.minY) / r.texelWorldSize),
+        3,
+      );
+
+    // Straight out along +x: inside the hex, then across the fade, then clear.
+    const inside = at(TILE_W * 0.3);
+    const justOutside = at(TILE_W * 0.65);
+    const clear = at(TILE_W * (0.5 + PROP_MUTE_FADE_TILES + 0.25));
+    expect(inside).toBe(255);
+    expect(justOutside).toBeGreaterThan(0);
+    expect(justOutside).toBeLessThan(255);
+    expect(clear).toBe(0);
+  });
+
+  it('leaves the distance channels alone — the mute is a separate quantity', () => {
+    // A prop tile is still water, and still has a coastline running past it. If
+    // baking the mute perturbed R or G, muting the shader over one tile would
+    // also move the foam on its neighbours.
+    const r = region();
+    const plain = bakeWaterMask(r, TILE_W, TILE_H, verticalCoast(0));
+    const withProp = bakeWaterMask(r, TILE_W, TILE_H, {
+      isLand: (q) => q <= 0,
+      getTile: (q, tr) => ({ q, r: tr, terrain: q <= 0 ? 'grass' : 'sea', isCoastalWater: q === 1, variant: q === 1 ? 1 : 0 }),
+    });
+    for (let i = 0; i < plain.data.length; i += 4) {
+      expect(withProp.data[i]).toBe(plain.data[i]);
+      expect(withProp.data[i + 1]).toBe(plain.data[i + 1]);
+      expect(withProp.data[i + 2]).toBe(plain.data[i + 2]);
+    }
+    // ...and the prop column really did mute something, so the assertion above
+    // isn't passing because nothing happened.
+    expect(Array.from(withProp.data).some((_, i) => i % 4 === 3 && withProp.data[i] === 255)).toBe(true);
   });
 });

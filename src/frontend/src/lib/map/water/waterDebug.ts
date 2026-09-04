@@ -26,6 +26,12 @@ export interface WaterDebugFlags {
   causticsEverywhere: boolean;
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;
+  /**
+   * Fade the whole shader out over the coastal water tiles whose art carries a
+   * prop — a beached boat or a rock (§4.4). Off draws foam and caustics straight
+   * across them, which is the artifact this exists to fix.
+   */
+  propTileMute: boolean;
   /** Shader sea body under the world map (§4.1); off lets WorldMapCanvas's CSS gradient show through. Never drawn in settlement mode — the painted water tiles are the sea body there. */
   seaBody: boolean;
   /**
@@ -58,6 +64,7 @@ export const waterDebugFlags: WaterDebugFlags = {
   midWaterWaves: true,
   causticsEverywhere: false,
   shorelineFoam: true,
+  propTileMute: true,
   seaBody: true,
   legacyWaveSquiggles: false,
   showWaterMask: false,
@@ -85,10 +92,20 @@ export interface WaterDebugTuning {
   foamSurge: number;
   /** Multiplier on the wave swell rate. 1 is the shipped rate, matching the Graphics squiggles' own periods. */
   waveSpeed: number;
+  /**
+   * How far offshore the caustic ribbons start fading in, in hexes; they reach
+   * full strength a fixed CAUSTIC_FADE_WIDTH_TILES further out. 0 puts them
+   * right up against the coastline, which is where they compete with the foam.
+   *
+   * Capped by the mask's own far range (FOAM_REACH_TILES, 1.5 hexes): past that
+   * the distance channel is saturated and moving this further has no effect.
+   */
+  causticFadeHexes: number;
 }
 
 export const waterDebugTuning: WaterDebugTuning = {
   foamWidthHexes: 0.3,
   foamSurge: 0.35,
   waveSpeed: 1,
+  causticFadeHexes: 0.4,
 };

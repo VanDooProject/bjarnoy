@@ -8,6 +8,7 @@
 // grid (waterMaskLayout.ts) and with a different transform.
 import { hexesInRadius } from '../../hex/coords';
 import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
+import type { Tile } from '../types';
 import type { WaterMaskRegion } from './waterMaskLayout';
 
 /**
@@ -18,6 +19,13 @@ import type { WaterMaskRegion } from './waterMaskLayout';
  */
 export interface TerrainLookup {
   isLand(q: number, r: number): boolean;
+  /**
+   * The whole tile, when the caller has one — only used to spot the coastal
+   * water variants that carry a prop (`hasWaterProp`). Optional so a test can
+   * still pass a bare `isLand`, and because a caller that omits it gets a mask
+   * whose A channel is simply all zero: no prop tiles, nothing muted.
+   */
+  getTile?(q: number, r: number): Tile;
 }
 
 /**
@@ -49,8 +57,41 @@ export const FOAM_REACH_TILES = 1.5;
  */
 export const NEAR_SPAN_TILES = 0.6;
 
+/**
+ * How far past a prop tile's own hex the shader mute fades out, in tile widths.
+ *
+ * The mute exists because two of the three `coastalwatertile_*` variants aren't
+ * plain water: `variant000` paints a beached boat and `variant001` a rock, both
+ * lit and shaded as solid objects sitting *in* the water. Animated foam and
+ * caustic ribbons drawn flat across them read as painted onto the object rather
+ * than flowing around it, which is exactly the illusion the props are there to
+ * create.
+ *
+ * Faded rather than switched. A per-hex boolean would cut the foam collar off
+ * at a hexagon edge, and a hexagonal hole in a coastline is far more visible
+ * than either the prop or the foam — the same failure mode `isNearLand` has in
+ * the wave field, and the reason §4.2's coast fade is continuous too. 0.4 tiles
+ * is a little over a third of a hex: enough that the ramp reads as the effect
+ * thinning out, not enough to strip the neighbouring tiles' foam as well.
+ */
+export const PROP_MUTE_FADE_TILES = 0.4;
+
+/**
+ * Whether a tile renders with one of the coastal-water props, and so wants the
+ * shader muted over it.
+ *
+ * The conditions are `baseTextureFor`'s, because that is what decides which art
+ * actually gets drawn: only sea, only coastal water, only without a building on
+ * it (a fishing hut or dockyard replaces the coastal tile with its own art, so
+ * there is no prop to protect), and only a non-zero variant — index 0 is the
+ * plain coastal tile, which `worldGenerator`'s weights make 80% of the coast.
+ */
+export function hasWaterProp(tile: Tile): boolean {
+  return tile.terrain === 'sea' && !!tile.isCoastalWater && !tile.buildingType && (tile.variant ?? 0) > 0;
+}
+
 export interface WaterMask {
-  /** RGBA8, `width * height * 4`. R: signed near distance (0.5 = coastline). G: far distance from land. B: per-hex seed. A: water coverage, for the debug view only. */
+  /** RGBA8, `width * height * 4`. R: signed near distance (0.5 = coastline). G: far distance from land. B: per-hex seed. A: prop-tile shader mute (§4.4). */
   data: Uint8Array;
   width: number;
   height: number;
@@ -208,6 +249,22 @@ export function euclideanDistanceTransform(seeds: Uint8Array, width: number, hei
 }
 
 /**
+ * The prop-tile mute ramp: 1 on the prop hex itself, smoothly to 0 `fade` world
+ * units outside it.
+ *
+ * Smoothstep rather than a linear ramp so the *rate* of the fade also goes to
+ * zero at its far end — a linear ramp meets the unmuted water at a corner, and
+ * a corner in a multiplier applied to a bright foam band is visible as a ring
+ * even though the value itself is continuous there.
+ */
+export function propMute(distance: number, fade: number): number {
+  if (distance <= 0) return 1;
+  if (distance >= fade) return 0;
+  const t = distance / fade;
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
  * Deterministic per-hex pseudo-random seed for the shader's foam ruggedness
  * and wave phase — the same hash `demoFogMask`'s `noiseSeed` uses, and for the
  * same reason: it is only ever sampled locally, never compared against a
@@ -239,6 +296,8 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   const water = new Uint8Array(count);
   const land = new Uint8Array(count);
   const seed = new Uint8Array(count);
+  const prop = new Uint8Array(count);
+  let propTexels = 0;
 
   // One `isoPixelToAxial` per texel is the bake's whole cost. It is a rounded
   // estimate plus at most seven point-in-hexagon tests, and at 1024^2 in the
@@ -253,6 +312,10 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       land[row + x] = isLand ? 1 : 0;
       water[row + x] = isLand ? 0 : 1;
       seed[row + x] = waterNoiseSeed(hex.q, hex.r);
+      if (!isLand && terrain.getTile && hasWaterProp(terrain.getTile(hex.q, hex.r))) {
+        prop[row + x] = 1;
+        propTexels++;
+      }
     }
   }
 
@@ -272,6 +335,14 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
 
   const reachWorld = FOAM_REACH_TILES * tileWidth;
   const nearSpanWorld = NEAR_SPAN_TILES * tileWidth;
+
+  // Distance out of the prop hexes, for the A channel's mute ramp. The same
+  // transform the distance field itself uses, so this is one extra O(n) pass —
+  // and skipped outright on the common region with no prop tile in it, which is
+  // most of them (only ~20% of coastal hexes carry a prop, and coastal hexes
+  // are a thin set to begin with).
+  const distanceFromProp = propTexels > 0 ? euclideanDistanceTransform(prop, width, height) : null;
+  const propFadeWorld = PROP_MUTE_FADE_TILES * tileWidth;
 
   const data = new Uint8Array(count * 4);
   for (let y = 0; y < height; y++) {
@@ -312,7 +383,7 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       data[i * 4 + 0] = Math.round(255 * Math.min(1, Math.max(0, 0.5 + near / (2 * nearSpanWorld))));
       data[i * 4 + 1] = Math.round(255 * Math.min(1, rasterOutward / reachWorld));
       data[i * 4 + 2] = seed[i];
-      data[i * 4 + 3] = isWater ? 255 : 0;
+      data[i * 4 + 3] = distanceFromProp === null ? 0 : Math.round(255 * propMute(distanceFromProp[i] * texelWorldSize, propFadeWorld));
     }
   }
   return { data, width, height, region };

@@ -86,7 +86,22 @@ await page.waitForTimeout(1200);
 await shoot(page, 'settlement_close');
 await setFlags(page, { water: false });
 await shoot(page, 'settlement_close_off');
-await setFlags(page, { water: true });
+// The prop-tile mute (§4.4b) is only judgeable as an A/B at one camera: with it
+// off, foam and ribbons run straight across whatever boat or rock the coastal
+// art has drawn on that tile.
+await setFlags(page, { water: true, propTileMute: false });
+await shoot(page, 'settlement_close_no_mute');
+await setFlags(page, { propTileMute: true });
+// And the same for the caustics' offshore fade — at 0 they run to the coastline
+// and sit on top of the foam.
+await setFlags(page, {});
+await page.evaluate(() => {
+  window.__waterTuning.causticFadeHexes = 0;
+});
+await shoot(page, 'settlement_close_no_caustic_fade');
+await page.evaluate(() => {
+  window.__waterTuning.causticFadeHexes = 0.4;
+});
 
 await page.getByRole('button', { name: /world map/i }).first().click();
 await page.waitForTimeout(2500);

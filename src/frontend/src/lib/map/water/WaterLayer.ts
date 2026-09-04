@@ -3,7 +3,7 @@
 // container rather than on the stage the way fog's two quads do (waterShader.ts
 // explains why at length).
 import { BufferImageSource, GlProgram, Mesh, MeshGeometry, Shader, Texture, UniformGroup } from 'pixi.js';
-import { NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
+import { FOAM_REACH_TILES, NEAR_SPAN_TILES, groundSquash, type WaterMask } from './waterMask';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
 import { WATER_FRAGMENT, WATER_VERTEX } from './waterShader';
 
@@ -123,6 +123,17 @@ const CAUSTIC_ALPHA = 0.38;
 /** Slightly cooler than the foam, so ribbons crossing a foam band still read as behind it. */
 const CAUSTIC_COLOR = 0xdff4ff;
 
+/**
+ * Over how many tile widths the ribbons ramp from nothing to full strength,
+ * starting at `causticFadeHexes` offshore. Only the start is on a slider: the
+ * width is what makes the fade invisible as a fade, and there is one value that
+ * does that. Narrower and the ribbons appear along a line parallel to the shore,
+ * which reads as a second, softer coastline; wider and there is nowhere left
+ * between the fade and the mask's 1.5-tile far range for them to actually be at
+ * full strength.
+ */
+const CAUSTIC_FADE_WIDTH_TILES = 0.55;
+
 function hexToRgb01(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
@@ -205,6 +216,12 @@ export class WaterLayer {
       uCausticWidth: { value: CAUSTIC_WIDTH, type: 'f32' },
       uCausticAlpha: { value: CAUSTIC_ALPHA, type: 'f32' },
       uCausticColor: { value: new Float32Array([causticR, causticG, causticB]), type: 'vec3<f32>' },
+      uCausticFadeStart: { value: 0, type: 'f32' },
+      uCausticFadeWidth: { value: CAUSTIC_FADE_WIDTH_TILES, type: 'f32' },
+      uPropMute: { value: 0, type: 'f32' },
+      // What the mask's far channel is normalised over, so the shader can decode
+      // G back into tile widths the same way uNearSpan decodes R.
+      uFarReach: { value: FOAM_REACH_TILES, type: 'f32' },
       uGroundSquash: { value: groundSquash(tileWidth, tileHeight), type: 'f32' },
       // Half-range of the mask's signed near field, so the shader can decode R
       // back into tile widths.
@@ -315,6 +332,16 @@ export class WaterLayer {
     // two ways — see waterShader.ts's causticField.
     u.uCaustics = this.mode === 'settlement' || waterDebugFlags.causticsEverywhere ? 1 : 0;
     u.uShorelineFoam = waterDebugFlags.shorelineFoam ? 1 : 0;
+    // Settlement mode only. The mute protects the boat and rock painted on the
+    // coastal water art, and world mode does not draw sea tiles at all
+    // (HexMapRenderer's rebuildTerrainFlat skips them; the sea there is this
+    // shader's own body). Honouring it there would thin the foam on a fifth of
+    // every coastline to protect art that isn't on screen.
+    u.uPropMute = this.mode === 'settlement' && waterDebugFlags.propTileMute ? 1 : 0;
+    // Clamped to the far channel's own range: past it G is saturated, so a
+    // larger value would silently mean "never fade in" rather than "start
+    // further out".
+    u.uCausticFadeStart = Math.min(waterDebugTuning.causticFadeHexes, FOAM_REACH_TILES);
     // The panel's knob is in hexes; the shader's signed distance is in tile
     // widths, which for a flat-top hex is the same unit.
     u.uFoamWidth = waterDebugTuning.foamWidthHexes;

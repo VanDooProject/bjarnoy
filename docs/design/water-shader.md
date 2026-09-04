@@ -140,11 +140,11 @@ An RGBA8 texture over a world-space rect:
 | **R** | The **signed** near distance from the coastline, `0.5 + d / (2 * NEAR_SPAN_TILES)`. 0.5 is exactly the coastline, below it is land, above it is water. |
 | **G** | Unsigned distance from the nearest land, normalised over `FOAM_REACH_TILES` — the far field, which is all §4.2's wave coast-fade needs. |
 | **B** | Per-hex pseudo-random seed, exactly as fog v2's B channel does (`demoFogMask.ts`'s `noiseSeed`) — per-hex variation in wave phase and foam ruggedness so the coast isn't uniform. |
-| **A** | Water coverage: `255` water, `0` land. Used **only** by the raw-mask debug view. |
+| **A** | The prop-tile mute (§4.4b): `1` over a coastal water tile whose art carries a boat or a rock, ramping to `0` over `PROP_MUTE_FADE_TILES` outside it. |
 
-**Nothing branches on A**, and that is the point. An earlier version stored two
-unsigned distances (outward and inward) and had the shader pick between them on
-`A >= 0.5`. A 0/255 step sampled with linear filtering is a *texel-quantised*
+**No channel is a step**, and that is the point. An earlier version stored two
+unsigned distances (outward and inward) plus a water-coverage *bit* in A, and
+had the shader pick between them on `A >= 0.5`. A 0/255 step sampled with linear filtering is a *texel-quantised*
 silhouette: which side of the step a pixel falls on is decided by the texel
 raster, not by the hexagon the art draws. Measured on screen, that made the
 foam's inner edge alternately overlap the sand by up to 8px and leave a 1–3px
@@ -157,6 +157,11 @@ edge, and interpolation *helps* instead of blurring a silhouette.
 `NEAR_SPAN_TILES` is 0.6 either way, which spends the byte where the foam is —
 about 0.8 world units per level, against the ~2 a single channel spanning the
 whole `FOAM_REACH` would give.
+
+A is a *ramp* for the same reason, not a per-hex flag. It exists to switch the
+shader off over a tile, and a switch with a hexagonal edge puts a hexagonal hole
+in the foam collar — which is much more visible than whatever it was protecting.
+See §4.4b.
 
 ### 2.2 Layout — its own grid, not the fog mask's
 
@@ -524,6 +529,25 @@ field's feature size, how many contours it is sliced into, and how thick each
 one is. Few thick bands read as a pale haze on the water rather than as ribbons
 at all; many thin ones as fizz.
 
+Thickness is measured **after dividing by the field's own gradient**. Without
+that the width is in *field* units, so wherever the field is flat — at every
+local extremum, which is everywhere the noise has one — a whole basin falls
+inside a single band and paints as a filled smudge or a stray dot. Those smudges
+were the majority of what was on screen; the readable loops were the minority.
+
+The ribbons **fade in with distance from the shore**, over
+`causticFadeHexes` → `+ CAUSTIC_FADE_WIDTH_TILES`, read off G rather than the
+signed near field (the fade has to run well past where R saturates). Running
+them right up to the coastline stacks two bright white patterns in the one place
+the eye is already reading an edge, and the foam band stops looking like the
+boundary of the water and starts looking like the brightest part of a texture.
+Holding them off gives the coast a band of plain water to sit against, and reads
+as the surface only catching the light once there is some depth under it. The
+fade *width* is not on a slider: too narrow and the ribbons appear along a line
+parallel to the shore, which reads as a second, softer coastline; too wide and
+there is nowhere left inside the mask's 1.5-tile far range for them to reach
+full strength.
+
 ### 4.3 Shoreline foam — `uShorelineFoam`
 
 Foam is not an outline. A single band at a fixed offset from the coast reads
@@ -563,6 +587,48 @@ On top of that:
   thresholded-noise outer lace at lower alpha. The inner line is what makes the
   coast read as wet; the lace is what makes it read as foam.
 
+### 4.4b Prop-tile mute — `uPropMute`
+
+Two of the three `coastalwatertile_*` variants aren't plain water. `variant000`
+paints a beached boat, `variant001` a rock — both lit and shaded as solid objects
+sitting *in* the water. `worldGenerator`'s weights make them 10% each of the
+coastline, the plain tile the other 80%.
+
+Animated foam and caustic ribbons drawn flat across one of those objects read as
+painted *onto* it rather than flowing around it, which is exactly the illusion
+the prop is there to create. So the shader steps back over those tiles: the mask
+bakes A as 1 over the hex, and the fragment shader's last act is
+`acc *= 1.0 - m.a * uPropMute`. Everything the shader draws goes with it — sea
+body, waves, ribbons, foam — which is what "mute" means here.
+
+Two details are load-bearing:
+
+- **The ramp, not the hex.** A per-hex boolean cuts the foam collar off at a
+  hexagon edge, and a hexagonal hole in a coastline is far more visible than the
+  prop it is protecting — the same failure mode `isNearLand` has in the wave
+  field, and the reason §4.2's coast fade is continuous too. A is a smoothstep
+  from 1 on the tile to 0 `PROP_MUTE_FADE_TILES` (0.4 tiles) outside it.
+  Smoothstep rather than linear so the *rate* also goes to zero at the far end:
+  a linear ramp meets the unmuted water at a corner, and a corner in a
+  multiplier applied to a bright band is visible as a ring even though the value
+  is continuous there.
+- **It costs a foam gap.** A muted tile has no foam along its own shoreline, and
+  its neighbours' foam is thinned across the fade. That is the trade the mute
+  makes, and `propTileMute` is the flag to see both sides of it.
+- **Settlement mode only.** World mode draws no sea tiles at all
+  (`rebuildTerrainFlat` skips them; the sea there is §4.1's body), so there is no
+  boat or rock on screen to protect — and honouring the mute would thin the foam
+  on a fifth of every coastline for nothing. Gated on the mode in `WaterLayer`,
+  the same way `uSeaBody` and `uCaustics` are, rather than in the mask: the bake
+  stays mode-agnostic.
+
+The bake needs the whole tile, not just its terrain, so `TerrainLookup` gains an
+optional `getTile` — optional because a caller without one gets A all-zero
+(nothing muted), and because `waterMask.test.ts` should still be able to pass a
+bare `isLand`. `WorldModel` already satisfies it. `hasWaterProp` mirrors
+`baseTextureFor`'s own conditions, building included: a fishing hut or dockyard
+replaces the coastal tile with its own art, so there is no prop left to protect.
+
 ### 4.4 Uniforms
 
 ```
@@ -574,6 +640,9 @@ vec3  uShallowColor, uDeepColor   sea body ramp (world mode only)
 float uSeaMottle, uMottleScale
 vec3  uWaveColor;  float uWaveAlpha;  vec2 uWaveCoastFade;  float uWaveScale
 float uCausticScale, uCausticBands, uCausticWidth, uCausticAlpha; vec3 uCausticColor
+float uCausticFadeStart, uCausticFadeWidth   offshore fade-in, in tile widths
+float uFarReach                   what G is normalised over, so G decodes to tiles
+float uPropMute                   0/1: honour the mask's A channel (§4.4b)
 vec3  uFoamColor
 float uFoamWidth                  water-side reach, in tile widths
 float uFoamInner                  plateau, as a fraction of the width
@@ -608,6 +677,8 @@ export interface WaterDebugFlags {
   causticsEverywhere: boolean;  // default false
   /** Shader shoreline foam (§4.3). */
   shorelineFoam: boolean;       // default true
+  /** Fade the shader out over the boat/rock coastal tiles (§4.4b). Off draws straight across them. */
+  propTileMute: boolean;        // default true
   /** Shader sea body under the world map (§4.1); off → the CSS gradient shows through. */
   seaBody: boolean;             // default true
   /** The pre-shader Graphics wave squiggles (waveLayer). Kept for A/B against docs/design/img/worldmap.png. */
@@ -624,6 +695,9 @@ export interface WaterDebugTuning {
                            //       coastal hexes white up close.
   foamSurge: number;       // 0.35
   waveSpeed: number;       // 1
+  causticFadeHexes: number; // 0.4 — where the ribbons start fading in (§4.2b);
+                            //       clamped to FOAM_REACH_TILES, past which the
+                            //       far channel is saturated and the handle is inert.
 }
 ```
 

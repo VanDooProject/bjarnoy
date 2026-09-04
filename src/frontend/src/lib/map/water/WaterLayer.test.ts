@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WaterLayer } from './WaterLayer';
 import { waterDebugFlags, waterDebugTuning } from './waterDebug';
-import type { WaterMask } from './waterMask';
+import { FOAM_REACH_TILES, type WaterMask } from './waterMask';
 import { waterMaskRegion } from './waterMaskLayout';
 
 // No GPU here, so these test the wiring — which debug flag reaches which
@@ -43,6 +43,39 @@ describe('WaterLayer', () => {
   beforeEach(() => {
     Object.assign(waterDebugFlags, DEFAULTS);
     Object.assign(waterDebugTuning, DEFAULT_TUNING);
+  });
+
+  it('carries the prop-tile mute flag onto its uniform', () => {
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+    layer.tick(0);
+    expect(uniformsOf(layer).uPropMute).toBe(1);
+
+    waterDebugFlags.propTileMute = false;
+    layer.tick(16);
+    expect(uniformsOf(layer).uPropMute).toBe(0);
+  });
+
+  it('never mutes on the world map, which draws no coastal art to protect', () => {
+    // World mode skips sea tiles entirely, so there is no boat or rock on
+    // screen there — muting would only thin the foam on a fifth of every
+    // coastline for nothing.
+    const layer = new WaterLayer('world', TILE_W, TILE_H);
+    layer.tick(0);
+    expect(uniformsOf(layer).uPropMute).toBe(0);
+  });
+
+  it('clamps the caustic fade-in to the range the mask can actually express', () => {
+    // Past FOAM_REACH_TILES the far channel is saturated, so a larger start
+    // would quietly mean "never fade in" rather than "start further out".
+    const layer = new WaterLayer('settlement', TILE_W, TILE_H);
+
+    waterDebugTuning.causticFadeHexes = 0.75;
+    layer.tick(0);
+    expect(uniformsOf(layer).uCausticFadeStart).toBe(0.75);
+
+    waterDebugTuning.causticFadeHexes = 99;
+    layer.tick(16);
+    expect(uniformsOf(layer).uCausticFadeStart).toBe(FOAM_REACH_TILES);
   });
 
   it('never eats a hex click', () => {

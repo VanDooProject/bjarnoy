@@ -97,6 +97,10 @@ uniform float uCausticBands;
 uniform float uCausticWidth;
 uniform float uCausticAlpha;
 uniform vec3 uCausticColor;
+uniform float uCausticFadeStart;
+uniform float uCausticFadeWidth;
+uniform float uFarReach;
+uniform float uPropMute;
 
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
@@ -297,14 +301,16 @@ float causticField(vec2 ground, float t) {
 // The mask's channels, named. R: the **signed** near distance, 0.5 exactly on
 // the coastline, below it land and above it water. G: unsigned distance from
 // land over the far range, which is all the wave coast-fade needs. B: per-hex
-// seed. A: water coverage, used only by the debug view.
+// seed. A: the prop-tile mute, 1 over a coastal tile carrying a boat or a rock
+// and ramping to 0 just outside it.
 //
-// Nothing here branches on A. It is a 0/255 step, and sampled with linear
-// filtering a step's crossing is decided by the texel raster rather than by the
-// hexagon the art draws — which is exactly what made the foam's inner edge
-// wobble around the tile edge instead of sitting on it. The signed channel is
-// continuous across the boundary, so filtering places its zero crossing within
-// a fraction of a texel of the real edge.
+// Nothing here branches on a *step* in the mask. Every channel is a continuous
+// ramp, and that is deliberate: sampled with linear filtering, a 0/255 step's
+// crossing is decided by the texel raster rather than by the hexagon the art
+// draws — which is what made the foam's inner edge wobble around the tile edge
+// instead of sitting on it, back when the shader picked a side off a coverage
+// bit. Both R and A are continuous across their boundaries, so filtering places
+// them within a fraction of a texel of the real edge.
 vec4 sampleMask() {
   return texture(uWaterMask, vUV);
 }
@@ -315,7 +321,7 @@ vec4 sampleMask() {
 // the throwaway spike existed for, kept as a permanent option.
 vec4 maskDebugColor(vec4 m) {
   float contour = step(0.5, fract(m.r * 8.0));
-  vec3 col = vec3(m.r * contour, m.g, m.a * 0.5);
+  vec3 col = vec3(m.r * contour, m.g, m.a);
   return vec4(col, 0.85);
 }
 
@@ -345,6 +351,19 @@ void main() {
 
   // On land, only the foam's short reach onto the beach has anything to draw.
   if (!water && (uShorelineFoam < 0.5 || -dist > uFoamWidth * uFoamLandReach)) discard;
+
+  // --- §4.4 prop-tile mute -------------------------------------------------
+  // Two of the three coastal water variants paint a solid object sitting in the
+  // water: a beached boat, a rock. Animated foam and caustics drawn flat across
+  // one read as painted onto the object rather than flowing around it, so the
+  // shader steps back over those tiles entirely. A is baked as a ramp that is 1
+  // on the tile and fades out just past it, so the handover is a soft edge
+  // rather than a hexagon stamped into the coastline.
+  //
+  // Read here rather than folded in at the end so a fully muted pixel can leave
+  // before evaluating the fbm-heavy fields it is about to multiply by zero.
+  float mute = m.a * uPropMute;
+  if (mute > 0.996) discard;
 
   vec3 col = vec3(0.0);
   float alpha = 0.0;
@@ -383,10 +402,23 @@ void main() {
   // coarsest, so a narrow one would show the mask's own texel stepping.
   if (water && uMidWaterWaves > 0.5) {
     if (uCaustics > 0.5) {
-      // Close up. No coast fade: in the reference look the ribbons run right up
-      // to the foam, and the foam composites over them below anyway.
-      float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha;
-      acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
+      // Close up, and faded in with distance from the shore. Running the
+      // ribbons right up to the coastline puts two bright white patterns on top
+      // of each other in the one place the eye is already reading an edge: the
+      // foam band stops looking like the boundary of the water and starts
+      // looking like the brightest part of a texture. Holding them off until
+      // the foam has finished gives the coast a band of plain water to sit
+      // against, and reads as the surface only catching the light once there is
+      // some depth under it.
+      //
+      // Off the far channel, not the signed near one: the fade has to run well
+      // past where R saturates.
+      float offshore = m.g * uFarReach;
+      float clearOfCoast = smoothstep(uCausticFadeStart, uCausticFadeStart + uCausticFadeWidth, offshore);
+      if (clearOfCoast > 0.004) {
+        float ribbon = causticField(vGround, uWaveTime) * uCausticAlpha * clearOfCoast;
+        acc = vec4(uCausticColor * ribbon, ribbon) + acc * (1.0 - ribbon);
+      }
     } else {
       float clearOfCoast = smoothstep(uWaveCoastFade.x, uWaveCoastFade.y, m.g);
       if (clearOfCoast > 0.004) {
@@ -450,6 +482,9 @@ void main() {
     float foam = max(inner * uFoamAlpha.x, outer * uFoamAlpha.y);
     acc = vec4(uFoamColor * foam, foam) + acc * (1.0 - foam);
   }
+
+  // Premultiplied, so one multiply mutes colour and coverage together.
+  acc *= 1.0 - mute;
 
   if (acc.a < 0.004) discard;
   finalColor = acc;
