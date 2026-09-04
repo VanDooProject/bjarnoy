@@ -1059,6 +1059,182 @@ public sealed record Army
     }
 
     /// <summary>
+    /// Orders an army already out in the field onward to a new destination
+    /// (issue #156 phase 1) — the gap the design doc opens with: an army that
+    /// has reached where it was sent could previously only be
+    /// <see cref="Recall"/>ed, never sent further. Two shapes, one method, per
+    /// the design doc's "an in-flight order may only extend the route, never
+    /// divert it" rule:
+    /// <list type="bullet">
+    /// <item>
+    /// Standing at its current destination (<c>now &gt;= Movement.ArrivesAt</c>,
+    /// still before <see cref="Movement.TurnAroundAt"/>) — "move on": a fresh
+    /// leg departs from here, right now, exactly like <see cref="Recall"/>
+    /// builds its own fresh leg home.
+    /// </item>
+    /// <item>
+    /// Still travelling the outbound leg (<c>now &lt; Movement.ArrivesAt</c>) —
+    /// "append goal": the original route is never touched (it always finishes
+    /// — <see cref="Movement.DepartedAt"/> and every hex already computed stay
+    /// exactly as they were), only extended past the original destination
+    /// through the new waypoints/destination. Food is still checked from the
+    /// true original departure, so a chained append is exactly as affordable
+    /// as if the whole extended route had been the plan from the start.
+    /// </item>
+    /// </list>
+    /// Refused (<see cref="FieldOrderRejection.NoActiveJourney"/>) for
+    /// <see cref="ArmyLocation.AtHome"/>, <see cref="ArmyLocation.Supporting"/>,
+    /// or an already-returning <see cref="ArmyLocation.InTransit"/> — none of
+    /// those have anywhere left to extend from (recall/re-dispatch cover them
+    /// instead). Restricted by the caller (<c>ArmyService</c>) to
+    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/> armies —
+    /// see <c>ArmyService.FieldOrderAsync</c>'s remarks for why Attack/Support/
+    /// Raid are out of scope here.
+    /// </summary>
+    /// <param name="isPremium">
+    /// Gates the premium half of the design doc's rule table: waypoints on a
+    /// "move on" order, and any "append goal" order at all, are premium-only
+    /// (<see cref="FieldOrderRejection.PremiumRequired"/>) — a free "move on"
+    /// straight to a new hex, no waypoints, is the one case every player gets.
+    /// A pure boolean rather than a user id: whether the caller resolves that
+    /// from a live premium check or a test fixture is not this method's
+    /// concern (mirrors how <see cref="PlanDispatch"/> takes already-resolved
+    /// <c>renownAndSlotAllowed</c> for the same reason).
+    /// </param>
+    /// <param name="home">The army's home settlement's own hex — needed to price the new return leg, exactly as <see cref="Recall"/> needs it.</param>
+    /// <param name="isRiver">Optional river-tile lookup (issue #159 part A), threaded into every <see cref="HexPathfinder"/> call this makes.</param>
+    public static FieldOrderResult PlanFieldOrder(
+        Army army,
+        IReadOnlyList<HexCoord> waypoints,
+        HexCoord destination,
+        HexCoord home,
+        DateTimeOffset now,
+        Func<HexCoord, Terrain> terrainAt,
+        bool isPremium,
+        double speedFactor = 1.0,
+        Func<HexCoord, bool>? isRiver = null)
+    {
+        ArgumentNullException.ThrowIfNull(army);
+        ArgumentNullException.ThrowIfNull(waypoints);
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        if (army.Location is not ArmyLocation.InTransit { Movement.IsReturning: false } inTransit)
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.NoActiveJourney);
+        }
+
+        var movement = inTransit.Movement;
+        var isLandUnit = army.Stacks.Count == 0 || army.Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+
+        if (terrainAt(destination).IsLand() != isLandUnit)
+        {
+            return FieldOrderResult.Rejected(isLandUnit
+                ? FieldOrderRejection.DestinationNotLand
+                : FieldOrderRejection.DestinationNotSea);
+        }
+
+        foreach (var waypoint in waypoints)
+        {
+            if (terrainAt(waypoint).IsLand() != isLandUnit)
+            {
+                return FieldOrderResult.Rejected(isLandUnit
+                    ? FieldOrderRejection.WaypointNotLand
+                    : FieldOrderRejection.WaypointNotSea);
+            }
+        }
+
+        var arrived = now >= movement.ArrivesAt;
+
+        if (!arrived)
+        {
+            // Appending onto an in-progress leg is premium regardless of
+            // waypoints — the design doc's table has no free cell here.
+            if (!isPremium)
+            {
+                return FieldOrderResult.Rejected(FieldOrderRejection.PremiumRequired);
+            }
+        }
+        else if (waypoints.Count > 0 && !isPremium)
+        {
+            // Standing "move on" is free with no waypoints; adding any is premium.
+            return FieldOrderResult.Rejected(FieldOrderRejection.PremiumRequired);
+        }
+
+        DateTimeOffset departedAt;
+        double provisionsAtDeparture;
+        List<HexCoord> fullPath;
+
+        if (arrived)
+        {
+            var fromHex = movement.PositionAt(now);
+            departedAt = now;
+            provisionsAtDeparture = army.ProvisionsAt(now);
+
+            List<HexCoord> stops = [fromHex, .. waypoints, destination];
+            fullPath = [fromHex];
+            for (var i = 0; i < stops.Count - 1; i++)
+            {
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+                if (leg is null || leg.Count == 0)
+                {
+                    return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
+                }
+
+                fullPath.AddRange(leg.Skip(1));
+            }
+        }
+        else
+        {
+            // The original leg always finishes — its already-computed hexes
+            // are kept byte-for-byte, only extended past the old destination.
+            departedAt = movement.DepartedAt;
+            provisionsAtDeparture = army.Provisions;
+
+            var originalDestination = movement.Path[^1];
+            List<HexCoord> stops = [originalDestination, .. waypoints, destination];
+            fullPath = [.. movement.Path];
+            for (var i = 0; i < stops.Count - 1; i++)
+            {
+                var leg = HexPathfinder.FindPath(stops[i], stops[i + 1], terrainAt, isLandUnit, isRiver);
+                if (leg is null || leg.Count == 0)
+                {
+                    return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
+                }
+
+                fullPath.AddRange(leg.Skip(1));
+            }
+        }
+
+        var returnPath = HexPathfinder.FindPath(destination, home, terrainAt, isLandUnit, isRiver);
+        if (returnPath is null || returnPath.Count == 0)
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.UnreachableLeg);
+        }
+
+        var speed = army.TotalSpeed;
+        var upkeepPerHour = army.TotalUpkeepPerHour;
+        var cumulativeHours = HexPathfinder.CumulativeHours(fullPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+
+        var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+        if (provisionsAtDeparture < totalFoodNeeded)
+        {
+            return FieldOrderResult.Rejected(FieldOrderRejection.InsufficientProvisionsForRoundTrip);
+        }
+
+        var newMovement = Movement.Movement.Create(
+            departedAt, fullPath, cumulativeHours, returnPath, returnCumulativeHours, provisionsAtDeparture, upkeepPerHour);
+
+        var ordered = army with
+        {
+            Location = new ArmyLocation.InTransit(newMovement),
+            Provisions = provisionsAtDeparture,
+        };
+
+        return FieldOrderResult.Accept(ordered);
+    }
+
+    /// <summary>
     /// Admin god-mode "speed up": slides the whole active leg along the time
     /// axis so it arrives at <paramref name="arrivesAt"/> instead of
     /// <see cref="Movement.ArrivesAt"/>, keeping the route, the standing time
@@ -1253,6 +1429,49 @@ public sealed record RetargetFoundingResult(RetargetFoundingRejection Rejection,
     public static RetargetFoundingResult Rejected(RetargetFoundingRejection reason) => new(reason);
 
     public static RetargetFoundingResult Accept(Army army) => new(RetargetFoundingRejection.None, army);
+}
+
+/// <summary>Why <see cref="Army.PlanFieldOrder"/> was refused (issue #156 phase 1).</summary>
+public enum FieldOrderRejection
+{
+    None = 0,
+
+    /// <summary>The army is at home, supporting as a guest, or already on its way home — nothing left to extend.</summary>
+    NoActiveJourney,
+
+    /// <summary>
+    /// Only <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/>
+    /// armies can take a field order — checked by the caller
+    /// (<c>ArmyService.FieldOrderAsync</c>), not <see cref="Army.PlanFieldOrder"/>
+    /// itself, since redirecting an Attack/Support/Raid army mid-march needs
+    /// the same target-settlement re-validation <see cref="PlanDispatch"/>
+    /// already does and is explicitly out of scope for issue #156 phase 1.
+    /// </summary>
+    MissionNotFieldOrderable,
+
+    DestinationNotLand,
+    DestinationNotSea,
+    WaypointNotLand,
+    WaypointNotSea,
+    UnreachableLeg,
+    InsufficientProvisionsForRoundTrip,
+
+    /// <summary>
+    /// Waypoints on a "move on" order, or any "append goal" order at all,
+    /// require a premium account — see <see cref="Army.PlanFieldOrder"/>'s
+    /// own remarks and the design doc's rule table (issue #156 §3).
+    /// </summary>
+    PremiumRequired,
+}
+
+/// <summary>The outcome of asking to send an already-fielded army onward — mirrors <see cref="RetargetFoundingResult"/>.</summary>
+public sealed record FieldOrderResult(FieldOrderRejection Rejection, Army? Army = null)
+{
+    public bool Accepted => Rejection == FieldOrderRejection.None && Army is not null;
+
+    public static FieldOrderResult Rejected(FieldOrderRejection reason) => new(reason);
+
+    public static FieldOrderResult Accept(Army army) => new(FieldOrderRejection.None, army);
 }
 
 /// <summary>Why a dispatch was refused.</summary>

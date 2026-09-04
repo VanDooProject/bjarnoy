@@ -22,6 +22,7 @@ import type {
   CreateGuildTopicRequest,
   CreateWorldRequest,
   DispatchArmyRequest,
+  FieldOrderRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
   GrantRuneRequest,
@@ -485,6 +486,15 @@ export const api = {
   getArmy: (armyId: string) => request<ArmyResponse>(`/armies/${armyId}`),
   recallArmy: (armyId: string, ownerId?: string) =>
     request<ArmyResponse>(`/armies/${armyId}/recall`, { method: 'POST', headers: ownerHeader(ownerId) }),
+  // Issue #156 phase 1: sends an army already out in the field onward to a
+  // new hex — 'move on' if it's standing, 'append goal' if it's still
+  // travelling. Mirrors ArmyEndpoints.cs's `/armies/{id}/orders`.
+  fieldOrderArmy: (armyId: string, body: FieldOrderRequest, ownerId?: string) =>
+    request<ArmyResponse>(`/armies/${armyId}/orders`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
+    }),
   // Issue #40 phase 4: the host's read-only view of who is currently
   // supporting this settlement. Mirrors ArmyEndpoints.cs's
   // `/settlements/{id}/guests`.

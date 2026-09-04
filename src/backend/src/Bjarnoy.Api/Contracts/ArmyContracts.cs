@@ -67,6 +67,19 @@ public sealed record DispatchArmyRequest(
 /// <summary>Redirects an in-transit or parked founding convoy to a different target hex (issue #55 §6).</summary>
 public sealed record RetargetFoundingRequest([property: Required] HexPointRequest Target);
 
+/// <summary>
+/// Sends an army already out in the field onward to a new hex (issue #156
+/// phase 1) — "move on" when it is standing at its current destination,
+/// "append goal" when it is still travelling there. See
+/// <see cref="Army.PlanFieldOrder"/> for the exact rules, including which of
+/// the two this becomes and when waypoints require a premium account.
+/// </summary>
+/// <param name="Waypoints">Ordered intermediate hexes; empty/omitted for a direct route.</param>
+/// <param name="Destination">The new hex to head for.</param>
+public sealed record FieldOrderRequest(
+    IReadOnlyList<HexPointRequest>? Waypoints,
+    [property: Required] HexPointRequest Destination);
+
 public sealed record ArmyUnitStackResponse(string Unit, int Count);
 
 public sealed record HexPointResponse(int Q, int R)

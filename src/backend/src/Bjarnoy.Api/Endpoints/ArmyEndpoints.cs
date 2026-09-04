@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
@@ -49,6 +50,13 @@ public static class ArmyEndpoints
         armies.MapPost("/{armyId:guid}/recall", Recall)
             .WithName("RecallArmy")
             .WithSummary("Turns an army around mid-journey to head home early.")
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<ArmyOwnershipEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
+        armies.MapPost("/{armyId:guid}/orders", FieldOrder)
+            .WithName("FieldOrderArmy")
+            .WithSummary("Sends an army already out in the field onward to a new hex (issue #156 phase 1) — 'move on' if it's standing, 'append goal' if it's still travelling.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .AddEndpointFilter<ArmyOwnershipEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
@@ -273,6 +281,73 @@ public static class ArmyEndpoints
         var found = await armies.GetAsync(armyId, cancellationToken);
         var (entity, clock) = found!.Value;
         return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static async Task<Results<Ok<ArmyResponse>, NotFound, Conflict<ProblemDetails>>> FieldOrder(
+        Guid armyId,
+        FieldOrderRequest request,
+        ClaimsPrincipal principal,
+        ArmyService armies,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var waypoints = (request.Waypoints ?? []).Select(w => w.ToHexCoord()).ToList();
+        var destination = request.Destination.ToHexCoord();
+
+        // Anonymous play is a real, ordinary caller here (same as every other
+        // army endpoint) — GetIsPremiumAsync has nothing to check for one, so
+        // ArmyService.FieldOrderAsync just treats a null id as never premium.
+        var idClaim = principal.Identity?.IsAuthenticated == true
+            ? principal.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        Guid? callerUserId = Guid.TryParse(idClaim, out var parsed) ? parsed : null;
+
+        var result = await armies.FieldOrderAsync(armyId, waypoints, destination, callerUserId, cancellationToken);
+
+        if (result.ArmyNotFound)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (!result.Accepted)
+        {
+            return TypedResults.Conflict(FieldOrderProblem(result.Rejection));
+        }
+
+        var found = await armies.GetAsync(armyId, cancellationToken);
+        var (entity, clock) = found!.Value;
+        return TypedResults.Ok(ArmyResponse.From(entity!, clock.ToGameTime(time.GetUtcNow())));
+    }
+
+    private static ProblemDetails FieldOrderProblem(FieldOrderRejection rejection)
+    {
+        var problem = new ProblemDetails
+        {
+            Title = "The field order was refused.",
+            Detail = rejection switch
+            {
+                FieldOrderRejection.NoActiveJourney =>
+                    "This army has nowhere to extend from — it's at home, supporting, already heading home, or arrived home during this settle.",
+                FieldOrderRejection.MissionNotFieldOrderable =>
+                    "Only a move (or a founding convoy standing at its target) can be field-ordered.",
+                FieldOrderRejection.DestinationNotLand => "The destination is not land; sea pathing is not supported yet.",
+                FieldOrderRejection.DestinationNotSea => "The destination is not sea; fleets can only path over water.",
+                FieldOrderRejection.WaypointNotLand => "A waypoint is not land; sea pathing is not supported yet.",
+                FieldOrderRejection.WaypointNotSea => "A waypoint is not sea; fleets can only path over water.",
+                FieldOrderRejection.UnreachableLeg => "No route exists for one or more legs of the new journey.",
+                FieldOrderRejection.InsufficientProvisionsForRoundTrip =>
+                    "The provisions remaining would not cover the round trip to the new destination.",
+                FieldOrderRejection.PremiumRequired =>
+                    "Waypoints on a field order, and continuing a march already under way, require a premium account.",
+                _ => "Refused.",
+            },
+            Status = StatusCodes.Status409Conflict,
+        };
+
+        problem.Extensions["rejection"] = rejection.ToString();
+        return problem;
     }
 
     private static async Task<Results<Ok<BattleReportResponse>, NotFound>> GetReport(
