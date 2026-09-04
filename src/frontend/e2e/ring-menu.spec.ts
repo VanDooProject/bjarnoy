@@ -154,7 +154,7 @@ test.describe('ring menu drill-down', () => {
     const box = (await canvas.boundingBox())!;
 
     // Ask the model for a real empty, owned, grass hex (grass is what carries
-    // the Defense category — see BUILD_CATEGORIES) rather than guessing a
+    // the Military category — see BUILD_CATEGORIES) rather than guessing a
     // pixel offset that only lands on one at a particular camera framing.
     const target = await page.evaluate(() => {
       const win = window as unknown as {
@@ -194,7 +194,7 @@ test.describe('ring menu drill-down', () => {
     };
 
     await hoverBubble(page.locator('.ring-bubble', { hasText: 'Build' }).first());
-    await hoverBubble(page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Defense' }).first());
+    await hoverBubble(page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Military' }).first());
 
     // Nothing hovered yet, so nothing is preselected — opening a category must
     // not pop a card for a building the player never pointed at.
@@ -461,7 +461,7 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
     await page.mouse.click(box.x + target.x, box.y + target.y);
     await page.waitForSelector('.ring-bubble');
     await page.locator('.ring-bubble', { hasText: 'Build' }).first().tap();
-    await page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Defense' }).first().tap();
+    await page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Military' }).first().tap();
 
     const magicTower = page.locator('.ring-bubble.child', { hasText: 'Magic Tower' }).first();
     await expect(magicTower).toBeVisible();
