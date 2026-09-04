@@ -123,7 +123,7 @@ public class RiverGenerationTests
     }
 
     [Fact]
-    public void Straight_and_bend_tiles_have_exactly_one_inflow_and_one_outflow()
+    public void Straight_bend_and_bend60_tiles_have_exactly_one_inflow_and_one_outflow()
     {
         var world = Generate(2024);
 
@@ -131,7 +131,7 @@ public class RiverGenerationTests
         {
             foreach (var tile in island.RiverTiles)
             {
-                if (tile.Shape is not (RiverTileShape.Straight or RiverTileShape.Bend))
+                if (tile.Shape is not (RiverTileShape.Straight or RiverTileShape.Bend or RiverTileShape.Bend60))
                 {
                     continue;
                 }
@@ -146,15 +146,22 @@ public class RiverGenerationTests
         }
     }
 
+    /// <summary>The turn angle a tile's in/out directions imply, in 60° steps (0-3) — a small independent re-derivation, not the production switch.</summary>
+    private static int TurnDegreesSteps(TileOrientation inDirection, TileOrientation outDirection)
+    {
+        var straightAhead = ((int)inDirection + 3) % 6;
+        var diff = Math.Abs((int)outDirection - straightAhead);
+        return Math.Min(diff, 6 - diff);
+    }
+
     [Fact]
-    public void Bend_tiles_never_turn_more_than_60_degrees_off_straight_ahead()
+    public void Bend_tiles_turn_exactly_60_degrees_off_straight_ahead()
     {
         // The tile art pack's bend asset is a single fixed curve, camera-rotated
-        // six ways — it can only depict a straight continuation or a 60°-off-
-        // straight curve, never a sharper 120° one (see
-        // docs/design/river-generation.md's "Routing" and "Tile shape and
-        // orientation" sections). RiverGenerator.TracePath excludes 120° turns
-        // at generation time, so this locks that down.
+        // six ways — a Bend always depicts exactly a 60°-off-straight curve;
+        // a sharper 120° turn is RiverTileShape.Bend60 (a separate art family,
+        // see docs/design/river-generation.md's "Routing" and "Tile shape and
+        // orientation" sections).
         foreach (var seed in new[] { 1, 7, 42, 2024 })
         {
             var world = Generate(seed);
@@ -167,13 +174,44 @@ public class RiverGenerationTests
                         continue;
                     }
 
-                    var straightAhead = ((int)tile.InDirections[0] + 3) % 6;
-                    var diff = Math.Abs((int)tile.OutDirection!.Value - straightAhead);
-                    var turn = Math.Min(diff, 6 - diff);
-                    Assert.Equal(1, turn);
+                    Assert.Equal(1, TurnDegreesSteps(tile.InDirections[0], tile.OutDirection!.Value));
                 }
             }
         }
+    }
+
+    [Fact]
+    public void Bend60_tiles_turn_exactly_120_degrees_off_straight_ahead_and_can_be_generated()
+    {
+        // Bend60 is legal but scored down (WorldGenerationOptions.SharpBendPenalty)
+        // relative to a gentler Bend or a straight continuation, so it's rarer —
+        // zeroing the penalty here makes it reliably findable, same reasoning
+        // as Confluence_tiles_have_exactly_two_inflows widening its seed net
+        // for a naturally rare shape.
+        var checkedAny = false;
+        foreach (var seed in new[] { 1, 7, 42, 1337, 2024, 12345, 55555 })
+        {
+            var options = WorldGenerationOptions.ForSeed(seed) with { Radius = 60, SharpBendPenalty = 0 };
+            var world = new WorldGenerator(options).Generate(TestContext.Current.CancellationToken);
+
+            foreach (var island in world.Islands)
+            {
+                foreach (var tile in island.RiverTiles)
+                {
+                    if (tile.Shape != RiverTileShape.Bend60)
+                    {
+                        continue;
+                    }
+
+                    checkedAny = true;
+                    Assert.Single(tile.InDirections);
+                    Assert.NotNull(tile.OutDirection);
+                    Assert.Equal(2, TurnDegreesSteps(tile.InDirections[0], tile.OutDirection!.Value));
+                }
+            }
+        }
+
+        Assert.True(checkedAny, "expected at least one Bend60 tile across these seeds with SharpBendPenalty zeroed out — widen the seed list if this starts failing");
     }
 
     [Fact]

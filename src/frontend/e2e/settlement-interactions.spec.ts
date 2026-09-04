@@ -86,9 +86,10 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
           // Grass specifically: it's the one terrain where every category's
           // first building (Hut) has no longhouse-level gate at all, so a
           // fresh level-1 realm can always actually place it — sand/forest/
-          // mountain's own categories (Tower, shrines) are gated and would
-          // make this generic "does the click-to-build flow work" smoke
-          // test flaky on whichever terrain the scan happened to hit first.
+          // mountain's own categories (Tower, Lumberjack, Quarry) are gated
+          // and would make this generic "does the click-to-build flow work"
+          // smoke test flaky on whichever terrain the scan happened to hit
+          // first.
           if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
             return win.__settlementRenderer().hexCenterScreen(at);
           }
@@ -204,7 +205,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
 
     // Forest only offers what BuildingCatalogue.cs's AllowedTerrain actually
-    // permits there — Lumberjack (Resource) and shrines (any land hex) —
+    // permits there — Lumberjack (Resource), since shrines are Grass-only —
     // rather than grass's four-category spread; see SettlementView's
     // categoriesFor/BUILD_CATEGORIES. The root "Build" action it shares a
     // label with is gone by now: the 2a ring swaps the inner lane on
@@ -228,7 +229,8 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // as forest/mountain and offer Farm/Lumberjack/Quarry — none of which
     // the backend's AllowedTerrain would ever accept on sand (Farm is
     // Grass-only, Lumberjack Forest-only, Quarry Mountain-only). Sand only
-    // carries Tower (SandOrGrass) and the two shrines (any land hex).
+    // carries Tower (SandOrGrass) — shrines are Grass-only now, so they no
+    // longer appear here.
     test.setTimeout(90_000);
     await foundSettlement(page);
     const canvas = page.locator('canvas');
@@ -265,7 +267,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     const categoryBubbles = page.locator('.ring-bubble:not(.back):not(.child)');
     await expect(categoryBubbles.first()).toBeVisible();
     const categoryLabels = await categoryBubbles.allTextContents();
-    expect(new Set(categoryLabels)).toEqual(new Set(['Defense', 'Shrines']));
+    expect(new Set(categoryLabels)).toEqual(new Set(['Military']));
 
     for (const label of categoryLabels) {
       const category = page.locator('.ring-bubble:not(.back):not(.child)', { hasText: label }).first();

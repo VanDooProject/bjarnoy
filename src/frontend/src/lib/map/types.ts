@@ -136,7 +136,10 @@ export interface Tile {
     | 'storagehouse'
     | 'archeryrange'
     | 'dockyard'
-    | 'greatstorehouse';
+    | 'greatstorehouse'
+    | 'barracks'
+    | 'fisherhut'
+    | 'sawmill';
   buildingLevel?: number;
 }
 
@@ -206,7 +209,7 @@ export interface IslandLabel {
 }
 
 /** Mirrors the backend's `RiverTileShape` wire names. */
-export type RiverTileShape = 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth';
+export type RiverTileShape = 'spring' | 'straight' | 'bend' | 'confluence' | 'mouth' | 'bend60';
 
 /**
  * A single hex of a generated river, as served by the backend (see

@@ -166,6 +166,28 @@ public class TrainingAndGarrisonTests
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
+    /// <summary>The basic melee slice of the roster is gated by a Barracks standing, not just the longhouse level.</summary>
+    [Fact]
+    public void A_basic_melee_unit_cannot_be_trained_without_a_barracks()
+    {
+        var settlement = Found(longhouseLevel: 5);
+
+        var decision = settlement.PlanTrain(UnitType.Spearman, 1, T0, Guid.CreateVersion7());
+
+        Assert.Equal(TrainRejection.UnitNotAvailable, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_basic_melee_unit_can_be_trained_once_a_barracks_stands()
+    {
+        var settlement = Found(
+            longhouseLevel: 5, extraBuildings: [new PlacedBuilding(new HexCoord(1, 0), BuildingType.Barracks, 1)]);
+
+        var decision = settlement.PlanTrain(UnitType.Spearman, 1, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
     [Fact]
     public void A_ship_cannot_be_trained_without_a_dockyard()
     {

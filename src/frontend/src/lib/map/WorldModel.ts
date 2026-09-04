@@ -250,6 +250,20 @@ export class WorldModel {
     return null;
   }
 
+  /**
+   * Which of a Sawmill's two art families a Sawmill standing on `coord`
+   * should render with. A Sawmill is built directly on a river tile —
+   * `WorldModel.placeBuilding` only accepts a `straight`/`bend` shaped one,
+   * matching `BuildingDefinition.RequiresRiverShape` — so this reads that
+   * same hex's own river shape rather than scanning neighbours: `bend` ->
+   * `'sawmillbend'`, `straight` (or, defensively, anything else — the
+   * buildability gate means this shouldn't happen) -> `'sawmillriver'`.
+   */
+  sawmillArtVariantOf(coord: AxialCoord): 'sawmillriver' | 'sawmillbend' {
+    const river = this.getRiverTile(coord.q, coord.r);
+    return river?.shape === 'bend' ? 'sawmillbend' : 'sawmillriver';
+  }
+
   isLand(q: number, r: number): boolean {
     return this.getTile(q, r).terrain !== 'sea';
   }
@@ -483,6 +497,9 @@ export class WorldModel {
       'archeryrange',
       'dockyard',
       'greatstorehouse',
+      'barracks',
+      'fisherhut',
+      'sawmill',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -531,10 +548,21 @@ export class WorldModel {
       return false;
     }
     const tile = this.getTile(at.q, at.r);
-    // Every other building needs dry land; the fishing hut and dockyard are
-    // the exceptions, and only on the coastal ring of the sea, not open water.
-    const seaOk = (type === 'fishinghut' || type === 'dockyard') && tile.isCoastalWater;
-    if ((tile.terrain === 'sea' && !seaOk) || tile.buildingType) return false;
+    // Every other building needs dry land; the fishing hut, dockyard, and
+    // fisher hut are the exceptions, and *only* stand on the coastal ring of
+    // the sea, not open water and not land either (matches
+    // BuildingDefinition.RequiresCoastalWater).
+    const isWaterOnlyBuilding = type === 'fishinghut' || type === 'dockyard' || type === 'fisherhut';
+    if (isWaterOnlyBuilding ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
+    if (tile.buildingType) return false;
+    // The Sawmill is built directly on a river tile — only Straight/Bend
+    // shapes have a matching sawmill+river art composite (matches
+    // BuildingDefinition.RequiresRiverShape). sawmillArtVariantOf reads this
+    // same own-hex river tile to pick which composite to render.
+    if (type === 'sawmill') {
+      const river = this.getRiverTile(at.q, at.r);
+      if (!river || (river.shape !== 'straight' && river.shape !== 'bend')) return false;
+    }
     tile.ownerId = settlementId;
     tile.buildingType = type;
     tile.buildingLevel = 1;

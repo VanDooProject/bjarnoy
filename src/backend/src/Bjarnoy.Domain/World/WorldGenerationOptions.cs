@@ -65,6 +65,17 @@ public sealed record WorldGenerationOptions
     /// </summary>
     public double RiverMeanderWeight { get; init; } = 0.35;
 
+    /// <summary>
+    /// Subtracted from a candidate step's score when it would turn 120° off
+    /// straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) rather than
+    /// continue straight or take the gentler 60°-off <see cref="RiverTileShape.Bend"/>
+    /// turn — legal since the vendor art pack ships a dedicated
+    /// <c>rivertile_bend60_*</c> family, but still biased to be rarer than the
+    /// two gentler shapes, the way real river meanders favour a shallow turn
+    /// over a sharp one. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public double SharpBendPenalty { get; init; } = 0.5;
+
     public static WorldGenerationOptions ForSeed(int seed) => new() { Seed = seed };
 
     /// <summary>
@@ -83,6 +94,7 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(MinimumIslandTiles);
         ArgumentOutOfRangeException.ThrowIfLessThan(MinRiverLength, 2);
         ArgumentOutOfRangeException.ThrowIfNegative(RiverMeanderWeight);
+        ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
         if (MountainThreshold >= BeachThreshold)
         {

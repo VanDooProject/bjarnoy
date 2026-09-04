@@ -105,6 +105,7 @@ const TYPE_LABELS: Record<string, string> = {
   archeryrange: 'Archery range',
   dockyard: 'Dockyard',
   greatstorehouse: 'Great storehouse',
+  fisherhut: 'Fisher hut',
 };
 
 function typeLabel(type: string): string {
