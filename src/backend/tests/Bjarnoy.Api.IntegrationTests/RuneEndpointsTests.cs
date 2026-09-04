@@ -92,12 +92,26 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
         return leveled;
     }
 
-    /// <summary>Queues and completes a level-1 shrine of Thor on the hex next to the longhouse.</summary>
+    /// <summary>
+    /// Queues and completes a level-1 shrine of Thor on an empty Grass hex
+    /// inside the settlement's claim. A shrine is Grass-only
+    /// (BuildingCatalogue.Shrine's AllowedTerrain), so unlike before this
+    /// gate existed, the hex right next to the longhouse can't be assumed to
+    /// qualify — the admin layout endpoint (same one
+    /// AdminGodModeEndpointsTests.FirstBuildableHex uses) reports each
+    /// claimed hex's actual terrain.
+    /// </summary>
     private async Task<SettlementResponse> BuildShrineOfThorAsync(HttpClient client, SettlementResponse settlement)
     {
+        Authorize(client, await CreateAdminTokenAsync(client));
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var grassHex = layout!.Hexes.First(h => !h.IsCentre && h.Building is null && h.Terrain == "grass");
+        client.DefaultRequestHeaders.Authorization = null;
+
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/builds",
-            new QueueBuildRequest("shrineofthor", settlement.Q + 1, settlement.R), Ct);
+            new QueueBuildRequest("shrineofthor", grassHex.Q, grassHex.R), Ct);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
 
         // The shrine's own build duration is well under a day even at level 1
