@@ -60,9 +60,9 @@ one-off abstraction inside the spec.
 
 | Class | Covers |
 | --- | --- |
-| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver })`, `centreHex()`, `clickHex()`, `countBuildings()`, `setResources()`, plus `.ring`. |
+| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver })`, `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. |
 | `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()`, `openBuildCategories()`, `openCategory()`. |
-| `WorldMapPage` | `/world`: `open()`, `box()`, `centre()`, `screenshot()` for the canvas pixel-diff assertions. |
+| `WorldMapPage` | `/world`: `open()`, `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
 | `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |
 | `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `userRows` / `myRow`. |
 | `AdminSettlementsPage` | `/admin/settlements`: `openManagePanel()`, `hex(q, r)`, `hexForm` / `garrisonForm` / `armyEditor` / `grantForm` / `stocks` / `clampNotice`. |
