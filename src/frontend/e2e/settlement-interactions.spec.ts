@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS, MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 test.describe('settlement view interactions', { tag: '@g2' }, () => {
   test('hovering a hex renders a highlight that follows the cursor', async ({ page }) => {
@@ -9,11 +9,9 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // headless Chromium, before this test's own interaction — see the
     // panning test's comment below for the same reasoning.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const box = await settlement.canvasBox();
+    const { x: cx, y: cy } = await settlement.canvasCentre();
     // The settlement camera always centres on the longhouse, so hexes at
     // these offsets are reliably on screen regardless of where in the
     // (randomly seeded) world the settlement actually landed — but the
@@ -24,7 +22,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // offsets are well inside the guaranteed border+explored radius.
     const clip = { x: cx - 130, y: cy - 230, width: 260, height: 220 };
 
-    const tooltip = page.locator('.hex-tooltip');
+    const tooltip = settlement.tooltip;
 
     // top-left corner of the canvas is well outside the level-1 border-2
     // realm — a reliable "nothing hovered" baseline (unexplored hexes
@@ -58,9 +56,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // plus driving a real click through the render runs close to (and on
     // CI, over) the global 45s budget.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
 
     // A guessed pixel offset from the canvas centre only happens to land on
     // a real hex at one particular zoom/camera framing — zoomForFogMargin
@@ -70,46 +66,21 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // the model for a real empty hex inside the realm, then ask the
     // renderer's own camera math (__settlementRenderer's hexCenterScreen,
     // set up by SettlementView for exactly this) for that hex's exact
-    // screen position.
-    const target = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
-      const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
-      for (let dq = -radius; dq <= radius; dq++) {
-        for (let dr = -radius; dr <= radius; dr++) {
-          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-          const at = { q: settlement.q + dq, r: settlement.r + dr };
-          const tile = world.model.getTile(at.q, at.r);
-          // Grass specifically: it's the one terrain where every category's
-          // first building (Hut) has no longhouse-level gate at all, so a
-          // fresh level-1 realm can always actually place it — sand/forest/
-          // mountain's own categories (Tower, Lumberjack, Quarry) are gated
-          // and would make this generic "does the click-to-build flow work"
-          // smoke test flaky on whichever terrain the scan happened to hit
-          // first.
-          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
-            return win.__settlementRenderer().hexCenterScreen(at);
-          }
-        }
-      }
-      throw new Error('no empty buildable grass hex found inside the realm');
-    });
+    // screen position — which is what SettlementPage.findHex does.
+    //
+    // Grass specifically: it's the one terrain where every category's first
+    // building (Hut) has no longhouse-level gate at all, so a fresh level-1
+    // realm can always actually place it — sand/forest/mountain's own
+    // categories (Tower, Lumberjack, Quarry) are gated and would make this
+    // generic "does the click-to-build flow work" smoke test flaky on
+    // whichever terrain the scan happened to hit first.
+    const target = await settlement.findHex({ terrain: 'grass' });
 
     // The model, via the __demoWorld debug hook, is the deterministic
     // "did the build land" signal — a fixed sleep before checking it either
     // wastes time once it's actually placed or, on a loaded CI runner,
     // checks before the async model update has happened.
-    const countBuildings = () =>
-      page.evaluate(() => {
-        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-          .__demoWorld();
-        return world.model.countBuildings(world.selectedSettlementId) as number;
-      });
-    const before = await countBuildings();
+    const before = await settlement.countBuildings();
 
     // Issue #16: a hex click no longer opens BuildingModal directly — it
     // opens a RingMenu of contextual actions; hovering its "Build" bubble
@@ -124,12 +95,9 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // untried one: a click-based version of this same test was flaky here,
     // repeatedly racing the ring bubble getting detached and re-mounted
     // mid-click on a loaded run, something hover-then-click rides out fine.
-    await page.mouse.click(box.x + target.x, box.y + target.y);
+    await settlement.clickHex(target);
 
-    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
-    await expect(buildBubble).toBeVisible();
-    const buildBox = (await buildBubble.boundingBox())!;
-    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+    await settlement.ring.openBuildCategories();
 
     // Grass's first category (Housing) has exactly one building — Hut — so
     // hovering the first category bubble and clicking the first building
@@ -139,28 +107,22 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // actions with the categories rather than orbiting outside them —
     // `.child` is the outer lane, `.back` the reserved back slot, and what is
     // left is the categories.
-    const categoryBubble = page.locator('.ring-bubble:not(.back):not(.child)').first();
-    await expect(categoryBubble).toBeVisible();
+    await expect(settlement.ring.categoryBubbles.first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
-    const categoryBox = (await categoryBubble.boundingBox())!;
-    await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
-      steps: 6,
-    });
+    await settlement.ring.openFirstCategory();
 
-    const buildingBubble = page.locator('.ring-bubble.child').first();
+    const buildingBubble = settlement.ring.childBubbles.first();
     await expect(buildingBubble).toBeVisible();
     await buildingBubble.click();
 
-    await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
+    await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
   });
 
   test('placing a lumberjack on a forest hex is a real, terrain-gated building', async ({ page }) => {
     // Same reasoning as the other tests here: foundSettlement() plus driving
     // a real click through the render runs close to the global 45s budget.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
 
     // Lumberjack/Quarry only recently gained frontend support (they were
     // previously silently dropped by WorldModel.applyServerSnapshot's
@@ -168,42 +130,13 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // at all) — this test is the regression guard for that, so it
     // deliberately targets a Forest hex rather than accepting whatever the
     // first buildable hex happens to be (the other placement test's job).
-    const target = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
-      const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
-      for (let dq = -radius; dq <= radius; dq++) {
-        for (let dr = -radius; dr <= radius; dr++) {
-          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-          const at = { q: settlement.q + dq, r: settlement.r + dr };
-          const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'forest' && !tile.buildingType) {
-            const screen = win.__settlementRenderer().hexCenterScreen(at);
-            return { at, screen };
-          }
-        }
-      }
-      throw new Error('no empty forest hex found inside the realm — pick a different demo seed');
-    });
+    const target = await settlement.findHex({ terrain: 'forest' });
 
-    const getBuildingTypeAtTarget = () =>
-      page.evaluate((coord) => {
-        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-          .__demoWorld();
-        return world.model.getTile(coord.q, coord.r).buildingType as string | undefined;
-      }, target.at);
-    expect(await getBuildingTypeAtTarget()).toBeUndefined();
+    expect(await settlement.buildingTypeAt(target.hex)).toBeUndefined();
 
-    await page.mouse.click(box.x + target.screen.x, box.y + target.screen.y);
+    await settlement.clickHex(target);
 
-    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
-    await expect(buildBubble).toBeVisible();
-    const buildBox = (await buildBubble.boundingBox())!;
-    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+    await settlement.ring.openBuildCategories();
 
     // Forest only offers what BuildingCatalogue.cs's AllowedTerrain actually
     // permits there — Lumberjack (Resource), since shrines are Grass-only —
@@ -211,18 +144,13 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // categoriesFor/BUILD_CATEGORIES. The root "Build" action it shares a
     // label with is gone by now: the 2a ring swaps the inner lane on
     // drill-down instead of orbiting outside it.
-    const categoryBubble = page.locator('.ring-bubble:not(.back):not(.child)').first();
-    await expect(categoryBubble).toBeVisible();
-    const categoryBox = (await categoryBubble.boundingBox())!;
-    await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
-      steps: 6,
-    });
+    await settlement.ring.openFirstCategory();
 
-    const lumberjackBubble = page.locator('.ring-bubble.child', { hasText: 'Lumberjack' }).first();
+    const lumberjackBubble = settlement.ring.child('Lumberjack').first();
     await expect(lumberjackBubble).toBeVisible();
     await lumberjackBubble.click();
 
-    await expect.poll(getBuildingTypeAtTarget, { timeout: 5_000 }).toBe('lumberjack');
+    await expect.poll(() => settlement.buildingTypeAt(target.hex), { timeout: 5_000 }).toBe('lumberjack');
   });
 
   test('a shore (sand) hex only offers categories BuildingCatalogue.cs actually allows there', async ({ page }) => {
@@ -233,49 +161,22 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // carries Tower (SandOrGrass) — shrines are Grass-only now, so they no
     // longer appear here.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
 
-    const target = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
-      const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
-      for (let dq = -radius; dq <= radius; dq++) {
-        for (let dr = -radius; dr <= radius; dr++) {
-          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-          const at = { q: settlement.q + dq, r: settlement.r + dr };
-          const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'sand' && !tile.buildingType) {
-            return win.__settlementRenderer().hexCenterScreen(at);
-          }
-        }
-      }
-      throw new Error('no empty sand hex found inside the realm — pick a different demo seed');
-    });
+    const target = await settlement.findHex({ terrain: 'sand' });
 
-    await page.mouse.click(box.x + target.x, box.y + target.y);
+    await settlement.clickHex(target);
 
-    const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
-    await expect(buildBubble).toBeVisible();
-    const buildBox = (await buildBubble.boundingBox())!;
-    await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+    await settlement.ring.openBuildCategories();
 
-    const categoryBubbles = page.locator('.ring-bubble:not(.back):not(.child)');
-    await expect(categoryBubbles.first()).toBeVisible();
-    const categoryLabels = await categoryBubbles.allTextContents();
+    await expect(settlement.ring.categoryBubbles.first()).toBeVisible();
+    const categoryLabels = await settlement.ring.categoryBubbles.allTextContents();
     expect(new Set(categoryLabels)).toEqual(new Set(['Military']));
 
     for (const label of categoryLabels) {
-      const category = page.locator('.ring-bubble:not(.back):not(.child)', { hasText: label }).first();
-      const rect = (await category.boundingBox())!;
-      await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 6 });
-      await expect(page.locator('.ring-bubble.child').first()).toBeVisible();
-      const buildingLabels = await page.locator('.ring-bubble.child').allTextContents();
+      await settlement.ring.openCategory(label);
+      await expect(settlement.ring.childBubbles.first()).toBeVisible();
+      const buildingLabels = await settlement.ring.childBubbles.allTextContents();
       for (const forbidden of ['Farm', 'Pumpkin Farm', 'Lumberjack', 'Quarry', 'Hut', 'Magic Tower']) {
         expect(buildingLabels).not.toContain(forbidden);
       }
@@ -292,12 +193,9 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // it. This is the regression guard for the real hit-test fix
     // (`document.elementFromPoint` in updateHover).
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    const tooltip = page.locator('.hex-tooltip');
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
+    const tooltip = settlement.tooltip;
 
     // Establish the tooltip actually shows for a plain hex hover first, so
     // the panel check below is a real "it hides" signal rather than the
@@ -309,9 +207,8 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // the bottom-right corner — the tile "under" it (per the old rect test)
     // would still resolve to a real hex, so this is exactly the panel the
     // bug report calls out.
-    const statusCard = page.locator('.status-card');
-    await expect(statusCard).toBeVisible();
-    const panelBox = (await statusCard.boundingBox())!;
+    await expect(settlement.statusCard).toBeVisible();
+    const panelBox = (await settlement.statusCard.boundingBox())!;
     await page.mouse.move(panelBox.x + panelBox.width / 2, panelBox.y + 20, { steps: 6 });
     await expect(tooltip).toBeHidden();
 
@@ -342,13 +239,10 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     // is evidently wider than 90s leaves room for. 120s rather than
     // shrugging this off as a repeat flake.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
 
-    const before = await canvas.screenshot();
+    const before = await settlement.canvas.screenshot();
 
     await page.mouse.move(cx, cy);
     await page.mouse.down();
@@ -359,7 +253,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     await page.mouse.up();
     await page.waitForTimeout(300);
 
-    const after = await canvas.screenshot();
+    const after = await settlement.canvas.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);
   });
 });

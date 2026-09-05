@@ -1,4 +1,4 @@
-import type { Page, Route } from '@playwright/test';
+import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { waitForMapReady } from './helpers';
 
@@ -15,8 +15,6 @@ import { waitForMapReady } from './helpers';
  * "no fog" needed no new code at all.
  */
 
-const ADMIN_USER = { id: 'admin-1', userName: 'e2e-admin', role: 'admin', status: 'active', displayName: 'E2E Admin' };
-
 const WORLD = {
   id: 'world-1',
   name: 'Midgard',
@@ -32,15 +30,6 @@ const WORLD = {
   runStateSince: '2026-01-01T00:00:00Z',
   createdAt: '2026-01-01T00:00:00Z',
 };
-
-/** Same shape as admin-activity.spec.ts's: seeds a refresh token, then answers the refresh/me calls. */
-async function loginAsAdmin(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bjarnoy.refreshToken', 'seed-refresh-admin'));
-  await page.route('**/api/v1/auth/refresh', (route: Route) =>
-    route.fulfill({ json: { accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token', user: ADMIN_USER } }),
-  );
-  await page.route('**/api/v1/auth/me', (route: Route) => route.fulfill({ json: ADMIN_USER }));
-}
 
 /**
  * A small but real preview payload: two islands with a river, positioned where
@@ -76,8 +65,11 @@ const PREVIEW = {
 };
 
 test.describe('admin world reseed', { tag: '@g2' }, () => {
-  test('previews a candidate seed on the world map, then commits it behind two confirmations', async ({ page }) => {
-    await loginAsAdmin(page);
+  test('previews a candidate seed on the world map, then commits it behind two confirmations', async ({
+    page,
+    adminAuth,
+  }) => {
+    await adminAuth.login();
     await page.route('**/api/v1/admin/worlds', (route: Route) => route.fulfill({ json: [WORLD] }));
 
     let previewBody: unknown = null;

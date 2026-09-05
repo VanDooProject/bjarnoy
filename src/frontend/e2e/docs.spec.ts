@@ -1,4 +1,5 @@
 import { expect, test } from './fixtures';
+import { ScrollableView } from './pages';
 
 /**
  * Regression coverage for the docs pages' scroll bug: `.tech-tree`/
@@ -20,30 +21,23 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     const lastSection = page.locator('section.building').last();
     await lastSection.waitFor();
 
-    const root = page.locator('.tech-tree');
-    const { scrollHeight, clientHeight } = await root.evaluate((el) => ({
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-    }));
+    const view = new ScrollableView(page, '.tech-tree');
+    const { scrollHeight, clientHeight } = await view.metrics();
     expect(scrollHeight).toBeGreaterThan(clientHeight);
 
     await expect(lastSection).not.toBeInViewport();
 
-    await root.hover();
     // A large, deliberately overshooting delta rather than a value sized to
     // the page's current content: the browser clamps scrollTop at the real
     // max either way, and a snug value keeps needing bumping as the tech
     // tree grows another building section (it has three times already).
-    await page.mouse.wheel(0, 100_000);
-    await expect
-      .poll(() => root.evaluate((el) => el.scrollTop))
-      .toBeGreaterThan(0);
+    await view.wheel(100_000);
     await expect(lastSection).toBeInViewport();
 
     // Guards the `100vw` -> `100%` fix: a viewport-width element plus the
     // scrollbar gutter that scrolling now needs would push the page wider
     // than the window.
-    expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await view.noHorizontalOverflow()).toBe(true);
   });
 
   test('tile docs page scrolls to reveal content below the fold', async ({ page }) => {
@@ -51,22 +45,15 @@ test.describe('docs pages scrolling', { tag: '@g2' }, () => {
     const lastSection = page.locator('#mountain');
     await lastSection.waitFor();
 
-    const root = page.locator('.tile-docs');
-    const { scrollHeight, clientHeight } = await root.evaluate((el) => ({
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-    }));
+    const view = new ScrollableView(page, '.tile-docs');
+    const { scrollHeight, clientHeight } = await view.metrics();
     expect(scrollHeight).toBeGreaterThan(clientHeight);
 
     await expect(lastSection).not.toBeInViewport();
 
-    await root.hover();
-    await page.mouse.wheel(0, 5000);
-    await expect
-      .poll(() => root.evaluate((el) => el.scrollTop))
-      .toBeGreaterThan(0);
+    await view.wheel(5000);
     await expect(lastSection).toBeInViewport();
 
-    expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await view.noHorizontalOverflow()).toBe(true);
   });
 });

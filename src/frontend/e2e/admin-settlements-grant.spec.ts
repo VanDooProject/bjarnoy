@@ -1,5 +1,6 @@
-import type { Page, Route } from '@playwright/test';
+import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { AdminSettlementsPage } from './pages';
 
 /**
  * Issue #98: admin-granting 3000 of a resource to a fresh level-1
@@ -23,18 +24,8 @@ import { expect, test } from './fixtures';
  * `SettlementTests.cs`).
  */
 
-const ADMIN_USER = { id: 'admin-1', userName: 'e2e-admin', role: 'admin', status: 'active', displayName: 'E2E Admin' };
 const WORLD_ID = 'world-1';
 const SETTLEMENT_ID = 'settlement-1';
-
-/** Same shape as admin-activity.spec.ts's loginAsAdmin. */
-async function loginAsAdmin(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bjarnoy.refreshToken', 'seed-refresh-admin'));
-  await page.route('**/api/v1/auth/refresh', (route: Route) =>
-    route.fulfill({ json: { accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token', user: ADMIN_USER } }),
-  );
-  await page.route('**/api/v1/auth/me', (route: Route) => route.fulfill({ json: ADMIN_USER }));
-}
 
 function resourceLine(wood: number, stone: number, food: number, iron: number) {
   return { wood, stone, food, iron };
@@ -66,8 +57,10 @@ function settlementResponse(stock: ReturnType<typeof resourceLine>) {
 test.describe('admin settlements: grant resources honors real storage capacity', { tag: '@g2' }, () => {
   test('a grant clamped by capacity shows the true cap and reports the clamp, not a silent partial grant', async ({
     page,
+    adminAuth,
   }) => {
-    await loginAsAdmin(page);
+    const admin = new AdminSettlementsPage(page);
+    await adminAuth.login();
 
     await page.route('**/api/v1/admin/worlds', (route: Route) =>
       route.fulfill({
@@ -125,26 +118,22 @@ test.describe('admin settlements: grant resources honors real storage capacity',
       route.fulfill({ json: settlementResponse(resourceLine(750, 0, 0, 0)) }),
     );
 
-    await page.goto('/admin/settlements');
-    await expect(page.getByRole('heading', { name: 'Settlements' })).toBeVisible();
-
-    await page.getByRole('button', { name: 'Manage' }).click();
+    await admin.openManagePanel();
 
     // Bug 1 fixed: the detail panel shows the *real* backend capacity
     // (750), not a synthetic client-side guess (which for a level-1
     // settlement would read 3,000).
-    await expect(page.locator('.stocks')).toContainText('Wood 750 / 750');
+    await expect(admin.stocks).toContainText('Wood 750 / 750');
 
     // Grant 3000 wood — server-side this is clamped to the 750 cap.
-    const grantForm = page.locator('.grant-form');
-    await grantForm.locator('label', { hasText: 'Wood' }).locator('input').fill('3000');
-    await grantForm.getByRole('button', { name: 'Apply' }).click();
+    await admin.grantForm.locator('label', { hasText: 'Wood' }).locator('input').fill('3000');
+    await admin.grantForm.getByRole('button', { name: 'Apply' }).click();
 
     // Bug 2 fixed: the clamp is surfaced, not applied silently.
-    await expect(page.locator('.clamp-notice')).toContainText('wood: granted 0 of 3000');
-    await expect(page.locator('.clamp-notice')).toContainText('storage full at 750');
+    await expect(admin.clampNotice).toContainText('wood: granted 0 of 3000');
+    await expect(admin.clampNotice).toContainText('storage full at 750');
 
     // The detail panel still reads the true "750 / 750", never "750 / 3,000".
-    await expect(page.locator('.stocks')).toContainText('Wood 750 / 750');
+    await expect(admin.stocks).toContainText('Wood 750 / 750');
   });
 });

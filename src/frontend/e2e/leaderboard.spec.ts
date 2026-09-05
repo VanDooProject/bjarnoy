@@ -1,6 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { AdminTablePage } from './pages';
 
 /**
  * Demo mode (what `npm run test:e2e` runs against — see playwright.config.ts
@@ -89,28 +90,6 @@ async function mockLeaderboardApi(
   });
 }
 
-/**
- * Simulates a logged-in session without a real `/auth/login` round trip:
- * seeds a refresh token so `authStore.ensureInitialized()` (awaited by the
- * router guard on every navigation) calls `tryRefresh()`, then intercepts
- * that one `/auth/refresh` call. This is the same shape as `__demoWorld` —
- * a test-only shortcut into a store that a real UI flow would normally
- * drive — except auth has no `DEMO_MODE` hook of its own, so route
- * interception is what stands in for one here.
- */
-async function loginAs(page: Page, userName: string) {
-  const user = { id: 'user-1', userName, role: 'player', status: 'active', displayName: userName };
-  await page.addInitScript((name) => localStorage.setItem('bjarnoy.refreshToken', `seed-refresh-${name}`), userName);
-  await page.route('**/api/v1/auth/refresh', (route: Route) =>
-    route.fulfill({ json: { accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token', user } }),
-  );
-  // `ensureInitialized()` follows a successful refresh with `fetchMe()` — a
-  // real GET to confirm the access token still resolves a user — and
-  // `fetchMe()` calls `clearSession()` on ANY failure, silently undoing the
-  // refresh above if this isn't mocked too.
-  await page.route('**/api/v1/auth/me', (route: Route) => route.fulfill({ json: user }));
-}
-
 async function gotoLeaderboards(page: Page) {
   await page.addInitScript((worldId) => localStorage.setItem('bjarnoy.worldId', worldId), WORLD_ID);
   await page.goto('/leaderboards');
@@ -150,15 +129,16 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
 
     // The first board in the directory (user/score, live) is auto-selected
     // on mount — a real table with the mocked rows.
-    await expect(page.locator('table.table')).toBeVisible();
-    await expect(page.locator('table.table tbody tr')).toHaveCount(2);
+    const board = new AdminTablePage(page);
+    await expect(board.table).toBeVisible();
+    await expect(board.rows).toHaveCount(2);
     await expect(page.getByText('Player 1')).toBeVisible();
 
     // Switching to the guild/score tab (always noGuildSystemYet today,
     // per LeaderboardCatalogue.cs) shows the dark-board reason instead of a
     // table — it's opted-out of the live-board fetch entirely.
     await tabs.nth(1).click();
-    await expect(page.locator('table.table')).toHaveCount(0);
+    await expect(board.table).toHaveCount(0);
     await expect(page.getByText('Unlocks once guilds exist.')).toBeVisible();
   });
 
@@ -173,12 +153,13 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     });
     await gotoLeaderboards(page);
 
-    await expect(page.locator('table.table tbody tr')).toHaveCount(2);
+    const board = new AdminTablePage(page);
+    await expect(board.rows).toHaveCount(2);
     const loadMore = page.getByRole('button', { name: 'Load more' });
     await expect(loadMore).toBeEnabled();
 
     await loadMore.click();
-    await expect(page.locator('table.table tbody tr')).toHaveCount(3);
+    await expect(board.rows).toHaveCount(3);
     await expect(page.getByText('Player 3')).toBeVisible();
 
     // No more pages left — the pager button is disabled rather than
@@ -194,9 +175,9 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     await expect(page.getByRole('button', { name: 'Jump to my rank' })).toHaveCount(0);
   });
 
-  test('"Jump to my rank" is visible and functional when logged in', async ({ page }) => {
+  test('"Jump to my rank" is visible and functional when logged in', async ({ page, adminAuth }) => {
     await mockLeaderboardApi(page, { first: { items: [scoreEntry(1), scoreEntry(2)], nextAfterRank: null } });
-    await loginAs(page, 'e2e-player');
+    await adminAuth.loginAsPlayer('e2e-player');
     // `jumpToMyRank()` is called with no `subjectId`, so the real request
     // has no query string at all — `*` (matching zero or more chars) covers
     // that, unlike glob's `?` (exactly one char).
@@ -214,8 +195,9 @@ test.describe('leaderboards', { tag: '@g2' }, () => {
     // jumpToMyRank() replaces `entries` outright with the /me window, so
     // the table should now show rank 7's neighbourhood, not the original
     // page-1 rows.
+    const board = new AdminTablePage(page);
     await expect(page.getByText('Player 7')).toBeVisible();
-    await expect(page.locator('table.table tbody tr')).toHaveCount(3);
-    await expect(page.locator('tr.my-row')).toContainText('Player 7');
+    await expect(board.rows).toHaveCount(3);
+    await expect(board.myRow).toContainText('Player 7');
   });
 });

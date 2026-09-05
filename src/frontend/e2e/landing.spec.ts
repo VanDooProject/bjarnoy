@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement, waitForMapReady } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 test('landing page is the village view, not a marketing page in front of it', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
@@ -14,7 +14,7 @@ test('landing page is the village view, not a marketing page in front of it', { 
 
   // Founding, then the 2 guided onboarding buildings, then the nickname
   // prompt, then the full game — all without ever visiting a world map.
-  await foundSettlement(page);
+  await SettlementPage.found(page);
   await expect(page).toHaveURL(/\/settlement$/);
 });
 
@@ -29,20 +29,8 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   // enabling both regardless of terrain would just reintroduce the same
   // silent-failure bug for whichever one doesn't fit.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await page.goto('/');
-  await waitForMapReady(page);
-
-  const canvas = page.locator('canvas');
-  const box = (await canvas.boundingBox())!;
-  // Matches helpers.ts's own foundSettlement click point: the real world's
-  // own starter plot via WorldModel.findLandfall, shifted by screenBiasX.
-  await page.mouse.click(box.x + box.width * (0.5 + 0.16), box.y + box.height / 2);
-  await page.waitForFunction(
-    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
-      ?.selectedSettlementId,
-    undefined,
-    { timeout: 15_000 },
-  );
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
 
   // A guessed pixel offset only happens to land on a real hex at one
   // particular zoom/camera framing — ask the model for a real empty *grass*
@@ -51,32 +39,13 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   // (__settlementRenderer's hexCenterScreen) for that hex's exact screen
   // position. Same technique settlement-interactions.spec.ts uses for the
   // full settlement view's own ring menu.
-  const target = await page.evaluate(() => {
-    const win = window as unknown as {
-      __demoWorld: () => { model: any; selectedSettlementId: string };
-      __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-    };
-    const world = win.__demoWorld();
-    const settlement = world.model.getSettlement(world.selectedSettlementId);
-    const radius = world.model.borderRadius(settlement);
-    for (let dq = -radius; dq <= radius; dq++) {
-      for (let dr = -radius; dr <= radius; dr++) {
-        if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-        const at = { q: settlement.q + dq, r: settlement.r + dr };
-        const tile = world.model.getTile(at.q, at.r);
-        if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
-          return win.__settlementRenderer().hexCenterScreen(at);
-        }
-      }
-    }
-    throw new Error('no empty grass hex found inside the realm');
-  });
+  const target = await settlement.findHex({ terrain: 'grass' });
 
-  await page.mouse.click(box.x + target.x, box.y + target.y);
+  await settlement.clickHex(target);
 
-  const farm = page.locator('.ring-bubble', { hasText: 'Farm' });
-  const lumberjack = page.locator('.ring-bubble', { hasText: 'Lumberjack' });
-  const quarry = page.locator('.ring-bubble', { hasText: 'Quarry' });
+  const farm = settlement.ring.action('Farm');
+  const lumberjack = settlement.ring.action('Lumberjack');
+  const quarry = settlement.ring.action('Quarry');
   await expect(farm).toBeVisible();
   await expect(lumberjack).toBeVisible();
   await expect(quarry).toBeVisible();
@@ -84,15 +53,9 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   await expect(lumberjack).toBeDisabled();
   await expect(quarry).toBeDisabled();
 
-  const countBuildings = () =>
-    page.evaluate(() => {
-      const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-        .__demoWorld();
-      return world.model.countBuildings(world.selectedSettlementId) as number;
-    });
-  const before = await countBuildings();
+  const before = await settlement.countBuildings();
   await farm.click();
-  await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
+  await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
 });
 
@@ -105,52 +68,23 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
   // component per open menu now, and it always owns its backdrop, so there is
   // no longer a way to render one without these.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await page.goto('/');
-  await waitForMapReady(page);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
 
-  const canvas = page.locator('canvas');
-  const box = (await canvas.boundingBox())!;
-  await page.mouse.click(box.x + box.width * (0.5 + 0.16), box.y + box.height / 2);
-  await page.waitForFunction(
-    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
-      ?.selectedSettlementId,
-    undefined,
-    { timeout: 15_000 },
-  );
+  const target = await settlement.findHex({ notTerrain: 'sea' });
 
-  const target = await page.evaluate(() => {
-    const win = window as unknown as {
-      __demoWorld: () => { model: any; selectedSettlementId: string };
-      __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-    };
-    const world = win.__demoWorld();
-    const settlement = world.model.getSettlement(world.selectedSettlementId);
-    const radius = world.model.borderRadius(settlement);
-    for (let dq = -radius; dq <= radius; dq++) {
-      for (let dr = -radius; dr <= radius; dr++) {
-        if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-        const at = { q: settlement.q + dq, r: settlement.r + dr };
-        const tile = world.model.getTile(at.q, at.r);
-        if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
-          return win.__settlementRenderer().hexCenterScreen(at);
-        }
-      }
-    }
-    throw new Error('no empty own hex found inside the realm');
-  });
-
-  await page.mouse.click(box.x + target.x, box.y + target.y);
-  await expect(page.locator('.ring-bubble').first()).toBeVisible();
+  await settlement.clickHex(target);
+  await expect(settlement.ring.bubbles.first()).toBeVisible();
 
   // Well clear of the ring's own bubbles, elsewhere on the landing page.
   await page.mouse.click(20, 20);
-  await expect(page.locator('.ring-bubble')).toHaveCount(0);
+  await expect(settlement.ring.bubbles).toHaveCount(0);
 
-  await page.mouse.click(box.x + target.x, box.y + target.y);
-  await expect(page.locator('.ring-bubble').first()).toBeVisible();
+  await settlement.clickHex(target);
+  await expect(settlement.ring.bubbles.first()).toBeVisible();
 
   await page.keyboard.press('Escape');
-  await expect(page.locator('.ring-bubble')).toHaveCount(0);
+  await expect(settlement.ring.bubbles).toHaveCount(0);
 });
 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {

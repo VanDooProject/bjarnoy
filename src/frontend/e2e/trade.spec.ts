@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /**
  * Demo-mode trade flow (PR 2): post an offer, see it land in "My offers",
@@ -14,7 +14,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
   // real page load plus a PixiJS mount, which alone can approach the
   // global 45s default on a loaded CI runner.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
+  const settlement = await SettlementPage.found(page);
 
   const toggle = page.locator('.trade-toggle');
   await toggle.click();
@@ -50,10 +50,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
   await expect(myRow.getByText('50 Stone')).toBeVisible();
   await expect(myRow.getByText('open')).toBeVisible();
 
-  const before = await page.evaluate(
-    () => (window as unknown as { __demoWorld: () => { hud: { resources: { wood: number; iron: number } } } })
-      .__demoWorld().hud.resources,
-  );
+  const before = await settlement.hudResources();
 
   await rivalRow.getByRole('button', { name: 'Accept' }).click();
 
@@ -62,10 +59,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
   await expect(openSection.locator('.trade-row', { hasText: 'Iron' })).toHaveCount(0);
   await expect(panel.locator('.trade-error')).toHaveCount(0);
 
-  const after = await page.evaluate(
-    () => (window as unknown as { __demoWorld: () => { hud: { resources: { wood: number; iron: number } } } })
-      .__demoWorld().hud.resources,
-  );
+  const after = await settlement.hudResources();
   // Accepting "50 wood for 25 iron" credits 50 wood and debits 25 iron.
   // Generous tolerance for the small amount of natural resource accrual
   // that happens between the two reads (production rates keep ticking).
@@ -85,7 +79,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
  */
 test('accepting an offer drops a cart shipment onto the world map', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
+  const settlement = await SettlementPage.found(page);
 
   await page.locator('.trade-toggle').click();
   const panel = page.locator('.trade-panel');
@@ -98,13 +92,6 @@ test('accepting an offer drops a cart shipment onto the world map', async ({ pag
   await rivalRow.getByRole('button', { name: 'Accept' }).click();
   await expect(panel.locator('.trade-error')).toHaveCount(0);
 
-  const carts = await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __demoWorld: () => { model: { listCartShipments: () => unknown[] } };
-        }
-      ).__demoWorld().model.listCartShipments(),
-  );
+  const carts = await settlement.listCartShipments();
   expect(carts.length).toBeGreaterThan(0);
 });

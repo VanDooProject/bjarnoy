@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /**
  * Issue #53: shrines are new BuildingTypes with no dedicated art in the
@@ -19,85 +19,39 @@ test('building a shrine from the ring menu places it without a rendering error',
   // test: foundSettlement() plus driving a real click through the render
   // runs close to (and on CI, over) the global 45s budget.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
-  const canvas = page.locator('canvas');
-  const box = (await canvas.boundingBox())!;
+  const settlement = await SettlementPage.found(page);
 
   // Shrines are RequiredLonghouseLevel 3 (BuildingCatalogue.cs), and the ring
   // menu now reads that gate off the building catalogue and refuses to place
   // a locked building — so a fresh level-1 realm genuinely cannot build one.
   // Level the longhouse up first, which is what a player would have to do,
   // rather than weakening the gate for the test.
-  await page.evaluate(() => {
-    const world = (window as unknown as {
-      __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-    }).__demoWorld();
-    world.model.getSettlement(world.selectedSettlementId).level = 3;
-    world.syncHud();
-  });
+  await settlement.setSettlementLevel(3);
 
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new
   // "Shrines" category — see BUILD_CATEGORIES in SettlementView.vue) rather
   // than guess a pixel offset that only happens to land on one at whatever
   // zoom/camera framing this run's settlement got.
-  const target = await page.evaluate(() => {
-    const win = window as unknown as {
-      __demoWorld: () => { model: any; selectedSettlementId: string };
-      __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-    };
-    const world = win.__demoWorld();
-    const settlement = world.model.getSettlement(world.selectedSettlementId);
-    const radius = world.model.borderRadius(settlement);
-    for (let dq = -radius; dq <= radius; dq++) {
-      for (let dr = -radius; dr <= radius; dr++) {
-        if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-        const at = { q: settlement.q + dq, r: settlement.r + dr };
-        const tile = world.model.getTile(at.q, at.r);
-        if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
-          return { screen: win.__settlementRenderer().hexCenterScreen(at), hex: at };
-        }
-      }
-    }
-    throw new Error('no empty buildable grass hex found inside the realm');
-  });
+  const target = await settlement.findHex({ terrain: 'grass' });
 
-  const countBuildings = () =>
-    page.evaluate(() => {
-      const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-        .__demoWorld();
-      return world.model.countBuildings(world.selectedSettlementId) as number;
-    });
-  const before = await countBuildings();
+  const before = await settlement.countBuildings();
 
-  await page.mouse.click(box.x + target.screen.x, box.y + target.screen.y);
+  await settlement.clickHex(target);
 
-  const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' }).first();
-  await expect(buildBubble).toBeVisible();
-  const buildBox = (await buildBubble.boundingBox())!;
-  await page.mouse.move(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2, { steps: 6 });
+  await settlement.ring.openBuildCategories();
+  await settlement.ring.openCategory('Shrines');
 
-  const shrineCategory = page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Shrines' }).first();
-  await expect(shrineCategory).toBeVisible();
-  const categoryBox = (await shrineCategory.boundingBox())!;
-  await page.mouse.move(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2, {
-    steps: 6,
-  });
-
-  const shrineBubble = page.locator('.ring-bubble.child', { hasText: 'Shrine of Thor' }).first();
+  const shrineBubble = settlement.ring.child('Shrine of Thor').first();
   await expect(shrineBubble).toBeVisible();
   // Unlocked at longhouse 3, so it is a normal buildable bubble, not the
   // dashed locked treatment.
   await expect(shrineBubble).not.toHaveClass(/locked/);
   await shrineBubble.click();
 
-  await expect.poll(countBuildings, { timeout: 5_000 }).toBeGreaterThan(before);
+  await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
 
   // The placed shrine's tile now renders with the hut placeholder rather
   // than nothing — a real texture was resolved, not an empty/broken tile.
-  const builtType = await page.evaluate((at) => {
-    const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
-    return world.model.getTile(at.q, at.r).buildingType as string | undefined;
-  }, target.hex);
-  expect(builtType).toBe('shrineofthor');
+  expect(await settlement.buildingTypeAt(target.hex)).toBe('shrineofthor');
 });

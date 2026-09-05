@@ -1,5 +1,6 @@
-import type { Page, Route } from '@playwright/test';
+import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { ADMIN_USER, AdminActivityPage } from './pages';
 
 /**
  * Like leaderboard.spec.ts, this runs against demo mode (see
@@ -19,71 +20,39 @@ import { expect, test } from './fixtures';
  * aggregate chart actually mounts a Chart.js canvas from the summary data.
  */
 
-const ADMIN_USER = { id: 'admin-1', userName: 'e2e-admin', role: 'admin', status: 'active', displayName: 'E2E Admin' };
-
-/**
- * Same shape as leaderboard.spec.ts's `loginAs`: seeds a refresh token so
- * `authStore.ensureInitialized()` (awaited by the router guard on every
- * navigation) calls `tryRefresh()`, then intercepts that call and the
- * follow-up `fetchMe()` so the session sticks. `role: 'admin'` is what
- * `authStore.isAdmin` checks (see `stores/auth.ts`), which is what lets this
- * session past the `/admin` route's `requiresAdmin` guard.
- */
-async function loginAsAdmin(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bjarnoy.refreshToken', 'seed-refresh-admin'));
-  await page.route('**/api/v1/auth/refresh', (route: Route) =>
-    route.fulfill({ json: { accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token', user: ADMIN_USER } }),
-  );
-  await page.route('**/api/v1/auth/me', (route: Route) => route.fulfill({ json: ADMIN_USER }));
-}
-
 /** A recent (well within "today") ISO timestamp for the admin's own last-active value. */
 function recentIso(minutesAgo: number): string {
   return new Date(Date.now() - minutesAgo * 60_000).toISOString();
 }
 
-/**
- * Wires up the three admin activity endpoints AdminActivityView calls,
- * before the page ever navigates. The admin's own user row (with a recent
- * `lastActiveAtUtc`) stands in for the real activity the endpoint filter
- * would have recorded from this same session's earlier authenticated
- * requests — see the file-level comment for why this suite mocks rather
- * than tracks for real.
- */
-async function mockActivityApi(page: Page) {
-  await page.route('**/api/v1/admin/activity/summary*', (route: Route) =>
-    route.fulfill({
-      json: {
-        from: '2026-08-22T00:00:00.000Z',
-        to: '2026-08-29T23:59:59.999Z',
-        bucket: 'day',
-        buckets: [
-          { bucketStart: '2026-08-27T00:00:00Z', activeUserCount: 2 },
-          { bucketStart: '2026-08-28T00:00:00Z', activeUserCount: 3 },
-          { bucketStart: '2026-08-29T00:00:00Z', activeUserCount: 1 },
-        ],
-      },
-    }),
-  );
-  await page.route('**/api/v1/admin/activity/users*', (route: Route) =>
-    route.fulfill({
-      json: {
-        items: [
-          { userId: ADMIN_USER.id, userName: ADMIN_USER.userName, displayName: ADMIN_USER.displayName, lastActiveAtUtc: recentIso(1) },
-          { userId: 'user-2', userName: 'other-player', displayName: 'Other Player', lastActiveAtUtc: recentIso(120) },
-        ],
-        totalCount: 2,
-        page: 1,
-        pageSize: 25,
-      },
-    }),
-  );
-}
-
 test.describe('admin activity view', { tag: '@g2' }, () => {
-  test('shows the logged-in admin as a recently active user and renders the aggregate chart', async ({ page }) => {
-    await loginAsAdmin(page);
-    await mockActivityApi(page);
+  test('shows the logged-in admin as a recently active user and renders the aggregate chart', async ({
+    page,
+    adminAuth,
+  }) => {
+    const activity = new AdminActivityPage(page);
+    await adminAuth.login();
+    // The admin's own user row (with a recent `lastActiveAtUtc`) stands in
+    // for the real activity the endpoint filter would have recorded from
+    // this same session's earlier authenticated requests — see the
+    // file-level comment for why this suite mocks rather than tracks for
+    // real.
+    await activity.mockApi({
+      buckets: [
+        { bucketStart: '2026-08-27T00:00:00Z', activeUserCount: 2 },
+        { bucketStart: '2026-08-28T00:00:00Z', activeUserCount: 3 },
+        { bucketStart: '2026-08-29T00:00:00Z', activeUserCount: 1 },
+      ],
+      users: [
+        {
+          userId: ADMIN_USER.id,
+          userName: ADMIN_USER.userName,
+          displayName: ADMIN_USER.displayName,
+          lastActiveAtUtc: recentIso(1),
+        },
+        { userId: 'user-2', userName: 'other-player', displayName: 'Other Player', lastActiveAtUtc: recentIso(120) },
+      ],
+    });
     // ProfileView's own-profile fetch — a plain authenticated GET, standing
     // in for the "perform an authenticated action first" step: in the real
     // stack this request (like every authenticated request) would have run
@@ -118,7 +87,7 @@ test.describe('admin activity view', { tag: '@g2' }, () => {
     // Step 4a: the admin's own row appears with a recent last-active value —
     // not "Never" (the no-activity-yet rendering) and not the other user's
     // 2-hour-old timestamp.
-    const adminRow = page.locator('tr.user-row', { hasText: ADMIN_USER.userName });
+    const adminRow = activity.userRow(ADMIN_USER.userName);
     await expect(adminRow).toBeVisible();
     await expect(adminRow).not.toContainText('Never');
 
@@ -126,10 +95,9 @@ test.describe('admin activity view', { tag: '@g2' }, () => {
     // non-zero dimensions — not asserting pixel content, just that the
     // underlying data-loaded state was reached and something actually
     // rendered rather than the "No activity data" empty state.
-    await expect(page.locator('.activity-chart .empty')).toHaveCount(0);
-    const canvas = page.locator('.canvas-wrap canvas');
-    await expect(canvas).toBeVisible();
-    const box = await canvas.boundingBox();
+    await expect(activity.chartEmpty).toHaveCount(0);
+    await expect(activity.chartCanvas).toBeVisible();
+    const box = await activity.chartCanvas.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.width).toBeGreaterThan(0);
     expect(box!.height).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /**
  * Issues #93 and #94: the settlement map's army/route overlay — draggable
@@ -29,15 +29,16 @@ interface OverlayFrame {
   iconsReady: boolean;
 }
 
-declare global {
-  interface Window {
-    __demoWorld: () => any;
-    __settlementRenderer: () => {
-      hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
-      lastArmyOverlayFrame: () => OverlayFrame;
-    };
-  }
-}
+// Local cast rather than a `declare global`, per e2e/AGENTS.md /
+// globals.d.ts: `__demoWorld`/`__settlementRenderer` are deliberately not
+// declared globally, so each spec states the exact slice it uses.
+type OverlayWindow = Window & {
+  __demoWorld: () => any;
+  __settlementRenderer: () => {
+    hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
+    lastArmyOverlayFrame: () => OverlayFrame;
+  };
+};
 
 test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
   test('a plotted waypoint can be dragged onto another hex', async ({ page }) => {
@@ -45,15 +46,14 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // real pointer interaction through the live PixiJS scene — see
     // settlement-interactions.spec.ts's own comments.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
+    const box = await settlement.canvasBox();
 
     // Plot a two-hex route around the settlement centre, then work out where
     // its first pin and the hex we want to drag it to actually are, via the
     // renderer's own camera maths rather than guessed pixel offsets.
     const geometry = await page.evaluate(() => {
-      const world = window.__demoWorld();
+      const world = (window as unknown as OverlayWindow).__demoWorld();
       const settlement = world.model.getSettlement(world.selectedSettlementId);
       const first = { q: settlement.q + 1, r: settlement.r };
       const second = { q: settlement.q + 2, r: settlement.r };
@@ -61,7 +61,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
       world.startDispatch();
       world.addWaypoint(first);
       world.addWaypoint(second);
-      const renderer = window.__settlementRenderer();
+      const renderer = (window as unknown as OverlayWindow).__settlementRenderer();
       return {
         first,
         second,
@@ -72,7 +72,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
       };
     });
 
-    const frame = () => page.evaluate(() => window.__settlementRenderer().lastArmyOverlayFrame());
+    const frame = () => page.evaluate(() => (window as unknown as OverlayWindow).__settlementRenderer().lastArmyOverlayFrame());
     // The pins have to have been drawn before they can be grabbed — the
     // renderer picks the overlay up on its next frame, not synchronously.
     await expect.poll(async () => (await frame()).waypoints.length, { timeout: 5_000 }).toBe(2);
@@ -94,7 +94,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     await page.mouse.move(box.x + geometry.dropScreen.x, box.y + geometry.dropScreen.y, { steps: 8 });
     await page.mouse.up();
 
-    const route = await page.evaluate(() => window.__demoWorld().dispatchDraft.route);
+    const route = await page.evaluate(() => (window as unknown as OverlayWindow).__demoWorld().dispatchDraft.route);
     // The dragged pin moved, the one after it didn't, and the drag did not
     // also append a third waypoint on release.
     expect(route).toHaveLength(2);
@@ -104,9 +104,9 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // Dragging a pin must not pan the camera — the same gesture on empty map
     // still does, so this is the part that distinguishes the two.
     const settlementScreenAfter = await page.evaluate(() => {
-      const world = window.__demoWorld();
+      const world = (window as unknown as OverlayWindow).__demoWorld();
       const settlement = world.model.getSettlement(world.selectedSettlementId);
-      return window.__settlementRenderer().hexCenterScreen({ q: settlement.q, r: settlement.r });
+      return (window as unknown as OverlayWindow).__settlementRenderer().hexCenterScreen({ q: settlement.q, r: settlement.r });
     });
     expect(settlementScreenAfter.x).toBeCloseTo(geometry.settlementScreen.x, 1);
     expect(settlementScreenAfter.y).toBeCloseTo(geometry.settlementScreen.y, 1);
@@ -124,10 +124,10 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('a waypoint can be removed by index, not just undone from the end', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     const plotted = await page.evaluate(() => {
-      const world = window.__demoWorld();
+      const world = (window as unknown as OverlayWindow).__demoWorld();
       const s = world.model.getSettlement(world.selectedSettlementId);
       world.startDispatch();
       world.addWaypoint({ q: s.q + 1, r: s.r });
@@ -139,18 +139,17 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // The middle one — the case "Undo waypoint" (pop the newest) can't reach.
     await page.getByRole('button', { name: 'Remove waypoint 2' }).click();
 
-    const route = await page.evaluate(() => window.__demoWorld().dispatchDraft.route);
+    const route = await page.evaluate(() => (window as unknown as OverlayWindow).__demoWorld().dispatchDraft.route);
     expect(route).toEqual([plotted[0], plotted[2]]);
   });
 
   test('an attack draft marks its target settlement on the map', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
+    const box = await settlement.canvasBox();
 
     const target = await page.evaluate(() => {
-      const world = window.__demoWorld();
+      const world = (window as unknown as OverlayWindow).__demoWorld();
       const s = world.model.getSettlement(world.selectedSettlementId);
       const at = { q: s.q + 3, r: s.r - 1 };
       // A rival settlement the dispatch can be aimed at — registered into
@@ -169,17 +168,17 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
         foundedAt: Date.now(),
       });
       world.startDispatch();
-      return { at, screen: window.__settlementRenderer().hexCenterScreen(at) };
+      return { at, screen: (window as unknown as OverlayWindow).__settlementRenderer().hexCenterScreen(at) };
     });
 
-    const frame = () => page.evaluate(() => window.__settlementRenderer().lastArmyOverlayFrame());
+    const frame = () => page.evaluate(() => (window as unknown as OverlayWindow).__settlementRenderer().lastArmyOverlayFrame());
     const clip = { x: box.x + target.screen.x - 70, y: box.y + target.screen.y - 70, width: 140, height: 140 };
     // Nothing is marked while the draft is a plain Move with no target.
     expect((await frame()).targets).toEqual([]);
     const unmarked = await page.screenshot({ clip });
 
     await page.getByRole('button', { name: 'Attack', exact: true }).click();
-    await page.evaluate(() => window.__demoWorld().setDispatchTarget('rival-1'));
+    await page.evaluate(() => (window as unknown as OverlayWindow).__demoWorld().setDispatchTarget('rival-1'));
 
     await expect.poll(async () => (await frame()).targets.length, { timeout: 5_000 }).toBe(1);
     const marked = (await frame()).targets[0];
@@ -191,7 +190,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // Support gets its own, visibly different marker rather than reusing the
     // crossed sword/axe.
     await page.getByRole('button', { name: 'Support', exact: true }).click();
-    await page.evaluate(() => window.__demoWorld().setDispatchTarget('rival-1'));
+    await page.evaluate(() => (window as unknown as OverlayWindow).__demoWorld().setDispatchTarget('rival-1'));
     await expect.poll(async () => (await frame()).targets[0]?.kind, { timeout: 5_000 }).toBe('support');
     const supportShot = await page.screenshot({ clip });
     expect(Buffer.compare(attackShot, supportShot)).not.toBe(0);
@@ -199,7 +198,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('an in-transit army is drawn between hexes and keeps advancing', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     // A march that started a moment ago and has half a minute to run, over
     // an intentionally uneven per-leg schedule (`cumulativeHours`) — the
@@ -208,7 +207,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // that still snapped to `position` would sit motionless on a hex centre
     // and fail every assertion below.
     const seeded = await page.evaluate(() => {
-      const world = window.__demoWorld();
+      const world = (window as unknown as OverlayWindow).__demoWorld();
       const s = world.model.getSettlement(world.selectedSettlementId);
       const path = [
         { q: s.q, r: s.r },
@@ -248,12 +247,12 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
         },
       ];
       world.selectArmy('army-1');
-      const renderer = window.__settlementRenderer();
+      const renderer = (window as unknown as OverlayWindow).__settlementRenderer();
       return { path, hexCentres: path.map((c) => renderer.hexCenterScreen(c)) };
     });
 
     const marker = async () => {
-      const frame = await page.evaluate(() => window.__settlementRenderer().lastArmyOverlayFrame());
+      const frame = await page.evaluate(() => (window as unknown as OverlayWindow).__settlementRenderer().lastArmyOverlayFrame());
       return frame.armies[0];
     };
     await expect.poll(async () => (await marker())?.id, { timeout: 5_000 }).toBe('army-1');
@@ -325,10 +324,10 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('an army standing at home stays on its settlement hex', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     const home = await page.evaluate(() => {
-      const world = window.__demoWorld();
+      const world = (window as unknown as OverlayWindow).__demoWorld();
       const s = world.model.getSettlement(world.selectedSettlementId);
       world.armies = [
         {
@@ -346,11 +345,11 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
           movement: null,
         },
       ];
-      return window.__settlementRenderer().hexCenterScreen({ q: s.q, r: s.r });
+      return (window as unknown as OverlayWindow).__settlementRenderer().hexCenterScreen({ q: s.q, r: s.r });
     });
 
     const marker = async () => {
-      const frame = await page.evaluate(() => window.__settlementRenderer().lastArmyOverlayFrame());
+      const frame = await page.evaluate(() => (window as unknown as OverlayWindow).__settlementRenderer().lastArmyOverlayFrame());
       return frame.armies[0];
     };
     await expect.poll(async () => (await marker())?.id, { timeout: 5_000 }).toBe('garrison-1');

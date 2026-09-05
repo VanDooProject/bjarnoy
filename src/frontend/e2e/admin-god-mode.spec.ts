@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { AdminSettlementsPage, AdminTablePage } from './pages';
 
 /**
  * The admin god-mode surface from issue #105 — instant build, the graphical
@@ -15,18 +16,8 @@ import { expect, test } from './fixtures';
  * `Bjarnoy.Api.IntegrationTests/AdminGodModeEndpointsTests`.
  */
 
-const ADMIN_USER = { id: 'admin-1', userName: 'e2e-admin', role: 'admin', status: 'active', displayName: 'E2E Admin' };
-
 const SETTLEMENT_ID = '11111111-1111-1111-1111-111111111111';
 const ARMY_ID = '22222222-2222-2222-2222-222222222222';
-
-async function loginAsAdmin(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('bjarnoy.refreshToken', 'seed-refresh-admin'));
-  await page.route('**/api/v1/auth/refresh', (route: Route) =>
-    route.fulfill({ json: { accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token', user: ADMIN_USER } }),
-  );
-  await page.route('**/api/v1/auth/me', (route: Route) => route.fulfill({ json: ADMIN_USER }));
-}
 
 interface SettlementOverrides {
   longhouseLevel?: number;
@@ -252,91 +243,89 @@ async function mockSettlementsApi(page: Page) {
   );
 }
 
-async function openSettlementPanel(page: Page) {
-  await page.goto('/admin/settlements');
-  await page.getByRole('button', { name: 'Manage' }).click();
-  await expect(page.getByText('Settlement editor')).toBeVisible();
-}
-
 test.describe('admin god mode', { tag: '@g2' }, () => {
-  test('finishes a queued build instantly and reports what it built', async ({ page }) => {
-    await loginAsAdmin(page);
+  test('finishes a queued build instantly and reports what it built', async ({ page, adminAuth }) => {
+    const admin = new AdminSettlementsPage(page);
+    await adminAuth.login();
     await mockSettlementsApi(page);
-    await openSettlementPanel(page);
+    await admin.openManagePanel();
 
-    const instaBuild = page.locator('button.insta');
-    await expect(instaBuild).toContainText('Instant build (1 queued)');
-    await instaBuild.click();
+    await expect(admin.instantBuild).toContainText('Instant build (1 queued)');
+    await admin.instantBuild.click();
 
     await expect(page.getByText('Finished 1 build(s)')).toBeVisible();
     // The row's longhouse column re-renders from the settlement the server
     // returned, so the level actually moved.
-    await expect(page.locator('tbody tr').first()).toContainText('2');
+    await expect(admin.list.rows.first()).toContainText('2');
   });
 
-  test('places a building on a clicked hex and razes it again', async ({ page }) => {
-    await loginAsAdmin(page);
+  test('places a building on a clicked hex and razes it again', async ({ page, adminAuth }) => {
+    const admin = new AdminSettlementsPage(page);
+    await adminAuth.login();
     await mockSettlementsApi(page);
-    await openSettlementPanel(page);
+    await admin.openManagePanel();
 
-    await page.locator('polygon[data-hex="1,0"]').click();
-    await expect(page.locator('.hex-form')).toContainText('Empty');
+    await admin.hex(1, 0).click();
+    await expect(admin.hexForm).toContainText('Empty');
 
-    await page.locator('.hex-form select').selectOption('farm');
-    await page.locator('.hex-form input[type="number"]').fill('6');
+    await admin.hexForm.locator('select').selectOption('farm');
+    await admin.hexForm.locator('input[type="number"]').fill('6');
 
     const placeRequest = page.waitForRequest(
       (request) =>
         request.method() === 'PUT' && request.url().includes(`/admin/settlements/${SETTLEMENT_ID}/buildings/1/0`),
     );
     // Scoped: GrantResourcesForm's own submit button is also called "Apply".
-    await page.locator('.hex-form').getByRole('button', { name: 'Apply' }).click();
+    await admin.hexForm.getByRole('button', { name: 'Apply' }).click();
     await placeRequest;
 
     // The grid reloads from the layout endpoint, which now reports the farm.
-    await expect(page.locator('polygon[data-hex="1,0"]')).toHaveClass(/occupied/);
+    await expect(admin.hex(1, 0)).toHaveClass(/occupied/);
 
     const razeRequest = page.waitForRequest(
       (request) =>
         request.method() === 'DELETE' && request.url().includes(`/admin/settlements/${SETTLEMENT_ID}/buildings/1/0`),
     );
-    await page.locator('polygon[data-hex="1,0"]').click();
+    await admin.hex(1, 0).click();
     await page.getByRole('button', { name: 'Raze' }).click();
     await razeRequest;
 
-    await expect(page.locator('polygon[data-hex="1,0"]')).not.toHaveClass(/occupied/);
+    await expect(admin.hex(1, 0)).not.toHaveClass(/occupied/);
   });
 
-  test('creates troops straight into the garrison', async ({ page }) => {
-    await loginAsAdmin(page);
+  test('creates troops straight into the garrison', async ({ page, adminAuth }) => {
+    const admin = new AdminSettlementsPage(page);
+    await adminAuth.login();
     await mockSettlementsApi(page);
-    await openSettlementPanel(page);
+    await admin.openManagePanel();
 
-    await page.locator('.garrison-form select').selectOption('spearman');
-    await page.locator('.garrison-form input[type="number"]').fill('25');
-    await page.locator('.garrison-form').getByRole('button', { name: 'Create' }).click();
+    await admin.garrisonForm.locator('select').selectOption('spearman');
+    await admin.garrisonForm.locator('input[type="number"]').fill('25');
+    await admin.garrisonForm.getByRole('button', { name: 'Create' }).click();
 
-    await expect(page.locator('.garrison-form')).toContainText('spearman 25');
+    await expect(admin.garrisonForm).toContainText('spearman 25');
   });
 
-  test('moves an army in the field to another hex', async ({ page }) => {
-    await loginAsAdmin(page);
+  test('moves an army in the field to another hex', async ({ page, adminAuth }) => {
+    const admin = new AdminSettlementsPage(page);
+    await adminAuth.login();
     await mockSettlementsApi(page);
-    await openSettlementPanel(page);
+    await admin.openManagePanel();
 
-    await expect(page.locator('.army-editor')).toContainText('5x thrall');
-    await page.locator('.army-editor').getByRole('button', { name: 'Edit' }).click();
+    await expect(admin.armyEditor).toContainText('5x thrall');
+    await admin.armyEditor.getByRole('button', { name: 'Edit' }).click();
 
-    const controls = page.locator('.army-editor .controls').nth(1);
+    const controls = admin.armyEditor.locator('.controls').nth(1);
     await controls.locator('input').first().fill('9');
     await controls.locator('input').nth(1).fill('9');
     await page.getByRole('button', { name: 'Move here' }).click();
 
-    await expect(page.locator('.army-editor')).toContainText('(9, 9)');
+    await expect(admin.armyEditor).toContainText('(9, 9)');
   });
 
-  test('creates a new world from the worlds page', async ({ page }) => {
-    await loginAsAdmin(page);
+  test('creates a new world from the worlds page', async ({ page, adminAuth }) => {
+    const worlds = new AdminTablePage(page);
+    await adminAuth.login();
 
     const existing = {
       id: 'world-1',
@@ -373,7 +362,7 @@ test.describe('admin god mode', { tag: '@g2' }, () => {
     await page.locator('.create input[type="number"]').nth(2).fill('120');
     await page.getByRole('button', { name: 'Create world' }).click();
 
-    await expect(page.locator('tbody')).toContainText('Alfheim');
-    await expect(page.locator('tbody')).toContainText('0 / 120');
+    await expect(worlds.body).toContainText('Alfheim');
+    await expect(worlds.body).toContainText('0 / 120');
   });
 });
