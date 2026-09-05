@@ -339,6 +339,168 @@ public class ArmyTests
         Assert.Equal(midway, recalledMovement.DepartedAt);
     }
 
+    // Issue #156 phase 1: PlanFieldOrder — sending an army already out in the
+    // field onward. `Standing` and `Marching` below both go through the real
+    // Dispatch() fixture (not a hand-built Army) so the movement/food math the
+    // assertions lean on is exactly what a real dispatch would have produced.
+
+    /// <summary>An army dispatched to <paramref name="destination"/>, settled to just after it arrives (still standing, before turn-around).</summary>
+    private static Army Standing(HexCoord destination, double provisions = 40)
+    {
+        var settlement = Found();
+        var decision = Dispatch(settlement, destination, provisions);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+        return army.SettleTo(movement.ArrivesAt.AddMinutes(1)).Army;
+    }
+
+    /// <summary>An army dispatched to <paramref name="destination"/>, still partway along the outbound leg.</summary>
+    private static Army Marching(HexCoord destination, double provisions = 40)
+    {
+        var settlement = Found();
+        var decision = Dispatch(settlement, destination, provisions);
+        return decision.Army!;
+    }
+
+    private static DateTimeOffset ArrivedAt(Army army) => ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt.AddMinutes(1);
+
+    private static DateTimeOffset MidwayOf(Army army) =>
+        ((ArmyLocation.InTransit)army.Location).Movement is var m
+            ? m.DepartedAt + TimeSpan.FromHours(m.CumulativeHours[^1] / 4.0)
+            : throw new InvalidOperationException();
+
+    [Fact]
+    public void FieldOrder_is_rejected_when_the_army_is_at_home()
+    {
+        var army = new Army
+        {
+            Id = Guid.CreateVersion7(),
+            SettlementId = Guid.CreateVersion7(),
+            Location = new ArmyLocation.AtHome(),
+        };
+
+        var result = Army.PlanFieldOrder(army, [], new HexCoord(1, 0), Home, T0, AllGrass(), isPremium: true);
+
+        Assert.Equal(FieldOrderRejection.NoActiveJourney, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_is_rejected_when_the_army_is_supporting()
+    {
+        var army = new Army
+        {
+            Id = Guid.CreateVersion7(),
+            SettlementId = Guid.CreateVersion7(),
+            Location = new ArmyLocation.Supporting(Guid.CreateVersion7()),
+        };
+
+        var result = Army.PlanFieldOrder(army, [], new HexCoord(1, 0), Home, T0, AllGrass(), isPremium: true);
+
+        Assert.Equal(FieldOrderRejection.NoActiveJourney, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_is_rejected_when_already_returning()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+        var returning = army.SettleTo(movement.TurnAroundAt.AddMinutes(1)).Army;
+
+        var result = Army.PlanFieldOrder(
+            returning, [], new HexCoord(1, 0), Home, movement.TurnAroundAt.AddMinutes(2), AllGrass(), isPremium: true);
+
+        Assert.Equal(FieldOrderRejection.NoActiveJourney, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_move_on_with_no_waypoints_is_free()
+    {
+        var army = Standing(new HexCoord(10, 0));
+
+        var result = Army.PlanFieldOrder(
+            army, [], new HexCoord(15, 0), Home, ArrivedAt(army), AllGrass(), isPremium: false);
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        var movement = ((ArmyLocation.InTransit)result.Army!.Location).Movement;
+        Assert.Equal(new HexCoord(10, 0), movement.Path[0]);
+        Assert.Equal(new HexCoord(15, 0), movement.Path[^1]);
+        Assert.False(movement.IsReturning);
+    }
+
+    [Fact]
+    public void FieldOrder_move_on_with_waypoints_requires_premium()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var now = ArrivedAt(army);
+
+        var refused = Army.PlanFieldOrder(
+            army, [new HexCoord(12, 0)], new HexCoord(15, 0), Home, now, AllGrass(), isPremium: false);
+        Assert.Equal(FieldOrderRejection.PremiumRequired, refused.Rejection);
+
+        var accepted = Army.PlanFieldOrder(
+            army, [new HexCoord(12, 0)], new HexCoord(15, 0), Home, now, AllGrass(), isPremium: true);
+        Assert.True(accepted.Accepted, $"expected accept, got {accepted.Rejection}");
+        var movement = ((ArmyLocation.InTransit)accepted.Army!.Location).Movement;
+        Assert.Contains(new HexCoord(12, 0), movement.Path);
+    }
+
+    [Fact]
+    public void FieldOrder_append_goal_while_still_marching_requires_premium()
+    {
+        var army = Marching(new HexCoord(10, 0));
+        var midway = MidwayOf(army);
+
+        var refused = Army.PlanFieldOrder(army, [], new HexCoord(15, 0), Home, midway, AllGrass(), isPremium: false);
+        Assert.Equal(FieldOrderRejection.PremiumRequired, refused.Rejection);
+
+        var accepted = Army.PlanFieldOrder(army, [], new HexCoord(15, 0), Home, midway, AllGrass(), isPremium: true);
+        Assert.True(accepted.Accepted, $"expected accept, got {accepted.Rejection}");
+    }
+
+    [Fact]
+    public void FieldOrder_append_goal_extends_the_original_route_rather_than_restarting_it()
+    {
+        var army = Marching(new HexCoord(10, 0));
+        var originalMovement = ((ArmyLocation.InTransit)army.Location).Movement;
+        var midway = MidwayOf(army);
+
+        var result = Army.PlanFieldOrder(army, [], new HexCoord(15, 0), Home, midway, AllGrass(), isPremium: true);
+
+        Assert.True(result.Accepted, $"expected accept, got {result.Rejection}");
+        var movement = ((ArmyLocation.InTransit)result.Army!.Location).Movement;
+        // The already-computed original leg is untouched (same departure and
+        // the same hexes up to the original destination), just continued.
+        Assert.Equal(originalMovement.DepartedAt, movement.DepartedAt);
+        Assert.Equal(originalMovement.Path, movement.Path.Take(originalMovement.Path.Count));
+        Assert.Equal(new HexCoord(15, 0), movement.Path[^1]);
+    }
+
+    [Fact]
+    public void FieldOrder_is_rejected_when_the_new_destination_is_unreachable()
+    {
+        var army = Standing(new HexCoord(10, 0));
+        var seaWall = Enumerable.Range(-10, 21).Select(r => new HexCoord(12, r)).ToHashSet();
+        Terrain TerrainAt(HexCoord c) => seaWall.Contains(c) ? Terrain.Sea : Terrain.Grass;
+
+        var result = Army.PlanFieldOrder(
+            army, [], new HexCoord(15, 0), Home, ArrivedAt(army), TerrainAt, isPremium: false);
+
+        Assert.Equal(FieldOrderRejection.UnreachableLeg, result.Rejection);
+    }
+
+    [Fact]
+    public void FieldOrder_is_rejected_when_provisions_do_not_cover_the_new_round_trip()
+    {
+        // Enough for the original round trip (10 out, 10 back) with a small
+        // margin — nowhere near enough for a much longer detour to (60, 0).
+        var army = Standing(new HexCoord(10, 0), provisions: 40);
+
+        var result = Army.PlanFieldOrder(
+            army, [], new HexCoord(60, 0), Home, ArrivedAt(army), AllGrass(), isPremium: false);
+
+        Assert.Equal(FieldOrderRejection.InsufficientProvisionsForRoundTrip, result.Rejection);
+    }
+
     [Fact]
     public void Dispatch_is_rejected_when_mixing_ships_and_land_units()
     {

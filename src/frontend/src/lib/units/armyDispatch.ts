@@ -3,7 +3,7 @@
 // they're unit-testable without mounting a component or a Pinia store, same
 // reasoning as lib/units/trainingEconomy.ts.
 import type { AxialCoord } from '../hex/coords';
-import type { DispatchArmyRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
+import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
 
 /**
  * Converts an ordered list of clicked hexes into the shape `DispatchArmyRequest`
@@ -82,6 +82,42 @@ export function buildAttackDispatchRequest(
     targetSettlementId,
     targetBuildingCoord: targetBuildingCoord ?? undefined,
   };
+}
+
+/**
+ * Builds a `FieldOrderRequest` from a clicked route (issue #156 phase 1) —
+ * same split as `routeToWaypointsAndDestination` (last click is the
+ * destination, everything before it a waypoint), but for an army already out
+ * in the field rather than one being dispatched from a garrison, so there's
+ * no unit selection to validate. `null` for an empty route: a field order
+ * always needs a destination.
+ */
+export function buildFieldOrderRequest(route: AxialCoord[]): FieldOrderRequest | null {
+  if (route.length === 0) return null;
+  const { waypoints, destination } = routeToWaypointsAndDestination(route);
+  return { waypoints: waypoints.length > 0 ? waypoints : undefined, destination: destination! };
+}
+
+/**
+ * Whether an army can be given a field order at all (issue #156 phase 1) —
+ * standing at its destination or still travelling outbound, on a `move` or
+ * `found` mission (see `Army.PlanFieldOrder`'s remarks on why attack/support/
+ * raid are out of scope: their destination is always a target settlement's
+ * own hex, re-validated by dispatch-time-only checks a bare "new hex" order
+ * can't safely reuse). Mirrors the backend's own `NoActiveJourney`/
+ * `MissionNotFieldOrderable` rejections closely enough to greylist the button
+ * before a doomed request is even sent, the same reasoning
+ * `isUnitSelectableFor` applies to fleet/land mixing.
+ */
+export function canFieldOrderArmy(army: {
+  atHome: boolean;
+  supporting: boolean;
+  mission: string;
+  movement: { isReturning: boolean } | null;
+}): boolean {
+  if (army.atHome || army.supporting) return false;
+  if (army.movement?.isReturning) return false;
+  return army.mission === 'move' || army.mission === 'found';
 }
 
 /**

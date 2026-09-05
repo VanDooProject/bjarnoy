@@ -18,6 +18,7 @@ import { DEMO_MODE } from '../config';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
+  buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
 } from '../lib/units/armyDispatch';
@@ -210,6 +211,18 @@ export const useWorldStore = defineStore('world', {
       // picked one. Always `null` outside `mission: 'attack'` — a Move/Support
       // dispatch has no battle to apply it in (see `setDispatchMission`).
       targetBuildingCoord: { q: number; r: number } | null;
+    } | null,
+    // Issue #156 phase 1: waypoint-editing state for an army already out in
+    // the field, given a "move on"/"append goal" order — same click-to-plot
+    // flow as `dispatchDraft` (mutually exclusive with it on the same
+    // canvas, see SettlementView.vue's `onHexClick`), but scoped to a single
+    // existing `armyId` rather than a garrison selection. `null` while no
+    // field order is being composed.
+    fieldOrderDraft: null as {
+      armyId: string;
+      route: AxialCoord[];
+      submitting: boolean;
+      error: string | null;
     } | null,
     // The target settlement's own placed buildings, fetched on demand once an
     // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
@@ -755,8 +768,73 @@ export const useWorldStore = defineStore('world', {
       await api.recallArmy(armyId, this.ownerId ?? undefined);
       await this.refreshArmies();
     },
+    /**
+     * Issue #156 phase 1: enters waypoint-editing mode for a field order on
+     * an army already out in the field — "move on" if it's standing at its
+     * destination, "append goal" if it's still travelling there (the backend
+     * decides which; see `Army.PlanFieldOrder`). Cancels any dispatch draft
+     * in progress first — the two flows share the same click-to-plot canvas
+     * (see SettlementView.vue's `onHexClick`) and can't run at once.
+     */
+    startFieldOrder(armyId: string) {
+      this.dispatchDraft = null;
+      this.fieldOrderDraft = { armyId, route: [], submitting: false, error: null };
+    },
+    cancelFieldOrder() {
+      this.fieldOrderDraft = null;
+    },
+    addFieldOrderWaypoint(coord: AxialCoord) {
+      if (!this.fieldOrderDraft) return;
+      this.fieldOrderDraft.route.push(coord);
+    },
+    moveFieldOrderWaypoint(index: number, coord: AxialCoord) {
+      const route = this.fieldOrderDraft?.route;
+      if (!route || index < 0 || index >= route.length) return;
+      route[index] = { q: coord.q, r: coord.r };
+    },
+    removeFieldOrderWaypoint(index: number) {
+      const route = this.fieldOrderDraft?.route;
+      if (!route || index < 0 || index >= route.length) return;
+      route.splice(index, 1);
+    },
+    removeLastFieldOrderWaypoint() {
+      if (!this.fieldOrderDraft) return;
+      this.fieldOrderDraft.route.pop();
+    },
+    clearFieldOrderWaypoints() {
+      if (!this.fieldOrderDraft) return;
+      this.fieldOrderDraft.route = [];
+    },
+    /**
+     * Sends the composed field order to the backend. Leaves the draft in
+     * place (with `error` set) on rejection — e.g. `premium_required` for a
+     * waypointed/mid-march order from a non-premium account, or an
+     * insufficient-provisions/unreachable-route rejection — so the player can
+     * adjust and retry, mirroring `confirmDispatch`.
+     */
+    async confirmFieldOrder() {
+      const draft = this.fieldOrderDraft;
+      if (!draft) return;
+      const request = buildFieldOrderRequest(draft.route);
+      if (!request) {
+        draft.error = 'Click the map to set a destination first.';
+        return;
+      }
+      draft.submitting = true;
+      draft.error = null;
+      try {
+        await api.fieldOrderArmy(draft.armyId, request, this.ownerId ?? undefined);
+        this.fieldOrderDraft = null;
+        await this.refreshArmies();
+      } catch (err) {
+        draft.error = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Field order failed.';
+      } finally {
+        draft.submitting = false;
+      }
+    },
     /** Enters waypoint-editing mode for a fresh dispatch from the current settlement's garrison. */
     startDispatch() {
+      this.fieldOrderDraft = null;
       this.dispatchDraft = {
         unitCounts: {},
         route: [],

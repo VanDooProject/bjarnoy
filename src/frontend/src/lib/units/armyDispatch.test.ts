@@ -3,8 +3,10 @@ import type { UnitDefinitionResponse } from '../../api/types';
 import {
   armyStatusLabel,
   buildAttackDispatchRequest,
+  buildFieldOrderRequest,
   buildMoveDispatchRequest,
   buildSupportDispatchRequest,
+  canFieldOrderArmy,
   classifyUnitSelection,
   formatEta,
   hasCatapultSelected,
@@ -306,5 +308,63 @@ describe('isUnitSelectableFor', () => {
   it('locks out nothing further for an (unreachable in practice) mixed selection', () => {
     expect(isUnitSelectableFor('spearman', 'mixed', byType)).toBe(true);
     expect(isUnitSelectableFor('karve', 'mixed', byType)).toBe(true);
+  });
+});
+
+describe('buildFieldOrderRequest', () => {
+  it('returns null for an empty route — a field order always needs a destination', () => {
+    expect(buildFieldOrderRequest([])).toBeNull();
+  });
+
+  it('treats a single-hex route as destination-only, no waypoints', () => {
+    expect(buildFieldOrderRequest([{ q: 3, r: -1 }])).toEqual({
+      waypoints: undefined,
+      destination: { q: 3, r: -1 },
+    });
+  });
+
+  it('splits a multi-hex route into waypoints plus a final destination', () => {
+    const route = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }];
+    expect(buildFieldOrderRequest(route)).toEqual({
+      waypoints: [{ q: 0, r: 0 }, { q: 1, r: 0 }],
+      destination: { q: 2, r: 0 },
+    });
+  });
+});
+
+describe('canFieldOrderArmy', () => {
+  it('refuses an army standing at home', () => {
+    expect(canFieldOrderArmy({ atHome: true, supporting: false, mission: 'move', movement: null })).toBe(false);
+  });
+
+  it('refuses a guest army supporting elsewhere', () => {
+    expect(canFieldOrderArmy({ atHome: false, supporting: true, mission: 'move', movement: null })).toBe(false);
+  });
+
+  it('refuses an army already heading home', () => {
+    expect(
+      canFieldOrderArmy({
+        atHome: false,
+        supporting: false,
+        mission: 'move',
+        movement: { isReturning: true },
+      }),
+    ).toBe(false);
+  });
+
+  it('refuses an attack/support/raid mission — out of scope for issue #156 phase 1', () => {
+    for (const mission of ['attack', 'support', 'raid']) {
+      expect(
+        canFieldOrderArmy({ atHome: false, supporting: false, mission, movement: { isReturning: false } }),
+      ).toBe(false);
+    }
+  });
+
+  it('allows a standing or marching move/found army', () => {
+    for (const mission of ['move', 'found']) {
+      expect(
+        canFieldOrderArmy({ atHome: false, supporting: false, mission, movement: { isReturning: false } }),
+      ).toBe(true);
+    }
   });
 });

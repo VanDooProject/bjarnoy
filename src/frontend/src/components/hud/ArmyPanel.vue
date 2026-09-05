@@ -15,6 +15,7 @@ import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
 import {
   armyStatusLabel,
+  canFieldOrderArmy,
   classifyUnitSelection,
   formatEta,
   hasCatapultSelected,
@@ -233,6 +234,14 @@ const armyRows = computed(() => {
       status,
       eta,
       canRecall,
+      // Issue #156 phase 1: "Move on" once standing, "Append goal" while
+      // still travelling — same eligibility, the label just names what the
+      // backend will actually do with the plotted route (Army.PlanFieldOrder
+      // decides which from `now` vs. the active leg's ArrivesAt).
+      canFieldOrder: canFieldOrderArmy(army),
+      fieldOrderLabel: army.movement && !army.movement.isReturning && Date.parse(army.movement.arrivesAt) > now
+        ? 'Append goal'
+        : 'Move on',
       selected: army.id === world.selectedArmyId,
       mission: army.mission !== 'move' ? missionTagLabel(army.mission) : null,
     };
@@ -257,6 +266,27 @@ async function recall(armyId: string) {
     recallingId.value = null;
   }
 }
+
+// Issue #156 phase 1: field-order composing — a separate, lighter draft from
+// the dispatch one above (no unit picker, just a plotted route against an
+// already-existing armyId). See stores/world.ts's `fieldOrderDraft` comment
+// for why this shares the same click-to-plot canvas rather than reusing
+// `dispatchDraft` outright.
+const fieldDraft = computed(() => world.fieldOrderDraft);
+const fieldOrderRouteLength = computed(() => fieldDraft.value?.route.length ?? 0);
+const fieldOrderRouteRows = computed(() =>
+  (fieldDraft.value?.route ?? []).map((c, i) => ({
+    index: i,
+    label: `${i + 1}. (${c.q}, ${c.r})`,
+    isDestination: i === (fieldDraft.value?.route.length ?? 0) - 1,
+  })),
+);
+function beginFieldOrder(armyId: string) {
+  world.startFieldOrder(armyId);
+}
+async function confirmFieldOrderClick() {
+  await world.confirmFieldOrder();
+}
 </script>
 
 <template>
@@ -270,7 +300,7 @@ async function recall(armyId: string) {
       Dispatching armies requires the live backend and isn't wired up in demo mode yet.
     </p>
 
-    <template v-if="!draft">
+    <template v-if="!draft && !fieldDraft">
       <div v-if="armyRows.length" class="army-list">
         <div
           v-for="row in armyRows"
@@ -286,14 +316,23 @@ async function recall(armyId: string) {
           <div class="status-subtext">
             {{ row.status }}<span v-if="row.mission" class="mission-tag"> · {{ row.mission }}</span>
           </div>
-          <button
-            v-if="row.canRecall"
-            class="recall"
-            :disabled="recalling(row.id)"
-            @click.stop="recall(row.id)"
-          >
-            {{ recalling(row.id) ? 'Recalling…' : 'Recall' }}
-          </button>
+          <div class="army-row-actions">
+            <button
+              v-if="row.canFieldOrder"
+              class="secondary field-order"
+              @click.stop="beginFieldOrder(row.id)"
+            >
+              {{ row.fieldOrderLabel }}
+            </button>
+            <button
+              v-if="row.canRecall"
+              class="recall"
+              :disabled="recalling(row.id)"
+              @click.stop="recall(row.id)"
+            >
+              {{ recalling(row.id) ? 'Recalling…' : 'Recall' }}
+            </button>
+          </div>
         </div>
       </div>
       <div v-else class="status-subtext garrison-empty">No armies on the road.</div>
@@ -307,7 +346,62 @@ async function recall(armyId: string) {
       </button>
     </template>
 
-    <template v-else>
+    <template v-else-if="fieldDraft">
+      <div class="dispatch-form">
+        <p v-if="fieldDraft.error" class="status-subtext error-note">{{ fieldDraft.error }}</p>
+        <p class="status-subtext instructions">
+          Click hexes on the map to plot where this army should go next — the
+          last click is the new destination. {{ fieldOrderRouteLength }}
+          hex{{ fieldOrderRouteLength === 1 ? '' : 'es' }} plotted.
+        </p>
+
+        <div v-if="fieldOrderRouteRows.length" class="waypoint-list">
+          <p class="status-subtext waypoint-hint">Drag a pin on the map to move a waypoint.</p>
+          <div v-for="row in fieldOrderRouteRows" :key="row.index" class="waypoint-row">
+            <span class="waypoint-label">
+              {{ row.label }}<span v-if="row.isDestination" class="waypoint-tag"> · destination</span>
+            </span>
+            <button
+              type="button"
+              class="waypoint-remove"
+              :aria-label="`Remove waypoint ${row.index + 1}`"
+              @click="world.removeFieldOrderWaypoint(row.index)"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div class="dispatch-actions">
+          <button
+            class="secondary"
+            @click="world.removeLastFieldOrderWaypoint()"
+            :disabled="fieldOrderRouteLength === 0"
+          >
+            Undo waypoint
+          </button>
+          <button
+            class="secondary"
+            @click="world.clearFieldOrderWaypoints()"
+            :disabled="fieldOrderRouteLength === 0"
+          >
+            Clear route
+          </button>
+        </div>
+        <div class="dispatch-actions">
+          <button class="secondary" @click="world.cancelFieldOrder()">Cancel</button>
+          <button
+            class="primary"
+            :disabled="fieldOrderRouteLength === 0 || fieldDraft.submitting"
+            @click="confirmFieldOrderClick"
+          >
+            {{ fieldDraft.submitting ? 'Sending…' : 'Confirm order' }}
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="draft">
       <div class="dispatch-form">
         <p v-if="draft.error" class="status-subtext error-note">{{ draft.error }}</p>
 
@@ -560,6 +654,10 @@ async function recall(armyId: string) {
 .army-row.is-selected {
   background: rgba(255, 197, 92, 0.08);
 }
+.army-row-actions {
+  display: flex;
+  gap: 6px;
+}
 .recall {
   margin-top: 6px;
   padding: 5px 10px;
@@ -574,6 +672,12 @@ async function recall(armyId: string) {
 .recall:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.field-order {
+  margin-top: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .dispatch-btn {

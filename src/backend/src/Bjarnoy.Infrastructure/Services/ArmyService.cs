@@ -50,6 +50,12 @@ public sealed record RetargetFoundingApiResult(RetargetFoundingRejection Rejecti
     public bool Accepted => Rejection == RetargetFoundingRejection.None && Army is not null;
 }
 
+/// <summary>The outcome of asking to send an already-fielded army onward (issue #156 phase 1) — mirrors <see cref="RetargetFoundingApiResult"/>.</summary>
+public sealed record FieldOrderApiResult(FieldOrderRejection Rejection, ArmyEntity? Army = null, bool ArmyNotFound = false)
+{
+    public bool Accepted => Rejection == FieldOrderRejection.None && Army is not null;
+}
+
 /// <summary>Why an admin's direct army edit was refused.</summary>
 public enum AdminArmyEditOutcome
 {
@@ -90,12 +96,14 @@ public sealed class ArmyService(
     TimeProvider timeProvider,
     SettlementService settlementService,
     RenownService renownService,
+    AuthService authService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly SettlementService _settlementService = settlementService;
     private readonly RenownService _renownService = renownService;
+    private readonly AuthService _authService = authService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -489,6 +497,97 @@ public sealed class ArmyService(
         _logger.LogInformation("Founding convoy (army {ArmyId}) retargeted to {NewTarget} at {Now}.", armyId, newTarget, now);
 
         return new RetargetFoundingApiResult(RetargetFoundingRejection.None, army);
+    }
+
+    /// <summary>
+    /// Sends an army already out in the field onward to a new hex (issue #156
+    /// phase 1) — "move on" once it has arrived and is standing, "append
+    /// goal" while it is still travelling. See <see cref="Army.PlanFieldOrder"/>
+    /// for the domain rule this wraps.
+    /// </summary>
+    /// <remarks>
+    /// Restricted here, not in the pure domain method, to
+    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Found"/>: an
+    /// Attack/Support/Raid army's destination is always a target settlement's
+    /// own hex, re-validated by <see cref="Army.PlanDispatch"/>'s
+    /// target-settlement/shoreline/claim-disc checks at dispatch time — none
+    /// of which a bare "new hex" field order can safely reuse without
+    /// redoing that whole validation. Issue #156's own design doc calls that
+    /// combination "in scope but separate work"; this only ever touches
+    /// <see cref="Army.Location"/>, never <see cref="Army.Mission"/> or
+    /// <see cref="Army.TargetSettlementId"/>, so a Found convoy that failed
+    /// to found and is standing at its target (<c>ResolveFoundingAsync</c>'s
+    /// fallback) can still be walked onward exactly like a Move army.
+    /// </remarks>
+    /// <param name="callerUserId">
+    /// The authenticated caller's id, if any — resolved to a live premium
+    /// flag via <see cref="AuthService.GetIsPremiumAsync"/>, same as
+    /// <see cref="Bjarnoy.Api.Auth.PremiumUserEndpointFilter"/>. An anonymous
+    /// caller (<see langword="null"/>) is never premium — ordinary game
+    /// actions (a free "move on" with no waypoints) still work for them, only
+    /// the premium half of the rule table is unavailable.
+    /// </param>
+    public async Task<FieldOrderApiResult> FieldOrderAsync(
+        Guid armyId,
+        IReadOnlyList<HexCoord> waypoints,
+        HexCoord destination,
+        Guid? callerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var army = await LoadArmyAsync(armyId, cancellationToken).ConfigureAwait(false);
+        if (army?.Settlement?.World is null)
+        {
+            return new FieldOrderApiResult(FieldOrderRejection.NoActiveJourney, ArmyNotFound: true);
+        }
+
+        var clock = army.Settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+
+        var outcome = await SettleAndFoldAsync(army, now, cancellationToken).ConfigureAwait(false);
+        if (outcome == ArmySettleOutcome.FoldedHome)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new FieldOrderApiResult(FieldOrderRejection.NoActiveJourney);
+        }
+
+        var domain = army.ToDomain();
+        if (domain.Mission is not (ArmyMission.Move or ArmyMission.Found))
+        {
+            if (outcome == ArmySettleOutcome.Updated)
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new FieldOrderApiResult(FieldOrderRejection.MissionNotFieldOrderable, army);
+        }
+
+        var isPremium = callerUserId is { } userId
+            && await _authService.GetIsPremiumAsync(userId, cancellationToken).ConfigureAwait(false) == true;
+
+        var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
+
+        var result = Army.PlanFieldOrder(
+            domain, waypoints, destination, home, now, sampler.TerrainAt, isPremium,
+            army.Settlement.World.SpeedFactor, riverTiles.Contains);
+
+        if (!result.Accepted)
+        {
+            if (outcome == ArmySettleOutcome.Updated)
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new FieldOrderApiResult(result.Rejection, army);
+        }
+
+        army.ApplyDomain(result.Army!);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Army {ArmyId} given a field order at {Now}, now heading to {Destination}.", armyId, now, destination);
+
+        return new FieldOrderApiResult(FieldOrderRejection.None, army);
     }
 
     /// <summary>

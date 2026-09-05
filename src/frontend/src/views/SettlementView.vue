@@ -137,7 +137,7 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
       ? selected.movement.returnPath
       : selected.movement.path
     : [];
-  const draftWaypoints = world.dispatchDraft?.route ?? [];
+  const draftWaypoints = world.dispatchDraft?.route ?? world.fieldOrderDraft?.route ?? [];
   return { armies, route, draftWaypoints, targets: overlayTargets(selected) };
 });
 
@@ -642,6 +642,13 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     world.addWaypoint(coord);
     return;
   }
+  // Issue #156 phase 1: a field order being composed (ArmyPanel's "Move
+  // on"/"Append goal" flow) claims clicks the same way a dispatch draft
+  // does — mutually exclusive interaction modes, same as above.
+  if (world.fieldOrderDraft) {
+    world.addFieldOrderWaypoint(coord);
+    return;
+  }
   hoverInfo.value = null;
   selectedCoord.value = coord;
   selectedTile.value = tile;
@@ -653,6 +660,10 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
 // the pin was dragged onto (snapping happens there, against the same
 // isoPixelToAxial a click uses); this just writes it into the draft.
 function onWaypointMove(index: number, coord: AxialCoord) {
+  if (world.fieldOrderDraft) {
+    world.moveFieldOrderWaypoint(index, coord);
+    return;
+  }
   world.moveWaypoint(index, coord);
 }
 

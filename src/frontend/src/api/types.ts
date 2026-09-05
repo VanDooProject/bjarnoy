@@ -1002,6 +1002,16 @@ export interface DispatchArmyRequest {
 }
 
 /**
+ * Sends an army already out in the field onward to a new hex (issue #156
+ * phase 1) — "move on" when it's standing at its destination, "append goal"
+ * when it's still travelling. Mirrors `FieldOrderRequest`.
+ */
+export interface FieldOrderRequest {
+  waypoints?: HexPoint[];
+  destination: HexPoint;
+}
+
+/**
  * Mirrors `MovementResponse` — the full outbound route, start and destination
  * included.
  *
