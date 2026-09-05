@@ -267,8 +267,16 @@ function buildTileTextures(atlases: LoadedAtlas[]): TileTextures {
     if (classified.top) top[key] = classified.top;
   }
 
+  // Coastal water's numbered variants (ripples) currently render as this
+  // family's *top* frames in the source, with `base` staying a single
+  // level-invariant frame per orientation — but the game only ever draws
+  // one texture for a coastal-water tile (baseTextureFor, no separate top
+  // layer for it), so whichever bucket actually turned out indexed is the
+  // one that reproduces that variety; `baseIndexed` is preferred only in
+  // case a future render puts the variants there instead.
   const coastalClassified = classifyFamilyFrames(framesOfFamily(merged, COASTAL_FAMILY));
-  const coastalBase = coastalClassified.baseIndexed ?? emptyOrientationMap<Texture[]>(() => []);
+  const coastalBase =
+    coastalClassified.baseIndexed ?? coastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
 
   const riverBase = {} as Record<RiverArtShape, OrientationMap<Texture>>;
   const riverTop = {} as Record<RiverArtShape, OrientationMap<Texture>>;
