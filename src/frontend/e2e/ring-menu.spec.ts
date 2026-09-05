@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
-import { distanceFrom, foundSettlement, rectsOf } from './helpers';
+import { distanceFrom, rectsOf } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
@@ -28,11 +29,8 @@ import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 test.describe('ring menu drill-down', () => {
   test('hovering into build categories, then a category into its buildings, keeps the menu two lanes deep', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
 
     // Same "try a spread of offsets" approach settlement-interactions.spec
     // uses for finding a buildable tile — walk offsets until one opens a
@@ -51,7 +49,7 @@ test.describe('ring menu drill-down', () => {
     let drilled = false;
     for (const [dx, dy] of offsets) {
       await page.mouse.click(cx + dx, cy + dy);
-      const buildBubble = page.locator('.ring-bubble', { hasText: 'Build' });
+      const buildBubble = settlement.ring.action('Build');
       // Wait for the ring to actually appear rather than sleeping a flat
       // 150ms and hoping. On a runner where one frame costs 200ms+, that
       // sleep expires before the ring renders and a perfectly good tile
@@ -67,20 +65,19 @@ test.describe('ring menu drill-down', () => {
         continue;
       }
 
-      const bb = (await buildBubble.boundingBox())!;
-      await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2, { steps: 6 });
+      await settlement.ring.hover(buildBubble);
       await page.waitForTimeout(250);
 
       // The inner lane is now the categories plus the reserved ‹ BACK slot —
       // the root actions it replaced are gone, which is the whole point of
       // capping the menu at two lanes.
       await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(0);
-      const backBubble = page.locator('.ring-bubble.back');
+      const backBubble = settlement.ring.backBubble;
       await expect(backBubble).toHaveCount(1);
 
       // Lanes are distinguishable by class rather than by excluding labels:
       // `.back` is the reserved back slot, `.child` the outer lane.
-      const categoryBubbles = page.locator('.ring-bubble:not(.back):not(.child)');
+      const categoryBubbles = settlement.ring.categoryBubbles;
       // rectsOf snapshots synchronously, where the per-bubble
       // toBeVisible() this replaces used to auto-wait — so keep one
       // auto-waiting assertion to let the ring finish opening, then read
@@ -95,7 +92,7 @@ test.describe('ring menu drill-down', () => {
       // The tile's own hover tooltip must stay suppressed throughout —
       // this is the regression from the first correction: it used to
       // render on top of exactly these freshly opened bubbles.
-      await expect(page.locator('.hex-tooltip')).toBeHidden();
+      await expect(settlement.tooltip).toBeHidden();
 
       const categoryTexts = categoryRects.map((r) => r.text);
       const firstCategoryRect = categoryRects[0];
@@ -115,7 +112,7 @@ test.describe('ring menu drill-down', () => {
         await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(1);
       }
       await expect(backBubble).toHaveCount(1);
-      const buildingBubbles = page.locator('.ring-bubble.child');
+      const buildingBubbles = settlement.ring.childBubbles;
       await expect(buildingBubbles.first()).toBeVisible();
       const buildingRects = await rectsOf(buildingBubbles);
       expect(buildingRects.length).toBeGreaterThan(0);
@@ -124,7 +121,7 @@ test.describe('ring menu drill-down', () => {
         // The outer lane sits further out than the inner one it fanned from.
         expect(distanceFrom(rect, cx + dx, cy + dy)).toBeGreaterThan(categoryDist);
       }
-      await expect(page.locator('.hex-tooltip')).toBeHidden();
+      await expect(settlement.tooltip).toBeHidden();
 
       // ‹ BACK goes up exactly one level, back to the categories.
       await backBubble.click();
@@ -150,61 +147,29 @@ test.describe('ring menu drill-down', () => {
     // fresh level-1 realm cannot place one, and the ring says why rather than
     // letting the click silently do nothing.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
 
     // Ask the model for a real empty, owned, grass hex (grass is what carries
     // the Military category — see BUILD_CATEGORIES) rather than guessing a
     // pixel offset that only lands on one at a particular camera framing.
-    const target = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
-      const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
-      for (let dq = -radius; dq <= radius; dq++) {
-        for (let dr = -radius; dr <= radius; dr++) {
-          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-          const at = { q: settlement.q + dq, r: settlement.r + dr };
-          const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
-            return win.__settlementRenderer().hexCenterScreen(at);
-          }
-        }
-      }
-      throw new Error('no empty buildable grass hex found inside the realm');
-    });
+    const target = await settlement.findHex({ terrain: 'grass' });
 
-    const countBuildings = () =>
-      page.evaluate(() => {
-        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-          .__demoWorld();
-        return world.model.countBuildings(world.selectedSettlementId) as number;
-      });
+    const countBuildings = () => settlement.countBuildings();
     const before = await countBuildings();
 
-    await page.mouse.click(box.x + target.x, box.y + target.y);
+    await settlement.clickHex(target);
 
-    const hoverBubble = async (locator: ReturnType<typeof page.locator>) => {
-      await expect(locator).toBeVisible();
-      const rect = (await locator.boundingBox())!;
-      await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 6 });
-    };
-
-    await hoverBubble(page.locator('.ring-bubble', { hasText: 'Build' }).first());
-    await hoverBubble(page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Military' }).first());
+    await settlement.ring.openBuildCategories();
+    await settlement.ring.openCategory('Military');
 
     // Nothing hovered yet, so nothing is preselected — opening a category must
     // not pop a card for a building the player never pointed at.
-    await expect(page.locator('.ring-card')).toHaveCount(0);
+    await expect(settlement.ring.card).toHaveCount(0);
 
-    const watchtower = page.locator('.ring-bubble.child', { hasText: 'Watchtower' }).first();
-    await hoverBubble(watchtower);
+    const watchtower = settlement.ring.child('Watchtower').first();
+    await settlement.ring.hover(watchtower);
 
-    const card = page.locator('.ring-card');
+    const card = settlement.ring.card;
     await expect(card).toBeVisible();
     // Cost, time and the gate all come from the building catalogue, so these
     // are the backend's own numbers: 120 wood / 200 stone / 10 iron, 8:00,
@@ -230,8 +195,8 @@ test.describe('ring menu drill-down', () => {
     );
     expect(underCard).not.toContain('ring-card');
 
-    const magicTower = page.locator('.ring-bubble.child', { hasText: 'Magic Tower' }).first();
-    await hoverBubble(magicTower);
+    const magicTower = settlement.ring.child('Magic Tower').first();
+    await settlement.ring.hover(magicTower);
     await magicTower.click();
     await expect.poll(countBuildings, { timeout: 5_000 }).toBe(before + 1);
   });
@@ -242,42 +207,18 @@ test.describe('ring menu drill-down', () => {
     // bump the level for free regardless. Same disabled+hint convention as
     // Raze/Train/the sea-tile Build action, not a new affordance.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
 
-    const longhouseScreen = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
-      const settlement = world.model.getSettlement(world.selectedSettlementId);
-      return win.__settlementRenderer().hexCenterScreen({ q: settlement.q, r: settlement.r });
-    });
-    const buildingLevel = () =>
-      page.evaluate(() => {
-        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-          .__demoWorld();
-        const s = world.model.getSettlement(world.selectedSettlementId);
-        return world.model.getTile(s.q, s.r).buildingLevel as number;
-      });
-    const setResources = (resources: { wood: number; stone: number; food: number; iron: number }) =>
-      page.evaluate((r) => {
-        const world = (window as unknown as {
-          __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
-        }).__demoWorld();
-        world.model.getSettlement(world.selectedSettlementId).resources = r;
-        world.syncHud();
-      }, resources);
+    const longhouse = await settlement.centreHex();
+    const buildingLevel = () => settlement.longhouseBuildingLevel();
 
     // Longhouse's next level costs 320 wood / 240 stone / 160 food
     // (BuildingCatalogue.cs's base * CostFactor(2)) and 0 iron at every
     // level — zeroing every resource is short on exactly the first three.
-    await setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
-    await page.mouse.click(box.x + longhouseScreen.x, box.y + longhouseScreen.y);
+    await settlement.setResources({ wood: 0, stone: 0, food: 0, iron: 0 });
+    await settlement.clickHex(longhouse);
 
-    const upgradeBubble = page.locator('.ring-bubble', { hasText: 'Upgrade' }).first();
+    const upgradeBubble = settlement.ring.action('Upgrade').first();
     await expect(upgradeBubble).toBeVisible();
     await expect(upgradeBubble).toHaveClass(/disabled/);
     await expect(upgradeBubble).toHaveAttribute('title', 'Not enough wood, stone, food');
@@ -289,10 +230,10 @@ test.describe('ring menu drill-down', () => {
 
     // Grant plenty and reopen: the same bubble is now a plain, enabled one.
     await page.keyboard.press('Escape');
-    await setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
-    await page.mouse.click(box.x + longhouseScreen.x, box.y + longhouseScreen.y);
+    await settlement.setResources({ wood: 99_999, stone: 99_999, food: 99_999, iron: 99_999 });
+    await settlement.clickHex(longhouse);
 
-    const upgradeBubble2 = page.locator('.ring-bubble', { hasText: 'Upgrade' }).first();
+    const upgradeBubble2 = settlement.ring.action('Upgrade').first();
     await expect(upgradeBubble2).toBeVisible();
     await expect(upgradeBubble2).not.toHaveClass(/disabled/);
     await upgradeBubble2.click();
@@ -301,22 +242,20 @@ test.describe('ring menu drill-down', () => {
 
   test('a mousedown outside a ring bubble closes the ring and starts dragging the map', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const box = await settlement.canvasBox();
+    const { x: cx, y: cy } = await settlement.canvasCentre();
 
     // Open a ring on the longhouse — any tile with a ring works for this.
     await page.mouse.click(cx, cy);
-    await page.waitForSelector('.ring-bubble');
+    await settlement.ring.waitForOpen();
     const before = await page.screenshot({ clip: { x: box.x, y: box.y, width: box.width, height: box.height } });
 
     // Mousedown on empty backdrop space, away from any bubble, then drag —
     // this single gesture should both dismiss the ring and pan the camera.
     await page.mouse.move(cx + 260, cy + 260);
     await page.mouse.down();
-    await expect(page.locator('.ring-backdrop')).toHaveCount(0);
+    await expect(settlement.ring.backdrop).toHaveCount(0);
     await page.mouse.move(cx + 200, cy + 200, { steps: 6 });
     await page.mouse.move(cx + 140, cy + 140, { steps: 6 });
     await page.mouse.up();
@@ -327,33 +266,27 @@ test.describe('ring menu drill-down', () => {
 
   test('hovering the map while a ring is open does not show the tile tooltip', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
 
     await page.mouse.click(cx, cy);
-    await page.waitForSelector('.ring-bubble');
+    await settlement.ring.waitForOpen();
 
     // Move over a hex well clear of the ring's own bubbles, inside the
     // backdrop area — with interaction locked, this must not resurrect the
     // tile hover tooltip the renderer would normally draw here.
     await page.mouse.move(cx + 260, cy - 200, { steps: 6 });
     await page.waitForTimeout(250);
-    await expect(page.locator('.hex-tooltip')).toBeHidden();
+    await expect(settlement.tooltip).toBeHidden();
   });
 
   test('clicking "World map" in the header while a ring is open navigates instead of the ring intercepting it', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
 
     await page.mouse.click(cx, cy);
-    await page.waitForSelector('.ring-bubble');
+    await settlement.ring.waitForOpen();
 
     // The header sits at the very top of the screen — the ring's own
     // full-screen backdrop used to render above it and swallow this click,
@@ -362,19 +295,16 @@ test.describe('ring menu drill-down', () => {
     await page.getByRole('button', { name: 'World map', exact: true }).click();
 
     await page.waitForURL('**/world');
-    await expect(page.locator('.ring-bubble')).toHaveCount(0);
+    await expect(settlement.ring.bubbles).toHaveCount(0);
   });
 
   test('clicking elsewhere on the map with a ring open just closes it, instead of opening a new one there', { tag: '@g3' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
 
     await page.mouse.click(cx, cy);
-    await page.waitForSelector('.ring-bubble');
+    await settlement.ring.waitForOpen();
 
     // A single stationary click well clear of any bubble, elsewhere on the
     // map — this used to close the current ring and immediately reopen a
@@ -385,26 +315,25 @@ test.describe('ring menu drill-down', () => {
     await page.mouse.click(cx - 300, cy - 260);
     await page.waitForTimeout(250);
 
-    await expect(page.locator('.ring-bubble')).toHaveCount(0);
+    await expect(settlement.ring.bubbles).toHaveCount(0);
     // Give the (absent) reopened ring's async/tick-based rendering every
     // chance to show up before declaring it stayed closed.
     await page.waitForTimeout(300);
-    await expect(page.locator('.ring-bubble')).toHaveCount(0);
+    await expect(settlement.ring.bubbles).toHaveCount(0);
   });
 
   // Issue #141: Escape had never been wired up anywhere the ring menu is
   // used — only an outside click/right-click on the backdrop closed it.
   test('pressing Escape closes the ring menu', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
+    const centre = await settlement.canvasCentre();
 
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await page.waitForSelector('.ring-bubble');
+    await page.mouse.click(centre.x, centre.y);
+    await settlement.ring.waitForOpen();
 
     await page.keyboard.press('Escape');
-    await expect(page.locator('.ring-bubble')).toHaveCount(0);
+    await expect(settlement.ring.bubbles).toHaveCount(0);
   });
 });
 
@@ -419,37 +348,11 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
 
   test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
 
-    const target = await page.evaluate(() => {
-      const win = window as unknown as {
-        __demoWorld: () => { model: any; selectedSettlementId: string };
-        __settlementRenderer: () => { hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number } };
-      };
-      const world = win.__demoWorld();
-      const settlement = world.model.getSettlement(world.selectedSettlementId);
-      const radius = world.model.borderRadius(settlement);
-      for (let dq = -radius; dq <= radius; dq++) {
-        for (let dr = -radius; dr <= radius; dr++) {
-          if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > radius) continue;
-          const at = { q: settlement.q + dq, r: settlement.r + dr };
-          const tile = world.model.getTile(at.q, at.r);
-          if (tile.ownerId === world.selectedSettlementId && tile.terrain === 'grass' && !tile.buildingType) {
-            return win.__settlementRenderer().hexCenterScreen(at);
-          }
-        }
-      }
-      throw new Error('no empty buildable grass hex found inside the realm');
-    });
+    const target = await settlement.findHex({ terrain: 'grass' });
 
-    const countBuildings = () =>
-      page.evaluate(() => {
-        const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string } })
-          .__demoWorld();
-        return world.model.countBuildings(world.selectedSettlementId) as number;
-      });
+    const countBuildings = () => settlement.countBuildings();
     const before = await countBuildings();
 
     // Opening the ring and drilling into a category is unaffected by this
@@ -459,16 +362,16 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
     // navigation taps use .tap() rather than .click() throughout, since a
     // real touch input (not a mouse click a touch-capable context happens
     // to also allow) is what this test is about.
-    await page.mouse.click(box.x + target.x, box.y + target.y);
-    await page.waitForSelector('.ring-bubble');
-    await page.locator('.ring-bubble', { hasText: 'Build' }).first().tap();
-    await page.locator('.ring-bubble:not(.back):not(.child)', { hasText: 'Military' }).first().tap();
+    await settlement.clickHex(target);
+    await settlement.ring.waitForOpen();
+    await settlement.ring.action('Build').first().tap();
+    await settlement.ring.category('Military').first().tap();
 
-    const magicTower = page.locator('.ring-bubble.child', { hasText: 'Magic Tower' }).first();
+    const magicTower = settlement.ring.child('Magic Tower').first();
     await expect(magicTower).toBeVisible();
 
     await magicTower.tap();
-    await expect(page.locator('.ring-card')).toContainText('Magic Tower');
+    await expect(settlement.ring.card).toContainText('Magic Tower');
     await page.waitForTimeout(300);
     expect(await countBuildings(), 'the first tap must only preview, not build').toBe(before);
 
