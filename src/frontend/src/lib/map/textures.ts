@@ -1,7 +1,9 @@
 // Hex tile art is packed into a handful of WebP atlas pages (plus a JSON
 // manifest per page) by VanDooProject/3D_assets' `scripts/build_atlas.py`
 // (see that repo's README, "Packing into atlases", and issue #187) and
-// vendored under `vendor/bg_assets_atlas` — not one PNG per
+// vendored under the VanDooProject/bg_assets_hextile submodule's own
+// `atlas/` directory (alongside its `hextiles/` individual PNGs, which
+// buildingArt.ts still uses) — not one PNG per
 // tile/orientation/level/variant as before. Every tile is still, at the
 // source, a 200x300 flat-top hex "plate" (top face 200x92, starting at
 // y=140) with a thick earthen skirt below it and, for taller assets, props

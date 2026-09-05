@@ -70,18 +70,20 @@ interface AtlasManifest {
   clips?: Record<string, AtlasClip>;
 }
 
-// Vendored atlas pages — see this directory's own note in the repo for how
-// they're produced/updated. Globbing the (handful of) page files themselves
+// Atlas pages live in the VanDooProject/bg_assets_hextile submodule's own
+// atlas/ directory, alongside (not replacing) the individual hextiles/
+// PNGs buildingArt.ts still uses (see textures.ts's module doc comment).
+// Globbing the (handful of) page files themselves
 // for URL discovery is a different thing from the per-tile-PNG glob this
 // atlas replaces: there are a few pages per category rather than one file
 // per tile/orientation/level, and the page count isn't fixed (rectpack
 // decides it), so discovering pages by filename is simpler than importing
 // each one by a name that can change as the art set grows.
-const ATLAS_JSON = import.meta.glob('../../../vendor/bg_assets_atlas/*.json', {
+const ATLAS_JSON = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.json', {
   eager: true,
   import: 'default',
 }) as Record<string, AtlasManifest>;
-const ATLAS_WEBP = import.meta.glob('../../../vendor/bg_assets_atlas/*.webp', {
+const ATLAS_WEBP = import.meta.glob('../../../vendor/bg_assets_hextile/atlas/*.webp', {
   eager: true,
   import: 'default',
 }) as Record<string, string>;
