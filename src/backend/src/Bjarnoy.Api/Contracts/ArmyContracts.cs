@@ -27,10 +27,10 @@ public sealed record HexPointRequest(int Q, int R)
 /// </param>
 /// <param name="Provisions">
 /// Food to load onto the army, capped by what its units can carry and what
-/// the settlement can afford. A <c>"support"</c> dispatch only needs to cover
-/// the one-way trip plus a small reserve (<see cref="Army.SupportReserveHours"/>)
-/// — the host feeds it from arrival — unlike <c>"move"</c>/<c>"attack"</c>/
-/// <c>"raid"</c>, which all need the full round trip.
+/// the settlement can afford. Every mission, including <c>"support"</c>,
+/// must cover the full round trip: a guest is fed by its host while there,
+/// but a recalled guest walks home on whatever provisions it still carries,
+/// with nobody feeding it on the way.
 /// </param>
 /// <param name="Mission">
 /// <c>"move"</c> (default), <c>"attack"</c>, <c>"support"</c>, or

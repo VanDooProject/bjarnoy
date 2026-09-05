@@ -24,8 +24,10 @@ Where it lives:
 - `Movement.Create` (`src/backend/src/Bjarnoy.Domain/Movement/Movement.cs`) derives
   `TurnAroundAt` — the instant the remaining food exactly covers the way home — and
   `Army.SettleTo` turns the army around there, unprompted.
-- `ArmyMission.Support` is the one exception today: one-way plus
-  `Army.SupportReserveHours` (2h), because the host feeds a guest from arrival.
+- `ArmyMission.Support` used to be a one-way-plus-reserve exception, because
+  the host feeds a guest from arrival — but a recalled guest still walks home
+  on its own provisions with nobody feeding it, so it now takes the same
+  round-trip check as everything else (§4).
 
 So "range" means *how far an army can go and still get back*. Everything below keeps
 that rule rather than inventing a second one.
@@ -71,19 +73,19 @@ target-settlement, shoreline and catapult-building validation. Attacking *other 
 in the open field is not — it needs a target type, army-vs-army resolution and
 interception semantics of its own.
 
-## 4. Guests must be able to walk home
+## 4. Guests must be able to walk home (implemented)
 
-Support dispatch validates one-way plus a 2h reserve, not the round trip. A guest does
-not burn its own provisions while hosted (`Settlement.SettleTo` feeds it;
+Support dispatch used to validate one-way plus a 2h reserve, not the round trip. A
+guest does not burn its own provisions while hosted (`Settlement.SettleTo` feeds it;
 `Army.ProvisionsAt` returns the raw field for `Supporting`), so at `Recall` it still
-holds roughly that reserve and then walks home on an empty stomach. `ProvisionsAt`
-floors at zero and there is no in-field starvation model yet, so today it survives by
-accident — the moment starvation lands, every recalled guest dies.
+held roughly that reserve and then walked home on an empty stomach. `ProvisionsAt`
+floors at zero and there is no in-field starvation model yet, so it survived by
+accident — the moment starvation lands, every recalled guest would have died.
 
-Support therefore takes the same round-trip check as every other mission. The
-consequence is deliberate: support dispatches roughly double in food, and long-range
-support may start hitting `ProvisionsExceedCarryCapacity`, i.e. it needs provisioners
-along.
+Support now takes the same round-trip check as every other mission
+(`Army.PlanDispatch`). The consequence is deliberate: support dispatches roughly
+double in food, and long-range support may start hitting
+`ProvisionsExceedCarryCapacity`, i.e. it needs provisioners along.
 
 ## 5. Rivers
 
