@@ -1,4 +1,8 @@
 import { test as base, expect } from '@playwright/test';
+// Imported from the module, not from `./pages`: the barrel re-exports page
+// objects that import `./helpers`, and keeping this edge narrow is what
+// stops `fixtures.ts` sitting in a cycle with them.
+import { AdminAuthFixture } from './pages/AdminAuthFixture';
 
 /**
  * Every e2e test should fail on an uncaught page error or a `console.error`
@@ -15,7 +19,16 @@ import { test as base, expect } from '@playwright/test';
 // everything else still fails the run.
 const isEnvironmentNoise = (text: string) => text.includes('net::ERR_CONNECTION_RESET');
 
-export const test = base.extend<{ forbidConsoleErrors: void }>({
+export const test = base.extend<{ forbidConsoleErrors: void; adminAuth: AdminAuthFixture }>({
+  /**
+   * A mocked authenticated session (issue #189). Not autouse — asking for it
+   * only builds the object; nothing is intercepted until a test calls
+   * `adminAuth.login()`, so logged-out specs are unaffected.
+   */
+  adminAuth: async ({ page }, use) => {
+    await use(new AdminAuthFixture(page));
+  },
+
   forbidConsoleErrors: [
     async ({ page }, use) => {
       const errors: string[] = [];

@@ -31,13 +31,6 @@ import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 
-declare global {
-  interface Window {
-    __fogDebug: { drift: boolean };
-    __waterDebug: { water: boolean };
-  }
-}
-
 /** Fraction of pixels differing by more than `threshold` summed over RGB, and the largest such difference. */
 async function frameDelta(
   page: import('@playwright/test').Page,

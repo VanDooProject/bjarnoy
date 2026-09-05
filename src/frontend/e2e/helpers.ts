@@ -21,6 +21,36 @@ export async function gotoWorldMap(page: Page): Promise<void> {
 }
 
 /**
+ * Clicks the landing page's starter plot and waits for the store to actually
+ * hold a settlement. Assumes the landing page is already mounted
+ * (`waitForMapReady`). Split out of `foundSettlement` so specs that stop at
+ * the onboarding ring menu — which runs on the landing page, before the
+ * nickname prompt — can share the same click instead of re-deriving it.
+ */
+export async function claimLandfall(page: Page): Promise<void> {
+  const canvas = page.locator('canvas');
+  const box = (await canvas.boundingBox())!;
+  // The starter plot is deterministic and camera-centred (HexMapRenderer's
+  // previewCenter), but shifted right of true screen centre by
+  // LandingView's `screenBiasX` (0.16 of the viewport width) so the island
+  // composes next to the hero text rather than behind it — see
+  // HexMapRenderer's biasedCenterX.
+  const cx = box.x + box.width * (0.5 + 0.16);
+  const cy = box.y + box.height / 2;
+  await page.mouse.click(cx, cy);
+
+  // Founding is async (even in demo mode, it's a Vue reactive update away) —
+  // wait for the store to actually have a selected settlement before poking
+  // it directly, rather than racing the click above.
+  await page.waitForFunction(
+    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
+      ?.selectedSettlementId,
+    undefined,
+    { timeout: 15_000 },
+  );
+}
+
+/**
  * Founds a settlement on the landing page (zip 6a: the landing page is the
  * village view — the starter plot is deterministic, so there's exactly one
  * hex to click, not a grid sweep across a world map), places the 2 guided
@@ -40,27 +70,8 @@ export async function foundSettlement(page: Page): Promise<void> {
   // `mount()` has wired up pointer handling at all.
   await waitForMapReady(page);
 
-  const canvas = page.locator('canvas');
-  const box = (await canvas.boundingBox())!;
-  // The starter plot is deterministic and camera-centred (HexMapRenderer's
-  // previewCenter), but shifted right of true screen centre by
-  // LandingView's `screenBiasX` (0.16 of the viewport width) so the island
-  // composes next to the hero text rather than behind it — see
-  // HexMapRenderer's biasedCenterX.
-  const cx = box.x + box.width * (0.5 + 0.16);
-  const cy = box.y + box.height / 2;
-  await page.mouse.click(cx, cy);
-
   const prompt = page.getByText('Landfall made.');
-  // Founding is async (even in demo mode, it's a Vue reactive update away) —
-  // wait for the store to actually have a selected settlement before poking
-  // it directly, rather than racing the click above.
-  await page.waitForFunction(
-    () => !!(window as unknown as { __demoWorld?: () => { selectedSettlementId: string | null } }).__demoWorld?.()
-      ?.selectedSettlementId,
-    undefined,
-    { timeout: 15_000 },
-  );
+  await claimLandfall(page);
 
   // Places the 2 guided onboarding buildings directly against the model —
   // real click-to-build UI is settlement-interactions.spec's job to cover;

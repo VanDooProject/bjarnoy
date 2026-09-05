@@ -42,13 +42,6 @@ import { expect, test } from './fixtures';
 import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 
-declare global {
-  interface Window {
-    __waterDebug: { water: boolean };
-    __fogDebug: { drift: boolean; maskUnknown: boolean; maskOutOfSight: boolean; terrainCull: boolean };
-  }
-}
-
 /** A screen-space box centred on a hex, small enough to stay inside it. */
 interface Patch {
   x: number;

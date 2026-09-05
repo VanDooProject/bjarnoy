@@ -11,9 +11,15 @@ production build via `vite preview`, no backend — specs mock the API themselve
 - `fixtures.ts` — **always** `import { expect, test } from './fixtures'`, never
   from `@playwright/test` directly. It carries the autouse `forbidConsoleErrors`
   fixture; importing the raw `test` silently drops that regression guard.
+- `pages/` — the page objects (below). Check here first: most setup a spec
+  needs already has an intent method.
 - `helpers.ts` — `waitForMapReady(page)`, `gotoWorldMap(page)`,
-  `foundSettlement(page)`, `rectsOf(locator)` / `distanceFrom(rect, x, y)`.
+  `claimLandfall(page)`, `foundSettlement(page)`, `rectsOf(locator)` /
+  `distanceFrom(rect, x, y)`.
 - `budgets.ts` — `MAP_SPEC_TIMEOUT_MS`, `HEAVY_MAP_SPEC_TIMEOUT_MS`.
+- `globals.d.ts` — the app's `window.__fogDebug` / `__waterDebug` hooks. Don't
+  add a `declare global` to a spec; two specs doing that with different shapes
+  is a typecheck error across the suite.
 
 ## Rules that keep the suite from drifting
 
@@ -47,10 +53,22 @@ production build via `vite preview`, no backend — specs mock the API themselve
 
 ## Page objects (issue #189)
 
-Full POM migration is tracked in
-[#189](https://github.com/VanDooProject/bjarnoy/issues/189). Once it lands,
-page objects live in `src/frontend/e2e/pages/` as `<View>Page` classes
-(`SettlementPage`, `AdminActivityPage`) exposing locators + intent methods, and
-new specs use them. **Until `pages/` exists, do not start a private one-off
-abstraction inside a spec** — add to `helpers.ts` / `fixtures.ts` so the eventual
-migration has one place to move code from.
+Page objects live in `src/frontend/e2e/pages/` as classes exposing locators +
+intent methods, re-exported from `pages/index.ts`. New specs use them rather
+than raw selectors; a new view gets a new `<View>Page` rather than a private
+one-off abstraction inside the spec.
+
+| Class | Covers |
+| --- | --- |
+| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver })`, `centreHex()`, `clickHex()`, `countBuildings()`, `setResources()`, plus `.ring`. |
+| `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()`, `openBuildCategories()`, `openCategory()`. |
+| `WorldMapPage` | `/world`: `open()`, `box()`, `centre()`, `screenshot()` for the canvas pixel-diff assertions. |
+| `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |
+| `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `userRows` / `myRow`. |
+| `AdminSettlementsPage` | `/admin/settlements`: `openManagePanel()`, `hex(q, r)`, `hexForm` / `garrisonForm` / `armyEditor` / `grantForm` / `stocks` / `clampNotice`. |
+| `AdminActivityPage` | `/admin/activity`: `mockApi({ buckets, users })`, `userRows` / `userRow(name)`, `chartCanvas`, `shell`. |
+| `ScrollableView` | The "does this view scroll inside its own box" check (#101): `metrics()`, `wheel(delta)`, `noHorizontalOverflow()`. |
+
+Page objects import `expect` from `@playwright/test`, not from `./fixtures` —
+`fixtures.ts` imports `pages/AdminAuthFixture`, so importing back would close a
+module cycle. **Specs still import `test` from `./fixtures`.**
