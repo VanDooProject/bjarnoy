@@ -181,20 +181,6 @@ public sealed record Army
     /// singleton map — while still letting the caller (<c>ArmyService</c>)
     /// supply a real <c>TerrainSampler.TerrainAt</c>.
     /// </remarks>
-    /// <summary>
-    /// A support army only needs to reach its host, plus a small buffer — the
-    /// host feeds it from the moment it arrives (see
-    /// <c>Settlement.SettleTo</c>'s <c>guestStacks</c> parameter), so unlike
-    /// <see cref="ArmyMission.Move"/>/<see cref="ArmyMission.Attack"/> there is
-    /// no return trip to provision for. The buffer covers the gap between
-    /// "arrives" and "the host's next settle actually picks it up as a guest"
-    /// (a settlement is only settled when something reads or writes it, not
-    /// continuously) — two hours is comfortably more than that gap will
-    /// realistically ever be, without materially weakening the one-way food
-    /// check into a non-check for slow-upkeep units.
-    /// </summary>
-    public const double SupportReserveHours = 2.0;
-
     /// <param name="targetClaimDiscs">
     /// The target settlement's full claimed territory, as the same
     /// (centre, radius) discs <see cref="Settlement.ClaimDiscs"/> yields —
@@ -457,19 +443,17 @@ public sealed record Army
 
         var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
 
-        // Support only needs a one-way trip plus a small reserve — see
-        // SupportReserveHours — everything else still needs the full round
-        // trip, since standing at a Move destination or returning from an
-        // Attack both burn provisions with nobody else feeding the army.
-        var totalFoodNeeded = mission == ArmyMission.Support
-            ? (cumulativeHours[^1] + SupportReserveHours) * upkeepPerHour
-            : (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
+        // Every mission, Support included, needs the full round trip: a guest
+        // does not burn its own provisions while hosted (Settlement.SettleTo
+        // feeds it), but Recall still walks it home on whatever it is
+        // carrying, with nobody feeding it on the way — so the same
+        // "can it get back" check that gates Move/Attack/Raid has to gate
+        // Support too, or a recalled guest starves on the road home.
+        var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
 
         if (provisions < totalFoodNeeded)
         {
-            return DispatchDecision.Rejected(mission == ArmyMission.Support
-                ? DispatchRejection.InsufficientProvisionsForTrip
-                : DispatchRejection.InsufficientProvisionsForRoundTrip);
+            return DispatchDecision.Rejected(DispatchRejection.InsufficientProvisionsForRoundTrip);
         }
 
         var movement = Movement.Movement.Create(
@@ -1502,14 +1486,6 @@ public enum DispatchRejection
 
     /// <summary>An army cannot be sent to support the settlement it was dispatched from.</summary>
     CannotSupportOwnSettlement,
-
-    /// <summary>
-    /// A <see cref="ArmyMission.Support"/> dispatch's provisions do not cover
-    /// the one-way trip plus <see cref="Army.SupportReserveHours"/> — see
-    /// <see cref="Army.PlanDispatch"/>'s remarks on why support only needs a
-    /// one-way check, unlike <see cref="InsufficientProvisionsForRoundTrip"/>.
-    /// </summary>
-    InsufficientProvisionsForTrip,
 
     /// <summary>
     /// A target building coordinate was given for a mission other than

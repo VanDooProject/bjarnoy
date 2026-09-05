@@ -77,19 +77,16 @@ public class ArmySupportTests
     }
 
     [Fact]
-    public void Support_dispatch_accepts_one_way_plus_reserve_provisions_that_would_fail_a_round_trip_check()
+    public void Support_dispatch_requires_provisions_for_the_full_round_trip()
     {
-        // Destination is 4 hexes away; Spearman speed is 4/h so the one-way
-        // trip takes 1h. Upkeep is 1/unit/h for 10 Spearmen = 10/h.
-        // One-way + reserve = (1 + SupportReserveHours) * 10 = 30.
-        // A round trip would need (1 + 1) * 10 = 20 for travel alone, plus
-        // this test picks a number that is enough for the one-way check but
-        // would fail a strict "must also cover coming all the way back and
-        // then some standing time" reading — see the assertion below, which
-        // proves this exact amount is accepted only because Support is a
-        // one-way check.
+        // Destination is 4 hexes away; Spearman speed is 4/h so each leg
+        // takes 1h. Upkeep is 1/unit/h for 10 Spearmen = 10/h.
+        // Round trip = (1 + 1) * 10 = 20 — a guest is fed by its host while
+        // there, but Recall still has to walk it all the way home on
+        // whatever it carries, so Support needs the same round-trip cover as
+        // every other mission.
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
-        var provisions = (1.0 + Army.SupportReserveHours) * 10.0;
+        var provisions = 2.0 * 10.0;
 
         var decision = DispatchSupport(settlement, Guid.CreateVersion7(), provisions);
 
@@ -98,14 +95,14 @@ public class ArmySupportTests
     }
 
     [Fact]
-    public void Support_dispatch_is_rejected_when_provisions_fall_short_of_the_one_way_trip_plus_reserve()
+    public void Support_dispatch_is_rejected_when_provisions_fall_short_of_the_round_trip()
     {
         var settlement = Found(garrison: [new UnitStack(UnitType.Spearman, 10)]);
-        var provisions = ((1.0 + Army.SupportReserveHours) * 10.0) - 0.01;
+        var provisions = (2.0 * 10.0) - 0.01;
 
         var decision = DispatchSupport(settlement, Guid.CreateVersion7(), provisions);
 
-        Assert.Equal(DispatchRejection.InsufficientProvisionsForTrip, decision.Rejection);
+        Assert.Equal(DispatchRejection.InsufficientProvisionsForRoundTrip, decision.Rejection);
     }
 
     [Fact]

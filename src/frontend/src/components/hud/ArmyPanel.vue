@@ -469,8 +469,8 @@ async function confirmFieldOrderClick() {
           </div>
 
           <p v-if="draft.mission === 'support'" class="status-subtext support-note">
-            Support needs less food than an attack or long march — the host
-            feeds your troops once they arrive.
+            The host feeds your troops once they arrive, but they still need
+            enough food loaded for the round trip home if recalled.
           </p>
 
           <div v-if="showBuildingPicker" class="building-picker">
