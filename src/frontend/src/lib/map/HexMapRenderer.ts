@@ -51,7 +51,9 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
-  loadTileTextures,
+  loadBuildingAtlases,
+  loadTerrainAtlas,
+  mergeTileTextures,
   riverTexturesFor,
   topTextureFor,
   type TileTextures,
@@ -1015,14 +1017,20 @@ export class HexMapRenderer {
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
-    // above), so it has no need for the (large, submodule-backed) texture
-    // pack at all — only settlement mode loads it. The army/route marker
-    // icons (issues #93/#94) are settlement-only too (the world map never
-    // gets an army overlay), and load alongside rather than after it: six
-    // small SVGs against ~150 tile PNGs is no reason to lengthen the mount.
+    // above), so it has no need for the (large) building atlas at all —
+    // only settlement mode loads it. The army/route marker icons (issues
+    // #93/#94) are settlement-only too (the world map never gets an army
+    // overlay), and load alongside the small terrain atlas rather than
+    // after it: six small SVGs is no reason to lengthen the mount.
+    //
+    // Only the terrain atlas is awaited here — mount() (and its first
+    // rebuildAll() below) can paint terrain-only tiles the moment that
+    // small atlas resolves, rather than waiting on the much larger
+    // buildings-static atlas too. Building sprites pop in once it resolves
+    // (below), via a second rebuildAll() that reuses the sprite pool.
     if (this.options.mode === 'settlement') {
       const [textures, icons] = await Promise.all([
-        loadTileTextures(),
+        loadTerrainAtlas(),
         // The whole map failing to mount because a marker icon didn't
         // decode would be a wildly disproportionate outcome — the overlay
         // draws plain vector shapes when `icons` is null (see
@@ -1036,6 +1044,16 @@ export class HexMapRenderer {
       ]);
       this.textures = textures;
       this.icons = icons;
+
+      loadBuildingAtlases()
+        .then((buildings) => {
+          if (this.destroyed || !this.textures) return;
+          this.textures = mergeTileTextures(this.textures, buildings);
+          this.rebuildAll();
+        })
+        .catch((err) => {
+          console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
+        });
     } else {
       this.textures = null;
     }
