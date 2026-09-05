@@ -773,8 +773,7 @@ async function upgrade() {
   if (!world.selectedSettlementId || !selectedCoord.value || !selectedTile.value?.buildingType) return;
   actionError.value = null;
   if (DEMO_MODE) {
-    const tile = world.model.getTile(selectedCoord.value.q, selectedCoord.value.r);
-    tile.buildingLevel = (selectedTile.value.buildingLevel ?? 1) + 1;
+    world.model.upgradeBuilding(world.selectedSettlementId, selectedCoord.value);
     canvasRef.value?.renderer?.forceRebuild();
     closeModal();
     return;

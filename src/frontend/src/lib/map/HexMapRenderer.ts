@@ -2264,9 +2264,12 @@ export class HexMapRenderer {
       // not its northmost edge — the reference has it clear above the whole
       // cluster instead. Same footprint-scanning approach section 6 uses for
       // world-map island labels (there: lowest tile-bottom vertex; here:
-      // highest tile-top vertex), scanned over the settlement's owned disc
-      // rather than a flood fill since claimed tiles are already exactly
-      // that disc (`foundSettlement`/`claimTile`).
+      // highest tile-top vertex), scanned over `borderRadius`'s centre disc
+      // rather than a flood fill or the settlement's full (Tower-extended)
+      // territory — purely cosmetic vertical clearance for a name badge, so
+      // a settlement with a Tower's satellite disc off to one side clears
+      // slightly less than its true full footprint, not worth the extra
+      // per-frame disc-union scan to fix.
       // Measured against each tile's own art, halfway up the sprite rather
       // than its full height (grid.y - TILE_TOPFACE_Y_OFFSET / 2) — the same
       // offset `rebuildTerrain` places building/tree sprites at (see its

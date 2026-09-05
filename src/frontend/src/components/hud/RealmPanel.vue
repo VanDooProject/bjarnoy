@@ -19,9 +19,11 @@ const props = defineProps<{
 const settlement = computed(() =>
   world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined,
 );
-const claimedHexes = computed(() =>
-  settlement.value ? world.model.claimedHexCount(settlement.value.id) : 0,
-);
+// Reads world.hud (refreshed by syncHud on every tick/level-up/tower change)
+// rather than calling world.model.claimedHexCount directly — model is
+// markRaw, so a computed reading it wouldn't re-run when a Tower or the
+// Longhouse levels up without some other reactive dependency also changing.
+const claimedHexes = computed(() => world.hud.claimedHexes);
 </script>
 
 <template>

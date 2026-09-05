@@ -31,11 +31,15 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     const canvas = page.locator('canvas');
     const box = (await canvas.boundingBox())!;
 
-    // Compute the border-edge hex (a level-1 tower may only be placed inside
-    // the existing border — same constraint `WorldModel.placeBuilding`
-    // enforces), and the screen point of a hex two rings further out, still
-    // in the tower's own future satellite-disc direction, for the
-    // before/after screenshot clip below.
+    // Places a level-1 tower at the settlement's border edge, then forces a
+    // redraw so it's fully painted before either screenshot is taken —
+    // isolating the before/after diff below to the *border* claim, not the
+    // tower's own sprite appearing. Returns the screen point of a hex two
+    // rings past the tower (inside a level-4 tower's own satellite disc,
+    // radius 2, but well outside the tower itself) for the screenshot clip —
+    // deliberately excluding the tower's own hex, since its sprite does
+    // change between the two screenshots (level 1 -> 4) for a reason
+    // unrelated to what this test checks.
     const setup = await page.evaluate(() => {
       const win = window as unknown as {
         __demoWorld: () => { model: any; selectedSettlementId: string };
@@ -79,30 +83,21 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
 
       const placed = model.placeBuilding(world.selectedSettlementId, towerAt, 'tower');
       if (!placed) throw new Error('failed to place the level-1 tower at the border edge');
+      win.__settlementRenderer().forceRebuild();
 
-      // Two rings past the tower, straight out away from the settlement
-      // centre — inside a level-4 tower's own satellite disc (radius 2,
-      // TowerClaimRadius(4) == 2) but well past the centre disc alone.
+      // The first direction (of the same six) that, continued two more
+      // steps from the tower, lands outside the centre disc — not
+      // necessarily "straight out" from the settlement, just guaranteed to
+      // exist: continuing in whichever direction originally placed the
+      // tower on the border's edge always qualifies, so this never falls
+      // through to the `!` below.
       const farDir = DIRS.find(
         ([dq, dr]) => hexDistance(at, { q: towerAt!.q + dq * 2, r: towerAt!.r + dr * 2 }) > radius,
       )!;
       const farHex = { q: towerAt.q + farDir[0] * 2, r: towerAt.r + farDir[1] * 2 };
+      const farScreen = win.__settlementRenderer().hexCenterScreen(farHex);
 
-      const renderer = win.__settlementRenderer();
-      const towerScreen = renderer.hexCenterScreen(towerAt);
-      const farScreen = renderer.hexCenterScreen(farHex);
-
-      return {
-        towerAt,
-        farHex,
-        settlementId: world.selectedSettlementId as string,
-        clip: {
-          xMin: Math.min(towerScreen.x, farScreen.x) - 90,
-          xMax: Math.max(towerScreen.x, farScreen.x) + 90,
-          yMin: Math.min(towerScreen.y, farScreen.y) - 90,
-          yMax: Math.max(towerScreen.y, farScreen.y) + 90,
-        },
-      };
+      return { towerAt, farHex, farScreen, settlementId: world.selectedSettlementId as string };
     });
 
     // Regression guard: a fresh (level-1) tower's own satellite disc has
@@ -117,11 +112,21 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     );
     expect(farClaimedAfterPlacingOnly).toBe(false);
 
+    // A tight box around just the far hex, clamped inside the canvas itself
+    // (not only at 0 — also at the canvas's own far edge) so the screenshot
+    // never throws if this seed happens to land the hex near an edge.
+    const HALF = 70;
+    const desired = {
+      x: box.x + setup.farScreen.x - HALF,
+      y: box.y + setup.farScreen.y - HALF,
+      width: HALF * 2,
+      height: HALF * 2,
+    };
     const clip = {
-      x: Math.max(0, box.x + setup.clip.xMin),
-      y: Math.max(0, box.y + setup.clip.yMin),
-      width: setup.clip.xMax - setup.clip.xMin,
-      height: setup.clip.yMax - setup.clip.yMin,
+      x: Math.max(box.x, desired.x),
+      y: Math.max(box.y, desired.y),
+      width: Math.min(box.x + box.width, desired.x + desired.width) - Math.max(box.x, desired.x),
+      height: Math.min(box.y + box.height, desired.y + desired.height) - Math.max(box.y, desired.y),
     };
     const before = await page.screenshot({ clip });
 
@@ -162,8 +167,12 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     );
     const after = await page.screenshot({ clip });
 
-    // The rendered border literally moved: the same screen region now draws
-    // the gold realm wash/glow over ground it didn't before.
+    // The rendered border literally moved: this region — the far hex and its
+    // immediate surroundings, with the tower itself out of frame — now draws
+    // the gold realm wash/glow where it didn't before. Nothing else in this
+    // clip changes between the two shots (no camera movement, no other
+    // building placed, no ambient animation source this close to the map's
+    // edge), so this diff is attributable to the claim change alone.
     expect(Buffer.compare(before, after)).not.toBe(0);
   });
 });

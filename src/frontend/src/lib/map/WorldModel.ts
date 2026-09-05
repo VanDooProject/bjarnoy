@@ -408,7 +408,10 @@ export class WorldModel {
    * also includes one satellite disc per standing Tower (see
    * `claimDiscsFor`/`claimedHexes`), so this alone under-covers a
    * territory with towers. Kept for callers that only ever cared about the
-   * centre disc (fog radius, the realm-panel label).
+   * centre disc — fog radius (`visibleHexes`/`exploredRadius`) and hex-offset
+   * math (`demoFogMask.ts`, `HexMapRenderer.rebuildSettlementLabels`) that
+   * hasn't been made tower-aware. `RealmPanel`'s displayed count instead
+   * uses `claimedHexCount`, which does account for towers.
    */
   borderRadius(settlement: Settlement): number {
     return claimRadiusForLevel(settlement.level);
@@ -449,10 +452,22 @@ export class WorldModel {
     );
   }
 
-  /** Total hexes this settlement has claimed — the centre disc plus every Tower's own satellite disc (see `claimedHexes`). */
+  /**
+   * Hexes this settlement actually owns right now — every `claimedHexes`
+   * disc hex whose tile's `ownerId` still reads back as this settlement,
+   * rather than the raw disc count. That distinction matters once discs can
+   * overlap a neighbour's own territory (whoever claimed a hex first keeps
+   * it — see `claims`' remarks on chaining) or reach open sea (a claim disc
+   * doesn't care about terrain, same as the backend's own `Settlement.Claims`).
+   */
   claimedHexCount(settlementId: string): number {
     const settlement = this.settlements.get(settlementId);
-    return settlement ? this.claimedHexes(settlement).length : 0;
+    if (!settlement) return 0;
+    let count = 0;
+    for (const c of this.claimedHexes(settlement)) {
+      if (this.getTile(c.q, c.r).ownerId === settlementId) count++;
+    }
+    return count;
   }
 
   /** Hexes visible right now (line-of-sight radius around a settlement). */
@@ -646,13 +661,65 @@ export class WorldModel {
    * (`Bjarnoy.Domain.Buildings`) has no raze endpoint yet, so live mode
    * disables this action rather than pretending to support it (see
    * SettlementView.vue's ring-menu wiring). Clears the building but leaves
-   * the hex claimed by the settlement.
+   * the hex claimed by the settlement — claiming stays one-way here, the
+   * same as `applyServerSnapshot`'s live-mode reads, so razing a Tower never
+   * shrinks the border its satellite disc already opened up.
    */
   razeBuilding(settlementId: string, at: AxialCoord): boolean {
     const tile = this.getTile(at.q, at.r);
     if (tile.ownerId !== settlementId || !tile.buildingType || tile.buildingType === 'longhouse') return false;
+    if (tile.buildingType === 'tower') {
+      const towers = this.settlementTowers.get(settlementId);
+      if (towers) {
+        const index = towers.findIndex((t) => t.q === at.q && t.r === at.r);
+        if (index !== -1) towers.splice(index, 1);
+      }
+    }
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
+    return true;
+  }
+
+  /**
+   * Bumps a building's level by one — demo mode's own upgrade path
+   * (`SettlementView.upgrade`), the local counterpart to a real build order
+   * completing server-side (`applyServerSnapshot`). A Longhouse upgrade
+   * grows the settlement's own level (and so its centre disc); a Tower
+   * upgrade grows that tower's own satellite disc — both re-claim
+   * afterward, the same way `applyServerSnapshot` does for a live-mode
+   * level-up, so a demo-mode upgrade of either actually extends the realm
+   * border rather than only changing the sprite.
+   */
+  upgradeBuilding(settlementId: string, at: AxialCoord): boolean {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return false;
+    const tile = this.getTile(at.q, at.r);
+    if (tile.ownerId !== settlementId || !tile.buildingType) return false;
+
+    const nextLevel = (tile.buildingLevel ?? 1) + 1;
+    tile.buildingLevel = nextLevel;
+
+    if (tile.buildingType === 'longhouse') {
+      settlement.level = nextLevel;
+    } else if (tile.buildingType === 'tower') {
+      const towers = this.settlementTowers.get(settlementId) ?? [];
+      const existing = towers.find((t) => t.q === at.q && t.r === at.r);
+      if (existing) existing.level = nextLevel;
+      else towers.push({ q: at.q, r: at.r, level: nextLevel });
+      this.settlementTowers.set(settlementId, towers);
+    } else {
+      // Every other building type levels up cosmetically only — it has no
+      // claim-radius contribution to re-derive (see BuildingDefinition.ClaimRadius).
+      return true;
+    }
+
+    for (const c of this.claimedHexes(settlement)) {
+      const claimed = this.getTile(c.q, c.r);
+      if (!claimed.ownerId) claimed.ownerId = settlementId;
+    }
+    for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.exploredRadius(settlement))) {
+      this.explored.add(coordKey(c));
+    }
     return true;
   }
 
