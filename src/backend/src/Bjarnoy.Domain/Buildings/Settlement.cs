@@ -108,16 +108,21 @@ public sealed record Settlement
 
     /// <summary>
     /// <see cref="ClaimRadius"/> for an arbitrary longhouse level, clamped to
-    /// at least 1 — a settlement with no standing Longhouse (level 0, e.g.
-    /// mid-founding) still gets the level-1 radius rather than a lookup
-    /// failure, matching this property's old <c>1 + (level / 2)</c> formula
-    /// at level 0. Public so callers with only a raw longhouse level on hand
-    /// (a lightweight DB projection, e.g. <c>SettlementService.GetClaimedSettlementsAsync</c>
+    /// <c>[1, BuildingCatalogue.MaxLevel]</c> — a settlement with no standing
+    /// Longhouse (level 0, e.g. mid-founding) still gets the level-1 radius
+    /// (2, not this property's old level-0 floor of 1: the floor itself grew
+    /// by the same one hex as every other level when the formula changed)
+    /// rather than a lookup failure, and a corrupted/out-of-range level above
+    /// <see cref="BuildingCatalogue.MaxLevel"/> is clamped down to it instead
+    /// of throwing — the same defensive clamp <c>SettlementEntity.ToDomain</c>
+    /// already applies for exactly this "a raw DB row could carry a bad
+    /// level" reason. Public so callers with only a raw longhouse level on
+    /// hand (a lightweight DB projection, e.g. <c>SettlementService.GetClaimedSettlementsAsync</c>
     /// or <c>ArmyService</c>'s siege-arrival check) can compute the same
     /// number without a full <see cref="Settlement"/> instance.
     /// </summary>
     public static int ClaimRadiusForLonghouseLevel(int longhouseLevel) =>
-        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Max(1, longhouseLevel)).ClaimRadius;
+        BuildingCatalogue.Get(BuildingType.Longhouse, Math.Clamp(longhouseLevel, 1, BuildingCatalogue.MaxLevel)).ClaimRadius;
 
     /// <summary>
     /// How many orders may build in parallel right now (issue #158):
@@ -205,9 +210,9 @@ public sealed record Settlement
     /// once Towers are involved there is no such fixed ceiling (a long enough
     /// chain of towers, each built inside ground the last one's own disc
     /// opened up, can in principle reach arbitrarily far from
-    /// <see cref="Centre"/>; see <see cref="Claims"/>'s remarks). This
-    /// constant is only ever used as founding's cheap, longhouse-only
-    /// pre-filter (<c>SettlementService.MinimumSpacing</c>'s "phase 1") — a
+    /// <see cref="Centre"/>; see <see cref="Claims"/>'s remarks). This value
+    /// is only ever used as founding's cheap, longhouse-only pre-filter
+    /// (<c>SettlementService.MinimumSpacing</c>'s "phase 1") — a
     /// fast distance check that quickly rejects the obviously-too-close case
     /// without needing to load anyone's building list, before the real,
     /// tower-aware check runs.
@@ -227,10 +232,17 @@ public sealed record Settlement
     /// built level-1 tower needs no guaranteed reach of its own. Product
     /// call: towers become a meaningfully sized expansion tool only once
     /// levelled up, rather than instantly doubling border growth per tower
-    /// placed.
+    /// placed. A non-positive level (no tower, or a level-0 foundation stub —
+    /// see <see cref="ClaimDiscsFor"/>'s remarks) returns 0 rather than
+    /// looking anything up; a level above <see cref="BuildingCatalogue.MaxLevel"/>
+    /// (a corrupted/out-of-range DB row) is clamped down to it instead of
+    /// silently returning 0 — the same defensive clamp <see cref="ClaimRadiusForLonghouseLevel"/>
+    /// applies for the Longhouse side of this same concern.
     /// </summary>
     public static int TowerClaimRadius(int towerLevel) =>
-        BuildingCatalogue.TryGet(BuildingType.Tower, towerLevel)?.ClaimRadius ?? 0;
+        towerLevel <= 0
+            ? 0
+            : BuildingCatalogue.Get(BuildingType.Tower, Math.Min(towerLevel, BuildingCatalogue.MaxLevel)).ClaimRadius;
 
     /// <summary>The largest a single tower's own satellite disc can ever reach on its own (at <see cref="BuildingCatalogue.MaxLevel"/>).</summary>
     public static readonly int MaxTowerClaimRadius =

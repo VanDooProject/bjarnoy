@@ -3,8 +3,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -57,8 +59,8 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
     /// the *maximum possible* claim radius (<c>2 * Settlement.MaxClaimRadius
     /// + 1</c> — a level-10 Longhouse's radius of 7, so 15), not the
     /// dispatching settlement's current one, so the real minimum distance
-    /// here is <c>currentClaimRadius (4, level 5) + MinimumSpacing (15) =
-    /// 19</c>, not just <c>currentClaimRadius + currentClaimRadius</c>.
+    /// here is <c>currentClaimRadius (level 5) + MinimumSpacing</c>, not just
+    /// <c>currentClaimRadius + currentClaimRadius</c>.
     /// <c>island.StartPositions</c> alone can't be trusted for this: they're
     /// curated "good building spot" tiles and can all sit well inside that
     /// radius of each other. Picks the *closest* qualifying hex, to keep the
@@ -78,16 +80,14 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
         var queue = new Queue<(int Q, int R)>();
         queue.Enqueue(start);
 
-        // Level-5 Longhouse ClaimRadius (2 + level/2 = 4) + the world's
-        // MinimumSpacing (2 * MaxClaimRadius(7) + 1 = 15).
-        const int MinFoundingDistance = 19;
+        var minFoundingDistance = Settlement.ClaimRadiusForLonghouseLevel(5) + SettlementService.MinimumSpacing;
 
         (int Q, int R)? best = null;
         while (queue.Count > 0)
         {
             var (q, r) = queue.Dequeue();
             var distance = HexDistance(settlement.Q, settlement.R, q, r);
-            if (distance >= MinFoundingDistance
+            if (distance >= minFoundingDistance
                 && (best is null || distance < HexDistance(settlement.Q, settlement.R, best.Value.Q, best.Value.R)))
             {
                 best = (q, r);

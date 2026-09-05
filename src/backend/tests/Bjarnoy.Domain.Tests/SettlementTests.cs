@@ -81,6 +81,48 @@ public class BuildingCatalogueTests
         }
     }
 
+    /// <summary>
+    /// Regression coverage: <see cref="Settlement.ClaimRadiusForLonghouseLevel"/>
+    /// and <see cref="Settlement.TowerClaimRadius"/> both moved from a plain
+    /// arithmetic formula (which never threw and never silently zeroed out)
+    /// to a <see cref="BuildingCatalogue.Get"/> lookup, which throws outside
+    /// <c>[1, MaxLevel]</c>/returns <see langword="null"/> outside that
+    /// range. A level from a raw DB row (a manual edit, or a future write
+    /// path that bypasses <see cref="Settlement.PlanBuild"/>'s own
+    /// validation — see <c>SettlementEntity.ToDomain</c>'s matching clamp)
+    /// must still be handled defensively rather than crashing the caller or
+    /// silently reporting a much smaller radius than the level actually
+    /// earned.
+    /// </summary>
+    [Theory]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(int.MaxValue)]
+    public void ClaimRadiusForLonghouseLevel_clamps_a_too_high_level_instead_of_throwing(int longhouseLevel)
+    {
+        Assert.Equal(
+            BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevel).ClaimRadius,
+            Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel));
+    }
+
+    [Theory]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(int.MaxValue)]
+    public void TowerClaimRadius_clamps_a_too_high_level_instead_of_returning_zero(int towerLevel)
+    {
+        Assert.Equal(
+            BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevel).ClaimRadius,
+            Settlement.TowerClaimRadius(towerLevel));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(int.MinValue)]
+    public void TowerClaimRadius_is_zero_for_a_non_positive_level(int towerLevel)
+    {
+        Assert.Equal(0, Settlement.TowerClaimRadius(towerLevel));
+    }
+
     [Theory]
     [InlineData(BuildingType.Lumberjack, Terrain.Forest, true)]
     [InlineData(BuildingType.Lumberjack, Terrain.Grass, false)]
