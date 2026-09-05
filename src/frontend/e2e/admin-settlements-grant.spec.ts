@@ -118,10 +118,7 @@ test.describe('admin settlements: grant resources honors real storage capacity',
       route.fulfill({ json: settlementResponse(resourceLine(750, 0, 0, 0)) }),
     );
 
-    await admin.goto();
-    await expect(page.getByRole('heading', { name: 'Settlements' })).toBeVisible();
-
-    await page.getByRole('button', { name: 'Manage' }).click();
+    await admin.openManagePanel();
 
     // Bug 1 fixed: the detail panel shows the *real* backend capacity
     // (750), not a synthetic client-side guess (which for a level-1

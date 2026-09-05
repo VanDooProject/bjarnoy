@@ -64,7 +64,7 @@ one-off abstraction inside the spec.
 | `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()`, `openBuildCategories()`, `openCategory()`. |
 | `WorldMapPage` | `/world`: `open()`, `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
 | `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |
-| `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `userRows` / `myRow`. |
+| `AdminTablePage` | The shared `table.table` list: `table` / `body` / `rows` / `row(text)` / `myRow`. |
 | `AdminSettlementsPage` | `/admin/settlements`: `openManagePanel()`, `hex(q, r)`, `hexForm` / `garrisonForm` / `armyEditor` / `grantForm` / `stocks` / `clampNotice`. |
 | `AdminActivityPage` | `/admin/activity`: `mockApi({ buckets, users })`, `userRows` / `userRow(name)`, `chartCanvas`, `shell`. |
 | `ScrollableView` | The "does this view scroll inside its own box" check (#101): `metrics()`, `wheel(delta)`, `noHorizontalOverflow()`. |

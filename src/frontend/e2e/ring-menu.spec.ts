@@ -97,11 +97,7 @@ test.describe('ring menu drill-down', () => {
       const categoryTexts = categoryRects.map((r) => r.text);
       const firstCategoryRect = categoryRects[0];
       const categoryDist = distanceFrom(firstCategoryRect, cx + dx, cy + dy);
-      await page.mouse.move(
-        firstCategoryRect.x + firstCategoryRect.width / 2,
-        firstCategoryRect.y + firstCategoryRect.height / 2,
-        { steps: 6 },
-      );
+      await settlement.ring.hover(categoryBubbles.first());
       await page.waitForTimeout(250);
 
       // Drilling into a category fans its buildings out on a second lane

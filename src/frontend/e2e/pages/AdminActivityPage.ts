@@ -1,5 +1,4 @@
 import type { Locator, Page, Route } from '@playwright/test';
-import { AdminTablePage } from './AdminTablePage';
 import { ScrollableView } from './ScrollableView';
 
 /** One row of `/admin/activity/users`, as the view expects it. */
@@ -35,7 +34,6 @@ export class AdminActivityPage {
   readonly chartCanvas: Locator;
   /** The admin shell (`.admin`), which is the element that has to scroll. */
   readonly shell: ScrollableView;
-  readonly table: AdminTablePage;
 
   readonly page: Page;
 
@@ -45,7 +43,6 @@ export class AdminActivityPage {
     this.chartEmpty = page.locator('.activity-chart .empty');
     this.chartCanvas = page.locator('.canvas-wrap canvas');
     this.shell = new ScrollableView(page, '.admin');
-    this.table = new AdminTablePage(page);
   }
 
   /** Navigates straight to the activity view. */

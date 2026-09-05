@@ -33,11 +33,6 @@ export class AdminTablePage {
     return this.rows.filter({ hasText });
   }
 
-  /** The activity view's user rows, which carry their own marker class. */
-  get userRows(): Locator {
-    return this.page.locator('tr.user-row');
-  }
-
   /** The leaderboard's "this is you" row. */
   get myRow(): Locator {
     return this.page.locator('tr.my-row');

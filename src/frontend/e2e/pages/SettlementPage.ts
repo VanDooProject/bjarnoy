@@ -233,4 +233,12 @@ export class SettlementPage {
           .__demoWorld().hud.resources,
     );
   }
+
+  /** The cosmetic cart shipments a trade acceptance drops onto the world map (issue #46). */
+  listCartShipments(): Promise<unknown[]> {
+    return this.page.evaluate(() =>
+      (window as unknown as { __demoWorld: () => { model: { listCartShipments: () => unknown[] } } })
+        .__demoWorld().model.listCartShipments(),
+    );
+  }
 }

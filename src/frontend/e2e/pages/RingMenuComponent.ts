@@ -58,7 +58,7 @@ export class RingMenuComponent {
 
   /** Waits for a ring to have opened at all. */
   async waitForOpen(): Promise<void> {
-    await this.page.waitForSelector('.ring-bubble');
+    await expect(this.bubbles.first()).toBeVisible();
   }
 
   /**

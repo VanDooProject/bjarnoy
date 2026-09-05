@@ -1,5 +1,4 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
 
@@ -15,7 +14,7 @@ test('landing page is the village view, not a marketing page in front of it', { 
 
   // Founding, then the 2 guided onboarding buildings, then the nickname
   // prompt, then the full game — all without ever visiting a world map.
-  await foundSettlement(page);
+  await SettlementPage.found(page);
   await expect(page).toHaveURL(/\/settlement$/);
 });
 

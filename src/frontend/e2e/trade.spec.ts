@@ -79,7 +79,7 @@ test('posting and accepting a trade offer updates the board and resources', asyn
  */
 test('accepting an offer drops a cart shipment onto the world map', async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await SettlementPage.found(page);
+  const settlement = await SettlementPage.found(page);
 
   await page.locator('.trade-toggle').click();
   const panel = page.locator('.trade-panel');
@@ -92,13 +92,6 @@ test('accepting an offer drops a cart shipment onto the world map', async ({ pag
   await rivalRow.getByRole('button', { name: 'Accept' }).click();
   await expect(panel.locator('.trade-error')).toHaveCount(0);
 
-  const carts = await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __demoWorld: () => { model: { listCartShipments: () => unknown[] } };
-        }
-      ).__demoWorld().model.listCartShipments(),
-  );
+  const carts = await settlement.listCartShipments();
   expect(carts.length).toBeGreaterThan(0);
 });
