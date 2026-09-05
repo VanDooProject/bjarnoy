@@ -1,0 +1,3003 @@
+{
+  "frames": {
+    "coastalwatertile_E": {
+      "bjarnoy": {
+        "family": "coastalwatertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "coastalwatertile_NE": {
+      "bjarnoy": {
+        "family": "coastalwatertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "coastalwatertile_NW": {
+      "bjarnoy": {
+        "family": "coastalwatertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 3,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "coastalwatertile_SE": {
+      "bjarnoy": {
+        "family": "coastalwatertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 3,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "coastalwatertile_SW": {
+      "bjarnoy": {
+        "family": "coastalwatertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 6,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "coastalwatertile_W": {
+      "bjarnoy": {
+        "family": "coastalwatertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 6,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "foresttile_E": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_E_base": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "foresttile_E_variant000": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_E_variant001": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_NE": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 906
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_NE_base": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "foresttile_NE_variant000": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 1208
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_NE_variant001": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 1510
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_NW": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 202,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_NW_base": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "foresttile_NW_variant000": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 404,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_NW_variant001": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 606,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_SE": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 808,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_SE_base": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "foresttile_SE_variant000": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1010,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_SE_variant001": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1212,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_SW": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1414,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_SW_base": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 767
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "foresttile_SW_variant000": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1616,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_SW_variant001": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1818,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_W": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 202,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_W_base": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 825
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "foresttile_W_variant000": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 202,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "foresttile_W_variant001": {
+      "bjarnoy": {
+        "family": "foresttile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 202,
+        "y": 906
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "grasstile_E": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 72,
+        "w": 143,
+        "x": 808,
+        "y": 1966
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 72,
+        "w": 143,
+        "x": 2,
+        "y": 135
+      },
+      "trimmed": true
+    },
+    "grasstile_E_base": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 825
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "grasstile_E_variant002": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 129,
+        "w": 198,
+        "x": 1212,
+        "y": 1908
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 129,
+        "w": 198,
+        "x": 1,
+        "y": 103
+      },
+      "trimmed": true
+    },
+    "grasstile_NE_base": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 767
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "grasstile_NE_variant001": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 101,
+        "w": 198,
+        "x": 1810,
+        "y": 1908
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 101,
+        "w": 198,
+        "x": 1,
+        "y": 132
+      },
+      "trimmed": true
+    },
+    "grasstile_NE_variant002": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 117,
+        "w": 197,
+        "x": 1412,
+        "y": 1908
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 117,
+        "w": 197,
+        "x": 3,
+        "y": 116
+      },
+      "trimmed": true
+    },
+    "grasstile_NW_base": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 767
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "grasstile_SE_base": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 767
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "grasstile_SE_variant002": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 117,
+        "w": 197,
+        "x": 1611,
+        "y": 1908
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 117,
+        "w": 197,
+        "x": 2,
+        "y": 116
+      },
+      "trimmed": true
+    },
+    "grasstile_SW": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 62,
+        "w": 155,
+        "x": 953,
+        "y": 1966
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 62,
+        "w": 155,
+        "x": 12,
+        "y": 170
+      },
+      "trimmed": true
+    },
+    "grasstile_SW_base": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 930
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "grasstile_W_base": {
+      "bjarnoy": {
+        "family": "grasstile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 988
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "mountaintile_E": {
+      "bjarnoy": {
+        "family": "mountaintile",
+        "layer": "composite"
+      },
+      "frame": {
+        "h": 222,
+        "w": 200,
+        "x": 606,
+        "y": 1812
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 222,
+        "w": 200,
+        "x": 0,
+        "y": 78
+      },
+      "trimmed": true
+    },
+    "mountaintile_NE": {
+      "bjarnoy": {
+        "family": "mountaintile",
+        "layer": "composite"
+      },
+      "frame": {
+        "h": 219,
+        "w": 200,
+        "x": 808,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 219,
+        "w": 200,
+        "x": 0,
+        "y": 81
+      },
+      "trimmed": true
+    },
+    "mountaintile_NW": {
+      "bjarnoy": {
+        "family": "mountaintile",
+        "layer": "composite"
+      },
+      "frame": {
+        "h": 219,
+        "w": 200,
+        "x": 1010,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 219,
+        "w": 200,
+        "x": 0,
+        "y": 81
+      },
+      "trimmed": true
+    },
+    "mountaintile_SE": {
+      "bjarnoy": {
+        "family": "mountaintile",
+        "layer": "composite"
+      },
+      "frame": {
+        "h": 224,
+        "w": 200,
+        "x": 202,
+        "y": 1812
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 224,
+        "w": 200,
+        "x": 0,
+        "y": 76
+      },
+      "trimmed": true
+    },
+    "mountaintile_SW": {
+      "bjarnoy": {
+        "family": "mountaintile",
+        "layer": "composite"
+      },
+      "frame": {
+        "h": 227,
+        "w": 200,
+        "x": 0,
+        "y": 1812
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 227,
+        "w": 200,
+        "x": 0,
+        "y": 73
+      },
+      "trimmed": true
+    },
+    "mountaintile_W": {
+      "bjarnoy": {
+        "family": "mountaintile",
+        "layer": "composite"
+      },
+      "frame": {
+        "h": 224,
+        "w": 200,
+        "x": 404,
+        "y": 1812
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 224,
+        "w": 200,
+        "x": 0,
+        "y": 76
+      },
+      "trimmed": true
+    },
+    "rivertile_E": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 202,
+        "y": 1208
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_E_base": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 988
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_NE": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 202,
+        "y": 1510
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_NE_base": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 930
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_NW": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 404,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_NW_base": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 930
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_SE": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 404,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_SE_base": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 930
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_SW": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 404,
+        "y": 906
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_SW_base": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 1093
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_W": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 404,
+        "y": 1208
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_W_base": {
+      "bjarnoy": {
+        "family": "rivertile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 1151
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_E": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 9,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_E_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 1151
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_NE": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 9,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_NE_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 1093
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_NW": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 12,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_NW_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 1093
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_SE": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 12,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_SE_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 1093
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_SW": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 15,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_SW_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 1314
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_W": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 15,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_bend60_W_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend60",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 1477
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend_E": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 404,
+        "y": 1510
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_bend_E_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 1640
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend_NE": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 606,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_bend_NE_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 808,
+        "y": 1803
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend_NW": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 808,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_bend_NW_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 1314
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend_SE": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1010,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_bend_SE_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 1477
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend_SW": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1212,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_bend_SW_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 1640
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_bend_W": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1414,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_bend_W_base": {
+      "bjarnoy": {
+        "family": "rivertile_bend",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1010,
+        "y": 1803
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_spring_E": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1616,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_spring_E_base": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 1256
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_spring_NE": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 1818,
+        "y": 302
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_spring_NE_base": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 1256
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_spring_NW": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 606,
+        "y": 604
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_spring_NW_base": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 1256
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_spring_SE": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 606,
+        "y": 906
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_spring_SE_base": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 1256
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_spring_SW": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 606,
+        "y": 1208
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_spring_SW_base": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 1419
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_spring_W": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 300,
+        "w": 200,
+        "x": 606,
+        "y": 1510
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 300,
+        "w": 200,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": false
+    },
+    "rivertile_spring_W_base": {
+      "bjarnoy": {
+        "family": "rivertile_spring",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 1582
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_E": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 18,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_E_base": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1212,
+        "y": 1745
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_NE": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 18,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_NE_base": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 1419
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_NW": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 21,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_NW_base": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 1419
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_SE": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 21,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_SE_base": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 1419
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_SW": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 24,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_SW_base": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 1582
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_W": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 24,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "rivertile_y_narrow_W_base": {
+      "bjarnoy": {
+        "family": "rivertile_y_narrow",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1414,
+        "y": 1745
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sandtile_E": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 27,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "sandtile_E_base": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 1582
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sandtile_NE": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 27,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "sandtile_NE_base": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 1582
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sandtile_NW": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 30,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "sandtile_NW_base": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1616,
+        "y": 1745
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sandtile_SE": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 30,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "sandtile_SE_base": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "base"
+      },
+      "frame": {
+        "h": 161,
+        "w": 200,
+        "x": 1818,
+        "y": 1745
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 161,
+        "w": 200,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sandtile_SW": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 33,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "sandtile_W": {
+      "bjarnoy": {
+        "family": "sandtile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 33,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "watertile_E": {
+      "bjarnoy": {
+        "family": "watertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 36,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "watertile_NE": {
+      "bjarnoy": {
+        "family": "watertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 36,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "watertile_NW": {
+      "bjarnoy": {
+        "family": "watertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 39,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "watertile_SE": {
+      "bjarnoy": {
+        "family": "watertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 39,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "watertile_SW": {
+      "bjarnoy": {
+        "family": "watertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 42,
+        "y": 2041
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    },
+    "watertile_W": {
+      "bjarnoy": {
+        "family": "watertile",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 1,
+        "w": 1,
+        "x": 42,
+        "y": 2044
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 1,
+        "w": 1,
+        "x": 0,
+        "y": 0
+      },
+      "trimmed": true
+    }
+  },
+  "meta": {
+    "bjarnoy": {
+      "atlasVersion": 1,
+      "category": "terrain",
+      "sourceHash": "20260905-devbuild",
+      "tile": {
+        "h": 300,
+        "topFaceH": 92,
+        "topFaceY": 140,
+        "w": 200
+      }
+    },
+    "format": "RGBA8888",
+    "image": "terrain-0.webp",
+    "related_multi_packs": [
+      "terrain-1.json"
+    ],
+    "scale": "1",
+    "size": {
+      "h": 2048,
+      "w": 2048
+    }
+  }
+}

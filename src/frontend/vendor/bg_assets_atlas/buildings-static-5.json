@@ -1,0 +1,1495 @@
+{
+  "frames": {
+    "barracks_NW_level000": {
+      "bjarnoy": {
+        "family": "barracks",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 804,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "barracks_SE_level000": {
+      "bjarnoy": {
+        "family": "barracks",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 1631
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "cropmill_NW_level000a": {
+      "bjarnoy": {
+        "family": "cropmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1004,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "cropmill_NW_level001": {
+      "bjarnoy": {
+        "family": "cropmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 197,
+        "x": 399,
+        "y": 383
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 197,
+        "x": 2,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "cropmill_NW_level002": {
+      "bjarnoy": {
+        "family": "cropmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 1726
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "dockyard_E_level000": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 188,
+        "x": 395,
+        "y": 955
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 188,
+        "x": 5,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_E_level001": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 95,
+        "w": 190,
+        "x": 398,
+        "y": 670
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 95,
+        "w": 190,
+        "x": 5,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_NE_level000": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_NE_level001": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 201,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_NW_level000": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 197,
+        "x": 199,
+        "y": 670
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 197,
+        "x": 2,
+        "y": 151
+      },
+      "trimmed": true
+    },
+    "dockyard_NW_level001": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 402,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_NW_level002": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 603,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_NW_level003": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 804,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "dockyard_SW_level000": {
+      "bjarnoy": {
+        "family": "dockyard",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 197,
+        "x": 199,
+        "y": 765
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 197,
+        "x": 2,
+        "y": 151
+      },
+      "trimmed": true
+    },
+    "fisherhut_NE_level000": {
+      "bjarnoy": {
+        "family": "fisherhut",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 200,
+        "x": 0,
+        "y": 480
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 200,
+        "x": 0,
+        "y": 151
+      },
+      "trimmed": true
+    },
+    "fisherhut_NW_level000": {
+      "bjarnoy": {
+        "family": "fisherhut",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 200,
+        "y": 288
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 2,
+        "y": 151
+      },
+      "trimmed": true
+    },
+    "fisherhut_SW_level000": {
+      "bjarnoy": {
+        "family": "fisherhut",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1204,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "fisherhut_W_level000": {
+      "bjarnoy": {
+        "family": "fisherhut",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 200,
+        "y": 384
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 1,
+        "y": 150
+      },
+      "trimmed": true
+    },
+    "freyjashrine_E_level000": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 575
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_E_level001": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1404,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_NE_level000": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 1005,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_NE_level001": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 1206,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_NE_level002": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 1407,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_NW_level000": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 671
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_NW_level001": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 767
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_SE_level001": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1604,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_SW_level000": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 863
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_SW_level001": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1804,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_W_level000": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 959
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "freyjashrine_W_level001": {
+      "bjarnoy": {
+        "family": "freyjashrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 1055
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "greathall_NW_level000": {
+      "bjarnoy": {
+        "family": "greathall",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 1608,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_NE_level000": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_NE_level001": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 200,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_NE_level002": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 400,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_SE_level000": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 1151
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_SE_level001": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 600,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_SE_level002": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 800,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_SW_level000": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 1821
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "sawmill_SW_level001": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 1809,
+        "y": 0
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmill_SW_level002": {
+      "bjarnoy": {
+        "family": "sawmill",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillbend_E_level000": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 1247
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 3,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillbend_E_level001": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1000,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillbend_NE_level000": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1200,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillbend_NE_level001": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1400,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillbend_NW_level000": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 197,
+        "x": 199,
+        "y": 860
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 197,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "sawmillbend_NW_level001": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 1916
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "sawmillbend_NW_level002": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 199,
+        "y": 575
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "sawmillbend_NW_level003": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 202,
+        "y": 480
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "sawmillbend_SE_level000": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 1343
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 3,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillbend_SE_level001": {
+      "bjarnoy": {
+        "family": "sawmillbend",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 1439
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 3,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillriver_E_level000": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 194,
+        "x": 199,
+        "y": 955
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 194,
+        "x": 6,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillriver_E_level001": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1600,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillriver_E_level002": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 1800,
+        "y": 192
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillriver_NE_level000": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 92,
+        "w": 198,
+        "x": 199,
+        "y": 1051
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 92,
+        "w": 198,
+        "x": 1,
+        "y": 141
+      },
+      "trimmed": true
+    },
+    "sawmillriver_NE_level001": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 93,
+        "w": 199,
+        "x": 399,
+        "y": 288
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 93,
+        "w": 199,
+        "x": 0,
+        "y": 140
+      },
+      "trimmed": true
+    },
+    "sawmillriver_NW_level000": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 1535
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 197,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "sawmillriver_NW_level001": {
+      "bjarnoy": {
+        "family": "sawmillriver",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 201,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "thorshrine_SW_level000": {
+      "bjarnoy": {
+        "family": "thorshrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 402,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 1,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "thorshrine_W_level000": {
+      "bjarnoy": {
+        "family": "thorshrine",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 199,
+        "x": 603,
+        "y": 96
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 199,
+        "x": 0,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "vikinghut_SE_level000": {
+      "bjarnoy": {
+        "family": "vikinghut",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 288
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    },
+    "vikinghut_SE_level001": {
+      "bjarnoy": {
+        "family": "vikinghut",
+        "layer": "top"
+      },
+      "frame": {
+        "h": 94,
+        "w": 198,
+        "x": 0,
+        "y": 384
+      },
+      "rotated": false,
+      "sourceSize": {
+        "h": 300,
+        "w": 200
+      },
+      "spriteSourceSize": {
+        "h": 94,
+        "w": 198,
+        "x": 2,
+        "y": 139
+      },
+      "trimmed": true
+    }
+  },
+  "meta": {
+    "bjarnoy": {
+      "atlasVersion": 1,
+      "category": "buildings-static",
+      "sourceHash": "20260905-devbuild",
+      "tile": {
+        "h": 300,
+        "topFaceH": 92,
+        "topFaceY": 140,
+        "w": 200
+      }
+    },
+    "format": "RGBA8888",
+    "image": "buildings-static-5.webp",
+    "related_multi_packs": [
+      "buildings-static-0.json",
+      "buildings-static-1.json",
+      "buildings-static-2.json",
+      "buildings-static-3.json",
+      "buildings-static-4.json"
+    ],
+    "scale": "1",
+    "size": {
+      "h": 2048,
+      "w": 2048
+    }
+  }
+}
