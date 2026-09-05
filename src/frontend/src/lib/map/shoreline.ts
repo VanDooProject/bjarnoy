@@ -33,23 +33,27 @@ export function hasShoreline(center: AxialCoord, claimRadius: number, terrain: T
 }
 
 /**
- * Mirrors `Settlement.cs`'s `ClaimRadius => 1 + (LonghouseLevel / 2)` — the
- * centre disc's own radius, derived purely from the longhouse level the
- * frontend already tracks (`hud.level`), so no extra wire field
- * (`SettlementResponse.claimRadius`, fetched but otherwise unused by
- * anything client-side) needs plumbing through just for this. This is only
- * the centre disc — see `claimDiscs` for the settlement's full claimed
- * territory once Tower satellite discs are included.
+ * Mirrors `Settlement.cs`'s `ClaimRadius` (backed by
+ * `BuildingCatalogue`'s Longhouse `ClaimRadius = 2 + (level / 2)`, the same
+ * number `building-catalogue.json`'s `longhouse` entries carry in their own
+ * `claimRadius` field) — the centre disc's own radius, derived purely from
+ * the longhouse level the frontend already tracks (`hud.level`), so no
+ * extra wire field (`SettlementResponse.claimRadius`, fetched but otherwise
+ * unused by anything client-side) needs plumbing through just for this.
+ * This is only the centre disc — see `claimDiscs` for the settlement's full
+ * claimed territory once Tower satellite discs are included.
  */
 export function claimRadiusForLevel(longhouseLevel: number): number {
-  return 1 + Math.floor(longhouseLevel / 2);
+  return 2 + Math.floor(longhouseLevel / 2);
 }
 
 /**
- * Mirrors `Settlement.cs`'s `TowerClaimRadius(int towerLevel) => Math.Max(0,
- * towerLevel) / 2` — half the growth rate of `claimRadiusForLevel`, with no
- * "+1" floor (a Tower only ever extends ground the settlement's centre disc
- * already reaches; see that backend method's own remarks for why).
+ * Mirrors `Settlement.cs`'s `TowerClaimRadius(int towerLevel)` (backed by
+ * `BuildingCatalogue`'s Tower `ClaimRadius = level / 2`, the same number
+ * `building-catalogue.json`'s `tower` entries carry in their own
+ * `claimRadius` field) — half the growth rate of `claimRadiusForLevel`, with
+ * no "+1" floor (a Tower only ever extends ground the settlement's centre
+ * disc already reaches; see that backend method's own remarks for why).
  */
 export function towerClaimRadiusForLevel(towerLevel: number): number {
   return Math.floor(Math.max(0, towerLevel) / 2);

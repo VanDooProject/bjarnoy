@@ -889,7 +889,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var settlement = await founded.ReadStrictAsync<SettlementResponse>(Ct);
         var centre = new HexCoord(settlement.Q, settlement.R);
 
-        // Claim radius is 1 + longhouseLevel/2 — grow to level 4 (radius 3)
+        // Claim radius is 2 + longhouseLevel/2 — grow to level 4 (radius 4)
         // so the shore found above is actually reachable. Each level costs
         // more than the settlement can afford right away (cost grows faster
         // than a single longhouse's own production), so a rejected attempt

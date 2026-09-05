@@ -67,7 +67,7 @@ public class LandingOnboardingCompletionTests
         // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
         // terrain, both guaranteed adjacent to any start position (see
         // LandingBuildQueueTests's own comment on WorldGenerator's
-        // guarantee) and so within ClaimRadius 1 at level 1.
+        // guarantee) and so within ClaimRadius 2 at level 1.
         var centre = new HexCoord(settlement.Q, settlement.R);
         var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
             $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"

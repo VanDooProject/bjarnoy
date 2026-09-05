@@ -40,6 +40,18 @@ public sealed record BuildingDefinition
     public ResourceAmounts StorageCapacity { get; init; } = ResourceAmounts.Zero;
 
     /// <summary>
+    /// Radius (in hexes) of the claim disc this building/level contributes,
+    /// or 0 for a building that contributes none. For
+    /// <see cref="BuildingType.Longhouse"/> this is the settlement's own
+    /// centre-disc radius (<see cref="Settlement.ClaimRadius"/>); for
+    /// <see cref="BuildingType.Tower"/> it is that tower's own satellite-disc
+    /// radius, centred on the tower rather than the settlement (see
+    /// <see cref="Settlement.ClaimDiscsFor"/>). Every other building leaves
+    /// this at 0 — it does not extend the realm at all.
+    /// </summary>
+    public int ClaimRadius { get; init; }
+
+    /// <summary>
     /// Terrain this building may stand on. Empty means anywhere buildable —
     /// which is any land hex; nothing is built on open sea. Meaningless (and
     /// unused — see <see cref="RequiresCoastalWater"/>) for a building that

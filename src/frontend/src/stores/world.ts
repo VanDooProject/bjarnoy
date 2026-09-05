@@ -116,6 +116,12 @@ export const useWorldStore = defineStore('world', {
       // longhouse counts as the first) rather than a separately tracked
       // counter that could drift from what's really on the ground.
       buildingsPlaced: 0,
+      // RealmPanel's displayed territory size (WorldModel.claimedHexCount) —
+      // refreshed here alongside buildingsPlaced rather than read directly
+      // off `model` in a computed, since `model` is `markRaw` and a Tower
+      // levelling up (or a Longhouse levelling up) changes nothing Vue
+      // tracks, so a direct read would freeze at its first-render value.
+      claimedHexes: 0,
       // Full placed-building list (type/level/coord) for the selected live
       // settlement, refreshed alongside everything else in
       // `refreshLiveSettlement` — TrainingModal.vue's own coastal check needs
@@ -952,6 +958,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
+      this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
       this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
     },

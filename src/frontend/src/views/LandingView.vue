@@ -185,22 +185,20 @@ function showInvalidClickMessage(message: string) {
   invalidClickTimer = setTimeout(() => (invalidClickMessage.value = null), 2500);
 }
 
-// Live mode only: `WorldModel.borderRadius` (what marks a tile's `ownerId`,
-// and thus what reads as "your territory" on screen) is deliberately more
-// generous than the backend's actual buildable range
-// (`Settlement.ClaimRadius`, mirrored here via `claimRadiusForLevel`) — see
-// `WorldModel.borderRadius`'s own comment. `Settlement.Claims` (what the
+// Live mode only: an explicit mirror of the backend's actual buildable range
+// (`Settlement.ClaimRadius`, via `claimRadiusForLevel`) — `WorldModel.borderRadius`
+// (what marks a tile's `ownerId`, and thus what reads as "your territory" on
+// screen) now uses the same formula, so this is no longer closing a gap
+// between the two, just making the backend's own rule explicit here rather
+// than relying on that agreement implicitly. `Settlement.Claims` (what the
 // backend actually gates new construction against) is the union of the
 // centre disc and every placed Tower's own satellite disc — but this
 // onboarding flow only ever places the very first Farm/Lumberjack, before
 // any Tower exists, so the centre disc alone is already the exact same
 // range at this point in a player's settlement; `claimRadiusForLevel` stays
 // a faithful enough mirror here without needing the fuller `claimDiscs`
-// machinery TrainingModal.vue uses once towers are in play. Without this
-// extra check, the tutorial ring opened on hexes the backend would always
-// reject with `HexNotInSettlement`, which is exactly the "ring 2 fails to
-// close" symptom `onRingSelect` used to hit below. Demo mode has no backend
-// to disagree with, so its own `tile.ownerId` (bounded by the same
+// machinery TrainingModal.vue uses once towers are in play. Demo mode has no
+// backend to mirror, so its own `tile.ownerId` (bounded by the same
 // `borderRadius`) is already the full truth.
 function withinBuildableRange(coord: AxialCoord): boolean {
   if (DEMO_MODE || !world.selectedSettlementId) return true;

@@ -203,7 +203,7 @@ public sealed class ArmyService(
             // Mirrors Settlement.ClaimDiscs: the centre disc (Settlement.ClaimRadius)
             // plus one satellite disc per Tower, centred on that tower's own
             // hex, not the settlement's centre.
-            var centreClaimRadius = 1 + (target.LonghouseLevel / 2);
+            var centreClaimRadius = Settlement.ClaimRadiusForLonghouseLevel(target.LonghouseLevel);
             targetClaimDiscs =
             [
                 (effectiveDestination, centreClaimRadius),

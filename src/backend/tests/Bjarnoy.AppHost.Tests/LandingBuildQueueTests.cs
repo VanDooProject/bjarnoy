@@ -32,12 +32,12 @@ namespace Bjarnoy.AppHost.Tests;
 /// Deliberately doesn't drive the ring menu's click-to-open UI here — a
 /// pixel-accurate click needs the renderer's own camera math, which isn't
 /// exposed outside demo mode (see <c>main.ts</c>), so there's no reliable
-/// way from here to land exactly on a given hex. (LandingView.vue also now
+/// way from here to land exactly on a given hex. (LandingView.vue also
 /// refuses to open the ring at all on a hex outside <c>Settlement.ClaimRadius</c>,
-/// even though <c>WorldModel.borderRadius</c> — what actually marks a
-/// tile's <c>ownerId</c> — still renders territory a hex or two more
-/// generous than that; see <c>withinBuildableRange</c>.) The ring's own
-/// enabled/disabled terrain gating is covered by the demo-mode e2e suite
+/// via <c>withinBuildableRange</c> — now numerically identical to
+/// <c>WorldModel.borderRadius</c>, what actually marks a tile's
+/// <c>ownerId</c>, since both use the same centre-disc formula.) The ring's
+/// own enabled/disabled terrain gating is covered by the demo-mode e2e suite
 /// instead (<c>landing.spec.ts</c>), where that camera math *is* available.
 /// </remarks>
 public class LandingBuildQueueTests
@@ -82,7 +82,7 @@ public class LandingBuildQueueTests
         // A grass neighbour of the settlement's own centre — guaranteed to
         // exist (WorldGenerator only picks a start position with at least
         // one adjacent forest and two more adjacent grass hexes) and within
-        // ClaimRadius 1 at level 1, so the backend accepts a Farm there.
+        // ClaimRadius 2 at level 1, so the backend accepts a Farm there.
         var centre = new HexCoord(settlement.Q, settlement.R);
         var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
             $"/api/v1/worlds/{world.Id}/tiles?qMin={centre.Q - 1}&qMax={centre.Q + 1}"

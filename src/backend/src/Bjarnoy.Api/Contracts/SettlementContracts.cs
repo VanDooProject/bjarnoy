@@ -303,7 +303,8 @@ public sealed record BuildingDefinitionResponse(
     bool RequiresCoastalWater,
     int RequiredLonghouseLevel,
     int SlotCost,
-    bool OccupiesAllSlots)
+    bool OccupiesAllSlots,
+    int ClaimRadius)
 {
     public static BuildingDefinitionResponse From(BuildingDefinition definition)
     {
@@ -320,7 +321,8 @@ public sealed record BuildingDefinitionResponse(
             definition.RequiresCoastalWater,
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
-            definition.OccupiesAllSlots);
+            definition.OccupiesAllSlots,
+            definition.ClaimRadius);
     }
 }
 

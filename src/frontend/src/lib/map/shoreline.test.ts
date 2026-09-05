@@ -72,12 +72,12 @@ describe('hasShoreline', () => {
 });
 
 describe('claimRadiusForLevel', () => {
-  it('mirrors Settlement.cs\'s 1 + (LonghouseLevel / 2), integer division', () => {
-    expect(claimRadiusForLevel(1)).toBe(1);
-    expect(claimRadiusForLevel(2)).toBe(2);
-    expect(claimRadiusForLevel(3)).toBe(2);
-    expect(claimRadiusForLevel(4)).toBe(3);
-    expect(claimRadiusForLevel(10)).toBe(6);
+  it('mirrors Settlement.cs\'s 2 + (LonghouseLevel / 2), integer division', () => {
+    expect(claimRadiusForLevel(1)).toBe(2);
+    expect(claimRadiusForLevel(2)).toBe(3);
+    expect(claimRadiusForLevel(3)).toBe(3);
+    expect(claimRadiusForLevel(4)).toBe(4);
+    expect(claimRadiusForLevel(10)).toBe(7);
   });
 });
 
@@ -100,24 +100,24 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
     );
 
     expect(discs).toEqual([
-      { q: 0, r: 0, radius: 1 },
+      { q: 0, r: 0, radius: 2 },
       { q: 5, r: 0, radius: 2 },
     ]);
   });
 
   it('finds a shoreline reachable only through a tower disc, not the centre disc', () => {
-    // Sea everywhere except a small land patch around (5, 0) — well outside
-    // the centre disc (radius 1 around origin) but inside a level-4 tower's
-    // own satellite disc (radius 2) sitting at (5, 0).
+    // Sea everywhere except a small land patch around (9, 0) — well outside
+    // the centre disc (radius 2 around origin) but inside a level-4 tower's
+    // own satellite disc (radius 2) sitting at (9, 0).
     const terrain: TerrainLookup = {
-      isLand: (q, r) => Math.abs(q - 5) <= 1 && r === 0,
+      isLand: (q, r) => Math.abs(q - 9) <= 1 && r === 0,
     };
-    const discs = claimDiscs({ q: 0, r: 0 }, 1, [{ q: 5, r: 0, level: 4 }]);
+    const discs = claimDiscs({ q: 0, r: 0 }, 1, [{ q: 9, r: 0, level: 4 }]);
 
     expect(hasShorelineInTerritory(discs, terrain)).toBe(true);
     // Sanity: the centre disc alone finds nothing — this really is the
     // tower disc doing the work.
-    expect(hasShoreline({ q: 0, r: 0 }, 1, terrain)).toBe(false);
+    expect(hasShoreline({ q: 0, r: 0 }, 2, terrain)).toBe(false);
   });
 
   it('is false when no disc — centre or any tower — reaches a shoreline hex', () => {

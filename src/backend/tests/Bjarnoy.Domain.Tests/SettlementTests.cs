@@ -35,6 +35,94 @@ public class BuildingCatalogueTests
             () => BuildingCatalogue.Get(BuildingType.Farm, level));
     }
 
+    /// <summary>
+    /// Regression coverage for a frontend/backend realm-border mismatch: the
+    /// frontend's own realm-border formula (`WorldModel.borderRadius`,
+    /// `2 + floor(level / 2)`) and the backend's `Settlement.ClaimRadius`
+    /// (previously `1 + (level / 2)`) disagreed by exactly one hex at every
+    /// longhouse level, so a tile the frontend rendered as "inside the
+    /// realm" could still be rejected by the backend with
+    /// `HexNotInSettlement`. `Settlement.ClaimRadius` now reads this same
+    /// catalogue value back (see <see cref="Settlement.ClaimRadius"/>), so
+    /// this is the one place either side's number can drift from the other.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(2, 3)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(10, 7)]
+    public void Longhouse_ClaimRadius_matches_the_frontends_2_plus_half_level_formula(int level, int expectedRadius)
+    {
+        Assert.Equal(expectedRadius, BuildingCatalogue.Get(BuildingType.Longhouse, level).ClaimRadius);
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 1)]
+    [InlineData(10, 5)]
+    public void Tower_ClaimRadius_is_half_the_longhouses_growth_rate(int level, int expectedRadius)
+    {
+        Assert.Equal(expectedRadius, BuildingCatalogue.Get(BuildingType.Tower, level).ClaimRadius);
+    }
+
+    [Fact]
+    public void Only_longhouse_and_tower_contribute_a_claim_radius()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            if (type is BuildingType.Longhouse or BuildingType.Tower) continue;
+
+            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            {
+                Assert.Equal(0, BuildingCatalogue.Get(type, level).ClaimRadius);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Regression coverage: <see cref="Settlement.ClaimRadiusForLonghouseLevel"/>
+    /// and <see cref="Settlement.TowerClaimRadius"/> both moved from a plain
+    /// arithmetic formula (which never threw and never silently zeroed out)
+    /// to a <see cref="BuildingCatalogue.Get"/> lookup, which throws outside
+    /// <c>[1, MaxLevel]</c>/returns <see langword="null"/> outside that
+    /// range. A level from a raw DB row (a manual edit, or a future write
+    /// path that bypasses <see cref="Settlement.PlanBuild"/>'s own
+    /// validation — see <c>SettlementEntity.ToDomain</c>'s matching clamp)
+    /// must still be handled defensively rather than crashing the caller or
+    /// silently reporting a much smaller radius than the level actually
+    /// earned.
+    /// </summary>
+    [Theory]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(int.MaxValue)]
+    public void ClaimRadiusForLonghouseLevel_clamps_a_too_high_level_instead_of_throwing(int longhouseLevel)
+    {
+        Assert.Equal(
+            BuildingCatalogue.Get(BuildingType.Longhouse, BuildingCatalogue.MaxLevel).ClaimRadius,
+            Settlement.ClaimRadiusForLonghouseLevel(longhouseLevel));
+    }
+
+    [Theory]
+    [InlineData(BuildingCatalogue.MaxLevel + 1)]
+    [InlineData(int.MaxValue)]
+    public void TowerClaimRadius_clamps_a_too_high_level_instead_of_returning_zero(int towerLevel)
+    {
+        Assert.Equal(
+            BuildingCatalogue.Get(BuildingType.Tower, BuildingCatalogue.MaxLevel).ClaimRadius,
+            Settlement.TowerClaimRadius(towerLevel));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(int.MinValue)]
+    public void TowerClaimRadius_is_zero_for_a_non_positive_level(int towerLevel)
+    {
+        Assert.Equal(0, Settlement.TowerClaimRadius(towerLevel));
+    }
+
     [Theory]
     [InlineData(BuildingType.Lumberjack, Terrain.Forest, true)]
     [InlineData(BuildingType.Lumberjack, Terrain.Grass, false)]
@@ -310,6 +398,14 @@ public class SettlementTests
     }
 
     [Fact]
+    public void Settlement_ClaimRadius_reads_the_catalogues_ClaimRadius_for_its_longhouse_level()
+    {
+        var settlement = Found();
+
+        Assert.Equal(BuildingCatalogue.Get(BuildingType.Longhouse, 1).ClaimRadius, settlement.ClaimRadius);
+    }
+
+    [Fact]
     public void The_claim_radius_grows_with_the_longhouse()
     {
         var small = Found();
@@ -377,7 +473,7 @@ public class SettlementTests
             // the claim check, not the longhouse-prerequisite one.
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 2), // ClaimRadius == 2
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 2), // ClaimRadius == 3
                 new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 5
             ],
         };

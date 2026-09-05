@@ -19,9 +19,11 @@ const props = defineProps<{
 const settlement = computed(() =>
   world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined,
 );
-const claimedHexes = computed(() =>
-  settlement.value ? world.model.borderRadius(settlement.value) : 0,
-);
+// Reads world.hud (refreshed by syncHud on every tick/level-up/tower change)
+// rather than calling world.model.claimedHexCount directly — model is
+// markRaw, so a computed reading it wouldn't re-run when a Tower or the
+// Longhouse levels up without some other reactive dependency also changing.
+const claimedHexes = computed(() => world.hud.claimedHexes);
 </script>
 
 <template>
@@ -30,7 +32,7 @@ const claimedHexes = computed(() =>
       <span class="name">{{ settlement.name }}</span>
       <span class="level pill">Lv {{ settlement.level }}</span>
     </div>
-    <p class="sub">Longhouse claims a border-{{ claimedHexes }} realm</p>
+    <p class="sub">Realm claims {{ claimedHexes }} hexes</p>
     <button class="back" :disabled="props.ringOpen" @click="router.push('/world')">← World map</button>
   </div>
 </template>
