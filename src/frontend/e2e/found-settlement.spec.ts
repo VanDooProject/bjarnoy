@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 test('clicking an island founds a settlement and opens the village view', async ({ page }) => {
   // foundSettlement() alone — page load plus a real PixiJS/texture mount —
@@ -10,14 +10,14 @@ test('clicking an island founds a settlement and opens the village view', async 
   // its own assertions run. See settlement-interactions.spec.ts's matching
   // comments for the other tests that share this same root cause.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  await foundSettlement(page);
+  const settlement = await SettlementPage.found(page);
   await expect(page).toHaveURL(/\/settlement$/);
 
   // realm panel: the settlement is real state, not a placeholder screen.
   // Scoped to .realm-panel — TopBar's header also shows the settlement name,
   // so an unscoped text locator matches both and violates Playwright's
   // strict mode.
-  const realmPanel = page.locator('.realm-panel');
+  const realmPanel = settlement.realmPanel;
   await expect(realmPanel.getByText('Unnamed realm')).toBeVisible();
   await expect(realmPanel.getByText('Lv 1')).toBeVisible();
   await expect(realmPanel.getByText(/Longhouse claims a border-\d+ realm/)).toBeVisible();
