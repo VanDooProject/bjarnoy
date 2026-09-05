@@ -39,8 +39,8 @@
 // the water. Neither can prop the other up, which is the property that test's
 // header asks for and did not get until the water arrived.
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /** A screen-space box centred on a hex, small enough to stay inside it. */
 interface Patch {
@@ -113,12 +113,9 @@ async function revealTheSea(page: import('@playwright/test').Page): Promise<void
  * the shader cares about is the sea/land split the mask encodes, and that is
  * what this asks for.
  */
-async function patchDeepInside(
-  page: import('@playwright/test').Page,
-  want: 'sea' | 'land',
-  half: number,
-): Promise<Patch> {
-  const box = (await page.locator('canvas').boundingBox())!;
+async function patchDeepInside(settlement: SettlementPage, want: 'sea' | 'land', half: number): Promise<Patch> {
+  const page = settlement.page;
+  const box = await settlement.canvasBox();
   const centre = await page.evaluate(
     ([wanted, margin, viewport]) => {
       const win = window as unknown as {
@@ -192,11 +189,11 @@ test.describe('water shader', { tag: '@g1' }, () => {
     // foundSettlement() plus a real PixiJS mount, then several screenshots of a
     // continuously animating canvas — see budgets.ts.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    const settlement = await SettlementPage.found(page);
     await revealTheSea(page);
 
-    const sea = await patchDeepInside(page, 'sea', PATCH_HALF);
-    const inland = await patchDeepInside(page, 'land', PATCH_HALF);
+    const sea = await patchDeepInside(settlement, 'sea', PATCH_HALF);
+    const inland = await patchDeepInside(settlement, 'land', PATCH_HALF);
 
     const shoot = async () => ({
       sea: await page.screenshot({ clip: sea }),
@@ -243,7 +240,7 @@ test.describe('water shader', { tag: '@g1' }, () => {
 
   test('keeps animating while the camera sits still', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    const settlement = await SettlementPage.found(page);
     await revealTheSea(page);
 
     // The fog is the other thing in this view that animates at rest, so its
@@ -255,7 +252,7 @@ test.describe('water shader', { tag: '@g1' }, () => {
     });
     await page.waitForTimeout(500);
 
-    const sea = await patchDeepInside(page, 'sea', PATCH_HALF);
+    const sea = await patchDeepInside(settlement, 'sea', PATCH_HALF);
 
     const before = await page.screenshot({ clip: sea });
     await page.waitForTimeout(2_000);

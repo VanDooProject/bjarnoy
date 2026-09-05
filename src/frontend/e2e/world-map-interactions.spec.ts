@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement, gotoWorldMap } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { WorldMapPage } from './pages';
 
 // Mirrors settlement-interactions.spec.ts but for the world map: hover
 // highlighting and panning both go through the same HexMapRenderer code
@@ -10,81 +10,71 @@ import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 //
 // zip 6a: founding now only ever happens on the landing page — /world
 // requires an already-founded settlement (see router/index.ts's guard), so
-// every test here founds one first via the shared helper, then still has to
-// pan/zoom/hover through a second real render. 120s (not the 90s these used
-// before founding was added to them) matches settlement-interactions.spec's
-// own panning test — the same "found a settlement, then drive real
+// every test here founds one first via `WorldMapPage.open()`, then still has
+// to pan/zoom/hover through a second real render. 120s (not the 90s these
+// used before founding was added to them) matches settlement-interactions
+// .spec's own panning test — the same "found a settlement, then drive real
 // interaction through a render" shape that's been observed needing the
 // extra headroom under this suite's software-rendered headless Chromium.
 test.describe('world map interactions', () => {
   test('world map drifts on its own before any input', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    await gotoWorldMap(page);
+    const world = await WorldMapPage.open(page);
 
-    const canvas = page.locator('canvas');
-    await expect(canvas).toBeVisible();
-    const box = await canvas.boundingBox();
-    expect(box?.width).toBeGreaterThan(100);
-    expect(box?.height).toBeGreaterThan(100);
+    await expect(world.canvas).toBeVisible();
+    const box = await world.box();
+    expect(box.width).toBeGreaterThan(100);
+    expect(box.height).toBeGreaterThan(100);
 
     // zip 4: the camera drifts on its own before any interaction — confirm
     // the canvas is actually being redrawn, not a static frame. Poll for the
     // diff instead of sleeping a fixed 1200ms then checking once: on a slow
     // CI runner the drift may simply need longer than that to become
     // visible, and polling finds it as soon as it happens on a fast one too.
-    const before = await canvas.screenshot();
-    await expect.poll(async () => Buffer.compare(before, await canvas.screenshot()), { timeout: 10_000 }).not.toBe(
+    const before = await world.screenshot();
+    await expect.poll(async () => Buffer.compare(before, await world.screenshot()), { timeout: 10_000 }).not.toBe(
       0,
     );
   });
 
   test('hovering an island renders a highlight that follows the cursor', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    await gotoWorldMap(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const world = await WorldMapPage.open(page);
 
     // top-left corner of the canvas is open sea far from any island in the
     // starting view — a reliable "nothing hovered" baseline. World mode has
     // no DOM tooltip to wait on (unlike settlement mode's `.hex-tooltip`),
     // so poll the canvas itself for the pixel diff that hovering causes,
     // rather than sleeping a guessed frame duration.
-    await page.mouse.move(box.x + 10, box.y + 10);
-    const idle = await canvas.screenshot();
+    await world.moveTo(await world.pointAt(10, 10));
+    const idle = await world.screenshot();
 
     // an island is reliably on screen near the centre at the default zoom
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    await page.mouse.move(cx, cy, { steps: 6 });
+    const { x: cx, y: cy } = await world.centre();
+    await world.moveTo({ x: cx, y: cy }, { steps: 6 });
     let hoverA!: Buffer;
     await expect
       .poll(
         async () => {
-          hoverA = await canvas.screenshot();
+          hoverA = await world.screenshot();
           return Buffer.compare(idle, hoverA);
         },
         { timeout: 5_000 },
       )
       .not.toBe(0);
 
-    await page.mouse.move(cx + 80, cy + 40, { steps: 6 });
+    await world.moveTo({ x: cx + 80, y: cy + 40 }, { steps: 6 });
     await expect
-      .poll(async () => Buffer.compare(hoverA, await canvas.screenshot()), { timeout: 5_000 })
+      .poll(async () => Buffer.compare(hoverA, await world.screenshot()), { timeout: 5_000 })
       .not.toBe(0);
   });
 
   test('panning the world map does not error and moves the camera', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    await gotoWorldMap(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
+    const world = await WorldMapPage.open(page);
+    const { x: cx, y: cy } = await world.centre();
 
-    const before = await canvas.screenshot();
+    const before = await world.screenshot();
 
     await page.mouse.move(cx, cy);
     await page.mouse.down();
@@ -94,17 +84,14 @@ test.describe('world map interactions', () => {
     }
     await page.mouse.up();
 
-    await expect.poll(async () => Buffer.compare(before, await canvas.screenshot()), { timeout: 5_000 }).not.toBe(0);
+    await expect.poll(async () => Buffer.compare(before, await world.screenshot()), { timeout: 5_000 }).not.toBe(0);
   });
 
   test('zooming with the wheel does not error', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    await gotoWorldMap(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const world = await WorldMapPage.open(page);
 
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await world.moveTo(await world.centre());
     for (let i = 0; i < 8; i++) {
       await page.mouse.wheel(0, -120);
       await page.waitForTimeout(20);

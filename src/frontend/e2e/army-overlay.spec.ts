@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /**
  * Issues #93 and #94: the settlement map's army/route overlay — draggable
@@ -45,9 +45,8 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
     // real pointer interaction through the live PixiJS scene — see
     // settlement-interactions.spec.ts's own comments.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
+    const box = await settlement.canvasBox();
 
     // Plot a two-hex route around the settlement centre, then work out where
     // its first pin and the hex we want to drag it to actually are, via the
@@ -124,7 +123,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('a waypoint can be removed by index, not just undone from the end', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     const plotted = await page.evaluate(() => {
       const world = window.__demoWorld();
@@ -145,9 +144,8 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('an attack draft marks its target settlement on the map', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const settlement = await SettlementPage.found(page);
+    const box = await settlement.canvasBox();
 
     const target = await page.evaluate(() => {
       const world = window.__demoWorld();
@@ -199,7 +197,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('an in-transit army is drawn between hexes and keeps advancing', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     // A march that started a moment ago and has half a minute to run, over
     // an intentionally uneven per-leg schedule (`cumulativeHours`) — the
@@ -325,7 +323,7 @@ test.describe('army overlay on the settlement map', { tag: '@g3' }, () => {
 
   test('an army standing at home stays on its settlement hex', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     const home = await page.evaluate(() => {
       const world = window.__demoWorld();

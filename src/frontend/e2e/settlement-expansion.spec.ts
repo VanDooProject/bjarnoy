@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { foundSettlement } from './helpers';
+import { SettlementPage } from './pages';
 
 /**
  * Settlement expansion (issue #55) — settler crews, renown, and founding a
@@ -37,7 +37,7 @@ import { foundSettlement } from './helpers';
  */
 test.describe('settlement expansion (issue #55)', { tag: '@g2' }, () => {
   test('the expansion panel does not render in demo mode', async ({ page }) => {
-    await foundSettlement(page);
+    await SettlementPage.found(page);
 
     // DEMO_MODE has no auth/renown/army backend for ExpansionPanel to talk
     // to, so it must not render at all here — rendering empty or broken

@@ -28,8 +28,8 @@
 // would satisfy it whatever the fog did — the "quietly propping up" failure
 // this comment warned about.
 import { expect, test } from './fixtures';
-import { foundSettlement } from './helpers';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 /** Fraction of pixels differing by more than `threshold` summed over RGB, and the largest such difference. */
 async function frameDelta(
@@ -71,7 +71,7 @@ test.describe('fog wind drift', { tag: '@g3' }, () => {
     // headless Chromium, and this test then sits still for several seconds
     // on purpose — the thing under test is elapsed time.
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
-    await foundSettlement(page);
+    const settlement = await SettlementPage.found(page);
 
     // The only other thing in this view that animates at rest — see the note
     // at the top of the file. Off, so both halves below measure the fog.
@@ -80,8 +80,7 @@ test.describe('fog wind drift', { tag: '@g3' }, () => {
     });
     await page.waitForTimeout(500);
 
-    const canvas = page.locator('canvas');
-    const box = (await canvas.boundingBox())!;
+    const box = await settlement.canvasBox();
     // A band around the settlement wide enough to contain the whole vision
     // edge at the level-1 camera zoom (zoomForFogMargin), which is the only
     // part of the frame the fog is allowed to be shaping at all.
