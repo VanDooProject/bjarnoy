@@ -477,10 +477,12 @@ public sealed class ArmyService(
         }
 
         var sampler = new TerrainSampler(army.Settlement.World.ToGenerationOptions());
+        var riverTiles = await LoadRiverTilesAsync(army.Settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var home = new HexCoord(army.Settlement.CentreQ, army.Settlement.CentreR);
 
         var result = Army.RetargetFounding(
-            army.ToDomain(), newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor);
+            army.ToDomain(), newTarget, now, home, sampler.TerrainAt, army.Settlement.World.SpeedFactor,
+            riverTiles.Contains);
         if (!result.Accepted)
         {
             if (outcome == ArmySettleOutcome.Updated)

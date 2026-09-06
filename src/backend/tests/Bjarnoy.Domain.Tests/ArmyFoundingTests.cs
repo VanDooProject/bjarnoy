@@ -290,4 +290,66 @@ public class ArmyFoundingTests
 
         Assert.Equal(RetargetFoundingRejection.InsufficientProvisionsForRoundTrip, result.Rejection);
     }
+
+    [Fact]
+    public void RetargetFounding_prices_a_river_crossing_like_every_other_movement()
+    {
+        // Issue #159 part A threaded river-crossing cost through every other
+        // HexPathfinder call site in Army.cs, but RetargetFounding was added
+        // separately (issue #55 §6) and missed it: a convoy could redirect
+        // straight across a river as if it were dry grass. Barely enough
+        // provisions for the grass round trip should now be rejected once the
+        // route the retarget actually plans crosses a river.
+        var settlement = Found();
+        var decision = DispatchFound(settlement, new HexCoord(2, 0));
+        var army = decision.Army!;
+        // Retarget once the convoy has actually arrived at (2, 0) and is
+        // standing there — PositionAt at an earlier "now" would still be
+        // mid-flight, part-way between home and (2, 0).
+        var arrivesAt = ((ArmyLocation.InTransit)army.Location).Movement.ArrivesAt;
+        var newTarget = new HexCoord(4, 0);
+        // A single river tile is cheaper to detour around than to cross
+        // (issue #159 part A), so a one-hex river would just get routed
+        // around and prove nothing here. A wall spanning the whole search
+        // box (mirrors HexPathfinderTests' own "no detour exists" case)
+        // forces every route — outbound and return alike — straight through it.
+        var riverWall = new HashSet<HexCoord>();
+        for (var r = -15; r <= 15; r++)
+        {
+            riverWall.Add(new HexCoord(3, r));
+        }
+
+        bool IsRiver(HexCoord c) => riverWall.Contains(c);
+
+        // The exact round-trip cost RetargetFounding itself computes, from
+        // wherever the convoy is actually standing (HexCoord(2, 0), per
+        // DispatchFound above) — mirroring Army.RetargetFounding's own
+        // HexPathfinder calls rather than hand-deriving hex counts.
+        var speed = army.TotalSpeed;
+        var upkeepPerHour = army.TotalUpkeepPerHour;
+        double RoundTripFood(Func<HexCoord, bool>? isRiver)
+        {
+            var outPath = HexPathfinder.FindPath(new HexCoord(2, 0), newTarget, AllGrass(), isLandUnit: true, isRiver)!;
+            var backPath = HexPathfinder.FindPath(newTarget, Home, AllGrass(), isLandUnit: true, isRiver)!;
+            var outHours = HexPathfinder.CumulativeHours(outPath, AllGrass(), speed, isRiver: isRiver);
+            var backHours = HexPathfinder.CumulativeHours(backPath, AllGrass(), speed, isRiver: isRiver);
+            return (outHours[^1] + backHours[^1]) * upkeepPerHour;
+        }
+
+        var neededWithoutRiver = RoundTripFood(null);
+        var neededWithRiver = RoundTripFood(IsRiver);
+        Assert.True(neededWithRiver > neededWithoutRiver, "expected the river wall to actually raise the round-trip cost");
+
+        // ProvisionsAt(arrivesAt) burns upkeep for the outbound leg already
+        // flown to (2, 0), so the loaded Provisions has to cover that burn on
+        // top of the round trip we are actually gating on.
+        var outboundHours = (arrivesAt - ((ArmyLocation.InTransit)army.Location).Movement.DepartedAt).TotalHours;
+        var toppedUp = army with { Provisions = neededWithoutRiver + (upkeepPerHour * outboundHours) };
+
+        var withoutRiver = Army.RetargetFounding(toppedUp, newTarget, arrivesAt, Home, AllGrass());
+        Assert.True(withoutRiver.Accepted, $"expected accept, got {withoutRiver.Rejection}");
+
+        var withRiver = Army.RetargetFounding(toppedUp, newTarget, arrivesAt, Home, AllGrass(), isRiver: IsRiver);
+        Assert.Equal(RetargetFoundingRejection.InsufficientProvisionsForRoundTrip, withRiver.Rejection);
+    }
 }

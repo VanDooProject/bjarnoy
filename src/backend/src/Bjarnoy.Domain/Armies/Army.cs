@@ -850,9 +850,15 @@ public sealed record Army
     /// parameter of the same name. Defaults to <c>1.0</c> for callers with no
     /// world in hand.
     /// </param>
+    /// <param name="isRiver">
+    /// Optional river-tile lookup (issue #159 part A), threaded into both
+    /// <see cref="HexPathfinder"/> calls this makes — a retargeted founding
+    /// convoy prices river crossings exactly like every other movement.
+    /// <see langword="null"/> (the default) charges no river penalty.
+    /// </param>
     public static RetargetFoundingResult RetargetFounding(
         Army army, HexCoord newTarget, DateTimeOffset now, HexCoord home, Func<HexCoord, Terrain> terrainAt,
-        double speedFactor = 1.0)
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(terrainAt);
@@ -886,13 +892,13 @@ public sealed record Army
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit);
+        var path = HexPathfinder.FindPath(fromHex, newTarget, terrainAt, isLandUnit, isRiver);
         if (path is null || path.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
         }
 
-        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit);
+        var returnPath = HexPathfinder.FindPath(newTarget, home, terrainAt, isLandUnit, isRiver);
         if (returnPath is null || returnPath.Count == 0)
         {
             return RetargetFoundingResult.Rejected(RetargetFoundingRejection.TargetNotReachable);
@@ -900,8 +906,8 @@ public sealed record Army
 
         var speed = army.TotalSpeed;
         var upkeepPerHour = army.TotalUpkeepPerHour;
-        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor);
-        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor);
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+        var returnCumulativeHours = HexPathfinder.CumulativeHours(returnPath, terrainAt, speed, isLandUnit, speedFactor, isRiver);
 
         var provisionsNow = army.ProvisionsAt(now);
         var totalFoodNeeded = (cumulativeHours[^1] + returnCumulativeHours[^1]) * upkeepPerHour;
