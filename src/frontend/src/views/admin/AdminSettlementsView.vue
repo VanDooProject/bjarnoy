@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import { api, ApiError } from '../../api/client';
 import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
 import { useAdminWorldStore } from '../../stores/adminWorld';
@@ -88,10 +88,42 @@ function applySummary(updated: SettlementResponse) {
   }
 }
 
+// Background world ticks (resource production, queues) keep changing the
+// open settlement's detail underneath the admin, so it's kept fresh on a
+// timer while a settlement is expanded, alongside a manual "Refresh" button
+// for an on-demand nudge. Stopped whenever nothing is selected/on unmount.
+const DETAIL_POLL_MS = 10_000;
+let detailPollHandle: ReturnType<typeof setInterval> | null = null;
+
+function stopDetailPolling() {
+  if (detailPollHandle !== null) {
+    clearInterval(detailPollHandle);
+    detailPollHandle = null;
+  }
+}
+
+function startDetailPolling() {
+  stopDetailPolling();
+  detailPollHandle = setInterval(() => void refreshDetail(), DETAIL_POLL_MS);
+}
+
+async function refreshDetail() {
+  if (!selectedId.value || detailLoading.value) return;
+  try {
+    const updated = await api.adminGetSettlement(selectedId.value);
+    detail.value = updated;
+    applySummary(updated);
+    detailError.value = null;
+  } catch (err) {
+    detailError.value = err instanceof ApiError ? err.message : 'Could not load settlement detail.';
+  }
+}
+
 async function manage(settlement: AdminSettlementSummary) {
   if (selectedId.value === settlement.id) {
     selectedId.value = null;
     detail.value = null;
+    stopDetailPolling();
     return;
   }
 
@@ -101,6 +133,7 @@ async function manage(settlement: AdminSettlementSummary) {
   detailLoading.value = true;
   try {
     detail.value = await api.adminGetSettlement(settlement.id);
+    startDetailPolling();
   } catch (err) {
     detailError.value = err instanceof ApiError ? err.message : 'Could not load settlement detail.';
   } finally {
@@ -112,6 +145,8 @@ function onChanged(updated: SettlementResponse) {
   detail.value = updated;
   applySummary(updated);
 }
+
+onBeforeUnmount(stopDetailPolling);
 </script>
 
 <template>
@@ -150,6 +185,13 @@ function onChanged(updated: SettlementResponse) {
               <td>({{ settlement.q }}, {{ settlement.r }})</td>
               <td>{{ settlement.longhouseLevel }}</td>
               <td>
+                <button
+                  v-if="selectedId === settlement.id"
+                  :disabled="detailLoading"
+                  @click="refreshDetail"
+                >
+                  Refresh
+                </button>
                 <button @click="manage(settlement)">
                   {{ selectedId === settlement.id ? 'Close' : 'Manage' }}
                 </button>
@@ -281,5 +323,8 @@ button {
 button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.table td button + button {
+  margin-left: 8px;
 }
 </style>
