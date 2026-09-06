@@ -53,7 +53,7 @@ describe('AdminUsersView guards', () => {
     adminListUsers.mockResolvedValue({ items: [self, other], totalCount: 2, page: 1, pageSize: 25 });
 
     const auth = useAuthStore();
-    auth.user = { id: 'admin-1', userName: 'me', role: 'admin', status: 'active', displayName: null };
+    auth.user = { id: 'admin-1', userName: 'me', role: 'admin', status: 'active', displayName: null, isPremium: false };
 
     const wrapper = mount(AdminUsersView, { global: { plugins: [] } });
     await flushPromises();
@@ -83,7 +83,7 @@ describe('AdminUsersView guards', () => {
     );
 
     const auth = useAuthStore();
-    auth.user = { id: 'other-admin', userName: 'someone-else-entirely', role: 'admin', status: 'active', displayName: null };
+    auth.user = { id: 'other-admin', userName: 'someone-else-entirely', role: 'admin', status: 'active', displayName: null, isPremium: false };
 
     const wrapper = mount(AdminUsersView, { global: { plugins: [] } });
     await flushPromises();

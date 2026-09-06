@@ -23,12 +23,19 @@ public sealed record RefreshRequest([property: Required] string RefreshToken);
 
 public sealed record LogoutRequest([property: Required] string RefreshToken);
 
+/// <param name="IsPremium">
+/// Lets the frontend gate premium-only actions (the fight simulator, extra
+/// field-order waypoints, the waiting build queue) upfront — greyed out
+/// before a click, not just rejected after one — instead of only learning
+/// about the restriction from a 403/409 once the request is already sent.
+/// </param>
 public sealed record UserResponse(
     Guid Id,
     string UserName,
     string Role,
     string Status,
-    string? DisplayName)
+    string? DisplayName,
+    bool IsPremium)
 {
     public static UserResponse From(UserEntity user)
     {
@@ -39,7 +46,8 @@ public sealed record UserResponse(
             user.UserName,
             user.Role.ToString().ToLowerInvariant(),
             user.Status.ToString().ToLowerInvariant(),
-            user.DisplayName);
+            user.DisplayName,
+            user.IsPremium);
     }
 }
 

@@ -121,6 +121,23 @@ export function canFieldOrderArmy(army: {
 }
 
 /**
+ * Whether a field-order-eligible army is still travelling to its current
+ * destination (an "append goal" order) rather than already standing there
+ * (a "move on" order) — mirrors the `arrived` check `Army.PlanFieldOrder`
+ * makes server-side. `Army.PlanFieldOrder`'s own rule table has no free cell
+ * for appending onto an in-progress leg: unlike a standing "move on" (free
+ * with no extra waypoints), *any* mid-march field order costs premium, so
+ * this is what `ArmyPanel.vue` greys its "Append goal" button on rather than
+ * only learning about `FieldOrderRejection.PremiumRequired` after a click.
+ */
+export function isFieldOrderMidMarch(
+  army: { movement: { isReturning: boolean; arrivesAt: string } | null },
+  now: number,
+): boolean {
+  return army.movement !== null && !army.movement.isReturning && Date.parse(army.movement.arrivesAt) > now;
+}
+
+/**
  * Issue #40 phase 6 §1: which unit-class family a garrison selection is
  * drawing from, so `ArmyPanel.vue` can grey out the class the player hasn't
  * picked yet — cheaply catching the backend's `MixedFleetAndLandUnits`

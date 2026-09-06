@@ -63,6 +63,7 @@ function authenticate() {
     role: 'player',
     status: 'active',
     displayName: null,
+    isPremium: false,
   };
 }
 

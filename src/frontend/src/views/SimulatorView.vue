@@ -2,21 +2,28 @@
 // Issue #40 phase 7: the premium fight simulator. `/simulator` carries
 // `meta: { requiresAuth: true }` (router/index.ts) so an unauthenticated
 // visitor is redirected to /login before this component even mounts — but
-// that only proves they're logged in, not that they're premium. There is no
-// client-side premium flag anywhere (UserResponse doesn't expose IsPremium
-// today — see AuthContracts.cs), so this view can't gate itself ahead of
-// time: it always renders the form, and only finds out on an actual 403
-// when the player clicks Simulate. That 403 is the everyday, expected
-// response for a non-premium account, not a bug state, so it gets real
-// friendly copy instead of the raw problem text most other rejections show.
+// that only proves they're logged in, not that they're premium.
+// `auth.isPremium` (UserResponse now exposes IsPremium — see
+// AuthContracts.cs) lets this view show the "Premium feature" notice upfront
+// instead of only after a 403. It's advisory only, not a hard gate on the
+// button: `PremiumUserEndpointFilter` reads `IsPremium` live from the
+// database on every request rather than a token claim, specifically so an
+// admin grant takes effect on an already-logged-in account's very next
+// request with no re-login needed (see PremiumSimulatorTests) — `auth.user`
+// is only ever a login-time snapshot, so disabling Simulate on it would
+// permanently lock out exactly the account this design is meant to unblock.
+// A successful response self-heals the stale flag (see `runSimulation`) so
+// the notice clears without needing a re-login either.
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api } from '../api/client';
 import { DEMO_MODE } from '../config';
+import { useAuthStore } from '../stores/auth';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import { buildSimulatorRequest, isPremiumRequiredError } from '../lib/units/simulator';
 import type { SimulatorResponse } from '../api/types';
 
+const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
 onMounted(() => catalogue.load());
 
@@ -31,6 +38,11 @@ const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const premiumRequired = ref(false);
 const result = ref<SimulatorResponse | null>(null);
+
+// Shown before any request too, once `auth.user` is known — `premiumRequired`
+// only ever flips true after an actual 403, so this also covers a stale flag.
+// Advisory only (see the file-top comment) — never used to disable Simulate.
+const premiumBlocked = computed(() => !auth.isPremium || premiumRequired.value);
 
 function countFor(bucket: Record<string, number>, unit: string): number {
   return bucket[unit] ?? 0;
@@ -68,6 +80,12 @@ async function runSimulation() {
   loading.value = true;
   try {
     result.value = await api.simulate(request);
+    // The request only ever succeeds for a premium account (see the file-top
+    // comment) — self-heal a stale `auth.user.isPremium` snapshot so the
+    // proactive notice clears immediately, with no re-login required.
+    if (auth.user && !auth.user.isPremium) {
+      auth.user.isPremium = true;
+    }
   } catch (err) {
     if (isPremiumRequiredError(err)) {
       premiumRequired.value = true;
@@ -100,12 +118,13 @@ async function runSimulation() {
       </p>
 
       <template v-else>
-        <div v-if="premiumRequired" class="premium-card">
+        <div v-if="premiumBlocked" class="premium-card">
           <h2>Premium feature</h2>
-          <p>
+          <p v-if="premiumRequired">
             The fight simulator is a premium feature. This account isn't premium, so the server
             turned that last request down.
           </p>
+          <p v-else>The fight simulator is a premium feature. This account isn't premium.</p>
           <p class="honest-note">
             There's no upgrade flow in this game yet — nowhere here actually sells premium — so
             there's nothing more to click. Ask whoever runs this world if you think that's wrong.
