@@ -223,16 +223,14 @@ public sealed record Settlement
     /// <summary>
     /// Extra radius a single <see cref="BuildingType.Tower"/>'s own satellite
     /// disc reaches outward from that tower's own hex (not the settlement
-    /// centre), driven by the tower's own level. Half the growth rate of
-    /// <see cref="ClaimRadius"/> (one hex of reach per two tower levels,
-    /// versus one per two longhouse levels) and, deliberately, with no "+1"
-    /// floor: <see cref="ClaimRadius"/>'s floor exists because a settlement
-    /// always has *some* territory just for existing, but a tower can only
-    /// ever be built on ground the settlement already claims, so a freshly
-    /// built level-1 tower needs no guaranteed reach of its own. Product
-    /// call: towers become a meaningfully sized expansion tool only once
-    /// levelled up, rather than instantly doubling border growth per tower
-    /// placed. A non-positive level (no tower, or a level-0 foundation stub —
+    /// centre), driven by the tower's own level: one hex of reach per tower
+    /// level, starting at level 1. Deliberately still has no "+1" floor the
+    /// way <see cref="ClaimRadius"/> does: <see cref="ClaimRadius"/>'s floor
+    /// exists because a settlement always has *some* territory just for
+    /// existing, but a tower can only ever be built on ground the settlement
+    /// already claims, so a level-0 foundation stub needs no guaranteed reach
+    /// of its own — it simply reads 0 rather than a level-1-sized floor. A
+    /// non-positive level (no tower, or a level-0 foundation stub —
     /// see <see cref="ClaimDiscsFor"/>'s remarks) returns 0 rather than
     /// looking anything up; a level above <see cref="BuildingCatalogue.MaxLevel"/>
     /// (a corrupted/out-of-range DB row) is clamped down to it instead of

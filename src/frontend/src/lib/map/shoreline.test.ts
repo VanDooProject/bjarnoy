@@ -82,12 +82,12 @@ describe('claimRadiusForLevel', () => {
 });
 
 describe('towerClaimRadiusForLevel', () => {
-  it("mirrors Settlement.cs's TowerClaimRadius: half the growth rate of claimRadiusForLevel, no +1 floor", () => {
+  it("mirrors Settlement.cs's TowerClaimRadius: one hex of reach per level starting at level 1, no +1 floor", () => {
     expect(towerClaimRadiusForLevel(0)).toBe(0);
-    expect(towerClaimRadiusForLevel(1)).toBe(0);
-    expect(towerClaimRadiusForLevel(2)).toBe(1);
-    expect(towerClaimRadiusForLevel(3)).toBe(1);
-    expect(towerClaimRadiusForLevel(10)).toBe(5);
+    expect(towerClaimRadiusForLevel(1)).toBe(1);
+    expect(towerClaimRadiusForLevel(2)).toBe(2);
+    expect(towerClaimRadiusForLevel(3)).toBe(3);
+    expect(towerClaimRadiusForLevel(10)).toBe(10);
   });
 });
 
@@ -101,7 +101,7 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
 
     expect(discs).toEqual([
       { q: 0, r: 0, radius: 2 },
-      { q: 5, r: 0, radius: 2 },
+      { q: 5, r: 0, radius: 4 },
     ]);
   });
 

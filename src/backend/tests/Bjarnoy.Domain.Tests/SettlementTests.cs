@@ -58,11 +58,11 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(1, 0)]
-    [InlineData(2, 1)]
-    [InlineData(3, 1)]
-    [InlineData(10, 5)]
-    public void Tower_ClaimRadius_is_half_the_longhouses_growth_rate(int level, int expectedRadius)
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(10, 10)]
+    public void Tower_ClaimRadius_grows_one_hex_per_level_starting_at_level_1(int level, int expectedRadius)
     {
         Assert.Equal(expectedRadius, BuildingCatalogue.Get(BuildingType.Tower, level).ClaimRadius);
     }
@@ -422,7 +422,7 @@ public class SettlementTests
     {
         // Far enough from the centre that the centre disc alone (radius 1 at
         // longhouse level 1) never reaches it, but a level-4 tower sitting
-        // just inside the centre disc's edge (TowerClaimRadius(4) == 2) does.
+        // just inside the centre disc's edge (TowerClaimRadius(4) == 4) does.
         var towerCoord = new HexCoord(1, 0);
         var farHex = new HexCoord(3, 0);
         var settlement = Found() with
@@ -474,7 +474,7 @@ public class SettlementTests
             Buildings =
             [
                 new PlacedBuilding(Centre, BuildingType.Longhouse, 2), // ClaimRadius == 3
-                new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 5
+                new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 10
             ],
         };
 

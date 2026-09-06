@@ -36,7 +36,7 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     // isolating the before/after diff below to the *border* claim, not the
     // tower's own sprite appearing. Returns the screen point of a hex two
     // rings past the tower (inside a level-4 tower's own satellite disc,
-    // radius 2, but well outside the tower itself) for the screenshot clip —
+    // radius 4, but well outside the tower itself) for the screenshot clip —
     // deliberately excluding the tower's own hex, since its sprite does
     // change between the two screenshots (level 1 -> 4) for a reason
     // unrelated to what this test checks.
@@ -101,8 +101,12 @@ test.describe('tower border expansion (realm borders)', { tag: '@g2' }, () => {
     });
 
     // Regression guard: a fresh (level-1) tower's own satellite disc has
-    // radius 0 (Settlement.TowerClaimRadius(1) == 0) — the old bug flatly
-    // claimed a radius-1 ring around every tower regardless of level.
+    // radius 1 (Settlement.TowerClaimRadius(1) == 1), and farHex sits two
+    // rings past the tower — still outside that radius-1 disc, so it isn't
+    // newly claimed yet. The old bug flatly claimed a radius-1 ring around
+    // every tower regardless of level, which happened to reach exactly this
+    // far too, so this guard is only meaningful together with the level-4
+    // assertion below actually reaching further than the level-1 one did.
     const farClaimedAfterPlacingOnly = await page.evaluate(
       ({ farHex, settlementId }) => {
         const world = (window as unknown as { __demoWorld: () => { model: any } }).__demoWorld();
