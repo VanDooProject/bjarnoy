@@ -61,7 +61,9 @@ import {
   mergeTileTextures,
   riverTexturesFor,
   textureKeyFor,
+  topAnimFor,
   topTextureFor,
+  type TileAnimClip,
   type TileTextures,
 } from './textures';
 
@@ -260,6 +262,16 @@ function createSpriteLayer(): SpriteLayer {
   const container = new Container();
   container.sortableChildren = true;
   return { pool: [], active: new Map(), container };
+}
+
+/** One hex's live `buildings-anim` playback state — see `syncTopAnim`/`advanceTopAnimations`. */
+interface TopAnimState {
+  clip: TileAnimClip;
+  sprite: Sprite;
+  frame: number;
+  elapsedMs: number;
+  /** Ping-pong direction; unused (and harmless) for a looping clip. */
+  dir: 1 | -1;
 }
 
 export interface HexMapRendererOptions {
@@ -819,6 +831,13 @@ export class HexMapRenderer {
   private world = new Container();
   private terrainBase = createSpriteLayer();
   private terrainTop = createSpriteLayer();
+  // Issue: buildings-anim playback. Keyed by the same coordKey `terrainTop`'s
+  // own active/pool maps use, but tracked separately since a clip's frame
+  // advances every tick (advanceTopAnimations) while `terrainTop` itself is
+  // only rebuilt on a cull (camera pan/zoom/rebuildTerrain) — this is what
+  // survives *between* rebuilds, so a looping clip doesn't reset its phase
+  // every time the camera merely moves.
+  private topAnimState = new Map<string, TopAnimState>();
   private terrainFlat = new Graphics();
   private waveLayer = new Graphics();
   // docs/design/water-shader.md. Constructed in the constructor rather than
@@ -1182,6 +1201,7 @@ export class HexMapRenderer {
 
   private onTick = () => {
     this.options.worldModel.tick();
+    this.advanceTopAnimations(this.app!.ticker.deltaMS);
     this.rebuildMarkers();
     // Issue #16 "ring menu": the settlement name badge (rebuildSettlementLabels,
     // below) floats right where the ring's own bubbles/track need to sit — it
@@ -1893,7 +1913,12 @@ export class HexMapRenderer {
 
     const { worldModel } = this.options;
     const textures = this.textures!;
-    type Entry = { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number } };
+    type Entry = {
+      texture: Texture;
+      coord: AxialCoord;
+      crop?: { nativeY: number; nativeH: number };
+      anim?: TileAnimClip;
+    };
     const baseEntries = new Map<string, Entry>();
     const topEntries = new Map<string, Entry>();
     const settlement = this.settlement();
@@ -1945,7 +1970,9 @@ export class HexMapRenderer {
         const sawmillVariant = worldModel.sawmillArtVariantOf(c);
         baseEntries.set(key, { texture: baseTextureFor(textures, tile, sawmillVariant), coord: c });
         const topTexture = topTextureFor(textures, tile, sawmillVariant);
-        if (topTexture) topEntries.set(key, { texture: topTexture, coord: c });
+        if (topTexture) {
+          topEntries.set(key, { texture: topTexture, coord: c, anim: topAnimFor(textures, tile, sawmillVariant) });
+        }
         fogPerfStats.terrainDrawnCount++;
         continue;
       }
@@ -1963,7 +1990,7 @@ export class HexMapRenderer {
       const topTexture = topTextureFor(textures, tile);
       if (topTexture) {
         baseEntries.set(key, { texture: baseTexture, coord: c });
-        topEntries.set(key, { texture: topTexture, coord: c });
+        topEntries.set(key, { texture: topTexture, coord: c, anim: topAnimFor(textures, tile) });
       } else if (waterDebugFlags.legacyTileSplit && LEGACY_TALL_KEYS.has(textureKeyFor(tile))) {
         // No `top` half in the pack for this family, and its art rises above
         // the top face — cut it in code (legacyTileSplit.ts) so the overhanging
@@ -2123,16 +2150,24 @@ export class HexMapRenderer {
     // splitLegacyTexture) for art the pack hasn't split yet — native-pixel
     // offset and height inside the 200x300 tile, so the piece lands exactly
     // where the whole sprite would have.
-    entries: Map<string, { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number } }>,
+    entries: Map<
+      string,
+      { texture: Texture; coord: AxialCoord; crop?: { nativeY: number; nativeH: number }; anim?: TileAnimClip }
+    >,
   ) {
-    for (const [key, { texture, coord, crop }] of entries) {
+    const isTopLayer = layer === this.terrainTop;
+    for (const [key, { texture, coord, crop, anim }] of entries) {
       let sprite = layer.active.get(key);
       const isNew = !sprite;
       if (!sprite) {
         sprite = layer.pool.pop() ?? new Sprite();
         layer.active.set(key, sprite);
       }
-      sprite.texture = texture;
+      if (isTopLayer) {
+        this.syncTopAnim(key, sprite, anim, texture);
+      } else {
+        sprite.texture = texture;
+      }
       sprite.width = TILE_W;
       sprite.height = crop ? (TILE_W * crop.nativeH) / TILE_ART_NATIVE_W : TILE_CANVAS_H;
       const grid = isoGridPosition(coord, TILE_W, TILE_H);
@@ -2147,8 +2182,59 @@ export class HexMapRenderer {
       layer.container.removeChild(sprite);
       layer.pool.push(sprite);
       layer.active.delete(key);
+      if (isTopLayer) this.topAnimState.delete(key);
     }
     layer.container.sortChildren();
+  }
+
+  /**
+   * Reconciles one top-layer hex's animation state against what this
+   * rebuild says it should be showing. A rebuild runs far more often than a
+   * clip's own frame rate (every camera pan/zoom, vs. a handful of fps), so
+   * the common case — same clip as last rebuild, or still no clip at all —
+   * must leave `topAnimState`/the sprite's current frame alone rather than
+   * resetting playback to frame 0 every time the camera merely moves.
+   */
+  private syncTopAnim(key: string, sprite: Sprite, anim: TileAnimClip | undefined, staticTexture: Texture) {
+    const existing = this.topAnimState.get(key);
+    if (!anim) {
+      if (existing) this.topAnimState.delete(key);
+      sprite.texture = staticTexture;
+      return;
+    }
+    if (existing && existing.clip === anim) {
+      existing.sprite = sprite;
+      return;
+    }
+    this.topAnimState.set(key, { clip: anim, sprite, frame: 0, elapsedMs: 0, dir: 1 });
+    sprite.texture = anim.textures[0]!;
+  }
+
+  /** Advances every active top-layer clip by `deltaMs` of playback, called once per app tick regardless of whether a rebuild ran this frame. */
+  private advanceTopAnimations(deltaMs: number) {
+    for (const state of this.topAnimState.values()) {
+      const frameDurationMs = 1000 / state.clip.fps;
+      state.elapsedMs += deltaMs;
+      let advanced = false;
+      while (state.elapsedMs >= frameDurationMs) {
+        state.elapsedMs -= frameDurationMs;
+        advanced = true;
+        const lastIndex = state.clip.textures.length - 1;
+        if (state.clip.playback === 'pingpong') {
+          state.frame += state.dir;
+          if (state.frame >= lastIndex) {
+            state.frame = lastIndex;
+            state.dir = -1;
+          } else if (state.frame <= 0) {
+            state.frame = 0;
+            state.dir = 1;
+          }
+        } else {
+          state.frame = (state.frame + 1) % state.clip.textures.length;
+        }
+      }
+      if (advanced) state.sprite.texture = state.clip.textures[state.frame]!;
+    }
   }
 
   private rebuildBorders(coords: AxialCoord[], fogActive: boolean, deepFogOnly: boolean) {

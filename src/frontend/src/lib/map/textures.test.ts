@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFamilyFrames, riverArtFor, type FamilyFrame } from './textures';
+import { classifyFamilyClips, classifyFamilyFrames, riverArtFor, type FamilyFrame } from './textures';
 import { bendOrientationOf } from './types';
 import type { RiverTile } from './types';
+import type { AtlasClip } from './atlas';
 
 // classifyFamilyFrames turns one family's raw atlas frame names into the
 // base/baseIndexed/top shape TileTextures needs. Exercised here with plain
@@ -19,6 +20,33 @@ function frame(name: string, layer: FamilyFrame<string>['layer']): FamilyFrame<s
 // riverArtFor's own export comment.
 function riverTile(shape: RiverTile['shape'], inDirection: RiverTile['inDirections'][number] | null, outDirection: RiverTile['outDirection']): RiverTile {
   return { q: 0, r: 0, shape, inDirections: inDirection ? [inDirection] : [], outDirection };
+}
+
+// classifyFamilyClips turns one family's buildings-anim clips into a
+// per-orientation, per-level lookup. Exercised with plain strings as the
+// resolved frame value (via `resolveFrame`) for the same reason
+// classifyFamilyFrames is above — no Pixi dependency of its own.
+function clip(overrides: Partial<AtlasClip> & Pick<AtlasClip, 'name' | 'orientation' | 'frames'>): AtlasClip {
+  return {
+    family: 'sawmillriver',
+    camera: overrides.orientation,
+    layer: 'top',
+    source_level: null,
+    variant: null,
+    pass_suffix: '',
+    anim_type: 'loop',
+    playback: 'loop',
+    fps: 6,
+    pause: 0,
+    frame_count: overrides.frames.length,
+    frame_padding: 2,
+    parts: [],
+    ...overrides,
+  };
+}
+
+function resolveAll(name: string): string | undefined {
+  return name;
 }
 
 describe('riverArtFor', () => {
@@ -129,5 +157,63 @@ describe('classifyFamilyFrames', () => {
         frame('vikinghut_SE_level002', 'top'),
       ]),
     ).toThrow(/missing index 1/);
+  });
+});
+
+describe('classifyFamilyClips', () => {
+  it('keys a clip by its exact level and orientation', () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00', 'f01'] })],
+      resolveAll,
+    );
+
+    expect(result.SE.get(3)).toEqual({ textures: ['f00', 'f01'], fps: 6, playback: 'loop' });
+    expect(result.SE.get(4)).toBeUndefined();
+    expect(result.NE.size).toBe(0);
+  });
+
+  it('sparse — only the levels/orientations a clip exists for get an entry, everything else stays absent', () => {
+    const result = classifyFamilyClips(
+      [
+        clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00'] }),
+        clip({ name: 'sawmillriver_SE_level004', orientation: 'SE', frames: ['f00'] }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.SE.get(0)).toBeUndefined();
+    expect(result.SE.get(1)).toBeUndefined();
+    expect(result.SE.get(2)).toBeUndefined();
+    expect(result.SE.get(3)).toBeDefined();
+    expect(result.SE.get(4)).toBeDefined();
+  });
+
+  it('drops a lettered alternate pass (e.g. level004a) rather than colliding it with the plain level004', () => {
+    const result = classifyFamilyClips(
+      [
+        clip({ name: 'cropmill_E_level004', orientation: 'E', frames: ['plain'] }),
+        clip({ name: 'cropmill_E_level004a', orientation: 'E', frames: ['alt'] }),
+      ],
+      resolveAll,
+    );
+
+    expect(result.E.get(4)?.textures).toEqual(['plain']);
+  });
+
+  it('drops a clip whose frames do not all resolve (e.g. a page that failed to parse)', () => {
+    const result = classifyFamilyClips(
+      [clip({ name: 'sawmillriver_SE_level003', orientation: 'SE', frames: ['f00', 'missing'] })],
+      (name) => (name === 'missing' ? undefined : name),
+    );
+
+    expect(result.SE.get(3)).toBeUndefined();
+  });
+
+  it('returns an all-empty result for no clips at all (no animation for this family)', () => {
+    const result = classifyFamilyClips([], resolveAll);
+
+    for (const orientation of ['E', 'NE', 'NW', 'W', 'SW', 'SE'] as const) {
+      expect(result[orientation].size).toBe(0);
+    }
   });
 });

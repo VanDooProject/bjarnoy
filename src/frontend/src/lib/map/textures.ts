@@ -30,7 +30,7 @@
 // its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
-import { loadAtlasCategory, type LoadedAtlas } from './atlas';
+import { loadAtlasCategory, type AtlasClip, type LoadedAtlas } from './atlas';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
@@ -117,6 +117,16 @@ const ORIENTATION_RE = /_(NE|NW|SW|SE|E|W)(?:_|$)/;
 const VARIANT_RE = /_variant(\d{3})(?:_base)?$/;
 /** A numbered building-level suffix, e.g. `_level004` (a top frame) or `_level004_base` (a leveled base frame — see `classifyFamilyFrames`). */
 const LEVEL_RE = /_level(\d{3})(?:_base)?$/;
+
+/**
+ * A clip's plain numbered level, e.g. `cropmill_E_level003` — deliberately
+ * anchored at the end with no trailing letter, unlike `LEVEL_RE` above: some
+ * families carry an alternate lettered pass at the same level (e.g.
+ * `cropmill_E_level004a`, a second-mill variant of level004) alongside the
+ * canonical one, and picking a level's clip is simpler by just ignoring the
+ * lettered extras than by picking a "preferred" one.
+ */
+const ANIM_LEVEL_RE = /_level(\d{3})$/;
 
 function orientationOf(name: string): TileOrientation {
   const match = ORIENTATION_RE.exec(name);
@@ -230,11 +240,59 @@ export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[]): ClassifiedFam
   return result;
 }
 
+/** One playable `buildings-anim` clip, resolved to live frame Textures — see atlas.ts's `AtlasClip` for the raw manifest shape this is built from. */
+export interface TileAnimClip {
+  textures: Texture[];
+  fps: number;
+  playback: 'loop' | 'pingpong';
+}
+
+/**
+ * One family's `buildings-anim` clips (already filtered to that family — see
+ * `AtlasClip.family`), grouped by orientation and keyed by level number.
+ * `ANIM_LEVEL_RE` drops any lettered alternate pass (see its own comment).
+ * Generic over the frame's resolved value for the same reason
+ * `classifyFamilyFrames` is — unit-testable with plain strings, no Pixi
+ * dependency (see `textures.test.ts`) — with a real caller supplying a
+ * `Record<string, Texture>` and dropping any clip that doesn't fully resolve
+ * (a page that failed to parse) before it ever reaches this function.
+ */
+export function classifyFamilyClips<T>(
+  clips: AtlasClip[],
+  resolveFrame: (name: string) => T | undefined,
+): OrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>> {
+  const byOrientation = emptyOrientationMap<Map<number, { textures: T[]; fps: number; playback: 'loop' | 'pingpong' }>>(
+    () => new Map(),
+  );
+  for (const clip of clips) {
+    const match = ANIM_LEVEL_RE.exec(clip.name);
+    if (!match) continue;
+    const orientation = clip.orientation as TileOrientation;
+    if (!TILE_ORIENTATIONS.includes(orientation)) continue;
+    const frameValues = clip.frames.map(resolveFrame);
+    if (frameValues.some((v) => v === undefined)) continue;
+    byOrientation[orientation].set(Number(match[1]), {
+      textures: frameValues as T[],
+      fps: clip.fps,
+      playback: clip.playback,
+    });
+  }
+  return byOrientation;
+}
+
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
   coastalBase: OrientationMap<Texture[]>;
   baseIndexed: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
   top: Partial<Record<TextureKey, OrientationMap<Texture[]>>>;
+  /**
+   * A sparse overlay on `top`: same `TextureKey`/orientation/level indexing,
+   * but only the (level, orientation) rungs the `buildings-anim` atlas
+   * actually animates (e.g. a sawmill's water wheel only spins from level 3
+   * on) carry an entry — every other index is `undefined`, meaning "just
+   * show `top`'s own static texture for that rung", not "no art".
+   */
+  animTop: Partial<Record<TextureKey, OrientationMap<(TileAnimClip | undefined)[]>>>;
   riverBase: Record<RiverArtShape, OrientationMap<Texture>>;
   riverTop: Record<RiverArtShape, OrientationMap<Texture>>;
 }
@@ -250,8 +308,21 @@ function framesOfFamily(atlas: LoadedAtlas, family: string): FamilyFrame<Texture
   return frames;
 }
 
-/** Builds the full `TileTextures` shape from one or more loaded atlas categories (e.g. `terrain` + `buildings-static`). A family with no matching frames in any given atlas is simply absent from the result. */
-function buildTileTextures(atlases: LoadedAtlas[]): TileTextures {
+/**
+ * Builds the full `TileTextures` shape from one or more loaded atlas
+ * categories (e.g. `terrain` + `buildings-static`). A family with no
+ * matching frames in any given atlas is simply absent from the result.
+ *
+ * `animAtlas` (the `buildings-anim` category) is kept separate rather than
+ * folded into `atlases` above: its per-frame clip frames (`cropmill_E_
+ * level003_f00`, ...) carry the same family/layer `bjarnoy` metadata as a
+ * plain static frame, so merging them into the same frame pool would feed
+ * `classifyFamilyFrames` a mix of real static frames and individual
+ * animation frames it has no way to tell apart — corrupting the static
+ * `top`/`base` index it builds. Reading `animAtlas.clips` on its own instead
+ * sidesteps that entirely.
+ */
+function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): TileTextures {
   const merged: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
   for (const atlas of atlases) {
     Object.assign(merged.textures, atlas.textures);
@@ -262,11 +333,24 @@ function buildTileTextures(atlases: LoadedAtlas[]): TileTextures {
   const base: TileTextures['base'] = {};
   const baseIndexed: TileTextures['baseIndexed'] = {};
   const top: TileTextures['top'] = {};
+  const animTop: TileTextures['animTop'] = {};
   for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
     const classified = classifyFamilyFrames(framesOfFamily(merged, family));
     if (classified.base) base[key] = classified.base;
     if (classified.baseIndexed) baseIndexed[key] = classified.baseIndexed;
     if (classified.top) top[key] = classified.top;
+
+    if (classified.top && animAtlas) {
+      const familyClips = Object.values(animAtlas.clips).filter((clip) => clip.family === family);
+      const clipsByOrientation = classifyFamilyClips(familyClips, (name) => animAtlas.textures[name]);
+      const hasClips = TILE_ORIENTATIONS.some((o) => clipsByOrientation[o].size > 0);
+      if (hasClips) {
+        const topArr = classified.top;
+        animTop[key] = mapOrientations(topArr, (o, arr) =>
+          arr.map((_v, i) => clipsByOrientation[o].get(i)),
+        );
+      }
+    }
   }
 
   // Coastal water's numbered variants (ripples) currently render as this
@@ -289,7 +373,7 @@ function buildTileTextures(atlases: LoadedAtlas[]): TileTextures {
     riverTop[shape] = mapOrientations(topArr, (_o, arr) => arr[0] ?? Texture.EMPTY);
   }
 
-  return { base, coastalBase, baseIndexed, top, riverBase, riverTop };
+  return { base, coastalBase, baseIndexed, top, animTop, riverBase, riverTop };
 }
 
 /** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
@@ -298,6 +382,7 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
     base: { ...a.base, ...b.base },
     baseIndexed: { ...a.baseIndexed, ...b.baseIndexed },
     top: { ...a.top, ...b.top },
+    animTop: { ...a.animTop, ...b.animTop },
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,
@@ -314,21 +399,33 @@ export function loadTerrainAtlas(): Promise<TileTextures> {
 }
 
 let buildingLoading: Promise<TileTextures> | null = null;
-/** The (much larger) `buildings-static` atlas alone. Its `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those only ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures` rather than using this result standalone. */
+/**
+ * The (much larger) `buildings-static` atlas, plus `buildings-anim`'s clips
+ * layered on top as `animTop` (see `buildTileTextures`'s own remarks on why
+ * that atlas is kept separate rather than merged into the static one). Its
+ * `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those only
+ * ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures` rather
+ * than using this result standalone.
+ */
 export function loadBuildingAtlases(): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = loadAtlasCategory('buildings-static').then((atlas) => buildTileTextures([atlas]));
+    buildingLoading = Promise.all([
+      loadAtlasCategory('buildings-static'),
+      loadAtlasCategory('buildings-anim'),
+    ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
   }
   return buildingLoading;
 }
 
 let combinedLoading: Promise<TileTextures> | null = null;
-/** Both atlases, merged. Existing callers that don't need staged loading keep using this. */
+/** All three atlases, merged. Existing callers that don't need staged loading keep using this. */
 export function loadTileTextures(): Promise<TileTextures> {
   if (!combinedLoading) {
-    combinedLoading = Promise.all([loadAtlasCategory('terrain'), loadAtlasCategory('buildings-static')]).then(
-      ([terrain, buildings]) => buildTileTextures([terrain, buildings]),
-    );
+    combinedLoading = Promise.all([
+      loadAtlasCategory('terrain'),
+      loadAtlasCategory('buildings-static'),
+      loadAtlasCategory('buildings-anim'),
+    ]).then(([terrain, buildings, animAtlas]) => buildTileTextures([terrain, buildings], animAtlas));
   }
   return combinedLoading;
 }
@@ -396,6 +493,26 @@ export function topTextureFor(
   if (!arr) return undefined;
   const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
   return arr[clampIndex(index, arr.length)];
+}
+
+/**
+ * The playable clip standing in for this tile's top texture, or `undefined`
+ * if this exact key/orientation/level has no animation (most rungs don't —
+ * see `TileTextures.animTop`'s own comment). Resolves the level index
+ * identically to `topTextureFor` so the two always agree on which rung a
+ * given tile is showing.
+ */
+export function topAnimFor(
+  textures: TileTextures,
+  tile: Tile,
+  sawmillVariant?: 'sawmillriver' | 'sawmillbend',
+): TileAnimClip | undefined {
+  const key = textureKeyFor(tile, sawmillVariant);
+  const orientation = tile.orientation ?? 'SE';
+  const arr = textures.top[key]?.[orientation];
+  if (!arr) return undefined;
+  const index = tile.buildingType ? (tile.buildingLevel ?? 1) : (tile.variant ?? 0);
+  return textures.animTop[key]?.[orientation]?.[clampIndex(index, arr.length)];
 }
 
 /**
