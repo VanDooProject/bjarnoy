@@ -441,8 +441,6 @@ public static class ArmyEndpoints
                 DispatchRejection.UnreachableLeg => "No land route exists for one or more legs of the journey.",
                 DispatchRejection.InsufficientProvisionsForRoundTrip =>
                     "The loaded provisions would not cover the full round trip's upkeep.",
-                DispatchRejection.InsufficientProvisionsForTrip =>
-                    "The loaded provisions would not cover the one-way trip plus the support reserve.",
                 DispatchRejection.TargetSettlementRequired => "This mission requires a target settlement.",
                 DispatchRejection.TargetSettlementNotFound => "The target settlement does not exist.",
                 DispatchRejection.CannotAttackOwnSettlement => "An army cannot attack its own settlement.",
