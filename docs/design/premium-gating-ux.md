@@ -30,10 +30,27 @@ This needs a client-side premium flag to gate on, which didn't exist before this
 
 | Action | Free case | Premium-only case | Where the gate lives |
 | --- | --- | --- | --- |
-| Fight simulator (`SimulatorView.vue`) | — (whole feature is premium) | Simulating at all | `Simulate` button disabled and a "Premium feature" card shown whenever `!auth.isPremium`, before any request |
+| Fight simulator (`SimulatorView.vue`) | — (whole feature is premium) | Simulating at all | A "Premium feature" card is shown whenever `!auth.isPremium`, before any request — **advisory only**, the button itself stays clickable (see note below) |
 | Army field order, standing (`ArmyPanel.vue` "Move on") | One destination click, no extra stops | Plotting more than one stop | `stores/world.ts`'s `addFieldOrderWaypoint` refuses a second point for a non-premium account, with `fieldOrderDraft.error` explaining why, instead of only failing at Confirm; the drafting form also states the free/premium split upfront |
 | Army field order, mid-march (`ArmyPanel.vue` "Append goal") | — (redirecting a march in progress is always premium, per `Army.PlanFieldOrder`'s rule table) | Redirecting at all while still travelling | The row's field-order button is disabled (🔒, with a tooltip) for a non-premium account whenever the army hasn't arrived yet — `isFieldOrderMidMarch` in `lib/units/armyDispatch.ts` |
 | Construction queue (`BuildingModal.vue`) | A free slot is open, or the account has a non-zero waiting queue | No free slot *and* `maxWaitingOrders === 0` (no waiting queue at all) | Build/Upgrade button disabled, with an inline note, whenever `noSlotNoQueue` is true |
+
+## The one exception: the simulator's flag can't be trusted enough to hard-block
+
+`PremiumUserEndpointFilter` checks `IsPremium` live against the database on every request rather than
+a token claim — deliberately, so an admin granting premium takes effect on an already-logged-in
+account's very next click, with no re-login needed (`PremiumSimulatorTests` exercises exactly this).
+`auth.user`, though, is only ever a login-time snapshot with nothing that refreshes it mid-session. If
+`Simulate` were hard-disabled on `!auth.isPremium` the way the other two actions are, a legitimately
+just-upgraded account would find its *own stale client flag* permanently blocking the one button that
+could still succeed — worse than the original click-then-reject behavior, not better.
+
+So for the simulator specifically, the "Premium feature" card is advisory only: it still tells the
+player upfront what a non-premium account should expect, but the button stays clickable, and a
+successful response self-heals the stale flag (`auth.user.isPremium = true`) so the notice clears
+without a page reload. The other two actions don't have this problem — their gating data
+(`world.hud.construction.maxWaitingOrders`, the field order draft's own route) is refreshed by the
+same live poll/action flow the rest of the HUD already relies on, not a stale login-time snapshot.
 
 ## Why disabled-but-visible over other options considered
 

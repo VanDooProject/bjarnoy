@@ -4,11 +4,16 @@
 // visitor is redirected to /login before this component even mounts — but
 // that only proves they're logged in, not that they're premium.
 // `auth.isPremium` (UserResponse now exposes IsPremium — see
-// AuthContracts.cs) lets this view grey the form out upfront instead of only
-// finding out on a 403 after the player clicks Simulate. `isPremiumRequired`
-// below stays as a defensive fallback for a stale/out-of-date `auth.user`
-// (e.g. premium was revoked mid-session) — still real, everyday, friendly
-// copy, not a bug state.
+// AuthContracts.cs) lets this view show the "Premium feature" notice upfront
+// instead of only after a 403. It's advisory only, not a hard gate on the
+// button: `PremiumUserEndpointFilter` reads `IsPremium` live from the
+// database on every request rather than a token claim, specifically so an
+// admin grant takes effect on an already-logged-in account's very next
+// request with no re-login needed (see PremiumSimulatorTests) — `auth.user`
+// is only ever a login-time snapshot, so disabling Simulate on it would
+// permanently lock out exactly the account this design is meant to unblock.
+// A successful response self-heals the stale flag (see `runSimulation`) so
+// the notice clears without needing a re-login either.
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api } from '../api/client';
 import { DEMO_MODE } from '../config';
@@ -36,6 +41,7 @@ const result = ref<SimulatorResponse | null>(null);
 
 // Shown before any request too, once `auth.user` is known — `premiumRequired`
 // only ever flips true after an actual 403, so this also covers a stale flag.
+// Advisory only (see the file-top comment) — never used to disable Simulate.
 const premiumBlocked = computed(() => !auth.isPremium || premiumRequired.value);
 
 function countFor(bucket: Record<string, number>, unit: string): number {
@@ -54,8 +60,6 @@ const seed = computed<number | undefined>(() => {
 });
 
 async function runSimulation() {
-  if (premiumBlocked.value) return;
-
   errorMessage.value = null;
   premiumRequired.value = false;
   result.value = null;
@@ -76,6 +80,12 @@ async function runSimulation() {
   loading.value = true;
   try {
     result.value = await api.simulate(request);
+    // The request only ever succeeds for a premium account (see the file-top
+    // comment) — self-heal a stale `auth.user.isPremium` snapshot so the
+    // proactive notice clears immediately, with no re-login required.
+    if (auth.user && !auth.user.isPremium) {
+      auth.user.isPremium = true;
+    }
   } catch (err) {
     if (isPremiumRequiredError(err)) {
       premiumRequired.value = true;
@@ -189,7 +199,7 @@ async function runSimulation() {
 
           <p v-if="errorMessage" class="hint error">{{ errorMessage }}</p>
 
-          <button type="submit" class="simulate-btn" :disabled="loading || premiumBlocked">
+          <button type="submit" class="simulate-btn" :disabled="loading">
             {{ loading ? 'Simulating…' : 'Simulate' }}
           </button>
         </form>
