@@ -58,6 +58,7 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => state.user !== null,
     isAdmin: (state) => state.user?.role === 'admin',
+    isPremium: (state) => state.user?.isPremium ?? false,
   },
   actions: {
     applyAuthResponse(response: AuthResponse) {

@@ -84,7 +84,7 @@ describe('ProfileView', () => {
     updateMyBio.mockResolvedValue(profile({ bio: 'new bio' }));
 
     const auth = useAuthStore();
-    auth.user = { id: 'user-1', userName: 'ragnar', role: 'player', status: 'active', displayName: null };
+    auth.user = { id: 'user-1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: false };
 
     const wrapper = mount(ProfileView);
     await flushPromises();
@@ -108,7 +108,7 @@ describe('ProfileView', () => {
     reportProfile.mockResolvedValue({});
 
     const auth = useAuthStore();
-    auth.user = { id: 'user-2', userName: 'floki', role: 'player', status: 'active', displayName: null };
+    auth.user = { id: 'user-2', userName: 'floki', role: 'player', status: 'active', displayName: null, isPremium: false };
 
     const wrapper = mount(ProfileView);
     await flushPromises();

@@ -56,6 +56,15 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         await db.SaveChangesAsync(Ct);
     }
 
+    private async Task SetPremiumAsync(Guid userId, bool isPremium)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Id == userId, Ct);
+        user.IsPremium = isPremium;
+        await db.SaveChangesAsync(Ct);
+    }
+
     [Fact]
     public async Task Register_then_login_then_refresh_then_logout_is_a_working_happy_path()
     {
@@ -210,6 +219,27 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         var after = await client.GetFromJsonAsync<UserResponse>(
             "/api/v1/auth/me", SqliteApiFixture.StrictJson, Ct);
         Assert.Equal("locked", after!.Status);
+    }
+
+    /// <summary>
+    /// The frontend's premium-gating UX (docs/design/premium-gating-ux.md —
+    /// disable premium actions upfront rather than only rejecting them after
+    /// a click) needs a live `IsPremium` flag on every user-facing auth
+    /// response, not just the admin-only `AdminUserResponse`.
+    /// </summary>
+    [Fact]
+    public async Task UserResponse_reflects_premium_status_on_register_login_and_me()
+    {
+        using var client = Client();
+        var registered = await RegisterAsync(client, Unique("premiumflag-"));
+        Assert.False(registered.User.IsPremium);
+        Authorize(client, registered.AccessToken);
+
+        await SetPremiumAsync(registered.User.Id, true);
+
+        var me = await client.GetFromJsonAsync<UserResponse>(
+            "/api/v1/auth/me", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(me!.IsPremium);
     }
 
     [Fact]

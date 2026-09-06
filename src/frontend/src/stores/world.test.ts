@@ -47,6 +47,11 @@ async function loadStoreModule(demoMode: boolean) {
       getFogMask: (...args: unknown[]) => getFogMask(...args),
     },
     ApiError: class ApiError extends Error {},
+    // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
+    // (`authHooks.getAccessToken = ...`) — world.ts now imports that store
+    // for the field-order premium check below, so the mock needs a plain
+    // object here for that assignment to land on, same as the real module.
+    authHooks: {},
   }));
   // demoFogMask.ts's own bake needs OffscreenCanvas, which this test
   // environment (node, not jsdom — see the localStorage stub above) has no
@@ -164,6 +169,60 @@ describe('useWorldStore waypoint editing', () => {
     store.cancelDispatch();
     expect(() => store.moveWaypoint(0, { q: 4, r: 4 })).not.toThrow();
     expect(() => store.removeWaypoint(0)).not.toThrow();
+  });
+});
+
+// The premium-gating UX fix (docs/design/premium-gating-ux.md): a standing
+// army's first click is the free "move on" destination — Army.PlanFieldOrder
+// never charges premium for that one case — but a second click turns it into
+// a waypointed order, which is premium-only. This used to only be caught
+// server-side at Confirm; it's now refused right where the click is added,
+// with `error` telling the player why, so a non-premium account never builds
+// a route it can't submit in the first place.
+describe('useWorldStore addFieldOrderWaypoint (premium gate)', () => {
+  async function withAuth(isPremium: boolean) {
+    const store = await loadStoreModule(true);
+    const { useAuthStore } = await import('./auth');
+    const auth = useAuthStore();
+    auth.user = { id: 'u1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium };
+    return store;
+  }
+
+  it('lets a non-premium account plot exactly one free destination', async () => {
+    const store = await withAuth(false);
+    store.startFieldOrder('army-1');
+
+    store.addFieldOrderWaypoint({ q: 1, r: 0 });
+
+    expect(store.fieldOrderDraft!.route).toEqual([{ q: 1, r: 0 }]);
+    expect(store.fieldOrderDraft!.error).toBeNull();
+  });
+
+  it('refuses a second stop for a non-premium account, explaining why instead of silently dropping it', async () => {
+    const store = await withAuth(false);
+    store.startFieldOrder('army-1');
+    store.addFieldOrderWaypoint({ q: 1, r: 0 });
+
+    store.addFieldOrderWaypoint({ q: 2, r: 0 });
+
+    expect(store.fieldOrderDraft!.route).toEqual([{ q: 1, r: 0 }]);
+    expect(store.fieldOrderDraft!.error).toMatch(/premium/i);
+  });
+
+  it('lets a premium account plot as many stops as it likes', async () => {
+    const store = await withAuth(true);
+    store.startFieldOrder('army-1');
+
+    store.addFieldOrderWaypoint({ q: 1, r: 0 });
+    store.addFieldOrderWaypoint({ q: 2, r: 0 });
+    store.addFieldOrderWaypoint({ q: 3, r: 0 });
+
+    expect(store.fieldOrderDraft!.route).toEqual([
+      { q: 1, r: 0 },
+      { q: 2, r: 0 },
+      { q: 3, r: 0 },
+    ]);
+    expect(store.fieldOrderDraft!.error).toBeNull();
   });
 });
 

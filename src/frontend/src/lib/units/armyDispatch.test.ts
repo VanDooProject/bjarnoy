@@ -10,6 +10,7 @@ import {
   classifyUnitSelection,
   formatEta,
   hasCatapultSelected,
+  isFieldOrderMidMarch,
   isUnitSelectableFor,
   maxAffordableProvisions,
   routeToWaypointsAndDestination,
@@ -366,5 +367,31 @@ describe('canFieldOrderArmy', () => {
         canFieldOrderArmy({ atHome: false, supporting: false, mission, movement: { isReturning: false } }),
       ).toBe(true);
     }
+  });
+});
+
+describe('isFieldOrderMidMarch', () => {
+  const now = Date.parse('2026-01-01T12:00:00Z');
+
+  it('is false for an army with no active movement (standing at home or supporting)', () => {
+    expect(isFieldOrderMidMarch({ movement: null }, now)).toBe(false);
+  });
+
+  it('is false for an army already heading home — Recall, not a field order, owns that leg', () => {
+    expect(
+      isFieldOrderMidMarch({ movement: { isReturning: true, arrivesAt: '2026-01-01T13:00:00Z' } }, now),
+    ).toBe(false);
+  });
+
+  it('is false once the active leg has already arrived — a "move on", not an "append goal"', () => {
+    expect(
+      isFieldOrderMidMarch({ movement: { isReturning: false, arrivesAt: '2026-01-01T11:00:00Z' } }, now),
+    ).toBe(false);
+  });
+
+  it('is true while still travelling to a not-yet-reached destination', () => {
+    expect(
+      isFieldOrderMidMarch({ movement: { isReturning: false, arrivesAt: '2026-01-01T13:00:00Z' } }, now),
+    ).toBe(true);
   });
 });

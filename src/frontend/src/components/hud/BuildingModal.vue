@@ -201,13 +201,21 @@ const waitingOrderHere = computed(() =>
 );
 
 // No free construction slot right now (every slot occupied by an
-// already-building order) — the action still submits, but as a premium
-// waiting-queue request rather than an immediate build, so the button copy
-// says so up front instead of surprising the player with a 409.
+// already-building order) — for a premium account (a non-zero waiting
+// queue), the action still submits, but as a waiting-queue request rather
+// than an immediate build, so the button copy says so up front instead of
+// surprising the player with a 409.
 const noFreeSlot = computed(() => world.hud.construction.slotsUsed >= world.hud.construction.slots);
+
+// No free slot *and* no waiting queue at all (`maxWaitingOrders === 0`
+// doubles as "not premium" — see stores/world.ts's own comment on the
+// field) — there is nothing this click could do but be rejected, so the
+// button is disabled outright instead of only failing after the round trip.
+const noSlotNoQueue = computed(() => noFreeSlot.value && world.hud.construction.maxWaitingOrders === 0);
 
 const actionLabel = computed(() => {
   if (props.busy) return 'Queuing…';
+  if (noSlotNoQueue.value) return 'No free slot — Premium required';
   if (noFreeSlot.value) return 'Queue build';
   return props.tile.buildingType ? `Upgrade to level ${level.value + 1}` : 'Build here';
 });
@@ -295,11 +303,20 @@ const actionLabel = computed(() => {
           <p v-if="!canAfford" class="desc afford-note">
             Not enough resources available (some may be reserved for queued construction).
           </p>
+          <p v-if="noSlotNoQueue" class="desc afford-note">
+            Every construction slot is busy, and this account has no waiting queue to fall back
+            on — that's a <strong>Premium</strong> feature.
+          </p>
           <p v-if="error" class="desc afford-note">{{ error }}</p>
-          <button v-if="tile.buildingType" class="primary" :disabled="busy || !canAfford" @click="emit('upgrade')">
+          <button
+            v-if="tile.buildingType"
+            class="primary"
+            :disabled="busy || !canAfford || noSlotNoQueue"
+            @click="emit('upgrade')"
+          >
             {{ actionLabel }}
           </button>
-          <button v-else class="primary" :disabled="busy || !canAfford" @click="emit('build')">
+          <button v-else class="primary" :disabled="busy || !canAfford || noSlotNoQueue" @click="emit('build')">
             {{ actionLabel }}
           </button>
         </div>

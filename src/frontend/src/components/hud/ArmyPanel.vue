@@ -11,6 +11,7 @@
 // absolute` in their <style>) — this is the one open corner.
 import { computed, onMounted, ref } from 'vue';
 import { useWorldStore } from '../../stores/world';
+import { useAuthStore } from '../../stores/auth';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
 import {
@@ -19,12 +20,14 @@ import {
   classifyUnitSelection,
   formatEta,
   hasCatapultSelected,
+  isFieldOrderMidMarch,
   isUnitSelectableFor,
   maxAffordableProvisions,
 } from '../../lib/units/armyDispatch';
 import { buildingLabel } from '../../lib/units/battleReports';
 
 const world = useWorldStore();
+const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
 
 onMounted(() => {
@@ -228,20 +231,21 @@ const armyRows = computed(() => {
       ? formatEta(army.movement.isReturning ? army.movement.returnArrivesAt : army.movement.arrivesAt, now)
       : null;
     const canRecall = !army.atHome && (army.supporting || (army.movement !== null && !army.movement.isReturning));
+    // Issue #156 phase 1: "Move on" once standing, "Append goal" while still
+    // travelling — Army.PlanFieldOrder's rule table has no free cell for the
+    // latter (see isFieldOrderMidMarch's own doc comment), so a non-premium
+    // account never gets past this button greyed-and-locked rather than
+    // finding out only after a doomed request.
+    const midMarch = isFieldOrderMidMarch(army, now);
     return {
       id: army.id,
       composition: composition || '—',
       status,
       eta,
       canRecall,
-      // Issue #156 phase 1: "Move on" once standing, "Append goal" while
-      // still travelling — same eligibility, the label just names what the
-      // backend will actually do with the plotted route (Army.PlanFieldOrder
-      // decides which from `now` vs. the active leg's ArrivesAt).
       canFieldOrder: canFieldOrderArmy(army),
-      fieldOrderLabel: army.movement && !army.movement.isReturning && Date.parse(army.movement.arrivesAt) > now
-        ? 'Append goal'
-        : 'Move on',
+      fieldOrderLocked: midMarch && !auth.isPremium,
+      fieldOrderLabel: midMarch ? 'Append goal' : 'Move on',
       selected: army.id === world.selectedArmyId,
       mission: army.mission !== 'move' ? missionTagLabel(army.mission) : null,
     };
@@ -320,9 +324,11 @@ async function confirmFieldOrderClick() {
             <button
               v-if="row.canFieldOrder"
               class="secondary field-order"
+              :disabled="row.fieldOrderLocked"
+              :title="row.fieldOrderLocked ? 'Premium required to redirect an army that is still travelling' : undefined"
               @click.stop="beginFieldOrder(row.id)"
             >
-              {{ row.fieldOrderLabel }}
+              <span v-if="row.fieldOrderLocked" aria-hidden="true">🔒</span> {{ row.fieldOrderLabel }}
             </button>
             <button
               v-if="row.canRecall"
@@ -353,6 +359,10 @@ async function confirmFieldOrderClick() {
           Click hexes on the map to plot where this army should go next — the
           last click is the new destination. {{ fieldOrderRouteLength }}
           hex{{ fieldOrderRouteLength === 1 ? '' : 'es' }} plotted.
+        </p>
+        <p v-if="!auth.isPremium" class="status-subtext waypoint-hint">
+          Free with the account: one destination, no stops along the way.
+          <strong>Premium</strong> is needed to plot extra waypoints.
         </p>
 
         <div v-if="fieldOrderRouteRows.length" class="waypoint-list">

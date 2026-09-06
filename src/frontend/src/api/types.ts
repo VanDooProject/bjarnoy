@@ -348,6 +348,7 @@ export interface UserResponse {
   role: string;
   status: string;
   displayName: string | null;
+  isPremium: boolean;
 }
 
 export interface AuthResponse {

@@ -15,6 +15,7 @@ import type {
   WorldMovementResponse,
 } from '../api/types';
 import { DEMO_MODE } from '../config';
+import { useAuthStore } from './auth';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
@@ -783,9 +784,22 @@ export const useWorldStore = defineStore('world', {
     cancelFieldOrder() {
       this.fieldOrderDraft = null;
     },
+    /**
+     * A standing army's first click is the free "move on" destination — the
+     * one waypointless case `Army.PlanFieldOrder` never charges premium for.
+     * Any click beyond that turns the order into a waypointed one, which is
+     * premium-only, so a non-premium account is refused here (with `error`
+     * explaining why) rather than only finding out once it hits Confirm.
+     */
     addFieldOrderWaypoint(coord: AxialCoord) {
-      if (!this.fieldOrderDraft) return;
-      this.fieldOrderDraft.route.push(coord);
+      const draft = this.fieldOrderDraft;
+      if (!draft) return;
+      if (draft.route.length >= 1 && !useAuthStore().isPremium) {
+        draft.error = 'Premium required to plot more than one stop — clear the extra stop, or upgrade.';
+        return;
+      }
+
+      draft.route.push(coord);
     },
     moveFieldOrderWaypoint(index: number, coord: AxialCoord) {
       const route = this.fieldOrderDraft?.route;

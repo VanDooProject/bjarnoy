@@ -75,8 +75,9 @@ export const router = createRouter({
       // this game that actually requires login (every other troop endpoint
       // works anonymously), so it needs `requiresAuth` even though most
       // routes here don't. Being logged in doesn't mean being premium
-      // though — SimulatorView.vue itself handles the 403 for that, since
-      // there's no client-side premium flag to gate on ahead of time.
+      // though — SimulatorView.vue greys itself out upfront using
+      // `auth.isPremium` (UserResponse now exposes it), with the 403 path
+      // kept only as a defensive fallback for a stale flag.
       path: '/simulator',
       name: 'simulator',
       component: () => import('../views/SimulatorView.vue'),

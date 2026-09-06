@@ -2,21 +2,23 @@
 // Issue #40 phase 7: the premium fight simulator. `/simulator` carries
 // `meta: { requiresAuth: true }` (router/index.ts) so an unauthenticated
 // visitor is redirected to /login before this component even mounts — but
-// that only proves they're logged in, not that they're premium. There is no
-// client-side premium flag anywhere (UserResponse doesn't expose IsPremium
-// today — see AuthContracts.cs), so this view can't gate itself ahead of
-// time: it always renders the form, and only finds out on an actual 403
-// when the player clicks Simulate. That 403 is the everyday, expected
-// response for a non-premium account, not a bug state, so it gets real
-// friendly copy instead of the raw problem text most other rejections show.
+// that only proves they're logged in, not that they're premium.
+// `auth.isPremium` (UserResponse now exposes IsPremium — see
+// AuthContracts.cs) lets this view grey the form out upfront instead of only
+// finding out on a 403 after the player clicks Simulate. `isPremiumRequired`
+// below stays as a defensive fallback for a stale/out-of-date `auth.user`
+// (e.g. premium was revoked mid-session) — still real, everyday, friendly
+// copy, not a bug state.
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api } from '../api/client';
 import { DEMO_MODE } from '../config';
+import { useAuthStore } from '../stores/auth';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import { buildSimulatorRequest, isPremiumRequiredError } from '../lib/units/simulator';
 import type { SimulatorResponse } from '../api/types';
 
+const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
 onMounted(() => catalogue.load());
 
@@ -31,6 +33,10 @@ const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const premiumRequired = ref(false);
 const result = ref<SimulatorResponse | null>(null);
+
+// Shown before any request too, once `auth.user` is known — `premiumRequired`
+// only ever flips true after an actual 403, so this also covers a stale flag.
+const premiumBlocked = computed(() => !auth.isPremium || premiumRequired.value);
 
 function countFor(bucket: Record<string, number>, unit: string): number {
   return bucket[unit] ?? 0;
@@ -48,6 +54,8 @@ const seed = computed<number | undefined>(() => {
 });
 
 async function runSimulation() {
+  if (premiumBlocked.value) return;
+
   errorMessage.value = null;
   premiumRequired.value = false;
   result.value = null;
@@ -100,12 +108,13 @@ async function runSimulation() {
       </p>
 
       <template v-else>
-        <div v-if="premiumRequired" class="premium-card">
+        <div v-if="premiumBlocked" class="premium-card">
           <h2>Premium feature</h2>
-          <p>
+          <p v-if="premiumRequired">
             The fight simulator is a premium feature. This account isn't premium, so the server
             turned that last request down.
           </p>
+          <p v-else>The fight simulator is a premium feature. This account isn't premium.</p>
           <p class="honest-note">
             There's no upgrade flow in this game yet — nowhere here actually sells premium — so
             there's nothing more to click. Ask whoever runs this world if you think that's wrong.
@@ -180,7 +189,7 @@ async function runSimulation() {
 
           <p v-if="errorMessage" class="hint error">{{ errorMessage }}</p>
 
-          <button type="submit" class="simulate-btn" :disabled="loading">
+          <button type="submit" class="simulate-btn" :disabled="loading || premiumBlocked">
             {{ loading ? 'Simulating…' : 'Simulate' }}
           </button>
         </form>
