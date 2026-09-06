@@ -1,35 +1,36 @@
-// Hex tile art comes from the VanDooProject/bg_assets_hextile git submodule
-// at src/frontend/vendor/bg_assets_hextile (see that directory's own
-// README) — not copied in, so `git submodule update --init` (or a checkout
-// with `submodules: true`, as .github/workflows/frontend-ci.yml uses) is
-// required before this module resolves. Every tile is a single 200x300 PNG
-// per camera rotation, a flat-top hex "plate" (top face 200x92, starting at
+// Hex tile art is packed into a handful of WebP atlas pages (plus a JSON
+// manifest per page) by VanDooProject/3D_assets' `scripts/build_atlas.py`
+// (see that repo's README, "Packing into atlases", and issue #187) and
+// vendored under the VanDooProject/bg_assets_hextile submodule's own
+// `atlas/` directory (alongside its `hextiles/` individual PNGs, which
+// buildingArt.ts still uses) — not one PNG per
+// tile/orientation/level/variant as before. Every tile is still, at the
+// source, a 200x300 flat-top hex "plate" (top face 200x92, starting at
 // y=140) with a thick earthen skirt below it and, for taller assets, props
-// rising above it.
+// rising above it; the atlas just repacks those same renders into shared
+// pages instead of shipping them as individual files.
 //
-// Where the pack has one, we use its base/top split — ground-only under
-// hextiles/base, props/building-only under hextiles/top, sharing the same
-// 200x300 framing as the composited root file — instead of the single
-// composited image. Per that directory's own README, this exists "so realm
-// borders, or mouse hover effects can be placed between top-ing and base
-// tile": HexMapRenderer draws base, then the border/hover layers, then top,
-// so a border or hover highlight sits on the ground and tucks *under* a
-// tile's trees/building rather than being sliced across their canopy.
-// Terrains the pack doesn't split (sand, mountain, sea/coastal water) and
-// one building it doesn't split (tower) fall back to their single
-// composited image as the base layer, with no top layer.
+// Where the source has one, we use its base/top split — ground-only under
+// a `layer: "base"` frame, props/building-only under `layer: "top"` —
+// instead of a single composited image, same as before: HexMapRenderer
+// draws base, then the border/hover layers, then top, so a border or hover
+// highlight sits on the ground and tucks *under* a tile's trees/building
+// rather than being sliced across their canopy. A family the source doesn't
+// split (`layer: "composite"`) is treated as that family's base, with no
+// top layer — same effective result as before for e.g. `sand`/`mountain`.
 //
-// Every hex renders with one of the pack's six camera rotations
-// (`TileOrientation`) and, where the pack has more than one look for a
-// terrain/building, a numbered variant (terrain) or level (building) —
-// see `worldGenerator.ts`'s `orientationAt`/`variantAt` and
-// `Tile.buildingLevel`. Rather than one hand-written `import` per
-// orientation/variant/level combination (100+ once every family is
-// covered), each asset *family* actually used — e.g. every `grasstile_*`
-// file — is pulled in with one `import.meta.glob`, scoped to that family's
-// filename prefix so unused families (of which the pack has a few — no
-// quarry art exists, for instance) are still never bundled.
-import { Assets, Texture } from 'pixi.js';
+// Every hex renders with one of the source's six camera rotations
+// (`TileOrientation`) and, where a terrain/building has more than one look,
+// a numbered variant (terrain) or level (building) — see
+// `worldGenerator.ts`'s `orientationAt`/`variantAt` and
+// `Tile.buildingLevel`. Which array index a variant/level lands at is read
+// straight off each frame's own name (`..._variant001`, `..._level004`),
+// same convention the source files used; `classifyFamilyFrames` is the pure
+// function that turns one family's frame names into that array shape (see
+// its own doc comment and `textures.test.ts` — no Pixi/Texture dependency,
+// so it's exercised directly rather than only through a loaded atlas).
+import { Texture } from 'pixi.js';
+import { loadAtlasCategory, type LoadedAtlas } from './atlas';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
@@ -47,7 +48,11 @@ export const TILE_ART_NATIVE_H = 300;
 // vertical offset — has to be expressed as a fraction of the native WIDTH
 // (200), not the native height, or it scales by the wrong factor and the
 // art ends up misaligned with the (width-scaled) hex-top polygons used for
-// borders/fog.
+// borders/fog. Matches the atlas manifest's own `meta.bjarnoy.tile`
+// geometry (200x300, top face 92 tall starting at y=140) — kept as static
+// constants rather than read from a loaded atlas because callers elsewhere
+// (isoGridPosition, border/fog geometry) need them before any atlas load
+// resolves.
 /** Fraction of the tile width down to where the flat top face begins (140 / 200). */
 export const TILE_ART_TOPFACE_Y_FRAC = 140 / 200;
 /** Top-face height as a fraction of the tile width (92 / 200). */
@@ -61,152 +66,77 @@ export type TextureKey = Terrain | NonNullable<Tile['buildingType']> | 'sawmillr
 
 type OrientationMap<T> = Record<TileOrientation, T>;
 
-// Every file in each glob'd family, keyed by its full module path (Vite
-// resolves these to hashed asset URLs at build time — the string value,
-// not the path key, is what we actually use).
-type AssetModules = Record<string, string>;
+/** The atlas source-render `family` name backing each `TextureKey` — the same string the old per-family `import.meta.glob` prefix used. A key with no rendered family (no art exists, e.g. Quarry) is simply absent here, and `baseTextureFor` already falls back to bare terrain for that case. */
+const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
+  sea: 'watertile',
+  sand: 'sandtile',
+  mountain: 'mountaintile',
+  grass: 'grasstile',
+  forest: 'foresttile',
+  hut: 'vikinghut',
+  longhouse: 'greathall',
+  shrineofthor: 'thorshrine',
+  shrineoffreyja: 'freyjashrine',
+  farm: 'farm_crop',
+  pumpkinfarm: 'farm_pumpkin',
+  lumberjack: 'lumberjackhut',
+  storagehouse: 'storagebuilding',
+  archeryrange: 'archerybuilding',
+  greatstorehouse: 'bigstoragehouse',
+  barracks: 'barracks',
+  // Flat/inland sawmill only — 'sawmillriver'/'sawmillbend' are separate
+  // TextureKeys below, since (unlike this one) their base layer varies by
+  // level too.
+  sawmill: 'sawmill',
+  fishinghut: 'fishinghutbuilding',
+  magictower: 'magictower',
+  tower: 'towerbuilding',
+  dockyard: 'dockyard',
+  fisherhut: 'fisherhut',
+  sawmillriver: 'sawmillriver',
+  sawmillbend: 'sawmillbend',
+};
 
-const ROOT_TERRAIN = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{watertile,coastalwatertile,sandtile,mountaintile}_*.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-// Single composited image per orientation, no levels, no base/top split —
-// same shape as the plain root terrains above.
-const ROOT_BUILDING_PLAIN = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{fishinghutbuilding,magictower}_*.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const SPLIT_TERRAIN_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{grasstile,foresttile}_*_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const SPLIT_TERRAIN_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{grasstile,foresttile}_*.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const ROOT_BUILDING_LEVELED = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/{towerbuilding,dockyard}_*.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const SPLIT_BUILDING_BASE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse,barracks,sawmill}_*_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const SPLIT_BUILDING_TOP = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{vikinghut,greathall,farm_crop,farm_pumpkin,thorshrine,freyjashrine,lumberjackhut,storagebuilding,archerybuilding,bigstoragehouse,barracks,sawmill}_*.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-// fisherhut/sawmillriver/sawmillbend are also base/top split, but — unlike
-// every family above, whose base is one level-invariant tint — their *base*
-// layer itself carries a level rung too (e.g.
-// `base/fisherhut_E_level000_base.png`), so it needs `buildIndexed` (like
-// `ROOT_BUILDING_LEVELED` below) rather than `buildPlain`. Their glob is
-// `sawmill_*` (not `sawmillriver_*`)-safe because the pack always puts an
-// underscore right after the family name — "sawmillriver_..." never matches
-// a "sawmill_*" pattern, so this doesn't collide with plain `sawmill`'s own
-// glob above.
-const SPLIT_BUILDING_BASE_LEVELED = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/{fisherhut,sawmillriver,sawmillbend}_*_level*_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const SPLIT_BUILDING_TOP_LEVELED = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/{fisherhut,sawmillriver,sawmillbend}_*_level*.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-// One glob per river shape (not a single `rivertile_*` prefix glob): the
-// four shapes' filenames share the `rivertile_` prefix with an extra infix
-// (`bend_`/`spring_`/`y_narrow_`) before the orientation token, so a plain
-// prefix match (as buildPlain/buildIndexed use for every other family) can't
-// tell "straight" apart from the other three by prefix alone — keeping each
-// shape in its own glob result is what does. This also sidesteps the pack's
-// one stray `rivertile_SE_x2.png` in `top/`, which doesn't fit any shape's
-// exact orientation-suffixed pattern.
-//
-// Each pattern is a plain string literal (not built from a shared constant):
-// Vite's import.meta.glob is resolved by statically parsing the source text
-// of this exact call, not by evaluating a runtime expression, so the brace
-// alternation has to be written out at every call site or Vite can't see it.
-const RIVER_BASE_STRAIGHT = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_{E,NE,NW,W,SW,SE}_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_BASE_BEND = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend_{E,NE,NW,W,SW,SE}_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-// The 120°-off-straight turn (RiverTileShape.Bend60) — a distinct art family
-// from the 60°-off-straight `bend` above, not a variant of it. Its filename
-// prefix is `rivertile_bend60_`, which the plain `bend` glob above can't
-// match (`bend_` requires an underscore right after "bend", and "60" sits
-// there instead), so it needs its own glob rather than colliding with it.
-const RIVER_BASE_BEND60 = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_bend60_{E,NE,NW,W,SW,SE}_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_BASE_SPRING = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_spring_{E,NE,NW,W,SW,SE}_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_BASE_CONFLUENCE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/base/rivertile_y_narrow_{E,NE,NW,W,SW,SE}_base.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_TOP_STRAIGHT = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_{E,NE,NW,W,SW,SE}.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_TOP_BEND = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend_{E,NE,NW,W,SW,SE}.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_TOP_BEND60 = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_bend60_{E,NE,NW,W,SW,SE}.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_TOP_SPRING = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_spring_{E,NE,NW,W,SW,SE}.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
-const RIVER_TOP_CONFLUENCE = import.meta.glob(
-  '../../../vendor/bg_assets_hextile/hextiles/top/rivertile_y_narrow_{E,NE,NW,W,SW,SE}.png',
-  { eager: true, import: 'default' },
-) as AssetModules;
+/** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
+const COASTAL_FAMILY = 'coastalwatertile';
 
-/** The orientation token embedded in every filename, e.g. `..._NE_...` or `..._NE.png`. */
-const ORIENTATION_RE = /_(NE|NW|SW|SE|E|W)(?:_|\.)/;
-/** A numbered terrain-variant suffix, e.g. `_variant001.png`. */
-const VARIANT_RE = /_variant(\d{3})\.png$/;
-/**
- * A numbered building-level suffix, e.g. `_level004.png` (a top/root file)
- * or `_level004_base.png` (a leveled base file — see
- * `SPLIT_BUILDING_BASE_LEVELED`).
- */
-const LEVEL_RE = /_level(\d{3})(?:_base)?\.png$/;
+/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
+type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
 
-function basename(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}
+const RIVER_FAMILY: Record<RiverArtShape, string> = {
+  straight: 'rivertile',
+  bend: 'rivertile_bend',
+  bend60: 'rivertile_bend60',
+  spring: 'rivertile_spring',
+  confluence: 'rivertile_y_narrow',
+};
 
-function orientationOf(path: string): TileOrientation {
-  const match = ORIENTATION_RE.exec(basename(path));
+/** The orientation token embedded in every frame name, e.g. `..._NE_...` or `..._NE`. */
+const ORIENTATION_RE = /_(NE|NW|SW|SE|E|W)(?:_|$)/;
+/** A numbered terrain-variant suffix, e.g. `_variant001`. */
+const VARIANT_RE = /_variant(\d{3})(?:_base)?$/;
+/** A numbered building-level suffix, e.g. `_level004` (a top frame) or `_level004_base` (a leveled base frame — see `classifyFamilyFrames`). */
+const LEVEL_RE = /_level(\d{3})(?:_base)?$/;
+
+function orientationOf(name: string): TileOrientation {
+  const match = ORIENTATION_RE.exec(name);
   if (!match) {
-    throw new Error(`textures.ts: couldn't find an orientation token in "${path}"`);
+    throw new Error(`textures.ts: couldn't find an orientation token in frame "${name}"`);
   }
   return match[1] as TileOrientation;
 }
 
 /**
- * A terrain-variant family (grass/forest top) has a plain, unsuffixed file
- * as well as numbered `variantNNN` ones — the plain file is index 0 and
+ * A terrain-variant family (grass/forest top) has a plain, unsuffixed frame
+ * as well as numbered `variantNNN` ones — the plain frame is index 0 and
  * `variantNNN` is index `NNN + 1`. A building-level family (tower, hut/
- * longhouse/farm top) has no plain file at all — every rung is a numbered
+ * longhouse/farm top) has no plain frame at all — every rung is a numbered
  * `levelNNN`, which *is* its index directly, `000` included.
  */
-function explicitIndexOf(path: string): number | null {
-  const base = basename(path);
-  const variant = VARIANT_RE.exec(base);
+function explicitIndexOf(name: string): number | null {
+  const variant = VARIANT_RE.exec(name);
   if (variant) return Number(variant[1]) + 1;
-  const level = LEVEL_RE.exec(base);
+  const level = LEVEL_RE.exec(name);
   if (level) return Number(level[1]);
   return null;
 }
@@ -219,139 +149,86 @@ function emptyOrientationMap<T>(fill: () => T): OrientationMap<T> {
   return map;
 }
 
-/** Builds a plain (one file per orientation, no variant/level) lookup from a glob result. */
-function buildPlain(modules: AssetModules, prefix: string): OrientationMap<string> {
-  const map = {} as Partial<OrientationMap<string>>;
-  for (const [path, url] of Object.entries(modules)) {
-    if (!basename(path).startsWith(prefix)) continue;
-    map[orientationOf(path)] = url;
-  }
-  return map as OrientationMap<string>;
-}
-
-/**
- * Builds an indexed (variant or level) lookup from a glob result: per
- * orientation, an array ordered `[plain-or-000, 001, 002, ...]` — the same
- * ordering `variantAt`/a building's level number already index into
- * directly, so no separate offset table is needed at render time.
- */
-function buildIndexed(modules: AssetModules, prefix: string): OrientationMap<string[]> {
-  const byOrientation = emptyOrientationMap<Map<number, string>>(() => new Map());
-  for (const [path, url] of Object.entries(modules)) {
-    if (!basename(path).startsWith(prefix)) continue;
-    const orientation = orientationOf(path);
-    const index = explicitIndexOf(path) ?? 0;
-    byOrientation[orientation].set(index, url);
-  }
-  const result = {} as OrientationMap<string[]>;
+function mapOrientations<T, U>(map: OrientationMap<T>, fn: (o: TileOrientation, v: T) => U): OrientationMap<U> {
+  const result = {} as OrientationMap<U>;
   for (const orientation of TILE_ORIENTATIONS) {
-    const entries = byOrientation[orientation];
-    result[orientation] = Array.from({ length: entries.size }, (_, i) => {
-      const url = entries.get(i);
-      if (!url) {
-        throw new Error(`textures.ts: "${prefix}" is missing index ${i} for orientation ${orientation}`);
-      }
-      return url;
-    });
+    result[orientation] = fn(orientation, map[orientation]);
   }
   return result;
 }
 
-const SOURCES = {
-  base: {
-    sea: buildPlain(ROOT_TERRAIN, 'watertile_'),
-    sand: buildPlain(ROOT_TERRAIN, 'sandtile_'),
-    mountain: buildPlain(ROOT_TERRAIN, 'mountaintile_'),
-    grass: buildPlain(SPLIT_TERRAIN_BASE, 'grasstile_'),
-    forest: buildPlain(SPLIT_TERRAIN_BASE, 'foresttile_'),
-    hut: buildPlain(SPLIT_BUILDING_BASE, 'vikinghut_'),
-    longhouse: buildPlain(SPLIT_BUILDING_BASE, 'greathall_'),
-    shrineofthor: buildPlain(SPLIT_BUILDING_BASE, 'thorshrine_'),
-    shrineoffreyja: buildPlain(SPLIT_BUILDING_BASE, 'freyjashrine_'),
-    farm: buildPlain(SPLIT_BUILDING_BASE, 'farm_crop_'),
-    pumpkinfarm: buildPlain(SPLIT_BUILDING_BASE, 'farm_pumpkin_'),
-    lumberjack: buildPlain(SPLIT_BUILDING_BASE, 'lumberjackhut_'),
-    storagehouse: buildPlain(SPLIT_BUILDING_BASE, 'storagebuilding_'),
-    archeryrange: buildPlain(SPLIT_BUILDING_BASE, 'archerybuilding_'),
-    greatstorehouse: buildPlain(SPLIT_BUILDING_BASE, 'bigstoragehouse_'),
-    barracks: buildPlain(SPLIT_BUILDING_BASE, 'barracks_'),
-    // Flat/inland sawmill only — 'sawmillriver'/'sawmillbend' are separate
-    // TextureKeys below (baseIndexed), since (unlike this family) their base
-    // layer varies by level too.
-    sawmill: buildPlain(SPLIT_BUILDING_BASE, 'sawmill_'),
-    // Unlike towerbuilding, the pack draws the fishing hut with a real
-    // per-orientation sprite (its dock visibly points a different way in
-    // each of the six files) rather than one image reused at every
-    // rotation — see `TerrainSampler.FishingHutOrientation` on the backend
-    // for why that orientation has to be computed per building instead of
-    // read off the coastal-water tile it stands on.
-    fishinghut: buildPlain(ROOT_BUILDING_PLAIN, 'fishinghutbuilding_'),
-    magictower: buildPlain(ROOT_BUILDING_PLAIN, 'magictower_'),
-  } satisfies Partial<Record<TextureKey, OrientationMap<string>>>,
-  /**
-   * Coastal water is a rendering variant of `sea`, not a `TextureKey` of its
-   * own — and the pack gives it 3 variants per orientation (plain +
-   * `variant000`/`variant001`), same shape as grass/forest's top layer.
-   */
-  coastalBase: buildIndexed(ROOT_TERRAIN, 'coastalwatertile_'),
-  /**
-   * Tower and Dockyard aren't base/top split, so their level swap replaces
-   * the *base* texture outright, with no top layer at all. FisherHut and
-   * Sawmill's two river-adjacent families (`sawmillriver`/`sawmillbend`)
-   * are base/top split like most buildings — they just also need their
-   * *base* layer indexed by level (see `SPLIT_BUILDING_BASE_LEVELED`), so
-   * they belong here too, each paired with its own leveled `top` entry
-   * below rather than going without one.
-   */
-  baseIndexed: {
-    tower: buildIndexed(ROOT_BUILDING_LEVELED, 'towerbuilding_'),
-    dockyard: buildIndexed(ROOT_BUILDING_LEVELED, 'dockyard_'),
-    fisherhut: buildIndexed(SPLIT_BUILDING_BASE_LEVELED, 'fisherhut_'),
-    sawmillriver: buildIndexed(SPLIT_BUILDING_BASE_LEVELED, 'sawmillriver_'),
-    sawmillbend: buildIndexed(SPLIT_BUILDING_BASE_LEVELED, 'sawmillbend_'),
-  } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
-  top: {
-    grass: buildIndexed(SPLIT_TERRAIN_TOP, 'grasstile_'),
-    forest: buildIndexed(SPLIT_TERRAIN_TOP, 'foresttile_'),
-    hut: buildIndexed(SPLIT_BUILDING_TOP, 'vikinghut_'),
-    longhouse: buildIndexed(SPLIT_BUILDING_TOP, 'greathall_'),
-    shrineofthor: buildIndexed(SPLIT_BUILDING_TOP, 'thorshrine_'),
-    shrineoffreyja: buildIndexed(SPLIT_BUILDING_TOP, 'freyjashrine_'),
-    farm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_crop_'),
-    pumpkinfarm: buildIndexed(SPLIT_BUILDING_TOP, 'farm_pumpkin_'),
-    lumberjack: buildIndexed(SPLIT_BUILDING_TOP, 'lumberjackhut_'),
-    storagehouse: buildIndexed(SPLIT_BUILDING_TOP, 'storagebuilding_'),
-    archeryrange: buildIndexed(SPLIT_BUILDING_TOP, 'archerybuilding_'),
-    greatstorehouse: buildIndexed(SPLIT_BUILDING_TOP, 'bigstoragehouse_'),
-    barracks: buildIndexed(SPLIT_BUILDING_TOP, 'barracks_'),
-    sawmill: buildIndexed(SPLIT_BUILDING_TOP, 'sawmill_'),
-    fisherhut: buildIndexed(SPLIT_BUILDING_TOP_LEVELED, 'fisherhut_'),
-    sawmillriver: buildIndexed(SPLIT_BUILDING_TOP_LEVELED, 'sawmillriver_'),
-    sawmillbend: buildIndexed(SPLIT_BUILDING_TOP_LEVELED, 'sawmillbend_'),
-  } satisfies Partial<Record<TextureKey, OrientationMap<string[]>>>,
-  /**
-   * The art pack's four river shapes — a `RiverTileShape.Mouth` (see
-   * `types.ts`) has no art of its own and renders with `straight`, same as
-   * a plain through-flow tile.
-   */
-  riverBase: {
-    straight: buildPlain(RIVER_BASE_STRAIGHT, ''),
-    bend: buildPlain(RIVER_BASE_BEND, ''),
-    bend60: buildPlain(RIVER_BASE_BEND60, ''),
-    spring: buildPlain(RIVER_BASE_SPRING, ''),
-    confluence: buildPlain(RIVER_BASE_CONFLUENCE, ''),
-  } satisfies Record<RiverArtShape, OrientationMap<string>>,
-  riverTop: {
-    straight: buildPlain(RIVER_TOP_STRAIGHT, ''),
-    bend: buildPlain(RIVER_TOP_BEND, ''),
-    bend60: buildPlain(RIVER_TOP_BEND60, ''),
-    spring: buildPlain(RIVER_TOP_SPRING, ''),
-    confluence: buildPlain(RIVER_TOP_CONFLUENCE, ''),
-  } satisfies Record<RiverArtShape, OrientationMap<string>>,
-};
+/** One family's atlas frame, narrowed to what `classifyFamilyFrames` needs — generic over the frame's resolved value so it can be unit tested with plain strings instead of real `Texture`s (see `textures.test.ts`). */
+export interface FamilyFrame<T> {
+  name: string;
+  layer: 'base' | 'top' | 'composite';
+  value: T;
+}
 
-/** The art pack's river shapes — `RiverTileShape`'s `mouth` maps onto `straight`/`bend` (see `SOURCES.riverBase`). */
-type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
+export interface ClassifiedFamily<T> {
+  base?: OrientationMap<T>;
+  baseIndexed?: OrientationMap<T[]>;
+  top?: OrientationMap<T[]>;
+}
+
+/**
+ * Groups one family's atlas frames into the base/baseIndexed/top shape
+ * `TileTextures` needs, purely from each frame's own name and layer — no
+ * Pixi/Texture dependency. `layer: "composite"` (a family the source
+ * doesn't split into base/top folders) is treated as that family's base,
+ * with no top, same as `"base"`.
+ *
+ * Whether a family's base ends up plain (`base`) or indexed (`baseIndexed`)
+ * is inferred from the data rather than hardcoded per family: most
+ * buildings' base is one level-invariant texture, but a few (fisherhut,
+ * sawmillriver, sawmillbend) render a different base per level too — this
+ * shows up simply as more than one distinct index turning up for some
+ * orientation's base frames, with no family-specific rule needed either way.
+ */
+export function classifyFamilyFrames<T>(frames: FamilyFrame<T>[]): ClassifiedFamily<T> {
+  const baseByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
+  const topByOrientation = emptyOrientationMap<Map<number, T>>(() => new Map());
+
+  for (const { name, layer, value } of frames) {
+    const orientation = orientationOf(name);
+    const index = explicitIndexOf(name) ?? 0;
+    (layer === 'top' ? topByOrientation : baseByOrientation)[orientation].set(index, value);
+  }
+
+  const toIndexedMap = (byOrientation: OrientationMap<Map<number, T>>): OrientationMap<T[]> => {
+    const result = {} as OrientationMap<T[]>;
+    for (const orientation of TILE_ORIENTATIONS) {
+      const entries = byOrientation[orientation];
+      result[orientation] = Array.from({ length: entries.size }, (_, i) => {
+        const value = entries.get(i);
+        if (value === undefined) {
+          throw new Error(`textures.ts: frame set is missing index ${i} for orientation ${orientation}`);
+        }
+        return value;
+      });
+    }
+    return result;
+  };
+
+  const hasAny = (byOrientation: OrientationMap<Map<number, T>>) =>
+    TILE_ORIENTATIONS.some((o) => byOrientation[o].size > 0);
+
+  const result: ClassifiedFamily<T> = {};
+  if (hasAny(topByOrientation)) {
+    result.top = toIndexedMap(topByOrientation);
+  }
+  if (hasAny(baseByOrientation)) {
+    const isIndexed = TILE_ORIENTATIONS.some((o) => baseByOrientation[o].size > 1);
+    if (isIndexed) {
+      result.baseIndexed = toIndexedMap(baseByOrientation);
+    } else {
+      result.base = mapOrientations(baseByOrientation, (_o, m) => {
+        const [value] = m.values();
+        return value as T;
+      });
+    }
+  }
+  return result;
+}
 
 export interface TileTextures {
   base: Partial<Record<TextureKey, OrientationMap<Texture>>>;
@@ -362,92 +239,98 @@ export interface TileTextures {
   riverTop: Record<RiverArtShape, OrientationMap<Texture>>;
 }
 
-let loaded: TileTextures | null = null;
-let loading: Promise<TileTextures> | null = null;
-
-export function loadTileTextures(): Promise<TileTextures> {
-  if (loaded) return Promise.resolve(loaded);
-  if (loading) return loading;
-
-  const aliases: { alias: string; src: string }[] = [];
-  const record = (alias: string, src: string) => {
-    aliases.push({ alias, src });
-    return alias;
-  };
-
-  const aliasedBase: Partial<Record<TextureKey, OrientationMap<string>>> = {};
-  for (const [key, map] of Object.entries(SOURCES.base)) {
-    aliasedBase[key as TextureKey] = mapOrientations(map, (o, url) => record(`base:${key}:${o}`, url));
+function framesOfFamily(atlas: LoadedAtlas, family: string): FamilyFrame<Texture>[] {
+  const frames: FamilyFrame<Texture>[] = [];
+  for (const [name, meta] of Object.entries(atlas.frameMeta)) {
+    if (meta.family !== family) continue;
+    const value = atlas.textures[name];
+    if (!value) continue;
+    frames.push({ name, layer: meta.layer, value });
   }
-  const aliasedCoastalBase = mapOrientationArrays(SOURCES.coastalBase, (o, i, url) => record(`coastal:${o}:${i}`, url));
-  const aliasedBaseIndexed: Partial<Record<TextureKey, OrientationMap<string[]>>> = {};
-  for (const [key, map] of Object.entries(SOURCES.baseIndexed)) {
-    aliasedBaseIndexed[key as TextureKey] = mapOrientationArrays(map, (o, i, url) =>
-      record(`baseIndexed:${key}:${o}:${i}`, url),
+  return frames;
+}
+
+/** Builds the full `TileTextures` shape from one or more loaded atlas categories (e.g. `terrain` + `buildings-static`). A family with no matching frames in any given atlas is simply absent from the result. */
+function buildTileTextures(atlases: LoadedAtlas[]): TileTextures {
+  const merged: LoadedAtlas = { textures: {}, frameMeta: {}, clips: {} };
+  for (const atlas of atlases) {
+    Object.assign(merged.textures, atlas.textures);
+    Object.assign(merged.frameMeta, atlas.frameMeta);
+    Object.assign(merged.clips, atlas.clips);
+  }
+
+  const base: TileTextures['base'] = {};
+  const baseIndexed: TileTextures['baseIndexed'] = {};
+  const top: TileTextures['top'] = {};
+  for (const [key, family] of Object.entries(KEY_FAMILY) as [TextureKey, string][]) {
+    const classified = classifyFamilyFrames(framesOfFamily(merged, family));
+    if (classified.base) base[key] = classified.base;
+    if (classified.baseIndexed) baseIndexed[key] = classified.baseIndexed;
+    if (classified.top) top[key] = classified.top;
+  }
+
+  // Coastal water's numbered variants (ripples) currently render as this
+  // family's *top* frames in the source, with `base` staying a single
+  // level-invariant frame per orientation — but the game only ever draws
+  // one texture for a coastal-water tile (baseTextureFor, no separate top
+  // layer for it), so whichever bucket actually turned out indexed is the
+  // one that reproduces that variety; `baseIndexed` is preferred only in
+  // case a future render puts the variants there instead.
+  const coastalClassified = classifyFamilyFrames(framesOfFamily(merged, COASTAL_FAMILY));
+  const coastalBase =
+    coastalClassified.baseIndexed ?? coastalClassified.top ?? emptyOrientationMap<Texture[]>(() => []);
+
+  const riverBase = {} as Record<RiverArtShape, OrientationMap<Texture>>;
+  const riverTop = {} as Record<RiverArtShape, OrientationMap<Texture>>;
+  for (const [shape, family] of Object.entries(RIVER_FAMILY) as [RiverArtShape, string][]) {
+    const classified = classifyFamilyFrames(framesOfFamily(merged, family));
+    riverBase[shape] = classified.base ?? emptyOrientationMap<Texture>(() => Texture.EMPTY);
+    const topArr = classified.top ?? emptyOrientationMap<Texture[]>(() => []);
+    riverTop[shape] = mapOrientations(topArr, (_o, arr) => arr[0] ?? Texture.EMPTY);
+  }
+
+  return { base, coastalBase, baseIndexed, top, riverBase, riverTop };
+}
+
+/** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
+export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTextures {
+  return {
+    base: { ...a.base, ...b.base },
+    baseIndexed: { ...a.baseIndexed, ...b.baseIndexed },
+    top: { ...a.top, ...b.top },
+    coastalBase: a.coastalBase,
+    riverBase: a.riverBase,
+    riverTop: a.riverTop,
+  };
+}
+
+let terrainLoading: Promise<TileTextures> | null = null;
+/** The small `terrain` atlas alone — enough for the landing page / world map background, and for `HexMapRenderer` to draw terrain-only settlement tiles before building art resolves. */
+export function loadTerrainAtlas(): Promise<TileTextures> {
+  if (!terrainLoading) {
+    terrainLoading = loadAtlasCategory('terrain').then((atlas) => buildTileTextures([atlas]));
+  }
+  return terrainLoading;
+}
+
+let buildingLoading: Promise<TileTextures> | null = null;
+/** The (much larger) `buildings-static` atlas alone. Its `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those only ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures` rather than using this result standalone. */
+export function loadBuildingAtlases(): Promise<TileTextures> {
+  if (!buildingLoading) {
+    buildingLoading = loadAtlasCategory('buildings-static').then((atlas) => buildTileTextures([atlas]));
+  }
+  return buildingLoading;
+}
+
+let combinedLoading: Promise<TileTextures> | null = null;
+/** Both atlases, merged. Existing callers that don't need staged loading keep using this. */
+export function loadTileTextures(): Promise<TileTextures> {
+  if (!combinedLoading) {
+    combinedLoading = Promise.all([loadAtlasCategory('terrain'), loadAtlasCategory('buildings-static')]).then(
+      ([terrain, buildings]) => buildTileTextures([terrain, buildings]),
     );
   }
-  const aliasedTop: Partial<Record<TextureKey, OrientationMap<string[]>>> = {};
-  for (const [key, map] of Object.entries(SOURCES.top)) {
-    aliasedTop[key as TextureKey] = mapOrientationArrays(map, (o, i, url) => record(`top:${key}:${o}:${i}`, url));
-  }
-  const aliasedRiverBase = {} as Record<RiverArtShape, OrientationMap<string>>;
-  for (const [shape, map] of Object.entries(SOURCES.riverBase)) {
-    aliasedRiverBase[shape as RiverArtShape] = mapOrientations(map, (o, url) => record(`riverBase:${shape}:${o}`, url));
-  }
-  const aliasedRiverTop = {} as Record<RiverArtShape, OrientationMap<string>>;
-  for (const [shape, map] of Object.entries(SOURCES.riverTop)) {
-    aliasedRiverTop[shape as RiverArtShape] = mapOrientations(map, (o, url) => record(`riverTop:${shape}:${o}`, url));
-  }
-
-  loading = Assets.load(aliases.map((a) => ({ alias: a.alias, src: a.src }))).then(
-    (textures: Record<string, Texture>) => {
-      const resolve = (alias: string) => textures[alias];
-      const base: TileTextures['base'] = {};
-      for (const [key, map] of Object.entries(aliasedBase)) {
-        base[key as TextureKey] = mapOrientations(map, (_o, alias) => resolve(alias));
-      }
-      const coastalBase = mapOrientationArrays(aliasedCoastalBase, (_o, _i, alias) => resolve(alias));
-      const baseIndexed: TileTextures['baseIndexed'] = {};
-      for (const [key, map] of Object.entries(aliasedBaseIndexed)) {
-        baseIndexed[key as TextureKey] = mapOrientationArrays(map, (_o, _i, alias) => resolve(alias));
-      }
-      const top: TileTextures['top'] = {};
-      for (const [key, map] of Object.entries(aliasedTop)) {
-        top[key as TextureKey] = mapOrientationArrays(map, (_o, _i, alias) => resolve(alias));
-      }
-      const riverBase = {} as Record<RiverArtShape, OrientationMap<Texture>>;
-      for (const [shape, map] of Object.entries(aliasedRiverBase)) {
-        riverBase[shape as RiverArtShape] = mapOrientations(map, (_o, alias) => resolve(alias));
-      }
-      const riverTop = {} as Record<RiverArtShape, OrientationMap<Texture>>;
-      for (const [shape, map] of Object.entries(aliasedRiverTop)) {
-        riverTop[shape as RiverArtShape] = mapOrientations(map, (_o, alias) => resolve(alias));
-      }
-
-      loaded = { base, coastalBase, baseIndexed, top, riverBase, riverTop };
-      return loaded;
-    },
-  );
-  return loading;
-}
-
-function mapOrientations<T, U>(map: OrientationMap<T>, fn: (o: TileOrientation, v: T) => U): OrientationMap<U> {
-  const result = {} as OrientationMap<U>;
-  for (const orientation of TILE_ORIENTATIONS) {
-    result[orientation] = fn(orientation, map[orientation]);
-  }
-  return result;
-}
-
-function mapOrientationArrays<T, U>(
-  map: OrientationMap<T[]>,
-  fn: (o: TileOrientation, i: number, v: T) => U,
-): OrientationMap<U[]> {
-  const result = {} as OrientationMap<U[]>;
-  for (const orientation of TILE_ORIENTATIONS) {
-    result[orientation] = map[orientation].map((v, i) => fn(orientation, i, v));
-  }
-  return result;
+  return combinedLoading;
 }
 
 /**

@@ -25,6 +25,8 @@
 // closes. This component owns layout and navigation only — the caller
 // supplies the tree and reacts to `select`, the same contract as before.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import AtlasSprite from '../AtlasSprite.vue';
+import type { ArtRef } from '../../lib/map/buildingArt';
 import {
   BUB1,
   BUB2,
@@ -56,8 +58,8 @@ export interface RingBuilding extends RingAction {
   gives?: string;
   /** Reason it can't be built yet, e.g. "Requires longhouse 2". */
   lock?: string;
-  /** Art URL for the card thumbnail. */
-  art?: string;
+  /** Art for the card thumbnail. */
+  art?: ArtRef;
 }
 
 export interface RingCategory {
@@ -396,7 +398,8 @@ function onBackdropPointerDown(e: PointerEvent) {
       :style="{ left: `${layout.card.x}px`, top: `${layout.card.y}px`, width: `${CARD_W}px` }"
     >
       <div class="card-art">
-        <img v-if="hovered.art" :src="hovered.art" alt="" />
+        <AtlasSprite v-if="hovered.art?.kind === 'atlas'" :frame="hovered.art.frame" class="card-art-img" />
+        <img v-else-if="hovered.art?.kind === 'png'" class="card-art-img" :src="hovered.art.url" alt="" />
         <div class="card-head">
           <span class="card-name">{{ hovered.label }}</span>
           <span class="card-sub">Level 1 · {{ hovered.lock ? 'locked' : 'ready' }}</span>
@@ -590,13 +593,14 @@ function onBackdropPointerDown(e: PointerEvent) {
 }
 .card-art {
   display: flex;
+  align-items: center;
   gap: 10px;
   padding: 10px 12px;
   background: radial-gradient(90% 80% at 50% 40%, #1a3d4d, #0d1f29);
 }
-.card-art img {
+.card-art-img {
   width: 50px;
-  height: 78px;
+  max-height: 78px;
   object-fit: contain;
   flex: none;
 }

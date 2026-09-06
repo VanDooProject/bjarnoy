@@ -2,27 +2,26 @@
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
-
-// Same submodule assets HexMapRenderer/textures.ts draw the map with —
-// reused here rather than duplicated, so a thumbnail is never out of sync
-// with what the terrain actually looks like in game.
-import seaUrl from '../../vendor/bg_assets_hextile/hextiles/watertile_SE.png';
-import coastalWaterUrl from '../../vendor/bg_assets_hextile/hextiles/coastalwatertile_SE.png';
-import sandUrl from '../../vendor/bg_assets_hextile/hextiles/sandtile_SE.png';
-import mountainUrl from '../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
-import grassBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/grasstile_SE_base.png';
-import grassTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/grasstile_SE.png';
-import forestBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/foresttile_SE_base.png';
-import forestTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/foresttile_SE.png';
+import AtlasSprite from '../components/AtlasSprite.vue';
+import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
 
 onMounted(() => catalogue.load());
 
-interface TileArt {
-  base: string;
-  top?: string;
+// The `showcase` atlas category has one higher-res, pre-composited
+// (base + top decoration already merged) image per terrain family — the
+// same art HexMapRenderer draws the map with, reused here rather than
+// duplicated, so a thumbnail is never out of sync with the game. Grass and
+// forest use their decorated variant so the picture matches what the tile
+// looks like in-game, not the bare base layer.
+function showcaseTile(family: string, decorated: boolean): AtlasFrameRect {
+  const frame = decorated
+    ? findAtlasFrame('showcase', `${family}_SE_variant000`)
+    : (findAtlasFrame('showcase', `${family}_SE`) ?? findAtlasFrame('showcase', `${family}_SE_level000`));
+  if (!frame) throw new Error(`TileDocsView: no showcase frame for "${family}"`);
+  return frame;
 }
 
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
@@ -32,7 +31,7 @@ interface TileArt {
 interface TileEntry {
   id: string;
   title: string;
-  art: TileArt;
+  art: AtlasFrameRect;
   lore: string;
   generation: string;
   terrain: string | null;
@@ -46,7 +45,7 @@ const TILES: TileEntry[] = [
   {
     id: 'sea',
     title: 'Sea',
-    art: { base: seaUrl },
+    art: showcaseTile('watertile', false),
     lore: 'Open water. Nothing stands on it, and nothing is grown or mined here — it only ever separates islands.',
     generation: "Every hex outside an island's radius.",
     terrain: 'sea',
@@ -54,7 +53,7 @@ const TILES: TileEntry[] = [
   {
     id: 'coastal-water',
     title: 'Coastal water',
-    art: { base: coastalWaterUrl },
+    art: showcaseTile('coastalwatertile', false),
     lore:
       'Still plain sea underneath — the same terrain as the open water beyond it — but close enough to the shore for a dock.',
     generation: 'A sea hex with at least one land neighbour: the ring hugging every island.',
@@ -64,7 +63,7 @@ const TILES: TileEntry[] = [
   {
     id: 'sand',
     title: 'Sand',
-    art: { base: sandUrl },
+    art: showcaseTile('sandtile', false),
     lore: "An island's beach — the coastal ring settlers actually land on when founding a settlement.",
     generation: "The outer edge of an island: beyond 82% of its radius from centre.",
     terrain: 'sand',
@@ -72,7 +71,7 @@ const TILES: TileEntry[] = [
   {
     id: 'grass',
     title: 'Grass',
-    art: { base: grassBaseUrl, top: grassTopUrl },
+    art: showcaseTile('grasstile', true),
     lore: 'Open lowland — most of a settlement is built here.',
     generation: 'Lowland too smooth to be forest and too far from the centre to be mountain.',
     terrain: 'grass',
@@ -80,7 +79,7 @@ const TILES: TileEntry[] = [
   {
     id: 'forest',
     title: 'Forest',
-    art: { base: forestBaseUrl, top: forestTopUrl },
+    art: showcaseTile('foresttile', true),
     lore: 'Lowland gone rocky enough to grow trees instead of open grass.',
     generation: 'Rockiness above the forest threshold, but not steep enough for mountain.',
     terrain: 'forest',
@@ -88,7 +87,7 @@ const TILES: TileEntry[] = [
   {
     id: 'mountain',
     title: 'Mountain',
-    art: { base: mountainUrl },
+    art: showcaseTile('mountaintile', false),
     lore: 'The rockiest ground an island has.',
     generation: "Confined to an island's interior (within 40% of its radius) so ridges never form on the coast.",
     terrain: 'mountain',
@@ -154,8 +153,7 @@ const buildingsByTile = computed(() => {
       <section v-for="tile in TILES" :key="tile.id" :id="tile.id" class="tile">
         <div class="tile-header">
           <div class="thumb">
-            <img class="thumb-layer" :src="tile.art.base" alt="" />
-            <img v-if="tile.art.top" class="thumb-layer" :src="tile.art.top" alt="" />
+            <AtlasSprite :frame="tile.art" />
           </div>
           <div class="tile-intro">
             <h2>{{ tile.title }}</h2>
@@ -237,7 +235,9 @@ const buildingsByTile = computed(() => {
   gap: 16px;
 }
 .thumb {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   width: 96px;
   height: 144px;
@@ -245,13 +245,6 @@ const buildingsByTile = computed(() => {
   border-radius: 8px;
   background: var(--panel, #1c1710);
   border: 1px solid var(--panel-border);
-}
-.thumb-layer {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .tile-intro h2 {
   margin: 0 0 4px;
