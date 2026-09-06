@@ -294,4 +294,74 @@ describe('AdminSettlementsView', () => {
     expect(button.text()).toContain('Nothing queued');
     expect(button.attributes('disabled')).toBeDefined();
   });
+
+  it('draws the settlement hexes with the same flat-top layout as the real settlement view', async () => {
+    const wrapper = await openDetail();
+
+    // Regression test for a rotated admin hex grid: this editor used to lay
+    // hexes out pointy-top (redblobgames convention) while the real
+    // settlement view is flat-top, drawing the same settlement's shape
+    // rotated 30° relative to what players see. The centre hex (0,0) sits
+    // at the grid origin either way, but its polygon's very first point
+    // differs — flat-top starts at the left corner (x=0, y=h/2), pointy-top
+    // at a point 30° up from the x-axis — so checking that one point is
+    // enough to catch a regression to the old formula.
+    const centreHex = wrapper.find('polygon[data-hex="0,0"]');
+    const firstPoint = centreHex.attributes('points')!.trim().split(' ')[0]!;
+    const [x, y] = firstPoint.split(',').map(Number);
+    expect(x).toBeCloseTo(0, 5);
+    expect(y).toBeGreaterThan(0);
+  });
+
+  it('refetches the settlement detail when the Refresh button is clicked', async () => {
+    const wrapper = await openDetail();
+    adminGetSettlement.mockClear();
+
+    const refreshed = detail({
+      resources: { ...detail().resources, stock: { wood: 999, stone: 200, food: 150, iron: 50 } },
+    });
+    adminGetSettlement.mockResolvedValue(refreshed);
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click');
+    await flushPromises();
+
+    expect(adminGetSettlement).toHaveBeenCalledWith('settlement-1');
+    expect(wrapper.text()).toContain('Wood 999');
+  });
+
+  it('auto-refreshes the open settlement detail on a timer', async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = await openDetail();
+      adminGetSettlement.mockClear();
+
+      const refreshed = detail({
+        resources: { ...detail().resources, stock: { wood: 777, stone: 200, food: 150, iron: 50 } },
+      });
+      adminGetSettlement.mockResolvedValue(refreshed);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(adminGetSettlement).toHaveBeenCalledWith('settlement-1');
+      expect(wrapper.text()).toContain('Wood 777');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops polling once the detail panel is closed', async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = await openDetail();
+
+      await wrapper.findAll('button').find((b) => b.text() === 'Close')!.trigger('click');
+      adminGetSettlement.mockClear();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(adminGetSettlement).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { api, ApiError } from '../../api/client';
 import type {
   AdminSettlementHexResponse,
   AdminSettlementLayoutResponse,
   SettlementResponse,
 } from '../../api/types';
+import { isoGridPosition, isoTopPoints } from '../../lib/hex/geometry';
+import { TILE_ART_TOPFACE_H_FRAC } from '../../lib/map/textures';
 
 // The graphical half of the admin settlement editor (issue #105): the
 // settlement's claimed hexes drawn as a real hex grid, click one to place,
@@ -25,23 +27,27 @@ const saving = ref(false);
 const error = ref<string | null>(null);
 const notice = ref<string | null>(null);
 
-/** Pointy-top axial layout; the grid is small enough to draw every hex up front. */
-const HEX_SIZE = 26;
-const SQRT3 = Math.sqrt(3);
+// Flat-top isometric layout matching the real settlement view (SettlementCanvas.vue /
+// HexMapRenderer.ts, both built on lib/hex/geometry.ts) — this editor used to lay its
+// hexes out pointy-top instead, which drew the same settlement rotated 30° relative
+// to how players actually see it.
+const TILE_W = 64;
+const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
+
+function topLeftOf(hex: { q: number; r: number }): { x: number; y: number } {
+  return isoGridPosition(hex, TILE_W, TILE_H);
+}
 
 function centreOf(hex: { q: number; r: number }): { x: number; y: number } {
-  return {
-    x: HEX_SIZE * SQRT3 * (hex.q + hex.r / 2),
-    y: HEX_SIZE * 1.5 * hex.r,
-  };
+  const { x, y } = topLeftOf(hex);
+  return { x: x + TILE_W / 2, y: y + TILE_H / 2 };
 }
 
 function pointsFor(hex: { q: number; r: number }): string {
-  const { x, y } = centreOf(hex);
-  return Array.from({ length: 6 }, (_, i) => {
-    const angle = (Math.PI / 180) * (60 * i - 30);
-    return `${(x + HEX_SIZE * Math.cos(angle)).toFixed(2)},${(y + HEX_SIZE * Math.sin(angle)).toFixed(2)}`;
-  }).join(' ');
+  const { x, y } = topLeftOf(hex);
+  return isoTopPoints(TILE_W, TILE_H)
+    .map((p) => `${(x + p.x).toFixed(2)},${(y + p.y).toFixed(2)}`)
+    .join(' ');
 }
 
 /** The grid is centred on the settlement, so the viewBox follows the hexes rather than assuming a size. */
@@ -50,10 +56,10 @@ const viewBox = computed(() => {
   if (hexes.length === 0) return '0 0 100 100';
 
   const centres = hexes.map(centreOf);
-  const minX = Math.min(...centres.map((c) => c.x)) - HEX_SIZE * 1.2;
-  const maxX = Math.max(...centres.map((c) => c.x)) + HEX_SIZE * 1.2;
-  const minY = Math.min(...centres.map((c) => c.y)) - HEX_SIZE * 1.2;
-  const maxY = Math.max(...centres.map((c) => c.y)) + HEX_SIZE * 1.2;
+  const minX = Math.min(...centres.map((c) => c.x)) - TILE_W * 0.6;
+  const maxX = Math.max(...centres.map((c) => c.x)) + TILE_W * 0.6;
+  const minY = Math.min(...centres.map((c) => c.y)) - TILE_H * 0.6;
+  const maxY = Math.max(...centres.map((c) => c.y)) + TILE_H * 0.6;
   return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
 });
 
@@ -65,15 +71,18 @@ function keyOf(hex: { q: number; r: number }): string {
   return `${hex.q},${hex.r}`;
 }
 
+async function fetchLayout() {
+  layout.value = await api.adminGetSettlementLayout(props.settlementId);
+  if (selected.value) {
+    selected.value = layout.value.hexes.find((h) => keyOf(h) === keyOf(selected.value!)) ?? null;
+  }
+}
+
 async function load() {
   loading.value = true;
   loadError.value = null;
   try {
-    layout.value = await api.adminGetSettlementLayout(props.settlementId);
-    if (selected.value) {
-      selected.value =
-        layout.value.hexes.find((h) => keyOf(h) === keyOf(selected.value!)) ?? null;
-    }
+    await fetchLayout();
   } catch {
     loadError.value = 'Could not load the settlement layout.';
   } finally {
@@ -81,7 +90,37 @@ async function load() {
   }
 }
 
+const refreshing = ref(false);
+
+/** Manual "Refresh" button and the poll timer below both go through this — unlike
+ * `load()` it doesn't blank the panel behind a "Loading…" message, since queued
+ * builds/training finishing in the background shouldn't yank the editor out from
+ * under whoever's mid-click on it. */
+async function refresh() {
+  if (refreshing.value || saving.value) return;
+  refreshing.value = true;
+  try {
+    await fetchLayout();
+    loadError.value = null;
+  } catch {
+    loadError.value = 'Could not refresh the settlement layout.';
+  } finally {
+    refreshing.value = false;
+  }
+}
+
 watch(() => props.settlementId, load, { immediate: true });
+
+// Background world ticks keep completing this settlement's build/training
+// queues, so the grid is kept fresh on a timer too, not just after an edit.
+const POLL_MS = 10_000;
+let pollHandle: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  pollHandle = setInterval(() => void refresh(), POLL_MS);
+});
+onBeforeUnmount(() => {
+  if (pollHandle !== null) clearInterval(pollHandle);
+});
 
 function select(hex: AdminSettlementHexResponse) {
   selected.value = hex;
@@ -161,6 +200,9 @@ async function instantBuild() {
       <h3>Settlement editor</h3>
       <button class="insta" type="button" :disabled="saving || pending === 0" @click="instantBuild">
         {{ pending === 0 ? 'Nothing queued' : `Instant build (${pending} queued)` }}
+      </button>
+      <button type="button" :disabled="loading || refreshing || saving" @click="refresh">
+        {{ refreshing ? 'Refreshing…' : 'Refresh' }}
       </button>
     </header>
 
