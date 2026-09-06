@@ -2,76 +2,39 @@
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
-
-// Same submodule assets HexMapRenderer draws the map with (see
-// lib/map/textures.ts) — reused here rather than duplicated, so a doc-page
-// thumbnail is never out of sync with what a building actually looks like
-// in game. Quarry has no building sprite of its own (the map renders it as
-// its terrain, mountain, with no distinct prop); its thumbnail uses that
-// terrain art instead.
-import towerUrl from '../../vendor/bg_assets_hextile/hextiles/towerbuilding_SE_level000.png';
-import mountainUrl from '../../vendor/bg_assets_hextile/hextiles/mountaintile_SE.png';
-import grassBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/grasstile_SE_base.png';
-import farmBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/farm_crop_SE_base.png';
-import farmTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/farm_crop_SE_level001.png';
-import longhouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/greathall_SE_base.png';
-import longhouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/greathall_SE_level004.png';
-import fishingHutUrl from '../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
-import magicTowerUrl from '../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
-import pumpkinFarmBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/farm_pumpkin_SE_base.png';
-import pumpkinFarmTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/farm_pumpkin_SE_level001.png';
-import thorShrineBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/thorshrine_SE_base.png';
-import thorShrineTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/thorshrine_SE_level002.png';
-import freyjaShrineBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/freyjashrine_SE_base.png';
-import freyjaShrineTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/freyjashrine_SE_level002.png';
-import lumberjackBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/lumberjackhut_SE_base.png';
-import lumberjackTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/lumberjackhut_SE_level002.png';
-import storageHouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/storagebuilding_SE_base.png';
-import storageHouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/storagebuilding_SE_level004.png';
-import archeryRangeBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/archerybuilding_SE_base.png';
-import archeryRangeTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/archerybuilding_SE_level002.png';
-import dockyardUrl from '../../vendor/bg_assets_hextile/hextiles/dockyard_SE_level007.png';
-import greatStorehouseBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/bigstoragehouse_SE_base.png';
-import greatStorehouseTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/bigstoragehouse_SE_level004.png';
-import barracksBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/barracks_SE_base.png';
-import barracksTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/barracks_SE_level002.png';
-// Fisher Hut's *base* layer is itself leveled (unlike every family above) —
-// see textures.ts's SPLIT_BUILDING_BASE_LEVELED doc comment.
-import fisherHutBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/fisherhut_SE_level002_base.png';
-import fisherHutTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/fisherhut_SE_level002.png';
-// Flat/inland family only — same simplification buildingArt.ts's preview
-// card makes, regardless of where the actual tile sits next to a river.
-import sawmillBaseUrl from '../../vendor/bg_assets_hextile/hextiles/base/sawmill_SE_base.png';
-import sawmillTopUrl from '../../vendor/bg_assets_hextile/hextiles/top/sawmill_SE_level002.png';
+import AtlasSprite from '../components/AtlasSprite.vue';
+import type { AtlasFrameRect } from '../lib/map/atlas';
+import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
 
 onMounted(() => catalogue.load());
 
-interface BuildingArt {
-  base: string;
-  top?: string;
-}
-
-const ART: Record<string, BuildingArt> = {
-  longhouse: { base: longhouseBaseUrl, top: longhouseTopUrl },
-  storagehouse: { base: storageHouseBaseUrl, top: storageHouseTopUrl },
-  farm: { base: farmBaseUrl, top: farmTopUrl },
-  lumberjack: { base: lumberjackBaseUrl, top: lumberjackTopUrl },
-  quarry: { base: mountainUrl },
-  tower: { base: towerUrl },
-  fishinghut: { base: fishingHutUrl },
-  magictower: { base: magicTowerUrl },
-  pumpkinfarm: { base: pumpkinFarmBaseUrl, top: pumpkinFarmTopUrl },
-  shrineofthor: { base: thorShrineBaseUrl, top: thorShrineTopUrl },
-  shrineoffreyja: { base: freyjaShrineBaseUrl, top: freyjaShrineTopUrl },
-  archeryrange: { base: archeryRangeBaseUrl, top: archeryRangeTopUrl },
-  dockyard: { base: dockyardUrl },
-  greatstorehouse: { base: greatStorehouseBaseUrl, top: greatStorehouseTopUrl },
-  barracks: { base: barracksBaseUrl, top: barracksTopUrl },
-  fisherhut: { base: fisherHutBaseUrl, top: fisherHutTopUrl },
-  sawmill: { base: sawmillBaseUrl, top: sawmillTopUrl },
+// Same showcase atlas art HexMapRenderer/BuildingModal/RingMenu use — reused
+// here rather than duplicated, so a doc-page thumbnail is never out of sync
+// with what a building actually looks like in game. Each entry is the level
+// this preview shows (an upgraded building looks more built-up, so pick a
+// representative rung rather than always level 1); quarry has no building
+// sprite of its own (the map renders it as its terrain, mountain, with no
+// distinct prop), so it falls through to `terrainArt('mountain')` below.
+const PREVIEW_LEVEL: Record<string, number> = {
+  longhouse: 4,
+  storagehouse: 4,
+  farm: 1,
+  lumberjack: 2,
+  tower: 0,
+  pumpkinfarm: 1,
+  shrineofthor: 2,
+  shrineoffreyja: 2,
+  archeryrange: 2,
+  dockyard: 7,
+  greatstorehouse: 4,
+  barracks: 2,
+  fisherhut: 2,
+  // Flat/inland family only — same simplification buildingArt.ts's preview
+  // card makes, regardless of where the actual tile sits next to a river.
+  sawmill: 2,
 };
 
 const LORE: Record<string, string> = {
@@ -157,9 +120,30 @@ const categories = computed(() =>
   })).filter((c) => c.types.length > 0),
 );
 
-function art(type: string): BuildingArt {
-  return ART[type] ?? { base: grassBaseUrl };
+function art(type: string): ArtRef {
+  if (type === 'quarry') return terrainArt('mountain');
+  return buildingArt(type, PREVIEW_LEVEL[type] ?? 1) ?? terrainArt('grass');
 }
+
+// Computed once per building type rather than called from the template.
+// Split into two lookups (rather than one ArtRef-keyed map) so the template
+// doesn't need to narrow a discriminated union through an indexed access.
+const atlasThumbs = computed<Record<string, AtlasFrameRect>>(() => {
+  const result: Record<string, AtlasFrameRect> = {};
+  for (const type of catalogue.types) {
+    const a = art(type);
+    if (a.kind === 'atlas') result[type] = a.frame;
+  }
+  return result;
+});
+const pngThumbs = computed<Record<string, string>>(() => {
+  const result: Record<string, string> = {};
+  for (const type of catalogue.types) {
+    const a = art(type);
+    if (a.kind === 'png') result[type] = a.url;
+  }
+  return result;
+});
 
 function terrainLabel(requiresCoastalWater: boolean, terrain: string[]): string {
   if (requiresCoastalWater) return 'Shallow (coastal) water';
@@ -212,8 +196,8 @@ function formatAmount(value: number): string {
         <section v-for="type in cat.types" :key="type" :id="type" class="building">
           <div class="building-header">
             <div class="thumb">
-              <img class="thumb-layer" :src="art(type).base" alt="" />
-              <img v-if="art(type).top" class="thumb-layer" :src="art(type).top" alt="" />
+              <AtlasSprite v-if="atlasThumbs[type]" :frame="atlasThumbs[type]!" />
+              <img v-else-if="pngThumbs[type]" class="thumb-img" :src="pngThumbs[type]" alt="" />
             </div>
             <div class="building-intro">
               <h3>{{ typeLabel(type) }}</h3>
@@ -367,7 +351,9 @@ function formatAmount(value: number): string {
   gap: 16px;
 }
 .thumb {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
   width: 96px;
   height: 144px;
@@ -376,12 +362,10 @@ function formatAmount(value: number): string {
   background: var(--panel, #1c1710);
   border: 1px solid var(--panel-border);
 }
-.thumb-layer {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.thumb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 .building-intro h3 {
   margin: 0 0 4px;

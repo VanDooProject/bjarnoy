@@ -19,6 +19,7 @@ import {
 const world = useWorldStore();
 
 import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
+import AtlasSprite from '../AtlasSprite.vue';
 
 const props = defineProps<{
   tile: Tile;
@@ -217,7 +218,8 @@ const actionLabel = computed(() => {
   <div class="backdrop" @click.self="emit('close')">
     <div class="modal panel">
       <div class="art">
-        <img :src="art" alt="" />
+        <AtlasSprite v-if="art?.kind === 'atlas'" :frame="art.frame" class="art-img" />
+        <img v-else-if="art?.kind === 'png'" class="art-img" :src="art.url" alt="" />
         <span class="coord">Hex {{ tile.q }}, {{ tile.r }}</span>
       </div>
       <div class="body">
@@ -334,7 +336,7 @@ const actionLabel = computed(() => {
   justify-content: center;
   background: radial-gradient(90% 70% at 50% 45%, #1a3d4d 0%, #0d1f29 100%);
 }
-.art img {
+.art-img {
   width: 70%;
   image-rendering: -webkit-optimize-contrast;
 }

@@ -115,6 +115,25 @@ export interface LoadedAtlas {
   clips: Record<string, AtlasClip>;
 }
 
+/** One frame's raw pixel rect on its atlas page, for CSS-sprite rendering outside Pixi (HTML overlays: docs, tooltips, build previews). */
+export interface AtlasFrameRect {
+  webpUrl: string;
+  frame: { x: number; y: number; w: number; h: number };
+  pageSize: { w: number; h: number };
+}
+
+// Manifests/webp URLs are already resolved eagerly at import time (see
+// ATLAS_JSON/ATLAS_WEBP above), so an HTML consumer that only needs a
+// frame's pixel rect for CSS sprite rendering — not a live Pixi Texture —
+// can look it up synchronously, with no Assets.load/Spritesheet.parse cost.
+export function findAtlasFrame(category: string, name: string): AtlasFrameRect | undefined {
+  for (const { manifest, webpUrl } of pagesFor(category)) {
+    const frame = manifest.frames[name];
+    if (frame) return { webpUrl, frame: frame.frame, pageSize: manifest.meta.size };
+  }
+  return undefined;
+}
+
 const cache = new Map<string, Promise<LoadedAtlas>>();
 
 /** Loads and parses every page of one atlas category, merging them into a single frame/clip lookup. */
