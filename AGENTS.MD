@@ -4,11 +4,12 @@
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
 - when asked to "squash this PR" (or similar, with nothing more specific said), that means squash-merge the PR via GitHub (rewriting the branch's own commit history by hand is not what's meant) — keep the branch's full commit history intact, and use GitHub's squash-merge so the PR title becomes the one resulting commit message on the base branch
+- squash always means GitHub's squash-merge, never a local rewrite of history — and never force-push, on any branch, as a way to get there
 
 
 # ai dev workflow
 - think of a solution
-- ask me if plan is fine if its more complex AND use plan/todo tool to list things u have to do
+- ask me if plan is fine if its more complex AND use the `TaskCreate`/`TaskUpdate`/`TaskList` task tools to list things u have to do
 - implement (if multiple tasks push each task as a separate commit and open PR after first push)
 - evaluate with requirements (if there are reference screenshots compare them)
 - run build and tests
