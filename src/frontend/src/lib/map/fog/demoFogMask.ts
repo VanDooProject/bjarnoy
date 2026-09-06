@@ -11,7 +11,7 @@
 // fogMaskLayout.ts's own note on that being deliberately out of scope here).
 import type { AxialCoord } from '../../hex/coords';
 import { hexEuclideanDistance } from '../../hex/coords';
-import type { Settlement } from '../types';
+import { FOG_SCOUT_RING } from '../WorldModel';
 import type { WorldModel } from '../WorldModel';
 import {
   diagonalNeighboursForInterpolation,
@@ -59,12 +59,6 @@ function noiseSeed(hex: AxialCoord): number {
   return h & 0xff;
 }
 
-// visibleHexes' own radius (WorldModel.ts) — not exposed directly, so
-// recomputed here from the public borderRadius the same way.
-function visibleRadius(model: WorldModel, settlement: Settlement): number {
-  return model.borderRadius(settlement) + 1;
-}
-
 /**
  * Distance past the nearest source's ring, measured with the *round* metric
  * (`hexEuclideanDistance`) rather than `hexDistance`.
@@ -110,8 +104,18 @@ function generateCells(model: WorldModel, bounds: MaskBounds): DemoFogMaskCell[]
     }
   }
 
-  const exploredSources = settlements.map((s) => ({ q: s.q, r: s.r, radius: model.exploredRadius(s) }));
-  const visibleSources = settlements.map((s) => ({ q: s.q, r: s.r, radius: visibleRadius(model, s) }));
+  // One source per vision disc (the settlement's own centre plus one per
+  // standing Tower — WorldModel.visionDiscsFor), not one per settlement,
+  // so a Tower actually pushes back the fog around itself instead of only
+  // widening its settlement's territory — mirrors the backend's own
+  // FogMaskService, which adds one FogVisionSource per Tower alongside each
+  // settlement's own.
+  const exploredSources = settlements.flatMap((s) =>
+    model.visionDiscsFor(s).map((d) => ({ q: d.q, r: d.r, radius: d.radius + FOG_SCOUT_RING })),
+  );
+  const visibleSources = settlements.flatMap((s) =>
+    model.visionDiscsFor(s).map((d) => ({ q: d.q, r: d.r, radius: d.radius + 1 })),
+  );
 
   // Pass 1: real hexes. `isExplored` still gates the unknown channel — that
   // is WorldModel's own monotonic explored set (hex-counted, as gameplay

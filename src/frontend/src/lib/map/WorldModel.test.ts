@@ -27,7 +27,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 }
 
 describe('WorldModel border-anchoring (watchtower)', () => {
-  it('a freshly placed (level-1) tower claims no extra ground — Settlement.TowerClaimRadius(1) == 0', () => {
+  it('a freshly placed (level-1) tower claims one extra ring of ground — Settlement.TowerClaimRadius(1) == 1', () => {
     const model = new WorldModel(20260825);
     const { settlement, at } = foundLandedSettlement(model);
     const radius = model.borderRadius(settlement);
@@ -35,11 +35,12 @@ describe('WorldModel border-anchoring (watchtower)', () => {
 
     expect(model.placeBuilding(settlement.id, edge, 'tower')).toBe(true);
 
-    // Nothing past the centre disc's own radius is newly claimed — a
-    // level-1 tower's own satellite disc has radius 0.
+    // One hex past the centre disc's own radius, in the tower's own
+    // direction, is newly claimed — a level-1 tower's own satellite disc
+    // now has radius 1 (one hex of reach per level, starting at level 1).
     const beyond = hexesInRadius(edge, 1).filter((c) => hexDistance(at, c) === radius + 1);
     expect(beyond.length).toBeGreaterThan(0);
-    expect(beyond.every((c) => model.getTile(c.q, c.r).ownerId !== settlement.id)).toBe(true);
+    expect(beyond.some((c) => model.getTile(c.q, c.r).ownerId === settlement.id)).toBe(true);
   });
 
   it('refuses to place a tower outside the existing border, so it can only bump the shape outward, never teleport it', () => {
@@ -66,9 +67,10 @@ describe('WorldModel border-anchoring (watchtower)', () => {
     const radius = model.borderRadius(settlement);
     const towerAt = findLandBorderEdge(model, at, radius);
 
-    // A level-4 tower's own satellite disc has radius 2 (TowerClaimRadius(4)
-    // == 2), reaching well past the centre disc alone from a tower sitting
-    // right on the border's own edge.
+    // A level-4 tower's own satellite disc has radius 4 (TowerClaimRadius(4)
+    // == 4), reaching well past the centre disc alone from a tower sitting
+    // right on the border's own edge — checking only its inner radius-2 ring
+    // below is a deliberately conservative subset of the true, larger disc.
     model.applyServerSnapshot(settlement.id, {
       level: settlement.level,
       resources: settlement.resources,

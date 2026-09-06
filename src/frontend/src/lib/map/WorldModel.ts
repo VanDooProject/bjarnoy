@@ -5,7 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { claimDiscs, claimRadiusForLevel } from './shoreline';
+import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import { DEFAULT_GENERATION, generateTile, type WorldGenerationConstants } from './worldGenerator';
 import {
@@ -86,7 +86,7 @@ const DEMO_RIVAL_CART_OFFSET: AxialCoord = { q: 6, r: -4 };
 // and explored reaches further still so there's an actual ring of greyed-out
 // scouted terrain between the clear realm and the hidden unknown, instead of
 // unexplored starting immediately at the border.
-const FOG_SCOUT_RING = 3;
+export const FOG_SCOUT_RING = 3;
 
 export class WorldModel {
   readonly seed: number;
@@ -310,7 +310,7 @@ export class WorldModel {
       const tile = this.getTile(c.q, c.r);
       if (!tile.ownerId) tile.ownerId = settlement.id;
     }
-    for (const c of hexesInRadius(at, this.exploredRadius(settlement))) {
+    for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
     return settlement;
@@ -408,10 +408,11 @@ export class WorldModel {
    * also includes one satellite disc per standing Tower (see
    * `claimDiscsFor`/`claimedHexes`), so this alone under-covers a
    * territory with towers. Kept for callers that only ever cared about the
-   * centre disc — fog radius (`visibleHexes`/`exploredRadius`) and hex-offset
-   * math (`demoFogMask.ts`, `HexMapRenderer.rebuildSettlementLabels`) that
-   * hasn't been made tower-aware. `RealmPanel`'s displayed count instead
-   * uses `claimedHexCount`, which does account for towers.
+   * centre disc — hex-offset math (`demoFogMask.ts`'s own centre-radius use,
+   * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
+   * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
+   * instead. `RealmPanel`'s displayed count instead uses `claimedHexCount`,
+   * which also accounts for towers.
    */
   borderRadius(settlement: Settlement): number {
     return claimRadiusForLevel(settlement.level);
@@ -424,6 +425,46 @@ export class WorldModel {
       settlement.level,
       this.settlementTowers.get(settlement.id) ?? [],
     );
+  }
+
+  /**
+   * Every fog-vision disc making up this settlement's actual sight reach —
+   * the centre disc (`borderRadius`) plus one satellite disc per standing
+   * Tower, each Tower's own reach growing one hex per level starting at
+   * level 1. Mirrors the backend's `FogVisionRadii.ToVisionSource`/
+   * `ToTowerVisionSource` pair: kept as its own formula rather than reusing
+   * `claimDiscsFor`'s tower radius, even though both currently compute the
+   * same number, for the same "fog vision and building-claim radius aren't
+   * guaranteed to move together" reason that backend class documents.
+   */
+  visionDiscsFor(settlement: Settlement): ClaimDisc[] {
+    return [
+      { q: settlement.q, r: settlement.r, radius: this.borderRadius(settlement) },
+      ...(this.settlementTowers.get(settlement.id) ?? []).map((t) => ({
+        q: t.q,
+        r: t.r,
+        radius: Math.max(0, t.level),
+      })),
+    ];
+  }
+
+  /**
+   * Every hex within any vision disc's own explored ring (`visionDiscsFor`'s
+   * discs, each grown by `FOG_SCOUT_RING`) — the tower-aware replacement for
+   * looping `hexesInRadius` around the settlement's own centre alone.
+   */
+  private exploredHexesFor(settlement: Settlement): AxialCoord[] {
+    const seen = new Set<string>();
+    const hexes: AxialCoord[] = [];
+    for (const disc of this.visionDiscsFor(settlement)) {
+      for (const c of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius + FOG_SCOUT_RING)) {
+        const key = coordKey(c);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hexes.push(c);
+      }
+    }
+    return hexes;
   }
 
   /**
@@ -470,21 +511,42 @@ export class WorldModel {
     return count;
   }
 
-  /** Hexes visible right now (line-of-sight radius around a settlement). */
+  /**
+   * Hexes visible right now — the union of every vision disc's own
+   * line-of-sight radius (`visionDiscsFor`, each disc's own radius plus one),
+   * so a Tower's satellite disc extends sight the same way the settlement's
+   * own centre disc does, not just the centre disc alone.
+   */
   visibleHexes(settlement: Settlement): Set<string> {
-    const radius = this.borderRadius(settlement) + 1;
-    return new Set(hexesInRadius({ q: settlement.q, r: settlement.r }, radius).map(coordKey));
+    const seen = new Set<string>();
+    for (const disc of this.visionDiscsFor(settlement)) {
+      for (const c of hexesInRadius({ q: disc.q, r: disc.r }, disc.radius + 1)) {
+        seen.add(coordKey(c));
+      }
+    }
+    return seen;
   }
 
   /**
-   * Hexes that get marked "ever scouted" once claimed/leveled — wider than
-   * visibleHexes so a ring of greyed-out fog actually renders beyond it.
-   * Public so HexMapRenderer can frame the initial camera wide enough to
-   * show a real margin of white (unexplored) fog past this ring, rather
-   * than a zoom level tight enough to hide it entirely.
+   * A single, generous radius around the settlement's own centre that
+   * safely bounds every vision disc's own explored ring (`visionDiscsFor`,
+   * each grown by `FOG_SCOUT_RING`) — for callers that only want one circle
+   * centred on the settlement itself rather than the disc union
+   * `visibleHexes`/`exploredHexesFor` use for the actual fog shape: initial
+   * camera framing (`HexMapRenderer.zoomForFogMargin`) and terrain-cull
+   * pruning (`HexMapRenderer.isEntirelyDeepFog`/`unexploredFogSources`),
+   * both of which only ever need "far enough to not miss anything", not the
+   * exact shape. Equals the old centre-only `borderRadius(settlement) +
+   * FOG_SCOUT_RING` when there are no towers.
    */
   exploredRadius(settlement: Settlement): number {
-    return this.borderRadius(settlement) + FOG_SCOUT_RING;
+    let max = 0;
+    for (const disc of this.visionDiscsFor(settlement)) {
+      const reach =
+        hexDistance({ q: settlement.q, r: settlement.r }, { q: disc.q, r: disc.r }) + disc.radius + FOG_SCOUT_RING;
+      if (reach > max) max = reach;
+    }
+    return max;
   }
 
   /** Hexes ever scouted — greyed out (not live) once out of sight. */
@@ -503,8 +565,10 @@ export class WorldModel {
   distanceBeyondExplored(q: number, r: number): number {
     let min = Infinity;
     for (const settlement of this.settlements.values()) {
-      const d = hexDistance({ q: settlement.q, r: settlement.r }, { q, r }) - this.exploredRadius(settlement);
-      if (d < min) min = d;
+      for (const disc of this.visionDiscsFor(settlement)) {
+        const d = hexDistance({ q: disc.q, r: disc.r }, { q, r }) - (disc.radius + FOG_SCOUT_RING);
+        if (d < min) min = d;
+      }
     }
     return min === Infinity ? Infinity : Math.max(0, min);
   }
@@ -552,7 +616,7 @@ export class WorldModel {
         const tile = this.getTile(c.q, c.r);
         if (!tile.ownerId) tile.ownerId = settlementId;
       }
-      for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.exploredRadius(settlement))) {
+      for (const c of this.exploredHexesFor(settlement)) {
         this.explored.add(coordKey(c));
       }
     }
@@ -717,7 +781,7 @@ export class WorldModel {
       const claimed = this.getTile(c.q, c.r);
       if (!claimed.ownerId) claimed.ownerId = settlementId;
     }
-    for (const c of hexesInRadius({ q: settlement.q, r: settlement.r }, this.exploredRadius(settlement))) {
+    for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
     return true;

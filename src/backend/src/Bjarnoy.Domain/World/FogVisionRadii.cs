@@ -56,6 +56,35 @@ public static class FogVisionRadii
         new(coord, ExploredRadius(longhouseLevel), VisibleRadius(longhouseLevel));
 
     /// <summary>
+    /// A single standing <see cref="Buildings.BuildingType.Tower"/>'s own
+    /// satellite border radius, centred on that tower's own hex rather than
+    /// the settlement centre — the fog-vision analogue of
+    /// <see cref="Buildings.Settlement.TowerClaimRadius"/>, kept as its own
+    /// formula rather than reading that one directly (see this class's own
+    /// remarks on why fog vision and building-claim radius are deliberately
+    /// separate). One hex of reach per tower level, starting at level 1, with
+    /// no "+1" floor: a non-positive level (no tower, or a level-0 foundation
+    /// stub) contributes nothing.
+    /// </summary>
+    public static int TowerBorderRadius(int towerLevel) => Math.Max(0, towerLevel);
+
+    /// <summary>A tower's own line-of-sight reach — mirrors <see cref="VisibleRadius"/>.</summary>
+    public static int TowerVisibleRadius(int towerLevel) => TowerBorderRadius(towerLevel) + 1;
+
+    /// <summary>A tower's own scouted/explored reach — mirrors <see cref="ExploredRadius"/>.</summary>
+    public static int TowerExploredRadius(int towerLevel) => TowerBorderRadius(towerLevel) + ScoutRingHexes;
+
+    /// <summary>
+    /// Builds the <see cref="FogVisionSource"/> a single standing Tower
+    /// contributes to the mask, centred on the tower's own hex — every
+    /// standing Tower adds one of these alongside the settlement's own
+    /// <see cref="ToVisionSource"/>, the same way <see cref="Buildings.Settlement.ClaimDiscsFor"/>
+    /// adds one satellite claim disc per Tower alongside the centre disc.
+    /// </summary>
+    public static FogVisionSource ToTowerVisionSource(HexCoord coord, int towerLevel) =>
+        new(coord, TowerExploredRadius(towerLevel), TowerVisibleRadius(towerLevel));
+
+    /// <summary>
     /// How far around a travelling army's current hex counts as "walked, now
     /// permanently explored" — §1e's "Growth" trigger for
     /// <c>PersistedExploredBitset</c>. Deliberately not a per-unit-type value:

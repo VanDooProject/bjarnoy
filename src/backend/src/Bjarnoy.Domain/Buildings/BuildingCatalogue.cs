@@ -293,8 +293,10 @@ public static class BuildingCatalogue
         RequiredLonghouseLevel = 2 + ((level - 1) / 2),
         // This tower's own satellite-disc claim radius, centred on the tower
         // rather than the settlement — see Settlement.ClaimDiscsFor, which
-        // reads this back for every standing Tower.
-        ClaimRadius = level / 2,
+        // reads this back for every standing Tower. One hex of reach per
+        // tower level, starting at level 1 (see Settlement.TowerClaimRadius's
+        // remarks for why there is still no separate "+1" floor).
+        ClaimRadius = level,
     };
 
     // Same shape as the land Producers, but gated by RequiresCoastalWater

@@ -49,14 +49,15 @@ export function claimRadiusForLevel(longhouseLevel: number): number {
 
 /**
  * Mirrors `Settlement.cs`'s `TowerClaimRadius(int towerLevel)` (backed by
- * `BuildingCatalogue`'s Tower `ClaimRadius = level / 2`, the same number
+ * `BuildingCatalogue`'s Tower `ClaimRadius = level`, the same number
  * `building-catalogue.json`'s `tower` entries carry in their own
- * `claimRadius` field) — half the growth rate of `claimRadiusForLevel`, with
- * no "+1" floor (a Tower only ever extends ground the settlement's centre
- * disc already reaches; see that backend method's own remarks for why).
+ * `claimRadius` field) — one hex of reach per tower level, starting at
+ * level 1, with no "+1" floor (a Tower only ever extends ground the
+ * settlement's centre disc already reaches; see that backend method's own
+ * remarks for why).
  */
 export function towerClaimRadiusForLevel(towerLevel: number): number {
-  return Math.floor(Math.max(0, towerLevel) / 2);
+  return Math.max(0, towerLevel);
 }
 
 /** One disc of a settlement's claimed territory — see `claimDiscs`. */

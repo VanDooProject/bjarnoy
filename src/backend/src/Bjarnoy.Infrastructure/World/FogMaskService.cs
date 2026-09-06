@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
@@ -115,6 +116,12 @@ public sealed class FogMaskService(GameDbContext dbContext, IMemoryCache cache, 
             var level = settlement.ToDomain().LonghouseLevel;
             newlyWalked.AddRange(new HexCoord(settlement.CentreQ, settlement.CentreR)
                 .WithinRadius(FogVisionRadii.ExploredRadius(level)));
+
+            foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
+            {
+                newlyWalked.AddRange(new HexCoord(tower.Q, tower.R)
+                    .WithinRadius(FogVisionRadii.TowerExploredRadius(tower.Level)));
+            }
         }
 
         foreach (var armyEntity in travellingArmies)
@@ -153,6 +160,9 @@ public sealed class FogMaskService(GameDbContext dbContext, IMemoryCache cache, 
         var sources = settlements
             .Select(s => FogVisionRadii.ToVisionSource(
                 new HexCoord(s.CentreQ, s.CentreR), s.ToDomain().LonghouseLevel))
+            .Concat(settlements
+                .SelectMany(s => s.Buildings.Where(b => b.Type == BuildingType.Tower))
+                .Select(t => FogVisionRadii.ToTowerVisionSource(new HexCoord(t.Q, t.R), t.Level)))
             .ToList();
 
         var persistedExplored = PersistedExploredBitset.Decode(bounds, mergedBits);
@@ -166,26 +176,31 @@ public sealed class FogMaskService(GameDbContext dbContext, IMemoryCache cache, 
 
     /// <summary>
     /// A deterministic hash of the player's current settlement set — id,
-    /// position, and longhouse level (the only inputs
-    /// <see cref="FogVisionRadii.ToVisionSource"/> reads) — sorted first so
-    /// the same set always hashes the same way regardless of query order —
+    /// position, longhouse level, and every standing Tower's own coord/level
+    /// (the inputs <see cref="FogVisionRadii.ToVisionSource"/> and
+    /// <see cref="FogVisionRadii.ToTowerVisionSource"/> read) — sorted first
+    /// so the same set always hashes the same way regardless of query order —
     /// plus the persisted explored bitset actually baked into this mask.
     /// Doubles as the cache key's version component and the HTTP `ETag`, per
     /// §1a Option B's <c>(playerId, sorted [settlementId, q, r, level])</c>
-    /// cache key, extended for §1e's persisted layer. The bitset only ever
-    /// grows (see <see cref="PersistedExploredBitset.Merge"/>), so this
-    /// doesn't reintroduce §1c's "busts the cache every movement tick"
-    /// problem — an army merely standing somewhere already-walked changes
-    /// nothing here.
+    /// cache key, extended for §1e's persisted layer and for Towers so a
+    /// tower built/levelled/razed actually busts the cached mask instead of
+    /// serving a stale one. The bitset only ever grows (see
+    /// <see cref="PersistedExploredBitset.Merge"/>), so this doesn't
+    /// reintroduce §1c's "busts the cache every movement tick" problem — an
+    /// army merely standing somewhere already-walked changes nothing here.
     /// </summary>
     private static string ComputeETag(IReadOnlyCollection<Entities.SettlementEntity> settlements, byte[] persistedBits)
     {
         var version = string.Join(
             '|',
             settlements
-                .Select(s => (s.Id, s.CentreQ, s.CentreR, Level: s.ToDomain().LonghouseLevel))
+                .Select(s => (s.Id, s.CentreQ, s.CentreR, Level: s.ToDomain().LonghouseLevel, Towers: s.Buildings
+                    .Where(b => b.Type == BuildingType.Tower)
+                    .OrderBy(b => b.Q).ThenBy(b => b.R)
+                    .Select(b => $"{b.Q}:{b.R}:{b.Level}")))
                 .OrderBy(s => s.Id)
-                .Select(s => $"{s.Id}:{s.CentreQ}:{s.CentreR}:{s.Level}"));
+                .Select(s => $"{s.Id}:{s.CentreQ}:{s.CentreR}:{s.Level}:[{string.Join(',', s.Towers)}]"));
 
         using var sha = SHA256.Create();
         sha.TransformBlock(Encoding.UTF8.GetBytes(version), 0, Encoding.UTF8.GetByteCount(version), null, 0);
