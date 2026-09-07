@@ -29,6 +29,8 @@ import enLeaderboard from './locales/en/leaderboard.json';
 import deLeaderboard from './locales/de/leaderboard.json';
 import enReports from './locales/en/reports.json';
 import deReports from './locales/de/reports.json';
+import enSimulator from './locales/en/simulator.json';
+import deSimulator from './locales/de/simulator.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -83,6 +85,7 @@ export const i18n = createI18n({
       profile: enProfile,
       leaderboard: enLeaderboard,
       reports: enReports,
+      simulator: enSimulator,
     },
     de: {
       common: deCommon,
@@ -100,6 +103,7 @@ export const i18n = createI18n({
       profile: deProfile,
       leaderboard: deLeaderboard,
       reports: deReports,
+      simulator: deSimulator,
     },
   },
   datetimeFormats,

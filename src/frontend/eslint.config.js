@@ -14,7 +14,6 @@ const LEGACY_UNMIGRATED_VUE_FILES = [
   'src/components/hud/WaterPerfPanel.vue',
   'src/views/DocsView.vue',
   'src/views/ImpressumView.vue',
-  'src/views/SimulatorView.vue',
   'src/views/TechTreeView.vue',
   'src/views/TileDocsView.vue',
   'src/views/admin/AdminActivityView.vue',

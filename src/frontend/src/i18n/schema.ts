@@ -13,6 +13,7 @@ import messages from './locales/en/messages.json';
 import profile from './locales/en/profile.json';
 import leaderboard from './locales/en/leaderboard.json';
 import reports from './locales/en/reports.json';
+import simulator from './locales/en/simulator.json';
 
 // English is the source of truth for keys: every other locale is typed
 // against its shape, so a missing/misspelled key is a `vue-tsc -b` error.
@@ -33,4 +34,5 @@ export interface MessageSchema {
   profile: typeof profile;
   leaderboard: typeof leaderboard;
   reports: typeof reports;
+  simulator: typeof simulator;
 }
