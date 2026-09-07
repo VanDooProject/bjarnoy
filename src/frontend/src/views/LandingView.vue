@@ -334,6 +334,13 @@ async function foundHere(coord: AxialCoord) {
       : await world.foundStartingSettlementLive(player.id, player.ownerName, realmName, coord);
     player.foundSettlement(settlement.id);
     world.startHudSync();
+    // The view stays mounted after founding (flipped into settlement mode
+    // in place, see below) rather than unmounting, so onUnmounted's own
+    // stopPreviewPoll() won't run for a while yet — without stopping it
+    // here too, the pre-founding poll keeps asking the backend for a plot
+    // suggestion this owner no longer needs, which now 409s
+    // (PlotSuggestionRejection.AlreadyFounded) on every tick.
+    stopPreviewPoll();
     // The canvas was mounted in preview mode (no settlementId yet) — flip it
     // into a real settlement view in place, same camera, no remount. Also
     // drops screenBiasX back to 0: the hero text (the only reason to bias
