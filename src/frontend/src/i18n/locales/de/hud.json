@@ -1,0 +1,24 @@
+{
+  "nav": {
+    "settlement": "Siedlung",
+    "worldMap": "Weltkarte",
+    "leaderboards": "Ranglisten",
+    "messages": "Nachrichten",
+    "reports": "Meldungen",
+    "alliance": "Allianz",
+    "docs": "Docs",
+    "landing": "Startseite",
+    "profileTitle": "Dein Profil",
+    "createAccountTitle": "{nickname} — Konto erstellen"
+  },
+  "resourceBar": {
+    "capSuffix": "/{n}",
+    "reserved": "({n} reserviert)",
+    "rate": "+{n}/h"
+  },
+  "realmPanel": {
+    "level": "Lv {level}",
+    "claims": "Reich beansprucht {count} Hexfelder",
+    "backToWorldMap": "← Weltkarte"
+  }
+}

@@ -6,6 +6,7 @@ import demoModeBadge from './locales/en/demoModeBadge.json';
 import login from './locales/en/login.json';
 import register from './locales/en/register.json';
 import accountRestrictedBanner from './locales/en/accountRestrictedBanner.json';
+import hud from './locales/en/hud.json';
 
 // English is the source of truth for keys: every other locale is typed
 // against its shape, so a missing/misspelled key is a `vue-tsc -b` error.
@@ -19,4 +20,5 @@ export interface MessageSchema {
   login: typeof login;
   register: typeof register;
   accountRestrictedBanner: typeof accountRestrictedBanner;
+  hud: typeof hud;
 }

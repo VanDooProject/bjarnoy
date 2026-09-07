@@ -7,16 +7,19 @@
 // pill TopBar used to show.
 import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { DEMO_MODE } from '../../config';
+import type { MessageSchema } from '../../i18n/schema';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #40 phase 3: a lightweight "new reports" badge. HudNav is mounted
 // for as long as TopBar is (settlement/world map views), so its own
@@ -52,17 +55,17 @@ const initials = computed(() => {
       :class="{ active: route.name === 'settlement' }"
       @click="router.push('/settlement')"
     >
-      Settlement
+      {{ t('hud.nav.settlement') }}
     </button>
     <button class="link" :class="{ active: route.name === 'world' }" @click="router.push('/world')">
-      World map
+      {{ t('hud.nav.worldMap') }}
     </button>
     <button
       class="link"
       :class="{ active: route.name === 'leaderboards' }"
       @click="router.push('/leaderboards')"
     >
-      Leaderboards
+      {{ t('hud.nav.leaderboards') }}
     </button>
     <button
       v-if="auth.isAuthenticated"
@@ -70,28 +73,28 @@ const initials = computed(() => {
       :class="{ active: ['messages', 'conversation'].includes(String(route.name)) }"
       @click="router.push('/messages')"
     >
-      Messages
+      {{ t('hud.nav.messages') }}
     </button>
     <button
       class="link reports-link"
       :class="{ active: String(route.name).startsWith('report') }"
       @click="router.push('/reports')"
     >
-      Reports
+      {{ t('hud.nav.reports') }}
       <span v-if="reports.unreadCount > 0" class="badge">{{ reports.unreadCount }}</span>
     </button>
     <button class="link" :class="{ active: route.name === 'guild' }" @click="router.push('/guild')">
-      Alliance
+      {{ t('hud.nav.alliance') }}
     </button>
     <button
       class="link"
       :class="{ active: ['docs', 'tech-tree', 'tile-docs'].includes(String(route.name)) }"
       @click="router.push('/docs')"
     >
-      Docs
+      {{ t('hud.nav.docs') }}
     </button>
     <button class="link" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
-      Landing
+      {{ t('hud.nav.landing') }}
     </button>
     <!-- Logged in, the avatar opens the player's own profile (issue #42).
          Anonymous, it opens registration (issue #108) — the only entry
@@ -101,7 +104,7 @@ const initials = computed(() => {
       v-if="auth.isAuthenticated"
       class="avatar avatar-button"
       type="button"
-      title="Your profile"
+      :title="t('hud.nav.profileTitle')"
       @click="router.push('/profile')"
     >
       {{ initials }}
@@ -110,7 +113,7 @@ const initials = computed(() => {
       v-else
       class="avatar avatar-button"
       type="button"
-      :title="`${player.nickname ?? 'Bjarnoy'} — create an account`"
+      :title="t('hud.nav.createAccountTitle', { nickname: player.nickname ?? 'Bjarnoy' })"
       @click="router.push('/register')"
     >
       {{ initials }}

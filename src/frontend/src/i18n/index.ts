@@ -15,6 +15,8 @@ import enRegister from './locales/en/register.json';
 import deRegister from './locales/de/register.json';
 import enAccountRestrictedBanner from './locales/en/accountRestrictedBanner.json';
 import deAccountRestrictedBanner from './locales/de/accountRestrictedBanner.json';
+import enHud from './locales/en/hud.json';
+import deHud from './locales/de/hud.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -62,6 +64,7 @@ export const i18n = createI18n({
       login: enLogin,
       register: enRegister,
       accountRestrictedBanner: enAccountRestrictedBanner,
+      hud: enHud,
     },
     de: {
       common: deCommon,
@@ -72,6 +75,7 @@ export const i18n = createI18n({
       login: deLogin,
       register: deRegister,
       accountRestrictedBanner: deAccountRestrictedBanner,
+      hud: deHud,
     },
   },
   datetimeFormats,

@@ -12,6 +12,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ResourceBar from './ResourceBar.vue';
 import { useWorldStore } from '../../stores/world';
+import { createTestI18n } from '../../test/i18n';
+import enHud from '../../i18n/locales/en/hud.json';
+
+function mountResourceBar() {
+  return mount(ResourceBar, {
+    global: { plugins: [createTestI18n({ hud: enHud })] },
+  });
+}
 
 describe('ResourceBar', () => {
   beforeEach(() => {
@@ -24,7 +32,7 @@ describe('ResourceBar', () => {
     world.hud.storageCap = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
     world.hud.reserved = { wood: 0, stone: 0, food: 0, iron: 0 };
 
-    const wrapper = mount(ResourceBar);
+    const wrapper = mountResourceBar();
 
     expect(wrapper.find('.fill-reserved').exists()).toBe(false);
     expect(wrapper.find('.reserved-hint').exists()).toBe(false);
@@ -37,7 +45,7 @@ describe('ResourceBar', () => {
     world.hud.storageCap = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
     world.hud.reserved = { wood: 100, stone: 0, food: 0, iron: 0 };
 
-    const wrapper = mount(ResourceBar);
+    const wrapper = mountResourceBar();
 
     const hint = wrapper.get('.reserved-hint');
     expect(hint.text()).toBe('(100 reserved)');
@@ -64,7 +72,7 @@ describe('ResourceBar', () => {
     // render a segment past the fill it belongs to if it ever does.
     world.hud.reserved = { wood: 999, stone: 0, food: 0, iron: 0 };
 
-    const wrapper = mount(ResourceBar);
+    const wrapper = mountResourceBar();
 
     const segment = wrapper.get('.fill-reserved');
     const style = segment.attributes('style') ?? '';

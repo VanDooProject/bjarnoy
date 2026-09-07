@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useRouter } from 'vue-router';
+import type { MessageSchema } from '../../i18n/schema';
 
 const world = useWorldStore();
 const router = useRouter();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const props = defineProps<{
   // Issue #16 "ring menu": this panel's own "← World map" button sits below
@@ -30,10 +33,10 @@ const claimedHexes = computed(() => world.hud.claimedHexes);
   <div v-if="settlement" class="realm-panel panel" :class="{ disabled: props.ringOpen }">
     <div class="title">
       <span class="name">{{ settlement.name }}</span>
-      <span class="level pill">Lv {{ settlement.level }}</span>
+      <span class="level pill">{{ t('hud.realmPanel.level', { level: settlement.level }) }}</span>
     </div>
-    <p class="sub">Realm claims {{ claimedHexes }} hexes</p>
-    <button class="back" :disabled="props.ringOpen" @click="router.push('/world')">← World map</button>
+    <p class="sub">{{ t('hud.realmPanel.claims', { count: claimedHexes }) }}</p>
+    <button class="back" :disabled="props.ringOpen" @click="router.push('/world')">{{ t('hud.realmPanel.backToWorldMap') }}</button>
   </div>
 </template>
 

@@ -1,0 +1,24 @@
+{
+  "nav": {
+    "settlement": "Settlement",
+    "worldMap": "World map",
+    "leaderboards": "Leaderboards",
+    "messages": "Messages",
+    "reports": "Reports",
+    "alliance": "Alliance",
+    "docs": "Docs",
+    "landing": "Landing",
+    "profileTitle": "Your profile",
+    "createAccountTitle": "{nickname} — create an account"
+  },
+  "resourceBar": {
+    "capSuffix": "/{n}",
+    "reserved": "({n} reserved)",
+    "rate": "+{n}/h"
+  },
+  "realmPanel": {
+    "level": "Lv {level}",
+    "claims": "Realm claims {count} hexes",
+    "backToWorldMap": "← World map"
+  }
+}
