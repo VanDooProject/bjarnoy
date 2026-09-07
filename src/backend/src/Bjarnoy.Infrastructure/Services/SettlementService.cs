@@ -33,7 +33,16 @@ public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntit
     public bool Accepted => Rejection == FoundingRejection.None && Settlement is not null;
 }
 
-public sealed record BuildResult(BuildRejection Rejection, BuildOrder? Order = null, bool WorldPaused = false)
+/// <param name="MissingPrerequisite">
+/// Set only for <see cref="BuildRejection.RequiredBuildingTooLow"/> — the
+/// prerequisite the settlement does not meet, so the API can name it rather
+/// than only report that something is missing.
+/// </param>
+public sealed record BuildResult(
+    BuildRejection Rejection,
+    BuildOrder? Order = null,
+    bool WorldPaused = false,
+    BuildingPrerequisite? MissingPrerequisite = null)
 {
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 }
@@ -1040,7 +1049,8 @@ public sealed class SettlementService(
             // that is a real change worth keeping.
             await PersistIfSettledAsync(settlement, settleResult, guestArmies, cancellationToken)
                 .ConfigureAwait(false);
-            return new BuildResult(decision.Rejection);
+            return new BuildResult(
+                decision.Rejection, MissingPrerequisite: decision.MissingPrerequisite);
         }
 
         settlement.ApplyDomain(settled.Enqueue(decision.Order!, now));
