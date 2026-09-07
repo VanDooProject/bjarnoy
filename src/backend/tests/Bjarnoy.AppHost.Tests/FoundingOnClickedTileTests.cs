@@ -54,15 +54,14 @@ public class FoundingOnClickedTileTests
     /// <summary>
     /// A world whose backend-suggested plot has at least one same-island
     /// alternative (<c>PlotReservationService.AlternativeCount</c>) that
-    /// projects well inside a 1280x720 canvas — for this seed, (6|3) at
-    /// (1072,337) against a suggested plot of (3|5) — so the click this test
-    /// needs to make is well clear of every edge. Any seed with that property
-    /// would do; this one was picked out of the 100-seed survey described in
-    /// the class remarks (against the older, client-side placement rule —
-    /// re-verified against the current backend-owned suggestion by a
-    /// throwaway harness reproducing <c>ComputeFreshPin</c> for a
-    /// zero-population world, which is what this test's own fresh world
-    /// always is).
+    /// projects well inside a 1280x720 canvas — for this seed, (6|3) against
+    /// a suggested plot of (3|5) — so the click this test needs to make is
+    /// well clear of every edge. Any seed with that property would do; this
+    /// one was picked out of the 100-seed survey described in the class
+    /// remarks (against the older, client-side placement rule — re-verified
+    /// against the current backend-owned suggestion by a throwaway harness
+    /// reproducing <c>ComputeFreshPin</c> for a zero-population world, which
+    /// is what this test's own fresh world always is).
     /// </summary>
     private const int PinnedWorldSeed = 5538230;
 
@@ -134,8 +133,29 @@ public class FoundingOnClickedTileTests
             $"/api/v1/worlds/{world.Id}/plot-suggestion", cancellationToken);
         var suggested = suggestionResponse!.Plot;
 
+        // The landing page's preview camera is *locked* (LandingView's
+        // :lock-camera) and fits the whole preview island to the viewport
+        // (HexMapRenderer.previewFitZoom) rather than sitting at a fixed
+        // zoom — so where any hex renders depends on which hexes within
+        // PREVIEW_ISLAND_RADIUS of the suggested plot are land. The frontend
+        // answers that from its own client-side WorldModel (a bit-exact port
+        // of the backend's TerrainSampler); this asks the backend directly,
+        // which is the same terrain by construction. One bounding-box chunk
+        // covers the whole radius.
+        var chunk = await apiClient.GetFromJsonAsync<TileChunkResponse>(
+            $"/api/v1/worlds/{world.Id}/tiles"
+            + $"?qMin={suggested.Q - PreviewIslandRadius}&qMax={suggested.Q + PreviewIslandRadius}"
+            + $"&rMin={suggested.R - PreviewIslandRadius}&rMax={suggested.R + PreviewIslandRadius}",
+            cancellationToken);
+        var seaTiles = chunk!.Tiles
+            .Where(t => t.Terrain == "sea")
+            .Select(t => (t.Q, t.R))
+            .ToHashSet();
+        bool IsSea(TileCoordinate c) => seaTiles.Contains((c.Q, c.R));
+
         var box = await canvas.BoundingBoxAsync()
             ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
+        var zoom = PreviewFitZoom(suggested, (box.Width, box.Height), IsSea);
 
         // Nearest alternative plot that actually renders somewhere clickable.
         // "On the canvas" isn't enough on its own: the onboarding tray
@@ -150,7 +170,7 @@ public class FoundingOnClickedTileTests
         const double trayInset = 200;
         var clickable = suggestionResponse.Alternatives
             .OrderBy(p => HexDistance(suggested, p))
-            .Select(p => (Coord: p, Screen: ScreenPositionOf(p, suggested, (box.Width, box.Height))))
+            .Select(p => (Coord: p, Screen: ScreenPositionOf(p, suggested, (box.Width, box.Height), zoom)))
             .Where(c =>
                 c.Screen.x >= edgeInset && c.Screen.x <= box.Width - edgeInset
                 && c.Screen.y >= edgeInset && c.Screen.y <= box.Height - trayInset)
@@ -159,7 +179,7 @@ public class FoundingOnClickedTileTests
         Assert.True(
             clickable.Count > 0,
             $"No unclaimed start position other than the suggested one ({suggested.Q}|{suggested.R}) renders "
-            + $"inside the {box.Width}x{box.Height} preview viewport for seed {PinnedWorldSeed} — this test has "
+            + $"inside the {box.Width}x{box.Height} preview viewport (fit zoom {zoom:F3}) for seed {PinnedWorldSeed} — this test has "
             + "nothing it can click. Re-run the seed survey in this file's remarks and pin a different seed.");
 
         var (target, click) = clickable[0];
@@ -176,9 +196,13 @@ public class FoundingOnClickedTileTests
             // relative to it, so a canvas that resized (a late-arriving
             // scrollbar, a layout settling) after the first read would
             // otherwise keep aiming at the old geometry for all ten tries.
+            // The fit zoom is a function of that same viewport (the renderer
+            // re-fits a locked camera on every resize), so it's recomputed
+            // alongside it.
             var attemptBox = await canvas.BoundingBoxAsync()
                 ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
-            var attemptClick = ScreenPositionOf(target, suggested, (attemptBox.Width, attemptBox.Height));
+            var attemptZoom = PreviewFitZoom(suggested, (attemptBox.Width, attemptBox.Height), IsSea);
+            var attemptClick = ScreenPositionOf(target, suggested, (attemptBox.Width, attemptBox.Height), attemptZoom);
             await page.Mouse.ClickAsync(
                 attemptBox.X + (float)attemptClick.x, attemptBox.Y + (float)attemptClick.y);
             try
@@ -195,7 +219,7 @@ public class FoundingOnClickedTileTests
         Assert.True(
             founded,
             $"Clicking the non-suggested start position ({target.Q}|{target.R}) at "
-            + $"({click.x:F0},{click.y:F0}) in a {box.Width}x{box.Height} canvas never founded a settlement. "
+            + $"({click.x:F0},{click.y:F0}) in a {box.Width}x{box.Height} canvas (fit zoom {zoom:F3}) never founded a settlement. "
             + $"Suggested plot was ({suggested.Q}|{suggested.R}). "
             + $"Hero status: [{string.Join(" | ", await page.Locator(".hero .status").AllTextContentsAsync())}]. "
             + $"Console errors: [{string.Join(" | ", consoleErrors)}]");
@@ -221,24 +245,87 @@ public class FoundingOnClickedTileTests
     }
 
     // Ports HexMapRenderer's preview-mode iso projection (isoGridPosition,
-    // biasedCenterX, worldToScreen — src/frontend/src/lib/hex/geometry.ts and
-    // lib/map/camera.ts) just far enough to compute where a given start
-    // position renders on screen while the landing page previews around
-    // `previewCenter` (LandingView's suggested tile). If that projection ever
-    // changes, this starts clicking the wrong pixel and this test's own
-    // "Placed" wait will fail loudly rather than silently mis-asserting.
+    // biasedCenterX, worldToScreen, previewFitZoom — src/frontend/src/lib/hex/
+    // geometry.ts, lib/map/camera.ts and lib/map/HexMapRenderer.ts) just far
+    // enough to compute where a given start position renders on screen while
+    // the landing page previews around `previewCenter` (LandingView's
+    // suggested tile) with its camera locked to fit the island. If that
+    // projection ever changes, this starts clicking the wrong pixel and this
+    // test's own "Placed" wait will fail loudly rather than silently
+    // mis-asserting — which is exactly what happened when the fixed
+    // PREVIEW_ZOOM (0.6) this used to hardcode gave way to the viewport- and
+    // terrain-dependent fit below.
     private const double TileW = 168;
     private const double TileH = TileW * 92.0 / 200.0;
-    private const double PreviewZoom = 0.6;
     private const double ScreenBiasX = 0.16; // LandingView's :screen-bias-x
+    private const int PreviewIslandRadius = 7; // HexMapRenderer's PREVIEW_ISLAND_RADIUS
+    // settlementCameraOrigin's locked-preview branch: PREVIEW_ZOOM as the
+    // fallback, and the wheel-zoom clamp (0.05..4) as the bounds.
+    private const double PreviewFallbackZoom = 0.6;
+    private const double PreviewMinZoom = 0.05;
+    private const double PreviewMaxZoom = 4;
+
+    /// <summary>
+    /// HexMapRenderer.previewFitZoom: the largest zoom at which every land
+    /// hex within <see cref="PreviewIslandRadius"/> of <paramref name="center"/>
+    /// still fits the viewport, given that <see cref="ScreenBiasX"/> leaves
+    /// only <c>(0.5 - bias) * width</c> of usable half-width.
+    /// </summary>
+    private static double PreviewFitZoom(
+        TileCoordinate center, (double width, double height) viewport, Func<TileCoordinate, bool> isSea)
+    {
+        if (viewport.width == 0 || viewport.height == 0)
+        {
+            return PreviewFallbackZoom;
+        }
+
+        var centerGrid = IsoGridPosition(center);
+        var centerX = centerGrid.x + TileW / 2;
+        var centerY = centerGrid.y + TileH / 2;
+        double maxDx = 0, maxDy = 0;
+        foreach (var c in HexesInRadius(center, PreviewIslandRadius))
+        {
+            if (isSea(c))
+            {
+                continue;
+            }
+
+            var g = IsoGridPosition(c);
+            maxDx = Math.Max(maxDx, Math.Abs(g.x + TileW / 2 - centerX));
+            maxDy = Math.Max(maxDy, Math.Abs(g.y + TileH / 2 - centerY));
+        }
+
+        if (maxDx == 0 || maxDy == 0)
+        {
+            return PreviewFallbackZoom;
+        }
+
+        var usableHalfWidth = (0.5 - Math.Abs(ScreenBiasX)) * viewport.width;
+        var zoom = Math.Min(usableHalfWidth / maxDx, viewport.height / 2 / maxDy);
+        return Math.Min(PreviewMaxZoom, Math.Max(PreviewMinZoom, zoom));
+    }
+
+    // lib/hex/coords.ts's hexesInRadius.
+    private static IEnumerable<TileCoordinate> HexesInRadius(TileCoordinate center, int radius)
+    {
+        for (var dq = -radius; dq <= radius; dq++)
+        {
+            var rMin = Math.Max(-radius, -dq - radius);
+            var rMax = Math.Min(radius, -dq + radius);
+            for (var dr = rMin; dr <= rMax; dr++)
+            {
+                yield return new TileCoordinate(center.Q + dq, center.R + dr);
+            }
+        }
+    }
 
     private static (double x, double y) ScreenPositionOf(
-        TileCoordinate coord, TileCoordinate previewCenter, (double width, double height) viewport)
+        TileCoordinate coord, TileCoordinate previewCenter, (double width, double height) viewport, double zoom)
     {
         var previewGrid = IsoGridPosition(previewCenter);
         var centerX = previewGrid.x + TileW / 2;
         var centerY = previewGrid.y + TileH / 2;
-        var cameraX = centerX - (ScreenBiasX * viewport.width) / PreviewZoom;
+        var cameraX = centerX - (ScreenBiasX * viewport.width) / zoom;
         var cameraY = centerY;
 
         var grid = IsoGridPosition(coord);
@@ -246,8 +333,8 @@ public class FoundingOnClickedTileTests
         var worldY = grid.y + TileH / 2;
 
         return (
-            (worldX - cameraX) * PreviewZoom + viewport.width / 2,
-            (worldY - cameraY) * PreviewZoom + viewport.height / 2);
+            (worldX - cameraX) * zoom + viewport.width / 2,
+            (worldY - cameraY) * zoom + viewport.height / 2);
     }
 
     private static (double x, double y) IsoGridPosition(TileCoordinate c)
