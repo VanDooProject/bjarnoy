@@ -829,6 +829,34 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_building_catalogue_reports_cross_building_prerequisites()
+    {
+        using var client = Client();
+
+        var levelOne = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
+            "/api/v1/buildings?level=1", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(levelOne);
+        Assert.Empty(levelOne.Single(d => d.Type == "lumberjack").Prerequisites);
+
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("fishinghut", 4)],
+            levelOne.Single(d => d.Type == "dockyard").Prerequisites);
+        Assert.Equal(
+            [new BuildingPrerequisiteResponse("lumberjack", 5), new BuildingPrerequisiteResponse("farm", 3)],
+            levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
+
+        // Prerequisites gate placement, so they sit on level 1 only — bar the
+        // Great Storehouse, a flat level-10-only tier.
+        var levelTwo = await client.GetFromJsonAsync<List<BuildingDefinitionResponse>>(
+            "/api/v1/buildings?level=2", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(levelTwo);
+        Assert.Empty(levelTwo.Single(d => d.Type == "dockyard").Prerequisites);
+        Assert.NotEmpty(levelTwo.Single(d => d.Type == "greatstorehouse").Prerequisites);
+    }
+
+    [Fact]
     public async Task A_fishing_hut_can_be_built_on_coastal_water_and_reports_its_orientation()
     {
         using var client = Client();
