@@ -40,7 +40,7 @@ test.describe('zoom-driven world/settlement transition', () => {
     const zoomBefore = await cameraZoom(page);
 
     // Zoom in until the enter-settlement threshold is crossed (the shipped
-    // default is 0.8 — see zoomTransition.ts's DEFAULT_ENTER_SETTLEMENT_ZOOM).
+    // default is 0.5 — see zoomTransition.ts's DEFAULT_ENTER_SETTLEMENT_ZOOM).
     // Bounded loop rather than a fixed step count: this only needs to prove
     // the transition fires on a real sustained gesture, not pin the exact
     // number of wheel events it takes.
@@ -62,7 +62,7 @@ test.describe('zoom-driven world/settlement transition', () => {
     // that a route push happened to fire.
     await expect(page.locator('.hud-scrim')).toBeVisible();
 
-    // Zoom back out past the exit-to-world threshold (default 0.3).
+    // Zoom back out past the exit-to-world threshold (default 0.4).
     for (let i = 0; i < 60; i++) {
       await page.mouse.wheel(0, 120);
       await page.waitForTimeout(15);

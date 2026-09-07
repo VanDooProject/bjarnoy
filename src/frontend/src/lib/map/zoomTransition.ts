@@ -29,22 +29,36 @@ export interface ZoomTransitionTuning {
   enterSettlementZoom: number;
   /** Zoom-out threshold (settlement -> world). Must stay below enterSettlementZoom. */
   exitToWorldZoom: number;
+  /**
+   * How long (ms) the mode swap's crossfade takes — see HexMapRenderer's
+   * `zoomBy`/`onTick`: the `world` container (terrain/water/buildings, not
+   * fog or markers — those are stage siblings, see mount()'s own comment)
+   * drops to alpha 0 the instant a threshold is crossed, then eases back to
+   * 1 over this many milliseconds, masking the terrain/building swap
+   * instead of popping straight to the new mode's geometry. 0 disables the
+   * fade (an instant swap).
+   */
+  fadeMs: number;
 }
 
 // Shipped defaults, kept as separate named constants (rather than only
 // living inside the tuning object) so the debug panel can label its
 // "reset to default" action and so a test can assert the shipped values
-// against the renderer's own framing constants — see zoom-transition.md §3:
-// the enter threshold sits near the top of the settlement zoom range
-// (SETTLEMENT_DEFAULT_ZOOM = 0.85 in HexMapRenderer.ts), not the bottom,
-// since settlement-mode rendering costs more per visible hex.
-export const DEFAULT_ENTER_SETTLEMENT_ZOOM = 0.8;
-export const DEFAULT_EXIT_TO_WORLD_ZOOM = 0.3;
+// against the renderer's own framing constants — see zoom-transition.md §3.
+// The two thresholds sit close together (a narrow hysteresis band) so the
+// transition fires after a natural, short zoom gesture in either direction
+// rather than requiring a zoom sweep across most of the settlement zoom
+// range (SETTLEMENT_DEFAULT_ZOOM = 0.85 in HexMapRenderer.ts) before it
+// takes effect.
+export const DEFAULT_ENTER_SETTLEMENT_ZOOM = 0.5;
+export const DEFAULT_EXIT_TO_WORLD_ZOOM = 0.4;
+export const DEFAULT_FADE_MS = 260;
 
 export const zoomTransitionTuning: ZoomTransitionTuning = {
   enabled: true,
   enterSettlementZoom: DEFAULT_ENTER_SETTLEMENT_ZOOM,
   exitToWorldZoom: DEFAULT_EXIT_TO_WORLD_ZOOM,
+  fadeMs: DEFAULT_FADE_MS,
 };
 
 /**
@@ -52,12 +66,14 @@ export const zoomTransitionTuning: ZoomTransitionTuning = {
  * pair would make every zoom step "cross" both on the way past, firing
  * enter and exit in the same gesture. Called by the debug panel after each
  * slider drag; not enforced by the interface type since a slider mid-drag
- * legitimately passes through invalid intermediate states.
+ * legitimately passes through invalid intermediate states. Also clamps
+ * fadeMs to a sane range for the same reason.
  */
 export function clampTuning(tuning: ZoomTransitionTuning): ZoomTransitionTuning {
   const minGap = 0.01;
   const enter = Math.max(tuning.enterSettlementZoom, tuning.exitToWorldZoom + minGap);
-  return { ...tuning, enterSettlementZoom: enter };
+  const fadeMs = Math.min(800, Math.max(0, tuning.fadeMs));
+  return { ...tuning, enterSettlementZoom: enter, fadeMs };
 }
 
 /**

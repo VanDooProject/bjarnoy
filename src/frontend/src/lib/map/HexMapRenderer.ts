@@ -1335,6 +1335,15 @@ export class HexMapRenderer {
     // than snapping.
     const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
     this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
+    // Crossfade back in after a zoom-driven mode switch dropped this.world
+    // to alpha 0 (see zoomBy) — time-constant based so the fade actually
+    // takes zoomTransitionTuning.fadeMs regardless of frame rate, rather
+    // than the fixed-per-frame factor markerLayer uses above.
+    if (this.world.alpha < 1) {
+      const fadeMs = Math.max(1, zoomTransitionTuning.fadeMs);
+      const k = 1 - Math.exp(-this.app!.ticker.deltaMS / fadeMs);
+      this.world.alpha = Math.min(1, this.world.alpha + (1 - this.world.alpha) * k);
+    }
     if (this.options.mode === 'world' && !this.deepFogOnly && waterDebugFlags.legacyWaveSquiggles) this.drawWaves();
     this.waterLayer.tick(performance.now());
     if (this.idleDrift) {
@@ -1815,7 +1824,15 @@ export class HexMapRenderer {
     const crossing = transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
     if (crossing) {
       const target: RenderMode = crossing === 'enter' ? 'settlement' : 'world';
+      // Drop the terrain/water/building layers (this.world — fog and the
+      // settlement/marker overlay are stage siblings, see mount()'s own
+      // comment, so they stay put and keep the fog continuous across the
+      // swap) to invisible right before setMode() rebuilds them, then let
+      // onTick ease it back to opaque — crossfades the mode swap instead of
+      // popping straight to the new geometry.
+      if (zoomTransitionTuning.fadeMs > 0) this.world.alpha = 0;
       if (this.setMode(target)) this.options.onZoomModeChange?.(target);
+      else this.world.alpha = 1; // setMode declined (e.g. settlement textures not ready yet) — nothing changed, stay visible
     }
   }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Tuning panel for the zoom-driven world<->settlement transition — see
-// docs/design/zoom-transition.md §2. Mounted by both WorldMapView.vue and
-// SettlementView.vue under ?debug=1, same as the fog/water panels.
+// docs/design/zoom-transition.md §2. Mounted by MapView.vue (the shared
+// /world and /settlement host) under ?debug=1, same as the fog/water panels.
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import DebugPanel from './DebugPanel.vue';
 import { clampTuning, zoomTransitionTuning, type ZoomTransitionTuning } from '../../lib/map/zoomTransition';
@@ -32,6 +32,7 @@ function load() {
     if (typeof saved.enabled === 'boolean') tuning.enabled = saved.enabled;
     if (typeof saved.enterSettlementZoom === 'number') tuning.enterSettlementZoom = saved.enterSettlementZoom;
     if (typeof saved.exitToWorldZoom === 'number') tuning.exitToWorldZoom = saved.exitToWorldZoom;
+    if (typeof saved.fadeMs === 'number') tuning.fadeMs = saved.fadeMs;
   } catch {
     // Corrupt/old-shape value — ignore and keep the shipped defaults.
   }
@@ -40,7 +41,12 @@ function load() {
 function save() {
   sessionStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ enabled: tuning.enabled, enterSettlementZoom: tuning.enterSettlementZoom, exitToWorldZoom: tuning.exitToWorldZoom }),
+    JSON.stringify({
+      enabled: tuning.enabled,
+      enterSettlementZoom: tuning.enterSettlementZoom,
+      exitToWorldZoom: tuning.exitToWorldZoom,
+      fadeMs: tuning.fadeMs,
+    }),
   );
 }
 
@@ -69,7 +75,9 @@ onUnmounted(() => {
 
 const ENTER_RANGE = { min: 0.3, max: 1.5, step: 0.05 };
 const EXIT_RANGE = { min: 0.05, max: 0.5, step: 0.02 };
+const FADE_RANGE = { min: 0, max: 800, step: 20 };
 const fmt = (v: number) => `${v.toFixed(2)}×`;
+const fmtMs = (v: number) => `${v}ms`;
 </script>
 
 <template>
@@ -112,6 +120,22 @@ const fmt = (v: number) => `${v.toFixed(2)}×`;
         :step="EXIT_RANGE.step"
         :disabled="!tuning.enabled"
         v-model.number="tuning.exitToWorldZoom"
+        @input="onSliderChange"
+      />
+    </div>
+
+    <div class="row slider-row" :class="{ disabled: !tuning.enabled }">
+      <span class="slider-label">
+        Fade duration
+        <span class="slider-value">{{ fmtMs(tuning.fadeMs) }}</span>
+      </span>
+      <input
+        type="range"
+        :min="FADE_RANGE.min"
+        :max="FADE_RANGE.max"
+        :step="FADE_RANGE.step"
+        :disabled="!tuning.enabled"
+        v-model.number="tuning.fadeMs"
         @input="onSliderChange"
       />
     </div>

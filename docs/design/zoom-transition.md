@@ -279,3 +279,36 @@ in-memory `hasFoundedSettlement` and redirected to the landing page — every
 existing world-map e2e spec had been unknowingly exercising the landing
 page's preview canvas instead of the real world map. Fixed to navigate via
 a real HudNav click instead.
+
+### 9.1 Post-review follow-up
+
+Playtesting the shipped defaults surfaced three more fixes:
+
+- **Hysteresis band was too wide.** `DEFAULT_ENTER_SETTLEMENT_ZOOM`/
+  `DEFAULT_EXIT_TO_WORLD_ZOOM` shipped at 0.8/0.3 — a 0.5 gap, meaning a
+  near-full zoom sweep across the settlement range in either direction
+  before the mode actually flipped. Narrowed to 0.5/0.4 (a 0.1 gap): still
+  clear of `WORLD_DEFAULT_ZOOM`/`FOG_MARGIN_MIN_ZOOM` (0.22) and
+  `SETTLEMENT_DEFAULT_ZOOM` (0.85) on their respective sides (§3's edge-
+  triggering reasoning still holds), but the transition now fires after a
+  short, natural zoom gesture rather than a deliberate one.
+- **The mode swap was a hard cut.** `setMode()` rebuilds `this.world`'s
+  children synchronously — terrain/water/building layers popping straight
+  from one mode's geometry to the other's read as a jarring snap even
+  though the camera itself never moved. `zoomBy()` now drops `this.world`'s
+  alpha to 0 right before calling `setMode()`, and `onTick` eases it back
+  to 1 over `zoomTransitionTuning.fadeMs` (default 260ms, tunable in the
+  debug panel, 0 disables it) — a time-constant-based ease so the fade
+  takes the same wall-clock duration regardless of frame rate. Fog
+  (`blackFogLayer`/`whiteMistLayer`) and the marker/settlement-name-badge
+  layer are stage siblings of `this.world`, not children (see mount()'s own
+  layering comment), so they're untouched by this — fog keeps rendering
+  continuously through the fade, per §1's original requirement.
+- **TopBar's title duplicated the in-scene settlement badge.** Settlement
+  mode already floats the settlement's own name over the longhouse hex
+  (`HexMapRenderer.rebuildSettlementLabels`); `TopBar.vue`'s settlement-name
+  + island-name caption showed the same information a second time once
+  zoomed all the way in. `TopBar` now takes a `hideTitle` prop, and
+  `MapView.vue` passes `mode === 'settlement'` — the title stays visible in
+  world mode (no in-scene badge there) and disappears once past the
+  transition into settlement mode.

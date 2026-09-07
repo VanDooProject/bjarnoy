@@ -3,6 +3,7 @@ import {
   clampTuning,
   DEFAULT_ENTER_SETTLEMENT_ZOOM,
   DEFAULT_EXIT_TO_WORLD_ZOOM,
+  DEFAULT_FADE_MS,
   transitionForZoom,
   type ZoomTransitionTuning,
 } from './zoomTransition';
@@ -11,6 +12,7 @@ const tuning: ZoomTransitionTuning = {
   enabled: true,
   enterSettlementZoom: 0.8,
   exitToWorldZoom: 0.3,
+  fadeMs: DEFAULT_FADE_MS,
 };
 
 describe('transitionForZoom', () => {
@@ -61,6 +63,7 @@ describe('transitionForZoom', () => {
       enabled: true,
       enterSettlementZoom: DEFAULT_ENTER_SETTLEMENT_ZOOM,
       exitToWorldZoom: DEFAULT_EXIT_TO_WORLD_ZOOM,
+      fadeMs: DEFAULT_FADE_MS,
     };
     const WORLD_DEFAULT_ZOOM = 0.22;
     const FOG_MARGIN_MIN_ZOOM = 0.22;
@@ -77,15 +80,31 @@ describe('clampTuning', () => {
   });
 
   it('pushes enterSettlementZoom above exitToWorldZoom when a slider drag inverts them', () => {
-    const inverted: ZoomTransitionTuning = { enabled: true, enterSettlementZoom: 0.2, exitToWorldZoom: 0.5 };
+    const inverted: ZoomTransitionTuning = {
+      enabled: true,
+      enterSettlementZoom: 0.2,
+      exitToWorldZoom: 0.5,
+      fadeMs: DEFAULT_FADE_MS,
+    };
     const fixed = clampTuning(inverted);
     expect(fixed.enterSettlementZoom).toBeGreaterThan(fixed.exitToWorldZoom);
     expect(fixed.exitToWorldZoom).toBe(0.5);
   });
 
   it('pushes enterSettlementZoom above an equal exitToWorldZoom', () => {
-    const equal: ZoomTransitionTuning = { enabled: true, enterSettlementZoom: 0.5, exitToWorldZoom: 0.5 };
+    const equal: ZoomTransitionTuning = {
+      enabled: true,
+      enterSettlementZoom: 0.5,
+      exitToWorldZoom: 0.5,
+      fadeMs: DEFAULT_FADE_MS,
+    };
     const fixed = clampTuning(equal);
     expect(fixed.enterSettlementZoom).toBeGreaterThan(fixed.exitToWorldZoom);
+  });
+
+  it('clamps fadeMs into a sane [0, 800] range', () => {
+    expect(clampTuning({ ...tuning, fadeMs: -50 }).fadeMs).toBe(0);
+    expect(clampTuning({ ...tuning, fadeMs: 5000 }).fadeMs).toBe(800);
+    expect(clampTuning({ ...tuning, fadeMs: 400 }).fadeMs).toBe(400);
   });
 });
