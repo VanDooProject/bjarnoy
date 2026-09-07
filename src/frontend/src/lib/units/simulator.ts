@@ -54,5 +54,5 @@ export function buildSimulatorRequest(
  */
 export function isPremiumRequiredError(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 403) return false;
-  return (error.problem as { error?: string } | undefined)?.error === 'premium_required';
+  return error.problem?.error === 'premium_required';
 }

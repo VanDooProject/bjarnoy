@@ -768,6 +768,15 @@ export interface ProblemDetails {
    * actually distinguishes them.
    */
   rejection?: string;
+  /**
+   * `AuthErrorResponse`'s snake_case error code (`user_banned`, `user_locked`,
+   * `not_owner`, `authentication_required`, `premium_required`) — a
+   * completely separate wire shape from the RFC 7807 fields above, but the
+   * backend serializes both under the same JSON body on error responses, so
+   * it's typed here rather than as a second interface callers would need to
+   * union in.
+   */
+  error?: string;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/LeaderboardContracts.cs.

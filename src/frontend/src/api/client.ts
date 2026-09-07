@@ -138,7 +138,7 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
 
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
-    if (res.status === 403 && (problem as { error?: string } | undefined)?.error === 'user_locked') {
+    if (res.status === 403 && (problem as ProblemDetails | undefined)?.error === 'user_locked') {
       authHooks.onAccountLocked();
     }
     throw new ApiError(res.status, problem);
