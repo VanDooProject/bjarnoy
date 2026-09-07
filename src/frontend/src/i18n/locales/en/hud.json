@@ -51,5 +51,50 @@
     "modifierShrineFavour": "+{percent}% {domain} production",
     "domainWoodStone": "Wood/Stone",
     "domainFood": "Food"
+  },
+  "ringMenu": {
+    "back": "Back",
+    "backButton": "‹ BACK",
+    "buildHub": "BUILD",
+    "categories": {
+      "housing": "Housing",
+      "resource": "Resource",
+      "military": "Military",
+      "logistics": "Logistics",
+      "religion": "Shrines",
+      "water": "Water"
+    },
+    "actions": {
+      "info": "Info",
+      "attackRaid": "Attack / Raid",
+      "combatNotImplemented": "Combat is not implemented yet",
+      "landHere": "Land here",
+      "sendSettlers": "Send settlers",
+      "noSettlersYet": "You have no settlers available yet",
+      "upgrade": "Upgrade",
+      "notEnough": "Not enough {resources}",
+      "details": "Details",
+      "raze": "Raze",
+      "cantRazeLonghouse": "Can't raze the longhouse",
+      "notWiredYet": "Not wired to the backend yet",
+      "trainUnits": "Train units",
+      "build": "Build",
+      "openWater": "Open water"
+    },
+    "hexCoord": "HEX {q}, {r}",
+    "levelHexCoord": "LV {level} · HEX {q}, {r}",
+    "level1": "Level 1 · {status}",
+    "locked": "locked",
+    "ready": "ready",
+    "buildableHere": "BUILDABLE HERE",
+    "cost": "Cost",
+    "buildTime": "Build time",
+    "gives": "Gives",
+    "lockedCta": "LOCKED",
+    "buildCta": "BUILD {label}",
+    "errors": {
+      "couldNotQueueBuild": "Could not queue that build.",
+      "couldNotQueueUpgrade": "Could not queue that upgrade."
+    }
   }
 }

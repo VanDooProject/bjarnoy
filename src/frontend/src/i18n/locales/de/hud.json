@@ -51,5 +51,50 @@
     "modifierShrineFavour": "+{percent}% {domain}-Produktion",
     "domainWoodStone": "Holz/Stein",
     "domainFood": "Nahrung"
+  },
+  "ringMenu": {
+    "back": "Zurück",
+    "backButton": "‹ ZURÜCK",
+    "buildHub": "BAUEN",
+    "categories": {
+      "housing": "Wohnen",
+      "resource": "Ressource",
+      "military": "Militär",
+      "logistics": "Logistik",
+      "religion": "Schreine",
+      "water": "Wasser"
+    },
+    "actions": {
+      "info": "Info",
+      "attackRaid": "Angriff / Überfall",
+      "combatNotImplemented": "Kampf ist noch nicht implementiert",
+      "landHere": "Hier landen",
+      "sendSettlers": "Siedler entsenden",
+      "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
+      "upgrade": "Ausbauen",
+      "notEnough": "Nicht genug {resources}",
+      "details": "Details",
+      "raze": "Abreißen",
+      "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
+      "notWiredYet": "Noch nicht mit dem Backend verbunden",
+      "trainUnits": "Einheiten ausbilden",
+      "build": "Bauen",
+      "openWater": "Offenes Wasser"
+    },
+    "hexCoord": "HEX {q}, {r}",
+    "levelHexCoord": "STF {level} · HEX {q}, {r}",
+    "level1": "Stufe 1 · {status}",
+    "locked": "gesperrt",
+    "ready": "bereit",
+    "buildableHere": "HIER BAUBAR",
+    "cost": "Kosten",
+    "buildTime": "Bauzeit",
+    "gives": "Ertrag",
+    "lockedCta": "GESPERRT",
+    "buildCta": "{label} BAUEN",
+    "errors": {
+      "couldNotQueueBuild": "Der Bau konnte nicht eingereiht werden.",
+      "couldNotQueueUpgrade": "Der Ausbau konnte nicht eingereiht werden."
+    }
   }
 }

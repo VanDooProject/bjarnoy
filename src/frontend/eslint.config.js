@@ -16,7 +16,6 @@ const LEGACY_UNMIGRATED_VUE_FILES = [
   'src/components/hud/ExpansionPanel.vue',
   'src/components/hud/FogDebugPanel.vue',
   'src/components/hud/FogPerfPanel.vue',
-  'src/components/hud/RingMenu.vue',
   'src/components/hud/TradePanel.vue',
   'src/components/hud/TrainingModal.vue',
   'src/components/hud/TrainingQueuePanel.vue',

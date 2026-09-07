@@ -10,6 +10,8 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import RingMenu, { type RingCategory } from './RingMenu.vue';
+import { createTestI18n } from '../../test/i18n';
+import enHud from '../../i18n/locales/en/hud.json';
 
 const CATEGORIES: RingCategory[] = [
   {
@@ -46,6 +48,7 @@ function ring(overrides: Record<string, unknown> = {}) {
       stock: { wood: 150, stone: 150, food: 150, iron: 0 },
       ...overrides,
     },
+    global: { plugins: [createTestI18n({ hud: enHud })] },
     attachTo: document.body,
   });
 }
