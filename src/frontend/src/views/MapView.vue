@@ -902,7 +902,7 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" />
-    <TopBar>
+    <TopBar :hide-title="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav />
     </TopBar>
