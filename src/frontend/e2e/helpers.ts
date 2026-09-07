@@ -14,9 +14,28 @@ export async function waitForMapReady(page: Page): Promise<void> {
   );
 }
 
-/** Navigates to the world map and waits for its renderer to be ready. */
+/**
+ * Navigates to the world map and waits for its renderer to be ready.
+ *
+ * Real client-side navigation (the HudNav "World map" button), not
+ * `page.goto('/world')` — a hard navigation reloads the whole app, and in
+ * demo mode `hasFoundedSettlement` is intentionally never persisted to
+ * localStorage (player.ts's own remarks: demo mode's WorldModel is pure
+ * in-memory, so every reload starts a fresh session). A reload here silently
+ * fails the router guard and redirects to `/`, whose landing-page preview
+ * canvas also satisfies `.map-container[data-map-ready]` — so every caller
+ * of this function was actually driving the *landing page's* canvas, not
+ * the world map, without a single assertion failing to say so.
+ *
+ * docs/design/zoom-transition.md: `/world` and `/settlement` now share one
+ * persistent renderer (MapView.vue), so `data-map-ready` alone no longer
+ * distinguishes "the world map is up" from "the settlement view never went
+ * away" — waiting for the URL first is what actually confirms the mode
+ * switch happened.
+ */
 export async function gotoWorldMap(page: Page): Promise<void> {
-  await page.goto('/world');
+  await page.locator('.hud-nav button', { hasText: 'World map' }).click();
+  await page.waitForURL('**/world');
   await waitForMapReady(page);
 }
 
