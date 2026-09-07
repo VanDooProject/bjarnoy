@@ -220,8 +220,9 @@ public class BuildingCatalogueTests
         var definition = BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1);
 
         Assert.Equal(10, definition.RequiredLonghouseLevel);
-        Assert.Equal(BuildingType.StorageHouse, definition.RequiredBuildingType);
-        Assert.Equal(10, definition.RequiredBuildingLevel);
+        var prerequisite = Assert.Single(definition.Prerequisites);
+        Assert.Equal(BuildingType.StorageHouse, prerequisite.Type);
+        Assert.Equal(10, prerequisite.Level);
     }
 
     [Fact]
@@ -891,6 +892,58 @@ public class SettlementTests
             BuildingType.GreatStorehouse, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_prerequisite_is_judged_by_the_settlements_highest_building_of_that_type()
+    {
+        // Two storage houses: an unfinished level-0 stub on the lower coord and
+        // the real level-10 one behind it. The check must find the level 10,
+        // not whichever building happens to come first.
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
+                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 10),
+            ],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                ResourceAmounts.Zero,
+                ResourceAmounts.Uniform(1_000_000),
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.GreatStorehouse, new HexCoord(3, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_level_zero_foundation_does_not_satisfy_a_prerequisite()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
+            ],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                ResourceAmounts.Zero,
+                ResourceAmounts.Uniform(1_000_000),
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.GreatStorehouse, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
+        Assert.Equal(BuildingType.StorageHouse, decision.MissingPrerequisite?.Type);
+        Assert.Equal(10, decision.MissingPrerequisite?.Level);
     }
 
     /// <summary>A settlement with the given longhouse level and a lot of stock, so affordability is never the thing under test.</summary>

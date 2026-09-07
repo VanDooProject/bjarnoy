@@ -92,6 +92,16 @@ public sealed record Settlement
     public int LonghouseLevel =>
         Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse).Level;
 
+    /// <summary>
+    /// The level of this settlement's best building of <paramref name="type"/>,
+    /// or 0 when it has none. A settlement may hold several buildings of one
+    /// type (two storage houses, a second tower), so a prerequisite asking for
+    /// "a storage house at level 10" is answered by the highest one rather
+    /// than by whichever happens to come first in coordinate order.
+    /// </summary>
+    private int HighestLevelOf(BuildingType type) =>
+        Buildings.Where(b => b.Type == type).Select(b => b.Level).DefaultIfEmpty(0).Max();
+
     /// <summary>Food consumed per hour by everything currently in <see cref="Garrison"/>.</summary>
     public double UpkeepPerHour => TotalUpkeepPerHour(Garrison);
 
@@ -997,12 +1007,16 @@ public sealed record Settlement
             return BuildDecision.Rejected(BuildRejection.LonghouseTooLow);
         }
 
-        if (definition.RequiredBuildingType is { } requiredType)
+        // Every prerequisite must be met, and each is judged against the
+        // settlement's *highest-level* building of that type — not the first
+        // one in coordinate order, which would let a second, lower building of
+        // the same type (or a level-0 foundation stub sorting first) decide the
+        // answer.
+        foreach (var prerequisite in definition.Prerequisites)
         {
-            var requiredLevel = Buildings.FirstOrDefault(b => b.Type == requiredType).Level;
-            if (requiredLevel < definition.RequiredBuildingLevel)
+            if (HighestLevelOf(prerequisite.Type) < prerequisite.Level)
             {
-                return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow);
+                return BuildDecision.Rejected(BuildRejection.RequiredBuildingTooLow, prerequisite);
             }
         }
 

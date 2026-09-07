@@ -353,7 +353,10 @@ public static class BuildingCatalogue
     /// A flat level-10-only late-game storage tier: both the Longhouse and
     /// the settlement's own <see cref="BuildingType.StorageHouse"/> must
     /// already be level 10 (see <see cref="Settlement.PlanBuild"/>'s
-    /// <see cref="BuildingDefinition.RequiredBuildingType"/> check).
+    /// <see cref="BuildingDefinition.Prerequisites"/> check). Unlike every
+    /// other building's prerequisites, which gate level 1 only, this one is
+    /// carried on every level — the tier is flat, so there is only ever one
+    /// rung to gate.
     /// </summary>
     private static BuildingDefinition GreatStorehouse(int level) => new()
     {
@@ -364,8 +367,7 @@ public static class BuildingCatalogue
         StorageCapacity = ResourceAmounts.Uniform(2000) * level,
         AllowedTerrain = Grass,
         RequiredLonghouseLevel = 10,
-        RequiredBuildingType = BuildingType.StorageHouse,
-        RequiredBuildingLevel = 10,
+        Prerequisites = [new BuildingPrerequisite(BuildingType.StorageHouse, 10)],
     };
 
     /// <summary>

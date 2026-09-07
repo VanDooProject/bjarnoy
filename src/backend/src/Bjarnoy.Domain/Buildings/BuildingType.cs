@@ -57,7 +57,7 @@ public enum BuildingType
     /// <summary>
     /// A late-game storage tier on grass, gated behind both a level-10
     /// Longhouse and a level-10 <see cref="StorageHouse"/> of its own — see
-    /// <see cref="BuildingDefinition.RequiredBuildingType"/>.
+    /// <see cref="BuildingDefinition.Prerequisites"/>.
     /// </summary>
     GreatStorehouse = 11,
 
