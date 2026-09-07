@@ -363,8 +363,10 @@ function clear() {
 }
 .thumb {
   flex: none;
-  width: 30px;
-  height: 42px;
+  /* The showcase art draws a building on its terrain tile, so below about
+     this size the tile is all you can make out and every card looks alike. */
+  width: 38px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
