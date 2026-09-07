@@ -38,6 +38,7 @@ onMounted(async () => {
   // needs `selectedSettlementId` already set so it doesn't briefly register
   // this player's own settlement as a rival (wrong `ownerId`) before
   // `restoreLiveSettlement` corrects it.
+  world.setWorldMapActive(true);
   await world.bootstrapLiveWorld();
   if (player.settlementId) {
     await world.restoreLiveSettlement(player.id, player.settlementId);
@@ -45,7 +46,10 @@ onMounted(async () => {
   }
   void world.refreshWorldSettlements();
 });
-onUnmounted(() => world.stopHudSync());
+onUnmounted(() => {
+  world.stopHudSync();
+  world.setWorldMapActive(false);
+});
 
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
 // renderer as soon as both the renderer and a bitmap exist. `worldRadius`

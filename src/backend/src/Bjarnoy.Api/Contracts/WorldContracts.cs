@@ -138,6 +138,25 @@ public sealed record IslandResponse(
 
 public sealed record TileCoordinate(int Q, int R);
 
+/// <summary>
+/// The plot a landing-page visitor is offered right now — see
+/// <c>PlotReservationService</c>. Never carries an owner id, IP, or anyone
+/// else's reservation: only the requesting visitor's own pinned plot and
+/// advisory alternatives.
+/// </summary>
+/// <param name="Reserved">
+/// Whether this plot is exclusively held for the requester right now (it
+/// may not be, e.g. an abuse cap was hit or the world isn't joinable) — a
+/// visitor can always still attempt to found on <see cref="Plot"/> either
+/// way, and <c>FoundAsync</c>'s own checks are the real authority.
+/// </param>
+public sealed record PlotSuggestionResponse(
+    Guid IslandId,
+    TileCoordinate Plot,
+    IReadOnlyList<TileCoordinate> Alternatives,
+    bool Reserved,
+    DateTimeOffset? ReservedUntil);
+
 /// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>, <c>bend60</c>.</param>
 /// <param name="InDirections">
 /// The orientations (<c>E</c>/<c>NE</c>/<c>NW</c>/<c>W</c>/<c>SW</c>/<c>SE</c>) this tile's river
