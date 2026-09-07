@@ -250,8 +250,32 @@ lifecycle each, and easy to regress):
 9. `test(e2e): zoom transition, fog continuity, leak guard`
 10. This doc, kept up to date with whichever §5/§3 open decisions get made.
 
-## 9. Open decisions (need a call before implementation)
+## 9. Implementation status — shipped
 
-- §3: settlement targeting on zoom-in — LOD-only (recommended) vs.
-  claim-radius-gated.
-- §5: which of the three persistent-host shapes to build.
+All 9 steps above landed on `claude/zoom-settlement-worldmap-threshold-mhr2ic`.
+The two open decisions were resolved as:
+
+- §3 settlement targeting: **LOD-only**, as recommended — zooming in never
+  changes `settlementId` or moves the camera; it only flips which content
+  renders (tile art vs. flat hexes) at whatever spot the world map was
+  already centred on.
+- §5 persistent host: **option (a)**, a single merged `MapView.vue` mounted
+  at both `/world` and `/settlement` (`WorldMapView.vue`/`SettlementView.vue`
+  retired; `WorldMapCanvas.vue` kept standalone for `AdminWorldReseedView`'s
+  own unrelated world-preview renderer).
+
+Verified against a real production build (`vite build` + `vite preview`)
+with the vendored tile-art submodule populated, not just unit-tested: a full
+wheel-zoom gesture genuinely crosses the enter/exit thresholds, switches
+mode with the camera continuing past where it started (no snap), and the
+debug panel's live tuning reaches the renderer — see
+`e2e/zoom-transition.spec.ts`. Mobile pinch-to-zoom (§2) remains the noted
+follow-up; the anchor-preserving zoom math already lives at
+`HexMapRenderer.ts`'s `zoomBy()` as the seam for it.
+
+One additional fix surfaced along the way: `e2e/helpers.ts`'s `gotoWorldMap`
+used to `page.goto('/world')`, a hard reload that silently lost demo mode's
+in-memory `hasFoundedSettlement` and redirected to the landing page — every
+existing world-map e2e spec had been unknowingly exercising the landing
+page's preview canvas instead of the real world map. Fixed to navigate via
+a real HudNav click instead.
