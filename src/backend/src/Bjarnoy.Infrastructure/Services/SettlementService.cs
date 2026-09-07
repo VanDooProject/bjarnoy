@@ -6,6 +6,7 @@ using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -26,6 +27,17 @@ public enum FoundingRejection
     WorldNotActive,
     JoinsClosed,
     NotStartedYet,
+
+    /// <summary>
+    /// The plot falls within another visitor's live, exclusive landing-page
+    /// reservation (<see cref="PlotReservationService"/>) — someone else is
+    /// about to found there. Distinct from <see cref="PlotTaken"/> (an
+    /// actual settlement already exists) and <see cref="TooCloseToNeighbour"/>
+    /// (a real settlement's territory) — this is a soft, time-limited hold,
+    /// not a database row, but enforced here for real rather than left as a
+    /// UI-only suggestion: see <c>docs/plans/landing-plot-reservation.md</c>.
+    /// </summary>
+    PlotReserved,
 }
 
 public sealed record FoundingResult(FoundingRejection Rejection, SettlementEntity? Settlement = null)
@@ -146,6 +158,7 @@ public sealed record CompleteQueuesResult(
 public sealed class SettlementService(
     GameDbContext dbContext,
     TimeProvider timeProvider,
+    IPlotReservationStore reservations,
     ILogger<SettlementService> logger)
 {
     /// <summary>
@@ -188,6 +201,7 @@ public sealed class SettlementService(
 
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
+    private readonly IPlotReservationStore _reservations = reservations;
     private readonly ILogger<SettlementService> _logger = logger;
 
     /// <summary>
@@ -311,6 +325,15 @@ public sealed class SettlementService(
                 return new FoundingResult(FoundingRejection.TooCloseToNeighbour);
         }
 
+        // A landing-page visitor other than this caller may be holding an
+        // exclusive, time-limited reservation on this plot right now (see
+        // PlotReservationService) — real, not just a UI suggestion. The
+        // caller's own reservation (if any) never blocks their own founding.
+        if (_reservations.IsBlockedByOtherOwner(worldId, coord, ownerId, PlotReservationService.ReservationSpacing))
+        {
+            return new FoundingResult(FoundingRejection.PlotReserved);
+        }
+
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
         var (production, capacity) = BuildingCatalogue.Totals([(BuildingType.Longhouse, 1)]);
         production *= world.SpeedFactor;
@@ -366,6 +389,8 @@ public sealed class SettlementService(
 
             throw;
         }
+
+        _reservations.Release(worldId, ownerId);
 
         _logger.LogInformation(
             "Settlement {Name} ({Id}) founded at {Coord} on island {IslandId}.",
