@@ -7,7 +7,6 @@ import intlifyVueI18n from '@intlify/eslint-plugin-vue-i18n';
 // add a *new* file here; a new component should be written with i18n from
 // the start, which is exactly what this lint rule is for.
 const LEGACY_UNMIGRATED_VUE_FILES = [
-  'src/components/AccountRestrictedBanner.vue',
   'src/components/admin/ActivityChart.vue',
   'src/components/battle/BattleReportCard.vue',
   'src/components/hud/ArmyPanel.vue',
@@ -31,10 +30,8 @@ const LEGACY_UNMIGRATED_VUE_FILES = [
   'src/views/GuildView.vue',
   'src/views/ImpressumView.vue',
   'src/views/LeaderboardView.vue',
-  'src/views/LoginView.vue',
   'src/views/MessagesView.vue',
   'src/views/ProfileView.vue',
-  'src/views/RegisterView.vue',
   'src/views/ReportsView.vue',
   'src/views/SimulatorView.vue',
   'src/views/TechTreeView.vue',

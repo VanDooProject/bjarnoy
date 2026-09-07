@@ -3,6 +3,9 @@ import catalogue from './locales/en/catalogue.json';
 import landing from './locales/en/landing.json';
 import onboarding from './locales/en/onboarding.json';
 import demoModeBadge from './locales/en/demoModeBadge.json';
+import login from './locales/en/login.json';
+import register from './locales/en/register.json';
+import accountRestrictedBanner from './locales/en/accountRestrictedBanner.json';
 
 // English is the source of truth for keys: every other locale is typed
 // against its shape, so a missing/misspelled key is a `vue-tsc -b` error.
@@ -13,4 +16,7 @@ export interface MessageSchema {
   landing: typeof landing;
   onboarding: typeof onboarding;
   demoModeBadge: typeof demoModeBadge;
+  login: typeof login;
+  register: typeof register;
+  accountRestrictedBanner: typeof accountRestrictedBanner;
 }

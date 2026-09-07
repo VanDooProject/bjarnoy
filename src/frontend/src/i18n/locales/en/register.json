@@ -1,0 +1,18 @@
+{
+  "brand": "Fjørdhold",
+  "title": "Create account",
+  "hint": "Turn your settlement into a permanent account so you can log back in from any device.",
+  "usernameLabel": "Username",
+  "passwordLabel": "Password",
+  "confirmPasswordLabel": "Confirm password",
+  "submit": "Create account",
+  "submitting": "Creating account…",
+  "loginLink": "Already have an account? Log in",
+  "back": "← Back",
+  "errors": {
+    "passwordMismatch": "Passwords do not match.",
+    "usernameTaken": "That username is taken.",
+    "validation": "Username must be at least 3 characters and password at least 8.",
+    "generic": "Could not create account. Try again."
+  }
+}

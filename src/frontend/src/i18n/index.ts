@@ -9,6 +9,12 @@ import enOnboarding from './locales/en/onboarding.json';
 import deOnboarding from './locales/de/onboarding.json';
 import enDemoModeBadge from './locales/en/demoModeBadge.json';
 import deDemoModeBadge from './locales/de/demoModeBadge.json';
+import enLogin from './locales/en/login.json';
+import deLogin from './locales/de/login.json';
+import enRegister from './locales/en/register.json';
+import deRegister from './locales/de/register.json';
+import enAccountRestrictedBanner from './locales/en/accountRestrictedBanner.json';
+import deAccountRestrictedBanner from './locales/de/accountRestrictedBanner.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -47,8 +53,26 @@ export const i18n = createI18n({
   missingWarn: false,
   fallbackWarn: false,
   messages: {
-    en: { common: enCommon, catalogue: enCatalogue, landing: enLanding, onboarding: enOnboarding, demoModeBadge: enDemoModeBadge },
-    de: { common: deCommon, catalogue: deCatalogue, landing: deLanding, onboarding: deOnboarding, demoModeBadge: deDemoModeBadge },
+    en: {
+      common: enCommon,
+      catalogue: enCatalogue,
+      landing: enLanding,
+      onboarding: enOnboarding,
+      demoModeBadge: enDemoModeBadge,
+      login: enLogin,
+      register: enRegister,
+      accountRestrictedBanner: enAccountRestrictedBanner,
+    },
+    de: {
+      common: deCommon,
+      catalogue: deCatalogue,
+      landing: deLanding,
+      onboarding: deOnboarding,
+      demoModeBadge: deDemoModeBadge,
+      login: deLogin,
+      register: deRegister,
+      accountRestrictedBanner: deAccountRestrictedBanner,
+    },
   },
   datetimeFormats,
   numberFormats,

@@ -3,14 +3,17 @@
 // `authHooks.onAccountLocked` in stores/auth.ts, set from api/client.ts's
 // request(). Deliberately minimal: a persistent strip, not a modal — a
 // locked account can still look around, it just can't act.
+import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
+import type { MessageSchema } from '../i18n/schema';
 
 const auth = useAuthStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 </script>
 
 <template>
   <div v-if="auth.accountLocked" class="banner">
-    Your account is restricted. Some actions are disabled — contact an admin if you think this is a mistake.
+    {{ t('accountRestrictedBanner.message') }}
   </div>
 </template>
 

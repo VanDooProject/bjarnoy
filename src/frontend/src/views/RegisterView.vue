@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
+import type { MessageSchema } from '../i18n/schema';
 
 const auth = useAuthStore();
 const player = usePlayerStore();
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const userName = ref('');
 const password = ref('');
@@ -21,7 +24,7 @@ async function onSubmit() {
   error.value = null;
 
   if (password.value !== confirmPassword.value) {
-    error.value = 'Passwords do not match.';
+    error.value = t('register.errors.passwordMismatch');
     return;
   }
 
@@ -36,11 +39,11 @@ async function onSubmit() {
     await router.push(redirect);
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
-      error.value = 'That username is taken.';
+      error.value = t('register.errors.usernameTaken');
     } else if (err instanceof ApiError && err.status === 400) {
-      error.value = 'Username must be at least 3 characters and password at least 8.';
+      error.value = t('register.errors.validation');
     } else {
-      error.value = 'Could not create account. Try again.';
+      error.value = t('register.errors.generic');
     }
   } finally {
     submitting.value = false;
@@ -51,15 +54,15 @@ async function onSubmit() {
 <template>
   <div class="register">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
+      <span class="brand">{{ t('register.brand') }}</span>
     </header>
     <main class="body">
-      <h1>Create account</h1>
+      <h1>{{ t('register.title') }}</h1>
       <p class="hint">
-        Turn your settlement into a permanent account so you can log back in from any device.
+        {{ t('register.hint') }}
       </p>
       <form class="form" @submit.prevent="onSubmit">
-        <label for="userName">Username</label>
+        <label for="userName">{{ t('register.usernameLabel') }}</label>
         <input
           id="userName"
           v-model="userName"
@@ -70,7 +73,7 @@ async function onSubmit() {
           required
         />
 
-        <label for="password">Password</label>
+        <label for="password">{{ t('register.passwordLabel') }}</label>
         <input
           id="password"
           v-model="password"
@@ -81,7 +84,7 @@ async function onSubmit() {
           required
         />
 
-        <label for="confirmPassword">Confirm password</label>
+        <label for="confirmPassword">{{ t('register.confirmPasswordLabel') }}</label>
         <input
           id="confirmPassword"
           v-model="confirmPassword"
@@ -95,13 +98,13 @@ async function onSubmit() {
         <p v-if="error" class="error">{{ error }}</p>
 
         <button class="submit" type="submit" :disabled="submitting">
-          {{ submitting ? 'Creating account…' : 'Create account' }}
+          {{ submitting ? t('register.submitting') : t('register.submit') }}
         </button>
       </form>
       <button class="link" @click="router.push({ path: '/login', query: route.query })">
-        Already have an account? Log in
+        {{ t('register.loginLink') }}
       </button>
-      <button class="back" @click="router.push('/')">← Back</button>
+      <button class="back" @click="router.push('/')">{{ t('register.back') }}</button>
     </main>
   </div>
 </template>
