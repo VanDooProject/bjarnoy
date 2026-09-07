@@ -4,6 +4,7 @@
 // reasoning as lib/units/trainingEconomy.ts.
 import type { AxialCoord } from '../hex/coords';
 import type { DispatchArmyRequest, FieldOrderRequest, HexPoint, UnitDefinitionResponse } from '../../api/types';
+import { i18n } from '../../i18n';
 
 /**
  * Converts an ordered list of clicked hexes into the shape `DispatchArmyRequest`
@@ -293,7 +294,7 @@ export function totalUpkeepPerHour(
 /** `"2h 14m"` / `"14m 6s"` / `"6s"` / `"Arriving"` for a countdown to an ISO timestamp, as of `now` (ms epoch). */
 export function formatEta(targetIso: string, now: number): string {
   const totalSeconds = Math.round((new Date(targetIso).getTime() - now) / 1000);
-  if (totalSeconds <= 0) return 'Arriving';
+  if (totalSeconds <= 0) return i18n.global.t('hud.armyStatus.arriving');
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
@@ -324,8 +325,12 @@ export function armyStatusLabel(
   },
   targetSettlementName?: string | null,
 ): string {
-  if (army.atHome) return 'At home';
-  if (army.supporting) return targetSettlementName ? `Supporting ${targetSettlementName}` : 'Supporting';
-  if (army.movement?.isReturning) return 'Returning';
-  return 'In transit';
+  if (army.atHome) return i18n.global.t('hud.armyStatus.atHome');
+  if (army.supporting) {
+    return targetSettlementName
+      ? i18n.global.t('hud.armyStatus.supportingNamed', { name: targetSettlementName })
+      : i18n.global.t('hud.armyStatus.supporting');
+  }
+  if (army.movement?.isReturning) return i18n.global.t('hud.armyStatus.returning');
+  return i18n.global.t('hud.armyStatus.inTransit');
 }

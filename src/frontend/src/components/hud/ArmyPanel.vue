@@ -10,10 +10,13 @@
 // top-right, RealmPanel bottom-left (see each panel's own `position:
 // absolute` in their <style>) — this is the one open corner.
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useAuthStore } from '../../stores/auth';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
+import type { MessageSchema } from '../../i18n/schema';
+import { missionName, unitName } from '../../i18n/catalogueNames';
 import {
   armyStatusLabel,
   canFieldOrderArmy,
@@ -29,34 +32,11 @@ import { buildingLabel } from '../../lib/units/battleReports';
 const world = useWorldStore();
 const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => {
   void catalogue.load();
 });
-
-const UNIT_LABELS: Record<string, string> = {
-  thrall: 'Thrall',
-  spearman: 'Spearman',
-  axeman: 'Axeman',
-  bowman: 'Bowman',
-  berserker: 'Berserker',
-  provisioner: 'Provisioner',
-  catapult: 'Catapult',
-  karve: 'Karve',
-  longship: 'Longship',
-};
-function unitLabel(unit: string): string {
-  return UNIT_LABELS[unit] ?? unit;
-}
-
-// A row's mission tag: unlike battleReports.ts's `missionLabel` (which only
-// ever sees 'attack'/'raid' — the two missions a battle report can be for),
-// an army row can be 'attack'/'support'/'raid' (never 'move' — see the
-// `!== 'move'` guard below), so this just title-cases the wire value rather
-// than special-casing two of the four.
-function missionTagLabel(mission: string): string {
-  return mission.charAt(0).toUpperCase() + mission.slice(1);
-}
 
 const draft = computed(() => world.dispatchDraft);
 
@@ -65,7 +45,7 @@ const draft = computed(() => world.dispatchDraft);
 const garrisonRows = computed(() =>
   world.hud.garrison
     .filter((g) => g.count > 0)
-    .map((g) => ({ unit: g.unit, label: unitLabel(g.unit), available: g.count })),
+    .map((g) => ({ unit: g.unit, label: unitName(g.unit), available: g.count })),
 );
 
 // Issue #40 phase 6 §1: which class family the current selection has
@@ -197,7 +177,7 @@ const selectedBuildingLabel = computed(() => {
   const coord = draft.value?.targetBuildingCoord;
   if (!coord) return null;
   const row = targetBuildingRows.value.find((b) => b.q === coord.q && b.r === coord.r);
-  return row ? `${row.label} (Lv ${row.level})` : `(${coord.q}, ${coord.r})`;
+  return row ? `${row.label} (${t('hud.armyPanel.buildingLevelCoord', { level: row.level, q: coord.q, r: coord.r })})` : `(${coord.q}, ${coord.r})`;
 });
 function pickBuildingTarget(q: number, r: number) {
   world.setDispatchTargetBuilding({ q, r });
@@ -221,7 +201,7 @@ const armyRows = computed(() => {
   return world.armies.map((army) => {
     const composition = army.stacks
       .filter((s) => s.count > 0)
-      .map((s) => `${s.count}× ${unitLabel(s.unit)}`)
+      .map((s) => `${s.count}× ${unitName(s.unit)}`)
       .join(', ');
     const targetName = army.targetSettlementId
       ? world.model.getSettlement(army.targetSettlementId)?.name ?? null
@@ -245,9 +225,9 @@ const armyRows = computed(() => {
       canRecall,
       canFieldOrder: canFieldOrderArmy(army),
       fieldOrderLocked: midMarch && !auth.isPremium,
-      fieldOrderLabel: midMarch ? 'Append goal' : 'Move on',
+      fieldOrderLabel: midMarch ? t('hud.armyPanel.appendGoal') : t('hud.armyPanel.moveOn'),
       selected: army.id === world.selectedArmyId,
-      mission: army.mission !== 'move' ? missionTagLabel(army.mission) : null,
+      mission: army.mission !== 'move' ? missionName(army.mission) : null,
     };
   });
 });
@@ -296,12 +276,12 @@ async function confirmFieldOrderClick() {
 <template>
   <div class="status-card army-panel">
     <div class="status-card-header">
-      <span class="status-card-title">Armies</span>
+      <span class="status-card-title">{{ t('hud.armyPanel.title') }}</span>
       <span class="status-card-count">{{ armyRows.length }}</span>
     </div>
 
     <p v-if="DEMO_MODE" class="status-subtext demo-note">
-      Dispatching armies requires the live backend and isn't wired up in demo mode yet.
+      {{ t('hud.armyPanel.demoNote') }}
     </p>
 
     <template v-if="!draft && !fieldDraft">
@@ -325,7 +305,7 @@ async function confirmFieldOrderClick() {
               v-if="row.canFieldOrder"
               class="secondary field-order"
               :disabled="row.fieldOrderLocked"
-              :title="row.fieldOrderLocked ? 'Premium required to redirect an army that is still travelling' : undefined"
+              :title="row.fieldOrderLocked ? t('hud.armyPanel.premiumRedirectTitle') : undefined"
               @click.stop="beginFieldOrder(row.id)"
             >
               <span v-if="row.fieldOrderLocked" aria-hidden="true">🔒</span> {{ row.fieldOrderLabel }}
@@ -336,19 +316,19 @@ async function confirmFieldOrderClick() {
               :disabled="recalling(row.id)"
               @click.stop="recall(row.id)"
             >
-              {{ recalling(row.id) ? 'Recalling…' : 'Recall' }}
+              {{ recalling(row.id) ? t('hud.armyPanel.recalling') : t('hud.armyPanel.recall') }}
             </button>
           </div>
         </div>
       </div>
-      <div v-else class="status-subtext garrison-empty">No armies on the road.</div>
+      <div v-else class="status-subtext garrison-empty">{{ t('hud.armyPanel.noArmies') }}</div>
 
       <button
         class="primary dispatch-btn"
         :disabled="DEMO_MODE || garrisonRows.length === 0"
         @click="beginDispatch"
       >
-        Dispatch army
+        {{ t('hud.armyPanel.dispatchArmy') }}
       </button>
     </template>
 
@@ -356,25 +336,26 @@ async function confirmFieldOrderClick() {
       <div class="dispatch-form">
         <p v-if="fieldDraft.error" class="status-subtext error-note">{{ fieldDraft.error }}</p>
         <p class="status-subtext instructions">
-          Click hexes on the map to plot where this army should go next — the
-          last click is the new destination. {{ fieldOrderRouteLength }}
-          hex{{ fieldOrderRouteLength === 1 ? '' : 'es' }} plotted.
+          {{ t('hud.armyPanel.fieldOrderInstructions', {
+            count: fieldOrderRouteLength,
+            hexWord: fieldOrderRouteLength === 1 ? t('hud.armyPanel.hex') : t('hud.armyPanel.hexes'),
+          }) }}
         </p>
         <p v-if="!auth.isPremium" class="status-subtext waypoint-hint">
-          Free with the account: one destination, no stops along the way.
-          <strong>Premium</strong> is needed to plot extra waypoints.
+          {{ t('hud.armyPanel.freeAccountWaypoints') }}
+          <strong>{{ t('hud.armyPanel.premium') }}</strong> {{ t('hud.armyPanel.premiumWaypointsNeeded') }}
         </p>
 
         <div v-if="fieldOrderRouteRows.length" class="waypoint-list">
-          <p class="status-subtext waypoint-hint">Drag a pin on the map to move a waypoint.</p>
+          <p class="status-subtext waypoint-hint">{{ t('hud.armyPanel.dragPinHint') }}</p>
           <div v-for="row in fieldOrderRouteRows" :key="row.index" class="waypoint-row">
             <span class="waypoint-label">
-              {{ row.label }}<span v-if="row.isDestination" class="waypoint-tag"> · destination</span>
+              {{ row.label }}<span v-if="row.isDestination" class="waypoint-tag"> · {{ t('hud.armyPanel.destinationTag') }}</span>
             </span>
             <button
               type="button"
               class="waypoint-remove"
-              :aria-label="`Remove waypoint ${row.index + 1}`"
+              :aria-label="t('hud.armyPanel.removeWaypoint', { n: row.index + 1 })"
               @click="world.removeFieldOrderWaypoint(row.index)"
             >
               ✕
@@ -388,24 +369,24 @@ async function confirmFieldOrderClick() {
             @click="world.removeLastFieldOrderWaypoint()"
             :disabled="fieldOrderRouteLength === 0"
           >
-            Undo waypoint
+            {{ t('hud.armyPanel.undoWaypoint') }}
           </button>
           <button
             class="secondary"
             @click="world.clearFieldOrderWaypoints()"
             :disabled="fieldOrderRouteLength === 0"
           >
-            Clear route
+            {{ t('hud.armyPanel.clearRoute') }}
           </button>
         </div>
         <div class="dispatch-actions">
-          <button class="secondary" @click="world.cancelFieldOrder()">Cancel</button>
+          <button class="secondary" @click="world.cancelFieldOrder()">{{ t('hud.armyPanel.cancel') }}</button>
           <button
             class="primary"
             :disabled="fieldOrderRouteLength === 0 || fieldDraft.submitting"
             @click="confirmFieldOrderClick"
           >
-            {{ fieldDraft.submitting ? 'Sending…' : 'Confirm order' }}
+            {{ fieldDraft.submitting ? t('hud.armyPanel.sending') : t('hud.armyPanel.confirmOrder') }}
           </button>
         </div>
       </div>
@@ -422,7 +403,7 @@ async function confirmFieldOrderClick() {
             :class="{ active: draft.mission === 'move' }"
             @click="setMission('move')"
           >
-            Move
+            {{ missionName('move') }}
           </button>
           <button
             type="button"
@@ -430,7 +411,7 @@ async function confirmFieldOrderClick() {
             :class="{ active: draft.mission === 'attack' }"
             @click="setMission('attack')"
           >
-            Attack
+            {{ missionName('attack') }}
           </button>
           <button
             type="button"
@@ -438,64 +419,67 @@ async function confirmFieldOrderClick() {
             :class="{ active: draft.mission === 'support' }"
             @click="setMission('support')"
           >
-            Support
+            {{ missionName('support') }}
           </button>
         </div>
 
         <p v-if="draft.mission === 'move'" class="status-subtext instructions">
-          Click hexes on the map to plot a route — the last click is the
-          destination. {{ routeLength }} hex{{ routeLength === 1 ? '' : 'es' }} plotted.
+          {{ t('hud.armyPanel.dispatchInstructions', {
+            count: routeLength,
+            hexWord: routeLength === 1 ? t('hud.armyPanel.hex') : t('hud.armyPanel.hexes'),
+          }) }}
         </p>
         <template v-else>
           <p class="status-subtext instructions">
-            Choose a settlement to {{ draft.mission }}, then optionally click hexes on the
-            map to plot a route there. {{ routeLength }} waypoint{{ routeLength === 1 ? '' : 's' }} plotted.
+            {{ t('hud.armyPanel.targetInstructions', {
+              mission: draft.mission,
+              count: routeLength,
+              waypointWord: routeLength === 1 ? t('hud.armyPanel.waypoint') : t('hud.armyPanel.waypoints'),
+            }) }}
           </p>
 
           <div v-if="selectedTarget" class="target-selected">
-            <span>Target: <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
-            <button type="button" class="secondary change-target" @click="clearTarget">Change</button>
+            <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedTarget.name }}</strong> ({{ selectedTarget.ownerName }})</span>
+            <button type="button" class="secondary change-target" @click="clearTarget">{{ t('hud.armyPanel.change') }}</button>
           </div>
           <div v-else class="target-picker">
             <input
               v-model="targetSearch"
               type="text"
               class="target-search"
-              :placeholder="`Search settlements to ${draft.mission}…`"
+              :placeholder="t('hud.armyPanel.searchSettlements', { mission: draft.mission })"
             />
             <div v-if="attackTargets.length" class="target-list">
               <button
-                v-for="t in attackTargets"
-                :key="t.id"
+                v-for="target in attackTargets"
+                :key="target.id"
                 type="button"
                 class="target-row"
-                @click="pickTarget(t.id)"
+                @click="pickTarget(target.id)"
               >
-                <span class="target-name">{{ t.name }}</span>
-                <span class="target-owner">{{ t.ownerName }}</span>
+                <span class="target-name">{{ target.name }}</span>
+                <span class="target-owner">{{ target.ownerName }}</span>
               </button>
             </div>
-            <p v-else class="status-subtext">No other settlements found yet.</p>
+            <p v-else class="status-subtext">{{ t('hud.armyPanel.noSettlementsFound') }}</p>
           </div>
 
           <p v-if="draft.mission === 'support'" class="status-subtext support-note">
-            The host feeds your troops once they arrive, but they still need
-            enough food loaded for the round trip home if recalled.
+            {{ t('hud.armyPanel.supportNote') }}
           </p>
 
           <div v-if="showBuildingPicker" class="building-picker">
             <p class="status-subtext building-picker-hint">
-              Preferred catapult target — may change if it's no longer there
-              by the time your army arrives.
+              {{ t('hud.armyPanel.buildingPickerHint') }}
             </p>
             <div v-if="selectedBuildingLabel" class="target-selected">
-              <span>Target: <strong>{{ selectedBuildingLabel }}</strong></span>
-              <button type="button" class="secondary change-target" @click="clearBuildingTarget">Clear</button>
+              <span>{{ t('hud.armyPanel.target') }} <strong>{{ selectedBuildingLabel }}</strong></span>
+              <button type="button" class="secondary change-target" @click="clearBuildingTarget">{{ t('hud.armyPanel.clear') }}</button>
             </div>
             <template v-else>
-              <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">Loading enemy layout…</p>
+              <p v-if="world.dispatchTargetBuildingsLoading" class="status-subtext">{{ t('hud.armyPanel.loadingEnemyLayout') }}</p>
               <p v-else-if="world.dispatchTargetBuildingsError" class="status-subtext">
-                Couldn't load this settlement's layout — target will be chosen at random on arrival.
+                {{ t('hud.armyPanel.layoutLoadError') }}
               </p>
               <div v-else-if="targetBuildingRows.length" class="target-list building-list">
                 <button
@@ -506,24 +490,24 @@ async function confirmFieldOrderClick() {
                   @click="pickBuildingTarget(b.q, b.r)"
                 >
                   <span class="target-name">{{ b.label }}</span>
-                  <span class="target-owner">Lv {{ b.level }} · ({{ b.q }}, {{ b.r }})</span>
+                  <span class="target-owner">{{ t('hud.armyPanel.buildingLevelCoord', { level: b.level, q: b.q, r: b.r }) }}</span>
                 </button>
               </div>
-              <p v-else class="status-subtext">No preference — target will be chosen at random on arrival.</p>
+              <p v-else class="status-subtext">{{ t('hud.armyPanel.noPreference') }}</p>
             </template>
           </div>
         </template>
 
         <div v-if="routeRows.length" class="waypoint-list">
-          <p class="status-subtext waypoint-hint">Drag a pin on the map to move a waypoint.</p>
+          <p class="status-subtext waypoint-hint">{{ t('hud.armyPanel.dragPinHint') }}</p>
           <div v-for="row in routeRows" :key="row.index" class="waypoint-row">
             <span class="waypoint-label">
-              {{ row.label }}<span v-if="row.isDestination" class="waypoint-tag"> · destination</span>
+              {{ row.label }}<span v-if="row.isDestination" class="waypoint-tag"> · {{ t('hud.armyPanel.destinationTag') }}</span>
             </span>
             <button
               type="button"
               class="waypoint-remove"
-              :aria-label="`Remove waypoint ${row.index + 1}`"
+              :aria-label="t('hud.armyPanel.removeWaypoint', { n: row.index + 1 })"
               @click="world.removeWaypoint(row.index)"
             >
               ✕
@@ -532,8 +516,7 @@ async function confirmFieldOrderClick() {
         </div>
 
         <p v-if="hasLockedOutUnits" class="status-subtext fleet-note">
-          {{ selectionKind === 'fleet' ? 'Ships' : 'Land units' }} only — ships and land
-          units can't be dispatched together.
+          {{ t('hud.armyPanel.fleetNote', { kind: selectionKind === 'fleet' ? t('hud.armyPanel.shipsOnly') : t('hud.armyPanel.landUnitsOnly') }) }}
         </p>
         <div class="unit-picker">
           <div
@@ -554,11 +537,11 @@ async function confirmFieldOrderClick() {
             />
             <span class="unit-picker-max">/ {{ row.available }}</span>
           </div>
-          <div v-if="!garrisonRows.length" class="status-subtext">No units available to send.</div>
+          <div v-if="!garrisonRows.length" class="status-subtext">{{ t('hud.armyPanel.noUnitsAvailable') }}</div>
         </div>
 
         <label class="provisions-field">
-          <span>Provisions</span>
+          <span>{{ t('hud.armyPanel.provisions') }}</span>
           <input
             type="number"
             min="0"
@@ -569,16 +552,16 @@ async function confirmFieldOrderClick() {
 
         <div class="dispatch-actions">
           <button class="secondary" @click="world.removeLastWaypoint()" :disabled="routeLength === 0">
-            Undo waypoint
+            {{ t('hud.armyPanel.undoWaypoint') }}
           </button>
           <button class="secondary" @click="world.clearWaypoints()" :disabled="routeLength === 0">
-            Clear route
+            {{ t('hud.armyPanel.clearRoute') }}
           </button>
         </div>
         <div class="dispatch-actions">
-          <button class="secondary" @click="world.cancelDispatch()">Cancel</button>
+          <button class="secondary" @click="world.cancelDispatch()">{{ t('hud.armyPanel.cancel') }}</button>
           <button class="primary" :disabled="!canConfirm" @click="confirm">
-            {{ draft.submitting ? 'Dispatching…' : 'Confirm dispatch' }}
+            {{ draft.submitting ? t('hud.armyPanel.dispatching') : t('hud.armyPanel.confirmDispatch') }}
           </button>
         </div>
       </div>

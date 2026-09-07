@@ -8,12 +8,9 @@ import intlifyVueI18n from '@intlify/eslint-plugin-vue-i18n';
 // the start, which is exactly what this lint rule is for.
 const LEGACY_UNMIGRATED_VUE_FILES = [
   'src/components/admin/ActivityChart.vue',
-  'src/components/battle/BattleReportCard.vue',
-  'src/components/hud/ArmyPanel.vue',
   'src/components/hud/DebugPanel.vue',
   'src/components/hud/FogDebugPanel.vue',
   'src/components/hud/FogPerfPanel.vue',
-  'src/components/hud/TradePanel.vue',
   'src/components/hud/WaterPerfPanel.vue',
   'src/views/ConversationView.vue',
   'src/views/DocsView.vue',
@@ -58,7 +55,7 @@ export default [
       // translated anyway.
       '@intlify/vue-i18n/no-raw-text': [
         'error',
-        { ignorePattern: '^[-–—•·:;,.!?()\\[\\]{}0-9\\s%]*$' },
+        { ignorePattern: '^[-–—•·:;,.!?()\\[\\]{}0-9\\s%/×→✕🔒]*$' },
       ],
     },
   },
