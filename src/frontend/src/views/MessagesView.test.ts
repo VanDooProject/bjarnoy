@@ -5,6 +5,8 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MessagesView from './MessagesView.vue';
 import type { ConversationResponse } from '../api/types';
+import { createTestI18n } from '../test/i18n';
+import enMessages from '../i18n/locales/en/messages.json';
 
 // MessagesView renders <router-link> for each conversation row — a real
 // (memory-history) router resolves those to actual <a href> elements,
@@ -61,7 +63,9 @@ describe('MessagesView', () => {
 
     const router = testRouter();
     await router.push('/messages');
-    const wrapper = mount(MessagesView, { global: { plugins: [router] } });
+    const wrapper = mount(MessagesView, {
+      global: { plugins: [router, createTestI18n({ messages: enMessages })] },
+    });
     await flushPromises();
 
     expect(wrapper.text()).toContain('No conversations yet');
@@ -76,7 +80,9 @@ describe('MessagesView', () => {
 
     const router = testRouter();
     await router.push('/messages');
-    const wrapper = mount(MessagesView, { global: { plugins: [router] } });
+    const wrapper = mount(MessagesView, {
+      global: { plugins: [router, createTestI18n({ messages: enMessages })] },
+    });
     await flushPromises();
 
     const rows = wrapper.findAll('.conversation');

@@ -19,6 +19,12 @@ import enHud from './locales/en/hud.json';
 import deHud from './locales/de/hud.json';
 import enApiErrors from './locales/en/apiErrors.json';
 import deApiErrors from './locales/de/apiErrors.json';
+import enGuild from './locales/en/guild.json';
+import deGuild from './locales/de/guild.json';
+import enMessages from './locales/en/messages.json';
+import deMessages from './locales/de/messages.json';
+import enProfile from './locales/en/profile.json';
+import deProfile from './locales/de/profile.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -68,6 +74,9 @@ export const i18n = createI18n({
       accountRestrictedBanner: enAccountRestrictedBanner,
       hud: enHud,
       apiErrors: enApiErrors,
+      guild: enGuild,
+      messages: enMessages,
+      profile: enProfile,
     },
     de: {
       common: deCommon,
@@ -80,6 +89,9 @@ export const i18n = createI18n({
       accountRestrictedBanner: deAccountRestrictedBanner,
       hud: deHud,
       apiErrors: deApiErrors,
+      guild: deGuild,
+      messages: deMessages,
+      profile: deProfile,
     },
   },
   datetimeFormats,

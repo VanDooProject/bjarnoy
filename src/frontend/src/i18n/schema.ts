@@ -8,6 +8,9 @@ import register from './locales/en/register.json';
 import accountRestrictedBanner from './locales/en/accountRestrictedBanner.json';
 import hud from './locales/en/hud.json';
 import apiErrors from './locales/en/apiErrors.json';
+import guild from './locales/en/guild.json';
+import messages from './locales/en/messages.json';
+import profile from './locales/en/profile.json';
 
 // English is the source of truth for keys: every other locale is typed
 // against its shape, so a missing/misspelled key is a `vue-tsc -b` error.
@@ -23,4 +26,7 @@ export interface MessageSchema {
   accountRestrictedBanner: typeof accountRestrictedBanner;
   hud: typeof hud;
   apiErrors: typeof apiErrors;
+  guild: typeof guild;
+  messages: typeof messages;
+  profile: typeof profile;
 }

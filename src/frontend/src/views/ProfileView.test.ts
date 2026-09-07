@@ -5,6 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
 import { useAuthStore } from '../stores/auth';
+import { createTestI18n } from '../test/i18n';
+import enProfile from '../i18n/locales/en/profile.json';
+
+function mountProfileView() {
+  return mount(ProfileView, {
+    global: { plugins: [createTestI18n({ profile: enProfile })] },
+  });
+}
 
 const { getProfileByName, updateMyBio, reportProfile } = vi.hoisted(() => ({
   getProfileByName: vi.fn(),
@@ -54,7 +62,7 @@ describe('ProfileView', () => {
   it('renders the bio verbatim in a pre block, with joined date and settlement count', async () => {
     getProfileByName.mockResolvedValue(profile());
 
-    const wrapper = mount(ProfileView);
+    const wrapper = mountProfileView();
     await flushPromises();
 
     // Whitespace/line breaks survive exactly — that's what makes ASCII art work.
@@ -71,7 +79,7 @@ describe('ProfileView', () => {
   it('escapes HTML in a bio instead of rendering it', async () => {
     getProfileByName.mockResolvedValue(profile({ bio: '<img src=x onerror=alert(1)>' }));
 
-    const wrapper = mount(ProfileView);
+    const wrapper = mountProfileView();
     await flushPromises();
 
     // The markup appears as text; no element is created from it.
@@ -86,7 +94,7 @@ describe('ProfileView', () => {
     const auth = useAuthStore();
     auth.user = { id: 'user-1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: false };
 
-    const wrapper = mount(ProfileView);
+    const wrapper = mountProfileView();
     await flushPromises();
 
     expect(wrapper.findAll('button').some((b) => b.text() === 'Report')).toBe(false);
@@ -110,7 +118,7 @@ describe('ProfileView', () => {
     const auth = useAuthStore();
     auth.user = { id: 'user-2', userName: 'floki', role: 'player', status: 'active', displayName: null, isPremium: false };
 
-    const wrapper = mount(ProfileView);
+    const wrapper = mountProfileView();
     await flushPromises();
 
     const reportButton = wrapper.findAll('button').find((b) => b.text() === 'Report')!;
@@ -132,7 +140,7 @@ describe('ProfileView', () => {
   it('shows no report button to an anonymous visitor', async () => {
     getProfileByName.mockResolvedValue(profile());
 
-    const wrapper = mount(ProfileView);
+    const wrapper = mountProfileView();
     await flushPromises();
 
     expect(wrapper.findAll('button').some((b) => b.text() === 'Report')).toBe(false);

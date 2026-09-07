@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../api/client';
 import type { MessageResponse, ProfileResponse } from '../api/types';
+import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const auth = useAuthStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const otherUserId = computed(() => route.params.userId as string);
 
@@ -31,7 +34,9 @@ async function load() {
     void api.markConversationRead(otherUserId.value);
   } catch (err) {
     loadError.value =
-      err instanceof ApiError && err.status === 404 ? 'No such player.' : 'Could not load this conversation.';
+      err instanceof ApiError && err.status === 404
+        ? t('messages.conversation.noSuchPlayer')
+        : t('messages.conversation.loadError');
   } finally {
     loading.value = false;
   }
@@ -58,7 +63,7 @@ async function send() {
     messages.value = [message, ...messages.value];
     draft.value = '';
   } catch (err) {
-    sendError.value = err instanceof ApiError ? err.message : 'Could not send the message.';
+    sendError.value = err instanceof ApiError ? err.message : t('messages.conversation.sendError');
   } finally {
     sending.value = false;
   }
@@ -81,7 +86,7 @@ function openReport(messageId: string) {
 async function sendReport() {
   if (reportSending.value || !reportingId.value) return;
   if (!reportReason.value.trim()) {
-    reportError.value = 'A reason is required.';
+    reportError.value = t('messages.conversation.reportDialog.reasonRequired');
     return;
   }
   reportSending.value = true;
@@ -91,7 +96,7 @@ async function sendReport() {
     reportedIds.value.add(reportingId.value);
     reportingId.value = null;
   } catch (err) {
-    reportError.value = err instanceof ApiError ? err.message : 'Could not send the report.';
+    reportError.value = err instanceof ApiError ? err.message : t('messages.conversation.reportDialog.sendError');
   } finally {
     reportSending.value = false;
   }
@@ -104,13 +109,15 @@ function isMine(message: MessageResponse): boolean {
 function readStatus(message: MessageResponse): string | null {
   if (!isMine(message)) return null;
   if (!message.readReceiptVisible) return null;
-  return message.readAt ? `Read ${new Date(message.readAt).toLocaleString()}` : 'Unread';
+  return message.readAt
+    ? t('messages.conversation.read', { date: new Date(message.readAt).toLocaleString() })
+    : t('messages.conversation.unread');
 }
 </script>
 
 <template>
   <div class="conversation-view">
-    <p v-if="loading" class="muted">Loading…</p>
+    <p v-if="loading" class="muted">{{ $t('common.states.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else>
@@ -118,7 +125,7 @@ function readStatus(message: MessageResponse): string | null {
         <router-link v-if="otherProfile" class="who" :to="`/profile/${otherProfile.userName}`">
           {{ otherProfile.displayName || otherProfile.userName }}
         </router-link>
-        <router-link to="/messages" class="back">Back to messages</router-link>
+        <router-link to="/messages" class="back">{{ $t('messages.conversation.backToMessages') }}</router-link>
       </header>
 
       <ul class="thread">
@@ -138,9 +145,9 @@ function readStatus(message: MessageResponse): string | null {
                 type="button"
                 @click="openReport(message.id)"
               >
-                Report
+                {{ $t('messages.conversation.report') }}
               </button>
-              <span v-else class="reported">Reported</span>
+              <span v-else class="reported">{{ $t('messages.conversation.reported') }}</span>
             </div>
           </div>
         </li>
@@ -151,31 +158,35 @@ function readStatus(message: MessageResponse): string | null {
           v-model="draft"
           rows="2"
           :maxlength="BODY_MAX"
-          placeholder="Write a message…"
+          :placeholder="$t('messages.conversation.composerPlaceholder')"
           @keydown.enter.exact.prevent="send"
         ></textarea>
-        <button :disabled="sending || !draft.trim()" @click="send">Send</button>
+        <button :disabled="sending || !draft.trim()" @click="send">{{ $t('messages.conversation.send') }}</button>
       </div>
       <p v-if="sendError" class="error">{{ sendError }}</p>
 
       <div v-if="reportingId" class="report-backdrop" @click.self="reportingId = null">
-        <div class="report-dialog" role="dialog" aria-label="Report message">
-          <h2>Report this message</h2>
-          <p class="muted">A moderator will review it.</p>
+        <div class="report-dialog" role="dialog" :aria-label="$t('messages.conversation.reportDialog.ariaLabel')">
+          <h2>{{ $t('messages.conversation.reportDialog.title') }}</h2>
+          <p class="muted">{{ $t('messages.conversation.reportDialog.hint') }}</p>
           <label>
-            Reason
+            {{ $t('messages.conversation.reportDialog.reason') }}
             <input
               v-model="reportReason"
               type="text"
               maxlength="500"
-              placeholder="e.g. harassment"
+              :placeholder="$t('messages.conversation.reportDialog.reasonPlaceholder')"
               @keyup.enter="sendReport"
             />
           </label>
           <p v-if="reportError" class="error">{{ reportError }}</p>
           <div class="row">
-            <button :disabled="reportSending" @click="sendReport">Send report</button>
-            <button class="secondary" :disabled="reportSending" @click="reportingId = null">Cancel</button>
+            <button :disabled="reportSending" @click="sendReport">
+              {{ $t('messages.conversation.reportDialog.send') }}
+            </button>
+            <button class="secondary" :disabled="reportSending" @click="reportingId = null">
+              {{ $t('common.buttons.cancel') }}
+            </button>
           </div>
         </div>
       </div>

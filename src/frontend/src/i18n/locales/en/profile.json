@@ -1,0 +1,30 @@
+{
+  "loadError": "Could not load profile.",
+  "noProfile": "No profile to show.",
+  "noSuchPlayer": "No such player.",
+  "message": "Message",
+  "report": "Report",
+  "reportSent": "Report sent — thank you.",
+  "joined": "Joined",
+  "settlements": "Settlements",
+  "bio": {
+    "title": "Bio",
+    "edit": "Edit bio",
+    "add": "Add a bio",
+    "placeholder": "Tell the other players about yourself — ASCII art welcome.",
+    "empty": "This player has not written a bio yet.",
+    "tooLong": "The bio is limited to {max} characters.",
+    "saveError": "Could not save the bio."
+  },
+  "reportDialog": {
+    "ariaLabel": "Report profile",
+    "title": "Report {userName}",
+    "hint": "A moderator will review this profile.",
+    "reason": "Reason",
+    "reasonPlaceholder": "e.g. offensive bio",
+    "reasonRequired": "A reason is required.",
+    "note": "Note (optional)",
+    "send": "Send report",
+    "sendError": "Could not send the report."
+  }
+}

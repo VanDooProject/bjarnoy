@@ -1,0 +1,32 @@
+{
+  "title": "Messages",
+  "empty": "No conversations yet — visit a player's profile to send them a message.",
+  "loadError": "Could not load your messages.",
+  "pager": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page}"
+  },
+  "conversation": {
+    "backToMessages": "Back to messages",
+    "loadError": "Could not load this conversation.",
+    "noSuchPlayer": "No such player.",
+    "read": "Read {date}",
+    "unread": "Unread",
+    "report": "Report",
+    "reported": "Reported",
+    "composerPlaceholder": "Write a message…",
+    "send": "Send",
+    "sendError": "Could not send the message.",
+    "reportDialog": {
+      "ariaLabel": "Report message",
+      "title": "Report this message",
+      "hint": "A moderator will review it.",
+      "reason": "Reason",
+      "reasonPlaceholder": "e.g. harassment",
+      "reasonRequired": "A reason is required.",
+      "send": "Send report",
+      "sendError": "Could not send the report."
+    }
+  }
+}
