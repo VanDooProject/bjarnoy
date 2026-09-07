@@ -299,29 +299,16 @@ public sealed class SettlementService(
             })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        foreach (var neighbour in neighbours)
+        var snapshots = neighbours.Select(n => new Founding.NeighbourSnapshot(
+            new HexCoord(n.CentreQ, n.CentreR),
+            n.Buildings.Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level)).ToList()));
+
+        switch (Founding.CheckSpacing(coord, snapshots, MinimumSpacing, FoundingSafetyMargin))
         {
-            var neighbourCentre = new HexCoord(neighbour.CentreQ, neighbour.CentreR);
-            var distance = coord.DistanceTo(neighbourCentre);
-            if (distance == 0)
-            {
+            case Founding.SpacingVerdict.PlotTaken:
                 return new FoundingResult(FoundingRejection.PlotTaken);
-            }
-
-            if (distance < MinimumSpacing)
-            {
+            case Founding.SpacingVerdict.TooClose:
                 return new FoundingResult(FoundingRejection.TooCloseToNeighbour);
-            }
-
-            var neighbourBuildings = neighbour.Buildings
-                .Select(b => new PlacedBuilding(new HexCoord(b.Q, b.R), b.Type, b.Level))
-                .ToList();
-            var withinRealTerritory = Settlement.ClaimDiscsFor(neighbourCentre, neighbourBuildings)
-                .Any(disc => disc.Centre.DistanceTo(coord) <= disc.Radius + FoundingSafetyMargin);
-            if (withinRealTerritory)
-            {
-                return new FoundingResult(FoundingRejection.TooCloseToNeighbour);
-            }
         }
 
         var now = clock.ToGameTime(_timeProvider.GetUtcNow());
