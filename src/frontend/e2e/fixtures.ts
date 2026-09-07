@@ -19,7 +19,7 @@ import { AdminAuthFixture } from './pages/AdminAuthFixture';
 // everything else still fails the run.
 const isEnvironmentNoise = (text: string) => text.includes('net::ERR_CONNECTION_RESET');
 
-export const test = base.extend<{ forbidConsoleErrors: void; adminAuth: AdminAuthFixture }>({
+export const test = base.extend<{ forbidConsoleErrors: void; pinnedLocale: void; adminAuth: AdminAuthFixture }>({
   /**
    * A mocked authenticated session (issue #189). Not autouse — asking for it
    * only builds the object; nothing is intercepted until a test calls
@@ -28,6 +28,24 @@ export const test = base.extend<{ forbidConsoleErrors: void; adminAuth: AdminAut
   adminAuth: async ({ page }, use) => {
     await use(new AdminAuthFixture(page));
   },
+
+  /**
+   * Pins the app's own locale (src/i18n) to English, independent of
+   * playwright.config.ts's `locale: 'en-US'` (which only sets
+   * navigator.language/Intl — the app's detectInitialLocale also checks
+   * localStorage first). Without this, a suite run right after an
+   * `i18n.spec.ts` locale-switch test could inherit a leftover `de` choice
+   * from browser storage reuse.
+   */
+  pinnedLocale: [
+    async ({ page }, use) => {
+      await page.addInitScript(() => {
+        window.localStorage.setItem('bjarnoy.locale', 'en');
+      });
+      await use();
+    },
+    { auto: true },
+  ],
 
   forbidConsoleErrors: [
     async ({ page }, use) => {

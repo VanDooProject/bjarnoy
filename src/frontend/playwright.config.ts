@@ -31,6 +31,12 @@ export default defineConfig({
     // against a viewport this size, and the tests' click/hover coordinates
     // are relative to it.
     viewport: { width: 1280, height: 800 },
+    // Independent of the runner's own navigator.language: the suite's many
+    // text-based locators/assertions are written against English copy, and
+    // i18n extraction PRs are text-preserving for `en`, so pinning this
+    // (plus the bjarnoy.locale fixture in fixtures.ts) keeps the suite
+    // locale-stable regardless of what a given CI runner reports.
+    locale: 'en-US',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
