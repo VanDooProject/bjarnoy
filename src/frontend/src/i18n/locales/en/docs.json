@@ -1,0 +1,127 @@
+{
+  "back": "← Back",
+  "backToDocs": "← Docs",
+  "hub": {
+    "title": "Docs",
+    "intro": "Reference pages for the game's rules and content.",
+    "pages": {
+      "techTree": {
+        "title": "Tech tree",
+        "description": "Every building, and what each of its ten levels costs, produces, and requires."
+      },
+      "tiles": {
+        "title": "Tiles",
+        "description": "The terrain a world is made of, how it generates, and what can be built on it."
+      }
+    }
+  },
+  "status": {
+    "loading": "Loading…",
+    "fallback": "Showing bundled reference data{snapshot} — not live backend data.",
+    "fallbackSnapshot": " (snapshot from {date})",
+    "toc": "Table of contents"
+  },
+  "buildingTypes": {
+    "storagehouse": "Storage house",
+    "fishinghut": "Fishing hut",
+    "magictower": "Magic tower",
+    "pumpkinfarm": "Pumpkin farm",
+    "shrineofthor": "Shrine of Thor",
+    "shrineoffreyja": "Shrine of Freyja",
+    "archeryrange": "Archery range",
+    "dockyard": "Dockyard",
+    "greatstorehouse": "Great storehouse",
+    "fisherhut": "Fisher hut"
+  },
+  "techTree": {
+    "title": "Tech tree",
+    "intro": "Every building, and what each of its ten levels costs, produces, and requires.",
+    "terrain": "Terrain:",
+    "terrainCoastal": "Shallow (coastal) water",
+    "terrainAny": "Any buildable land",
+    "categories": {
+      "anchor": "Anchor",
+      "production": "Production",
+      "military": "Military",
+      "logistics": "Logistics"
+    },
+    "lore": {
+      "longhouse": "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",
+      "lumberjack": "Fells timber on forested ground — the wood behind every wall and roof.",
+      "quarry": "Cuts stone from a mountain ridge — the bones of every keep.",
+      "farm": "Grows food on open grassland, keeping the longhouse table full.",
+      "storagehouse": "Extra room for the harvest on grass, so a full warehouse never stalls production.",
+      "tower": "A watch built on grass or sand at the border, pushing the claimed ground further out.",
+      "fishinghut": "A dock over shallow water, fishing the shallows a farm never could.",
+      "magictower": "Arcane iron out of grassland — no ore, no vein, just the working.",
+      "pumpkinfarm": "A second harvest for grass — pumpkins alongside the plain fields.",
+      "shrineofthor": "Raised to Thor on grass — its favour boosts Wood and Stone production.",
+      "shrineoffreyja": "Raised to Freyja on grass — its favour boosts Food production.",
+      "archeryrange": "Trains the land army — spearmen through catapults — on grass or sand, in place of the longhouse.",
+      "dockyard": "Trains ships on shallow (coastal) water, in place of the longhouse.",
+      "greatstorehouse": "A late-game storage tier on grass, needing both the longhouse and this settlement's own storage house at level 10.",
+      "barracks": "A garrison raised on grass or sand at the border.",
+      "fisherhut": "A second dock for the table, working grassland like a farm rather than the shallows.",
+      "sawmill": "Refines timber on grass, alongside a neighbouring Lumberjack — its look changes when built next to a river or a river bend."
+    },
+    "table": {
+      "level": "Level",
+      "wood": "Wood",
+      "stone": "Stone",
+      "food": "Food",
+      "iron": "Iron",
+      "buildTime": "Build time",
+      "productionPerHour": "Production/h",
+      "storage": "Storage",
+      "requiresLonghouse": "Requires longhouse",
+      "unitWood": "w",
+      "unitStone": "s",
+      "unitFood": "f",
+      "unitIron": "i",
+      "storagePrefix": "+"
+    }
+  },
+  "tiles": {
+    "title": "Tiles",
+    "intro": "The terrain a world is made of, how it generates, and what can be built on it.",
+    "generation": "Generation:",
+    "buildings": "Buildings:",
+    "none": "none",
+    "entries": {
+      "sea": {
+        "title": "Sea",
+        "lore": "Open water. Nothing stands on it, and nothing is grown or mined here — it only ever separates islands.",
+        "generation": "Every hex outside an island's radius."
+      },
+      "coastalWater": {
+        "title": "Coastal water",
+        "lore": "Still plain sea underneath — the same terrain as the open water beyond it — but close enough to the shore for a dock.",
+        "generation": "A sea hex with at least one land neighbour: the ring hugging every island."
+      },
+      "sand": {
+        "title": "Sand",
+        "lore": "An island's beach — the coastal ring settlers actually land on when founding a settlement.",
+        "generation": "The outer edge of an island: beyond 82% of its radius from centre."
+      },
+      "grass": {
+        "title": "Grass",
+        "lore": "Open lowland — most of a settlement is built here.",
+        "generation": "Lowland too smooth to be forest and too far from the centre to be mountain."
+      },
+      "forest": {
+        "title": "Forest",
+        "lore": "Lowland gone rocky enough to grow trees instead of open grass.",
+        "generation": "Rockiness above the forest threshold, but not steep enough for mountain."
+      },
+      "mountain": {
+        "title": "Mountain",
+        "lore": "The rockiest ground an island has.",
+        "generation": "Confined to an island's interior (within 40% of its radius) so ridges never form on the coast."
+      }
+    }
+  },
+  "impressum": {
+    "title": "Impressum",
+    "body": "Fjørdhold is a hobby project built for the VanDooProject community. This placeholder page exists so the real landing page has somewhere to link to — replace it with your actual legal notice (operator, contact address, and any disclosures your jurisdiction requires) before going live."
+  }
+}

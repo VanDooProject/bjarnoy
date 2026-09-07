@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import type { MessageSchema } from '../i18n/schema';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
+const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => catalogue.load());
 
@@ -37,44 +40,14 @@ const PREVIEW_LEVEL: Record<string, number> = {
   sawmill: 2,
 };
 
-const LORE: Record<string, string> = {
-  longhouse:
-    "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",
-  lumberjack: 'Fells timber on forested ground — the wood behind every wall and roof.',
-  quarry: 'Cuts stone from a mountain ridge — the bones of every keep.',
-  farm: 'Grows food on open grassland, keeping the longhouse table full.',
-  storagehouse: "Extra room for the harvest on grass, so a full warehouse never stalls production.",
-  tower: 'A watch built on grass or sand at the border, pushing the claimed ground further out.',
-  fishinghut: 'A dock over shallow water, fishing the shallows a farm never could.',
-  magictower: 'Arcane iron out of grassland — no ore, no vein, just the working.',
-  pumpkinfarm: 'A second harvest for grass — pumpkins alongside the plain fields.',
-  shrineofthor: 'Raised to Thor on grass — its favour boosts Wood and Stone production.',
-  shrineoffreyja: 'Raised to Freyja on grass — its favour boosts Food production.',
-  archeryrange: 'Trains the land army — spearmen through catapults — on grass or sand, in place of the longhouse.',
-  dockyard: 'Trains ships on shallow (coastal) water, in place of the longhouse.',
-  greatstorehouse:
-    'A late-game storage tier on grass, needing both the longhouse and this settlement’s own storage house at level 10.',
-  barracks: 'A garrison raised on grass or sand at the border.',
-  fisherhut: 'A second dock for the table, working grassland like a farm rather than the shallows.',
-  sawmill:
-    'Refines timber on grass, alongside a neighbouring Lumberjack — its look changes when built next to a river or a river bend.',
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  storagehouse: 'Storage house',
-  fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
-  pumpkinfarm: 'Pumpkin farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  archeryrange: 'Archery range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great storehouse',
-  fisherhut: 'Fisher hut',
-};
+function lore(type: string): string {
+  const key = `docs.techTree.lore.${type}`;
+  return te(key) ? t(key) : '';
+}
 
 function typeLabel(type: string): string {
-  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+  const key = `docs.buildingTypes.${type}`;
+  return te(key) ? t(key) : type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 // Mirrors prototypes/MECHANICS.md's building categories (anchor / production
@@ -84,10 +57,10 @@ const CATEGORY_ORDER = ['anchor', 'production', 'military', 'logistics'] as cons
 type Category = (typeof CATEGORY_ORDER)[number];
 
 const CATEGORY_LABELS: Record<Category, string> = {
-  anchor: 'Anchor',
-  production: 'Production',
-  military: 'Military',
-  logistics: 'Logistics',
+  anchor: t('docs.techTree.categories.anchor'),
+  production: t('docs.techTree.categories.production'),
+  military: t('docs.techTree.categories.military'),
+  logistics: t('docs.techTree.categories.logistics'),
 };
 
 const CATEGORY_OF: Record<string, Category> = {
@@ -146,8 +119,8 @@ const pngThumbs = computed<Record<string, string>>(() => {
 });
 
 function terrainLabel(requiresCoastalWater: boolean, terrain: string[]): string {
-  if (requiresCoastalWater) return 'Shallow (coastal) water';
-  return terrain.length === 0 ? 'Any buildable land' : terrain.join(', ');
+  if (requiresCoastalWater) return t('docs.techTree.terrainCoastal');
+  return terrain.length === 0 ? t('docs.techTree.terrainAny') : terrain.join(', ');
 }
 
 function humanizeSeconds(seconds: number): string {
@@ -166,24 +139,28 @@ function formatAmount(value: number): string {
 <template>
   <div class="tech-tree">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
-      <button class="back" @click="router.push('/docs')">← Docs</button>
+      <span class="brand">{{ $t('common.brand.name') }}</span>
+      <button class="back" @click="router.push('/docs')">{{ $t('docs.backToDocs') }}</button>
     </header>
     <main class="body">
-      <h1>Tech tree</h1>
+      <h1>{{ $t('docs.techTree.title') }}</h1>
       <p class="intro">
-        Every building, and what each of its ten levels costs, produces, and requires.
+        {{ $t('docs.techTree.intro') }}
       </p>
 
-      <p v-if="catalogue.loading" class="status">Loading…</p>
+      <p v-if="catalogue.loading" class="status">{{ $t('docs.status.loading') }}</p>
       <p v-else-if="catalogue.error" class="status error">{{ catalogue.error }}</p>
       <p v-else-if="catalogue.source === 'fallback'" class="status">
-        Showing bundled reference data{{
-          catalogue.generatedAt ? ` (snapshot from ${new Date(catalogue.generatedAt).toLocaleDateString()})` : ''
-        }} — not live backend data.
+        {{
+          $t('docs.status.fallback', {
+            snapshot: catalogue.generatedAt
+              ? $t('docs.status.fallbackSnapshot', { date: new Date(catalogue.generatedAt).toLocaleDateString() })
+              : '',
+          })
+        }}
       </p>
 
-      <nav v-if="categories.length > 0" class="toc" aria-label="Table of contents">
+      <nav v-if="categories.length > 0" class="toc" :aria-label="$t('docs.status.toc')">
         <div v-for="cat in categories" :key="cat.id" class="toc-group">
           <span class="toc-category">{{ cat.label }}</span>
           <a v-for="type in cat.types" :key="type" class="toc-link" :href="`#${type}`">{{ typeLabel(type) }}</a>
@@ -201,9 +178,9 @@ function formatAmount(value: number): string {
             </div>
             <div class="building-intro">
               <h3>{{ typeLabel(type) }}</h3>
-              <p class="lore">{{ LORE[type] }}</p>
+              <p class="lore">{{ lore(type) }}</p>
               <p class="terrain">
-                Terrain:
+                {{ $t('docs.techTree.terrain') }}
                 {{
                   terrainLabel(
                     catalogue.byType[type]![0]!.requiresCoastalWater,
@@ -217,15 +194,15 @@ function formatAmount(value: number): string {
             <table>
               <thead>
                 <tr>
-                  <th>Level</th>
-                  <th>Wood</th>
-                  <th>Stone</th>
-                  <th>Food</th>
-                  <th>Iron</th>
-                  <th>Build time</th>
-                  <th>Production/h</th>
-                  <th>Storage</th>
-                  <th>Requires longhouse</th>
+                  <th>{{ $t('docs.techTree.table.level') }}</th>
+                  <th>{{ $t('docs.techTree.table.wood') }}</th>
+                  <th>{{ $t('docs.techTree.table.stone') }}</th>
+                  <th>{{ $t('docs.techTree.table.food') }}</th>
+                  <th>{{ $t('docs.techTree.table.iron') }}</th>
+                  <th>{{ $t('docs.techTree.table.buildTime') }}</th>
+                  <th>{{ $t('docs.techTree.table.productionPerHour') }}</th>
+                  <th>{{ $t('docs.techTree.table.storage') }}</th>
+                  <th>{{ $t('docs.techTree.table.requiresLonghouse') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -238,19 +215,43 @@ function formatAmount(value: number): string {
                   <td>{{ humanizeSeconds(def.buildSeconds) }}</td>
                   <td>
                     <template v-if="Object.values(def.productionPerHour).some((v) => v > 0)">
-                      <span v-if="def.productionPerHour.wood > 0">{{ formatAmount(def.productionPerHour.wood) }}w </span>
-                      <span v-if="def.productionPerHour.stone > 0">{{ formatAmount(def.productionPerHour.stone) }}s </span>
-                      <span v-if="def.productionPerHour.food > 0">{{ formatAmount(def.productionPerHour.food) }}f </span>
-                      <span v-if="def.productionPerHour.iron > 0">{{ formatAmount(def.productionPerHour.iron) }}i</span>
+                      <span v-if="def.productionPerHour.wood > 0"
+                        >{{ formatAmount(def.productionPerHour.wood) }}{{ $t('docs.techTree.table.unitWood') }}
+                      </span>
+                      <span v-if="def.productionPerHour.stone > 0"
+                        >{{ formatAmount(def.productionPerHour.stone) }}{{ $t('docs.techTree.table.unitStone') }}
+                      </span>
+                      <span v-if="def.productionPerHour.food > 0"
+                        >{{ formatAmount(def.productionPerHour.food) }}{{ $t('docs.techTree.table.unitFood') }}
+                      </span>
+                      <span v-if="def.productionPerHour.iron > 0"
+                        >{{ formatAmount(def.productionPerHour.iron) }}{{ $t('docs.techTree.table.unitIron') }}</span
+                      >
                     </template>
                     <template v-else>—</template>
                   </td>
                   <td>
                     <template v-if="Object.values(def.storageCapacity).some((v) => v > 0)">
-                      <span v-if="def.storageCapacity.wood > 0">+{{ formatAmount(def.storageCapacity.wood) }}w </span>
-                      <span v-if="def.storageCapacity.stone > 0">+{{ formatAmount(def.storageCapacity.stone) }}s </span>
-                      <span v-if="def.storageCapacity.food > 0">+{{ formatAmount(def.storageCapacity.food) }}f </span>
-                      <span v-if="def.storageCapacity.iron > 0">+{{ formatAmount(def.storageCapacity.iron) }}i</span>
+                      <span v-if="def.storageCapacity.wood > 0"
+                        >{{ $t('docs.techTree.table.storagePrefix') }}{{ formatAmount(def.storageCapacity.wood) }}{{
+                          $t('docs.techTree.table.unitWood')
+                        }}
+                      </span>
+                      <span v-if="def.storageCapacity.stone > 0"
+                        >{{ $t('docs.techTree.table.storagePrefix') }}{{ formatAmount(def.storageCapacity.stone) }}{{
+                          $t('docs.techTree.table.unitStone')
+                        }}
+                      </span>
+                      <span v-if="def.storageCapacity.food > 0"
+                        >{{ $t('docs.techTree.table.storagePrefix') }}{{ formatAmount(def.storageCapacity.food) }}{{
+                          $t('docs.techTree.table.unitFood')
+                        }}
+                      </span>
+                      <span v-if="def.storageCapacity.iron > 0"
+                        >{{ $t('docs.techTree.table.storagePrefix') }}{{ formatAmount(def.storageCapacity.iron) }}{{
+                          $t('docs.techTree.table.unitIron')
+                        }}</span
+                      >
                     </template>
                     <template v-else>—</template>
                   </td>
