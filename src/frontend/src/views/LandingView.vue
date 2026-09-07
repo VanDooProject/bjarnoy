@@ -65,6 +65,44 @@ const showPrompt = ref(false);
 const invalidClickMessage = ref<string | null>(null);
 let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 
+// How often the pre-founding preview re-polls its plot suggestion and
+// same-island rivals so the "empty plot" scene reflects other visitors
+// founding nearby without a reload — comfortably inside the backend
+// reservation's 3-minute sliding TTL. Paused while the tab is hidden (see
+// `onVisibilityChange`) rather than wasting requests on a backgrounded tab.
+const PREVIEW_POLL_MS = 20000;
+let previewPollHandle: ReturnType<typeof setInterval> | undefined;
+
+async function refreshPreview() {
+  const changed = await world.refreshPlotSuggestion(player.id);
+  await world.refreshWorldSettlements();
+  const suggestion = world.plotSuggestion;
+  if (!suggestion) return;
+  if (changed) {
+    previewCoord.value = suggestion.plot;
+    nearbyStartCoords.value = [suggestion.plot, ...suggestion.alternatives];
+    canvasRef.value?.renderer?.updateOptions({
+      previewCenter: suggestion.plot,
+      highlightCoords: nearbyStartCoords.value,
+    });
+  }
+}
+
+function startPreviewPoll() {
+  stopPreviewPoll();
+  previewPollHandle = setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    void refreshPreview();
+  }, PREVIEW_POLL_MS);
+}
+
+function stopPreviewPoll() {
+  if (previewPollHandle !== undefined) {
+    clearInterval(previewPollHandle);
+    previewPollHandle = undefined;
+  }
+}
+
 onMounted(async () => {
   await world.bootstrapLiveWorld();
   if (player.hasFoundedSettlement && player.settlementId) {
@@ -76,15 +114,20 @@ onMounted(async () => {
   // own origin — not chosen by panning a world map (there is none here).
   //
   // Demo mode has no start positions at all, so it previews/founds via
-  // `findLandfall`, an arbitrary walkable hex — the two already agree there.
-  // Live mode previews the nearest start position purely to centre the
-  // camera; `nearbyStartCoords` below is what's actually clickable.
-  previewCoord.value = DEMO_MODE
-    ? (world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 })
-    : (world.nearestStartPosition({ q: 0, r: 0 })?.at ??
-      world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 });
-  if (!DEMO_MODE) {
-    nearbyStartCoords.value = world.nearbyStartPositions({ q: 0, r: 0 }).map((pos) => pos.at);
+  // `findLandfall`, an arbitrary walkable hex. Live mode asks the backend
+  // for a plot suggestion (see `PlotReservationService`) — pinned per
+  // player across reloads — and previews exactly that; `nearbyStartCoords`
+  // below (the suggestion's own advisory alternatives) is what's actually
+  // clickable alongside it.
+  if (DEMO_MODE) {
+    previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
+  } else {
+    await world.refreshPlotSuggestion(player.id);
+    await world.refreshWorldSettlements();
+    const suggestion = world.plotSuggestion;
+    previewCoord.value = suggestion?.plot ?? world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
+    nearbyStartCoords.value = suggestion ? [suggestion.plot, ...suggestion.alternatives] : [];
+    startPreviewPoll();
   }
   // Same test/debug-hook idea as SettlementView's own __settlementRenderer:
   // lets an e2e test convert a real hex coordinate to an exact click point
@@ -97,6 +140,7 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   world.stopHudSync();
+  stopPreviewPoll();
   clearTimeout(invalidClickTimer);
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
@@ -308,15 +352,17 @@ async function foundHere(coord: AxialCoord) {
   } catch (err) {
     // A 409 covers several distinct rejections (see FoundingRejection) —
     // only AlreadyFounded actually means "you already have a settlement,
-    // go there". The others (PlotTaken, TooCloseToNeighbour, ...) mean
-    // someone else claimed a start position between bootstrapLiveWorld()
-    // and this click; leave the player on the landing page so they can
-    // just click again — foundStartingSettlementLive re-syncs who else has
-    // founded before picking the next nearest plot.
+    // go there". The others (PlotReserved, PlotTaken, TooCloseToNeighbour,
+    // ...) mean someone else claimed or reserved a start position between
+    // the last refresh and this click — re-request the suggestion so the
+    // preview shows a plot that's actually still available, then let the
+    // player just click again.
     if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
       router.push('/settlement');
     } else {
       console.error('Failed to found settlement against the backend', err);
+      showInvalidClickMessage("That plot was just taken — here's another one.");
+      await refreshPreview();
     }
   } finally {
     founding.value = false;
