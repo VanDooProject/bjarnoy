@@ -5,6 +5,9 @@
 // roster at once with a quantity picker, rather than BuildingModal's
 // single-target cost/duration/action layout.
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../../i18n/schema';
+import { unitName } from '../../i18n/catalogueNames';
 import { ApiError } from '../../api/client';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
@@ -22,6 +25,7 @@ const emit = defineEmits<{ close: []; trained: [] }>();
 
 const world = useWorldStore();
 const catalogue = useUnitCatalogueStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => {
   void catalogue.load();
@@ -120,7 +124,7 @@ async function train(type: string, count: number) {
     // Mirrors how QueueBuildRequest's 409 rejection is surfaced elsewhere —
     // ApiError.problem.detail carries the backend's human-readable reason
     // (see SettlementEndpoints.DescribeTrain).
-    errorText.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Training failed.';
+    errorText.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : t('hud.trainingModal.trainingFailed');
   } finally {
     training.value = null;
   }
@@ -132,18 +136,18 @@ async function train(type: string, count: number) {
     <div class="modal panel">
       <div class="head">
         <div>
-          <div class="name">Train units</div>
-          <div class="sub">Longhouse level {{ longhouseLevel }}</div>
+          <div class="name">{{ t('hud.trainingModal.title') }}</div>
+          <div class="sub">{{ t('hud.trainingModal.subtitle', { level: longhouseLevel }) }}</div>
         </div>
-        <button class="close" @click="emit('close')">✕</button>
+        <button class="close" @click="emit('close')">{{ t('hud.trainingModal.close') }}</button>
       </div>
 
       <p v-if="DEMO_MODE" class="desc demo-note">
-        Training requires the live backend and isn't wired up in demo mode yet.
+        {{ t('hud.trainingModal.demoNote') }}
       </p>
       <p v-if="errorText" class="desc error-note">{{ errorText }}</p>
       <p v-if="reservedTotal > 0" class="desc reserved-note">
-        {{ reservedTotal.toFixed(0) }} resources reserved for queued construction.
+        {{ t('hud.trainingModal.reservedNote', { amount: reservedTotal.toFixed(0) }) }}
       </p>
 
       <div class="roster">
@@ -154,11 +158,11 @@ async function train(type: string, count: number) {
           :class="{ unavailable: !row.available }"
         >
           <div class="unit-info">
-            <div class="unit-name">{{ row.definition.type }}</div>
+            <div class="unit-name">{{ unitName(row.definition.type) }}</div>
             <div class="unit-stats">
-              Atk {{ row.definition.attack }} · Def {{ row.definition.defense }}
-              <span v-if="row.needsCoastReason"> · requires a coastal settlement</span>
-              <span v-else-if="!row.available"> · requires longhouse {{ row.definition.requiredLonghouseLevel }}<template v-if="row.definition.requiredUnitType"> and {{ row.definition.requiredUnitType }}</template></span>
+              {{ t('hud.trainingModal.attackDefense', { attack: row.definition.attack, defense: row.definition.defense }) }}
+              <span v-if="row.needsCoastReason"> · {{ t('hud.trainingModal.requiresCoastal') }}</span>
+              <span v-else-if="!row.available"> · {{ t('hud.trainingModal.requiresLonghouse', { level: row.definition.requiredLonghouseLevel }) }}<template v-if="row.definition.requiredUnitType"> {{ t('hud.trainingModal.requiresUnit', { unit: unitName(row.definition.requiredUnitType) }) }}</template></span>
             </div>
             <div class="unit-cost" :class="{ unaffordable: row.available && !row.affordable }">
               {{ row.costText }} · {{ row.durationText }}
@@ -178,7 +182,7 @@ async function train(type: string, count: number) {
               :disabled="!row.trainable || training === row.definition.type"
               @click="train(row.definition.type, row.count)"
             >
-              {{ training === row.definition.type ? 'Training…' : 'Train' }}
+              {{ training === row.definition.type ? t('hud.trainingModal.training') : t('hud.trainingModal.train') }}
             </button>
           </div>
         </div>

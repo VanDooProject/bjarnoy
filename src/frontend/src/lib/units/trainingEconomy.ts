@@ -2,6 +2,7 @@
 // availability and affordability logic is unit-testable without mounting
 // the component/Pinia stores — same reasoning as lib/map/buildingEconomy.ts.
 import type { ResourceLine, UnitDefinitionResponse } from '../../api/types';
+import { resourceName } from '../../i18n/catalogueNames';
 
 const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
 
@@ -50,16 +51,9 @@ export function formatTrainingDuration(seconds: number, count: number): string {
   return `${s}s`;
 }
 
-const RESOURCE_LABELS: Record<keyof ResourceLine, string> = {
-  wood: 'Wood',
-  stone: 'Stone',
-  food: 'Food',
-  iron: 'Iron',
-};
-
 /** `"80 Wood · 40 Stone · ..."`, omitting any resource that costs 0. */
 export function formatCostLine(cost: ResourceLine): string {
   return RESOURCE_KEYS.filter((key) => cost[key] > 0)
-    .map((key) => `${cost[key]} ${RESOURCE_LABELS[key]}`)
+    .map((key) => `${cost[key]} ${resourceName(key)}`)
     .join(' · ');
 }

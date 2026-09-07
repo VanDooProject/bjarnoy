@@ -15,9 +15,13 @@
 // illustrative, not built here) could reuse the same classes with a
 // different accent color, without wiring their data yet.
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../../i18n/schema';
+import { buildingName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 
 const world = useWorldStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const emit = defineEmits<{ select: [coord: { q: number; r: number }] }>();
 
 const cancelling = ref<string | null>(null);
@@ -29,31 +33,11 @@ async function cancel(orderId: string) {
   try {
     await world.cancelBuildLive(orderId);
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Could not cancel the order.';
+    error.value = err instanceof Error ? err.message : t('hud.buildQueue.cancelError');
   } finally {
     cancelling.value = null;
   }
 }
-
-const BUILDING_LABELS: Record<string, string> = {
-  longhouse: 'Longhouse',
-  lumberjack: 'Lumberjack',
-  quarry: 'Quarry',
-  farm: 'Crop farm',
-  storagehouse: 'Storehouse',
-  tower: 'Watchtower',
-  fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
-  pumpkinfarm: 'Pumpkin farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  archeryrange: 'Archery range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great storehouse',
-  barracks: 'Barracks',
-  fisherhut: 'Fisher hut',
-  sawmill: 'Sawmill',
-};
 
 function fmt(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -83,7 +67,7 @@ const orders = computed(() => {
     }
   }
   return world.hud.queue.map((q) => {
-    const label = BUILDING_LABELS[q.building] ?? q.building;
+    const label = buildingName(q.building);
     const waiting = q.state === 'waiting';
     // A waiting order has no real completion instant yet (see
     // BuildOrderResponse.completesAtGameTime's own remarks) — no countdown,
@@ -100,12 +84,12 @@ const orders = computed(() => {
     const done = remainingNow !== null && remainingNow <= 0.5;
     return {
       key: q.id,
-      name: `${label} → ${q.targetLevel}`,
-      remaining: waiting ? 'Waiting for a slot' : remainingNow === null ? '—' : fmt(remainingNow),
+      name: t('hud.buildQueue.orderName', { name: label, level: q.targetLevel }),
+      remaining: waiting ? t('hud.buildQueue.waitingForSlot') : remainingNow === null ? '—' : fmt(remainingNow),
       progress,
       done,
       waiting,
-      subtext: `hex ${q.q}-${q.r}`,
+      subtext: t('hud.buildQueue.hexSubtext', { q: q.q, r: q.r }),
       coord: { q: q.q, r: q.r },
     };
   });
@@ -124,8 +108,8 @@ const reservedTotal = computed(() => {
 <template>
   <div v-if="orders.length" class="status-card">
     <div class="status-card-header">
-      <span class="status-card-title">Construction</span>
-      <span class="status-card-count">{{ world.hud.construction.slotsUsed }} / {{ world.hud.construction.slots }} slots</span>
+      <span class="status-card-title">{{ t('hud.buildQueue.title') }}</span>
+      <span class="status-card-count">{{ t('hud.buildQueue.slots', { used: world.hud.construction.slotsUsed, total: world.hud.construction.slots }) }}</span>
     </div>
     <div v-for="o in orders" :key="o.key" class="status-row" :class="{ 'is-waiting': o.waiting }">
       <button type="button" class="status-row-click" @click="emit('select', o.coord)">
@@ -148,15 +132,16 @@ const reservedTotal = computed(() => {
         :disabled="cancelling === o.key"
         @click.stop="cancel(o.key)"
       >
-        ✕
+        {{ t('hud.buildQueue.cancel') }}
       </button>
     </div>
     <div v-if="reservedTotal > 0" class="status-subtext reserved-footer">
-      Reserved for queued construction:
-      {{ Math.round(world.hud.reserved.wood) }}w
-      {{ Math.round(world.hud.reserved.stone) }}s
-      {{ Math.round(world.hud.reserved.food) }}f
-      {{ Math.round(world.hud.reserved.iron) }}i
+      {{ t('hud.buildQueue.reservedFooter', {
+        wood: Math.round(world.hud.reserved.wood),
+        stone: Math.round(world.hud.reserved.stone),
+        food: Math.round(world.hud.reserved.food),
+        iron: Math.round(world.hud.reserved.iron),
+      }) }}
     </div>
     <div v-if="error" class="status-subtext error">{{ error }}</div>
   </div>

@@ -9,6 +9,15 @@ import { mount } from '@vue/test-utils';
 import TrainingQueuePanel from './TrainingQueuePanel.vue';
 import { useWorldStore } from '../../stores/world';
 import type { TrainingOrderResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import enHud from '../../i18n/locales/en/hud.json';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
+
+function mountPanel() {
+  return mount(TrainingQueuePanel, {
+    global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+  });
+}
 
 function order(overrides: Partial<TrainingOrderResponse> = {}): TrainingOrderResponse {
   return {
@@ -41,7 +50,7 @@ describe('TrainingQueuePanel', () => {
     world.hud.trainingQueueFetchedAt = Date.now();
     world.hud.trainingQueue = [order({ completesInSeconds: 100, totalSeconds: 100 })];
 
-    const wrapper = mount(TrainingQueuePanel);
+    const wrapper = mountPanel();
     const initial = fillWidth(wrapper);
 
     vi.advanceTimersByTime(20_000);
@@ -57,7 +66,7 @@ describe('TrainingQueuePanel', () => {
     world.hud.trainingQueueFetchedAt = Date.now();
     world.hud.trainingQueue = [order({ completesInSeconds: 100, totalSeconds: 100 })];
 
-    const wrapper = mount(TrainingQueuePanel);
+    const wrapper = mountPanel();
 
     vi.advanceTimersByTime(60_000);
     world.hud.tick += 1;

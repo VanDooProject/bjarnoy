@@ -25,9 +25,8 @@ export type BuildingModifier =
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
- * HexTooltip.vue (translated via useI18n) and BuildingModal.vue (still
- * English-only until it's migrated, see describeBuildingStatsEnglish below)
- * — can each turn the same numbers into their own display text, rather than
+ * HexTooltip.vue and BuildingModal.vue, both translated via useI18n — can
+ * each turn the same numbers into their own display text, rather than
  * baking one locale's phrasing into the shared formula.
  */
 export interface BuildingLevelStats {
@@ -197,75 +196,6 @@ export function buildingStatsFor(
     default:
       return {};
   }
-}
-
-/**
- * Plain-English formatting of buildingStatsFor's structured output, for
- * BuildingModal.vue only — that view isn't migrated to i18n yet (tracked
- * separately), so it needs the old formatted strings until it is. New
- * callers should consume the structured BuildingLevelStats directly and
- * translate it themselves (see HexTooltip.vue).
- */
-export function describeBuildingStatsEnglish(stats: BuildingLevelStats): { output?: string; modifier?: string; workers?: string } {
-  const RESOURCE_LABEL: Record<'wood' | 'stone' | 'food' | 'iron', string> = {
-    wood: 'wood',
-    stone: 'stone',
-    food: 'food',
-    iron: 'iron',
-  };
-  const TERRAIN_LABEL: Record<'forest' | 'mountain', string> = { forest: 'Forest', mountain: 'Mountain' };
-  const DOMAIN_LABEL: Record<'woodStone' | 'food', string> = { woodStone: 'Wood/Stone', food: 'Food' };
-
-  let output: string | undefined;
-  if (stats.output) {
-    switch (stats.output.kind) {
-      case 'resourceRate':
-        output = `+${stats.output.amount} ${RESOURCE_LABEL[stats.output.resource]}/h`;
-        break;
-      case 'populationCapacity':
-        output = `+${stats.output.amount} population capacity`;
-        break;
-      case 'storageCapacity':
-        output = `+${stats.output.amount} storage capacity`;
-        break;
-      case 'visionRing':
-        output = `Vision +${stats.output.amount} ring`;
-        break;
-    }
-  }
-
-  let modifier: string | undefined;
-  if (stats.modifier) {
-    switch (stats.modifier.kind) {
-      case 'borderAnchor':
-        modifier = 'Border anchor';
-        break;
-      case 'trainsLandTroops':
-        modifier = 'Trains land troops';
-        break;
-      case 'trainsShips':
-        modifier = 'Trains ships';
-        break;
-      case 'garrison':
-        modifier = 'Garrison';
-        break;
-      case 'terrainBoost':
-        modifier = `${TERRAIN_LABEL[stats.modifier.terrain]} (+${stats.modifier.percent}%)`;
-        break;
-      case 'coastal':
-        modifier = stats.modifier.percent ? `Coastal (+${stats.modifier.percent}%)` : 'Coastal';
-        break;
-      case 'arcane':
-        modifier = 'Arcane';
-        break;
-      case 'shrineFavour':
-        modifier = `+${stats.modifier.percent}% ${DOMAIN_LABEL[stats.modifier.domain]} production`;
-        break;
-    }
-  }
-
-  const workers = stats.workers ? `${stats.workers.cap}/${stats.workers.cap}` : undefined;
-  return { output, modifier, workers };
 }
 
 /** Cost multiplier for a level: 1, 1.6, 2.56, … Mirrors BuildingCatalogue.cs's CostFactor. */
