@@ -18,6 +18,8 @@ const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
 const getFogMask = vi.fn();
+const getPlotSuggestion = vi.fn();
+const releasePlotSuggestion = vi.fn();
 const buildDemoFogMask = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
@@ -45,6 +47,8 @@ async function loadStoreModule(demoMode: boolean) {
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
       getFogMask: (...args: unknown[]) => getFogMask(...args),
+      getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
+      releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
     },
     ApiError: class ApiError extends Error {},
     // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
@@ -262,11 +266,18 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     ];
   }
 
-  it('founds on the exact tile clicked, even when a different start position is nearer the origin', async () => {
+  it('founds on the exact tile clicked, even when it is only an advisory alternative', async () => {
     listSettlements.mockReset().mockResolvedValue([]);
     getTradeBoard.mockReset().mockResolvedValue([]);
     getMyTradeOffers.mockReset().mockResolvedValue([]);
     getShipments.mockReset().mockResolvedValue([]);
+    getPlotSuggestion.mockReset().mockResolvedValue({
+      islandId: FAR_ISLAND.islandId,
+      plot: NEAR_ISLAND.at,
+      alternatives: [FAR_ISLAND.at],
+      reserved: true,
+      reservedUntil: null,
+    });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
       ownerName: 'Astrid',
@@ -281,9 +292,9 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     const store = await loadStoreModule(false);
     withIslands(store);
 
-    // The player clicked the far start position, not the one nearest {0,0}
-    // (which `nearestStartPosition` — used only for the preview highlight —
-    // would have picked).
+    // The player clicked the advisory alternative, not the suggestion's own
+    // pinned plot — startPositionAt must resolve the exact hex clicked, not
+    // snap to whichever one the backend pinned.
     await store.foundStartingSettlementLive('player-1', 'Astrid', "Astrid's realm", FAR_ISLAND.at);
 
     expect(foundSettlement).toHaveBeenCalledWith(
@@ -292,8 +303,43 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     );
   });
 
-  it('refuses to found on a hex that is not an unclaimed start position, without calling the API', async () => {
+  it('re-requests the plot suggestion before founding, so a stale pin cannot be used', async () => {
     listSettlements.mockReset().mockResolvedValue([]);
+    getPlotSuggestion.mockReset().mockResolvedValue({
+      islandId: NEAR_ISLAND.islandId,
+      plot: NEAR_ISLAND.at,
+      alternatives: [],
+      reserved: true,
+      reservedUntil: null,
+    });
+    foundSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: NEAR_ISLAND.at.q,
+      r: NEAR_ISLAND.at.r,
+      longhouseLevel: 1,
+      resources: { stock: {}, ratePerHour: {} },
+      islandId: NEAR_ISLAND.islandId,
+    });
+
+    const store = await loadStoreModule(false);
+    withIslands(store);
+
+    await store.foundStartingSettlementLive('player-1', 'Astrid', "Astrid's realm", NEAR_ISLAND.at);
+
+    expect(getPlotSuggestion).toHaveBeenCalledWith('world-1', 'player-1');
+  });
+
+  it('refuses to found on a hex the backend did not offer, without calling the API', async () => {
+    listSettlements.mockReset().mockResolvedValue([]);
+    getPlotSuggestion.mockReset().mockResolvedValue({
+      islandId: NEAR_ISLAND.islandId,
+      plot: NEAR_ISLAND.at,
+      alternatives: [],
+      reserved: true,
+      reservedUntil: null,
+    });
     foundSettlement.mockReset();
 
     const store = await loadStoreModule(false);
@@ -304,93 +350,6 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     ).rejects.toThrow();
     expect(foundSettlement).not.toHaveBeenCalled();
   });
-
-  // Regression: refreshWorldSettlements() used to register another player's
-  // settlement into the local WorldModel without an islandId, so the
-  // per-island spacing check in unclaimedStartPositions() never actually
-  // excluded it — a second player's client kept treating an already-founded
-  // start position as free and repeatedly got 409'd by the backend.
-  it('refuses to found on a start position someone else already claimed on the same island, without calling the API', async () => {
-    listSettlements.mockReset().mockResolvedValue([
-      {
-        id: 'settlement-1',
-        name: "Astrid's realm",
-        ownerName: 'Astrid',
-        q: NEAR_ISLAND.at.q,
-        r: NEAR_ISLAND.at.r,
-        longhouseLevel: 1,
-        islandId: NEAR_ISLAND.islandId,
-      },
-    ]);
-    foundSettlement.mockReset();
-
-    const store = await loadStoreModule(false);
-    withIslands(store);
-
-    await expect(
-      store.foundStartingSettlementLive('player-2', 'Bjorn', "Bjorn's realm", NEAR_ISLAND.at),
-    ).rejects.toThrow();
-    expect(foundSettlement).not.toHaveBeenCalled();
-  });
-});
-
-// Regression coverage for scoping MINIMUM_SETTLEMENT_SPACING to the same
-// island (mirrors the backend's FoundAsync): a start position on a
-// *different* island must stay available no matter how close it is by raw
-// hex distance to an existing settlement — separate islands are always
-// divided by open sea, so their claim discs can never actually overlap any
-// land either could claim.
-describe('useWorldStore unclaimedStartPositions (spacing is per-island)', () => {
-  const HOME_ISLAND = 'island-home';
-  const OTHER_ISLAND = 'island-other';
-  // Well within MINIMUM_SETTLEMENT_SPACING (13) of the existing settlement
-  // at {0,0} on both islands below.
-  const CLOSE_ON_HOME = { q: 2, r: 0 };
-  const CLOSE_ON_OTHER = { q: 0, r: 2 };
-
-  it('excludes a close start position on the same island but keeps one just as close on a different island', async () => {
-    const store = await loadStoreModule(false);
-    store.islands = [
-      {
-        id: HOME_ISLAND,
-        index: 0,
-        name: 'Home',
-        q: 0,
-        r: 0,
-        tileCount: 10,
-        startPositions: [CLOSE_ON_HOME],
-        riverTiles: [],
-      },
-      {
-        id: OTHER_ISLAND,
-        index: 1,
-        name: 'Other',
-        q: 0,
-        r: 2,
-        tileCount: 10,
-        startPositions: [CLOSE_ON_OTHER],
-        riverTiles: [],
-      },
-    ];
-    store.model.registerSettlement({
-      id: 'settlement-home',
-      ownerId: 'owner-1',
-      ownerName: 'Ulf',
-      name: "Ulf's realm",
-      q: 0,
-      r: 0,
-      level: 1,
-      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
-      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
-      foundedAt: 0,
-      islandId: HOME_ISLAND,
-    });
-
-    const available = store.unclaimedStartPositions().map((p) => p.islandId);
-
-    expect(available).not.toContain(HOME_ISLAND);
-    expect(available).toContain(OTHER_ISLAND);
-  });
 });
 
 // Issue #98: the header's storage cap must reflect the backend's real
@@ -399,6 +358,52 @@ describe('useWorldStore unclaimedStartPositions (spacing is per-island)', () => 
 // longhouse-level-derived guess — otherwise a fully-clamped admin grant
 // (e.g. 3000 clamped to a 750 cap) makes the header read "750 / 3,000" and
 // look like most of the grant vanished.
+// Regression for the landing-page bug: the "empty plot" preview used to show
+// other players' already-existing buildings because refreshWorldSettlements
+// painted every settlement world-wide with no island scoping. Rivals should
+// only ever be painted (buildings + owner border) when they're on the same
+// island as what's actually on screen — the world map is the one legitimate
+// exception (worldMapActive).
+describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () => {
+  it('paints only same-island rivals once a plot suggestion pins the current island', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
+      { id: 'rival-far', name: 'Far realm', ownerName: 'Bjorn', q: 40, r: 40, longhouseLevel: 1, islandId: 'island-far' },
+    ]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.plotSuggestion = {
+      islandId: 'island-near',
+      plot: { q: 0, r: 0 },
+      alternatives: [],
+      reserved: true,
+      reservedUntil: null,
+    };
+
+    await store.refreshWorldSettlements();
+
+    expect(store.model.countBuildings('rival-near')).toBe(1);
+    expect(store.model.countBuildings('rival-far')).toBe(0);
+  });
+
+  it('paints every rival once the world map is active', async () => {
+    listSettlements.mockReset().mockResolvedValue([
+      { id: 'rival-near', name: 'Near realm', ownerName: 'Astrid', q: 0, r: 0, longhouseLevel: 1, islandId: 'island-near' },
+      { id: 'rival-far', name: 'Far realm', ownerName: 'Bjorn', q: 40, r: 40, longhouseLevel: 1, islandId: 'island-far' },
+    ]);
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.setWorldMapActive(true);
+
+    await store.refreshWorldSettlements();
+
+    expect(store.model.countBuildings('rival-near')).toBe(1);
+    expect(store.model.countBuildings('rival-far')).toBe(1);
+  });
+});
+
 describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
   it('uses the backend capacity for hud.storageCap, not the synthetic longhouse-level guess', async () => {
     getSettlement.mockReset().mockResolvedValue({

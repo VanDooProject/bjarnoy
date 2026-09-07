@@ -279,7 +279,7 @@ export class WorldModel {
 
   foundSettlement(ownerId: string, ownerName: string, name: string, at: AxialCoord): Settlement {
     const id = `stl_${ownerId}_${Date.now().toString(36)}`;
-    return this.registerSettlement({
+    const settlement = this.registerSettlement({
       id,
       ownerId,
       ownerName,
@@ -291,18 +291,32 @@ export class WorldModel {
       rates: { wood: 60, stone: 45, food: 90, iron: 20 },
       foundedAt: Date.now(),
     });
+    this.claimTerritory(settlement.id);
+    return settlement;
   }
 
   /**
-   * Registers a fully-formed settlement — used when the backend (not this
-   * client) is the source of truth for identity and starting stock (live
-   * mode; see `stores/world.ts`). Claims its border hexes exactly like
-   * `foundSettlement`, which delegates here for the demo-mode case.
+   * Registers a fully-formed settlement's data — used when the backend (not
+   * this client) is the source of truth for identity and starting stock
+   * (live mode; see `stores/world.ts`). Data-only: does not paint any tile —
+   * call `claimTerritory` (or one of its `claimTerritoryOnIsland`/
+   * `claimAllTerritory` batch forms) to do that, scoped to whichever
+   * island(s) the caller actually wants rendered.
    */
   registerSettlement(settlement: Settlement): Settlement {
     this.settlements.set(settlement.id, settlement);
-    const at = { q: settlement.q, r: settlement.r };
-    const home = this.getTile(at.q, at.r);
+    return settlement;
+  }
+
+  /**
+   * Paints a registered settlement's home tile (longhouse + owner) and
+   * claims its border/explored hexes. Idempotent: safe to call more than
+   * once for the same settlement.
+   */
+  claimTerritory(settlementId: string): void {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return;
+    const home = this.getTile(settlement.q, settlement.r);
     home.ownerId = settlement.id;
     home.buildingType = 'longhouse';
     home.buildingLevel = 1;
@@ -313,7 +327,20 @@ export class WorldModel {
     for (const c of this.exploredHexesFor(settlement)) {
       this.explored.add(coordKey(c));
     }
-    return settlement;
+  }
+
+  /** Claims territory for every registered settlement on the given island — used by the landing/settlement-view preview, which must only render the current island. */
+  claimTerritoryOnIsland(islandId: string): void {
+    for (const settlement of this.settlements.values()) {
+      if (settlement.islandId === islandId) this.claimTerritory(settlement.id);
+    }
+  }
+
+  /** Claims territory for every registered settlement world-wide — used by the world-map view, which legitimately shows everyone. */
+  claimAllTerritory(): void {
+    for (const settlement of this.settlements.values()) {
+      this.claimTerritory(settlement.id);
+    }
   }
 
   getSettlement(id: string): Settlement | undefined {

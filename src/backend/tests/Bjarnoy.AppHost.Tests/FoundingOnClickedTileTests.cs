@@ -52,12 +52,17 @@ namespace Bjarnoy.AppHost.Tests;
 public class FoundingOnClickedTileTests
 {
     /// <summary>
-    /// A world whose start positions cluster tightly around the plot nearest
-    /// the origin: at 1280x720 its eight nearest alternatives to the suggested
-    /// plot all project comfortably inside the canvas (the nearest two at
-    /// (769,337) and (845,406)), so the click this test needs to make is well
-    /// clear of every edge. Any seed with that property would do; this one was
-    /// picked out of the 100-seed survey described in the class remarks.
+    /// A world whose backend-suggested plot has at least one same-island
+    /// alternative (<c>PlotReservationService.AlternativeCount</c>) that
+    /// projects well inside a 1280x720 canvas — for this seed, (6|3) at
+    /// (1072,337) against a suggested plot of (3|5) — so the click this test
+    /// needs to make is well clear of every edge. Any seed with that property
+    /// would do; this one was picked out of the 100-seed survey described in
+    /// the class remarks (against the older, client-side placement rule —
+    /// re-verified against the current backend-owned suggestion by a
+    /// throwaway harness reproducing <c>ComputeFreshPin</c> for a
+    /// zero-population world, which is what this test's own fresh world
+    /// always is).
     /// </summary>
     private const int PinnedWorldSeed = 5538230;
 
@@ -103,23 +108,31 @@ public class FoundingOnClickedTileTests
         await canvas.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 60_000 });
 
         // The page must actually have joined the world created above, not some
-        // other one — everything below is computed from this world's islands.
+        // other one — everything below is computed from this world's plot
+        // suggestion.
         var joinedWorldId = await page.EvaluateAsync<string?>("() => localStorage.getItem('bjarnoy.worldId')");
         Assert.Equal(world.Id.ToString(), joinedWorldId);
 
-        var islands = await apiClient.GetFromJsonAsync<IslandResponse[]>(
-            $"/api/v1/worlds/{world.Id}/islands", cancellationToken);
-        var startPositions = islands!.SelectMany(i => i.StartPositions).ToList();
+        // player.ts mints and persists this on store creation (stablePlayerId),
+        // well before the canvas renders — the same id the page itself sends
+        // as X-Owner-Id, and the only way from outside the page to ask the
+        // backend what *this* visitor was actually offered.
+        var ownerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
-        // Mirrors world.ts's nearestStartPosition({q:0,r:0}) — what LandingView
-        // previews/highlights as the "suggested" plot before anything is
-        // claimed. That store walks the islands in this same order and keeps
-        // the first strict minimum, which a stable OrderBy reproduces exactly.
-        // The regression is a click landing there regardless of which hex was
-        // actually clicked, so the test must click a *different* one and prove
-        // it lands exactly there instead.
-        var origin = new TileCoordinate(0, 0);
-        var suggested = startPositions.OrderBy(p => HexDistance(origin, p)).First();
+        // What LandingView previews/highlights as the "suggested" plot before
+        // anything is claimed: plot-finding is entirely backend-owned now
+        // (PlotReservationService) — the frontend just displays and clicks
+        // whatever this endpoint pins for this owner, so the test has to ask
+        // it the same question rather than recomputing a placement rule of
+        // its own. The regression is a click landing on this plot regardless
+        // of which hex was actually clicked, so the test must click a
+        // *different* one (one of this response's own alternatives — the
+        // only other plots `startPositionAt` accepts a click on) and prove it
+        // lands exactly there instead.
+        var suggestionResponse = await apiClient.GetFromJsonAsync<PlotSuggestionResponse>(
+            $"/api/v1/worlds/{world.Id}/plot-suggestion", cancellationToken);
+        var suggested = suggestionResponse!.Plot;
 
         var box = await canvas.BoundingBoxAsync()
             ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
@@ -135,8 +148,7 @@ public class FoundingOnClickedTileTests
         // survive a different browser window size.
         const double edgeInset = 80;
         const double trayInset = 200;
-        var clickable = startPositions
-            .Where(p => !(p.Q == suggested.Q && p.R == suggested.R))
+        var clickable = suggestionResponse.Alternatives
             .OrderBy(p => HexDistance(suggested, p))
             .Select(p => (Coord: p, Screen: ScreenPositionOf(p, suggested, (box.Width, box.Height))))
             .Where(c =>

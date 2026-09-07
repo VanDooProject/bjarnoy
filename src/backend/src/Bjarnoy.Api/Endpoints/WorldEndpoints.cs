@@ -4,6 +4,7 @@ using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +47,14 @@ public static class WorldEndpoints
         worlds.MapGet("/{worldId:guid}/fog-mask", GetFogMask)
             .WithName("GetWorldFogMask")
             .WithSummary("The requesting player's fog-of-war mask, as an RGBA8 PNG (map-fog-v2.md §2.2).");
+
+        worlds.MapGet("/{worldId:guid}/plot-suggestion", GetPlotSuggestion)
+            .WithName("GetPlotSuggestion")
+            .WithSummary("The plot this visitor is offered to found on, pinned across reloads.");
+
+        worlds.MapDelete("/{worldId:guid}/plot-suggestion", ReleasePlotSuggestion)
+            .WithName("ReleasePlotSuggestion")
+            .WithSummary("Releases this visitor's held plot suggestion (e.g. \"pick a different island\").");
 
         return app;
     }
@@ -247,5 +256,108 @@ public static class WorldEndpoints
 
         httpContext.Response.Headers.ETag = eTag;
         return TypedResults.File(result.Png!, "image/png");
+    }
+
+    /// <summary>
+    /// Backend-owned counterpart to the landing page's old client-side plot
+    /// finder — see <see cref="PlotReservationService"/>. Same anonymous-play
+    /// ownership header as <see cref="GetFogMask"/>; never echoes any owner
+    /// id, IP, or another visitor's reservation back to the caller.
+    /// </summary>
+    private static async Task<Results<Ok<PlotSuggestionResponse>, NotFound<ProblemDetails>,
+        Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> GetPlotSuggestion(
+        Guid worldId,
+        HttpContext httpContext,
+        PlotReservationService reservations,
+        CancellationToken cancellationToken)
+    {
+        var ownerIdOrProblem = RequireOwnerId(httpContext);
+        if (ownerIdOrProblem.Problem is not null)
+        {
+            return TypedResults.BadRequest(ownerIdOrProblem.Problem);
+        }
+
+        var ipKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var fingerprintKey = ClientFingerprint.Derive(httpContext.Request.Headers);
+
+        var result = await reservations.GetOrRefreshAsync(
+            worldId, ownerIdOrProblem.OwnerId!, ipKey, fingerprintKey, cancellationToken);
+
+        switch (result.Rejection)
+        {
+            case PlotSuggestionRejection.WorldNotFound:
+                return TypedResults.NotFound(new ProblemDetails
+                {
+                    Title = "World not found.",
+                    Status = StatusCodes.Status404NotFound,
+                });
+            case PlotSuggestionRejection.AlreadyFounded:
+            {
+                var problem = new ProblemDetails
+                {
+                    Title = "Already founded.",
+                    Detail = "This visitor already has a settlement in this world.",
+                    Status = StatusCodes.Status409Conflict,
+                };
+                problem.Extensions["rejection"] = result.Rejection.ToString();
+                problem.Extensions["existingSettlementId"] = result.ExistingSettlementId;
+                return TypedResults.Conflict(problem);
+            }
+
+            case PlotSuggestionRejection.NoPlotAvailable:
+            {
+                var problem = new ProblemDetails
+                {
+                    Title = "No plot available.",
+                    Detail = "Every founding plot in this world is currently taken or held.",
+                    Status = StatusCodes.Status409Conflict,
+                };
+                problem.Extensions["rejection"] = result.Rejection.ToString();
+                return TypedResults.Conflict(problem);
+            }
+        }
+
+        // Always fresh — re-validated against live state on every call, so a
+        // cached response would just be wrong the moment anything changes.
+        httpContext.Response.Headers.CacheControl = "no-store";
+
+        var suggestion = result.Suggestion!;
+        return TypedResults.Ok(new PlotSuggestionResponse(
+            suggestion.IslandId,
+            new TileCoordinate(suggestion.Plot.Q, suggestion.Plot.R),
+            [.. suggestion.Alternatives.Select(a => new TileCoordinate(a.Q, a.R))],
+            suggestion.Reserved,
+            suggestion.ReservedUntil));
+    }
+
+    private static Results<NoContent, BadRequest<ProblemDetails>> ReleasePlotSuggestion(
+        Guid worldId,
+        HttpContext httpContext,
+        PlotReservationService reservations)
+    {
+        var ownerIdOrProblem = RequireOwnerId(httpContext);
+        if (ownerIdOrProblem.Problem is not null)
+        {
+            return TypedResults.BadRequest(ownerIdOrProblem.Problem);
+        }
+
+        reservations.Release(worldId, ownerIdOrProblem.OwnerId!);
+        return TypedResults.NoContent();
+    }
+
+    private static (string? OwnerId, ProblemDetails? Problem) RequireOwnerId(HttpContext httpContext)
+    {
+        var ownerId = httpContext.Request.Headers[OwnershipGate.OwnerIdHeaderName].ToString();
+        if (string.IsNullOrEmpty(ownerId))
+        {
+            return (null, new ProblemDetails
+            {
+                Title = "Missing owner id.",
+                Detail = $"The '{OwnershipGate.OwnerIdHeaderName}' header is required.",
+                Status = StatusCodes.Status400BadRequest,
+            });
+        }
+
+        return (ownerId, null);
     }
 }

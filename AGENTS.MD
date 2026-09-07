@@ -55,10 +55,26 @@
   `dotnet test` against `src/backend/Bjarnoy.slnx` should run for real, not
   be skipped with a "no SDK in this sandbox, please let CI confirm" note.
   (The PostgreSQL half of the integration suite and `Bjarnoy.AppHost.Tests`
-  still need a working Docker daemon, which this sandbox doesn't have —
-  those still skip/fail for that unrelated reason.)
+  need a working Docker daemon.)
 - Blender is installable the same way (`sudo apt-get install -y blender`)
   for anything touching 3D/tile-art asset work.
+- Docker (client + `dockerd`) is already installed in the cloud sandbox, but
+  the daemon isn't running by default, and `service docker start`/
+  `/etc/init.d/docker` fails with a `ulimit: error setting limit (Operation
+  not permitted)` sandbox restriction. Start it directly instead:
+  ```bash
+  sudo dockerd > /tmp/dockerd.log 2>&1 &
+  sleep 5 && docker info   # confirm it came up
+  ```
+  This gets you a running daemon, but it's still not useful for
+  `Bjarnoy.AppHost.Tests`/Postgres-backed integration tests here: pulling
+  any image (`docker run hello-world`, `postgres`, etc.) fails with a `403
+  Forbidden` from Docker Hub's CDN — the sandbox's egress proxy doesn't
+  allow that host for this session. Per the proxy's own guidance
+  (`/root/.ccr/README.md`), a 403 is an org policy denial, not a bug — don't
+  retry or try to route around it. So those Docker-dependent test suites
+  still can't be run/reproduced locally in this sandbox; say so rather than
+  claiming to have verified them, and rely on CI for that coverage.
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path
