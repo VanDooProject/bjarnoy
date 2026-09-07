@@ -1149,6 +1149,21 @@ export class HexMapRenderer {
     return worldModel.listSettlements().some((s) => s.ownerId === playerId);
   }
 
+  /** §3's layer stack, by name — shared by mount() (initial child order) and setMode() (reorder on a mode switch). */
+  private layersByName(): Record<WorldLayerName, Container> {
+    return {
+      water: this.waterLayer.mesh,
+      terrainBase: this.terrainBase.container,
+      waves: this.waveLayer,
+      terrainFlat: this.terrainFlat,
+      borders: this.borderLayer,
+      hover: this.hoverLayer,
+      terrainTop: this.terrainTop.container,
+      range: this.rangeLayer,
+      highlight: this.highlightLayer,
+    };
+  }
+
   async mount(canvas: HTMLCanvasElement, width: number, height: number): Promise<void> {
     const app = new Application();
     await app.init({
@@ -1192,7 +1207,15 @@ export class HexMapRenderer {
     // small atlas resolves, rather than waiting on the much larger
     // buildings-static atlas too. Building sprites pop in once it resolves
     // (below), via a second rebuildAll() that reuses the sprite pool.
-    if (this.options.mode === 'settlement') {
+    // Kicked off regardless of starting mode — a world-mode mount used to
+    // never load these at all (this.textures stayed null forever), which
+    // was fine while mode never changed after construction, but a later
+    // zoom-driven switch to settlement mode (setMode) needs them ready or
+    // it renders blank until they resolve. World mode's own first paint
+    // never awaits this (rebuildAll's settlement branch is the only thing
+    // gated on `this.textures`), so starting the load here costs nothing on
+    // the world map's own critical path.
+    const textureLoad = (async () => {
       const [textures, icons] = await Promise.all([
         loadTerrainAtlas(),
         // The whole map failing to mount because a marker icon didn't
@@ -1206,6 +1229,7 @@ export class HexMapRenderer {
           return null;
         }),
       ]);
+      if (this.destroyed) return;
       this.textures = textures;
       this.icons = icons;
 
@@ -1218,8 +1242,15 @@ export class HexMapRenderer {
         .catch((err) => {
           console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
         });
+    })();
+
+    if (this.options.mode === 'settlement') {
+      await textureLoad;
     } else {
       this.textures = null;
+      void textureLoad.then(() => {
+        if (!this.destroyed) this.rebuildAll();
+      });
     }
     if (this.destroyed) return;
 
@@ -1227,18 +1258,7 @@ export class HexMapRenderer {
     // testable without a canvas (see `worldLayerOrder`) — the whole of §3 is
     // about where in this stack the water mesh goes, and getting it wrong is
     // silent.
-    const byName: Record<WorldLayerName, Container> = {
-      water: this.waterLayer.mesh,
-      terrainBase: this.terrainBase.container,
-      waves: this.waveLayer,
-      terrainFlat: this.terrainFlat,
-      borders: this.borderLayer,
-      hover: this.hoverLayer,
-      terrainTop: this.terrainTop.container,
-      range: this.rangeLayer,
-      highlight: this.highlightLayer,
-    };
-    this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => byName[name]));
+    this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => this.layersByName()[name]));
 
     // §4's layer stack: the two fog quads are the only genuinely
     // screen-space `app.stage` children — everything else (terrain,
@@ -3167,6 +3187,68 @@ export class HexMapRenderer {
       }
     }
     this.rebuildAll();
+  }
+
+  /**
+   * The zoom-driven world<->settlement transition (docs/design/
+   * zoom-transition.md §4/§8) — a level-of-detail switch only: `mode`
+   * changes, nothing about `settlementId`/the camera does, which is what
+   * makes it continuous (no snap). Deliberately its own method rather than
+   * routed through `updateOptions()`, which always re-aims the camera at
+   * `settlementCameraOrigin()` whenever settlement+settlementId — exactly
+   * the snap this must not do.
+   *
+   * Returns whether the switch actually happened. Fails closed to `false`
+   * (stays in the current mode) when settlement-mode content isn't ready
+   * yet (`this.textures` still loading — see mount()) rather than rendering
+   * blank; the caller (the wheel/pinch handler) simply doesn't fire the
+   * mode-change side effects (route push) in that case. In practice this
+   * only matters for a few hundred ms right after the very first mount.
+   */
+  setMode(mode: RenderMode): boolean {
+    if (mode === this.options.mode) return true;
+    if (mode === 'settlement' && !this.textures) return false;
+
+    // Stale-content cleanup, both directions — none of these run as a side
+    // effect of the rebuild below, because rebuildTerrain/rebuildMarkers
+    // only ever populate *this* mode's own layers, never clear the other
+    // mode's leftovers (they've never needed to, since mode never used to
+    // change after construction).
+    if (mode === 'world') {
+      // Leaving settlement mode: drop its tile-art sprites (rebuildTerrainFlat,
+      // world mode's own draw path, never touches these) and the army-vision
+      // holes punched into the fog shader (drawArmyOverlay, settlement-only,
+      // is the only thing that ever sets or refreshes them).
+      this.syncSpriteLayer(this.terrainBase, new Map());
+      this.syncSpriteLayer(this.terrainTop, new Map());
+      this.topAnimState.clear();
+      this.blackFogLayer.setArmyVisionSources([], 0);
+      this.whiteMistLayer.setArmyVisionSources([], 0);
+    } else {
+      // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
+      // settlement branch never calls rebuildTerrainFlat, so terrainFlat is
+      // never cleared by the normal draw path) and its wave squiggles
+      // (drawWaves, gated to world mode, is the only thing that ever clears
+      // waveLayer).
+      this.terrainFlat.clear();
+      this.waveLayer.clear();
+      this.wavePoints = [];
+    }
+
+    this.options.mode = mode;
+    this.idleDrift = mode === 'world';
+    this.waterLayer.setMode(mode);
+    // Reinsert every layer in the new mode's order — addChild only moves a
+    // single already-parented child to the end, it doesn't reorder the rest
+    // (see worldLayerOrder's own doc comment on why the water mesh's
+    // position in the stack differs by mode).
+    this.world.addChild(...worldLayerOrder(mode).map((name) => this.layersByName()[name]));
+    // Forces a full rebake (waterMaskRegionBuilt gates it on viewport
+    // coverage, which hasn't changed) rather than leaving anything from the
+    // outgoing mode's last rebuild half-applied.
+    this.waterMaskRegionBuilt = null;
+    this.rebuildAll();
+    return true;
   }
 
   destroy() {
