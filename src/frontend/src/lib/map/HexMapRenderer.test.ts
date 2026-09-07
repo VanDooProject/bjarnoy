@@ -17,17 +17,17 @@ const river: RiverTile = { q: 0, r: 0, shape: 'mouth', inDirections: ['NE'], out
 
 describe('terrainTitleFor', () => {
   it('names the underlying terrain when there is no river', () => {
-    expect(terrainTitleFor(tileOf('sand'), undefined)).toBe('Shore');
-    expect(terrainTitleFor(tileOf('grass'), undefined)).toBe('Grassland');
+    expect(terrainTitleFor(tileOf('sand'), undefined)).toEqual({ terrain: 'sand', isRiver: false });
+    expect(terrainTitleFor(tileOf('grass'), undefined)).toEqual({ terrain: 'grass', isRiver: false });
   });
 
-  it('names the river instead of the underlying terrain when one is present — even on sand (the reported case)', () => {
-    expect(terrainTitleFor(tileOf('sand'), river)).toBe('River');
+  it('flags the river instead of the underlying terrain when one is present — even on sand (the reported case)', () => {
+    expect(terrainTitleFor(tileOf('sand'), river)).toEqual({ terrain: 'sand', isRiver: true });
   });
 
-  it('names the river regardless of which terrain it sits on', () => {
+  it('flags the river regardless of which terrain it sits on', () => {
     for (const terrain of ['sea', 'sand', 'grass', 'forest', 'mountain'] as const) {
-      expect(terrainTitleFor(tileOf(terrain), river)).toBe('River');
+      expect(terrainTitleFor(tileOf(terrain), river)).toEqual({ terrain, isRiver: true });
     }
   });
 });

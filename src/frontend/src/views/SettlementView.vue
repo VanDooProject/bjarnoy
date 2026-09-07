@@ -27,7 +27,13 @@ import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
-import { BOOST_TERRAIN, buildingStatsFor, buildingUpgradeCost, matchingNeighbourCount } from '../lib/map/buildingEconomy';
+import {
+  BOOST_TERRAIN,
+  buildingStatsFor,
+  buildingUpgradeCost,
+  describeBuildingStatsEnglish,
+  matchingNeighbourCount,
+} from '../lib/map/buildingEconomy';
 import { formatBuildTime, longhouseLock, riverShapeLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
@@ -561,7 +567,7 @@ function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord):
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
   const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
-  const stats = buildingStatsFor(type, 1, matching);
+  const stats = describeBuildingStatsEnglish(buildingStatsFor(type, 1, matching));
   // Sawmill is built directly on a river tile, and only a Straight/Bend one
   // has matching art — mirrors WorldModel.placeBuilding's own check, so the
   // ring shows it locked rather than accepting a click the backend/demo

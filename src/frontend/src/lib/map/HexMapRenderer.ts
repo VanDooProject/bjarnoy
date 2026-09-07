@@ -40,7 +40,7 @@ import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
 import type { WorldModel } from './WorldModel';
 import type { RiverTile, Settlement, Terrain, Tile } from './types';
-import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from './buildingEconomy';
+import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount, type BuildingLevelStats } from './buildingEconomy';
 import { lerpPoint, routeProgressAt } from '../units/armyProgress';
 import { loadMarkerIcons, type MarkerIconName, type MarkerIcons } from './markerIcons';
 import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
@@ -430,60 +430,37 @@ export interface ArmyOverlayFrame {
  * Workers 8/8 / CLICK TO OPEN". None of that is
  * tracked per-building anywhere (the backend/WorldModel only know a
  * settlement's *aggregate* rates, not a single building's own output) so
- * `output`/`modifier`/`workers` below are derived deterministically from
- * the building's type+level+neighbours purely for display — see
- * `hoverInfoFor`'s buildingStats. Undefined fields simply don't render.
+ * `stats` below is derived deterministically from the building's
+ * type+level+neighbours purely for display — see `hoverInfoFor`'s
+ * buildingStats. This carries no formatted text (i18n happens in
+ * HexTooltip.vue, which has i18n access this plain renderer class doesn't) —
+ * only the semantic data a translator needs. Undefined fields simply don't
+ * render.
  */
+export type HoverSubject =
+  | { kind: 'building'; buildingType: NonNullable<Tile['buildingType']>; level: number }
+  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean };
+
 export interface HoverInfo {
   screenX: number;
   screenY: number;
-  title: string;
-  subtitle: string;
-  stat: string;
-  level?: number;
-  output?: string;
-  modifier?: string;
-  workers?: string;
-  cta?: string;
-  // Building stats (output/modifier/workers) are only ever populated for
-  // the viewer's own buildings — see hoverInfoFor. `premiumLocked` tells
-  // HexTooltip.vue to render a gated "Pro" upsell row in their place for a
-  // building tile that belongs to someone else, rather than silently
-  // showing nothing where the stats would be.
+  subject: HoverSubject;
+  // Present whenever the tile belongs to a settlement (building or claimed
+  // terrain); absent for unclaimed ground.
+  owner?: { settlementName: string; ownerName: string; mine: boolean };
+  // Building stats are only ever populated for the viewer's own buildings —
+  // see hoverInfoFor. `premiumLocked` tells HexTooltip.vue to render a gated
+  // "Pro" upsell row in their place for a building tile that belongs to
+  // someone else, rather than silently showing nothing where the stats
+  // would be.
+  stats?: BuildingLevelStats;
   premiumLocked?: boolean;
+  // Only ever set for the viewer's own building — "click to open".
+  openable?: boolean;
 }
 
-const BUILDING_LABELS: Record<NonNullable<Tile['buildingType']>, string> = {
-  longhouse: 'Longhouse',
-  hut: 'Hut',
-  farm: 'Farm',
-  tower: 'Watchtower',
-  fishinghut: 'Fishing Hut',
-  magictower: 'Magic Tower',
-  pumpkinfarm: 'Pumpkin Farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  lumberjack: 'Lumberjack',
-  quarry: 'Quarry',
-  storagehouse: 'Storehouse',
-  archeryrange: 'Archery Range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great Storehouse',
-  barracks: 'Barracks',
-  fisherhut: 'Fisher Hut',
-  sawmill: 'Sawmill',
-};
-
-const TERRAIN_LABELS: Record<Terrain, string> = {
-  sea: 'Open water',
-  sand: 'Shore',
-  grass: 'Grassland',
-  forest: 'Forest',
-  mountain: 'Mountain',
-};
-
 /**
- * The hover tooltip's terrain title (not shown at all if the tile has a
+ * The hover tooltip's terrain subject (not shown at all if the tile has a
  * building — see hoverInfoFor). A river tile's art fully overrides its
  * underlying land terrain (see rebuildTerrain's `river` branch, which skips
  * the plain terrain texture entirely), so the tooltip needs to say so too
@@ -491,8 +468,8 @@ const TERRAIN_LABELS: Record<Terrain, string> = {
  * sand tile hovered as "Shore" before this, since `river` wasn't threaded
  * through to the tooltip at all.
  */
-export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): string {
-  return river ? 'River' : TERRAIN_LABELS[tile.terrain];
+export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { terrain: Terrain; isRiver: boolean } {
+  return { terrain: tile.terrain, isRiver: river !== undefined };
 }
 
 // One tile-art size for both views — see the module comment above.
@@ -1575,60 +1552,43 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
+    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
 
     if (tile.buildingType) {
-      const title = BUILDING_LABELS[tile.buildingType];
-      const subtitle = owner ? (mine ? owner.name : `${owner.ownerName}'s ${owner.name}`) : title;
       const level = tile.buildingLevel ?? 1;
-      // Output/modifier/workers are only for the viewer's own buildings —
-      // scouting a rival's tile shows the building and its level, but the
-      // stats themselves are gated behind Premium (see HoverInfo.premiumLocked).
-      const stats = mine ? this.buildingStats(tile, level) : {};
+      // Stats are only for the viewer's own buildings — scouting a rival's
+      // tile shows the building and its level, but the stats themselves are
+      // gated behind Premium (see HoverInfo.premiumLocked).
+      const stats = mine ? this.buildingStats(tile, level) : undefined;
       return {
         screenX: screen.x,
         screenY: screen.y,
-        title,
-        subtitle,
-        stat: `Level ${level}`,
-        level,
-        ...stats,
+        subject: { kind: 'building', buildingType: tile.buildingType, level },
+        owner: ownerInfo,
+        stats,
         premiumLocked: !mine,
-        cta: mine ? 'Click to open' : undefined,
+        openable: mine,
       };
     }
-    const title = terrainTitleFor(tile, river);
-    if (owner) {
-      const subtitle = mine ? owner.name : `${owner.ownerName}'s ${owner.name}`;
-      return {
-        screenX: screen.x,
-        screenY: screen.y,
-        title,
-        subtitle,
-        stat: mine ? 'Click to build here' : 'Claimed ground',
-      };
-    }
+    const { terrain, isRiver } = terrainTitleFor(tile, river);
     return {
       screenX: screen.x,
       screenY: screen.y,
-      title,
-      subtitle: 'Unclaimed',
-      stat: '',
+      subject: { kind: 'terrain', terrain, isRiver },
+      owner: ownerInfo,
     };
   }
 
   /**
-   * See the HoverInfo doc comment: output/modifier/workers aren't tracked
+   * See the HoverInfo doc comment: building stats aren't tracked
    * per-building anywhere, so these are derived deterministically from the
    * building's own type/level/neighbours purely so the hover card has
    * something concrete to show, matching the mockup's "Output +240 food/h /
    * Workers 8/8" for a farm. The formulas themselves live in
    * buildingEconomy.ts so BuildingModal.vue shows the exact same numbers.
    */
-  private buildingStats(
-    tile: Tile,
-    level: number,
-  ): Pick<HoverInfo, 'output' | 'modifier' | 'workers'> {
-    if (!tile.buildingType) return {};
+  private buildingStats(tile: Tile, level: number): BuildingLevelStats | undefined {
+    if (!tile.buildingType) return undefined;
     const boostTerrain = BOOST_TERRAIN[tile.buildingType];
     const matchingNeighbours = boostTerrain ? matchingNeighbourCount(tile, boostTerrain, this.getTile) : 0;
     return buildingStatsFor(tile.buildingType, level, matchingNeighbours);

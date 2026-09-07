@@ -12,6 +12,7 @@ import {
   BOOST_TERRAIN,
   buildingStatsFor,
   buildingUpgradeCost,
+  describeBuildingStatsEnglish,
   matchingNeighbourCount,
   type BuildingKind,
 } from '../../lib/map/buildingEconomy';
@@ -157,7 +158,7 @@ const matchingNeighbours = computed(() => {
 // (and hidden) for an empty tile, since there's nothing standing yet.
 const currentStats = computed(() =>
   props.tile.buildingType
-    ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value)
+    ? describeBuildingStatsEnglish(buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value))
     : undefined,
 );
 
