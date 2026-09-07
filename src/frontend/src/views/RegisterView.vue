@@ -6,6 +6,7 @@ import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import { usePlayerStore } from '../stores/player';
 import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const auth = useAuthStore();
 const player = usePlayerStore();
@@ -55,6 +56,7 @@ async function onSubmit() {
   <div class="register">
     <header class="topbar">
       <span class="brand">{{ t('register.brand') }}</span>
+      <LocaleSwitcher />
     </header>
     <main class="body">
       <h1>{{ t('register.title') }}</h1>
@@ -117,6 +119,9 @@ async function onSubmit() {
   background: var(--shell);
 }
 .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 20px 28px;
 }
 .brand {

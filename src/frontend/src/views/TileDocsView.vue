@@ -6,6 +6,7 @@ import type { MessageSchema } from '../i18n/schema';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
@@ -82,7 +83,10 @@ const buildingsByTile = computed(() => {
   <div class="tile-docs">
     <header class="topbar">
       <span class="brand">{{ $t('common.brand.name') }}</span>
-      <button class="back" @click="router.push('/docs')">{{ $t('docs.backToDocs') }}</button>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <button class="back" @click="router.push('/docs')">{{ $t('docs.backToDocs') }}</button>
+      </div>
     </header>
     <main class="body">
       <h1>{{ $t('docs.tiles.title') }}</h1>
@@ -141,6 +145,11 @@ const buildingsByTile = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;

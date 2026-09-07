@@ -24,6 +24,7 @@ import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
 import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -104,9 +105,12 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
   <div class="reports-view">
     <header class="topbar">
       <span class="brand">{{ $t('common.brand.name') }}</span>
-      <button class="back" @click="detailItem ? backToList() : router.push('/settlement')">
-        {{ detailItem ? $t('reports.backToList') : $t('reports.backToSettlement') }}
-      </button>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <button class="back" @click="detailItem ? backToList() : router.push('/settlement')">
+          {{ detailItem ? $t('reports.backToList') : $t('reports.backToSettlement') }}
+        </button>
+      </div>
     </header>
 
     <main class="body">
@@ -203,6 +207,11 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;

@@ -24,6 +24,7 @@ import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import { buildSimulatorRequest, isPremiumRequiredError } from '../lib/units/simulator';
 import type { SimulatorResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -106,7 +107,10 @@ async function runSimulation() {
   <div class="simulator-view">
     <header class="topbar">
       <span class="brand">{{ $t('common.brand.name') }}</span>
-      <router-link to="/reports" class="back">{{ $t('simulator.back') }}</router-link>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <router-link to="/reports" class="back">{{ $t('simulator.back') }}</router-link>
+      </div>
     </header>
 
     <main class="body">
@@ -214,6 +218,11 @@ async function runSimulation() {
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;

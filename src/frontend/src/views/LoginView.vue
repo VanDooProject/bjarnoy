@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -57,6 +58,7 @@ onMounted(() => {
   <div class="login">
     <header class="topbar">
       <span class="brand">{{ t('login.brand') }}</span>
+      <LocaleSwitcher />
     </header>
     <main class="body">
       <h1>{{ t('login.title') }}</h1>
@@ -89,6 +91,9 @@ onMounted(() => {
   background: var(--shell);
 }
 .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 20px 28px;
 }
 .brand {

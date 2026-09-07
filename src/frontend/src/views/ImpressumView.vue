@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const router = useRouter();
 </script>
@@ -8,6 +9,7 @@ const router = useRouter();
   <div class="impressum">
     <header class="topbar">
       <span class="brand">{{ $t('common.brand.name') }}</span>
+      <LocaleSwitcher />
     </header>
     <main class="body">
       <h1>{{ $t('docs.impressum.title') }}</h1>
@@ -27,6 +29,9 @@ const router = useRouter();
   background: var(--shell);
 }
 .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 20px 28px;
 }
 .brand {

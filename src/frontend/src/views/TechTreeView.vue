@@ -7,6 +7,7 @@ import AtlasSprite from '../components/AtlasSprite.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
@@ -140,7 +141,10 @@ function formatAmount(value: number): string {
   <div class="tech-tree">
     <header class="topbar">
       <span class="brand">{{ $t('common.brand.name') }}</span>
-      <button class="back" @click="router.push('/docs')">{{ $t('docs.backToDocs') }}</button>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <button class="back" @click="router.push('/docs')">{{ $t('docs.backToDocs') }}</button>
+      </div>
     </header>
     <main class="body">
       <h1>{{ $t('docs.techTree.title') }}</h1>
@@ -278,6 +282,11 @@ function formatAmount(value: number): string {
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;
