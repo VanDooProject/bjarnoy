@@ -4,38 +4,18 @@ import { useRouter } from 'vue-router';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
-import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  art,
+  categoryOf,
+  typeLabel,
+} from '../lib/techtree/buildingPresentation';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
 
 onMounted(() => catalogue.load());
-
-// Same showcase atlas art HexMapRenderer/BuildingModal/RingMenu use — reused
-// here rather than duplicated, so a doc-page thumbnail is never out of sync
-// with what a building actually looks like in game. Each entry is the level
-// this preview shows (an upgraded building looks more built-up, so pick a
-// representative rung rather than always level 1); quarry has no building
-// sprite of its own (the map renders it as its terrain, mountain, with no
-// distinct prop), so it falls through to `terrainArt('mountain')` below.
-const PREVIEW_LEVEL: Record<string, number> = {
-  longhouse: 4,
-  storagehouse: 4,
-  farm: 1,
-  lumberjack: 2,
-  tower: 0,
-  pumpkinfarm: 1,
-  shrineofthor: 2,
-  shrineoffreyja: 2,
-  archeryrange: 2,
-  dockyard: 7,
-  greatstorehouse: 4,
-  barracks: 2,
-  fisherhut: 2,
-  // Flat/inland family only — same simplification buildingArt.ts's preview
-  // card makes, regardless of where the actual tile sits next to a river.
-  sawmill: 2,
-};
 
 const LORE: Record<string, string> = {
   longhouse:
@@ -60,58 +40,6 @@ const LORE: Record<string, string> = {
     'Refines timber on grass, alongside a neighbouring Lumberjack — its look changes when built next to a river or a river bend.',
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  storagehouse: 'Storage house',
-  fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
-  pumpkinfarm: 'Pumpkin farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  archeryrange: 'Archery range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great storehouse',
-  fisherhut: 'Fisher hut',
-};
-
-function typeLabel(type: string): string {
-  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
-}
-
-// Mirrors prototypes/MECHANICS.md's building categories (anchor / production
-// / military / logistics) — the closest thing this codebase has to a
-// canonical grouping — rather than inventing a new taxonomy for this page.
-const CATEGORY_ORDER = ['anchor', 'production', 'military', 'logistics'] as const;
-type Category = (typeof CATEGORY_ORDER)[number];
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  anchor: 'Anchor',
-  production: 'Production',
-  military: 'Military',
-  logistics: 'Logistics',
-};
-
-const CATEGORY_OF: Record<string, Category> = {
-  longhouse: 'anchor',
-  farm: 'production',
-  pumpkinfarm: 'production',
-  lumberjack: 'production',
-  quarry: 'production',
-  fishinghut: 'production',
-  magictower: 'production',
-  fisherhut: 'production',
-  sawmill: 'production',
-  tower: 'military',
-  archeryrange: 'military',
-  barracks: 'military',
-  storagehouse: 'logistics',
-  greatstorehouse: 'logistics',
-  dockyard: 'logistics',
-};
-
-function categoryOf(type: string): Category {
-  return CATEGORY_OF[type] ?? 'production';
-}
-
 const categories = computed(() =>
   CATEGORY_ORDER.map((id) => ({
     id,
@@ -119,11 +47,6 @@ const categories = computed(() =>
     types: catalogue.types.filter((t) => categoryOf(t) === id),
   })).filter((c) => c.types.length > 0),
 );
-
-function art(type: string): ArtRef {
-  if (type === 'quarry') return terrainArt('mountain');
-  return buildingArt(type, PREVIEW_LEVEL[type] ?? 1) ?? terrainArt('grass');
-}
 
 // Computed once per building type rather than called from the template.
 // Split into two lookups (rather than one ArtRef-keyed map) so the template
