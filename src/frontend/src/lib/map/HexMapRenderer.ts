@@ -325,6 +325,14 @@ export interface HexMapRendererOptions {
    * `true`, not shown everywhere it isn't explicitly passed `false`.
    */
   hideSettlementBadge?: boolean;
+  /**
+   * Landing-page static preview: fixes the camera to fit the whole preview
+   * island on screen and disables drag/wheel/pinch zoom, while clicks/taps
+   * still pass through (founding a settlement must keep working) — unlike
+   * `setInteractionLocked`, which also blocks clicks. See `zoomBy`, the pan
+   * branch of `onPointerMove`, and `previewFitZoom`.
+   */
+  lockCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -547,6 +555,51 @@ const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // a slice of the world map).
 const PREVIEW_ZOOM = 0.6;
 const PREVIEW_ISLAND_RADIUS = 7;
+
+/**
+ * Zoom that fits the preview island's actual drawn hexes (non-sea, within
+ * `radius` of `center` — see rebuildTerrain's `preview` branch, which this
+ * mirrors) inside the viewport, for the landing page's locked static preview
+ * (`HexMapRendererOptions.lockCamera`). Replaces the fixed `PREVIEW_ZOOM`
+ * constant when locked, so the whole island stays on screen regardless of
+ * viewport size/aspect instead of only fitting at one assumed size.
+ *
+ * A pure, exported function (rather than a private method) so it's
+ * unit-testable without a canvas/Pixi app, matching `worldLayerOrder`'s own
+ * reasoning. `screenBiasX` is accounted for because the usable half-width
+ * left of the biased centre is narrower than half the viewport (see
+ * `biasedCenterX` for the corresponding camera shift) — ignoring it would
+ * push the island's far edge off screen whenever a bias is in play.
+ */
+export function previewFitZoom(params: {
+  center: AxialCoord;
+  radius: number;
+  screenBiasX: number;
+  viewport: { width: number; height: number };
+  isSea: (c: AxialCoord) => boolean;
+  fallbackZoom: number;
+  minZoom: number;
+  maxZoom: number;
+}): number {
+  const { center, radius, screenBiasX, viewport, isSea, fallbackZoom, minZoom, maxZoom } = params;
+  if (viewport.width === 0 || viewport.height === 0) return fallbackZoom;
+
+  const grid = isoGridPosition(center, TILE_W, TILE_H);
+  const centerPx = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+  let maxDx = 0;
+  let maxDy = 0;
+  for (const c of hexesInRadius(center, radius)) {
+    if (isSea(c)) continue;
+    const g = isoGridPosition(c, TILE_W, TILE_H);
+    maxDx = Math.max(maxDx, Math.abs(g.x + TILE_W / 2 - centerPx.x));
+    maxDy = Math.max(maxDy, Math.abs(g.y + TILE_H / 2 - centerPx.y));
+  }
+  if (maxDx === 0 || maxDy === 0) return fallbackZoom;
+
+  const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
+  const zoom = Math.min(usableHalfWidth / maxDx, viewport.height / 2 / maxDy);
+  return Math.min(maxZoom, Math.max(minZoom, zoom));
+}
 // How long the camera takes to ease from one position/zoom to another (see
 // animateCameraTo) — used for the founding transition (zip 6a: fog should
 // roll in as the camera settles, not cut instantly) rather than an abrupt
@@ -992,6 +1045,7 @@ export class HexMapRenderer {
     this.options = options;
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
     this.idleDrift = options.mode === 'world';
+    this.lockCamera = !!options.lockCamera;
     this.camera =
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
@@ -1015,7 +1069,25 @@ export class HexMapRenderer {
       const grid = isoGridPosition(at, TILE_W, TILE_H);
       const centerX = grid.x + TILE_W / 2;
       const centerY = grid.y + TILE_H / 2;
-      return { x: this.biasedCenterX(centerX, PREVIEW_ZOOM), y: centerY, zoom: PREVIEW_ZOOM };
+      // Locked static preview (landing page): fit the whole island to the
+      // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
+      // fully framed regardless of viewport size/aspect. Bounds match
+      // zoomBy's own wheel-zoom clamp (0.05..4) — this is a framing choice,
+      // not a fog-margin one, so FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM
+      // don't apply here.
+      const zoom = this.lockCamera
+        ? previewFitZoom({
+            center: at,
+            radius: PREVIEW_ISLAND_RADIUS,
+            screenBiasX: this.options.screenBiasX ?? 0,
+            viewport: this.viewport,
+            isSea: (c) => this.options.worldModel.getTile(c.q, c.r).terrain === 'sea',
+            fallbackZoom: PREVIEW_ZOOM,
+            minZoom: 0.05,
+            maxZoom: 4,
+          })
+        : PREVIEW_ZOOM;
+      return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
     }
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
     const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
@@ -1187,6 +1259,11 @@ export class HexMapRenderer {
     if (!this.app) return;
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
+    // A locked preview must stay fit to the island on every resize/rotation —
+    // unlike the normal camera, which just keeps whatever position/zoom it
+    // had (re-projected onto the new viewport), a locked one has no other
+    // event (no drag, no wheel) that would ever re-fit it.
+    if (this.lockCamera) this.camera = this.settlementCameraOrigin();
     this.applyCameraTransform();
     this.scheduleCull();
   }
@@ -3073,6 +3150,7 @@ export class HexMapRenderer {
   updateOptions(patch: Partial<HexMapRendererOptions>) {
     const wasFounded = !!this.settlement();
     this.options = { ...this.options, ...patch };
+    if ('lockCamera' in patch) this.lockCamera = !!patch.lockCamera;
     if (!this.app) return;
     if (this.options.mode === 'settlement' && this.options.settlementId) {
       const target = this.settlementCameraOrigin();

@@ -355,6 +355,7 @@ async function foundHere(coord: AxialCoord) {
       highlightCoord: undefined,
       highlightCoords: undefined,
       screenBiasX: 0,
+      lockCamera: false,
     });
   } catch (err) {
     // A 409 covers several distinct rejections (see FoundingRejection) —
@@ -423,6 +424,7 @@ watch(
       "
       :highlight-coords="player.hasFoundedSettlement || DEMO_MODE ? undefined : nearbyStartCoords"
       :screen-bias-x="0.16"
+      :lock-camera="!player.hasFoundedSettlement"
       hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
       @hex-click="onHexClick"

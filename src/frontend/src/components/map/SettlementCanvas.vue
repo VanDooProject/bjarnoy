@@ -33,6 +33,10 @@ const props = defineProps<{
   // other caller. `hideX` defaulting to `false` (shown) is what every
   // other caller actually wants without opting in.
   hideSettlementBadge?: boolean;
+  // Landing-page static preview: fixes the camera to fit the whole island on
+  // screen and disables drag/wheel zoom, while clicks still work (founding
+  // must keep working) — see HexMapRendererOptions.lockCamera.
+  lockCamera?: boolean;
 }>();
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
@@ -55,6 +59,7 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   highlightCoords: props.highlightCoords,
   screenBiasX: props.screenBiasX,
   hideSettlementBadge: props.hideSettlementBadge,
+  lockCamera: props.lockCamera,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
