@@ -88,7 +88,15 @@ beforeEach(() => {
   markConversationRead.mockResolvedValue({ markedRead: 0 });
 
   const auth = useAuthStore();
-  auth.user = { id: 'user-1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: false };
+  auth.user = {
+    id: 'user-1',
+    userName: 'ragnar',
+    role: 'player',
+    status: 'active',
+    displayName: null,
+    isPremium: false,
+    preferredLocale: null,
+  };
 });
 
 describe('ConversationView', () => {

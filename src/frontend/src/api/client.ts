@@ -84,7 +84,9 @@ import type {
   UnitDefinitionResponse,
   UpdateAdminUserRequest,
   UpdateBioRequest,
+  UpdateLocaleRequest,
   UpdateWorldSettingsRequest,
+  UserResponse,
   WorldResponse,
 } from './types';
 
@@ -297,6 +299,8 @@ export const api = {
     request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
   updateMyBio: (body: UpdateBioRequest) =>
     request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
+  updateMyLocale: (body: UpdateLocaleRequest) =>
+    request<UserResponse>('/profiles/me/locale', { method: 'PUT', body: JSON.stringify(body) }),
   reportProfile: (userId: string, body: ReportProfileRequest) =>
     request<ReportResponse>(`/profiles/${userId}/reports`, {
       method: 'POST',

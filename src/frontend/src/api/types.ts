@@ -349,6 +349,8 @@ export interface UserResponse {
   status: string;
   displayName: string | null;
   isPremium: boolean;
+  /** One of `SupportedLocale` (`i18n/locale.ts`); `null` if unset. */
+  preferredLocale: string | null;
 }
 
 export interface AuthResponse {
@@ -659,6 +661,11 @@ export interface ProfileResponse {
 /** `bio: null` (or empty) clears the bio. */
 export interface UpdateBioRequest {
   bio: string | null;
+}
+
+/** `preferredLocale: null` clears the saved preference. */
+export interface UpdateLocaleRequest {
+  preferredLocale: string | null;
 }
 
 export interface ReportProfileRequest {

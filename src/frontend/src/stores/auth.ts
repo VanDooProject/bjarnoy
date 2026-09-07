@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ApiError, authHooks } from '../api/client';
 import type { AuthResponse, UserResponse } from '../api/types';
 import { API_BASE_URL } from '../config';
+import { setLocale } from '../i18n';
+import { isSupportedLocale } from '../i18n/locale';
 
 const REFRESH_TOKEN_KEY = 'bjarnoy.refreshToken';
 
@@ -65,6 +67,16 @@ export const useAuthStore = defineStore('auth', {
       this.user = response.user;
       this.accessToken = response.accessToken;
       localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+      this.applyUserLocale(response.user);
+    },
+    // The account's saved locale (if any) wins over whatever was already
+    // detected/stored on this device — see detectInitialLocale's precedence
+    // in i18n/locale.ts, which this keeps in sync with after the fact for
+    // the login/register/refresh/me responses that arrive after boot.
+    applyUserLocale(user: UserResponse) {
+      if (isSupportedLocale(user.preferredLocale)) {
+        setLocale(user.preferredLocale);
+      }
     },
     clearSession() {
       this.user = null;
@@ -110,6 +122,7 @@ export const useAuthStore = defineStore('auth', {
       if (!this.accessToken) return;
       try {
         this.user = await getMe(this.accessToken);
+        this.applyUserLocale(this.user);
       } catch {
         this.clearSession();
       }

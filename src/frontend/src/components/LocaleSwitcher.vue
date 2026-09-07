@@ -6,11 +6,22 @@
 import { useI18n } from 'vue-i18n';
 import { setLocale, SUPPORTED_LOCALES, type SupportedLocale } from '../i18n';
 import type { MessageSchema } from '../i18n/schema';
+import { api } from '../api/client';
+import { useAuthStore } from '../stores/auth';
 
 const { t, locale } = useI18n<{ message: MessageSchema }, SupportedLocale>({ useScope: 'global' });
+const authStore = useAuthStore();
 
 function label(code: SupportedLocale): string {
   return t(`common.localeSwitcher.${code}`);
+}
+
+function selectLocale(code: SupportedLocale): void {
+  setLocale(code);
+  if (authStore.isAuthenticated) {
+    // Best-effort: the switch already applied locally either way.
+    api.updateMyLocale({ preferredLocale: code }).catch(() => {});
+  }
 }
 </script>
 
@@ -24,7 +35,7 @@ function label(code: SupportedLocale): string {
       :class="{ active: locale === code }"
       :aria-pressed="locale === code"
       :title="label(code)"
-      @click="setLocale(code)"
+      @click="selectLocale(code)"
     >
       {{ code.toUpperCase() }}
     </button>
