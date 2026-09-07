@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Settlers;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -83,5 +84,81 @@ public class FoundingTests
 
         // Clear of the first settlement but inside the spacing buffer of the second.
         Assert.False(Founding.IsHexFoundable(new HexCoord(18, 0), settlements, minimumSpacing: 3));
+    }
+
+    // CheckSpacing mirrors FoundAsync's own two-phase check byte-for-byte —
+    // the landing-page plot-suggestion service (PlotReservationService) must
+    // never disagree with founding about whether a plot is free.
+    [Fact]
+    public void CheckSpacing_is_ok_with_no_neighbours()
+    {
+        var verdict = Founding.CheckSpacing(new HexCoord(50, 50), [], minimumSpacing: 15, safetyMargin: 2);
+
+        Assert.Equal(Founding.SpacingVerdict.Ok, verdict);
+    }
+
+    [Fact]
+    public void CheckSpacing_reports_PlotTaken_on_an_exact_centre_match()
+    {
+        var neighbour = new Founding.NeighbourSnapshot(
+            new HexCoord(0, 0), [new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 1)]);
+
+        var verdict = Founding.CheckSpacing(new HexCoord(0, 0), [neighbour], minimumSpacing: 15, safetyMargin: 2);
+
+        Assert.Equal(Founding.SpacingVerdict.PlotTaken, verdict);
+    }
+
+    [Fact]
+    public void CheckSpacing_reports_TooClose_within_the_centre_distance_phase()
+    {
+        var neighbour = new Founding.NeighbourSnapshot(
+            new HexCoord(0, 0), [new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 1)]);
+
+        // Distance 10, less than minimumSpacing 15, but well outside a
+        // level-1 longhouse's real claim disc — only phase 1 catches this.
+        var verdict = Founding.CheckSpacing(new HexCoord(10, 0), [neighbour], minimumSpacing: 15, safetyMargin: 2);
+
+        Assert.Equal(Founding.SpacingVerdict.TooClose, verdict);
+    }
+
+    [Fact]
+    public void CheckSpacing_reports_TooClose_when_a_tower_chain_reaches_past_the_centre_distance_phase()
+    {
+        // A max-level longhouse (claim radius 7) plus a max-level tower
+        // (TowerClaimRadius(10)) placed right at that border, chaining real
+        // territory out past minimumSpacing's own centre-only radius — the
+        // same scenario SettlementEndpointsTests already covers for
+        // FoundAsync itself.
+        var towerClaimRadius = Settlement.TowerClaimRadius(10);
+        var neighbour = new Founding.NeighbourSnapshot(
+            new HexCoord(0, 0),
+            [
+                new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(7, 0), BuildingType.Tower, 10),
+            ]);
+
+        var candidate = new HexCoord(7 + towerClaimRadius + 2, 0);
+
+        var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 15, safetyMargin: 2);
+
+        Assert.Equal(Founding.SpacingVerdict.TooClose, verdict);
+    }
+
+    [Fact]
+    public void CheckSpacing_is_ok_just_past_a_tower_chains_reach()
+    {
+        var towerClaimRadius = Settlement.TowerClaimRadius(10);
+        var neighbour = new Founding.NeighbourSnapshot(
+            new HexCoord(0, 0),
+            [
+                new PlacedBuilding(new HexCoord(0, 0), BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(7, 0), BuildingType.Tower, 10),
+            ]);
+
+        var candidate = new HexCoord(7 + towerClaimRadius + 3, 0);
+
+        var verdict = Founding.CheckSpacing(candidate, [neighbour], minimumSpacing: 15, safetyMargin: 2);
+
+        Assert.Equal(Founding.SpacingVerdict.Ok, verdict);
     }
 }
