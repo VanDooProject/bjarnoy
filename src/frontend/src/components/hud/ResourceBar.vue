@@ -19,7 +19,7 @@ const props = defineProps<{
 }>();
 
 const world = useWorldStore();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
@@ -35,8 +35,8 @@ const pills = computed(() => [
 
 const population = computed(() => world.hud.population);
 
-function fmt(n: number): string {
-  return Math.floor(n).toLocaleString();
+function fmt(value: number): string {
+  return n(Math.floor(value), 'integer');
 }
 
 function fillPct(value: number, cap: number): number {

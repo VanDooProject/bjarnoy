@@ -35,7 +35,7 @@ const props = defineProps<{
   occurredAt?: string | null;
 }>();
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const victory = computed(() => isVictoryFor(props.report, props.side));
 const outcome = computed(() => outcomeLabel(props.report, props.side));
@@ -49,7 +49,7 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
       <span class="banner">{{ outcome }}</span>
       <span class="mission-pill">{{ missionLabel(report.mission) }}</span>
     </div>
-    <p v-if="occurredAt" class="occurred">{{ new Date(occurredAt).toLocaleString() }}</p>
+    <p v-if="occurredAt" class="occurred">{{ d(new Date(occurredAt), 'long') }}</p>
 
     <div class="power-row">
       <div class="power">

@@ -24,7 +24,7 @@ import type { Terrain, Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
 const ONBOARDING_TARGET_BUILDINGS = 3;
@@ -110,7 +110,7 @@ const joinBlocked = computed(
 const joinBlockedMessage = computed(() => {
   if (world.worldJoinableReason === 'NotStartedYet' && world.worldStartsAt) {
     const startsAt = new Date(world.worldStartsAt);
-    return t('landing.joinBlocked.opensAt', { date: startsAt.toLocaleString() });
+    return t('landing.joinBlocked.opensAt', { date: d(startsAt, 'long') });
   }
   if (world.worldJoinableReason === 'JoinsClosed') {
     return t('landing.joinBlocked.joinsClosed');

@@ -7,7 +7,7 @@ import { useWorldStore } from '../stores/world';
 import type { LeaderboardCategory, LeaderboardScope } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const auth = useAuthStore();
@@ -64,7 +64,7 @@ function selectTab(scope: LeaderboardScope, category: LeaderboardCategory) {
 const windowOptions = computed(() => [...leaderboard.weeklyWindows].reverse());
 
 function windowLabel(periodStart: string) {
-  return new Date(periodStart).toLocaleDateString();
+  return d(new Date(periodStart), 'short');
 }
 
 function selectWindow(periodStart: string | null) {

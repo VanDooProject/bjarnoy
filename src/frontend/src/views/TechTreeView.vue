@@ -10,7 +10,7 @@ import type { MessageSchema } from '../i18n/schema';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
-const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, te, n, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => catalogue.load());
 
@@ -132,7 +132,7 @@ function humanizeSeconds(seconds: number): string {
 }
 
 function formatAmount(value: number): string {
-  return value === 0 ? '—' : Math.round(value).toLocaleString();
+  return value === 0 ? '—' : n(Math.round(value), 'integer');
 }
 </script>
 
@@ -154,7 +154,7 @@ function formatAmount(value: number): string {
         {{
           $t('docs.status.fallback', {
             snapshot: catalogue.generatedAt
-              ? $t('docs.status.fallbackSnapshot', { date: new Date(catalogue.generatedAt).toLocaleDateString() })
+              ? $t('docs.status.fallbackSnapshot', { date: d(new Date(catalogue.generatedAt), 'short') })
               : '',
           })
         }}

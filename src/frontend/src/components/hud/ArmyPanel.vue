@@ -338,7 +338,7 @@ async function confirmFieldOrderClick() {
         <p class="status-subtext instructions">
           {{ t('hud.armyPanel.fieldOrderInstructions', {
             count: fieldOrderRouteLength,
-            hexWord: fieldOrderRouteLength === 1 ? t('hud.armyPanel.hex') : t('hud.armyPanel.hexes'),
+            hexWord: t('hud.armyPanel.hexWord', fieldOrderRouteLength),
           }) }}
         </p>
         <p v-if="!auth.isPremium" class="status-subtext waypoint-hint">
@@ -426,7 +426,7 @@ async function confirmFieldOrderClick() {
         <p v-if="draft.mission === 'move'" class="status-subtext instructions">
           {{ t('hud.armyPanel.dispatchInstructions', {
             count: routeLength,
-            hexWord: routeLength === 1 ? t('hud.armyPanel.hex') : t('hud.armyPanel.hexes'),
+            hexWord: t('hud.armyPanel.hexWord', routeLength),
           }) }}
         </p>
         <template v-else>
@@ -434,7 +434,7 @@ async function confirmFieldOrderClick() {
             {{ t('hud.armyPanel.targetInstructions', {
               mission: draft.mission,
               count: routeLength,
-              waypointWord: routeLength === 1 ? t('hud.armyPanel.waypoint') : t('hud.armyPanel.waypoints'),
+              waypointWord: t('hud.armyPanel.waypointWord', routeLength),
             }) }}
           </p>
 

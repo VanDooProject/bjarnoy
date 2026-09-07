@@ -10,7 +10,7 @@ import type { MessageSchema } from '../i18n/schema';
 const world = useWorldStore();
 const auth = useAuthStore();
 const guild = useGuildStore();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const feeTierLabels: Record<GuildFeeTier, string> = {
   copper: t('guild.feeTier.copper'),
@@ -177,7 +177,7 @@ function guildLabel(id: string): string {
 }
 
 function formattedDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+  return d(new Date(iso), 'long');
 }
 </script>
 

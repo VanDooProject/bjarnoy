@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const auth = useAuthStore();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const otherUserId = computed(() => route.params.userId as string);
 
@@ -110,7 +110,7 @@ function readStatus(message: MessageResponse): string | null {
   if (!isMine(message)) return null;
   if (!message.readReceiptVisible) return null;
   return message.readAt
-    ? t('messages.conversation.read', { date: new Date(message.readAt).toLocaleString() })
+    ? t('messages.conversation.read', { date: d(new Date(message.readAt), 'long') })
     : t('messages.conversation.unread');
 }
 </script>
@@ -137,7 +137,7 @@ function readStatus(message: MessageResponse): string | null {
           <div class="bubble">
             <p class="body">{{ message.body }}</p>
             <div class="meta">
-              <span>{{ new Date(message.sentAt).toLocaleString() }}</span>
+              <span>{{ d(new Date(message.sentAt), 'long') }}</span>
               <span v-if="readStatus(message)">· {{ readStatus(message) }}</span>
               <button
                 v-if="!reportedIds.has(message.id)"

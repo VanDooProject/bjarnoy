@@ -5,7 +5,7 @@ import { api, ApiError } from '../api/client';
 import type { ConversationResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const conversations = ref<ConversationResponse[]>([]);
 const page = ref(1);
@@ -62,7 +62,7 @@ function preview(body: string): string {
               <span v-if="conversation.unreadCount > 0" class="unread">{{ conversation.unreadCount }}</span>
             </span>
             <span class="preview">{{ preview(conversation.lastMessage.body) }}</span>
-            <span class="when">{{ new Date(conversation.lastMessage.sentAt).toLocaleString() }}</span>
+            <span class="when">{{ d(new Date(conversation.lastMessage.sentAt), 'long') }}</span>
           </router-link>
         </li>
       </ul>

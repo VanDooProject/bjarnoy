@@ -9,7 +9,7 @@ import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
-const { t, te } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, te, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => catalogue.load());
 
@@ -94,7 +94,7 @@ const buildingsByTile = computed(() => {
         {{
           $t('docs.status.fallback', {
             snapshot: catalogue.generatedAt
-              ? $t('docs.status.fallbackSnapshot', { date: new Date(catalogue.generatedAt).toLocaleDateString() })
+              ? $t('docs.status.fallbackSnapshot', { date: d(new Date(catalogue.generatedAt), 'short') })
               : '',
           })
         }}

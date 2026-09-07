@@ -9,7 +9,7 @@ import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const auth = useAuthStore();
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const profile = ref<ProfileResponse | null>(null);
 const loading = ref(true);
@@ -122,11 +122,7 @@ async function sendReport() {
 }
 
 function joinedDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  return d(new Date(iso), 'dateLong');
 }
 </script>
 

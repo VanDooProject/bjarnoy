@@ -25,7 +25,7 @@ import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import type { MessageSchema } from '../i18n/schema';
 
-const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const route = useRoute();
 const router = useRouter();
@@ -77,7 +77,7 @@ const rows = computed(() =>
         isVictory: isVictoryFor(item.report, side),
         mission: missionLabel(item.report.mission),
         summary: reportSummaryLine(item.report, side),
-        when: new Date(item.report.occurredAt).toLocaleString(),
+        when: d(new Date(item.report.occurredAt), 'long'),
       };
     }
     const side = tradeSideOf(item.report);
@@ -88,7 +88,7 @@ const rows = computed(() =>
       isVictory: false,
       mission: item.report.guildTrade ? t('reports.trade.guildTrade') : t('reports.trade.trade'),
       summary: tradeSummaryLine(item.report, side),
-      when: new Date(item.report.completedAt).toLocaleString(),
+      when: d(new Date(item.report.completedAt), 'long'),
     };
   }),
 );
@@ -121,7 +121,7 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
               tradeDetail.guildTrade ? $t('reports.trade.guildTrade') : $t('reports.trade.trade')
             }}</span>
           </div>
-          <p class="occurred">{{ new Date(tradeDetail.completedAt).toLocaleString() }}</p>
+          <p class="occurred">{{ d(new Date(tradeDetail.completedAt), 'long') }}</p>
 
           <div class="power-row">
             <div class="power">
