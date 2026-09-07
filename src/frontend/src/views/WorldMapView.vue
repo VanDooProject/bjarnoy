@@ -9,6 +9,7 @@ import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
+import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { useFogDebug } from '../composables/useFogDebug';
@@ -73,6 +74,7 @@ function onHexClick() {
   <div class="world-view">
     <WorldMapCanvas ref="canvasRef" :world-model="world.model" :player-id="player.id" @hex-click="onHexClick" />
     <div v-if="showFogDebug" class="fog-debug-stack">
+      <ZoomDebugPanel :renderer="canvasRef?.renderer" />
       <FogDebugPanel @change="onFogDebugChange" />
       <WaterDebugPanel @change="onFogDebugChange" />
       <WaterPerfPanel />

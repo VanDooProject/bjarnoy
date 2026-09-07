@@ -2747,6 +2747,11 @@ export class HexMapRenderer {
     return label;
   }
 
+  /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
+  get cameraZoom(): number {
+    return this.camera.zoom;
+  }
+
   panTo(coord: AxialCoord) {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
