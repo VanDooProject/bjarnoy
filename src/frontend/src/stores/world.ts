@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { ApiError, api } from '../api/client';
+import { api } from '../api/client';
+import { apiErrorMessage } from '../i18n/apiErrors';
+import { i18n } from '../i18n';
 import type {
   ArmyResponse,
   BuildOrderResponse,
@@ -841,7 +843,7 @@ export const useWorldStore = defineStore('world', {
         this.fieldOrderDraft = null;
         await this.refreshArmies();
       } catch (err) {
-        draft.error = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Field order failed.';
+        draft.error = apiErrorMessage(err, i18n.global.t('common.errors.fieldOrderFailed'));
       } finally {
         draft.submitting = false;
       }
@@ -1024,10 +1026,7 @@ export const useWorldStore = defineStore('world', {
         await this.refreshArmies();
         await this.refreshLiveSettlement(); // garrison shrank by the dispatched units
       } catch (err) {
-        // Mirrors TrainingModal's ApiError.problem.detail convention —
-        // DispatchRejection has no `rejection` wire property either (same as
-        // TrainRejection), just a human-readable Detail (ArmyEndpoints.Problem).
-        draft.error = err instanceof ApiError ? (err.problem?.detail ?? err.message) : 'Dispatch failed.';
+        draft.error = apiErrorMessage(err, i18n.global.t('common.errors.dispatchFailed'));
       } finally {
         draft.submitting = false;
       }

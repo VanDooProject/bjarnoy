@@ -12,9 +12,8 @@
 // `GuildOnlyOffer` rejection in case one ever reaches here anyway (e.g. a
 // stale board row accepted just as guild membership ships).
 import { computed, ref } from 'vue';
-import { ApiError } from '../../api/client';
 import { DEMO_MODE } from '../../config';
-import { DemoTradeError } from '../../lib/map/WorldModel';
+import { apiErrorMessage } from '../../i18n/apiErrors';
 import type { ResourceKind } from '../../lib/map/types';
 import { validateTradeRatio } from '../../lib/trade/tradeRatio';
 import { useWorldStore } from '../../stores/world';
@@ -37,9 +36,10 @@ const RESOURCE_COLORS: Record<string, string> = {
   iron: 'var(--iron)',
 };
 
-// Mirrors TradeEndpoints.Problem's Detail strings (backend) so a rejection
-// reads the same whether it came back from a real 409 or from
-// WorldModel's demo-mode DemoTradeError.
+// Client-side ratio validation (`ratioErrorMessage` below) never reaches the
+// backend, so it can't carry a wire rejection code — this dict is its own
+// lookup, kept in sync by name with `apiErrors.rejections` in
+// i18n/locales/*/apiErrors.json.
 const REJECTION_MESSAGES: Record<string, string> = {
   ZeroAmount: 'Both amounts must be positive.',
   SameResource: 'Offered and requested resources must differ.',
@@ -54,10 +54,7 @@ const REJECTION_MESSAGES: Record<string, string> = {
 };
 
 function messageFor(err: unknown): string {
-  const rejection =
-    err instanceof ApiError ? err.problem?.rejection : err instanceof DemoTradeError ? err.rejection : undefined;
-  if (rejection) return REJECTION_MESSAGES[rejection] ?? rejection;
-  return err instanceof Error ? err.message : 'Something went wrong.';
+  return apiErrorMessage(err, err instanceof Error ? err.message : 'Something went wrong.');
 }
 
 const guildOnlyTooltip = "Guild trading isn't available yet";

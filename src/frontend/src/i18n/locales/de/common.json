@@ -14,6 +14,10 @@
     "loading": "Lädt…",
     "unknown": "Unbekannt"
   },
+  "errors": {
+    "dispatchFailed": "Entsendung fehlgeschlagen.",
+    "fieldOrderFailed": "Marschbefehl fehlgeschlagen."
+  },
   "localeSwitcher": {
     "label": "Sprache",
     "en": "English",
