@@ -976,6 +976,12 @@ export class HexMapRenderer {
   // hovered hex and drawing its highlight regardless of what's visually on
   // top — so it needs an explicit lock, not just relying on DOM hit-testing.
   private interactionLocked = false;
+  // Static-preview mode (landing page): the camera is fixed to fit the whole
+  // island on screen, so drag panning and wheel/pinch zoom are no-ops — but
+  // unlike `interactionLocked`, clicks/taps still pass through (founding a
+  // settlement must keep working). See `zoomBy` and the pan branch of
+  // `onPointerMove`.
+  private lockCamera = false;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -1444,12 +1450,16 @@ export class HexMapRenderer {
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
     this.dragMoved += Math.abs(dx) + Math.abs(dy);
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+    // Locked preview (landing page): still track dragMoved/lastPointer above
+    // so onPointerUp's click-vs-drag slop check keeps working (founding must
+    // stay clickable) — only the actual camera pan is skipped.
+    if (this.lockCamera) return;
     this.camera = {
       ...this.camera,
       x: this.camera.x - dx / this.camera.zoom,
       y: this.camera.y - dy / this.camera.zoom,
     };
-    this.lastPointer = { x: e.clientX, y: e.clientY };
     this.applyCameraTransform();
     this.scheduleCull();
   };
@@ -1639,13 +1649,33 @@ export class HexMapRenderer {
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
     if (this.interactionLocked) return;
-    this.idleDrift = false;
     const canvas = this.app?.canvas;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    const before = screenToWorld(this.camera, screen, this.viewport);
     const factor = Math.exp(-e.deltaY * 0.001);
+    this.zoomBy(screen, factor);
+  };
+
+  /**
+   * Anchor-preserving zoom: rescales the camera around a fixed screen point
+   * so that point stays under the cursor/pinch centre as zoom changes. The
+   * only caller today is `onWheel`; pulled out as its own method (rather than
+   * inlined there) so a future multi-touch pinch handler can drive the exact
+   * same math through the exact same seam — pinch just needs to compute its
+   * own `screen` (the midpoint between the two touches) and `factor` (the
+   * ratio of successive inter-touch distances) and call this, picking up the
+   * `lockCamera` guard and zoom clamp for free.
+   * TODO(pinch-zoom): no multi-touch/pointerId tracking exists yet (single
+   * `lastPointer`, see onPointerDown) — mobile currently has no way to zoom
+   * the map at all, since `touch-action: none` also suppresses the browser's
+   * own native pinch. See docs/design/zoom-transition.md §2 (out of scope
+   * for the zoom-transition work, tracked as a follow-up).
+   */
+  private zoomBy(screen: { x: number; y: number }, factor: number) {
+    if (this.lockCamera) return;
+    this.idleDrift = false;
+    const before = screenToWorld(this.camera, screen, this.viewport);
     const zoom = Math.min(4, Math.max(0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
     const after = screenToWorld(this.camera, screen, this.viewport);
@@ -1655,9 +1685,9 @@ export class HexMapRenderer {
       y: this.camera.y + (before.y - after.y),
     };
     this.applyCameraTransform();
-    this.noteWheelActivity();
+    this.noteZoomActivity();
     this.scheduleCull();
-  };
+  }
 
   /**
    * Marks a wheel/pinch zoom gesture as in progress and (re)arms the timer
@@ -1670,7 +1700,7 @@ export class HexMapRenderer {
    * gives when a drag ends and tickCameraAnim gives when an animation
    * completes.
    */
-  private noteWheelActivity() {
+  private noteZoomActivity() {
     this.wheeling = true;
     if (this.wheelIdleTimer !== null) clearTimeout(this.wheelIdleTimer);
     this.wheelIdleTimer = setTimeout(() => {
@@ -1700,7 +1730,7 @@ export class HexMapRenderer {
 
   /**
    * True while the camera is mid-gesture — a pointer drag, an animated
-   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteWheelActivity)
+   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteZoomActivity)
    * — i.e. while more camera movement is expected imminently and any rebuild
    * done right now is about to be superseded. Each of the three ends with a
    * forced, fully up-to-date rebuild, so work skipped while this is true is
@@ -1728,7 +1758,7 @@ export class HexMapRenderer {
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
       // is released, tickCameraAnim's forceRebuild() when the animation
-      // completes, and noteWheelActivity's idle timer once zooming settles.
+      // completes, and noteZoomActivity's idle timer once zooming settles.
       if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
         return;
       }
@@ -3065,7 +3095,7 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     // Otherwise a zoom gesture still settling when the renderer goes away
-    // would fire its rebuild into a torn-down app (see noteWheelActivity).
+    // would fire its rebuild into a torn-down app (see noteZoomActivity).
     if (this.wheelIdleTimer !== null) {
       clearTimeout(this.wheelIdleTimer);
       this.wheelIdleTimer = null;
