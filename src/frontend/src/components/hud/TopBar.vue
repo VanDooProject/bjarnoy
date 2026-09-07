@@ -8,8 +8,22 @@
 import { computed } from 'vue';
 import { useWorldStore } from '../../stores/world';
 
+const props = defineProps<{
+  /** Overrides the settlement name — for a page with no settlement of its own (the docs). */
+  title?: string;
+  /** Overrides the island/longhouse caption. Only shown when there is a title to sit under. */
+  caption?: string;
+  /**
+   * Lay the bar out as a page header rather than a map overlay: it sits in
+   * the document (sticky to the scroll container) and takes its own clicks,
+   * instead of floating over a canvas and letting them through. The map
+   * views leave this off and are unaffected.
+   */
+  docked?: boolean;
+}>();
+
 const world = useWorldStore();
-const settlementName = computed(() => world.hud.settlementName || null);
+const settlementName = computed(() => props.title || world.hud.settlementName || null);
 
 const islandName = computed(() => {
   const settlement = world.selectedSettlementId ? world.model.getSettlement(world.selectedSettlementId) : undefined;
@@ -18,13 +32,17 @@ const islandName = computed(() => {
 });
 
 const caption = computed(() => {
+  if (props.caption) return props.caption;
+  // A caller that names the bar itself gets only the caption it asked for —
+  // a docs page has no island or longhouse to report.
+  if (props.title) return null;
   const parts = [islandName.value?.toUpperCase(), `LONGHOUSE ${world.hud.level}`].filter(Boolean);
   return parts.length ? parts.join(' · ') : null;
 });
 </script>
 
 <template>
-  <header class="hud-bar">
+  <header class="hud-bar" :class="{ 'hud-bar--docked': docked }">
     <div class="brand">
       <span class="logo-hex" aria-hidden="true" title="Bjarnoy">
         <svg viewBox="0 0 100 100">
@@ -65,6 +83,19 @@ const caption = computed(() => {
   pointer-events: none;
 }
 .hud-bar-right :deep(button) {
+  pointer-events: auto;
+}
+/* A page header rather than a map overlay: in the document flow, stuck to
+   the top of whichever ancestor scrolls (the docs pages make themselves the
+   scroll container), and taking its own clicks since there is no map behind
+   it to click through to. */
+.hud-bar--docked {
+  position: sticky;
+  inset: auto;
+  top: 0;
+  pointer-events: auto;
+}
+.hud-bar--docked .brand {
   pointer-events: auto;
 }
 .brand {
