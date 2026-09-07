@@ -66,6 +66,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
+import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -344,6 +345,16 @@ export interface HexMapRendererOptions {
    * (`world.moveWaypoint`) is idempotent for the same coordinate.
    */
   onWaypointMove?: (index: number, coord: AxialCoord) => void;
+  /**
+   * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
+   * crosses the enter-settlement or exit-to-world threshold
+   * (zoomTransition.ts's transitionForZoom). The renderer has already
+   * flipped its own `mode` (setMode) by the time this fires — the camera is
+   * deliberately untouched, which is what makes the transition continuous —
+   * so the caller's job is only the cosmetic side effect (a router.push to
+   * keep the URL in sync), not anything about the map itself.
+   */
+  onZoomModeChange?: (mode: RenderMode) => void;
 }
 
 /**
@@ -1248,9 +1259,18 @@ export class HexMapRenderer {
       await textureLoad;
     } else {
       this.textures = null;
-      void textureLoad.then(() => {
-        if (!this.destroyed) this.rebuildAll();
-      });
+      // A failure here only ever costs the ability to *later* switch into
+      // settlement mode with tile art ready (setMode's own fails-closed
+      // guard keeps that safe) — world mode's own draw path never touches
+      // `this.textures`, so there is nothing to fall back to besides not
+      // throwing an unhandled rejection off a fire-and-forget background load.
+      textureLoad
+        .then(() => {
+          if (!this.destroyed) this.rebuildAll();
+        })
+        .catch((err) => {
+          console.warn('Settlement-mode textures failed to preload from the world map', err);
+        });
     }
     if (this.destroyed) return;
 
@@ -1772,6 +1792,7 @@ export class HexMapRenderer {
   private zoomBy(screen: { x: number; y: number }, factor: number) {
     if (this.lockCamera) return;
     this.idleDrift = false;
+    const prevZoom = this.camera.zoom;
     const before = screenToWorld(this.camera, screen, this.viewport);
     const zoom = Math.min(4, Math.max(0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
@@ -1784,6 +1805,18 @@ export class HexMapRenderer {
     this.applyCameraTransform();
     this.noteZoomActivity();
     this.scheduleCull();
+
+    // docs/design/zoom-transition.md: edge-triggered on this exact step
+    // (prevZoom -> zoom), not on the resulting zoom's level, so an
+    // externally-placed camera resting anywhere relative to either
+    // threshold never spuriously re-triggers — only an actual gesture
+    // crossing the line does. Mode flips in place (no camera move, which is
+    // what makes this continuous); the route push is the caller's job.
+    const crossing = transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
+    if (crossing) {
+      const target: RenderMode = crossing === 'enter' ? 'settlement' : 'world';
+      if (this.setMode(target)) this.options.onZoomModeChange?.(target);
+    }
   }
 
   /**
@@ -2770,6 +2803,24 @@ export class HexMapRenderer {
   /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
   get cameraZoom(): number {
     return this.camera.zoom;
+  }
+
+  /**
+   * Re-homes the camera onto the current settlement's own canonical framing
+   * (settlementCameraOrigin — the same fog-margin-fitted view a fresh
+   * settlement-mode mount always started at). For *externally*-driven entry
+   * into settlement mode — a nav button, browser back/forward, a direct URL
+   * load — none of which are a continuous zoom gesture worth preserving, so
+   * there's nothing wrong with (and good reason for) re-centring exactly the
+   * way a fresh per-route renderer instance always used to. Never call this
+   * from a zoom-driven transition (setMode's own caller in `zoomBy`) — that
+   * path's entire point is a camera that does *not* jump.
+   */
+  focusSettlementCamera() {
+    if (!this.app) return;
+    this.camera = this.settlementCameraOrigin();
+    this.applyCameraTransform();
+    this.rebuildAll();
   }
 
   panTo(coord: AxialCoord) {

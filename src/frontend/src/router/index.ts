@@ -25,14 +25,22 @@ export const router = createRouter({
       component: () => import('../views/RegisterView.vue'),
     },
     {
+      // /world and /settlement share one component (docs/design/
+      // zoom-transition.md §5) so the zoom-driven transition's persistent
+      // HexMapRenderer survives navigating between them — Vue Router only
+      // reuses a route's component instance (no remount) when both routes
+      // resolve to the exact same component, which a shared dynamic import
+      // guarantees (the module is cached, so both resolve to the same
+      // object). See MapView.vue's own `mode` computed for how it tells the
+      // two apart.
       path: '/world',
       name: 'world',
-      component: () => import('../views/WorldMapView.vue'),
+      component: () => import('../views/MapView.vue'),
     },
     {
       path: '/settlement',
       name: 'settlement',
-      component: () => import('../views/SettlementView.vue'),
+      component: () => import('../views/MapView.vue'),
     },
     {
       // Own profile — needs a logged-in user to know whose it is.
