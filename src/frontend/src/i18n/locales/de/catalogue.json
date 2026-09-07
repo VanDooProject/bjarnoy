@@ -1,0 +1,98 @@
+{
+  "buildings": {
+    "longhouse": "Langhaus",
+    "hut": "Hütte",
+    "lumberjack": "Holzfäller",
+    "quarry": "Steinbruch",
+    "farm": "Bauernhof",
+    "storagehouse": "Lagerhaus",
+    "tower": "Turm",
+    "fisherhut": "Fischerhütte",
+    "fishinghut": "Fischerhütte",
+    "magictower": "Magischer Turm",
+    "pumpkinfarm": "Kürbisfarm",
+    "shrineofthor": "Schrein des Thor",
+    "shrineoffreyja": "Schrein der Freyja",
+    "greatstorehouse": "Großes Lagerhaus",
+    "archeryrange": "Schießplatz",
+    "dockyard": "Werft",
+    "barracks": "Kaserne",
+    "sawmill": "Sägewerk"
+  },
+  "units": {
+    "thrall": "Knecht",
+    "spearman": "Speerkämpfer",
+    "axeman": "Axtkämpfer",
+    "bowman": "Bogenschütze",
+    "berserker": "Berserker",
+    "provisioner": "Versorger",
+    "catapult": "Katapult",
+    "karve": "Karve",
+    "longship": "Langschiff"
+  },
+  "terrain": {
+    "sea": "Offenes Wasser",
+    "sand": "Ufer",
+    "grass": "Grasland",
+    "forest": "Wald",
+    "mountain": "Gebirge"
+  },
+  "resources": {
+    "wood": "Holz",
+    "stone": "Stein",
+    "food": "Nahrung",
+    "iron": "Eisen"
+  },
+  "missions": {
+    "move": "Ziehen",
+    "attack": "Angriff",
+    "support": "Unterstützung",
+    "raid": "Überfall",
+    "found": "Siedlung gründen"
+  },
+  "runes": {
+    "types": {
+      "fehu": "Fehu",
+      "jera": "Jera",
+      "othala": "Othala"
+    },
+    "rarities": {
+      "carved": "Geritzt",
+      "bound": "Gebunden",
+      "blooded": "Geblutet"
+    }
+  },
+  "guild": {
+    "roles": {
+      "leader": "Anführer",
+      "officer": "Offizier",
+      "member": "Mitglied"
+    },
+    "feeTiers": {
+      "copper": "Kupfer",
+      "silver": "Silber",
+      "gold": "Gold"
+    },
+    "boardTopics": {
+      "discussion": "Diskussion",
+      "announcement": "Ankündigung",
+      "report": "Bericht"
+    }
+  },
+  "leaderboard": {
+    "scopes": {
+      "user": "Spieler",
+      "settlement": "Siedlungen",
+      "guild": "Gilden"
+    },
+    "categories": {
+      "score": "Punktzahl",
+      "biggestSettlement": "Größte Siedlung",
+      "weeklyScoreGained": "Punkte diese Woche",
+      "weeklyFightsWon": "Siege diese Woche",
+      "weeklyFightsLost": "Niederlagen diese Woche",
+      "weeklyResourcesLooted": "Geplünderte Rohstoffe diese Woche",
+      "biggestArmy": "Größte Armee"
+    }
+  }
+}

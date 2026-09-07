@@ -1,6 +1,8 @@
 import { createI18n } from 'vue-i18n';
 import enCommon from './locales/en/common.json';
 import deCommon from './locales/de/common.json';
+import enCatalogue from './locales/en/catalogue.json';
+import deCatalogue from './locales/de/catalogue.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -39,8 +41,8 @@ export const i18n = createI18n({
   missingWarn: false,
   fallbackWarn: false,
   messages: {
-    en: { common: enCommon },
-    de: { common: deCommon },
+    en: { common: enCommon, catalogue: enCatalogue },
+    de: { common: deCommon, catalogue: deCatalogue },
   },
   datetimeFormats,
   numberFormats,
