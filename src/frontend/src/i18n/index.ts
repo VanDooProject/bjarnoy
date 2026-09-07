@@ -17,6 +17,8 @@ import enAccountRestrictedBanner from './locales/en/accountRestrictedBanner.json
 import deAccountRestrictedBanner from './locales/de/accountRestrictedBanner.json';
 import enHud from './locales/en/hud.json';
 import deHud from './locales/de/hud.json';
+import enApiErrors from './locales/en/apiErrors.json';
+import deApiErrors from './locales/de/apiErrors.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -65,6 +67,7 @@ export const i18n = createI18n({
       register: enRegister,
       accountRestrictedBanner: enAccountRestrictedBanner,
       hud: enHud,
+      apiErrors: enApiErrors,
     },
     de: {
       common: deCommon,
@@ -76,6 +79,7 @@ export const i18n = createI18n({
       register: deRegister,
       accountRestrictedBanner: deAccountRestrictedBanner,
       hud: deHud,
+      apiErrors: deApiErrors,
     },
   },
   datetimeFormats,
