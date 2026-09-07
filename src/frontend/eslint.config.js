@@ -8,7 +8,6 @@ import intlifyVueI18n from '@intlify/eslint-plugin-vue-i18n';
 // the start, which is exactly what this lint rule is for.
 const LEGACY_UNMIGRATED_VUE_FILES = [
   'src/components/AccountRestrictedBanner.vue',
-  'src/components/DemoModeBadge.vue',
   'src/components/admin/ActivityChart.vue',
   'src/components/battle/BattleReportCard.vue',
   'src/components/hud/ArmyPanel.vue',
@@ -27,12 +26,10 @@ const LEGACY_UNMIGRATED_VUE_FILES = [
   'src/components/hud/TrainingModal.vue',
   'src/components/hud/TrainingQueuePanel.vue',
   'src/components/hud/WaterPerfPanel.vue',
-  'src/components/onboarding/NicknamePrompt.vue',
   'src/views/ConversationView.vue',
   'src/views/DocsView.vue',
   'src/views/GuildView.vue',
   'src/views/ImpressumView.vue',
-  'src/views/LandingView.vue',
   'src/views/LeaderboardView.vue',
   'src/views/LoginView.vue',
   'src/views/MessagesView.vue',

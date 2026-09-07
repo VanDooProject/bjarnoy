@@ -3,6 +3,12 @@ import enCommon from './locales/en/common.json';
 import deCommon from './locales/de/common.json';
 import enCatalogue from './locales/en/catalogue.json';
 import deCatalogue from './locales/de/catalogue.json';
+import enLanding from './locales/en/landing.json';
+import deLanding from './locales/de/landing.json';
+import enOnboarding from './locales/en/onboarding.json';
+import deOnboarding from './locales/de/onboarding.json';
+import enDemoModeBadge from './locales/en/demoModeBadge.json';
+import deDemoModeBadge from './locales/de/demoModeBadge.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -41,8 +47,8 @@ export const i18n = createI18n({
   missingWarn: false,
   fallbackWarn: false,
   messages: {
-    en: { common: enCommon, catalogue: enCatalogue },
-    de: { common: deCommon, catalogue: deCatalogue },
+    en: { common: enCommon, catalogue: enCatalogue, landing: enLanding, onboarding: enOnboarding, demoModeBadge: enDemoModeBadge },
+    de: { common: deCommon, catalogue: deCatalogue, landing: deLanding, onboarding: deOnboarding, demoModeBadge: deDemoModeBadge },
   },
   datetimeFormats,
   numberFormats,

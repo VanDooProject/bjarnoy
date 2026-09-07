@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../../stores/player';
+import type { MessageSchema } from '../../i18n/schema';
 
 const emit = defineEmits<{ close: [] }>();
 const player = usePlayerStore();
 const name = ref('');
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 function submit() {
   const trimmed = name.value.trim();
@@ -16,22 +19,23 @@ function submit() {
 <template>
   <div class="scrim">
     <div class="prompt panel">
-      <h2>Landfall made.</h2>
+      <h2>{{ t('onboarding.nicknamePrompt.title') }}</h2>
       <p>
-        Your longship has broken ground. Name your jarl before the sea takes notice —
-        no account, no password, just a name.
+        {{ t('onboarding.nicknamePrompt.body') }}
       </p>
       <form @submit.prevent="submit">
         <input
           v-model="name"
           type="text"
           maxlength="24"
-          placeholder="Your jarl's name"
+          :placeholder="t('onboarding.nicknamePrompt.placeholder')"
           autofocus
         />
         <div class="actions">
-          <button type="button" class="skip" @click="emit('close')">Skip for now</button>
-          <button type="submit" class="confirm">Set name</button>
+          <button type="button" class="skip" @click="emit('close')">
+            {{ t('onboarding.nicknamePrompt.skip') }}
+          </button>
+          <button type="submit" class="confirm">{{ t('onboarding.nicknamePrompt.confirm') }}</button>
         </div>
       </form>
     </div>

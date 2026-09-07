@@ -1,0 +1,41 @@
+{
+  "hero": {
+    "eyebrow": "Leeres Grundstück · Bjarnøy",
+    "notOpenTitle": "Noch nicht geöffnet.",
+    "title": "Errichte irgendwo dein Langhaus.",
+    "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
+    "makingLandfall": "Landung wird gemacht…"
+  },
+  "joinBlocked": {
+    "opensAt": "Diese Welt öffnet {date}.",
+    "joinsClosed": "Diese Welt nimmt keine neuen Spieler mehr auf.",
+    "noWorldYet": "Es wurde noch keine Welt erstellt — schau bald wieder vorbei.",
+    "notAcceptingPlayers": "Diese Welt nimmt momentan keine neuen Spieler auf."
+  },
+  "invalidClick": {
+    "pickGlowingPlot": "Dort kannst du nicht siedeln — wähle eines der leuchtenden Grundstücke.",
+    "beyondClaim": "Dieses Feld liegt außerhalb des Anspruchs deines Langhauses — baue näher an deiner Heimat.",
+    "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld."
+  },
+  "ring": {
+    "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",
+    "needsTerrain": "Benötigt {terrain}-Gelände — versuche ein anderes Feld"
+  },
+  "foundHere": {
+    "namedRealm": "{nickname}s Reich",
+    "unnamedRealm": "Unbenanntes Reich"
+  },
+  "tray": {
+    "longhouseName": "Langhaus & Hof",
+    "placed": "Platziert",
+    "clickToPlace": "Klicke dein Grundstück an, um es zu platzieren",
+    "buildingName": "Gebäude {n}",
+    "clickEmptyHex": "Klicke ein leeres Feld in deiner Grenze an",
+    "foundFirst": "Gründe zuerst dein Langhaus"
+  },
+  "footer": {
+    "sea": "Kettil-See",
+    "noAccount": "Kein Konto",
+    "nothingToInstall": "Nichts zu installieren"
+  }
+}
