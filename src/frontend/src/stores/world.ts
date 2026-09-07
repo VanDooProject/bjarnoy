@@ -85,6 +85,11 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
+    // knows it's safe to paint every rival's territory — the world map is
+    // the one legitimate place that shows the whole world, unlike the
+    // landing/settlement preview which must stay scoped to one island.
+    worldMapActive: false,
     hud: {
       resources: emptyResources() as Resources,
       rates: emptyResources() as Resources,
@@ -491,6 +496,7 @@ export const useWorldStore = defineStore('world', {
         foundedAt: Date.now(),
         islandId: response.islandId,
       });
+      this.model.claimTerritory(settlement.id);
       this.selectedSettlementId = settlement.id;
       this.syncHud();
       void this.refreshTradeAsync();
@@ -696,16 +702,20 @@ export const useWorldStore = defineStore('world', {
         foundedAt: Date.now(),
         islandId: response.islandId,
       });
+      this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
       this.syncHud();
       void this.refreshTradeAsync();
     },
     /**
      * Live mode: pulls every settlement in the world (not just this
-     * player's) so rival realms — their border, marker and owner-name label
-     * — show up on the world map, matching `prototypes/worldmap`'s `marks`.
+     * player's) into the model, data-only — no tile is painted here.
      * Registered with the settlement's own id as its `ownerId`, which can
-     * never equal the local player's id, so it always renders as a rival.
+     * never equal the local player's id, so it always renders as a rival
+     * once a caller claims its territory (`WorldModel.claimTerritory` /
+     * `claimTerritoryOnIsland` / `claimAllTerritory`) — the world map claims
+     * everyone (matching `prototypes/worldmap`'s `marks`), while the
+     * landing/settlement preview only claims the island it's showing.
      */
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
@@ -726,6 +736,11 @@ export const useWorldStore = defineStore('world', {
           islandId: summary.islandId,
         });
       }
+      if (this.worldMapActive) this.model.claimAllTerritory();
+    },
+    /** See `worldMapActive`'s own comment. */
+    setWorldMapActive(active: boolean) {
+      this.worldMapActive = active;
     },
     /**
      * Pulls this settlement's armies (and, issue #40 phase 4, the guest
