@@ -60,10 +60,17 @@
     "NoActiveJourney": "Diese Armee ist gerade nicht unterwegs.",
     "MissionNotFieldOrderable": "Die Mission dieser Armee kann nicht umgeleitet werden.",
     "PremiumRequired": "Dafür wird Premium benötigt.",
+    "UnitNotAvailable": "Diese Einheit ist bei dieser Langhaus-Stufe noch nicht verfügbar.",
+    "TrainingQueueFull": "Die Ausbildungsschlange ist voll.",
+    "InvalidCount": "Die Anzahl muss mindestens 1 sein.",
+    "SettlementNotCoastal": "Schiffe können nur in einer Siedlung mit Küste ausgebildet werden.",
+    "UsernameTaken": "Dieser Benutzername ist bereits vergeben.",
     "user_banned": "Dein Konto wurde gesperrt.",
     "user_locked": "Dein Konto ist vorübergehend gesperrt.",
     "not_owner": "Das gehört dir nicht.",
     "authentication_required": "Dafür musst du angemeldet sein.",
-    "premium_required": "Dafür wird Premium benötigt."
+    "premium_required": "Dafür wird Premium benötigt.",
+    "invalid_credentials": "Benutzername oder Passwort ist falsch.",
+    "invalid_refresh_token": "Deine Sitzung ist abgelaufen — bitte melde dich erneut an."
   }
 }

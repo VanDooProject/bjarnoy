@@ -60,10 +60,17 @@
     "NoActiveJourney": "This army isn't currently travelling.",
     "MissionNotFieldOrderable": "This army's mission can't be redirected.",
     "PremiumRequired": "This action requires Premium.",
+    "UnitNotAvailable": "That unit is not available at this longhouse level yet.",
+    "TrainingQueueFull": "The training queue is full.",
+    "InvalidCount": "The count must be at least 1.",
+    "SettlementNotCoastal": "Ships can only be trained at a settlement with a shoreline.",
+    "UsernameTaken": "That username is taken.",
     "user_banned": "Your account has been banned.",
     "user_locked": "Your account has been locked.",
     "not_owner": "You don't own that.",
     "authentication_required": "You need to be signed in for that.",
-    "premium_required": "This action requires Premium."
+    "premium_required": "This action requires Premium.",
+    "invalid_credentials": "Wrong username or password.",
+    "invalid_refresh_token": "Your session has expired — please sign in again."
   }
 }

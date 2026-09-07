@@ -201,12 +201,7 @@ public static class SettlementEndpoints
 
         if (result.WorldPaused)
         {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "The world is not accepting commands.",
-                Detail = "It is paused, locked or under maintenance.",
-                Status = StatusCodes.Status409Conflict,
-            });
+            return TypedResults.Conflict(WorldPausedProblem());
         }
 
         if (result.Accepted)
@@ -255,12 +250,7 @@ public static class SettlementEndpoints
 
         if (result.WorldPaused)
         {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "The world is not accepting commands.",
-                Detail = "It is paused, locked or under maintenance.",
-                Status = StatusCodes.Status409Conflict,
-            });
+            return TypedResults.Conflict(WorldPausedProblem());
         }
 
         // OrderNotFound is CancelBuildRejection's only other value — either
@@ -293,12 +283,7 @@ public static class SettlementEndpoints
 
         if (result.WorldPaused)
         {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "The world is not accepting commands.",
-                Detail = "It is paused, locked or under maintenance.",
-                Status = StatusCodes.Status409Conflict,
-            });
+            return TypedResults.Conflict(WorldPausedProblem());
         }
 
         if (result.Accepted)
@@ -318,6 +303,7 @@ public static class SettlementEndpoints
             Detail = DescribeTrain(result.Rejection),
             Status = StatusCodes.Status409Conflict,
         };
+        problem.Extensions["rejection"] = result.Rejection.ToString();
 
         return TypedResults.Conflict(problem);
     }
@@ -441,6 +427,18 @@ public static class SettlementEndpoints
 
         type = default;
         return false;
+    }
+
+    private static ProblemDetails WorldPausedProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Title = "The world is not accepting commands.",
+            Detail = "It is paused, locked or under maintenance.",
+            Status = StatusCodes.Status409Conflict,
+        };
+        problem.Extensions["rejection"] = "WorldPaused";
+        return problem;
     }
 
     private static ProblemDetails Problem(FoundingRejection rejection)

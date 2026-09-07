@@ -5,13 +5,12 @@ import { DemoTradeError } from '../lib/map/WorldModel';
 /**
  * The machine-readable rejection code behind a failed action, if there is
  * one — `ApiError.problem.rejection` (BuildRejection/FoundingRejection/
- * TradeRejection/DispatchRejection/FieldOrderRejection, all wired with a
- * `rejection` extension), `ApiError.problem.error` (AuthErrorResponse's
- * snake_case codes), or `DemoTradeError.rejection` (demo mode's local
- * equivalent of a TradeRejection/DispatchRejection 409). `undefined` when
- * the error carries no such code (TrainRejection and a few other 409s
- * still don't — see issue tracked as Task #12) or isn't one of these error
- * types at all.
+ * TradeRejection/DispatchRejection/FieldOrderRejection/TrainRejection, all
+ * wired with a `rejection` extension), `ApiError.problem.error`
+ * (AuthErrorResponse's snake_case codes), or `DemoTradeError.rejection`
+ * (demo mode's local equivalent of a TradeRejection/DispatchRejection 409).
+ * `undefined` when the error carries no such code (a few rune/offer 409s
+ * still don't) or isn't one of these error types at all.
  */
 export function rejectionCodeOf(err: unknown): string | undefined {
   if (err instanceof ApiError) return err.problem?.rejection ?? err.problem?.error;
