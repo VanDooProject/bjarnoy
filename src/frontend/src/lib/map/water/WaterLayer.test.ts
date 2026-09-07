@@ -352,4 +352,46 @@ describe('WaterLayer', () => {
     layer.setMask(maskOver(-380, -230, 620, 370));
     expect(layer.mesh.shader!.resources.uWaterMask).toBe(before);
   });
+
+  // docs/design/zoom-transition.md §4: the zoom-driven mode switch flips the
+  // layer's mode in place rather than reconstructing it, so the three
+  // uniforms baked at construction (see "draws a crisp rim..." above) must
+  // update the same way setMode is asked to as they do when chosen at
+  // construction time.
+  describe('setMode', () => {
+    it('rewrites the foam uniforms to match a freshly-constructed layer of the target mode', () => {
+      const world = new WaterLayer('world', TILE_W, TILE_H);
+      const settlement = uniformsOf(new WaterLayer('settlement', TILE_W, TILE_H));
+
+      world.setMode('settlement');
+      const switched = uniformsOf(world);
+      expect(switched.uFoamInner).toBe(settlement.uFoamInner);
+      expect(switched.uFoamLandReach).toBe(settlement.uFoamLandReach);
+      expect(Array.from(switched.uFoamAlpha as Float32Array)).toEqual(
+        Array.from(settlement.uFoamAlpha as Float32Array),
+      );
+    });
+
+    it('is a no-op when the mode is unchanged', () => {
+      const layer = new WaterLayer('world', TILE_W, TILE_H);
+      const before = { ...uniformsOf(layer) };
+      layer.setMode('world');
+      expect(uniformsOf(layer)).toEqual(before);
+    });
+
+    it('flips uPropMute and uSeaBody on the next tick after switching', () => {
+      // Sanity check that setMode changes real rendered behaviour, not just
+      // the three foam uniforms it directly writes — the mode-dependent
+      // branches in tick() key off the same private field.
+      const layer = new WaterLayer('world', TILE_W, TILE_H);
+      layer.tick(0);
+      expect(uniformsOf(layer).uSeaBody).toBe(1);
+      expect(uniformsOf(layer).uPropMute).toBe(0);
+
+      layer.setMode('settlement');
+      layer.tick(16);
+      expect(uniformsOf(layer).uSeaBody).toBe(0);
+      expect(uniformsOf(layer).uPropMute).toBe(1);
+    });
+  });
 });
