@@ -12,22 +12,19 @@
 // `GuildOnlyOffer` rejection in case one ever reaches here anyway (e.g. a
 // stale board row accepted just as guild membership ships).
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../../config';
+import type { MessageSchema } from '../../i18n/schema';
 import { apiErrorMessage } from '../../i18n/apiErrors';
+import { resourceName } from '../../i18n/catalogueNames';
 import type { ResourceKind } from '../../lib/map/types';
 import { validateTradeRatio } from '../../lib/trade/tradeRatio';
 import { useWorldStore } from '../../stores/world';
 
 const world = useWorldStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const RESOURCES: ResourceKind[] = ['wood', 'stone', 'food', 'iron'];
-
-const RESOURCE_LABELS: Record<string, string> = {
-  wood: 'Wood',
-  stone: 'Stone',
-  food: 'Food',
-  iron: 'Iron',
-};
 
 const RESOURCE_COLORS: Record<string, string> = {
   wood: 'var(--wood)',
@@ -36,28 +33,11 @@ const RESOURCE_COLORS: Record<string, string> = {
   iron: 'var(--iron)',
 };
 
-// Client-side ratio validation (`ratioErrorMessage` below) never reaches the
-// backend, so it can't carry a wire rejection code — this dict is its own
-// lookup, kept in sync by name with `apiErrors.rejections` in
-// i18n/locales/*/apiErrors.json.
-const REJECTION_MESSAGES: Record<string, string> = {
-  ZeroAmount: 'Both amounts must be positive.',
-  SameResource: 'Offered and requested resources must differ.',
-  RatioExceeded: 'That ratio is outside the allowed corridor (max 2x, or 8x for guild-only offers).',
-  NotEnoughResources: 'Not enough resources in stock for that.',
-  NotEnoughCarts: 'Not enough carts free to carry that amount.',
-  LonghouseTooLow: 'The longhouse is not high enough level to trade yet.',
-  OutOfRange: "That settlement is out of the poster's trade range.",
-  OfferNotOpen: 'That offer is no longer open.',
-  GuildOnlyOffer: "Guild trading isn't available yet.",
-  OwnOffer: 'A settlement cannot accept its own offer.',
-};
-
 function messageFor(err: unknown): string {
-  return apiErrorMessage(err, err instanceof Error ? err.message : 'Something went wrong.');
+  return apiErrorMessage(err, err instanceof Error ? err.message : t('hud.tradePanel.somethingWentWrong'));
 }
 
-const guildOnlyTooltip = "Guild trading isn't available yet";
+const guildOnlyTooltip = computed(() => t('apiErrors.rejections.GuildOnlyOffer'));
 
 const open = ref(false);
 const error = ref('');
@@ -82,7 +62,7 @@ const ratioRejection = computed(() =>
   ),
 );
 const ratioErrorMessage = computed(() =>
-  ratioRejection.value ? (REJECTION_MESSAGES[ratioRejection.value] ?? ratioRejection.value) : '',
+  ratioRejection.value ? t('apiErrors.rejections.' + ratioRejection.value) : '',
 );
 
 async function submitOffer() {
@@ -186,7 +166,7 @@ const shipments = computed(() => {
  */
 function fmtCountdown(arrivesAtGameTime: string): string {
   const remainingMs = new Date(arrivesAtGameTime).getTime() - Date.now();
-  if (remainingMs <= 0) return 'arriving';
+  if (remainingMs <= 0) return t('hud.tradePanel.arriving');
   const s = Math.round(remainingMs / 1000);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -199,55 +179,64 @@ function fmtCountdown(arrivesAtGameTime: string): string {
 <template>
   <div class="trade-widget">
     <button type="button" class="trade-toggle pill" @click="open = !open">
-      Trade
+      {{ t('hud.tradePanel.toggle') }}
       <span v-if="myOffers.length" class="trade-badge">{{ myOffers.length }}</span>
     </button>
 
     <div v-if="open" class="trade-panel panel">
       <div class="trade-panel-header">
-        <span class="trade-panel-title">Trade</span>
-        <button type="button" class="trade-panel-close" aria-label="Close trade panel" @click="open = false">×</button>
+        <span class="trade-panel-title">{{ t('hud.tradePanel.title') }}</span>
+        <button
+          type="button"
+          class="trade-panel-close"
+          :aria-label="t('hud.tradePanel.close')"
+          @click="open = false"
+        >
+          ×
+        </button>
       </div>
 
       <div v-if="error" class="trade-error">{{ error }}</div>
 
       <section class="trade-section">
-        <h3 class="trade-section-title">Post an offer</h3>
+        <h3 class="trade-section-title">{{ t('hud.tradePanel.postAnOffer') }}</h3>
         <form class="trade-form" @submit.prevent="submitOffer">
           <div class="trade-form-row">
-            <span class="trade-form-label">Give</span>
+            <span class="trade-form-label">{{ t('hud.tradePanel.give') }}</span>
             <select v-model="offeredResource" class="trade-select">
-              <option v-for="r in RESOURCES" :key="r" :value="r">{{ RESOURCE_LABELS[r] }}</option>
+              <option v-for="r in RESOURCES" :key="r" :value="r">{{ resourceName(r) }}</option>
             </select>
             <input v-model.number="offeredAmount" type="number" min="1" class="trade-amount" />
           </div>
           <div class="trade-form-row">
-            <span class="trade-form-label">For</span>
+            <span class="trade-form-label">{{ t('hud.tradePanel.for') }}</span>
             <select v-model="requestedResource" class="trade-select">
-              <option v-for="r in RESOURCES" :key="r" :value="r">{{ RESOURCE_LABELS[r] }}</option>
+              <option v-for="r in RESOURCES" :key="r" :value="r">{{ resourceName(r) }}</option>
             </select>
             <input v-model.number="requestedAmount" type="number" min="1" class="trade-amount" />
           </div>
           <label class="trade-checkbox">
             <input v-model="guildOnly" type="checkbox" />
-            Guild only (up to 8x ratio)
+            {{ t('hud.tradePanel.guildOnlyRatio') }}
           </label>
           <p v-if="ratioErrorMessage" class="trade-hint">{{ ratioErrorMessage }}</p>
-          <button type="submit" class="trade-submit" :disabled="busy || !!ratioRejection">Post offer</button>
+          <button type="submit" class="trade-submit" :disabled="busy || !!ratioRejection">
+            {{ t('hud.tradePanel.postOffer') }}
+          </button>
         </form>
       </section>
 
       <section class="trade-section">
-        <h3 class="trade-section-title">Open offers</h3>
-        <p v-if="!openOffers.length" class="trade-empty">No offers in range right now.</p>
+        <h3 class="trade-section-title">{{ t('hud.tradePanel.openOffers') }}</h3>
+        <p v-if="!openOffers.length" class="trade-empty">{{ t('hud.tradePanel.noOffersInRange') }}</p>
         <div v-for="o in openOffers" :key="o.id" class="trade-row">
           <div class="trade-row-main">
             <span class="res-dot" :style="{ background: RESOURCE_COLORS[o.offeredResource] }" />
-            <span>{{ o.offeredAmount }} {{ RESOURCE_LABELS[o.offeredResource] ?? o.offeredResource }}</span>
+            <span>{{ o.offeredAmount }} {{ resourceName(o.offeredResource) }}</span>
             <span class="trade-arrow">→</span>
             <span class="res-dot" :style="{ background: RESOURCE_COLORS[o.requestedResource] }" />
-            <span>{{ o.requestedAmount }} {{ RESOURCE_LABELS[o.requestedResource] ?? o.requestedResource }}</span>
-            <span v-if="o.guildOnly" class="badge badge-guild">Guild only</span>
+            <span>{{ o.requestedAmount }} {{ resourceName(o.requestedResource) }}</span>
+            <span v-if="o.guildOnly" class="badge badge-guild">{{ t('hud.tradePanel.guildOnlyBadge') }}</span>
           </div>
           <button
             type="button"
@@ -256,40 +245,40 @@ function fmtCountdown(arrivesAtGameTime: string): string {
             :title="o.guildOnly ? guildOnlyTooltip : undefined"
             @click="accept(o.id)"
           >
-            Accept
+            {{ t('hud.tradePanel.accept') }}
           </button>
         </div>
       </section>
 
       <section class="trade-section">
-        <h3 class="trade-section-title">My offers</h3>
-        <p v-if="!myOffers.length" class="trade-empty">You haven't posted anything yet.</p>
+        <h3 class="trade-section-title">{{ t('hud.tradePanel.myOffers') }}</h3>
+        <p v-if="!myOffers.length" class="trade-empty">{{ t('hud.tradePanel.noOffersPosted') }}</p>
         <div v-for="o in myOffers" :key="o.id" class="trade-row">
           <div class="trade-row-main">
             <span class="res-dot" :style="{ background: RESOURCE_COLORS[o.offeredResource] }" />
-            <span>{{ o.offeredAmount }} {{ RESOURCE_LABELS[o.offeredResource] ?? o.offeredResource }}</span>
+            <span>{{ o.offeredAmount }} {{ resourceName(o.offeredResource) }}</span>
             <span class="trade-arrow">→</span>
             <span class="res-dot" :style="{ background: RESOURCE_COLORS[o.requestedResource] }" />
-            <span>{{ o.requestedAmount }} {{ RESOURCE_LABELS[o.requestedResource] ?? o.requestedResource }}</span>
-            <span class="badge" :class="`badge-${o.state}`">{{ o.state }}</span>
+            <span>{{ o.requestedAmount }} {{ resourceName(o.requestedResource) }}</span>
+            <span class="badge" :class="`badge-${o.state}`">{{ t('hud.tradePanel.states.' + o.state) }}</span>
           </div>
           <button v-if="o.state === 'open'" type="button" class="trade-action" @click="cancelOffer(o.id)">
-            Cancel
+            {{ t('hud.tradePanel.cancel') }}
           </button>
         </div>
       </section>
 
       <section v-if="!DEMO_MODE" class="trade-section">
-        <h3 class="trade-section-title">Shipments</h3>
-        <p v-if="!shipments.length" class="trade-empty">No carts on the road.</p>
+        <h3 class="trade-section-title">{{ t('hud.tradePanel.shipments') }}</h3>
+        <p v-if="!shipments.length" class="trade-empty">{{ t('hud.tradePanel.noCartsOnRoad') }}</p>
         <div v-for="s in shipments" :key="s.id" class="trade-row">
           <div class="trade-row-main">
-            <span>hex {{ s.fromQ }}-{{ s.fromR }}</span>
+            <span>{{ t('hud.tradePanel.hex', { q: s.fromQ, r: s.fromR }) }}</span>
             <span class="trade-arrow">→</span>
-            <span>hex {{ s.toQ }}-{{ s.toR }}</span>
-            <span>{{ s.cargoAmount }} {{ RESOURCE_LABELS[s.cargoResource] ?? s.cargoResource }}</span>
+            <span>{{ t('hud.tradePanel.hex', { q: s.toQ, r: s.toR }) }}</span>
+            <span>{{ s.cargoAmount }} {{ resourceName(s.cargoResource) }}</span>
           </div>
-          <span class="trade-time">{{ s.delivered ? 'delivered' : fmtCountdown(s.arrivesAtGameTime) }}</span>
+          <span class="trade-time">{{ s.delivered ? t('hud.tradePanel.delivered') : fmtCountdown(s.arrivesAtGameTime) }}</span>
         </div>
       </section>
     </div>

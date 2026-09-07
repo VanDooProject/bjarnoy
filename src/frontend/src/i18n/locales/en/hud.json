@@ -181,5 +181,35 @@
     "dispatchFailed": "Dispatch failed.",
     "recallFailed": "Recall failed.",
     "retargetFailed": "Retarget failed."
+  },
+  "tradePanel": {
+    "toggle": "Trade",
+    "title": "Trade",
+    "close": "Close trade panel",
+    "somethingWentWrong": "Something went wrong.",
+    "postAnOffer": "Post an offer",
+    "give": "Give",
+    "for": "For",
+    "guildOnlyRatio": "Guild only (up to 8x ratio)",
+    "postOffer": "Post offer",
+    "openOffers": "Open offers",
+    "noOffersInRange": "No offers in range right now.",
+    "guildOnlyBadge": "Guild only",
+    "accept": "Accept",
+    "myOffers": "My offers",
+    "noOffersPosted": "You haven't posted anything yet.",
+    "states": {
+      "open": "open",
+      "accepted": "accepted",
+      "delivered": "delivered",
+      "cancelled": "cancelled",
+      "expired": "expired"
+    },
+    "cancel": "Cancel",
+    "shipments": "Shipments",
+    "noCartsOnRoad": "No carts on the road.",
+    "hex": "hex {q}-{r}",
+    "delivered": "delivered",
+    "arriving": "arriving"
   }
 }
