@@ -2,15 +2,19 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { DEMO_MODE } from './config';
+import { i18n, initLocale } from './i18n';
 import { waterDebugFlags, waterDebugTuning } from './lib/map/water/waterDebug';
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { router } from './router';
 import { useWorldStore } from './stores/world';
 import './style.css';
 
+initLocale();
+
 const app = createApp(App);
 app.use(createPinia());
 app.use(router);
+app.use(i18n);
 
 app.mount('#app');
 

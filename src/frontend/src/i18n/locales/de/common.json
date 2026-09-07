@@ -1,0 +1,22 @@
+{
+  "brand": {
+    "name": "Fjørdhold"
+  },
+  "buttons": {
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "close": "Schließen",
+    "confirm": "Bestätigen",
+    "retry": "Erneut versuchen"
+  },
+  "states": {
+    "loading": "Lädt…",
+    "unknown": "Unbekannt"
+  },
+  "localeSwitcher": {
+    "label": "Sprache",
+    "en": "English",
+    "de": "Deutsch"
+  }
+}

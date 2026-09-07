@@ -1,0 +1,64 @@
+import { createI18n } from 'vue-i18n';
+import enCommon from './locales/en/common.json';
+import deCommon from './locales/de/common.json';
+import { datetimeFormats, numberFormats } from './formats';
+import {
+  DEFAULT_LOCALE,
+  detectInitialLocale,
+  persistLocale,
+  readStoredLocale,
+  type SupportedLocale,
+} from './locale';
+function queryLocale(): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get('lang');
+  } catch {
+    return null;
+  }
+}
+
+const initialLocale = detectInitialLocale({
+  queryLocale: queryLocale(),
+  storedLocale: readStoredLocale(),
+  navigatorLanguage: typeof navigator !== 'undefined' ? navigator.language : null,
+});
+
+// Not type-parameterized against MessageSchema: vue-i18n's generics for
+// createI18n require every message/format bag to satisfy an index-signature
+// shape that a hand-written nested interface doesn't have. `useI18n<{
+// message: MessageSchema }>()` (see schema.ts) is where per-component
+// call-sites get typed `t()` keys instead.
+export const i18n = createI18n({
+  legacy: false,
+  locale: initialLocale,
+  fallbackLocale: DEFAULT_LOCALE,
+  // Fallback/missing warnings are noise once a namespace intentionally has
+  // no `de` translation yet (e.g. the admin surface for now) — the throwing
+  // `missing` handler in src/test/i18n.ts is what actually catches an
+  // unextracted key, in unit tests.
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: {
+    en: { common: enCommon },
+    de: { common: deCommon },
+  },
+  datetimeFormats,
+  numberFormats,
+});
+
+export function setLocale(locale: SupportedLocale): void {
+  i18n.global.locale.value = locale;
+  persistLocale(locale);
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
+}
+
+// Apply the detected locale to <html lang> on boot (main.ts calls this once).
+export function initLocale(): void {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = i18n.global.locale.value;
+  }
+}
+
+export { SUPPORTED_LOCALES, DEFAULT_LOCALE, type SupportedLocale } from './locale';
