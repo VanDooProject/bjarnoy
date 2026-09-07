@@ -10,6 +10,13 @@ public enum BioUpdateOutcome
     NotFound,
 }
 
+public enum LocaleUpdateOutcome
+{
+    Success,
+    NotFound,
+    InvalidLocale,
+}
+
 public enum ProfileReportOutcome
 {
     Success,
@@ -38,6 +45,14 @@ public sealed record ProfileData(UserEntity User, int SettlementCount);
 /// </summary>
 public sealed class ProfileService(GameDbContext dbContext, ReportService reportService)
 {
+    /// <summary>
+    /// The account-level locale values <see cref="UpdateLocaleAsync"/> accepts —
+    /// must stay in sync with the frontend's <c>SupportedLocale</c>
+    /// (<c>src/frontend/src/i18n/locale.ts</c>), which is the source of truth.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SupportedLocales =
+        new HashSet<string>(["en", "de"], StringComparer.Ordinal);
+
     private readonly GameDbContext _dbContext = dbContext;
     private readonly ReportService _reportService = reportService;
 
@@ -91,6 +106,34 @@ public sealed class ProfileService(GameDbContext dbContext, ReportService report
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return (BioUpdateOutcome.Success, user);
+    }
+
+    /// <summary>
+    /// Sets (or with <c>null</c> clears) the caller's saved UI locale, so it
+    /// follows the account across devices instead of only living in
+    /// <c>localStorage</c> on whichever browser last set it.
+    /// </summary>
+    public async Task<(LocaleUpdateOutcome Outcome, UserEntity? User)> UpdateLocaleAsync(
+        Guid userId, string? preferredLocale, CancellationToken cancellationToken = default)
+    {
+        if (preferredLocale is not null && !SupportedLocales.Contains(preferredLocale))
+        {
+            return (LocaleUpdateOutcome.InvalidLocale, null);
+        }
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && !u.IsSystem, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (user is null)
+        {
+            return (LocaleUpdateOutcome.NotFound, null);
+        }
+
+        user.PreferredLocale = preferredLocale;
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return (LocaleUpdateOutcome.Success, user);
     }
 
     public async Task<(ProfileReportOutcome Outcome, ReportEntity? Report)> ReportProfileAsync(

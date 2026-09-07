@@ -35,7 +35,8 @@ public sealed record UserResponse(
     string Role,
     string Status,
     string? DisplayName,
-    bool IsPremium)
+    bool IsPremium,
+    string? PreferredLocale)
 {
     public static UserResponse From(UserEntity user)
     {
@@ -47,7 +48,8 @@ public sealed record UserResponse(
             user.Role.ToString().ToLowerInvariant(),
             user.Status.ToString().ToLowerInvariant(),
             user.DisplayName,
-            user.IsPremium);
+            user.IsPremium,
+            user.PreferredLocale);
     }
 }
 

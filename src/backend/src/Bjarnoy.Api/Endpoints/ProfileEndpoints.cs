@@ -47,6 +47,13 @@ public static class ProfileEndpoints
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
+        profiles.MapPut("/me/locale", UpdateOwnLocale)
+            .WithName("UpdateOwnLocale")
+            .WithSummary("Sets (or clears) the caller's saved UI locale.")
+            .RequireAuthorization()
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
         profiles.MapPost("/{userId:guid}/reports", ReportProfile)
             .WithName("ReportProfile")
             .WithSummary("Reports another player's profile for moderator review.")
@@ -99,6 +106,30 @@ public static class ProfileEndpoints
 
         var settlementCount = await profileService.GetProfileByIdAsync(userId, cancellationToken);
         return TypedResults.Ok(ProfileResponse.From(user!, settlementCount?.SettlementCount ?? 0));
+    }
+
+    private static async Task<Results<Ok<UserResponse>, NotFound, ValidationProblem>> UpdateOwnLocale(
+        UpdateLocaleRequest request,
+        ProfileService profileService,
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        var (outcome, user) = await profileService.UpdateLocaleAsync(
+            userId, request.PreferredLocale, cancellationToken);
+
+        return outcome switch
+        {
+            LocaleUpdateOutcome.NotFound => TypedResults.NotFound(),
+            LocaleUpdateOutcome.InvalidLocale => TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["preferredLocale"] = ["Unsupported locale."],
+            }),
+            _ => TypedResults.Ok(UserResponse.From(user!)),
+        };
     }
 
     private static async Task<Results<Created<ReportResponse>, NotFound, ValidationProblem>> ReportProfile(

@@ -87,6 +87,15 @@ public class UserEntity
     /// </summary>
     public string? Bio { get; set; }
 
+    /// <summary>
+    /// The account's saved UI language (e.g. <c>"en"</c>, <c>"de"</c>) —
+    /// see <c>src/frontend/src/i18n/locale.ts</c>'s <c>SupportedLocale</c>,
+    /// which is the source of truth for the set of valid values. Null means
+    /// no preference has been saved yet, so the frontend falls back to its
+    /// usual client-side detection (<c>detectInitialLocale</c>).
+    /// </summary>
+    public string? PreferredLocale { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? LastLoginAt { get; set; }
