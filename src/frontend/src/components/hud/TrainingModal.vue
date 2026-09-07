@@ -8,7 +8,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
-import { ApiError } from '../../api/client';
+import { apiErrorMessage } from '../../i18n/apiErrors';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
 import { DEMO_MODE } from '../../config';
@@ -121,10 +121,7 @@ async function train(type: string, count: number) {
     await world.trainUnitsLive(type, count);
     emit('trained');
   } catch (err) {
-    // Mirrors how QueueBuildRequest's 409 rejection is surfaced elsewhere —
-    // ApiError.problem.detail carries the backend's human-readable reason
-    // (see SettlementEndpoints.DescribeTrain).
-    errorText.value = err instanceof ApiError ? (err.problem?.detail ?? err.message) : t('hud.trainingModal.trainingFailed');
+    errorText.value = apiErrorMessage(err, t('hud.trainingModal.trainingFailed'));
   } finally {
     training.value = null;
   }

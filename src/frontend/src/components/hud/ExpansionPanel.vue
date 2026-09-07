@@ -20,7 +20,8 @@ import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
-import { api, ApiError } from '../../api/client';
+import { api } from '../../api/client';
+import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
@@ -82,7 +83,7 @@ async function trainSettlerCrews() {
     await api.trainUnits(world.selectedSettlementId, { unit: 'settlercrew', count: 3 });
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : t('hud.expansionPanel.trainingFailed');
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.trainingFailed'));
   } finally {
     busy.value = false;
   }
@@ -101,7 +102,7 @@ async function dispatchFounding() {
     });
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : t('hud.expansionPanel.dispatchFailed');
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.dispatchFailed'));
   } finally {
     busy.value = false;
   }
@@ -114,7 +115,7 @@ async function recall(armyId: string) {
     await api.recallArmy(armyId);
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : t('hud.expansionPanel.recallFailed');
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.recallFailed'));
   } finally {
     busy.value = false;
   }
@@ -133,7 +134,7 @@ async function confirmRetarget() {
     retargetFor.value = null;
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : t('hud.expansionPanel.retargetFailed');
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.retargetFailed'));
   } finally {
     busy.value = false;
   }

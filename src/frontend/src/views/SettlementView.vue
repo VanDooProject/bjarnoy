@@ -22,7 +22,7 @@ import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import { useWorldStore } from '../stores/world';
-import { ApiError } from '../api/client';
+import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -762,11 +762,8 @@ function closeTrainModal() {
   trainModalOpen.value = false;
 }
 
-// ApiError.problem.detail carries the backend's own human-readable
-// rejection reason (BuildRejection etc, ArmyEndpoints.Problem convention) —
-// mirrors world.ts's dispatchArmy/TrainingModal's own error-surfacing.
 function describeActionError(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? (err.problem?.detail ?? err.message) : fallback;
+  return apiErrorMessage(err, fallback);
 }
 
 // Demo mode places the chosen building instantly; live mode queues that
