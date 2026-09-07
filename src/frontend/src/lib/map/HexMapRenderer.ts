@@ -66,6 +66,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
+import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 
 export type RenderMode = 'world' | 'settlement';
 
@@ -325,6 +326,14 @@ export interface HexMapRendererOptions {
    * `true`, not shown everywhere it isn't explicitly passed `false`.
    */
   hideSettlementBadge?: boolean;
+  /**
+   * Landing-page static preview: fixes the camera to fit the whole preview
+   * island on screen and disables drag/wheel/pinch zoom, while clicks/taps
+   * still pass through (founding a settlement must keep working) — unlike
+   * `setInteractionLocked`, which also blocks clicks. See `zoomBy`, the pan
+   * branch of `onPointerMove`, and `previewFitZoom`.
+   */
+  lockCamera?: boolean;
   onHexClick?: (coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) => void;
   /** zip 9: "hover = stats tooltip". Fired on every hover change, `null` on leave. */
   onHoverChange?: (info: HoverInfo | null) => void;
@@ -336,6 +345,16 @@ export interface HexMapRendererOptions {
    * (`world.moveWaypoint`) is idempotent for the same coordinate.
    */
   onWaypointMove?: (index: number, coord: AxialCoord) => void;
+  /**
+   * docs/design/zoom-transition.md: fired when a wheel/pinch zoom step
+   * crosses the enter-settlement or exit-to-world threshold
+   * (zoomTransition.ts's transitionForZoom). The renderer has already
+   * flipped its own `mode` (setMode) by the time this fires — the camera is
+   * deliberately untouched, which is what makes the transition continuous —
+   * so the caller's job is only the cosmetic side effect (a router.push to
+   * keep the URL in sync), not anything about the map itself.
+   */
+  onZoomModeChange?: (mode: RenderMode) => void;
 }
 
 /**
@@ -547,6 +566,51 @@ const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // a slice of the world map).
 const PREVIEW_ZOOM = 0.6;
 const PREVIEW_ISLAND_RADIUS = 7;
+
+/**
+ * Zoom that fits the preview island's actual drawn hexes (non-sea, within
+ * `radius` of `center` — see rebuildTerrain's `preview` branch, which this
+ * mirrors) inside the viewport, for the landing page's locked static preview
+ * (`HexMapRendererOptions.lockCamera`). Replaces the fixed `PREVIEW_ZOOM`
+ * constant when locked, so the whole island stays on screen regardless of
+ * viewport size/aspect instead of only fitting at one assumed size.
+ *
+ * A pure, exported function (rather than a private method) so it's
+ * unit-testable without a canvas/Pixi app, matching `worldLayerOrder`'s own
+ * reasoning. `screenBiasX` is accounted for because the usable half-width
+ * left of the biased centre is narrower than half the viewport (see
+ * `biasedCenterX` for the corresponding camera shift) — ignoring it would
+ * push the island's far edge off screen whenever a bias is in play.
+ */
+export function previewFitZoom(params: {
+  center: AxialCoord;
+  radius: number;
+  screenBiasX: number;
+  viewport: { width: number; height: number };
+  isSea: (c: AxialCoord) => boolean;
+  fallbackZoom: number;
+  minZoom: number;
+  maxZoom: number;
+}): number {
+  const { center, radius, screenBiasX, viewport, isSea, fallbackZoom, minZoom, maxZoom } = params;
+  if (viewport.width === 0 || viewport.height === 0) return fallbackZoom;
+
+  const grid = isoGridPosition(center, TILE_W, TILE_H);
+  const centerPx = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
+  let maxDx = 0;
+  let maxDy = 0;
+  for (const c of hexesInRadius(center, radius)) {
+    if (isSea(c)) continue;
+    const g = isoGridPosition(c, TILE_W, TILE_H);
+    maxDx = Math.max(maxDx, Math.abs(g.x + TILE_W / 2 - centerPx.x));
+    maxDy = Math.max(maxDy, Math.abs(g.y + TILE_H / 2 - centerPx.y));
+  }
+  if (maxDx === 0 || maxDy === 0) return fallbackZoom;
+
+  const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
+  const zoom = Math.min(usableHalfWidth / maxDx, viewport.height / 2 / maxDy);
+  return Math.min(maxZoom, Math.max(minZoom, zoom));
+}
 // How long the camera takes to ease from one position/zoom to another (see
 // animateCameraTo) — used for the founding transition (zip 6a: fog should
 // roll in as the camera settles, not cut instantly) rather than an abrupt
@@ -976,6 +1040,12 @@ export class HexMapRenderer {
   // hovered hex and drawing its highlight regardless of what's visually on
   // top — so it needs an explicit lock, not just relying on DOM hit-testing.
   private interactionLocked = false;
+  // Static-preview mode (landing page): the camera is fixed to fit the whole
+  // island on screen, so drag panning and wheel/pinch zoom are no-ops — but
+  // unlike `interactionLocked`, clicks/taps still pass through (founding a
+  // settlement must keep working). See `zoomBy` and the pan branch of
+  // `onPointerMove`.
+  private lockCamera = false;
   // zip 4: "world view is already on screen and moving when the page loads" —
   // a gentle idle drift on the world map, cancelled on first user input.
   private idleDrift: boolean;
@@ -986,6 +1056,7 @@ export class HexMapRenderer {
     this.options = options;
     this.waterLayer = new WaterLayer(options.mode, TILE_W, TILE_H);
     this.idleDrift = options.mode === 'world';
+    this.lockCamera = !!options.lockCamera;
     this.camera =
       options.mode === 'settlement'
         ? this.settlementCameraOrigin()
@@ -1009,7 +1080,25 @@ export class HexMapRenderer {
       const grid = isoGridPosition(at, TILE_W, TILE_H);
       const centerX = grid.x + TILE_W / 2;
       const centerY = grid.y + TILE_H / 2;
-      return { x: this.biasedCenterX(centerX, PREVIEW_ZOOM), y: centerY, zoom: PREVIEW_ZOOM };
+      // Locked static preview (landing page): fit the whole island to the
+      // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
+      // fully framed regardless of viewport size/aspect. Bounds match
+      // zoomBy's own wheel-zoom clamp (0.05..4) — this is a framing choice,
+      // not a fog-margin one, so FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM
+      // don't apply here.
+      const zoom = this.lockCamera
+        ? previewFitZoom({
+            center: at,
+            radius: PREVIEW_ISLAND_RADIUS,
+            screenBiasX: this.options.screenBiasX ?? 0,
+            viewport: this.viewport,
+            isSea: (c) => this.options.worldModel.getTile(c.q, c.r).terrain === 'sea',
+            fallbackZoom: PREVIEW_ZOOM,
+            minZoom: 0.05,
+            maxZoom: 4,
+          })
+        : PREVIEW_ZOOM;
+      return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
     }
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
     const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
@@ -1071,6 +1160,21 @@ export class HexMapRenderer {
     return worldModel.listSettlements().some((s) => s.ownerId === playerId);
   }
 
+  /** §3's layer stack, by name — shared by mount() (initial child order) and setMode() (reorder on a mode switch). */
+  private layersByName(): Record<WorldLayerName, Container> {
+    return {
+      water: this.waterLayer.mesh,
+      terrainBase: this.terrainBase.container,
+      waves: this.waveLayer,
+      terrainFlat: this.terrainFlat,
+      borders: this.borderLayer,
+      hover: this.hoverLayer,
+      terrainTop: this.terrainTop.container,
+      range: this.rangeLayer,
+      highlight: this.highlightLayer,
+    };
+  }
+
   async mount(canvas: HTMLCanvasElement, width: number, height: number): Promise<void> {
     const app = new Application();
     await app.init({
@@ -1114,7 +1218,15 @@ export class HexMapRenderer {
     // small atlas resolves, rather than waiting on the much larger
     // buildings-static atlas too. Building sprites pop in once it resolves
     // (below), via a second rebuildAll() that reuses the sprite pool.
-    if (this.options.mode === 'settlement') {
+    // Kicked off regardless of starting mode — a world-mode mount used to
+    // never load these at all (this.textures stayed null forever), which
+    // was fine while mode never changed after construction, but a later
+    // zoom-driven switch to settlement mode (setMode) needs them ready or
+    // it renders blank until they resolve. World mode's own first paint
+    // never awaits this (rebuildAll's settlement branch is the only thing
+    // gated on `this.textures`), so starting the load here costs nothing on
+    // the world map's own critical path.
+    const textureLoad = (async () => {
       const [textures, icons] = await Promise.all([
         loadTerrainAtlas(),
         // The whole map failing to mount because a marker icon didn't
@@ -1128,6 +1240,7 @@ export class HexMapRenderer {
           return null;
         }),
       ]);
+      if (this.destroyed) return;
       this.textures = textures;
       this.icons = icons;
 
@@ -1140,8 +1253,24 @@ export class HexMapRenderer {
         .catch((err) => {
           console.warn('Building atlas failed to load; settlement tiles stay terrain-only', err);
         });
+    })();
+
+    if (this.options.mode === 'settlement') {
+      await textureLoad;
     } else {
       this.textures = null;
+      // A failure here only ever costs the ability to *later* switch into
+      // settlement mode with tile art ready (setMode's own fails-closed
+      // guard keeps that safe) — world mode's own draw path never touches
+      // `this.textures`, so there is nothing to fall back to besides not
+      // throwing an unhandled rejection off a fire-and-forget background load.
+      textureLoad
+        .then(() => {
+          if (!this.destroyed) this.rebuildAll();
+        })
+        .catch((err) => {
+          console.warn('Settlement-mode textures failed to preload from the world map', err);
+        });
     }
     if (this.destroyed) return;
 
@@ -1149,18 +1278,7 @@ export class HexMapRenderer {
     // testable without a canvas (see `worldLayerOrder`) — the whole of §3 is
     // about where in this stack the water mesh goes, and getting it wrong is
     // silent.
-    const byName: Record<WorldLayerName, Container> = {
-      water: this.waterLayer.mesh,
-      terrainBase: this.terrainBase.container,
-      waves: this.waveLayer,
-      terrainFlat: this.terrainFlat,
-      borders: this.borderLayer,
-      hover: this.hoverLayer,
-      terrainTop: this.terrainTop.container,
-      range: this.rangeLayer,
-      highlight: this.highlightLayer,
-    };
-    this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => byName[name]));
+    this.world.addChild(...worldLayerOrder(this.options.mode).map((name) => this.layersByName()[name]));
 
     // §4's layer stack: the two fog quads are the only genuinely
     // screen-space `app.stage` children — everything else (terrain,
@@ -1181,6 +1299,11 @@ export class HexMapRenderer {
     if (!this.app) return;
     this.viewport = { width, height };
     this.app.renderer.resize(width, height);
+    // A locked preview must stay fit to the island on every resize/rotation —
+    // unlike the normal camera, which just keeps whatever position/zoom it
+    // had (re-projected onto the new viewport), a locked one has no other
+    // event (no drag, no wheel) that would ever re-fit it.
+    if (this.lockCamera) this.camera = this.settlementCameraOrigin();
     this.applyCameraTransform();
     this.scheduleCull();
   }
@@ -1212,6 +1335,15 @@ export class HexMapRenderer {
     // than snapping.
     const targetMarkerAlpha = this.interactionLocked ? 0 : 1;
     this.markerLayer.alpha += (targetMarkerAlpha - this.markerLayer.alpha) * 0.25;
+    // Crossfade back in after a zoom-driven mode switch dropped this.world
+    // to alpha 0 (see zoomBy) — time-constant based so the fade actually
+    // takes zoomTransitionTuning.fadeMs regardless of frame rate, rather
+    // than the fixed-per-frame factor markerLayer uses above.
+    if (this.world.alpha < 1) {
+      const fadeMs = Math.max(1, zoomTransitionTuning.fadeMs);
+      const k = 1 - Math.exp(-this.app!.ticker.deltaMS / fadeMs);
+      this.world.alpha = Math.min(1, this.world.alpha + (1 - this.world.alpha) * k);
+    }
     if (this.options.mode === 'world' && !this.deepFogOnly && waterDebugFlags.legacyWaveSquiggles) this.drawWaves();
     this.waterLayer.tick(performance.now());
     if (this.idleDrift) {
@@ -1444,12 +1576,16 @@ export class HexMapRenderer {
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
     this.dragMoved += Math.abs(dx) + Math.abs(dy);
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+    // Locked preview (landing page): still track dragMoved/lastPointer above
+    // so onPointerUp's click-vs-drag slop check keeps working (founding must
+    // stay clickable) — only the actual camera pan is skipped.
+    if (this.lockCamera) return;
     this.camera = {
       ...this.camera,
       x: this.camera.x - dx / this.camera.zoom,
       y: this.camera.y - dy / this.camera.zoom,
     };
-    this.lastPointer = { x: e.clientX, y: e.clientY };
     this.applyCameraTransform();
     this.scheduleCull();
   };
@@ -1639,13 +1775,34 @@ export class HexMapRenderer {
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
     if (this.interactionLocked) return;
-    this.idleDrift = false;
     const canvas = this.app?.canvas;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    const before = screenToWorld(this.camera, screen, this.viewport);
     const factor = Math.exp(-e.deltaY * 0.001);
+    this.zoomBy(screen, factor);
+  };
+
+  /**
+   * Anchor-preserving zoom: rescales the camera around a fixed screen point
+   * so that point stays under the cursor/pinch centre as zoom changes. The
+   * only caller today is `onWheel`; pulled out as its own method (rather than
+   * inlined there) so a future multi-touch pinch handler can drive the exact
+   * same math through the exact same seam — pinch just needs to compute its
+   * own `screen` (the midpoint between the two touches) and `factor` (the
+   * ratio of successive inter-touch distances) and call this, picking up the
+   * `lockCamera` guard and zoom clamp for free.
+   * TODO(pinch-zoom): no multi-touch/pointerId tracking exists yet (single
+   * `lastPointer`, see onPointerDown) — mobile currently has no way to zoom
+   * the map at all, since `touch-action: none` also suppresses the browser's
+   * own native pinch. See docs/design/zoom-transition.md §2 (out of scope
+   * for the zoom-transition work, tracked as a follow-up).
+   */
+  private zoomBy(screen: { x: number; y: number }, factor: number) {
+    if (this.lockCamera) return;
+    this.idleDrift = false;
+    const prevZoom = this.camera.zoom;
+    const before = screenToWorld(this.camera, screen, this.viewport);
     const zoom = Math.min(4, Math.max(0.05, this.camera.zoom * factor));
     this.camera = { ...this.camera, zoom };
     const after = screenToWorld(this.camera, screen, this.viewport);
@@ -1655,9 +1812,29 @@ export class HexMapRenderer {
       y: this.camera.y + (before.y - after.y),
     };
     this.applyCameraTransform();
-    this.noteWheelActivity();
+    this.noteZoomActivity();
     this.scheduleCull();
-  };
+
+    // docs/design/zoom-transition.md: edge-triggered on this exact step
+    // (prevZoom -> zoom), not on the resulting zoom's level, so an
+    // externally-placed camera resting anywhere relative to either
+    // threshold never spuriously re-triggers — only an actual gesture
+    // crossing the line does. Mode flips in place (no camera move, which is
+    // what makes this continuous); the route push is the caller's job.
+    const crossing = transitionForZoom(this.options.mode, prevZoom, zoom, zoomTransitionTuning);
+    if (crossing) {
+      const target: RenderMode = crossing === 'enter' ? 'settlement' : 'world';
+      // Drop the terrain/water/building layers (this.world — fog and the
+      // settlement/marker overlay are stage siblings, see mount()'s own
+      // comment, so they stay put and keep the fog continuous across the
+      // swap) to invisible right before setMode() rebuilds them, then let
+      // onTick ease it back to opaque — crossfades the mode swap instead of
+      // popping straight to the new geometry.
+      if (zoomTransitionTuning.fadeMs > 0) this.world.alpha = 0;
+      if (this.setMode(target)) this.options.onZoomModeChange?.(target);
+      else this.world.alpha = 1; // setMode declined (e.g. settlement textures not ready yet) — nothing changed, stay visible
+    }
+  }
 
   /**
    * Marks a wheel/pinch zoom gesture as in progress and (re)arms the timer
@@ -1670,7 +1847,7 @@ export class HexMapRenderer {
    * gives when a drag ends and tickCameraAnim gives when an animation
    * completes.
    */
-  private noteWheelActivity() {
+  private noteZoomActivity() {
     this.wheeling = true;
     if (this.wheelIdleTimer !== null) clearTimeout(this.wheelIdleTimer);
     this.wheelIdleTimer = setTimeout(() => {
@@ -1700,7 +1877,7 @@ export class HexMapRenderer {
 
   /**
    * True while the camera is mid-gesture — a pointer drag, an animated
-   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteWheelActivity)
+   * transition (tickCameraAnim) or a wheel/pinch zoom (see noteZoomActivity)
    * — i.e. while more camera movement is expected imminently and any rebuild
    * done right now is about to be superseded. Each of the three ends with a
    * forced, fully up-to-date rebuild, so work skipped while this is true is
@@ -1728,7 +1905,7 @@ export class HexMapRenderer {
       // firing on every threshold-crossing frame. Each gesture still ends
       // with one forced, fully up-to-date rebuild — onPointerUp's when a drag
       // is released, tickCameraAnim's forceRebuild() when the animation
-      // completes, and noteWheelActivity's idle timer once zooming settles.
+      // completes, and noteZoomActivity's idle timer once zooming settles.
       if (this.isInteracting && performance.now() - this.lastRebuildAtMs < DRAG_REBUILD_THROTTLE_MS) {
         return;
       }
@@ -2640,6 +2817,29 @@ export class HexMapRenderer {
     return label;
   }
 
+  /** Current camera zoom — for the zoom-transition debug panel's live readout and e2e assertions on camera continuity. `camera` itself stays private. */
+  get cameraZoom(): number {
+    return this.camera.zoom;
+  }
+
+  /**
+   * Re-homes the camera onto the current settlement's own canonical framing
+   * (settlementCameraOrigin — the same fog-margin-fitted view a fresh
+   * settlement-mode mount always started at). For *externally*-driven entry
+   * into settlement mode — a nav button, browser back/forward, a direct URL
+   * load — none of which are a continuous zoom gesture worth preserving, so
+   * there's nothing wrong with (and good reason for) re-centring exactly the
+   * way a fresh per-route renderer instance always used to. Never call this
+   * from a zoom-driven transition (setMode's own caller in `zoomBy`) — that
+   * path's entire point is a camera that does *not* jump.
+   */
+  focusSettlementCamera() {
+    if (!this.app) return;
+    this.camera = this.settlementCameraOrigin();
+    this.applyCameraTransform();
+    this.rebuildAll();
+  }
+
   panTo(coord: AxialCoord) {
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
     this.camera = { ...this.camera, x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
@@ -3043,6 +3243,7 @@ export class HexMapRenderer {
   updateOptions(patch: Partial<HexMapRendererOptions>) {
     const wasFounded = !!this.settlement();
     this.options = { ...this.options, ...patch };
+    if ('lockCamera' in patch) this.lockCamera = !!patch.lockCamera;
     if (!this.app) return;
     if (this.options.mode === 'settlement' && this.options.settlementId) {
       const target = this.settlementCameraOrigin();
@@ -3056,6 +3257,68 @@ export class HexMapRenderer {
     this.rebuildAll();
   }
 
+  /**
+   * The zoom-driven world<->settlement transition (docs/design/
+   * zoom-transition.md §4/§8) — a level-of-detail switch only: `mode`
+   * changes, nothing about `settlementId`/the camera does, which is what
+   * makes it continuous (no snap). Deliberately its own method rather than
+   * routed through `updateOptions()`, which always re-aims the camera at
+   * `settlementCameraOrigin()` whenever settlement+settlementId — exactly
+   * the snap this must not do.
+   *
+   * Returns whether the switch actually happened. Fails closed to `false`
+   * (stays in the current mode) when settlement-mode content isn't ready
+   * yet (`this.textures` still loading — see mount()) rather than rendering
+   * blank; the caller (the wheel/pinch handler) simply doesn't fire the
+   * mode-change side effects (route push) in that case. In practice this
+   * only matters for a few hundred ms right after the very first mount.
+   */
+  setMode(mode: RenderMode): boolean {
+    if (mode === this.options.mode) return true;
+    if (mode === 'settlement' && !this.textures) return false;
+
+    // Stale-content cleanup, both directions — none of these run as a side
+    // effect of the rebuild below, because rebuildTerrain/rebuildMarkers
+    // only ever populate *this* mode's own layers, never clear the other
+    // mode's leftovers (they've never needed to, since mode never used to
+    // change after construction).
+    if (mode === 'world') {
+      // Leaving settlement mode: drop its tile-art sprites (rebuildTerrainFlat,
+      // world mode's own draw path, never touches these) and the army-vision
+      // holes punched into the fog shader (drawArmyOverlay, settlement-only,
+      // is the only thing that ever sets or refreshes them).
+      this.syncSpriteLayer(this.terrainBase, new Map());
+      this.syncSpriteLayer(this.terrainTop, new Map());
+      this.topAnimState.clear();
+      this.blackFogLayer.setArmyVisionSources([], 0);
+      this.whiteMistLayer.setArmyVisionSources([], 0);
+    } else {
+      // Leaving world mode: drop its flat-fill polygons (rebuildTerrain's
+      // settlement branch never calls rebuildTerrainFlat, so terrainFlat is
+      // never cleared by the normal draw path) and its wave squiggles
+      // (drawWaves, gated to world mode, is the only thing that ever clears
+      // waveLayer).
+      this.terrainFlat.clear();
+      this.waveLayer.clear();
+      this.wavePoints = [];
+    }
+
+    this.options.mode = mode;
+    this.idleDrift = mode === 'world';
+    this.waterLayer.setMode(mode);
+    // Reinsert every layer in the new mode's order — addChild only moves a
+    // single already-parented child to the end, it doesn't reorder the rest
+    // (see worldLayerOrder's own doc comment on why the water mesh's
+    // position in the stack differs by mode).
+    this.world.addChild(...worldLayerOrder(mode).map((name) => this.layersByName()[name]));
+    // Forces a full rebake (waterMaskRegionBuilt gates it on viewport
+    // coverage, which hasn't changed) rather than leaving anything from the
+    // outgoing mode's last rebuild half-applied.
+    this.waterMaskRegionBuilt = null;
+    this.rebuildAll();
+    return true;
+  }
+
   destroy() {
     this.destroyed = true;
     const canvas = this.app?.canvas;
@@ -3065,7 +3328,7 @@ export class HexMapRenderer {
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
     // Otherwise a zoom gesture still settling when the renderer goes away
-    // would fire its rebuild into a torn-down app (see noteWheelActivity).
+    // would fire its rebuild into a torn-down app (see noteZoomActivity).
     if (this.wheelIdleTimer !== null) {
       clearTimeout(this.wheelIdleTimer);
       this.wheelIdleTimer = null;

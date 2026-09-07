@@ -9,6 +9,14 @@ import { computed } from 'vue';
 import { useWorldStore } from '../../stores/world';
 
 const props = defineProps<{
+  /**
+   * docs/design/zoom-transition.md: settlement mode already floats the
+   * settlement's own name badge over the longhouse hex itself
+   * (HexMapRenderer.rebuildSettlementLabels) — showing it again here too, plus
+   * the island caption, is redundant clutter once you've zoomed all the way
+   * in. World mode has no such in-scene badge, so the title stays there.
+   */
+  hideTitle?: boolean;
   /** Overrides the settlement name — for a page with no settlement of its own (the docs). */
   title?: string;
   /** Overrides the island/longhouse caption. Only shown when there is a title to sit under. */
@@ -49,7 +57,7 @@ const caption = computed(() => {
           <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
         </svg>
       </span>
-      <div class="titles" v-if="settlementName">
+      <div class="titles" v-if="settlementName && !props.hideTitle">
         <span class="name">{{ settlementName }}</span>
         <span v-if="caption" class="caption">{{ caption }}</span>
       </div>

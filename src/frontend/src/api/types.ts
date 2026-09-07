@@ -65,6 +65,15 @@ export interface IslandResponse {
   riverTiles: RiverTileResponse[];
 }
 
+/** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */
+export interface PlotSuggestionResponse {
+  islandId: string;
+  plot: TileCoordinate;
+  alternatives: TileCoordinate[];
+  reserved: boolean;
+  reservedUntil: string | null;
+}
+
 export interface ResourceLine {
   wood: number;
   stone: number;
@@ -768,6 +777,8 @@ export interface ProblemDetails {
    * actually distinguishes them.
    */
   rejection?: string;
+  /** Present on the plot-suggestion endpoint's `AlreadyFounded` 409 — the caller's existing settlement id. */
+  existingSettlementId?: string;
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/LeaderboardContracts.cs.

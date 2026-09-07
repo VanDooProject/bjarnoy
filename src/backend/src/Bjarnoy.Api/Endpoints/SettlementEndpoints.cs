@@ -135,7 +135,7 @@ public static class SettlementEndpoints
                 or FoundingRejection.WorldFull or FoundingRejection.WorldPaused
                 or FoundingRejection.NotAStartPosition or FoundingRejection.AlreadyFounded
                 or FoundingRejection.WorldNotActive or FoundingRejection.JoinsClosed
-                or FoundingRejection.NotStartedYet =>
+                or FoundingRejection.NotStartedYet or FoundingRejection.PlotReserved =>
                 TypedResults.Conflict(problem),
             _ => TypedResults.BadRequest(problem),
         };
@@ -471,6 +471,8 @@ public static class SettlementEndpoints
                 FoundingRejection.WorldNotActive => "This world is not active.",
                 FoundingRejection.JoinsClosed => "This world is no longer accepting new players.",
                 FoundingRejection.NotStartedYet => "This world has not started yet.",
+                FoundingRejection.PlotReserved =>
+                    "Another settler is about to found there — pick one of the other highlighted plots.",
                 _ => "Refused.",
             },
             Status = StatusCodes.Status409Conflict,

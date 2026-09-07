@@ -26,6 +26,79 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
   throw new Error('no land border-edge hex found — pick a different test seed');
 }
 
+// Regression: the landing-page "empty plot" preview used to show other
+// players' already-existing buildings because `registerSettlement` painted
+// a settlement's home tile unconditionally. Registration and territory
+// painting are now separate steps so a caller can know about a settlement
+// without rendering it.
+describe('WorldModel.registerSettlement / claimTerritory', () => {
+  it('registerSettlement alone paints nothing; claimTerritory paints, idempotently', () => {
+    const model = new WorldModel();
+    const rival = model.registerSettlement({
+      id: 'rival-1',
+      ownerId: 'rival-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'island-1',
+    });
+
+    expect(model.countBuildings(rival.id)).toBe(0);
+    expect(model.claimedHexCount(rival.id)).toBe(0);
+    expect(model.getTile(0, 0).ownerId).toBeUndefined();
+
+    model.claimTerritory(rival.id);
+    const claimedAfterFirst = model.claimedHexCount(rival.id);
+    expect(model.countBuildings(rival.id)).toBe(1);
+    expect(claimedAfterFirst).toBeGreaterThan(0);
+    expect(model.getTile(0, 0).ownerId).toBe(rival.id);
+
+    model.claimTerritory(rival.id);
+    expect(model.countBuildings(rival.id)).toBe(1);
+    expect(model.claimedHexCount(rival.id)).toBe(claimedAfterFirst);
+  });
+
+  it('claimTerritoryOnIsland only paints settlements on the given island', () => {
+    const model = new WorldModel();
+    const home = model.registerSettlement({
+      id: 'home-1',
+      ownerId: 'home-1',
+      ownerName: 'Ulf',
+      name: "Ulf's realm",
+      q: 0,
+      r: 0,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'island-home',
+    });
+    const away = model.registerSettlement({
+      id: 'away-1',
+      ownerId: 'away-1',
+      ownerName: 'Bjorn',
+      name: "Bjorn's realm",
+      q: 40,
+      r: 40,
+      level: 1,
+      resources: { wood: 0, stone: 0, food: 0, iron: 0 },
+      rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
+      islandId: 'island-away',
+    });
+
+    model.claimTerritoryOnIsland('island-home');
+
+    expect(model.countBuildings(home.id)).toBe(1);
+    expect(model.countBuildings(away.id)).toBe(0);
+  });
+});
+
 describe('WorldModel border-anchoring (watchtower)', () => {
   it('a freshly placed (level-1) tower claims one extra ring of ground — Settlement.TowerClaimRadius(1) == 1', () => {
     const model = new WorldModel(20260825);

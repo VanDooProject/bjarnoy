@@ -1,3 +1,4 @@
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
@@ -82,5 +83,61 @@ public static class Founding
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// A same-island neighbour's centre and buildings, as needed by
+    /// <see cref="CheckSpacing"/>'s phase 2 (<see cref="Settlement.ClaimDiscsFor"/>).
+    /// </summary>
+    public readonly record struct NeighbourSnapshot(HexCoord Centre, IReadOnlyList<PlacedBuilding> Buildings);
+
+    public enum SpacingVerdict
+    {
+        Ok,
+        PlotTaken,
+        TooClose,
+    }
+
+    /// <summary>
+    /// The tower-aware, two-phase spacing check <c>SettlementService.FoundAsync</c>
+    /// and the landing-page plot-suggestion service both need to agree on
+    /// byte-for-byte: phase 1 is a cheap centre-to-centre distance filter
+    /// against <paramref name="minimumSpacing"/>; phase 2 catches a neighbour
+    /// whose real claimed territory (<see cref="Settlement.ClaimDiscsFor"/>,
+    /// towers and any tower chain included) reaches further than phase 1's
+    /// centre-only radius would suggest. <paramref name="safetyMargin"/> is
+    /// added to every claim-disc radius in phase 2, same as <c>FoundAsync</c>'s
+    /// own <c>FoundingSafetyMargin</c>.
+    /// </summary>
+    public static SpacingVerdict CheckSpacing(
+        HexCoord candidate,
+        IEnumerable<NeighbourSnapshot> sameIslandNeighbours,
+        int minimumSpacing,
+        int safetyMargin)
+    {
+        ArgumentNullException.ThrowIfNull(sameIslandNeighbours);
+
+        foreach (var neighbour in sameIslandNeighbours)
+        {
+            var distance = candidate.DistanceTo(neighbour.Centre);
+            if (distance == 0)
+            {
+                return SpacingVerdict.PlotTaken;
+            }
+
+            if (distance < minimumSpacing)
+            {
+                return SpacingVerdict.TooClose;
+            }
+
+            var withinRealTerritory = Settlement.ClaimDiscsFor(neighbour.Centre, neighbour.Buildings)
+                .Any(disc => disc.Centre.DistanceTo(candidate) <= disc.Radius + safetyMargin);
+            if (withinRealTerritory)
+            {
+                return SpacingVerdict.TooClose;
+            }
+        }
+
+        return SpacingVerdict.Ok;
     }
 }

@@ -41,6 +41,23 @@ test.describe('world map interactions', () => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const world = await WorldMapPage.open(page);
 
+    // WorldMapPage.open() founds a settlement, so the world map is fogged
+    // (HexMapRenderer.isFogActive(): world mode fogs once the local player
+    // owns any settlement) — before gotoWorldMap navigated via a real
+    // client-side click (see helpers.ts), this test had actually been
+    // exercising the landing page's own never-fogged preview the whole
+    // time, since its `.map-container[data-map-ready]` satisfied the same
+    // wait and a hard `page.goto('/world')` silently lost demo mode's
+    // founded-settlement state. With the real, fogged world map now
+    // reached, most of the default view is opaque unexplored mist — this
+    // test is about hover/highlight mechanics, not fog, so turn fog off
+    // rather than hunting for a guaranteed-explored on-screen point.
+    await page.evaluate(() => {
+      const fog = (window as unknown as { __fogDebug: { maskUnknown: boolean; maskOutOfSight: boolean } }).__fogDebug;
+      fog.maskUnknown = false;
+      fog.maskOutOfSight = false;
+    });
+
     // top-left corner of the canvas is open sea far from any island in the
     // starting view — a reliable "nothing hovered" baseline. World mode has
     // no DOM tooltip to wait on (unlike settlement mode's `.hex-tooltip`),
@@ -72,6 +89,16 @@ test.describe('world map interactions', () => {
   test('panning the world map does not error and moves the camera', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const world = await WorldMapPage.open(page);
+
+    // See the hover test's comment above — the founded settlement fogs the
+    // world map, and sliding a uniform sheet of opaque mist doesn't produce
+    // a pixel diff even though the camera really is moving underneath it.
+    await page.evaluate(() => {
+      const fog = (window as unknown as { __fogDebug: { maskUnknown: boolean; maskOutOfSight: boolean } }).__fogDebug;
+      fog.maskUnknown = false;
+      fog.maskOutOfSight = false;
+    });
+
     const { x: cx, y: cy } = await world.centre();
 
     const before = await world.screenshot();

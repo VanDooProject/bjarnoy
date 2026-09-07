@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config';
+import { clientFingerprint } from '../lib/clientFingerprint';
 import type {
   AcceptTradeOfferRequest,
   ActivitySummaryResponse,
@@ -52,6 +53,7 @@ import type {
   PagedMessagesResponse,
   PagedReportsResponse,
   PlaceBuildingRequest,
+  PlotSuggestionResponse,
   PostTradeOfferRequest,
   ProblemDetails,
   ProfileResponse,
@@ -574,4 +576,16 @@ export const api = {
   // mutating endpoints' — GetWorldFogMask 400s without it, since there is no
   // "public" fog mask the way there's a public settlement list.
   getFogMask: (worldId: string, ownerId: string) => requestImageBitmap(`/worlds/${worldId}/fog-mask`, ownerId),
+  // The backend-owned plot suggestion (see PlotReservationService): pinned
+  // per `ownerId` across reloads, held with a short exclusive reservation.
+  // `ownerId` is required, same reasoning as getFogMask's own.
+  getPlotSuggestion: (worldId: string, ownerId: string) =>
+    request<PlotSuggestionResponse>(`/worlds/${worldId}/plot-suggestion`, {
+      headers: { ...ownerHeader(ownerId), 'X-Client-Fingerprint': clientFingerprint() },
+    }),
+  releasePlotSuggestion: (worldId: string, ownerId: string) =>
+    request<unknown>(`/worlds/${worldId}/plot-suggestion`, {
+      method: 'DELETE',
+      headers: ownerHeader(ownerId),
+    }),
 };
