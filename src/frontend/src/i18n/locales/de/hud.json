@@ -211,5 +211,41 @@
     "hex": "Hex {q}-{r}",
     "delivered": "geliefert",
     "arriving": "kommt an"
+  },
+  "battleReport": {
+    "buildings": {
+      "longhouse": "Langhaus",
+      "lumberjack": "Holzfäller",
+      "quarry": "Steinbruch",
+      "farm": "Ackerfarm",
+      "storagehouse": "Lagerhaus",
+      "tower": "Wachturm",
+      "fishinghut": "Fischerhütte",
+      "magictower": "Magischer Turm",
+      "pumpkinfarm": "Kürbisfarm"
+    },
+    "missionAttack": "Angriff",
+    "missionRaid": "Überfall",
+    "victory": "Sieg",
+    "defeat": "Niederlage",
+    "summaryLost": "{n} verloren",
+    "summarySurvived": "{n} überlebt",
+    "summaryLooted": "{n} erbeutet",
+    "siegeDestroyedRazed": "{label} zerstört — Siedlung dem Erdboden gleichgemacht",
+    "siegeDestroyed": "{label} zerstört",
+    "siegeDamaged": "{label} beschädigt: Stufe {before} → {after}",
+    "attackPower": "Angriffskraft",
+    "defensePower": "Verteidigungskraft",
+    "attacker": "Angreifer",
+    "defender": "Verteidiger",
+    "unit": "Einheit",
+    "sent": "Entsandt",
+    "lost": "Verloren",
+    "survived": "Überlebt",
+    "noStacksRecorded": "Keine Truppen erfasst.",
+    "lootTaken": "Beute",
+    "settlementRazed": "Siedlung dem Erdboden gleichgemacht",
+    "siege": "Belagerung",
+    "hexCoord": "Hex ({q}, {r})"
   }
 }

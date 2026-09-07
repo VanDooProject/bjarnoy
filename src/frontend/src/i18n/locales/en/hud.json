@@ -211,5 +211,41 @@
     "hex": "hex {q}-{r}",
     "delivered": "delivered",
     "arriving": "arriving"
+  },
+  "battleReport": {
+    "buildings": {
+      "longhouse": "Longhouse",
+      "lumberjack": "Lumberjack",
+      "quarry": "Quarry",
+      "farm": "Crop farm",
+      "storagehouse": "Storehouse",
+      "tower": "Watchtower",
+      "fishinghut": "Fishing hut",
+      "magictower": "Magic tower",
+      "pumpkinfarm": "Pumpkin farm"
+    },
+    "missionAttack": "Attack",
+    "missionRaid": "Raid",
+    "victory": "Victory",
+    "defeat": "Defeat",
+    "summaryLost": "{n} lost",
+    "summarySurvived": "{n} survived",
+    "summaryLooted": "{n} looted",
+    "siegeDestroyedRazed": "{label} destroyed — settlement razed",
+    "siegeDestroyed": "{label} destroyed",
+    "siegeDamaged": "{label} damaged: level {before} → {after}",
+    "attackPower": "Attack power",
+    "defensePower": "Defense power",
+    "attacker": "Attacker",
+    "defender": "Defender",
+    "unit": "Unit",
+    "sent": "Sent",
+    "lost": "Lost",
+    "survived": "Survived",
+    "noStacksRecorded": "No stacks recorded.",
+    "lootTaken": "Loot taken",
+    "settlementRazed": "Settlement razed",
+    "siege": "Siege",
+    "hexCoord": "Hex ({q}, {r})"
   }
 }

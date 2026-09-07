@@ -2,27 +2,12 @@
 // inbox/detail view (ReportsView.vue, stores/reports.ts) — kept dependency-
 // free and unit-testable, same reasoning as lib/units/armyDispatch.ts.
 import type { BattleReportAttackerLine, BattleReportDefenderLine, BattleReportSiege, ResourceLine } from '../../api/types';
-
-// Wire building-type names -> a readable label. Mirrors the catalogue in
-// `data/building-catalogue.json`/`BuildQueuePanel.vue`'s own `BUILDING_LABELS`
-// — duplicated rather than imported, same as every other panel that needs a
-// building label (each already keeps its own small map; see BuildQueuePanel.vue's
-// comment on why scoped styles/consts aren't shared across components here).
-const BUILDING_LABELS: Record<string, string> = {
-  longhouse: 'Longhouse',
-  lumberjack: 'Lumberjack',
-  quarry: 'Quarry',
-  farm: 'Crop farm',
-  storagehouse: 'Storehouse',
-  tower: 'Watchtower',
-  fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
-  pumpkinfarm: 'Pumpkin farm',
-};
+import { i18n } from '../../i18n';
 
 /** A readable label for a wire building-type name, falling back to the raw value for anything unmapped. */
 export function buildingLabel(type: string): string {
-  return BUILDING_LABELS[type] ?? type;
+  const key = `hud.battleReport.buildings.${type}`;
+  return i18n.global.te(key) ? (i18n.global.t(key) as string) : type;
 }
 
 /**
@@ -31,7 +16,7 @@ export function buildingLabel(type: string): string {
  * phase 7, another player's dispatch), so it's labelled rather than assumed.
  */
 export function missionLabel(mission: string): string {
-  return mission === 'raid' ? 'Raid' : 'Attack';
+  return mission === 'raid' ? i18n.global.t('hud.battleReport.missionRaid') : i18n.global.t('hud.battleReport.missionAttack');
 }
 
 /** True when the settlement on `viewerSide` of this report came out on top. */
@@ -40,8 +25,8 @@ export function isVictoryFor(report: { winner: string }, viewerSide: 'attacker' 
 }
 
 /** `"Victory"` / `"Defeat"` from the given side's point of view. */
-export function outcomeLabel(report: { winner: string }, viewerSide: 'attacker' | 'defender'): 'Victory' | 'Defeat' {
-  return isVictoryFor(report, viewerSide) ? 'Victory' : 'Defeat';
+export function outcomeLabel(report: { winner: string }, viewerSide: 'attacker' | 'defender'): string {
+  return isVictoryFor(report, viewerSide) ? i18n.global.t('hud.battleReport.victory') : i18n.global.t('hud.battleReport.defeat');
 }
 
 /** Sum of every resource in a loot line — a single "how much was taken" number for a summary row. */
@@ -74,11 +59,11 @@ export function reportSummaryLine(
   const lines = viewerSide === 'attacker' ? report.attackerLines : report.defenderLines;
   const lost = sumLost(lines);
   const survived = sumSurvived(lines);
-  const parts = [`${lost} lost`, `${survived} survived`];
+  const parts = [i18n.global.t('hud.battleReport.summaryLost', { n: lost }), i18n.global.t('hud.battleReport.summarySurvived', { n: survived })];
 
   const loot = totalLoot(report.lootTaken);
   if (viewerSide === 'attacker' && loot > 0) {
-    parts.push(`${Math.round(loot)} looted`);
+    parts.push(i18n.global.t('hud.battleReport.summaryLooted', { n: Math.round(loot) }));
   }
   return parts.join(', ');
 }
@@ -115,7 +100,9 @@ export function unreadCount(reports: Array<{ occurredAt: string }>, lastSeenIso:
 export function siegeSummaryLine(siege: Pick<BattleReportSiege, 'targetType' | 'levelBefore' | 'levelAfter' | 'settlementRazed'>): string {
   const label = buildingLabel(siege.targetType);
   if (siege.levelAfter <= 0) {
-    return siege.settlementRazed ? `${label} destroyed — settlement razed` : `${label} destroyed`;
+    return siege.settlementRazed
+      ? i18n.global.t('hud.battleReport.siegeDestroyedRazed', { label })
+      : i18n.global.t('hud.battleReport.siegeDestroyed', { label });
   }
-  return `${label} damaged: level ${siege.levelBefore} → ${siege.levelAfter}`;
+  return i18n.global.t('hud.battleReport.siegeDamaged', { label, before: siege.levelBefore, after: siege.levelAfter });
 }
