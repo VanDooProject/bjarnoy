@@ -1,0 +1,23 @@
+{
+  "backToSettlement": "← Back",
+  "backToList": "← Reports",
+  "demoModeHint": "Reports require the live backend and aren't wired up in demo mode.",
+  "noSettlement": "Found a settlement first to have any reports.",
+  "trade": {
+    "completed": "Trade completed",
+    "guildTrade": "Guild trade",
+    "trade": "Trade",
+    "youGave": "You gave",
+    "youReceived": "You received",
+    "travelled": "Carts travelled {hours}h."
+  },
+  "title": "Reports",
+  "tabs": {
+    "all": "All",
+    "battle": "Battle",
+    "trade": "Trade"
+  },
+  "noReports": "No reports yet.",
+  "simulatorHint": "Want to test a fight without risking real troops?",
+  "simulatorLink": "Try the fight simulator →"
+}

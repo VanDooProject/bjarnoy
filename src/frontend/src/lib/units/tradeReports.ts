@@ -2,6 +2,7 @@
 // the shared inbox (ReportsView.vue, stores/reports.ts) — kept dependency-
 // free and unit-testable, mirroring lib/units/battleReports.ts's own split.
 import type { TradeReportResponse } from '../../api/types';
+import { i18n } from '../../i18n';
 
 /** Which side `settlementId` traded on in this report — `null` if it was neither (shouldn't happen for reports fetched for that settlement). */
 export function tradeSideFor(
@@ -31,7 +32,12 @@ export function tradeSummaryLine(
   const gaveAmount = viewerSide === 'poster' ? report.offeredAmount : report.requestedAmount;
   const got = viewerSide === 'poster' ? report.requestedResource : report.offeredResource;
   const gotAmount = viewerSide === 'poster' ? report.requestedAmount : report.offeredAmount;
-  return `Gave ${Math.round(gaveAmount)} ${gave} for ${Math.round(gotAmount)} ${got}`;
+  return i18n.global.t('hud.tradeReport.summary', {
+    gaveAmount: Math.round(gaveAmount),
+    gave,
+    gotAmount: Math.round(gotAmount),
+    got,
+  });
 }
 
 /** A trade report counts as unread if it completed after `lastSeenIso` (or nothing has been seen yet). */

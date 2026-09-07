@@ -302,5 +302,8 @@
     "provisions": "Proviant",
     "dispatching": "Wird entsendet…",
     "confirmDispatch": "Entsendung bestätigen"
+  },
+  "tradeReport": {
+    "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"
   }
 }

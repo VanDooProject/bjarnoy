@@ -302,5 +302,8 @@
     "provisions": "Provisions",
     "dispatching": "Dispatching…",
     "confirmDispatch": "Confirm dispatch"
+  },
+  "tradeReport": {
+    "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"
   }
 }

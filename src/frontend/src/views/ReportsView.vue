@@ -14,14 +14,18 @@
 // exact same markup as a real report, rather than duplicating it.
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { DEMO_MODE } from '../config';
 import type { BattleReportResponse, TradeReportResponse } from '../api/types';
-import { missionLabel, outcomeLabel, reportSummaryLine, sideFor } from '../lib/units/battleReports';
+import { isVictoryFor, missionLabel, outcomeLabel, reportSummaryLine, sideFor } from '../lib/units/battleReports';
 import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
 import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
+import type { MessageSchema } from '../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const route = useRoute();
 const router = useRouter();
@@ -70,6 +74,7 @@ const rows = computed(() =>
         kind: 'battle' as const,
         id: item.report.id,
         outcome: outcomeLabel(item.report, side),
+        isVictory: isVictoryFor(item.report, side),
         mission: missionLabel(item.report.mission),
         summary: reportSummaryLine(item.report, side),
         when: new Date(item.report.occurredAt).toLocaleString(),
@@ -80,7 +85,8 @@ const rows = computed(() =>
       kind: 'trade' as const,
       id: item.report.id,
       outcome: null,
-      mission: item.report.guildTrade ? 'Guild trade' : 'Trade',
+      isVictory: false,
+      mission: item.report.guildTrade ? t('reports.trade.guildTrade') : t('reports.trade.trade'),
       summary: tradeSummaryLine(item.report, side),
       when: new Date(item.report.completedAt).toLocaleString(),
     };
@@ -97,34 +103,36 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
 <template>
   <div class="reports-view">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
+      <span class="brand">{{ $t('common.brand.name') }}</span>
       <button class="back" @click="detailItem ? backToList() : router.push('/settlement')">
-        {{ detailItem ? '← Reports' : '← Back' }}
+        {{ detailItem ? $t('reports.backToList') : $t('reports.backToSettlement') }}
       </button>
     </header>
 
     <main class="body">
-      <p v-if="DEMO_MODE" class="hint">Reports require the live backend and aren't wired up in demo mode.</p>
-      <p v-else-if="!player.settlementId" class="hint">Found a settlement first to have any reports.</p>
+      <p v-if="DEMO_MODE" class="hint">{{ $t('reports.demoModeHint') }}</p>
+      <p v-else-if="!player.settlementId" class="hint">{{ $t('reports.noSettlement') }}</p>
 
       <template v-else-if="tradeDetail">
         <div class="card trade">
           <div class="card-header">
-            <span class="banner trade-banner">Trade completed</span>
-            <span class="mission-pill">{{ tradeDetail.guildTrade ? 'Guild trade' : 'Trade' }}</span>
+            <span class="banner trade-banner">{{ $t('reports.trade.completed') }}</span>
+            <span class="mission-pill">{{
+              tradeDetail.guildTrade ? $t('reports.trade.guildTrade') : $t('reports.trade.trade')
+            }}</span>
           </div>
           <p class="occurred">{{ new Date(tradeDetail.completedAt).toLocaleString() }}</p>
 
           <div class="power-row">
             <div class="power">
-              <span class="power-label">You gave</span>
+              <span class="power-label">{{ $t('reports.trade.youGave') }}</span>
               <span class="power-value">
                 {{ Math.round(tradeDetailSide === 'poster' ? tradeDetail.offeredAmount : tradeDetail.requestedAmount) }}
                 {{ tradeDetailSide === 'poster' ? tradeDetail.offeredResource : tradeDetail.requestedResource }}
               </span>
             </div>
             <div class="power">
-              <span class="power-label">You received</span>
+              <span class="power-label">{{ $t('reports.trade.youReceived') }}</span>
               <span class="power-value">
                 {{ Math.round(tradeDetailSide === 'poster' ? tradeDetail.requestedAmount : tradeDetail.offeredAmount) }}
                 {{ tradeDetailSide === 'poster' ? tradeDetail.requestedResource : tradeDetail.offeredResource }}
@@ -132,7 +140,7 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
             </div>
           </div>
 
-          <p class="trade-travel">Carts travelled {{ tradeDetail.travelHours.toFixed(1) }}h.</p>
+          <p class="trade-travel">{{ $t('reports.trade.travelled', { hours: tradeDetail.travelHours.toFixed(1) }) }}</p>
         </div>
       </template>
 
@@ -141,7 +149,7 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
       </template>
 
       <template v-else>
-        <h1>Reports</h1>
+        <h1>{{ $t('reports.title') }}</h1>
 
         <div class="kind-tabs">
           <button
@@ -152,25 +160,21 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
             :class="{ active: kindFilter === tab }"
             @click="kindFilter = tab"
           >
-            {{ tab === 'all' ? 'All' : tab === 'battle' ? 'Battle' : 'Trade' }}
+            {{ $t(`reports.tabs.${tab}`) }}
           </button>
         </div>
 
-        <p v-if="reports.loading && !rows.length">Loading…</p>
+        <p v-if="reports.loading && !rows.length">{{ $t('common.states.loading') }}</p>
         <p v-else-if="reports.error" class="hint error">{{ reports.error }}</p>
-        <p v-else-if="!rows.length" class="hint">No reports yet.</p>
+        <p v-else-if="!rows.length" class="hint">{{ $t('reports.noReports') }}</p>
 
         <div v-else class="list">
           <button v-for="row in rows" :key="row.id" type="button" class="row" @click="open(row.id)">
             <div class="row-top">
-              <span
-                v-if="row.kind === 'battle'"
-                class="outcome"
-                :class="row.outcome === 'Victory' ? 'victory' : 'defeat'"
-              >
+              <span v-if="row.kind === 'battle'" class="outcome" :class="row.isVictory ? 'victory' : 'defeat'">
                 {{ row.outcome }}
               </span>
-              <span v-else class="outcome trade-outcome">Trade</span>
+              <span v-else class="outcome trade-outcome">{{ $t('reports.trade.trade') }}</span>
               <span class="mission-pill">{{ row.mission }}</span>
               <span class="when">{{ row.when }}</span>
             </div>
@@ -179,8 +183,8 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
         </div>
 
         <p class="simulator-link">
-          Want to test a fight without risking real troops?
-          <router-link to="/simulator">Try the fight simulator →</router-link>
+          {{ $t('reports.simulatorHint') }}
+          <router-link to="/simulator">{{ $t('reports.simulatorLink') }}</router-link>
         </p>
       </template>
     </main>

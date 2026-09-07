@@ -25,6 +25,10 @@ import enMessages from './locales/en/messages.json';
 import deMessages from './locales/de/messages.json';
 import enProfile from './locales/en/profile.json';
 import deProfile from './locales/de/profile.json';
+import enLeaderboard from './locales/en/leaderboard.json';
+import deLeaderboard from './locales/de/leaderboard.json';
+import enReports from './locales/en/reports.json';
+import deReports from './locales/de/reports.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -77,6 +81,8 @@ export const i18n = createI18n({
       guild: enGuild,
       messages: enMessages,
       profile: enProfile,
+      leaderboard: enLeaderboard,
+      reports: enReports,
     },
     de: {
       common: deCommon,
@@ -92,6 +98,8 @@ export const i18n = createI18n({
       guild: deGuild,
       messages: deMessages,
       profile: deProfile,
+      leaderboard: deLeaderboard,
+      reports: deReports,
     },
   },
   datetimeFormats,
