@@ -15,6 +15,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { Line } from 'vue-chartjs';
 import ActivityChart from './ActivityChart.vue';
 import type { ActivityBucket } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import adminActivityChart from '../../i18n/locales/en/adminActivityChart.json';
+
+const global = { plugins: [createTestI18n({ adminActivityChart })] };
 
 beforeAll(() => {
   class ResizeObserverStub {
@@ -91,7 +95,7 @@ function bucket(bucketStart: string, activeUserCount: number): ActivityBucket {
 describe('ActivityChart', () => {
   it('renders a chart with the given buckets as line data', () => {
     const buckets = [bucket('2026-08-01T00:00:00Z', 3), bucket('2026-08-02T00:00:00Z', 7)];
-    const wrapper = mount(ActivityChart, { props: { buckets, bucketUnit: 'day' } });
+    const wrapper = mount(ActivityChart, { props: { buckets, bucketUnit: 'day' }, global });
 
     const line = wrapper.findComponent(Line);
     expect(line.exists()).toBe(true);
@@ -101,7 +105,7 @@ describe('ActivityChart', () => {
   });
 
   it('shows an empty state instead of a chart when there are no buckets', () => {
-    const wrapper = mount(ActivityChart, { props: { buckets: [] } });
+    const wrapper = mount(ActivityChart, { props: { buckets: [] }, global });
 
     expect(wrapper.findComponent(Line).exists()).toBe(false);
     expect(wrapper.text()).toContain('No activity data');
@@ -109,7 +113,7 @@ describe('ActivityChart', () => {
   });
 
   it('updates the chart data when the buckets prop changes', async () => {
-    const wrapper = mount(ActivityChart, { props: { buckets: [bucket('2026-08-01T00:00:00Z', 1)] } });
+    const wrapper = mount(ActivityChart, { props: { buckets: [bucket('2026-08-01T00:00:00Z', 1)] }, global });
 
     await wrapper.setProps({ buckets: [bucket('2026-08-01T00:00:00Z', 1), bucket('2026-08-02T00:00:00Z', 9)] });
 
@@ -127,8 +131,8 @@ describe('ActivityChart', () => {
 
   it('formats hour-bucket labels differently from day buckets', () => {
     const buckets = [bucket('2026-08-01T14:00:00Z', 5)];
-    const dayWrapper = mount(ActivityChart, { props: { buckets, bucketUnit: 'day' } });
-    const hourWrapper = mount(ActivityChart, { props: { buckets, bucketUnit: 'hour' } });
+    const dayWrapper = mount(ActivityChart, { props: { buckets, bucketUnit: 'day' }, global });
+    const hourWrapper = mount(ActivityChart, { props: { buckets, bucketUnit: 'hour' }, global });
 
     const dayLabel: unknown = dayWrapper.findComponent(Line).props('data').labels?.[0];
     const hourLabel: unknown = hourWrapper.findComponent(Line).props('data').labels?.[0];

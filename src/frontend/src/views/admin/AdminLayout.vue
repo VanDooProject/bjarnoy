@@ -24,13 +24,13 @@ async function onLogout() {
 <template>
   <div class="admin">
     <header class="topbar">
-      <span class="brand">Fjørdhold admin</span>
+      <span class="brand">{{ $t('adminLayout.brand') }}</span>
       <nav class="tabs">
-        <router-link to="/admin/worlds" class="tab">Worlds</router-link>
-        <router-link to="/admin/users" class="tab">Users</router-link>
-        <router-link to="/admin/settlements" class="tab">Settlements</router-link>
-        <router-link to="/admin/reports" class="tab">Reports</router-link>
-        <router-link to="/admin/activity" class="tab">Activity</router-link>
+        <router-link to="/admin/worlds" class="tab">{{ $t('adminLayout.tabs.worlds') }}</router-link>
+        <router-link to="/admin/users" class="tab">{{ $t('adminLayout.tabs.users') }}</router-link>
+        <router-link to="/admin/settlements" class="tab">{{ $t('adminLayout.tabs.settlements') }}</router-link>
+        <router-link to="/admin/reports" class="tab">{{ $t('adminLayout.tabs.reports') }}</router-link>
+        <router-link to="/admin/activity" class="tab">{{ $t('adminLayout.tabs.activity') }}</router-link>
       </nav>
       <div class="world-select">
         <select
@@ -43,12 +43,12 @@ async function onLogout() {
           </option>
         </select>
         <router-link v-else-if="!adminWorld.loading" to="/admin/worlds" class="no-worlds">
-          No worlds yet — create one
+          {{ $t('adminLayout.noWorlds') }}
         </router-link>
       </div>
       <div class="account">
         <span class="who">{{ auth.user?.displayName ?? auth.user?.userName }}</span>
-        <button class="logout" @click="onLogout">Log out</button>
+        <button class="logout" @click="onLogout">{{ $t('adminLayout.logout') }}</button>
       </div>
     </header>
     <main class="body">

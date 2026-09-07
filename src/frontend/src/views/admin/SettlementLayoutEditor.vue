@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type {
   AdminSettlementHexResponse,
@@ -8,6 +9,9 @@ import type {
 } from '../../api/types';
 import { isoGridPosition, isoTopPoints } from '../../lib/hex/geometry';
 import { TILE_ART_TOPFACE_H_FRAC } from '../../lib/map/textures';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // The graphical half of the admin settlement editor (issue #105): the
 // settlement's claimed hexes drawn as a real hex grid, click one to place,
@@ -84,7 +88,7 @@ async function load() {
   try {
     await fetchLayout();
   } catch {
-    loadError.value = 'Could not load the settlement layout.';
+    loadError.value = t('settlementLayoutEditor.loadError');
   } finally {
     loading.value = false;
   }
@@ -103,7 +107,7 @@ async function refresh() {
     await fetchLayout();
     loadError.value = null;
   } catch {
-    loadError.value = 'Could not refresh the settlement layout.';
+    loadError.value = t('settlementLayoutEditor.refreshError');
   } finally {
     refreshing.value = false;
   }
@@ -149,9 +153,12 @@ async function place() {
       building: building.value,
       level: level.value,
     });
-    await applied(updated, `${building.value} set to level ${level.value}.`);
+    await applied(
+      updated,
+      t('settlementLayoutEditor.buildingSetToLevel', { building: building.value, level: level.value }),
+    );
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Could not place the building.';
+    error.value = err instanceof ApiError ? err.message : t('settlementLayoutEditor.placeError');
   } finally {
     saving.value = false;
   }
@@ -166,9 +173,9 @@ async function raze() {
   notice.value = null;
   try {
     const updated = await api.adminRazeBuilding(props.settlementId, hex.q, hex.r);
-    await applied(updated, 'Razed.');
+    await applied(updated, t('settlementLayoutEditor.razed'));
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Could not raze the building.';
+    error.value = err instanceof ApiError ? err.message : t('settlementLayoutEditor.razeError');
   } finally {
     saving.value = false;
   }
@@ -184,10 +191,13 @@ async function instantBuild() {
     const result = await api.adminCompleteQueues(props.settlementId, { builds: true, training: true });
     await applied(
       result.settlement,
-      `Finished ${result.completedBuilds} build(s) and ${result.completedTraining} training batch(es).`,
+      t('settlementLayoutEditor.finishedQueue', {
+        builds: result.completedBuilds,
+        training: result.completedTraining,
+      }),
     );
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Could not finish the queue.';
+    error.value = err instanceof ApiError ? err.message : t('settlementLayoutEditor.finishQueueError');
   } finally {
     saving.value = false;
   }
@@ -197,20 +207,20 @@ async function instantBuild() {
 <template>
   <section class="layout-editor">
     <header>
-      <h3>Settlement editor</h3>
+      <h3>{{ $t('settlementLayoutEditor.title') }}</h3>
       <button class="insta" type="button" :disabled="saving || pending === 0" @click="instantBuild">
-        {{ pending === 0 ? 'Nothing queued' : `Instant build (${pending} queued)` }}
+        {{ pending === 0 ? $t('settlementLayoutEditor.nothingQueued') : $t('settlementLayoutEditor.instantBuild', { pending }) }}
       </button>
       <button type="button" :disabled="loading || refreshing || saving" @click="refresh">
-        {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+        {{ refreshing ? $t('settlementLayoutEditor.refreshing') : $t('settlementLayoutEditor.refresh') }}
       </button>
     </header>
 
-    <p v-if="loading">Loading layout…</p>
+    <p v-if="loading">{{ $t('settlementLayoutEditor.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <div v-else-if="layout" class="grid-and-form">
-      <svg class="grid" :viewBox="viewBox" role="group" aria-label="Settlement hexes">
+      <svg class="grid" :viewBox="viewBox" role="group" :aria-label="$t('settlementLayoutEditor.gridAriaLabel')">
         <g v-for="hex in layout.hexes" :key="keyOf(hex)">
           <polygon
             :points="pointsFor(hex)"
@@ -235,28 +245,34 @@ async function instantBuild() {
       </svg>
 
       <div class="hex-form">
-        <p v-if="!selected" class="hint">Pick a hex to edit it.</p>
+        <p v-if="!selected" class="hint">{{ $t('settlementLayoutEditor.pickHex') }}</p>
         <template v-else>
           <h4>({{ selected.q }}, {{ selected.r }}) — {{ selected.terrain }}</h4>
           <p class="standing">
-            {{ selected.building ? `${selected.building} level ${selected.level}` : 'Empty' }}
+            {{
+              selected.building
+                ? $t('settlementLayoutEditor.buildingLevel', { building: selected.building, level: selected.level })
+                : $t('settlementLayoutEditor.empty')
+            }}
           </p>
 
           <label>
-            Building
+            {{ $t('settlementLayoutEditor.building') }}
             <select v-model="building">
               <option v-for="type in layout.buildingTypes" :key="type" :value="type">{{ type }}</option>
             </select>
           </label>
           <label>
-            Level
+            {{ $t('settlementLayoutEditor.level') }}
             <input v-model.number="level" type="number" min="1" :max="layout.maxLevel" step="1" />
           </label>
 
           <div class="actions">
-            <button type="button" :disabled="saving || !building" @click="place">Apply</button>
+            <button type="button" :disabled="saving || !building" @click="place">
+              {{ $t('settlementLayoutEditor.apply') }}
+            </button>
             <button type="button" class="danger" :disabled="saving || !selected.building" @click="raze">
-              Raze
+              {{ $t('settlementLayoutEditor.raze') }}
             </button>
           </div>
         </template>

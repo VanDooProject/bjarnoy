@@ -33,6 +33,18 @@ import enSimulator from './locales/en/simulator.json';
 import deSimulator from './locales/de/simulator.json';
 import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
+import enAdminActivityChart from './locales/en/adminActivityChart.json';
+import enAdminActivity from './locales/en/adminActivity.json';
+import enAdminLayout from './locales/en/adminLayout.json';
+import enAdminReports from './locales/en/adminReports.json';
+import enAdminSettlements from './locales/en/adminSettlements.json';
+import enAdminUsers from './locales/en/adminUsers.json';
+import enAdminWorldReseed from './locales/en/adminWorldReseed.json';
+import enAdminWorlds from './locales/en/adminWorlds.json';
+import enArmyEditor from './locales/en/armyEditor.json';
+import enGarrisonForm from './locales/en/garrisonForm.json';
+import enGrantResourcesForm from './locales/en/grantResourcesForm.json';
+import enSettlementLayoutEditor from './locales/en/settlementLayoutEditor.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -89,6 +101,21 @@ export const i18n = createI18n({
       reports: enReports,
       simulator: enSimulator,
       docs: enDocs,
+      // Admin surface (en-only — German deliberately deferred; fallbackLocale
+      // below covers these, and src/test/i18n.ts skips the parity check for
+      // namespaces with no de/ file).
+      adminActivityChart: enAdminActivityChart,
+      adminActivity: enAdminActivity,
+      adminLayout: enAdminLayout,
+      adminReports: enAdminReports,
+      adminSettlements: enAdminSettlements,
+      adminUsers: enAdminUsers,
+      adminWorldReseed: enAdminWorldReseed,
+      adminWorlds: enAdminWorlds,
+      armyEditor: enArmyEditor,
+      garrisonForm: enGarrisonForm,
+      grantResourcesForm: enGrantResourcesForm,
+      settlementLayoutEditor: enSettlementLayoutEditor,
     },
     de: {
       common: deCommon,

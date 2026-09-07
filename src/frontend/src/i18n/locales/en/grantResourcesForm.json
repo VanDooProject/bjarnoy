@@ -1,0 +1,12 @@
+{
+  "title": "Grant resources",
+  "hint": "Positive adds, negative removes. A removal never takes stock below zero.",
+  "wood": "Wood",
+  "stone": "Stone",
+  "food": "Food",
+  "iron": "Iron",
+  "applying": "Applying…",
+  "apply": "Apply",
+  "grantError": "Could not grant resources.",
+  "clampLine": "{key}: granted {actual} of {requested} — storage full at {capacity}"
+}

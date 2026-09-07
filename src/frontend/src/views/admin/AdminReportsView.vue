@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { ReportResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
 
-const SOURCE_LABELS: Record<string, string> = {
-  profileBio: 'Profile',
-  chatMessage: 'Chat message',
-};
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+const SOURCE_LABELS = computed<Record<string, string>>(() => ({
+  profileBio: t('adminReports.source.profileBio'),
+  chatMessage: t('adminReports.source.chatMessage'),
+}));
 
 const reports = ref<ReportResponse[]>([]);
 const totalCount = ref(0);
@@ -43,7 +47,7 @@ async function load() {
       rows[report.id] = { saving: false, error: null };
     }
   } catch {
-    loadError.value = 'Could not load reports.';
+    loadError.value = t('adminReports.loadError');
   } finally {
     loading.value = false;
   }
@@ -74,7 +78,7 @@ async function resolve(report: ReportResponse, outcome: string) {
     const index = reports.value.findIndex((r) => r.id === updated.id);
     if (index !== -1) reports.value[index] = updated;
   } catch (err) {
-    row.error = err instanceof ApiError ? err.message : 'Could not update the report.';
+    row.error = err instanceof ApiError ? err.message : t('adminReports.updateError');
   } finally {
     row.saving = false;
   }
@@ -83,40 +87,40 @@ async function resolve(report: ReportResponse, outcome: string) {
 
 <template>
   <div class="reports">
-    <h1>Reports</h1>
+    <h1>{{ $t('adminReports.title') }}</h1>
 
     <div class="filters">
       <select v-model="statusFilter" @change="onFilter">
-        <option value="">All statuses</option>
-        <option value="pending">Pending</option>
-        <option value="resolved">Resolved</option>
-        <option value="dismissed">Dismissed</option>
-        <option value="actioned">Actioned</option>
+        <option value="">{{ $t('adminReports.filters.allStatuses') }}</option>
+        <option value="pending">{{ $t('adminReports.filters.pending') }}</option>
+        <option value="resolved">{{ $t('adminReports.filters.resolved') }}</option>
+        <option value="dismissed">{{ $t('adminReports.filters.dismissed') }}</option>
+        <option value="actioned">{{ $t('adminReports.filters.actioned') }}</option>
       </select>
       <select v-model="sourceTypeFilter" @change="onFilter">
-        <option value="">All sources</option>
-        <option value="profileBio">Profile</option>
-        <option value="chatMessage">Chat message</option>
+        <option value="">{{ $t('adminReports.filters.allSources') }}</option>
+        <option value="profileBio">{{ $t('adminReports.source.profileBio') }}</option>
+        <option value="chatMessage">{{ $t('adminReports.source.chatMessage') }}</option>
       </select>
     </div>
 
-    <p v-if="loading">Loading…</p>
+    <p v-if="loading">{{ $t('adminReports.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
-    <p v-else-if="reports.length === 0" class="muted">No reports.</p>
+    <p v-else-if="reports.length === 0" class="muted">{{ $t('adminReports.empty') }}</p>
 
     <template v-else>
       <table class="table">
         <thead>
           <tr>
-            <th>Source</th>
-            <th>Reported</th>
-            <th>Reporter</th>
-            <th>Content</th>
-            <th>Reason</th>
-            <th>Note</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th>{{ $t('adminReports.columns.source') }}</th>
+            <th>{{ $t('adminReports.columns.reported') }}</th>
+            <th>{{ $t('adminReports.columns.reporter') }}</th>
+            <th>{{ $t('adminReports.columns.content') }}</th>
+            <th>{{ $t('adminReports.columns.reason') }}</th>
+            <th>{{ $t('adminReports.columns.note') }}</th>
+            <th>{{ $t('adminReports.columns.status') }}</th>
+            <th>{{ $t('adminReports.columns.created') }}</th>
+            <th>{{ $t('adminReports.columns.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -131,24 +135,24 @@ async function resolve(report: ReportResponse, outcome: string) {
             <td>{{ report.reporterUserName }}</td>
             <td class="snapshot">{{ report.contextSnapshot }}</td>
             <td>{{ report.reason }}</td>
-            <td class="note">{{ report.note ?? '—' }}</td>
+            <td class="note">{{ report.note ?? $t('adminReports.noNote') }}</td>
             <td>
               <span :class="['status', report.status]">{{ report.status }}</span>
             </td>
-            <td>{{ new Date(report.createdAt).toLocaleString() }}</td>
+            <td>{{ d(new Date(report.createdAt), 'long') }}</td>
             <td class="actions">
               <template v-if="report.status === 'pending'">
                 <button :disabled="rows[report.id]?.saving" @click="resolve(report, 'resolved')">
-                  Resolve
+                  {{ $t('adminReports.actions.resolve') }}
                 </button>
                 <button :disabled="rows[report.id]?.saving" @click="resolve(report, 'dismissed')">
-                  Dismiss
+                  {{ $t('adminReports.actions.dismiss') }}
                 </button>
                 <button :disabled="rows[report.id]?.saving" @click="resolve(report, 'actioned')">
-                  Actioned
+                  {{ $t('adminReports.actions.actioned') }}
                 </button>
               </template>
-              <span v-else class="muted">—</span>
+              <span v-else class="muted">{{ $t('adminReports.noActions') }}</span>
             </td>
           </tr>
         </tbody>
@@ -160,9 +164,11 @@ async function resolve(report: ReportResponse, outcome: string) {
       </p>
 
       <div class="pager">
-        <button :disabled="page <= 1" @click="changePage(-1)">Previous</button>
-        <span>Page {{ page }} · {{ totalCount }} reports</span>
-        <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">Next</button>
+        <button :disabled="page <= 1" @click="changePage(-1)">{{ $t('adminReports.pager.previous') }}</button>
+        <span>{{ $t('adminReports.pager.summary', { page, total: totalCount }) }}</span>
+        <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">
+          {{ $t('adminReports.pager.next') }}
+        </button>
       </div>
     </template>
   </div>

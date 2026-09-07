@@ -10,6 +10,18 @@ import type {
   SettlementResponse,
   UnitDefinitionResponse,
 } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import adminSettlements from '../../i18n/locales/en/adminSettlements.json';
+import garrisonForm from '../../i18n/locales/en/garrisonForm.json';
+import grantResourcesForm from '../../i18n/locales/en/grantResourcesForm.json';
+import settlementLayoutEditor from '../../i18n/locales/en/settlementLayoutEditor.json';
+import armyEditor from '../../i18n/locales/en/armyEditor.json';
+
+const global = {
+  plugins: [
+    createTestI18n({ adminSettlements, garrisonForm, grantResourcesForm, settlementLayoutEditor, armyEditor }),
+  ],
+};
 
 const {
   adminSearchSettlements,
@@ -123,7 +135,7 @@ async function openDetail(detailResponse = detail()) {
     { type: 'thrall' },
   ] as UnitDefinitionResponse[]);
 
-  const wrapper = mount(AdminSettlementsView);
+  const wrapper = mount(AdminSettlementsView, { global });
   await flushPromises();
   await wrapper.findAll('button').find((b) => b.text() === 'Manage')!.trigger('click');
   await flushPromises();
@@ -144,7 +156,7 @@ describe('AdminSettlementsView', () => {
   it('lists settlements from a search scoped to the selected world', async () => {
     adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
 
-    const wrapper = mount(AdminSettlementsView);
+    const wrapper = mount(AdminSettlementsView, { global });
     await flushPromises();
 
     expect(adminSearchSettlements).toHaveBeenCalledWith(
@@ -158,7 +170,7 @@ describe('AdminSettlementsView', () => {
   it('shows a hint instead of searching when no world is selected', async () => {
     useAdminWorldStore().selectedWorldId = null;
 
-    const wrapper = mount(AdminSettlementsView);
+    const wrapper = mount(AdminSettlementsView, { global });
     await flushPromises();
 
     expect(adminSearchSettlements).not.toHaveBeenCalled();
@@ -169,7 +181,7 @@ describe('AdminSettlementsView', () => {
     adminSearchSettlements.mockResolvedValue({ items: [summary()], totalCount: 1, page: 1, pageSize: 25 });
     const adminWorld = useAdminWorldStore();
 
-    mount(AdminSettlementsView);
+    mount(AdminSettlementsView, { global });
     await flushPromises();
     expect(adminSearchSettlements).toHaveBeenCalledTimes(1);
 

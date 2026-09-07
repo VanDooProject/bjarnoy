@@ -1,0 +1,11 @@
+{
+  "title": "Create troops",
+  "empty": "Garrison empty.",
+  "unit": "Unit",
+  "count": "Count",
+  "working": "Working…",
+  "create": "Create",
+  "remove": "Remove",
+  "changeError": "Could not change the garrison.",
+  "loadingRoster": "Loading the unit roster…"
+}

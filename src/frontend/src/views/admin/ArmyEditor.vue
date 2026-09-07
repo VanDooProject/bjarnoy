@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminArmyResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Troop editing via admin (issue #105): change an army's units and food, speed
 // its journey up (or slow it down), and drop it on any hex it could legally
@@ -47,7 +51,7 @@ async function load() {
       drafts[entry.army.id] = draftFor(entry);
     }
   } catch {
-    loadError.value = 'Could not load armies.';
+    loadError.value = t('armyEditor.loadError');
   } finally {
     loading.value = false;
   }
@@ -60,9 +64,11 @@ function toggle(entry: AdminArmyResponse) {
 }
 
 function where(entry: AdminArmyResponse): string {
-  if (entry.army.atHome) return 'at home';
-  if (entry.army.supporting) return 'supporting';
-  return `in transit, arriving ${new Date(entry.army.movement!.arrivesAt).toLocaleString()}`;
+  if (entry.army.atHome) return t('armyEditor.where.atHome');
+  if (entry.army.supporting) return t('armyEditor.where.supporting');
+  return t('armyEditor.where.inTransit', {
+    date: d(new Date(entry.army.movement!.arrivesAt), 'long'),
+  });
 }
 
 async function save(entry: AdminArmyResponse, options: { move: boolean; retime: boolean }) {
@@ -85,7 +91,7 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
     if (index !== -1) armies.value[index] = updated;
     drafts[updated.army.id] = draftFor(updated);
   } catch (err) {
-    draft.error = err instanceof ApiError ? err.message : 'Could not edit the army.';
+    draft.error = err instanceof ApiError ? err.message : t('armyEditor.editError');
   } finally {
     draft.saving = false;
   }
@@ -94,22 +100,22 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
 
 <template>
   <section class="army-editor">
-    <h3>Armies</h3>
+    <h3>{{ $t('armyEditor.title') }}</h3>
 
-    <p v-if="loading">Loading armies…</p>
+    <p v-if="loading">{{ $t('armyEditor.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
-    <p v-else-if="armies.length === 0" class="hint">No armies in the field.</p>
+    <p v-else-if="armies.length === 0" class="hint">{{ $t('armyEditor.empty') }}</p>
 
     <ul v-else class="armies">
       <li v-for="entry in armies" :key="entry.army.id" class="army">
         <div class="summary">
           <span class="mission">{{ entry.army.mission }}</span>
           <span class="units">
-            {{ entry.army.stacks.map((s) => `${s.count}x ${s.unit}`).join(', ') || 'empty' }}
+            {{ entry.army.stacks.map((s) => `${s.count}x ${s.unit}`).join(', ') || $t('armyEditor.unitsEmpty') }}
           </span>
           <span class="position">({{ entry.army.position.q }}, {{ entry.army.position.r }}) — {{ where(entry) }}</span>
           <button type="button" @click="toggle(entry)">
-            {{ openId === entry.army.id ? 'Close' : 'Edit' }}
+            {{ openId === entry.army.id ? $t('armyEditor.close') : $t('armyEditor.edit') }}
           </button>
         </div>
 
@@ -120,14 +126,14 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
               <input v-model.number="drafts[entry.army.id].stacks[index].count" type="number" min="0" step="1" />
             </label>
             <label>
-              Provisions
+              {{ $t('armyEditor.provisions') }}
               <input v-model.number="drafts[entry.army.id].provisions" type="number" min="0" step="1" />
             </label>
           </div>
 
           <div class="controls">
             <label>
-              Arrive in (min)
+              {{ $t('armyEditor.arriveInMinutes') }}
               <input v-model="drafts[entry.army.id].arriveInMinutes" type="number" min="0" step="1" />
             </label>
             <button
@@ -135,17 +141,17 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
               :disabled="drafts[entry.army.id].saving"
               @click="save(entry, { move: false, retime: true })"
             >
-              Speed up
+              {{ $t('armyEditor.speedUp') }}
             </button>
           </div>
 
           <div class="controls">
             <label>
-              q
+              {{ $t('armyEditor.coordQ') }}
               <input v-model="drafts[entry.army.id].q" type="number" step="1" />
             </label>
             <label>
-              r
+              {{ $t('armyEditor.coordR') }}
               <input v-model="drafts[entry.army.id].r" type="number" step="1" />
             </label>
             <button
@@ -153,7 +159,7 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
               :disabled="drafts[entry.army.id].saving"
               @click="save(entry, { move: true, retime: false })"
             >
-              Move here
+              {{ $t('armyEditor.moveHere') }}
             </button>
           </div>
 
@@ -162,7 +168,7 @@ async function save(entry: AdminArmyResponse, options: { move: boolean; retime: 
             :disabled="drafts[entry.army.id].saving"
             @click="save(entry, { move: false, retime: false })"
           >
-            {{ drafts[entry.army.id].saving ? 'Saving…' : 'Save units & food' }}
+            {{ drafts[entry.army.id].saving ? $t('armyEditor.saving') : $t('armyEditor.saveUnitsAndFood') }}
           </button>
 
           <p v-if="drafts[entry.army.id].error" class="error">{{ drafts[entry.army.id].error }}</p>

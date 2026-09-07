@@ -1,0 +1,34 @@
+{
+  "title": "Settlements",
+  "loadError": "Could not load settlements.",
+  "detailError": "Could not load settlement detail.",
+  "loading": "Loading…",
+  "loadingDetail": "Loading detail…",
+  "ownerPlaceholder": "Owner name",
+  "search": "Search",
+  "selectWorldHint": "Select a world above to search its settlements.",
+  "columns": {
+    "name": "Name",
+    "owner": "Owner",
+    "world": "World",
+    "position": "Position",
+    "longhouse": "Longhouse",
+    "actions": "Actions"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "manage": "Manage",
+    "close": "Close"
+  },
+  "stocks": {
+    "wood": "Wood {stock} / {capacity}",
+    "stone": "Stone {stock} / {capacity}",
+    "food": "Food {stock} / {capacity}",
+    "iron": "Iron {stock} / {capacity}"
+  },
+  "pager": {
+    "previous": "Previous",
+    "next": "Next",
+    "summary": "Page {page} · {total} settlements"
+  }
+}

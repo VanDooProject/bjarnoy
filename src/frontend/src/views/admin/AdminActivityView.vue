@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import ActivityChart from '../../components/admin/ActivityChart.vue';
 import type { AdminActivityUser, AdminUserActivityDetailResponse, ActivityBucket } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 type BucketUnit = 'day' | 'hour';
 
@@ -45,7 +49,7 @@ async function loadSummary() {
     });
     buckets.value = result.buckets;
   } catch (err) {
-    summaryError.value = err instanceof ApiError ? err.message : 'Could not load activity summary.';
+    summaryError.value = err instanceof ApiError ? err.message : t('adminActivity.loadSummaryError');
   } finally {
     summaryLoading.value = false;
   }
@@ -80,7 +84,7 @@ async function loadUsers() {
     users.value = result.items;
     totalCount.value = result.totalCount;
   } catch (err) {
-    usersError.value = err instanceof ApiError ? err.message : 'Could not load users.';
+    usersError.value = err instanceof ApiError ? err.message : t('adminActivity.loadUsersError');
   } finally {
     usersLoading.value = false;
   }
@@ -110,7 +114,7 @@ async function loadDetail(userId: string) {
       to: endOfDayIso(rangeTo.value),
     });
   } catch (err) {
-    detailError.value = err instanceof ApiError ? err.message : 'Could not load session detail.';
+    detailError.value = err instanceof ApiError ? err.message : t('adminActivity.loadDetailError');
   } finally {
     detailLoading.value = false;
   }
@@ -153,7 +157,7 @@ function formatDuration(value: string): string {
 }
 
 function formatLastActive(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : 'Never';
+  return iso ? d(new Date(iso), 'long') : t('adminActivity.never');
 }
 
 const selectedUserName = computed(() => users.value.find((u) => u.userId === selectedUserId.value)?.userName ?? '');
@@ -166,66 +170,75 @@ onMounted(() => {
 
 <template>
   <div class="activity">
-    <h1>Activity</h1>
+    <h1>{{ $t('adminActivity.title') }}</h1>
 
     <div class="filters">
       <label>
-        From
+        {{ $t('adminActivity.filters.from') }}
         <input v-model="rangeFrom" type="date" @change="onRangeChange" />
       </label>
       <label>
-        To
+        {{ $t('adminActivity.filters.to') }}
         <input v-model="rangeTo" type="date" @change="onRangeChange" />
       </label>
       <div class="bucket-toggle">
-        <button :class="{ active: bucketUnit === 'day' }" @click="setBucketUnit('day')">Day</button>
-        <button :class="{ active: bucketUnit === 'hour' }" @click="setBucketUnit('hour')">Hour</button>
+        <button :class="{ active: bucketUnit === 'day' }" @click="setBucketUnit('day')">
+          {{ $t('adminActivity.filters.bucketDay') }}
+        </button>
+        <button :class="{ active: bucketUnit === 'hour' }" @click="setBucketUnit('hour')">
+          {{ $t('adminActivity.filters.bucketHour') }}
+        </button>
       </div>
     </div>
 
     <section class="panel-section">
-      <h2>Active users over time</h2>
-      <p v-if="summaryLoading">Loading…</p>
+      <h2>{{ $t('adminActivity.chart.title') }}</h2>
+      <p v-if="summaryLoading">{{ $t('adminActivity.chart.loading') }}</p>
       <p v-else-if="summaryError" class="error">{{ summaryError }}</p>
       <ActivityChart v-else :buckets="buckets" :bucket-unit="bucketUnit" />
     </section>
 
     <section class="panel-section">
-      <h2>Users</h2>
-      <p v-if="usersLoading">Loading…</p>
+      <h2>{{ $t('adminActivity.users.title') }}</h2>
+      <p v-if="usersLoading">{{ $t('adminActivity.users.loading') }}</p>
       <p v-else-if="usersError" class="error">{{ usersError }}</p>
-      <p v-else-if="users.length === 0" class="muted">No users.</p>
+      <p v-else-if="users.length === 0" class="muted">{{ $t('adminActivity.users.empty') }}</p>
 
       <template v-else>
         <table class="table">
           <thead>
             <tr>
-              <th>Username</th>
-              <th>Display name</th>
-              <th>Last active</th>
+              <th>{{ $t('adminActivity.users.columns.userName') }}</th>
+              <th>{{ $t('adminActivity.users.columns.displayName') }}</th>
+              <th>{{ $t('adminActivity.users.columns.lastActive') }}</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="user in users" :key="user.userId">
               <tr class="user-row" @click="selectUser(user)">
                 <td>{{ user.userName }}</td>
-                <td>{{ user.displayName ?? '—' }}</td>
+                <td>{{ user.displayName ?? $t('adminActivity.users.noDisplayName') }}</td>
                 <td>{{ formatLastActive(user.lastActiveAtUtc) }}</td>
               </tr>
               <tr v-if="selectedUserId === user.userId" class="detail-row">
                 <td colspan="3">
-                  <p v-if="detailLoading">Loading sessions…</p>
+                  <p v-if="detailLoading">{{ $t('adminActivity.detail.loading') }}</p>
                   <p v-else-if="detailError" class="error">{{ detailError }}</p>
                   <div v-else-if="detail" class="detail">
                     <p class="totals">
-                      {{ selectedUserName }} — {{ detail.sessionCount }} session{{ detail.sessionCount === 1 ? '' : 's' }},
-                      {{ formatDuration(detail.totalActiveDuration) }} active
+                      {{
+                        t('adminActivity.detail.totals', {
+                          userName: selectedUserName,
+                          sessions: t('adminActivity.detail.sessionCount', { count: detail.sessionCount }),
+                          duration: formatDuration(detail.totalActiveDuration),
+                        })
+                      }}
                     </p>
-                    <p v-if="detail.sessions.length === 0" class="muted">No sessions in this range.</p>
+                    <p v-if="detail.sessions.length === 0" class="muted">{{ $t('adminActivity.detail.empty') }}</p>
                     <ul v-else class="sessions">
                       <li v-for="(session, index) in detail.sessions" :key="index">
-                        {{ new Date(session.startedAtUtc).toLocaleString() }} –
-                        {{ new Date(session.lastSeenAtUtc).toLocaleString() }}
+                        {{ d(new Date(session.startedAtUtc), 'long') }} –
+                        {{ d(new Date(session.lastSeenAtUtc), 'long') }}
                       </li>
                     </ul>
                   </div>
@@ -236,9 +249,11 @@ onMounted(() => {
         </table>
 
         <div class="pager">
-          <button :disabled="page <= 1" @click="changePage(-1)">Previous</button>
-          <span>Page {{ page }} · {{ totalCount }} users</span>
-          <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">Next</button>
+          <button :disabled="page <= 1" @click="changePage(-1)">{{ $t('adminActivity.pager.previous') }}</button>
+          <span>{{ $t('adminActivity.pager.summary', { page, total: totalCount }) }}</span>
+          <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">
+            {{ $t('adminActivity.pager.next') }}
+          </button>
         </div>
       </template>
     </section>

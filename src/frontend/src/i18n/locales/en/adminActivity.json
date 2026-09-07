@@ -1,0 +1,39 @@
+{
+  "title": "Activity",
+  "loadSummaryError": "Could not load activity summary.",
+  "loadUsersError": "Could not load users.",
+  "loadDetailError": "Could not load session detail.",
+  "never": "Never",
+  "filters": {
+    "from": "From",
+    "to": "To",
+    "bucketDay": "Day",
+    "bucketHour": "Hour"
+  },
+  "chart": {
+    "title": "Active users over time",
+    "loading": "Loading…"
+  },
+  "users": {
+    "title": "Users",
+    "loading": "Loading…",
+    "empty": "No users.",
+    "columns": {
+      "userName": "Username",
+      "displayName": "Display name",
+      "lastActive": "Last active"
+    },
+    "noDisplayName": "—"
+  },
+  "detail": {
+    "loading": "Loading sessions…",
+    "totals": "{userName} — {sessions}, {duration} active",
+    "sessionCount": "{count} session | {count} sessions",
+    "empty": "No sessions in this range."
+  },
+  "pager": {
+    "previous": "Previous",
+    "next": "Next",
+    "summary": "Page {page} · {total} users"
+  }
+}

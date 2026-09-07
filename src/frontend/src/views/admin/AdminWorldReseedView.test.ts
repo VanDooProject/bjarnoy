@@ -4,6 +4,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminWorldReseedView from './AdminWorldReseedView.vue';
 import type { AdminWorldResponse, WorldSeedPreviewResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import adminWorldReseed from '../../i18n/locales/en/adminWorldReseed.json';
+
+const global = { plugins: [createTestI18n({ adminWorldReseed })] };
 
 const { adminListWorlds, adminPreviewWorldSeed, adminReseedWorld } = vi.hoisted(() => ({
   adminListWorlds: vi.fn(),
@@ -86,7 +90,7 @@ function preview(overrides: Partial<WorldSeedPreviewResponse> = {}): WorldSeedPr
 /** Mounts the view with its world already loaded. */
 async function mountView() {
   adminListWorlds.mockResolvedValue([world()]);
-  const wrapper = mount(AdminWorldReseedView);
+  const wrapper = mount(AdminWorldReseedView, { global });
   await flushPromises();
   return wrapper;
 }

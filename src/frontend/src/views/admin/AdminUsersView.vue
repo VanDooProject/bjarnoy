@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminUserResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
 import { useAuthStore } from '../../stores/auth';
 
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const auth = useAuthStore();
 
 const users = ref<AdminUserResponse[]>([]);
@@ -52,7 +55,7 @@ async function load() {
       drafts[user.id] = draftFor(user);
     }
   } catch {
-    loadError.value = 'Could not load users.';
+    loadError.value = t('adminUsers.loadError');
   } finally {
     loading.value = false;
   }
@@ -91,17 +94,17 @@ async function saveEdit(user: AdminUserResponse) {
     });
     applyUpdated(updated);
   } catch (err) {
-    draft.error = err instanceof ApiError ? err.message : 'Could not save.';
+    draft.error = err instanceof ApiError ? err.message : t('adminUsers.saveError');
   } finally {
     draft.saving = false;
   }
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  active: 'Unlock / unban',
-  locked: 'Lock',
-  banned: 'Ban',
-};
+const STATUS_LABELS = computed<Record<string, string>>(() => ({
+  active: t('adminUsers.statusLabels.active'),
+  locked: t('adminUsers.statusLabels.locked'),
+  banned: t('adminUsers.statusLabels.banned'),
+}));
 
 function isSelf(user: AdminUserResponse): boolean {
   return auth.user?.id === user.id;
@@ -111,10 +114,10 @@ async function setStatus(user: AdminUserResponse, status: string) {
   const draft = drafts[user.id];
   if (!draft || draft.saving || isSelf(user)) return;
 
-  const label = STATUS_LABELS[status] ?? status;
-  if (!window.confirm(`${label} user "${user.userName}"?`)) return;
+  const label = STATUS_LABELS.value[status] ?? status;
+  if (!window.confirm(t('adminUsers.confirmStatusChange', { label, userName: user.userName }))) return;
 
-  const reason = status === 'active' ? null : window.prompt('Reason (optional):') ?? undefined;
+  const reason = status === 'active' ? null : window.prompt(t('adminUsers.reasonPrompt')) ?? undefined;
 
   draft.saving = true;
   draft.error = null;
@@ -122,7 +125,7 @@ async function setStatus(user: AdminUserResponse, status: string) {
     const updated = await api.adminSetUserStatus(user.id, { status, reason: reason ?? undefined });
     applyUpdated(updated);
   } catch (err) {
-    draft.error = err instanceof ApiError ? err.message : 'Could not update status.';
+    draft.error = err instanceof ApiError ? err.message : t('adminUsers.statusError');
   } finally {
     draft.saving = false;
   }
@@ -141,7 +144,7 @@ async function togglePremium(user: AdminUserResponse) {
     const updated = await api.adminSetUserPremium(user.id, { isPremium: !user.isPremium });
     applyUpdated(updated);
   } catch (err) {
-    draft.error = err instanceof ApiError ? err.message : 'Could not update premium status.';
+    draft.error = err instanceof ApiError ? err.message : t('adminUsers.premiumError');
   } finally {
     draft.saving = false;
   }
@@ -150,35 +153,35 @@ async function togglePremium(user: AdminUserResponse) {
 
 <template>
   <div class="users">
-    <h1>Users</h1>
+    <h1>{{ $t('adminUsers.title') }}</h1>
 
     <div class="filters">
-      <input v-model="search" type="text" placeholder="Search username or display name" @keyup.enter="onSearch" />
+      <input v-model="search" type="text" :placeholder="$t('adminUsers.searchPlaceholder')" @keyup.enter="onSearch" />
       <select v-model="statusFilter" @change="onSearch">
-        <option value="">All statuses</option>
-        <option value="active">Active</option>
-        <option value="locked">Locked</option>
-        <option value="banned">Banned</option>
+        <option value="">{{ $t('adminUsers.filters.allStatuses') }}</option>
+        <option value="active">{{ $t('adminUsers.filters.active') }}</option>
+        <option value="locked">{{ $t('adminUsers.filters.locked') }}</option>
+        <option value="banned">{{ $t('adminUsers.filters.banned') }}</option>
       </select>
-      <button @click="onSearch">Search</button>
+      <button @click="onSearch">{{ $t('adminUsers.search') }}</button>
     </div>
 
-    <p v-if="loading">Loading…</p>
+    <p v-if="loading">{{ $t('adminUsers.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else>
       <table class="table">
         <thead>
           <tr>
-            <th>Username</th>
-            <th>Display name</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Premium</th>
-            <th>Settlements</th>
-            <th>Created</th>
-            <th>Last login</th>
-            <th>Actions</th>
+            <th>{{ $t('adminUsers.columns.userName') }}</th>
+            <th>{{ $t('adminUsers.columns.displayName') }}</th>
+            <th>{{ $t('adminUsers.columns.role') }}</th>
+            <th>{{ $t('adminUsers.columns.status') }}</th>
+            <th>{{ $t('adminUsers.columns.premium') }}</th>
+            <th>{{ $t('adminUsers.columns.settlements') }}</th>
+            <th>{{ $t('adminUsers.columns.created') }}</th>
+            <th>{{ $t('adminUsers.columns.lastLogin') }}</th>
+            <th>{{ $t('adminUsers.columns.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -189,8 +192,8 @@ async function togglePremium(user: AdminUserResponse) {
             </td>
             <td>
               <select v-model="drafts[user.id].role" class="cell-input">
-                <option value="player">Player</option>
-                <option value="admin">Admin</option>
+                <option value="player">{{ $t('adminUsers.roles.player') }}</option>
+                <option value="admin">{{ $t('adminUsers.roles.admin') }}</option>
               </select>
             </td>
             <td>
@@ -203,36 +206,36 @@ async function togglePremium(user: AdminUserResponse) {
                 :disabled="drafts[user.id]?.saving"
                 @click="togglePremium(user)"
               >
-                {{ user.isPremium ? 'Revoke premium' : 'Grant premium' }}
+                {{ user.isPremium ? $t('adminUsers.premium.revoke') : $t('adminUsers.premium.grant') }}
               </button>
             </td>
             <td>{{ user.settlementCount }}</td>
-            <td>{{ new Date(user.createdAt).toLocaleDateString() }}</td>
-            <td>{{ user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '—' }}</td>
+            <td>{{ d(new Date(user.createdAt), 'short') }}</td>
+            <td>{{ user.lastLoginAt ? d(new Date(user.lastLoginAt), 'long') : $t('adminUsers.noLastLogin') }}</td>
             <td class="actions">
-              <button :disabled="drafts[user.id]?.saving" @click="saveEdit(user)">Save</button>
+              <button :disabled="drafts[user.id]?.saving" @click="saveEdit(user)">{{ $t('adminUsers.actions.save') }}</button>
               <button
                 v-if="user.status !== 'active'"
                 :disabled="drafts[user.id]?.saving || isSelf(user)"
                 @click="setStatus(user, 'active')"
               >
-                Unlock/unban
+                {{ $t('adminUsers.actions.unlockUnban') }}
               </button>
               <button
                 v-if="user.status !== 'locked'"
                 :disabled="drafts[user.id]?.saving || isSelf(user)"
-                :title="isSelf(user) ? 'You cannot lock your own account.' : undefined"
+                :title="isSelf(user) ? $t('adminUsers.cannotLockSelf') : undefined"
                 @click="setStatus(user, 'locked')"
               >
-                Lock
+                {{ $t('adminUsers.actions.lock') }}
               </button>
               <button
                 v-if="user.status !== 'banned'"
                 :disabled="drafts[user.id]?.saving || isSelf(user)"
-                :title="isSelf(user) ? 'You cannot ban your own account.' : undefined"
+                :title="isSelf(user) ? $t('adminUsers.cannotBanSelf') : undefined"
                 @click="setStatus(user, 'banned')"
               >
-                Ban
+                {{ $t('adminUsers.actions.ban') }}
               </button>
             </td>
           </tr>
@@ -245,9 +248,9 @@ async function togglePremium(user: AdminUserResponse) {
       </p>
 
       <div class="pager">
-        <button :disabled="page <= 1" @click="changePage(-1)">Previous</button>
-        <span>Page {{ page }} · {{ totalCount }} users</span>
-        <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">Next</button>
+        <button :disabled="page <= 1" @click="changePage(-1)">{{ $t('adminUsers.pager.previous') }}</button>
+        <span>{{ $t('adminUsers.pager.summary', { page, total: totalCount }) }}</span>
+        <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">{{ $t('adminUsers.pager.next') }}</button>
       </div>
     </template>
   </div>

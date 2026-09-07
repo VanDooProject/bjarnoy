@@ -6,6 +6,10 @@ import AdminUsersView from './AdminUsersView.vue';
 import { ApiError } from '../../api/client';
 import type { AdminUserResponse } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
+import { createTestI18n } from '../../test/i18n';
+import adminUsers from '../../i18n/locales/en/adminUsers.json';
+
+const global = { plugins: [createTestI18n({ adminUsers })] };
 
 const { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium } = vi.hoisted(() => ({
   adminListUsers: vi.fn(),
@@ -63,7 +67,7 @@ describe('AdminUsersView guards', () => {
       preferredLocale: null,
     };
 
-    const wrapper = mount(AdminUsersView, { global: { plugins: [] } });
+    const wrapper = mount(AdminUsersView, { global });
     await flushPromises();
 
     const rows = wrapper.findAll('tbody tr');
@@ -101,7 +105,7 @@ describe('AdminUsersView guards', () => {
       preferredLocale: null,
     };
 
-    const wrapper = mount(AdminUsersView, { global: { plugins: [] } });
+    const wrapper = mount(AdminUsersView, { global });
     await flushPromises();
 
     const roleSelect = wrapper.find('select.cell-input');
