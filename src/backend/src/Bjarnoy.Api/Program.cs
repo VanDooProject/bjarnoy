@@ -7,9 +7,11 @@ using Bjarnoy.Api.Json;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Bjarnoy.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
@@ -45,6 +47,12 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<RenownService>();
+
+builder.Services.AddSingleton<IPlotReservationStore, InMemoryPlotReservationStore>();
+builder.Services.AddScoped<PlotReservationService>();
+builder.Services.AddOptions<PlotReservationOptions>()
+    .Bind(builder.Configuration.GetSection(PlotReservationOptions.SectionName))
+    .ValidateOnStart();
 
 // The per-user write-throttle UserActivityService keeps in IMemoryCache, and
 // FogMaskService's computed-mask cache (map-fog-v2.md §3) shares the same one.
@@ -202,6 +210,18 @@ await using (var adminSeedScope = app.Services.CreateAsyncScope())
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+// Recovers the real visitor IP from X-Forwarded-For behind a reverse proxy —
+// PlotReservationService's per-IP abuse cap (a soft signal, not a security
+// boundary) would otherwise see only the proxy's own address for everyone.
+// KnownNetworks/KnownProxies are cleared because this deployment's proxy
+// topology isn't fixed; that means the header is trusted from wherever it
+// arrives, which is fine for a generous, non-authoritative cap but would not
+// be for anything security-sensitive.
+var forwardedHeadersOptions = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor };
+forwardedHeadersOptions.KnownIPNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseAuthentication();
 app.UseAuthorization();

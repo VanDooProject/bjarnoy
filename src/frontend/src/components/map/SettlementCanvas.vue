@@ -4,9 +4,16 @@ import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
-import type { HoverInfo } from '../../lib/map/HexMapRenderer';
+import type { HoverInfo, RenderMode } from '../../lib/map/HexMapRenderer';
 
 const props = defineProps<{
+  // Defaults to 'settlement' — every existing caller (SettlementView's ring-
+  // menu view, LandingView's preview) wants that; MapView passes its own
+  // 'world' | 'settlement' explicitly. Only the *initial* value matters here
+  // (useHexMapRenderer captures options once, non-reactively, at mount) — a
+  // later mode change goes through the exposed renderer's own setMode(),
+  // not a prop update.
+  mode?: RenderMode;
   worldModel: WorldModel;
   playerId: string;
   // Unset before the player has founded anything yet (zip 6a: the landing
@@ -33,6 +40,10 @@ const props = defineProps<{
   // other caller. `hideX` defaulting to `false` (shown) is what every
   // other caller actually wants without opting in.
   hideSettlementBadge?: boolean;
+  // Landing-page static preview: fixes the camera to fit the whole island on
+  // screen and disables drag/wheel zoom, while clicks still work (founding
+  // must keep working) — see HexMapRendererOptions.lockCamera.
+  lockCamera?: boolean;
 }>();
 const emit = defineEmits<{
   'hex-click': [coord: AxialCoord, tile: Tile, screen: { x: number; y: number }];
@@ -40,13 +51,16 @@ const emit = defineEmits<{
   // Issue #93: a draft waypoint pin was dragged onto another hex — see
   // HexMapRendererOptions.onWaypointMove.
   'waypoint-move': [index: number, coord: AxialCoord];
+  // Docs/design/zoom-transition.md: a wheel/pinch zoom crossed the enter- or
+  // exit-threshold — see HexMapRendererOptions.onZoomModeChange.
+  'zoom-mode-change': [mode: RenderMode];
 }>();
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
 const { renderer } = useHexMapRenderer(canvas, container, {
-  mode: 'settlement',
+  mode: props.mode ?? 'settlement',
   worldModel: props.worldModel,
   playerId: props.playerId,
   settlementId: props.settlementId,
@@ -55,9 +69,11 @@ const { renderer } = useHexMapRenderer(canvas, container, {
   highlightCoords: props.highlightCoords,
   screenBiasX: props.screenBiasX,
   hideSettlementBadge: props.hideSettlementBadge,
+  lockCamera: props.lockCamera,
   onHexClick: (coord, tile, screen) => emit('hex-click', coord, tile, screen),
   onHoverChange: (info) => emit('hover', info),
   onWaypointMove: (index, coord) => emit('waypoint-move', index, coord),
+  onZoomModeChange: (mode) => emit('zoom-mode-change', mode),
 });
 
 // FogDebugPanel (SettlementView.vue, ?debug=1) needs to force a rebuild

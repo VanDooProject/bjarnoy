@@ -18,7 +18,7 @@ import type {
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { useAuthStore } from './auth';
-import { hexDistance, type AxialCoord } from '../lib/hex/coords';
+import type { AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
   buildFieldOrderRequest,
@@ -44,21 +44,6 @@ const LIVE_POLL_MS = 4000;
 // that discrete position from ever looking stale for long) rather than a
 // full websocket/animation loop, which the design doc explicitly defers.
 const ARMY_POLL_MS = 2000;
-
-// Mirrors the backend's SettlementService.MinimumSpacing: founding's cheap,
-// longhouse-only pre-filter (centre-to-centre distance), sized so two
-// settlements' *centre discs alone* can never overlap even at max longhouse
-// level. This is only ever a hint here — the real, tower-aware safety net is
-// the backend's own live "phase 2" check (SettlementService.FoundAsync,
-// Settlement.ClaimDiscsFor), which reads every nearby settlement's actual
-// current buildings (Tower chains included) and has no static distance this
-// client could mirror; a settlement whose towers have chained territory out
-// past this radius can still make an otherwise-passing plot get rejected
-// server-side. Kept in sync here purely so nearestStartPosition/
-// nearbyStartPositions can skip the *obviously* too-close plots the backend
-// would reject via phase 1, without waiting on a request; it does not
-// replace the backend's own enforcement.
-const MINIMUM_SETTLEMENT_SPACING = 13;
 
 // Demo mode's seed — kept as its own constant since both the initial
 // `WorldModel` below and its island labels have to agree on it.
@@ -87,6 +72,21 @@ export const useWorldStore = defineStore('world', {
   state: () => ({
     model: markRaw(buildDemoModel()),
     selectedSettlementId: null as string | null,
+    // Set by WorldMapView (`setWorldMapActive`) so `refreshWorldSettlements`
+    // knows it's safe to paint every rival's territory — the world map is
+    // the one legitimate place that shows the whole world, unlike the
+    // landing/settlement preview which must stay scoped to one island.
+    worldMapActive: false,
+    // The backend-owned plot suggestion (`refreshPlotSuggestion`) — the
+    // landing page's pinned plot plus its advisory alternatives. Null before
+    // the first successful request, or once a settlement has been founded.
+    plotSuggestion: null as {
+      islandId: string;
+      plot: AxialCoord;
+      alternatives: AxialCoord[];
+      reserved: boolean;
+      reservedUntil: string | null;
+    } | null,
     hud: {
       resources: emptyResources() as Resources,
       rates: emptyResources() as Resources,
@@ -375,65 +375,22 @@ export const useWorldStore = defineStore('world', {
       return worlds.length > 0 ? worlds[worlds.length - 1] : null;
     },
     /**
-     * Every island start position nobody has founded on (or too close to)
-     * yet — the shared base for `nearestStartPosition`, `startPositionAt`
-     * and `nearbyStartPositions` below.
-     */
-    unclaimedStartPositions(): { islandId: string; at: AxialCoord }[] {
-      const settlements = this.model.listSettlements();
-      const result: { islandId: string; at: AxialCoord }[] = [];
-      for (const island of this.islands) {
-        // Scoped to the same island, mirroring the backend's FoundAsync:
-        // separate islands are always divided by open sea, so their claim
-        // discs can never actually overlap any land regardless of hex
-        // distance — see SettlementService.MinimumSpacing's own comment.
-        const onThisIsland = settlements.filter((s) => s.islandId === island.id);
-        for (const pos of island.startPositions) {
-          const tooCloseToExisting = onThisIsland.some(
-            (s) => hexDistance(pos, { q: s.q, r: s.r }) < MINIMUM_SETTLEMENT_SPACING,
-          );
-          if (tooCloseToExisting) continue;
-          result.push({ islandId: island.id, at: pos });
-        }
-      }
-      return result;
-    },
-    /**
-     * Nearest island start position to `near` that nobody has founded on (or
-     * too close to) yet — used only to centre/preview the landing page's
-     * camera, never to decide where a click actually founds a settlement
-     * (see `startPositionAt`).
-     */
-    nearestStartPosition(near: AxialCoord): { islandId: string; at: AxialCoord } | null {
-      let best: { islandId: string; at: AxialCoord; distance: number } | null = null;
-      for (const pos of this.unclaimedStartPositions()) {
-        const distance = hexDistance(near, pos.at);
-        if (!best || distance < best.distance) {
-          best = { ...pos, distance };
-        }
-      }
-      return best;
-    },
-    /**
-     * Up to `limit` unclaimed start positions nearest to `near`, sorted
-     * closest-first — what the landing page highlights as clickable plots
-     * now that founding only ever targets an exact match (`startPositionAt`).
-     */
-    nearbyStartPositions(near: AxialCoord, limit = 6): { islandId: string; at: AxialCoord }[] {
-      return this.unclaimedStartPositions()
-        .map((pos) => ({ ...pos, distance: hexDistance(near, pos.at) }))
-        .sort((a, b) => a.distance - b.distance)
-        .slice(0, limit);
-    },
-    /**
-     * The unclaimed start position exactly at `at`, or `null` if that hex
-     * isn't a valid (or is an already-claimed) start position. Founding must
-     * use this, not `nearestStartPosition` — snapping a click to the nearest
-     * start position instead of the one actually clicked founds the
-     * settlement somewhere the player never chose (see issue #96).
+     * The plot-suggestion's own pinned plot or one of its advisory
+     * alternatives, exactly at `at`, or `null` otherwise. Founding must use
+     * this rather than snapping to the nearest offered plot — a click
+     * elsewhere than what was actually offered must not silently redirect
+     * the founding (see issue #96, the same reasoning that used to apply to
+     * the now-deleted client-side `unclaimedStartPositions`/
+     * `nearestStartPosition`/`nearbyStartPositions`: plot-finding is now
+     * entirely backend-owned, see `refreshPlotSuggestion` and
+     * `docs/plans/landing-plot-reservation.md`).
      */
     startPositionAt(at: AxialCoord): { islandId: string; at: AxialCoord } | null {
-      return this.unclaimedStartPositions().find((pos) => pos.at.q === at.q && pos.at.r === at.r) ?? null;
+      const suggestion = this.plotSuggestion;
+      if (!suggestion) return null;
+      const candidates = [suggestion.plot, ...suggestion.alternatives];
+      const match = candidates.find((c) => c.q === at.q && c.r === at.r);
+      return match ? { islandId: suggestion.islandId, at: match } : null;
     },
     /** Demo mode: found instantly in the local `WorldModel`, no server round trip. */
     foundStartingSettlement(ownerId: string, ownerName: string, name: string, near: AxialCoord) {
@@ -458,11 +415,14 @@ export const useWorldStore = defineStore('world', {
     async foundStartingSettlementLive(ownerId: string, ownerName: string, realmName: string, near: AxialCoord) {
       if (!this.worldId) throw new Error('bootstrapLiveWorld() must run before founding a settlement');
       this.ownerId = ownerId;
-      // Bootstrap's own snapshot can be stale by the time the player
-      // actually clicks — re-sync who else has founded here first so
-      // startPositionAt doesn't send this request for a plot someone else
-      // claimed in the meantime.
-      await this.refreshWorldSettlements();
+      // The landing page's own pin can be stale by the time the player
+      // actually clicks — re-request it so startPositionAt doesn't send this
+      // request for a plot that fell out of validity (someone else founded
+      // or reserved near it) in the meantime. The backend re-validates
+      // again at founding time regardless (PlotReserved/PlotTaken/
+      // TooCloseToNeighbour) — this is just to fail fast with a clear
+      // message before spending a round trip on a doomed request.
+      await this.refreshPlotSuggestion(ownerId);
       // Exact match only: `near` is the hex the player actually clicked, and
       // founding must land there, not on whichever start position happens to
       // be nearest to it (see issue #96). The landing page only lets the
@@ -493,7 +453,9 @@ export const useWorldStore = defineStore('world', {
         foundedAt: Date.now(),
         islandId: response.islandId,
       });
+      this.model.claimTerritory(settlement.id);
       this.selectedSettlementId = settlement.id;
+      this.plotSuggestion = null;
       this.syncHud();
       void this.refreshTradeAsync();
       return settlement;
@@ -698,16 +660,20 @@ export const useWorldStore = defineStore('world', {
         foundedAt: Date.now(),
         islandId: response.islandId,
       });
+      this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
       this.syncHud();
       void this.refreshTradeAsync();
     },
     /**
      * Live mode: pulls every settlement in the world (not just this
-     * player's) so rival realms — their border, marker and owner-name label
-     * — show up on the world map, matching `prototypes/worldmap`'s `marks`.
+     * player's) into the model, data-only — no tile is painted here.
      * Registered with the settlement's own id as its `ownerId`, which can
-     * never equal the local player's id, so it always renders as a rival.
+     * never equal the local player's id, so it always renders as a rival
+     * once a caller claims its territory (`WorldModel.claimTerritory` /
+     * `claimTerritoryOnIsland` / `claimAllTerritory`) — the world map claims
+     * everyone (matching `prototypes/worldmap`'s `marks`), while the
+     * landing/settlement preview only claims the island it's showing.
      */
     async refreshWorldSettlements() {
       if (DEMO_MODE || !this.worldId) return;
@@ -727,6 +693,61 @@ export const useWorldStore = defineStore('world', {
           foundedAt: Date.now(),
           islandId: summary.islandId,
         });
+      }
+      if (this.worldMapActive) {
+        this.model.claimAllTerritory();
+      } else {
+        // Landing preview and settlement view alike: rival territory is only
+        // ever painted for the island actually on screen — the island of the
+        // player's own settlement once founded, or of the current plot
+        // suggestion beforehand. Neither known yet (e.g. bootstrap's very
+        // first call, before a suggestion has been requested) means nothing
+        // is painted, which is the correct "empty plot" state.
+        const islandId =
+          this.model.getSettlement(this.selectedSettlementId ?? '')?.islandId ?? this.plotSuggestion?.islandId;
+        if (islandId) this.model.claimTerritoryOnIsland(islandId);
+      }
+    },
+    /** See `worldMapActive`'s own comment. */
+    setWorldMapActive(active: boolean) {
+      this.worldMapActive = active;
+    },
+    /**
+     * Live mode: requests the backend-owned plot suggestion for `ownerId`
+     * (see `PlotReservationService`) and stores it in `plotSuggestion`.
+     * Pinned across reloads/repeated calls server-side — this is what backs
+     * the landing page's preview camera and clickable plots now that
+     * plot-finding is no longer computed client-side. Returns whether the
+     * pinned plot actually changed since the last call, so a poll loop only
+     * needs to re-centre the camera when it did. No-op (returns `false`) in
+     * demo mode, which has no backend to ask.
+     */
+    async refreshPlotSuggestion(ownerId: string): Promise<boolean> {
+      if (DEMO_MODE || !this.worldId) return false;
+      const response = await api.getPlotSuggestion(this.worldId, ownerId);
+      const previous = this.plotSuggestion;
+      this.plotSuggestion = {
+        islandId: response.islandId,
+        plot: response.plot,
+        alternatives: response.alternatives,
+        reserved: response.reserved,
+        reservedUntil: response.reservedUntil,
+      };
+      return previous?.plot.q !== response.plot.q || previous?.plot.r !== response.plot.r;
+    },
+    /**
+     * Live mode: releases `ownerId`'s held plot suggestion (e.g. the visitor
+     * navigates away, or explicitly asks for a different island). Best
+     * effort — a failure here just means the reservation expires on its own
+     * sliding TTL instead of being dropped immediately, which is harmless.
+     */
+    async releasePlotSuggestion(ownerId: string) {
+      if (DEMO_MODE || !this.worldId) return;
+      this.plotSuggestion = null;
+      try {
+        await api.releasePlotSuggestion(this.worldId, ownerId);
+      } catch {
+        // Best effort — see this method's own comment.
       }
     },
     /**

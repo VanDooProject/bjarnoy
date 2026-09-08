@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { buildingName, resourceName, terrainName } from '../i18n/catalogueNames';
+import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -21,6 +22,7 @@ import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
+import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
@@ -40,7 +42,7 @@ import {
 } from '../lib/map/buildingEconomy';
 import { formatBuildTime, longhouseLock, riverShapeLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
-import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo } from '../lib/map/HexMapRenderer';
+import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
 
@@ -50,6 +52,34 @@ const world = useWorldStore();
 const player = usePlayerStore();
 const unitCatalogue = useUnitCatalogueStore();
 const buildingCatalogue = useBuildingCatalogueStore();
+const route = useRoute();
+const router = useRouter();
+
+// One view/one persistent renderer serves both /world and /settlement now
+// (docs/design/zoom-transition.md §5, option (a)) — the zoom-driven
+// transition needs the same HexMapRenderer instance to survive the switch
+// (no teardown/flash, fog persists uninterrupted), which two independently-
+// mounted views/renderers per route could never give it. `mode` is derived
+// from the route rather than tracked as separate local state, so a nav-button
+// click, browser back/forward, or a direct URL load all agree with the
+// renderer on what to show.
+const mode = computed<RenderMode>(() => (route.name === 'world' ? 'world' : 'settlement'));
+// World map's own sea backdrop (must match WorldMapCanvas.vue's — that
+// component is still used standalone by AdminWorldReseedView's world
+// preview, which has no settlement/ring-menu UI to merge and so keeps its
+// own separate renderer instance).
+const WORLD_SEA_BACKGROUND = 'radial-gradient(115% 100% at 45% 40%, #2a92ae 0%, #14657f 48%, #0b3c50 100%)';
+// Set right before a zoom-driven crossing pushes the route, and consumed by
+// the very next `mode` watcher run — distinguishes "the renderer already
+// switched mode itself, mid-gesture, camera untouched" from every other way
+// `mode` can change (nav button, back/forward, direct load), which still
+// need the camera re-homed onto the destination the way separate per-route
+// renderers always did (see the watcher below).
+let zoomDrivenTransition = false;
+function onZoomModeChange(next: RenderMode) {
+  zoomDrivenTransition = true;
+  router.push(next === 'settlement' ? '/settlement' : '/world');
+}
 
 // ?debug=1 surfaces FogDebugPanel — same idea as window.__fogDebug (main.ts)
 // but clickable, and not gated to demo mode: these are pure client-side
@@ -80,28 +110,58 @@ function onQueueSelect(coord: { q: number; r: number }) {
 }
 
 onMounted(async () => {
-  // A direct load of /settlement (reload, deep link) arrives here before
-  // WorldMapView ever mounts, so this view needs its own bootstrap/restore
-  // instead of assuming `world.selectedSettlementId` is already set.
+  // A direct load of either route (reload, deep link) arrives here with no
+  // guarantee anything else has bootstrapped the world yet — restoreLiveSettlement
+  // bootstraps internally (see its own remarks), so this covers both routes'
+  // old per-view bootstrap without needing two copies of it.
+  world.setWorldMapActive(mode.value === 'world');
   if (!DEMO_MODE && player.hasFoundedSettlement && player.settlementId) {
     await world.restoreLiveSettlement(player.id, player.settlementId);
   }
   world.startHudSync();
   void unitCatalogue.load();
+  buildingCatalogue.load();
+  void world.refreshWorldSettlements();
 
   // Same test/debug-hook idea as main.ts's __demoWorld: lets an e2e test
   // convert a real hex coordinate to an exact click point via the
   // renderer's own camera math (HexMapRenderer.hexCenterScreen), instead of
   // guessing pixel offsets that only happen to land right at one particular
-  // zoom/camera framing.
+  // zoom/camera framing. Exposed regardless of which of the two routes
+  // reached this view first — WorldMapView never exposed it, which meant an
+  // e2e test could only resolve click points while already on /settlement.
   if (DEMO_MODE) {
     (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
       canvasRef.value?.renderer;
   }
 });
 onUnmounted(() => {
+  // Only fires once, when the player leaves the map entirely (e.g. to
+  // /reports) — /world <-> /settlement no longer unmounts this view.
   world.stopHudSync();
+  world.setWorldMapActive(false);
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
+});
+
+// Reconciles the renderer and the store's territory-claiming scope
+// (worldMapActive; see refreshWorldSettlements) with `mode` on every change —
+// not just the initial mount, since this view's own onMounted no longer
+// re-runs per route the way two separate views' did.
+watch(mode, (m) => {
+  world.setWorldMapActive(m === 'world');
+  void world.refreshWorldSettlements();
+  const renderer = canvasRef.value?.renderer;
+  if (!renderer) return;
+  // A no-op if the zoom-driven handler already flipped it (setMode is
+  // idempotent on an unchanged mode) — this exists for every *other* way
+  // `mode` can change: nav button, browser back/forward, a direct URL load.
+  renderer.setMode(m);
+  // Those other ways have no continuous gesture to preserve, so re-home the
+  // camera onto the settlement's own framing exactly like a fresh per-route
+  // mount always did — but only when this wasn't the zoom gesture that just
+  // did the opposite on purpose (see zoomDrivenTransition's own comment).
+  if (m === 'settlement' && !zoomDrivenTransition) renderer.focusSettlementCamera();
+  zoomDrivenTransition = false;
 });
 
 // Fog v2 (map-fog-v2.md §3): pushes a freshly fetched mask bitmap into the
@@ -662,6 +722,15 @@ const ringCoordLabel = computed(() => {
 const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
+  // World mode: same click-to-enter as the old WorldMapView.onHexClick
+  // (ignores which hex was clicked, always goes to the player's own
+  // settlement) — the zoom-driven transition is additional, not a
+  // replacement for it. None of the ring-menu/dispatch logic below applies
+  // at world zoom.
+  if (mode.value === 'world') {
+    router.push('/settlement');
+    return;
+  }
   // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
   // "Dispatch army" flow), a click plots the next waypoint instead of
   // opening the usual ring menu — the two interaction modes are mutually
@@ -830,18 +899,22 @@ async function upgrade() {
 </script>
 
 <template>
-  <div ref="stageRef" class="settlement">
+  <div ref="stageRef" class="map-view">
     <SettlementCanvas
       v-if="world.selectedSettlementId"
       ref="canvasRef"
+      :mode="mode"
       :world-model="world.model"
       :player-id="player.id"
       :settlement-id="world.selectedSettlementId"
+      :background="mode === 'world' ? WORLD_SEA_BACKGROUND : undefined"
       @hex-click="onHexClick"
       @hover="onHover"
       @waypoint-move="onWaypointMove"
+      @zoom-mode-change="onZoomModeChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
+      <ZoomDebugPanel :renderer="canvasRef?.renderer" />
       <FogDebugPanel @change="onFogDebugChange" />
       <WaterDebugPanel @change="onFogDebugChange" />
       <WaterPerfPanel />
@@ -854,53 +927,55 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" />
-    <TopBar>
+    <TopBar :hide-title="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav />
     </TopBar>
-    <RealmPanel :ring-open="ringOpen" />
-    <BuildQueuePanel @select="onQueueSelect" />
-    <ExpansionPanel />
-    <TradePanel />
-    <TrainingQueuePanel />
-    <ArmyPanel />
-    <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-    <RingMenu
-      v-if="selectedTile && ringScreen"
-      :x="ringScreen.x"
-      :y="ringScreen.y"
-      :actions="rootActions"
-      :categories="ringCategories"
-      :terrain-label="ringTerrainLabel"
-      :coord-label="ringCoordLabel"
-      :bounds="ringBounds"
-      :card-bounds="ringCardBounds"
-      :stock="world.hud.resources"
-      @select="onRingSelect"
-      @close="closeRing"
-      @outside-pointer-down="onRingOutsidePointerDown"
-    />
-    <BuildingModal
-      v-if="selectedTile && !ringScreen && !trainModalOpen"
-      :tile="selectedTile"
-      :mine="modalMine"
-      :owner-label="modalOwnerLabel"
-      :busy="modalBusy"
-      :error="actionError"
-      @close="closeModal"
-      @build="build"
-      @upgrade="upgrade"
-    />
-    <TrainingModal
-      v-if="selectedTile && trainModalOpen"
-      @close="closeTrainModal"
-      @trained="closeTrainModal"
-    />
+    <template v-if="mode === 'settlement'">
+      <RealmPanel :ring-open="ringOpen" />
+      <BuildQueuePanel @select="onQueueSelect" />
+      <ExpansionPanel />
+      <TradePanel />
+      <TrainingQueuePanel />
+      <ArmyPanel />
+      <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
+      <RingMenu
+        v-if="selectedTile && ringScreen"
+        :x="ringScreen.x"
+        :y="ringScreen.y"
+        :actions="rootActions"
+        :categories="ringCategories"
+        :terrain-label="ringTerrainLabel"
+        :coord-label="ringCoordLabel"
+        :bounds="ringBounds"
+        :card-bounds="ringCardBounds"
+        :stock="world.hud.resources"
+        @select="onRingSelect"
+        @close="closeRing"
+        @outside-pointer-down="onRingOutsidePointerDown"
+      />
+      <BuildingModal
+        v-if="selectedTile && !ringScreen && !trainModalOpen"
+        :tile="selectedTile"
+        :mine="modalMine"
+        :owner-label="modalOwnerLabel"
+        :busy="modalBusy"
+        :error="actionError"
+        @close="closeModal"
+        @build="build"
+        @upgrade="upgrade"
+      />
+      <TrainingModal
+        v-if="selectedTile && trainModalOpen"
+        @close="closeTrainModal"
+        @trained="closeTrainModal"
+      />
+    </template>
   </div>
 </template>
 
 <style scoped>
-.settlement {
+.map-view {
   position: relative;
   width: 100vw;
   height: 100vh;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { terrainTitleFor, worldLayerOrder } from './HexMapRenderer';
+import { previewFitZoom, terrainTitleFor, worldLayerOrder } from './HexMapRenderer';
 import type { RiverTile, Tile } from './types';
+import type { AxialCoord } from '../hex/coords';
 
 // Regression coverage for a reported bug: a river mouth's hover tooltip
 // read "Shore" (its underlying sand terrain) instead of naming the river
@@ -87,5 +88,102 @@ describe('worldLayerOrder', () => {
       expect(new Set(order).size).toBe(order.length);
       expect(order).toHaveLength(9);
     }
+  });
+});
+
+// Regression coverage for the landing page's locked static preview
+// (docs/design/zoom-transition.md §6): the whole island must fit on screen
+// at any viewport size/aspect, biased or not. Asserted on the pure function
+// (no worldModel/canvas needed) for the same reason as terrainTitleFor/
+// worldLayerOrder above.
+describe('previewFitZoom', () => {
+  const center: AxialCoord = { q: 0, r: 0 };
+  const noSea = () => false;
+  const allSea = () => true;
+
+  it('falls back before the viewport is known', () => {
+    expect(
+      previewFitZoom({
+        center,
+        radius: 7,
+        screenBiasX: 0,
+        viewport: { width: 0, height: 0 },
+        isSea: noSea,
+        fallbackZoom: 0.6,
+        minZoom: 0.05,
+        maxZoom: 4,
+      }),
+    ).toBe(0.6);
+  });
+
+  it('falls back when every hex in range is sea', () => {
+    expect(
+      previewFitZoom({
+        center,
+        radius: 7,
+        screenBiasX: 0,
+        viewport: { width: 1200, height: 800 },
+        isSea: allSea,
+        fallbackZoom: 0.6,
+        minZoom: 0.05,
+        maxZoom: 4,
+      }),
+    ).toBe(0.6);
+  });
+
+  it('zooms out further for a wider radius of land, all else equal', () => {
+    const zoomFor = (radius: number) =>
+      previewFitZoom({
+        center,
+        radius,
+        screenBiasX: 0,
+        viewport: { width: 1200, height: 800 },
+        isSea: noSea,
+        fallbackZoom: 0.6,
+        minZoom: 0.05,
+        maxZoom: 4,
+      });
+    expect(zoomFor(7)).toBeLessThan(zoomFor(2));
+  });
+
+  it('zooms out further when a screen bias narrows the usable half-width', () => {
+    const zoomFor = (screenBiasX: number) =>
+      previewFitZoom({
+        center,
+        radius: 7,
+        screenBiasX,
+        viewport: { width: 1200, height: 800 },
+        isSea: noSea,
+        fallbackZoom: 0.6,
+        minZoom: 0.05,
+        maxZoom: 4,
+      });
+    expect(zoomFor(0.16)).toBeLessThan(zoomFor(0));
+  });
+
+  it('clamps to the given min/max bounds', () => {
+    const tiny = previewFitZoom({
+      center,
+      radius: 7,
+      screenBiasX: 0,
+      viewport: { width: 20, height: 20 },
+      isSea: noSea,
+      fallbackZoom: 0.6,
+      minZoom: 0.3,
+      maxZoom: 4,
+    });
+    expect(tiny).toBe(0.3);
+
+    const huge = previewFitZoom({
+      center,
+      radius: 1,
+      screenBiasX: 0,
+      viewport: { width: 20000, height: 20000 },
+      isSea: noSea,
+      fallbackZoom: 0.6,
+      minZoom: 0.05,
+      maxZoom: 1.5,
+    });
+    expect(huge).toBe(1.5);
   });
 });

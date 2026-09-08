@@ -1258,6 +1258,51 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.NotNull(await QueueFarmAsync(client, settlement));
     }
 
+    // ------------------------------------------------------- plot reservation
+
+    [Fact]
+    public async Task Founding_on_another_visitors_live_reservation_is_refused()
+    {
+        using var client = Client();
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "holder");
+        var suggestion = await (await client.GetAsync($"/api/v1/worlds/{world.Id}/plot-suggestion", Ct))
+            .ReadStrictAsync<PlotSuggestionResponse>(Ct);
+        Assert.True(suggestion.Reserved);
+
+        client.DefaultRequestHeaders.Remove("X-Owner-Id");
+        var response = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(suggestion.IslandId, suggestion.Plot.Q, suggestion.Plot.R, "Interloper", "Bjorn", "someone-else"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("PlotReserved", await response.RejectionAsync(Ct));
+    }
+
+    [Fact]
+    public async Task The_reservations_own_owner_can_still_found_on_it()
+    {
+        using var client = Client();
+        var world = await (await client.PostJsonAsync(
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            .ReadStrictAsync<WorldResponse>(Ct);
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "holder");
+        var suggestion = await (await client.GetAsync($"/api/v1/worlds/{world.Id}/plot-suggestion", Ct))
+            .ReadStrictAsync<PlotSuggestionResponse>(Ct);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/worlds/{world.Id}/settlements",
+            new FoundSettlementRequest(suggestion.IslandId, suggestion.Plot.Q, suggestion.Plot.R, "Holdersted", "Holder", "holder"),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private async Task<BuildOrderResponse?> QueueFarmAsync(

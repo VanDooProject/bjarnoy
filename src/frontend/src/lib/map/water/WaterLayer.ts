@@ -288,7 +288,10 @@ export class WaterLayer {
   readonly mesh: Mesh<MeshGeometry, Shader>;
   private readonly uniforms: UniformGroup;
   private readonly geometry: MeshGeometry;
-  private readonly mode: WaterMode;
+  // Not readonly: setMode() rewrites this (and the three foam uniforms baked
+  // from it below) so the zoom-driven mode switch can flip it in place
+  // instead of reconstructing the layer — see setMode's own doc comment.
+  private mode: WaterMode;
   private texture: Texture | null = null;
   // The previous mask texture, kept one generation past its replacement — see setMask.
   private retiredTexture: Texture | null = null;
@@ -523,6 +526,24 @@ export class WaterLayer {
     u.uShowMask = waterDebugFlags.showWaterMask ? 1 : 0;
 
     this.mesh.visible = waterDebugFlags.water && this.hasMask && !this.suppressed;
+  }
+
+  /**
+   * Flips the layer's mode in place, for the zoom-driven world<->settlement
+   * transition (docs/design/zoom-transition.md §4) — reconstructing the
+   * layer per mode switch would mean re-registering it with the scene graph
+   * and losing its mask texture for no reason, when only three uniforms are
+   * actually baked from `mode` at construction (the rest, above in `tick`,
+   * already recompute every frame). A no-op when the mode is unchanged.
+   */
+  setMode(mode: WaterMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    const world = mode === 'world';
+    const u = this.uniforms.uniforms;
+    u.uFoamInner = world ? FOAM_INNER_WORLD : FOAM_INNER_FRACTION;
+    u.uFoamLandReach = world ? FOAM_LAND_REACH_WORLD : FOAM_LAND_REACH;
+    u.uFoamAlpha = new Float32Array(world ? FOAM_ALPHA_WORLD : FOAM_ALPHA);
   }
 
   destroy(): void {
