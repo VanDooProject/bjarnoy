@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const router = useRouter();
 </script>
@@ -7,16 +8,15 @@ const router = useRouter();
 <template>
   <div class="impressum">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
+      <span class="brand">{{ $t('common.brand.name') }}</span>
+      <LocaleSwitcher />
     </header>
     <main class="body">
-      <h1>Impressum</h1>
+      <h1>{{ $t('docs.impressum.title') }}</h1>
       <p>
-        Fjørdhold is a hobby project built for the VanDooProject community. This placeholder page exists
-        so the real landing page has somewhere to link to — replace it with your actual legal notice
-        (operator, contact address, and any disclosures your jurisdiction requires) before going live.
+        {{ $t('docs.impressum.body') }}
       </p>
-      <button class="back" @click="router.push('/')">← Back</button>
+      <button class="back" @click="router.push('/')">{{ $t('docs.back') }}</button>
     </main>
   </div>
 </template>
@@ -29,6 +29,9 @@ const router = useRouter();
   background: var(--shell);
 }
 .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 20px 28px;
 }
 .brand {

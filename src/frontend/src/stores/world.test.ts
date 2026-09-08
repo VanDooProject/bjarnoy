@@ -188,7 +188,15 @@ describe('useWorldStore addFieldOrderWaypoint (premium gate)', () => {
     const store = await loadStoreModule(true);
     const { useAuthStore } = await import('./auth');
     const auth = useAuthStore();
-    auth.user = { id: 'u1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium };
+    auth.user = {
+      id: 'u1',
+      userName: 'ragnar',
+      role: 'player',
+      status: 'active',
+      displayName: null,
+      isPremium,
+      preferredLocale: null,
+    };
     return store;
   }
 

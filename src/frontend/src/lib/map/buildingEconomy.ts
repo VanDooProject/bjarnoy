@@ -7,10 +7,32 @@ import type { Terrain, Tile } from './types';
 
 export type BuildingKind = NonNullable<Tile['buildingType']>;
 
+export type BuildingOutput =
+  | { kind: 'resourceRate'; resource: 'wood' | 'stone' | 'food' | 'iron'; amount: number }
+  | { kind: 'populationCapacity'; amount: number }
+  | { kind: 'storageCapacity'; amount: number }
+  | { kind: 'visionRing'; amount: number };
+
+export type BuildingModifier =
+  | { kind: 'borderAnchor' }
+  | { kind: 'trainsLandTroops' }
+  | { kind: 'trainsShips' }
+  | { kind: 'garrison' }
+  | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
+  | { kind: 'coastal'; percent?: number }
+  | { kind: 'arcane' }
+  | { kind: 'shrineFavour'; percent: number; domain: 'woodStone' | 'food' };
+
+/**
+ * Structured (not pre-formatted) so callers in different render contexts —
+ * HexTooltip.vue and BuildingModal.vue, both translated via useI18n — can
+ * each turn the same numbers into their own display text, rather than
+ * baking one locale's phrasing into the shared formula.
+ */
 export interface BuildingLevelStats {
-  output?: string;
-  modifier?: string;
-  workers?: string;
+  output?: BuildingOutput;
+  modifier?: BuildingModifier;
+  workers?: { cap: number };
 }
 
 /**
@@ -68,67 +90,82 @@ export function buildingStatsFor(
     case 'farm': {
       const workersCap = level * 4;
       return {
-        output: `+${level * 36} food/h`,
-        workers: `${workersCap}/${workersCap}`,
+        output: { kind: 'resourceRate', resource: 'food', amount: level * 36 },
+        workers: { cap: workersCap },
       };
     }
     case 'hut':
-      return { output: `+${level * 5} population capacity` };
+      return { output: { kind: 'populationCapacity', amount: level * 5 } };
     case 'tower':
-      return { output: `Vision +${level} ring`, modifier: 'Border anchor' };
+      return { output: { kind: 'visionRing', amount: level }, modifier: { kind: 'borderAnchor' } };
     // No production/storage of its own — trains the land combat/siege
     // roster in place of the Longhouse. No combat bonus (deferred), unlike
     // Tower, which is why this reads the same as Tower's own "no output"
     // shape rather than inventing a stat line with nothing behind it.
     case 'archeryrange':
-      return { modifier: 'Trains land troops' };
+      return { modifier: { kind: 'trainsLandTroops' } };
     case 'dockyard':
-      return { modifier: 'Trains ships' };
+      return { modifier: { kind: 'trainsShips' } };
     // No production/storage of its own and no unit-training hook yet — see
     // BuildingType.Barracks's doc comment on the backend.
     case 'barracks':
-      return { modifier: 'Garrison' };
+      return { modifier: { kind: 'garrison' } };
     // A third food-producer variant alongside Farm/PumpkinFarm — same
     // fixed-field shape, no terrain/adjacency boost (mirrors those two's
     // exclusion from BuildingCatalogue.cs's Boosts table).
     case 'fisherhut': {
       const workersCap = level * 4;
-      return { output: `+${level * 32} food/h`, workers: `${workersCap}/${workersCap}` };
+      return {
+        output: { kind: 'resourceRate', resource: 'food', amount: level * 32 },
+        workers: { cap: workersCap },
+      };
     }
     case 'sawmill': {
       const multiplier = boostMultiplier(matchingNeighbours);
       const output = Math.round(level * 26 * multiplier);
       return {
-        output: `+${output} wood/h`,
-        modifier: multiplier > 1 ? `Forest (+${Math.round((multiplier - 1) * 100)}%)` : undefined,
+        output: { kind: 'resourceRate', resource: 'wood', amount: output },
+        modifier:
+          multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'forest', percent: Math.round((multiplier - 1) * 100) }
+            : undefined,
       };
     }
     case 'longhouse':
-      return { output: `+${level * 100} storage capacity` };
+      return { output: { kind: 'storageCapacity', amount: level * 100 } };
     // Mirrors BuildingCatalogue.cs's StorageHouse(level): ResourceAmounts.Uniform(1000) * level.
     case 'storagehouse':
-      return { output: `+${level * 1000} storage capacity` };
+      return { output: { kind: 'storageCapacity', amount: level * 1000 } };
     // Mirrors BuildingCatalogue.cs's GreatStorehouse(level): ResourceAmounts.Uniform(2000) * level.
     case 'greatstorehouse':
-      return { output: `+${level * 2000} storage capacity` };
+      return { output: { kind: 'storageCapacity', amount: level * 2000 } };
     case 'pumpkinfarm': {
       const workersCap = level * 4;
-      return { output: `+${level * 36} food/h`, workers: `${workersCap}/${workersCap}` };
+      return {
+        output: { kind: 'resourceRate', resource: 'food', amount: level * 36 },
+        workers: { cap: workersCap },
+      };
     }
     case 'lumberjack': {
       const multiplier = boostMultiplier(matchingNeighbours);
       const output = Math.round(level * 30 * multiplier);
       return {
-        output: `+${output} wood/h`,
-        modifier: multiplier > 1 ? `Forest (+${Math.round((multiplier - 1) * 100)}%)` : undefined,
+        output: { kind: 'resourceRate', resource: 'wood', amount: output },
+        modifier:
+          multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'forest', percent: Math.round((multiplier - 1) * 100) }
+            : undefined,
       };
     }
     case 'quarry': {
       const multiplier = boostMultiplier(matchingNeighbours);
       const output = Math.round(level * 24 * multiplier);
       return {
-        output: `+${output} stone/h`,
-        modifier: multiplier > 1 ? `Mountain (+${Math.round((multiplier - 1) * 100)}%)` : undefined,
+        output: { kind: 'resourceRate', resource: 'stone', amount: output },
+        modifier:
+          multiplier > 1
+            ? { kind: 'terrainBoost', terrain: 'mountain', percent: Math.round((multiplier - 1) * 100) }
+            : undefined,
       };
     }
     // Placed on coastal water itself (BuildingCatalogue.cs's FishingHut),
@@ -139,19 +176,22 @@ export function buildingStatsFor(
       const multiplier = boostMultiplier(matchingNeighbours);
       const output = Math.round(level * 30 * multiplier);
       return {
-        output: `+${output} food/h`,
-        modifier: multiplier > 1 ? `Coastal (+${Math.round((multiplier - 1) * 100)}%)` : 'Coastal',
+        output: { kind: 'resourceRate', resource: 'food', amount: output },
+        modifier:
+          multiplier > 1
+            ? { kind: 'coastal', percent: Math.round((multiplier - 1) * 100) }
+            : { kind: 'coastal' },
       };
     }
     case 'magictower':
-      return { output: `+${level * 6} iron/h`, modifier: 'Arcane' };
+      return { output: { kind: 'resourceRate', resource: 'iron', amount: level * 6 }, modifier: { kind: 'arcane' } };
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
     case 'shrineoffreyja': {
       const favour = Math.round((0.10 + 0.03 * (Math.min(level, 5) - 1)) * 100);
-      const domain = type === 'shrineofthor' ? 'Wood/Stone' : 'Food';
-      return { modifier: `+${favour}% ${domain} production` };
+      const domain = type === 'shrineofthor' ? 'woodStone' : 'food';
+      return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
     default:
       return {};

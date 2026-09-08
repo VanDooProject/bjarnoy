@@ -127,12 +127,14 @@ public static class ArmyEndpoints
 
         if (result.WorldPaused)
         {
-            return TypedResults.Conflict(new ProblemDetails
+            var worldPausedProblem = new ProblemDetails
             {
                 Title = "The world is not accepting commands.",
                 Detail = "It is paused, locked or under maintenance.",
                 Status = StatusCodes.Status409Conflict,
-            });
+            };
+            worldPausedProblem.Extensions["rejection"] = "WorldPaused";
+            return TypedResults.Conflict(worldPausedProblem);
         }
 
         if (result.Accepted)

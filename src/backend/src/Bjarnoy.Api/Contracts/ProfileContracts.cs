@@ -33,6 +33,13 @@ public sealed record ProfileResponse(
 /// <param name="Bio">The new bio; <c>null</c> or empty clears it. Stored verbatim (whitespace is significant).</param>
 public sealed record UpdateBioRequest([property: MaxLength(2000)] string? Bio);
 
+/// <param name="PreferredLocale">
+/// One of <see cref="ProfileService.SupportedLocales"/> (e.g. <c>"en"</c>,
+/// <c>"de"</c>); <c>null</c> clears the saved preference so the frontend
+/// falls back to its own client-side detection.
+/// </param>
+public sealed record UpdateLocaleRequest([property: MaxLength(10)] string? PreferredLocale);
+
 /// <param name="Reason">Why the profile is being reported.</param>
 /// <param name="Note">Optional extra context.</param>
 public sealed record ReportProfileRequest(

@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../api/client';
 import type { ConversationResponse } from '../api/types';
+import type { MessageSchema } from '../i18n/schema';
+
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const conversations = ref<ConversationResponse[]>([]);
 const page = ref(1);
@@ -16,7 +20,7 @@ async function load() {
     const result = await api.listConversations({ page: page.value, pageSize });
     conversations.value = result.items;
   } catch (err) {
-    loadError.value = err instanceof ApiError ? err.message : 'Could not load your messages.';
+    loadError.value = err instanceof ApiError ? err.message : t('messages.loadError');
   } finally {
     loading.value = false;
   }
@@ -38,12 +42,12 @@ function preview(body: string): string {
 
 <template>
   <div class="messages">
-    <h1>Messages</h1>
+    <h1>{{ $t('messages.title') }}</h1>
 
-    <p v-if="loading" class="muted">Loading…</p>
+    <p v-if="loading" class="muted">{{ $t('common.states.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
     <p v-else-if="conversations.length === 0" class="muted">
-      No conversations yet — visit a player's profile to send them a message.
+      {{ $t('messages.empty') }}
     </p>
 
     <template v-else>
@@ -58,15 +62,17 @@ function preview(body: string): string {
               <span v-if="conversation.unreadCount > 0" class="unread">{{ conversation.unreadCount }}</span>
             </span>
             <span class="preview">{{ preview(conversation.lastMessage.body) }}</span>
-            <span class="when">{{ new Date(conversation.lastMessage.sentAt).toLocaleString() }}</span>
+            <span class="when">{{ d(new Date(conversation.lastMessage.sentAt), 'long') }}</span>
           </router-link>
         </li>
       </ul>
 
       <div class="pager">
-        <button :disabled="page <= 1" @click="changePage(-1)">Previous</button>
-        <span>Page {{ page }}</span>
-        <button :disabled="conversations.length < pageSize" @click="changePage(1)">Next</button>
+        <button :disabled="page <= 1" @click="changePage(-1)">{{ $t('messages.pager.previous') }}</button>
+        <span>{{ $t('messages.pager.page', { page }) }}</span>
+        <button :disabled="conversations.length < pageSize" @click="changePage(1)">
+          {{ $t('messages.pager.next') }}
+        </button>
       </div>
     </template>
   </div>

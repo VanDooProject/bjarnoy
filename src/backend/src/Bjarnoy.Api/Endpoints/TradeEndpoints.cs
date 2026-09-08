@@ -202,12 +202,17 @@ public static class TradeEndpoints
         return false;
     }
 
-    private static ProblemDetails WorldPausedProblem() => new()
+    private static ProblemDetails WorldPausedProblem()
     {
-        Title = "The world is not accepting commands.",
-        Detail = "It is paused, locked or under maintenance.",
-        Status = StatusCodes.Status409Conflict,
-    };
+        var problem = new ProblemDetails
+        {
+            Title = "The world is not accepting commands.",
+            Detail = "It is paused, locked or under maintenance.",
+            Status = StatusCodes.Status409Conflict,
+        };
+        problem.Extensions["rejection"] = "WorldPaused";
+        return problem;
+    }
 
     // Every rejection here shares 409, but the frontend needs to tell them
     // apart (e.g. GuildOnlyOffer vs NotEnoughResources call for very

@@ -1,0 +1,98 @@
+{
+  "buildings": {
+    "longhouse": "Longhouse",
+    "hut": "Hut",
+    "lumberjack": "Lumberjack",
+    "quarry": "Quarry",
+    "farm": "Farm",
+    "storagehouse": "Storehouse",
+    "tower": "Watchtower",
+    "fisherhut": "Fisher's Hut",
+    "fishinghut": "Fishing Hut",
+    "magictower": "Magic Tower",
+    "pumpkinfarm": "Pumpkin Farm",
+    "shrineofthor": "Shrine of Thor",
+    "shrineoffreyja": "Shrine of Freyja",
+    "greatstorehouse": "Great Storehouse",
+    "archeryrange": "Archery Range",
+    "dockyard": "Dockyard",
+    "barracks": "Barracks",
+    "sawmill": "Sawmill"
+  },
+  "units": {
+    "thrall": "Thrall",
+    "spearman": "Spearman",
+    "axeman": "Axeman",
+    "bowman": "Bowman",
+    "berserker": "Berserker",
+    "provisioner": "Provisioner",
+    "catapult": "Catapult",
+    "karve": "Karve",
+    "longship": "Longship"
+  },
+  "terrain": {
+    "sea": "Open water",
+    "sand": "Shore",
+    "grass": "Grassland",
+    "forest": "Forest",
+    "mountain": "Mountain"
+  },
+  "resources": {
+    "wood": "Wood",
+    "stone": "Stone",
+    "food": "Food",
+    "iron": "Iron"
+  },
+  "missions": {
+    "move": "Move",
+    "attack": "Attack",
+    "support": "Support",
+    "raid": "Raid",
+    "found": "Found settlement"
+  },
+  "runes": {
+    "types": {
+      "fehu": "Fehu",
+      "jera": "Jera",
+      "othala": "Othala"
+    },
+    "rarities": {
+      "carved": "Carved",
+      "bound": "Bound",
+      "blooded": "Blooded"
+    }
+  },
+  "guild": {
+    "roles": {
+      "leader": "Leader",
+      "officer": "Officer",
+      "member": "Member"
+    },
+    "feeTiers": {
+      "copper": "Copper",
+      "silver": "Silver",
+      "gold": "Gold"
+    },
+    "boardTopics": {
+      "discussion": "Discussion",
+      "announcement": "Announcement",
+      "report": "Report"
+    }
+  },
+  "leaderboard": {
+    "scopes": {
+      "user": "Players",
+      "settlement": "Settlements",
+      "guild": "Guilds"
+    },
+    "categories": {
+      "score": "Score",
+      "biggestSettlement": "Biggest Settlement",
+      "weeklyScoreGained": "Weekly Score Gained",
+      "weeklyFightsWon": "Weekly Fights Won",
+      "weeklyFightsLost": "Weekly Fights Lost",
+      "weeklyResourcesLooted": "Weekly Resources Looted",
+      "biggestArmy": "Biggest Army"
+    }
+  }
+}

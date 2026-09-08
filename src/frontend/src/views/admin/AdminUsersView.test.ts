@@ -6,6 +6,10 @@ import AdminUsersView from './AdminUsersView.vue';
 import { ApiError } from '../../api/client';
 import type { AdminUserResponse } from '../../api/types';
 import { useAuthStore } from '../../stores/auth';
+import { createTestI18n } from '../../test/i18n';
+import adminUsers from '../../i18n/locales/en/adminUsers.json';
+
+const global = { plugins: [createTestI18n({ adminUsers })] };
 
 const { adminListUsers, adminUpdateUser, adminSetUserStatus, adminSetUserPremium } = vi.hoisted(() => ({
   adminListUsers: vi.fn(),
@@ -53,9 +57,17 @@ describe('AdminUsersView guards', () => {
     adminListUsers.mockResolvedValue({ items: [self, other], totalCount: 2, page: 1, pageSize: 25 });
 
     const auth = useAuthStore();
-    auth.user = { id: 'admin-1', userName: 'me', role: 'admin', status: 'active', displayName: null, isPremium: false };
+    auth.user = {
+      id: 'admin-1',
+      userName: 'me',
+      role: 'admin',
+      status: 'active',
+      displayName: null,
+      isPremium: false,
+      preferredLocale: null,
+    };
 
-    const wrapper = mount(AdminUsersView, { global: { plugins: [] } });
+    const wrapper = mount(AdminUsersView, { global });
     await flushPromises();
 
     const rows = wrapper.findAll('tbody tr');
@@ -83,9 +95,17 @@ describe('AdminUsersView guards', () => {
     );
 
     const auth = useAuthStore();
-    auth.user = { id: 'other-admin', userName: 'someone-else-entirely', role: 'admin', status: 'active', displayName: null, isPremium: false };
+    auth.user = {
+      id: 'other-admin',
+      userName: 'someone-else-entirely',
+      role: 'admin',
+      status: 'active',
+      displayName: null,
+      isPremium: false,
+      preferredLocale: null,
+    };
 
-    const wrapper = mount(AdminUsersView, { global: { plugins: [] } });
+    const wrapper = mount(AdminUsersView, { global });
     await flushPromises();
 
     const roleSelect = wrapper.find('select.cell-input');

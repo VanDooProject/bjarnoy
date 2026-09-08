@@ -1,0 +1,89 @@
+{
+  "title": "Gilde",
+  "noWorld": "Keine aktive Welt, für die Gilden angezeigt werden können.",
+  "directory": {
+    "title": "Gilden in dieser Welt",
+    "found": "Gilde gründen",
+    "loading": "Lädt…",
+    "empty": "Noch keine Gilden — gründe die erste.",
+    "memberCount": "{count} Mitglieder",
+    "view": "Ansehen",
+    "join": "Beitreten"
+  },
+  "feeTier": {
+    "copper": "Kupfer",
+    "silver": "Silber",
+    "gold": "Gold"
+  },
+  "role": {
+    "leader": "Anführer",
+    "officer": "Offizier",
+    "member": "Mitglied"
+  },
+  "foundDialog": {
+    "ariaLabel": "Gilde gründen",
+    "title": "Gilde gründen",
+    "name": "Name",
+    "tag": "Kürzel",
+    "description": "Beschreibung (optional)",
+    "found": "Gründen",
+    "cancel": "Abbrechen"
+  },
+  "detail": {
+    "back": "← Zurück zur Gildenliste",
+    "loading": "Lädt…",
+    "disband": "Auflösen",
+    "leave": "Verlassen",
+    "join": "Beitreten"
+  },
+  "perks": {
+    "title": "Vorteile & Grenzwerte",
+    "memberCap": "Mitgliederhöchstzahl",
+    "peaceTreatyCap": "Höchstzahl Friedensverträge",
+    "tradeBonus": "Handelsbonus",
+    "unitSupport": "Einheitenunterstützung",
+    "yes": "Ja",
+    "no": "Nein",
+    "feeTierLabel": "Beitragsstufe:"
+  },
+  "fee": {
+    "overdue": "überfällig",
+    "paidUp": "bezahlt",
+    "status": "Dein Beitrag ist {status}.",
+    "payFee": "Beitrag zahlen"
+  },
+  "roster": {
+    "title": "Mitgliederliste ({count})",
+    "overdue": "überfällig",
+    "makeLeader": "Zum Anführer machen",
+    "makeOfficer": "Zum Offizier machen",
+    "demote": "Degradieren",
+    "kick": "Rauswerfen"
+  },
+  "board": {
+    "title": "Pinnwand",
+    "loading": "Lädt…",
+    "noTopics": "Noch keine Themen.",
+    "pinned": "angeheftet",
+    "startTopic": "Thema eröffnen",
+    "titlePlaceholder": "Titel",
+    "discussion": "Diskussion",
+    "announcement": "Ankündigung",
+    "report": "Bericht",
+    "messagePlaceholder": "Nachricht…",
+    "post": "Veröffentlichen",
+    "backToTopics": "← Zurück zu den Themen",
+    "replyPlaceholder": "Antwort…",
+    "reply": "Antworten"
+  },
+  "treaties": {
+    "title": "Friedensverträge",
+    "loading": "Lädt…",
+    "noTreaties": "Noch keine Verträge.",
+    "accept": "Annehmen",
+    "reject": "Ablehnen",
+    "break": "Brechen",
+    "chooseGuild": "Gilde wählen…",
+    "proposePeace": "Frieden vorschlagen"
+  }
+}

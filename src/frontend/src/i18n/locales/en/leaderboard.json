@@ -1,0 +1,41 @@
+{
+  "title": "Leaderboards",
+  "noWorld": "No live world to show leaderboards for.",
+  "jumpToMyRank": "Jump to my rank",
+  "current": "Current",
+  "weekOf": "Week of {date}",
+  "noEntries": "No entries yet.",
+  "table": {
+    "rank": "Rank",
+    "name": "Name",
+    "value": "Value",
+    "change": "Change"
+  },
+  "badge": {
+    "new": "new",
+    "flat": "—"
+  },
+  "loadMore": "Load more",
+  "scopes": {
+    "user": "Players",
+    "settlement": "Settlements",
+    "guild": "Guilds"
+  },
+  "categories": {
+    "score": "Score",
+    "biggestSettlement": "Biggest settlement",
+    "weeklyScoreGained": "Weekly score gained",
+    "weeklyFightsWon": "Weekly fights won",
+    "weeklyFightsLost": "Weekly fights lost",
+    "weeklyResourcesLooted": "Weekly resources looted",
+    "biggestArmy": "Biggest army"
+  },
+  "darkReasons": {
+    "noBattleSystemYet": "Unlocks once battles exist.",
+    "noArmySystemYet": "Unlocks once armies exist.",
+    "noGuildSystemYet": "Unlocks once guilds exist.",
+    "noWeeklyWindowsYet": "Unlocks once weekly windows are tracked.",
+    "notComputedYet": "Not computed yet — check back soon.",
+    "unknownBoard": "This board does not exist."
+  }
+}

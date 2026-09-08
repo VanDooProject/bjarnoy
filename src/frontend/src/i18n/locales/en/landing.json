@@ -1,0 +1,41 @@
+{
+  "hero": {
+    "eyebrow": "Empty plot · Bjarnøy",
+    "notOpenTitle": "Not open yet.",
+    "title": "Put your longhouse somewhere.",
+    "lede": "That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting. Nobody asks your name until you have something worth naming.",
+    "makingLandfall": "Making landfall…"
+  },
+  "joinBlocked": {
+    "opensAt": "This world opens {date}.",
+    "joinsClosed": "This world is no longer accepting new players.",
+    "noWorldYet": "No world has been created yet — check back soon.",
+    "notAcceptingPlayers": "This world is not accepting new players right now."
+  },
+  "invalidClick": {
+    "pickGlowingPlot": "You can't found there — pick one of the glowing plots.",
+    "beyondClaim": "That hex is beyond your longhouse's claim — build closer to home.",
+    "orderFailed": "That order didn't go through — try a different hex."
+  },
+  "ring": {
+    "finishGuidedFirst": "Finish the guided buildings first",
+    "needsTerrain": "Needs {terrain} terrain — try a different hex"
+  },
+  "foundHere": {
+    "namedRealm": "{nickname}'s realm",
+    "unnamedRealm": "Unnamed realm"
+  },
+  "tray": {
+    "longhouseName": "Longhouse & yard",
+    "placed": "Placed",
+    "clickToPlace": "Click your plot to place it",
+    "buildingName": "Building {n}",
+    "clickEmptyHex": "Click an empty hex in your border",
+    "foundFirst": "Found your longhouse first"
+  },
+  "footer": {
+    "sea": "Kettil Sea",
+    "noAccount": "No account",
+    "nothingToInstall": "Nothing to install"
+  }
+}

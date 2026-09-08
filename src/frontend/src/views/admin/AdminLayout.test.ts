@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from './AdminLayout.vue';
 import { useAdminWorldStore } from '../../stores/adminWorld';
 import type { AdminWorldResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import adminLayout from '../../i18n/locales/en/adminLayout.json';
 
 // AdminLayout renders <router-link> tabs and its own <router-view> for
 // child tabs — a real (memory-history) router resolves those, same
@@ -59,7 +61,7 @@ async function mountLayout() {
   const router = testRouter();
   await router.push('/admin/worlds');
   await router.isReady();
-  return mount(AdminLayout, { global: { plugins: [router] } });
+  return mount(AdminLayout, { global: { plugins: [router, createTestI18n({ adminLayout })] } });
 }
 
 describe('AdminLayout', () => {

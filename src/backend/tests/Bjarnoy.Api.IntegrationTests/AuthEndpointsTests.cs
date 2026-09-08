@@ -100,7 +100,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Registering_the_same_username_twice_is_refused()
+    public async Task Registering_the_same_username_twice_is_refused_with_a_machine_readable_reason()
     {
         using var client = Client();
         var userName = Unique("dupe-");
@@ -110,6 +110,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
             "/api/v1/auth/register", new RegisterRequest(userName, "another-password"), Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("UsernameTaken", await response.RejectionAsync(Ct));
     }
 
     [Fact]
@@ -126,7 +127,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Logging_in_with_the_wrong_password_is_401()
+    public async Task Logging_in_with_the_wrong_password_is_401_with_a_machine_readable_reason()
     {
         using var client = Client();
         var userName = Unique("wrongpw-");
@@ -136,6 +137,21 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
             "/api/v1/auth/login", new LoginRequest(userName, "not-the-password"), Ct);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.ReadStrictAsync<AuthErrorResponse>(Ct);
+        Assert.Equal("invalid_credentials", body.Error);
+    }
+
+    [Fact]
+    public async Task Refreshing_with_a_bogus_token_is_401_with_a_machine_readable_reason()
+    {
+        using var client = Client();
+
+        var response = await client.PostJsonAsync(
+            "/api/v1/auth/refresh", new RefreshRequest("not-a-real-refresh-token"), Ct);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.ReadStrictAsync<AuthErrorResponse>(Ct);
+        Assert.Equal("invalid_refresh_token", body.Error);
     }
 
     [Fact]
@@ -196,6 +212,9 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task Me_without_a_token_is_401()
     {
+        // Unlike the endpoints behind PremiumUserEndpointFilter/ActiveUserEndpointFilter,
+        // /me is protected by plain RequireAuthorization() and so gets the framework's
+        // default challenge response, not an AuthErrorResponse — no rejection code here.
         using var client = Client();
         var response = await client.GetAsync("/api/v1/auth/me", Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);

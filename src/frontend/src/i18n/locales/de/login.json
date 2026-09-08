@@ -1,0 +1,15 @@
+{
+  "brand": "Fjørdhold",
+  "title": "Anmelden",
+  "usernameLabel": "Benutzername",
+  "passwordLabel": "Passwort",
+  "submit": "Anmelden",
+  "submitting": "Anmeldung läuft…",
+  "registerLink": "Spielst du anonym? Konto erstellen",
+  "back": "← Zurück",
+  "errors": {
+    "banned": "Dieses Konto wurde gesperrt.",
+    "invalidCredentials": "Falscher Benutzername oder Passwort.",
+    "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen."
+  }
+}

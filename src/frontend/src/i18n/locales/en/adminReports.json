@@ -1,0 +1,42 @@
+{
+  "title": "Reports",
+  "loadError": "Could not load reports.",
+  "updateError": "Could not update the report.",
+  "loading": "Loading…",
+  "empty": "No reports.",
+  "noNote": "—",
+  "noActions": "—",
+  "source": {
+    "profileBio": "Profile",
+    "chatMessage": "Chat message"
+  },
+  "filters": {
+    "allStatuses": "All statuses",
+    "pending": "Pending",
+    "resolved": "Resolved",
+    "dismissed": "Dismissed",
+    "actioned": "Actioned",
+    "allSources": "All sources"
+  },
+  "columns": {
+    "source": "Source",
+    "reported": "Reported",
+    "reporter": "Reporter",
+    "content": "Content",
+    "reason": "Reason",
+    "note": "Note",
+    "status": "Status",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "actions": {
+    "resolve": "Resolve",
+    "dismiss": "Dismiss",
+    "actioned": "Actioned"
+  },
+  "pager": {
+    "previous": "Previous",
+    "next": "Next",
+    "summary": "Page {page} · {total} reports"
+  }
+}

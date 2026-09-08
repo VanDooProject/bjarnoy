@@ -1,0 +1,33 @@
+{
+  "back": "← Reports",
+  "title": "Fight simulator",
+  "subtitle": "A premium feature: resolve a hypothetical battle with no army, settlement, or database involved — nothing here touches your real game state.",
+  "demoModeHint": "The simulator calls the real backend and needs a logged-in premium account — it isn't wired up in demo mode.",
+  "premium": {
+    "title": "Premium feature",
+    "rejected": "The fight simulator is a premium feature. This account isn't premium, so the server turned that last request down.",
+    "notPremium": "The fight simulator is a premium feature. This account isn't premium.",
+    "honestNote": "There's no upgrade flow in this game yet — nowhere here actually sells premium — so there's nothing more to click. Ask whoever runs this world if you think that's wrong."
+  },
+  "sections": {
+    "attacker": "Attacker",
+    "defender": "Defender",
+    "defenderHint": "Leave empty to simulate an undefended settlement.",
+    "guestDefenders": "Guest defenders",
+    "guestDefendersHint": "Optional — combined with the defender's own garrison, like a real Support army."
+  },
+  "options": {
+    "towerLevel": "Tower level",
+    "mission": "Mission",
+    "attack": "Attack",
+    "raid": "Raid",
+    "seed": "Seed (optional)",
+    "seedPlaceholder": "random"
+  },
+  "errors": {
+    "noAttacker": "Add at least one attacking unit first.",
+    "simulationFailed": "Simulation failed."
+  },
+  "simulating": "Simulating…",
+  "simulate": "Simulate"
+}

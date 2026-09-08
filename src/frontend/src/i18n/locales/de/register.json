@@ -1,0 +1,18 @@
+{
+  "brand": "Fjørdhold",
+  "title": "Konto erstellen",
+  "hint": "Verwandle deine Siedlung in ein dauerhaftes Konto, damit du dich von jedem Gerät aus wieder anmelden kannst.",
+  "usernameLabel": "Benutzername",
+  "passwordLabel": "Passwort",
+  "confirmPasswordLabel": "Passwort bestätigen",
+  "submit": "Konto erstellen",
+  "submitting": "Konto wird erstellt…",
+  "loginLink": "Hast du schon ein Konto? Anmelden",
+  "back": "← Zurück",
+  "errors": {
+    "passwordMismatch": "Die Passwörter stimmen nicht überein.",
+    "usernameTaken": "Dieser Benutzername ist bereits vergeben.",
+    "validation": "Der Benutzername muss mindestens 3 Zeichen haben, das Passwort mindestens 8.",
+    "generic": "Konto konnte nicht erstellt werden. Bitte erneut versuchen."
+  }
+}

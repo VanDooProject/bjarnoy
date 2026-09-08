@@ -1,0 +1,12 @@
+{
+  "brand": "Fjørdhold admin",
+  "tabs": {
+    "worlds": "Worlds",
+    "users": "Users",
+    "settlements": "Settlements",
+    "reports": "Reports",
+    "activity": "Activity"
+  },
+  "noWorlds": "No worlds yet — create one",
+  "logout": "Log out"
+}

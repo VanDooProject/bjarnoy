@@ -217,7 +217,7 @@ test.describe('ring menu drill-down', () => {
     const upgradeBubble = settlement.ring.action('Upgrade').first();
     await expect(upgradeBubble).toBeVisible();
     await expect(upgradeBubble).toHaveClass(/disabled/);
-    await expect(upgradeBubble).toHaveAttribute('title', 'Not enough wood, stone, food');
+    await expect(upgradeBubble).toHaveAttribute('title', 'Not enough Wood, Stone, Food');
 
     const levelBefore = await buildingLevel();
     await upgradeBubble.click({ force: true });

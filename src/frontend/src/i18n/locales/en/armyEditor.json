@@ -1,0 +1,23 @@
+{
+  "title": "Armies",
+  "loading": "Loading armies…",
+  "loadError": "Could not load armies.",
+  "empty": "No armies in the field.",
+  "editError": "Could not edit the army.",
+  "unitsEmpty": "empty",
+  "where": {
+    "atHome": "at home",
+    "supporting": "supporting",
+    "inTransit": "in transit, arriving {date}"
+  },
+  "close": "Close",
+  "edit": "Edit",
+  "provisions": "Provisions",
+  "arriveInMinutes": "Arrive in (min)",
+  "speedUp": "Speed up",
+  "coordQ": "q",
+  "coordR": "r",
+  "moveHere": "Move here",
+  "saving": "Saving…",
+  "saveUnitsAndFood": "Save units & food"
+}

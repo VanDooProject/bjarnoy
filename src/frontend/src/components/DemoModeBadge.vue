@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
 import { DEMO_MODE } from '../config';
+import type { MessageSchema } from '../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 </script>
 
 <template>
-  <div v-if="DEMO_MODE" class="demo-badge" title="No backend is connected — progress lives only in this browser tab and is lost on reload.">
-    Demo mode — progress isn't saved
+  <div v-if="DEMO_MODE" class="demo-badge" :title="t('demoModeBadge.title')">
+    {{ t('demoModeBadge.label') }}
   </div>
 </template>
 

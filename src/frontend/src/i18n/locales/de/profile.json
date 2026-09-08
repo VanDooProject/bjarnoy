@@ -1,0 +1,30 @@
+{
+  "loadError": "Profil konnte nicht geladen werden.",
+  "noProfile": "Kein Profil zum Anzeigen.",
+  "noSuchPlayer": "Diesen Spieler gibt es nicht.",
+  "message": "Nachricht",
+  "report": "Melden",
+  "reportSent": "Meldung gesendet — vielen Dank.",
+  "joined": "Beigetreten",
+  "settlements": "Siedlungen",
+  "bio": {
+    "title": "Bio",
+    "edit": "Bio bearbeiten",
+    "add": "Bio hinzufügen",
+    "placeholder": "Erzähl den anderen Spielern etwas über dich — ASCII-Art willkommen.",
+    "empty": "Dieser Spieler hat noch keine Bio geschrieben.",
+    "tooLong": "Die Bio ist auf {max} Zeichen begrenzt.",
+    "saveError": "Die Bio konnte nicht gespeichert werden."
+  },
+  "reportDialog": {
+    "ariaLabel": "Profil melden",
+    "title": "{userName} melden",
+    "hint": "Ein Moderator wird dieses Profil überprüfen.",
+    "reason": "Grund",
+    "reasonPlaceholder": "z. B. anstößige Bio",
+    "reasonRequired": "Ein Grund ist erforderlich.",
+    "note": "Notiz (optional)",
+    "send": "Meldung senden",
+    "sendError": "Die Meldung konnte nicht gesendet werden."
+  }
+}

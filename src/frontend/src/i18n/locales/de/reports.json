@@ -1,0 +1,23 @@
+{
+  "backToSettlement": "← Zurück",
+  "backToList": "← Berichte",
+  "demoModeHint": "Berichte benötigen das echte Backend und sind im Demo-Modus nicht verfügbar.",
+  "noSettlement": "Gründe zuerst eine Siedlung, um Berichte zu erhalten.",
+  "trade": {
+    "completed": "Handel abgeschlossen",
+    "guildTrade": "Gildenhandel",
+    "trade": "Handel",
+    "youGave": "Du hast gegeben",
+    "youReceived": "Du hast erhalten",
+    "travelled": "Karren waren {hours}h unterwegs."
+  },
+  "title": "Berichte",
+  "tabs": {
+    "all": "Alle",
+    "battle": "Kampf",
+    "trade": "Handel"
+  },
+  "noReports": "Noch keine Berichte.",
+  "simulatorHint": "Willst du einen Kampf testen, ohne echte Truppen zu riskieren?",
+  "simulatorLink": "Kampfsimulator ausprobieren →"
+}

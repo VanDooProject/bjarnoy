@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../i18n/schema';
+import { buildingName, resourceName, terrainName } from '../i18n/catalogueNames';
 import { useRoute, useRouter } from 'vue-router';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
@@ -21,7 +24,7 @@ import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
 import { useWorldStore } from '../stores/world';
-import { ApiError } from '../api/client';
+import { apiErrorMessage } from '../i18n/apiErrors';
 import { usePlayerStore } from '../stores/player';
 import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
@@ -29,12 +32,21 @@ import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
-import { BOOST_TERRAIN, buildingStatsFor, buildingUpgradeCost, matchingNeighbourCount } from '../lib/map/buildingEconomy';
+import {
+  BOOST_TERRAIN,
+  buildingStatsFor,
+  buildingUpgradeCost,
+  matchingNeighbourCount,
+  type BuildingModifier,
+  type BuildingOutput,
+} from '../lib/map/buildingEconomy';
 import { formatBuildTime, longhouseLock, riverShapeLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -326,7 +338,9 @@ const modalOwnerLabel = computed(() => {
   if (!tile?.ownerId) return null;
   const owner = world.model.getSettlement(tile.ownerId);
   if (!owner) return null;
-  return owner.ownerId === player.id ? owner.name : `${owner.ownerName}'s ${owner.name}`;
+  return owner.ownerId === player.id
+    ? owner.name
+    : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.name });
 });
 
 // Ring menu state. The 2a ring owns its own depth (root actions -> build
@@ -425,8 +439,7 @@ type BuildableType =
 
 interface BuildCategory {
   id: string;
-  label: string;
-  buildings: { type: BuildableType; label: string }[];
+  buildings: { type: BuildableType }[];
 }
 // Mirrors BuildingCatalogue.cs's per-type AllowedTerrain: Farm/PumpkinFarm/
 // MagicTower/Shrine are Grass-only, Lumberjack is Forest-only, Quarry is
@@ -441,66 +454,44 @@ interface BuildCategory {
 // categoriesFor), not through this land-terrain table.
 const SHRINE_CATEGORY: BuildCategory = {
   id: 'religion',
-  label: 'Shrines',
-  buildings: [
-    { type: 'shrineofthor', label: 'Shrine of Thor' },
-    { type: 'shrineoffreyja', label: 'Shrine of Freyja' },
-  ],
+  buildings: [{ type: 'shrineofthor' }, { type: 'shrineoffreyja' }],
 };
 // Fisher Hut is built directly on a coastal-water hex, exactly like Fishing
 // Hut/Dockyard (BuildingDefinition.RequiresCoastalWater) — not on Grass, so
 // it lives in the water category rather than the grass one below.
 const WATER_CATEGORY: BuildCategory = {
   id: 'water',
-  label: 'Water',
-  buildings: [
-    { type: 'fishinghut', label: 'Fishing Hut' },
-    { type: 'dockyard', label: 'Dockyard' },
-    { type: 'fisherhut', label: 'Fisher Hut' },
-  ],
+  buildings: [{ type: 'fishinghut' }, { type: 'dockyard' }, { type: 'fisherhut' }],
 };
 const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCategory[]> = {
   grass: [
-    { id: 'housing', label: 'Housing', buildings: [{ type: 'hut', label: 'Hut' }] },
+    { id: 'housing', buildings: [{ type: 'hut' }] },
     {
       id: 'resource',
-      label: 'Resource',
       buildings: [
-        { type: 'farm', label: 'Farm' },
-        { type: 'pumpkinfarm', label: 'Pumpkin Farm' },
+        { type: 'farm' },
+        { type: 'pumpkinfarm' },
         // Sawmill is only actually buildable on a Grass hex that is itself a
         // Straight/Bend river tile (BuildingDefinition.RequiresRiverShape) —
         // still offered here (this bucket is terrain-keyed, not hex-specific)
         // and locked per-hex instead, same as the longhouse-level gate below
         // (see ringBuildingFor's riverShapeLock call).
-        { type: 'sawmill', label: 'Sawmill' },
+        { type: 'sawmill' },
       ],
     },
     {
       id: 'military',
-      label: 'Military',
-      buildings: [
-        { type: 'tower', label: 'Watchtower' },
-        { type: 'magictower', label: 'Magic Tower' },
-        { type: 'archeryrange', label: 'Archery Range' },
-        { type: 'barracks', label: 'Barracks' },
-      ],
+      buildings: [{ type: 'tower' }, { type: 'magictower' }, { type: 'archeryrange' }, { type: 'barracks' }],
     },
     {
       id: 'logistics',
-      label: 'Logistics',
-      buildings: [
-        { type: 'storagehouse', label: 'Storehouse' },
-        { type: 'greatstorehouse', label: 'Great Storehouse' },
-      ],
+      buildings: [{ type: 'storagehouse' }, { type: 'greatstorehouse' }],
     },
     SHRINE_CATEGORY,
   ],
-  sand: [
-    { id: 'military', label: 'Military', buildings: [{ type: 'tower', label: 'Watchtower' }] },
-  ],
-  forest: [{ id: 'resource', label: 'Resource', buildings: [{ type: 'lumberjack', label: 'Lumberjack' }] }],
-  mountain: [{ id: 'resource', label: 'Resource', buildings: [{ type: 'quarry', label: 'Quarry' }] }],
+  sand: [{ id: 'military', buildings: [{ type: 'tower' }] }],
+  forest: [{ id: 'resource', buildings: [{ type: 'lumberjack' }] }],
+  mountain: [{ id: 'resource', buildings: [{ type: 'quarry' }] }],
 };
 
 function categoriesFor(tile: Tile): BuildCategory[] {
@@ -533,19 +524,24 @@ const rootActions = computed<RingAction[]>(() => {
 
   if (isEnemyTile.value) {
     return [
-      { id: 'info', label: 'Info' },
-      { id: 'attack', label: 'Attack / Raid', disabled: true, hint: 'Combat is not implemented yet' },
+      { id: 'info', label: t('hud.ringMenu.actions.info') },
+      {
+        id: 'attack',
+        label: t('hud.ringMenu.actions.attackRaid'),
+        disabled: true,
+        hint: t('hud.ringMenu.actions.combatNotImplemented'),
+      },
     ];
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
     return [
-      { id: 'info', label: 'Info' },
+      { id: 'info', label: t('hud.ringMenu.actions.info') },
       {
         id: onCoast ? 'land-here' : 'send-settlers',
-        label: onCoast ? 'Land here' : 'Send settlers',
+        label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
         disabled: true,
-        hint: 'You have no settlers available yet',
+        hint: t('hud.ringMenu.actions.noSettlersYet'),
       },
     ];
   }
@@ -568,17 +564,22 @@ const rootActions = computed<RingAction[]>(() => {
     const actions: RingAction[] = [
       {
         id: 'upgrade',
-        label: 'Upgrade',
+        label: t('hud.ringMenu.actions.upgrade'),
         color: 'var(--gold)',
         disabled: shortOf.length > 0,
-        hint: shortOf.length ? `Not enough ${shortOf.join(', ')}` : undefined,
+        hint: shortOf.length
+          ? t('hud.ringMenu.actions.notEnough', { resources: shortOf.map(resourceName).join(', ') })
+          : undefined,
       },
-      { id: 'details', label: 'Details' },
+      { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
         id: 'raze',
-        label: 'Raze',
+        label: t('hud.ringMenu.actions.raze'),
         disabled: tile.buildingType === 'longhouse' || !DEMO_MODE,
-        hint: tile.buildingType === 'longhouse' ? "Can't raze the longhouse" : 'Not wired to the backend yet',
+        hint:
+          tile.buildingType === 'longhouse'
+            ? t('hud.ringMenu.actions.cantRazeLonghouse')
+            : t('hud.ringMenu.actions.notWiredYet'),
       },
     ];
     // Training is queued against the settlement, not a specific hex, so the
@@ -594,18 +595,23 @@ const rootActions = computed<RingAction[]>(() => {
       || tile.buildingType === 'archeryrange'
       || tile.buildingType === 'dockyard'
     ) {
-      actions.push({ id: 'train', label: 'Train units' });
+      actions.push({ id: 'train', label: t('hud.ringMenu.actions.trainUnits') });
     }
     return actions;
   }
   if (isMineTile.value) {
     const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
     return [
-      { id: 'details', label: 'Details' },
-      { id: 'build', label: 'Build', disabled: !buildableSea, hint: buildableSea ? undefined : 'Open water' },
+      { id: 'details', label: t('hud.ringMenu.actions.details') },
+      {
+        id: 'build',
+        label: t('hud.ringMenu.actions.build'),
+        disabled: !buildableSea,
+        hint: buildableSea ? undefined : t('hud.ringMenu.actions.openWater'),
+      },
     ];
   }
-  return [{ id: 'details', label: 'Details' }];
+  return [{ id: 'details', label: t('hud.ringMenu.actions.details') }];
 });
 
 function tileAt(q: number, r: number): Tile {
@@ -617,7 +623,49 @@ function tileAt(q: number, r: number): Tile {
 // /api/v1/buildings, or its bundled snapshot in demo mode) — so the card
 // can't drift from BuildingCatalogue.cs. "hut" is demo-only and has no
 // catalogue entry, hence the client-side cost fallback and no time/lock.
-function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord): RingBuilding {
+// Mirrors HexTooltip.vue's formatOutput/formatModifier: the same structured
+// BuildingOutput/BuildingModifier data, translated the same way, since the
+// ring's building-preview card and the hover tooltip describe identical
+// semantics.
+function formatOutput(output: BuildingOutput): string {
+  switch (output.kind) {
+    case 'resourceRate':
+      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
+    case 'populationCapacity':
+      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
+    case 'storageCapacity':
+      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
+    case 'visionRing':
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+  }
+}
+function formatModifier(modifier: BuildingModifier): string {
+  switch (modifier.kind) {
+    case 'borderAnchor':
+      return t('hud.hoverTooltip.modifierBorderAnchor');
+    case 'trainsLandTroops':
+      return t('hud.hoverTooltip.modifierTrainsLandTroops');
+    case 'trainsShips':
+      return t('hud.hoverTooltip.modifierTrainsShips');
+    case 'garrison':
+      return t('hud.hoverTooltip.modifierGarrison');
+    case 'terrainBoost':
+      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
+    case 'coastal':
+      return modifier.percent
+        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
+        : t('hud.hoverTooltip.modifierCoastal');
+    case 'arcane':
+      return t('hud.hoverTooltip.modifierArcane');
+    case 'shrineFavour':
+      return t('hud.hoverTooltip.modifierShrineFavour', {
+        percent: modifier.percent,
+        domain: modifier.domain === 'woodStone' ? t('hud.hoverTooltip.domainWoodStone') : t('hud.hoverTooltip.domainFood'),
+      });
+  }
+}
+
+function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
   const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
@@ -632,10 +680,10 @@ function ringBuildingFor(type: BuildableType, label: string, coord: AxialCoord):
   const hasRiverShape = riverShape === 'straight' || riverShape === 'bend';
   return {
     id: type,
-    label,
+    label: buildingName(type),
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
     time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
-    gives: stats.output ?? stats.modifier,
+    gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
     lock:
       longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
       ?? riverShapeLock(type, hasRiverShape),
@@ -649,46 +697,26 @@ const ringCategories = computed<RingCategory[]>(() => {
   if (!tile || !coord) return [];
   return categoriesFor(tile).map((category) => ({
     id: category.id,
-    label: category.label,
+    label: t(`hud.ringMenu.categories.${category.id}`),
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
-    buildings: category.buildings.map((b) => ringBuildingFor(b.type, b.label, coord)),
+    buildings: category.buildings.map((b) => ringBuildingFor(b.type, coord)),
   }));
 });
-
-const TERRAIN_LABELS: Record<string, string> = {
-  sea: 'Open water',
-  sand: 'Shore',
-  grass: 'Grassland',
-  forest: 'Forest',
-  mountain: 'Mountain',
-};
-const BUILDING_LABELS: Record<string, string> = {
-  hut: 'Hut',
-  farm: 'Farm',
-  tower: 'Watchtower',
-  longhouse: 'Longhouse',
-  fishinghut: 'Fishing Hut',
-  magictower: 'Magic Tower',
-  pumpkinfarm: 'Pumpkin Farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  lumberjack: 'Lumberjack',
-  quarry: 'Quarry',
-};
 
 // The hub names what was clicked: the building standing on the hex if there
 // is one, otherwise the bare terrain.
 const ringTerrainLabel = computed(() => {
   const tile = selectedTile.value;
   if (!tile) return '';
-  return (tile.buildingType ? BUILDING_LABELS[tile.buildingType] : undefined) ?? TERRAIN_LABELS[tile.terrain] ?? '';
+  return tile.buildingType ? buildingName(tile.buildingType) : terrainName(tile.terrain);
 });
 const ringCoordLabel = computed(() => {
   const coord = selectedCoord.value;
   if (!coord) return '';
-  const hex = `HEX ${coord.q}, ${coord.r}`;
   const level = selectedTile.value?.buildingType ? selectedTile.value.buildingLevel ?? 1 : null;
-  return level === null ? hex : `LV ${level} · ${hex}`;
+  return level === null
+    ? t('hud.ringMenu.hexCoord', { q: coord.q, r: coord.r })
+    : t('hud.ringMenu.levelHexCoord', { level, q: coord.q, r: coord.r });
 });
 
 const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
@@ -803,11 +831,8 @@ function closeTrainModal() {
   trainModalOpen.value = false;
 }
 
-// ApiError.problem.detail carries the backend's own human-readable
-// rejection reason (BuildRejection etc, ArmyEndpoints.Problem convention) —
-// mirrors world.ts's dispatchArmy/TrainingModal's own error-surfacing.
 function describeActionError(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? (err.problem?.detail ?? err.message) : fallback;
+  return apiErrorMessage(err, fallback);
 }
 
 // Demo mode places the chosen building instantly; live mode queues that
@@ -833,7 +858,7 @@ async function buildType(type: BuildableType) {
     // Surface the rejection's detail — NoFreeSlot's premium hint included
     // (issue #158) — rather than leaving the player to guess why nothing
     // happened.
-    actionError.value = describeActionError(err, 'Could not queue that build.');
+    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild'));
   } finally {
     modalBusy.value = false;
   }
@@ -867,7 +892,7 @@ async function upgrade() {
     closeModal();
   } catch (err) {
     console.error('Failed to queue upgrade against the backend', err);
-    actionError.value = describeActionError(err, 'Could not queue that upgrade.');
+    actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueUpgrade'));
     modalBusy.value = false;
   }
 }

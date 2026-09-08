@@ -3,6 +3,7 @@
 // fetching here; AdminActivityView owns the fetch and passes buckets down.
 import { computed } from 'vue';
 import { Line } from 'vue-chartjs';
+import { useI18n } from 'vue-i18n';
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -14,6 +15,9 @@ import {
   Tooltip,
 } from 'chart.js';
 import type { ActivityBucket } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Only register what this single chart actually uses — not `...registerables`.
 ChartJS.register(LineController, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
@@ -36,7 +40,7 @@ const chartData = computed(() => ({
   labels: props.buckets.map((b) => formatLabel(b.bucketStart)),
   datasets: [
     {
-      label: 'Active users',
+      label: t('adminActivityChart.activeUsers'),
       data: props.buckets.map((b) => b.activeUserCount),
       borderColor: '#ffc55c',
       backgroundColor: 'rgba(255, 197, 92, 0.2)',
@@ -63,7 +67,7 @@ const chartOptions = {
 
 <template>
   <div class="activity-chart">
-    <p v-if="buckets.length === 0" class="empty">No activity data for this range.</p>
+    <p v-if="buckets.length === 0" class="empty">{{ $t('adminActivityChart.empty') }}</p>
     <div v-else class="canvas-wrap">
       <Line :data="chartData" :options="chartOptions" />
     </div>

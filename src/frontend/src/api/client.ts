@@ -86,7 +86,9 @@ import type {
   UnitDefinitionResponse,
   UpdateAdminUserRequest,
   UpdateBioRequest,
+  UpdateLocaleRequest,
   UpdateWorldSettingsRequest,
+  UserResponse,
   WorldResponse,
 } from './types';
 
@@ -140,7 +142,7 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
 
   if (!res.ok) {
     const problem = await res.json().catch(() => undefined);
-    if (res.status === 403 && (problem as { error?: string } | undefined)?.error === 'user_locked') {
+    if (res.status === 403 && (problem as ProblemDetails | undefined)?.error === 'user_locked') {
       authHooks.onAccountLocked();
     }
     throw new ApiError(res.status, problem);
@@ -299,6 +301,8 @@ export const api = {
     request<ProfileResponse>(`/profiles/by-name/${encodeURIComponent(userName)}`),
   updateMyBio: (body: UpdateBioRequest) =>
     request<ProfileResponse>('/profiles/me/bio', { method: 'PUT', body: JSON.stringify(body) }),
+  updateMyLocale: (body: UpdateLocaleRequest) =>
+    request<UserResponse>('/profiles/me/locale', { method: 'PUT', body: JSON.stringify(body) }),
   reportProfile: (userId: string, body: ReportProfileRequest) =>
     request<ReportResponse>(`/profiles/${userId}/reports`, {
       method: 'POST',

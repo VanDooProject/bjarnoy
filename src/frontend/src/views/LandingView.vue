@@ -7,6 +7,7 @@
 // nickname prompt (and only then a route into the full game) appears.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -20,6 +21,10 @@ import { ApiError } from '../api/client';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { claimRadiusForLevel } from '../lib/map/shoreline';
 import type { Terrain, Tile } from '../lib/map/types';
+import { buildingName, terrainName } from '../i18n/catalogueNames';
+import type { MessageSchema } from '../i18n/schema';
+
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
 const ONBOARDING_TARGET_BUILDINGS = 3;
@@ -41,13 +46,7 @@ const GUIDED_BUILD_TERRAIN: Partial<Record<OnboardingBuildType, Terrain>> = {
   farm: 'grass',
   lumberjack: 'forest',
 };
-const ONBOARDING_BUILD_RING: { type: OnboardingBuildType; label: string }[] = [
-  { type: 'farm', label: 'Farm' },
-  { type: 'lumberjack', label: 'Lumberjack' },
-  { type: 'quarry', label: 'Quarry' },
-  { type: 'tower', label: 'Watchtower' },
-  { type: 'fishinghut', label: 'Fishing Hut' },
-];
+const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['farm', 'lumberjack', 'quarry', 'tower', 'fishinghut'];
 
 const world = useWorldStore();
 const player = usePlayerStore();
@@ -155,15 +154,15 @@ const joinBlocked = computed(
 const joinBlockedMessage = computed(() => {
   if (world.worldJoinableReason === 'NotStartedYet' && world.worldStartsAt) {
     const startsAt = new Date(world.worldStartsAt);
-    return `This world opens ${startsAt.toLocaleString()}.`;
+    return t('landing.joinBlocked.opensAt', { date: d(startsAt, 'long') });
   }
   if (world.worldJoinableReason === 'JoinsClosed') {
-    return 'This world is no longer accepting new players.';
+    return t('landing.joinBlocked.joinsClosed');
   }
   if (world.worldJoinableReason === 'NoWorldYet') {
-    return 'No world has been created yet — check back soon.';
+    return t('landing.joinBlocked.noWorldYet');
   }
-  return 'This world is not accepting new players right now.';
+  return t('landing.joinBlocked.notAcceptingPlayers');
 });
 
 const buildingsPlaced = computed(() => world.hud.buildingsPlaced);
@@ -188,18 +187,18 @@ watch(ringScreen, (screen) => {
 });
 
 const ringActions = computed<RingAction[]>(() =>
-  ONBOARDING_BUILD_RING.map(({ type, label }) => {
+  ONBOARDING_BUILD_RING.map((type) => {
     const requiredTerrain = GUIDED_BUILD_TERRAIN[type];
     const guided = requiredTerrain !== undefined;
     const fitsTile = guided && requiredTerrain === ringTerrain.value;
     return {
       id: type,
-      label,
+      label: buildingName(type),
       disabled: !fitsTile,
       hint: !guided
-        ? 'Finish the guided buildings first'
+        ? t('landing.ring.finishGuidedFirst')
         : !fitsTile
-          ? `Needs ${requiredTerrain} terrain — try a different hex`
+          ? t('landing.ring.needsTerrain', { terrain: terrainName(requiredTerrain) })
           : undefined,
     };
   }),
@@ -207,14 +206,7 @@ const ringActions = computed<RingAction[]>(() =>
 
 // The 2a ring's hub names the tile the menu is anchored to; onboarding has no
 // building on it yet, so it's the bare terrain plus the hex coordinate.
-const TERRAIN_LABELS: Record<Terrain, string> = {
-  sea: 'Open water',
-  sand: 'Shore',
-  grass: 'Grassland',
-  forest: 'Forest',
-  mountain: 'Mountain',
-};
-const ringTerrainLabel = computed(() => (ringTerrain.value ? TERRAIN_LABELS[ringTerrain.value] : ''));
+const ringTerrainLabel = computed(() => (ringTerrain.value ? terrainName(ringTerrain.value) : ''));
 const ringCoordLabel = computed(() => (ringCoord.value ? `HEX ${ringCoord.value.q}, ${ringCoord.value.r}` : ''));
 
 function closeRing() {
@@ -259,7 +251,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     // found on the nearest one instead; now it just tells the player to
     // pick one of the highlighted plots.
     if (!DEMO_MODE && !world.startPositionAt(coord)) {
-      showInvalidClickMessage("You can't found there — pick one of the glowing plots.");
+      showInvalidClickMessage(t('landing.invalidClick.pickGlowingPlot'));
       return;
     }
     void foundHere(coord);
@@ -272,7 +264,7 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // whatever ring is open rather than opening some other UI for it.
   if (tile.ownerId === world.selectedSettlementId && !tile.buildingType && tile.terrain !== 'sea') {
     if (!withinBuildableRange(coord)) {
-      showInvalidClickMessage("That hex is beyond your longhouse's claim — build closer to home.");
+      showInvalidClickMessage(t('landing.invalidClick.beyondClaim'));
       closeRing();
       return;
     }
@@ -303,7 +295,7 @@ async function onRingSelect(type: string) {
     await world.queueBuildLive(type, coord);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
-    showInvalidClickMessage("That order didn't go through — try a different hex.");
+    showInvalidClickMessage(t('landing.invalidClick.orderFailed'));
   }
 }
 
@@ -328,7 +320,9 @@ function onQueueSelect(coord: { q: number; r: number }) {
 async function foundHere(coord: AxialCoord) {
   founding.value = true;
   try {
-    const realmName = player.nickname ? `${player.nickname}'s realm` : 'Unnamed realm';
+    const realmName = player.nickname
+      ? t('landing.foundHere.namedRealm', { nickname: player.nickname })
+      : t('landing.foundHere.unnamedRealm');
     const settlement = DEMO_MODE
       ? world.foundStartingSettlement(player.id, player.ownerName, realmName, coord)
       : await world.foundStartingSettlementLive(player.id, player.ownerName, realmName, coord);
@@ -439,18 +433,17 @@ watch(
          the village itself. The progress tray below already carries
          onboarding status, so it's the only thing left on screen. -->
     <div v-if="!player.hasFoundedSettlement && joinBlocked" class="hero">
-      <div class="eyebrow">Empty plot · Bjarnøy</div>
-      <h1>Not open yet.</h1>
+      <div class="eyebrow">{{ t('landing.hero.eyebrow') }}</div>
+      <h1>{{ t('landing.hero.notOpenTitle') }}</h1>
       <p class="lede">{{ joinBlockedMessage }}</p>
     </div>
     <div v-else-if="!player.hasFoundedSettlement" class="hero">
-      <div class="eyebrow">Empty plot · Bjarnøy</div>
-      <h1>Put your longhouse somewhere.</h1>
+      <div class="eyebrow">{{ t('landing.hero.eyebrow') }}</div>
+      <h1>{{ t('landing.hero.title') }}</h1>
       <p class="lede">
-        That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting.
-        Nobody asks your name until you have something worth naming.
+        {{ t('landing.hero.lede') }}
       </p>
-      <p v-if="founding" class="status">Making landfall…</p>
+      <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
 
@@ -458,8 +451,10 @@ watch(
       <div class="tray-item" :class="{ done: player.hasFoundedSettlement }">
         <div class="dot" />
         <div>
-          <div class="name">Longhouse &amp; yard</div>
-          <div class="sub">{{ player.hasFoundedSettlement ? 'Placed' : 'Click your plot to place it' }}</div>
+          <div class="name">{{ t('landing.tray.longhouseName') }}</div>
+          <div class="sub">
+            {{ player.hasFoundedSettlement ? t('landing.tray.placed') : t('landing.tray.clickToPlace') }}
+          </div>
         </div>
       </div>
       <div
@@ -470,14 +465,14 @@ watch(
       >
         <div class="dot" />
         <div>
-          <div class="name">Building {{ n + 1 }}</div>
+          <div class="name">{{ t('landing.tray.buildingName', { n: n + 1 }) }}</div>
           <div class="sub">
             {{
               buildingsPlaced >= n + 1
-                ? 'Placed'
+                ? t('landing.tray.placed')
                 : player.hasFoundedSettlement
-                  ? 'Click an empty hex in your border'
-                  : 'Found your longhouse first'
+                  ? t('landing.tray.clickEmptyHex')
+                  : t('landing.tray.foundFirst')
             }}
           </div>
         </div>
@@ -485,9 +480,9 @@ watch(
     </div>
 
     <div class="footer">
-      <span>Kettil Sea</span>
-      <span>No account</span>
-      <span>Nothing to install</span>
+      <span>{{ t('landing.footer.sea') }}</span>
+      <span>{{ t('landing.footer.noAccount') }}</span>
+      <span>{{ t('landing.footer.nothingToInstall') }}</span>
     </div>
 
     <BuildQueuePanel v-if="player.hasFoundedSettlement" @select="onQueueSelect" />

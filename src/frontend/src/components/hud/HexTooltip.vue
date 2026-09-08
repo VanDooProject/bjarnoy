@@ -1,14 +1,21 @@
 <script setup lang="ts">
 // Issue #16 "better hover": "hover on tiles should have more info and
 // square edges" — matches the mockup's "Crop farm LEVEL 2 / Output +72
-// food/h / Workers 8/8 / CLICK TO OPEN" card. The
-// extra fields (output/modifier/workers/cta) are optional — non-building
-// tiles just render title/subtitle/stat as before. See HoverInfo's doc
-// comment in HexMapRenderer.ts for how those numbers are derived.
+// food/h / Workers 8/8 / CLICK TO OPEN" card. `info.stats` is optional —
+// non-building tiles just render title/subtitle/stat as before. See
+// HoverInfo's doc comment in HexMapRenderer.ts for how those numbers are
+// derived; this component is the only place they're formatted/translated,
+// since HexMapRenderer.ts is a plain renderer class with no i18n access.
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { HoverInfo } from '../../lib/map/HexMapRenderer';
+import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
+import type { MessageSchema } from '../../i18n/schema';
+import { buildingName, terrainName, resourceName } from '../../i18n/catalogueNames';
 
 const props = defineProps<{ info: HoverInfo }>();
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // screenX is already anchored at the hovered tile's own right edge
 // (HexMapRenderer.hoverInfoFor), so only a small fixed margin is needed
@@ -18,36 +25,109 @@ const style = computed(() => ({
   left: `${props.info.screenX + 12}px`,
   top: `${props.info.screenY}px`,
 }));
+
+const title = computed(() => {
+  const subject = props.info.subject;
+  return subject.kind === 'building'
+    ? buildingName(subject.buildingType)
+    : subject.isRiver
+      ? t('hud.hoverTooltip.river')
+      : terrainName(subject.terrain);
+});
+
+const level = computed(() => (props.info.subject.kind === 'building' ? props.info.subject.level : undefined));
+
+const subtitle = computed(() => {
+  const owner = props.info.owner;
+  if (!owner) return undefined;
+  return owner.mine ? owner.settlementName : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.settlementName });
+});
+
+// Only shown for a non-building tile without a level badge — matches the
+// old "stat" line ("Click to build here" / "Claimed ground" / "Unclaimed").
+const stat = computed(() => {
+  if (props.info.subject.kind === 'building') return undefined;
+  const owner = props.info.owner;
+  if (!owner) return t('hud.hoverTooltip.unclaimed');
+  return owner.mine ? t('hud.hoverTooltip.clickToBuildHere') : t('hud.hoverTooltip.claimedGround');
+});
+
+function formatOutput(output: BuildingOutput): string {
+  switch (output.kind) {
+    case 'resourceRate':
+      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
+    case 'populationCapacity':
+      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
+    case 'storageCapacity':
+      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
+    case 'visionRing':
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+  }
+}
+
+function formatModifier(modifier: BuildingModifier): string {
+  switch (modifier.kind) {
+    case 'borderAnchor':
+      return t('hud.hoverTooltip.modifierBorderAnchor');
+    case 'trainsLandTroops':
+      return t('hud.hoverTooltip.modifierTrainsLandTroops');
+    case 'trainsShips':
+      return t('hud.hoverTooltip.modifierTrainsShips');
+    case 'garrison':
+      return t('hud.hoverTooltip.modifierGarrison');
+    case 'terrainBoost':
+      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
+    case 'coastal':
+      return modifier.percent
+        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
+        : t('hud.hoverTooltip.modifierCoastal');
+    case 'arcane':
+      return t('hud.hoverTooltip.modifierArcane');
+    case 'shrineFavour':
+      return t('hud.hoverTooltip.modifierShrineFavour', {
+        percent: modifier.percent,
+        domain: modifier.domain === 'woodStone' ? t('hud.hoverTooltip.domainWoodStone') : t('hud.hoverTooltip.domainFood'),
+      });
+  }
+}
+
+const outputText = computed(() => (props.info.stats?.output ? formatOutput(props.info.stats.output) : undefined));
+const modifierText = computed(() => (props.info.stats?.modifier ? formatModifier(props.info.stats.modifier) : undefined));
+const workersText = computed(() =>
+  props.info.stats?.workers ? t('hud.hoverTooltip.workersValue', { cap: props.info.stats.workers.cap }) : undefined,
+);
 </script>
 
 <template>
   <div class="hex-tooltip panel" :style="style">
     <div class="title-row">
-      <span class="title">{{ info.title }}</span>
-      <span v-if="info.level" class="level">LEVEL {{ info.level }}</span>
+      <span class="title">{{ title }}</span>
+      <span v-if="level" class="level">{{ t('hud.hoverTooltip.level', { level }) }}</span>
     </div>
-    <div class="subtitle">{{ info.subtitle }}</div>
+    <div v-if="subtitle" class="subtitle">{{ subtitle }}</div>
     <div class="separator" />
-    <div v-if="info.stat && !info.level" class="stat">{{ info.stat }}</div>
-    <dl v-if="info.output || info.modifier || info.workers" class="stats">
-      <template v-if="info.output">
-        <dt>Output</dt>
-        <dd>{{ info.output }}</dd>
+    <div v-if="stat && !level" class="stat">{{ stat }}</div>
+    <dl v-if="outputText || modifierText || workersText" class="stats">
+      <template v-if="outputText">
+        <dt>{{ t('hud.hoverTooltip.output') }}</dt>
+        <dd>{{ outputText }}</dd>
       </template>
-      <template v-if="info.modifier">
-        <dt>Modifier</dt>
-        <dd>{{ info.modifier }}</dd>
+      <template v-if="modifierText">
+        <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
+        <dd>{{ modifierText }}</dd>
       </template>
-      <template v-if="info.workers">
-        <dt>Workers</dt>
-        <dd>{{ info.workers }}</dd>
+      <template v-if="workersText">
+        <dt>{{ t('hud.hoverTooltip.workers') }}</dt>
+        <dd>{{ workersText }}</dd>
       </template>
     </dl>
     <div v-if="info.premiumLocked" class="premium-gate">
-      <span class="lock">&#128274;</span>
-      <span>Scouting details are a <strong>Premium</strong> feature</span>
+      <span class="lock">{{ t('hud.hoverTooltip.lockIcon') }}</span>
+      <i18n-t keypath="hud.hoverTooltip.premiumGate" tag="span">
+        <template #premium><strong>{{ t('hud.hoverTooltip.premium') }}</strong></template>
+      </i18n-t>
     </div>
-    <div v-if="info.cta" class="cta">{{ info.cta.toUpperCase() }}</div>
+    <div v-if="info.openable" class="cta">{{ t('hud.hoverTooltip.clickToOpen') }}</div>
   </div>
 </template>
 

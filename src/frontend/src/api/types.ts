@@ -358,6 +358,8 @@ export interface UserResponse {
   status: string;
   displayName: string | null;
   isPremium: boolean;
+  /** One of `SupportedLocale` (`i18n/locale.ts`); `null` if unset. */
+  preferredLocale: string | null;
 }
 
 export interface AuthResponse {
@@ -670,6 +672,11 @@ export interface UpdateBioRequest {
   bio: string | null;
 }
 
+/** `preferredLocale: null` clears the saved preference. */
+export interface UpdateLocaleRequest {
+  preferredLocale: string | null;
+}
+
 export interface ReportProfileRequest {
   reason: string;
   note?: string | null;
@@ -777,6 +784,15 @@ export interface ProblemDetails {
    * actually distinguishes them.
    */
   rejection?: string;
+  /**
+   * `AuthErrorResponse`'s snake_case error code (`user_banned`, `user_locked`,
+   * `not_owner`, `authentication_required`, `premium_required`) — a
+   * completely separate wire shape from the RFC 7807 fields above, but the
+   * backend serializes both under the same JSON body on error responses, so
+   * it's typed here rather than as a second interface callers would need to
+   * union in.
+   */
+  error?: string;
   /** Present on the plot-suggestion endpoint's `AlreadyFounded` 409 — the caller's existing settlement id. */
   existingSettlementId?: string;
 }

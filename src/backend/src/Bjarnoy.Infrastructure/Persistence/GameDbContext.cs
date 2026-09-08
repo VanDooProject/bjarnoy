@@ -379,6 +379,7 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             user.Property(u => u.Status).HasConversion<int>();
             user.Property(u => u.DisplayName).HasMaxLength(100);
             user.Property(u => u.Bio).HasMaxLength(2000);
+            user.Property(u => u.PreferredLocale).HasMaxLength(10);
             user.Property(u => u.StatusReason).HasMaxLength(500);
 
             // No FK: there is no guild table yet — see UserEntity.GuildId.

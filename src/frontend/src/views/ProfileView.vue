@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../api/client';
 import type { ProfileResponse } from '../api/types';
+import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const auth = useAuthStore();
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const profile = ref<ProfileResponse | null>(null);
 const loading = ref(true);
@@ -27,7 +30,7 @@ const isOwnProfile = computed(
 
 async function load() {
   if (!targetUserName.value) {
-    loadError.value = 'No profile to show.';
+    loadError.value = t('profile.noProfile');
     loading.value = false;
     return;
   }
@@ -38,7 +41,7 @@ async function load() {
     profile.value = await api.getProfileByName(targetUserName.value);
   } catch (err) {
     loadError.value =
-      err instanceof ApiError && err.status === 404 ? 'No such player.' : 'Could not load profile.';
+      err instanceof ApiError && err.status === 404 ? t('profile.noSuchPlayer') : t('profile.loadError');
   } finally {
     loading.value = false;
   }
@@ -63,7 +66,7 @@ function startEditBio() {
 async function saveBio() {
   if (bioSaving.value) return;
   if (bioDraft.value.length > BIO_MAX) {
-    bioError.value = `The bio is limited to ${BIO_MAX} characters.`;
+    bioError.value = t('profile.bio.tooLong', { max: BIO_MAX });
     return;
   }
   bioSaving.value = true;
@@ -72,7 +75,7 @@ async function saveBio() {
     profile.value = await api.updateMyBio({ bio: bioDraft.value || null });
     editingBio.value = false;
   } catch (err) {
-    bioError.value = err instanceof ApiError ? err.message : 'Could not save the bio.';
+    bioError.value = err instanceof ApiError ? err.message : t('profile.bio.saveError');
   } finally {
     bioSaving.value = false;
   }
@@ -99,7 +102,7 @@ function openReport() {
 async function sendReport() {
   if (reportSending.value || !profile.value) return;
   if (!reportReason.value.trim()) {
-    reportError.value = 'A reason is required.';
+    reportError.value = t('profile.reportDialog.reasonRequired');
     return;
   }
   reportSending.value = true;
@@ -112,57 +115,55 @@ async function sendReport() {
     reportOpen.value = false;
     reportDone.value = true;
   } catch (err) {
-    reportError.value = err instanceof ApiError ? err.message : 'Could not send the report.';
+    reportError.value = err instanceof ApiError ? err.message : t('profile.reportDialog.sendError');
   } finally {
     reportSending.value = false;
   }
 }
 
 function joinedDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  return d(new Date(iso), 'dateLong');
 }
 </script>
 
 <template>
   <div class="profile">
-    <p v-if="loading" class="muted">Loading…</p>
+    <p v-if="loading" class="muted">{{ $t('common.states.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else-if="profile">
       <header class="head">
         <div>
           <h1>{{ profile.displayName || profile.userName }}</h1>
-          <p v-if="profile.displayName" class="muted">@{{ profile.userName }}</p>
+          <p v-if="profile.displayName" class="muted">{{ `@${profile.userName}` }}</p>
         </div>
         <div class="head-actions">
           <router-link v-if="canReport" class="secondary" :to="`/messages/${profile.id}`">
-            Message
+            {{ $t('profile.message') }}
           </router-link>
-          <button v-if="canReport && !reportDone" class="secondary" @click="openReport">Report</button>
-          <span v-if="reportDone" class="muted">Report sent — thank you.</span>
+          <button v-if="canReport && !reportDone" class="secondary" @click="openReport">
+            {{ $t('profile.report') }}
+          </button>
+          <span v-if="reportDone" class="muted">{{ $t('profile.reportSent') }}</span>
         </div>
       </header>
 
       <dl class="facts">
         <div>
-          <dt>Joined</dt>
+          <dt>{{ $t('profile.joined') }}</dt>
           <dd>{{ joinedDate(profile.createdAt) }}</dd>
         </div>
         <div>
-          <dt>Settlements</dt>
+          <dt>{{ $t('profile.settlements') }}</dt>
           <dd>{{ profile.settlementCount }}</dd>
         </div>
       </dl>
 
       <section class="bio-section">
         <div class="bio-head">
-          <h2>Bio</h2>
+          <h2>{{ $t('profile.bio.title') }}</h2>
           <button v-if="isOwnProfile && !editingBio" class="secondary" @click="startEditBio">
-            {{ profile.bio ? 'Edit bio' : 'Add a bio' }}
+            {{ profile.bio ? $t('profile.bio.edit') : $t('profile.bio.add') }}
           </button>
         </div>
 
@@ -178,43 +179,47 @@ function joinedDate(iso: string): string {
             rows="10"
             :maxlength="BIO_MAX"
             spellcheck="false"
-            placeholder="Tell the other players about yourself — ASCII art welcome."
+            :placeholder="$t('profile.bio.placeholder')"
           ></textarea>
           <p class="muted counter">{{ bioDraft.length }} / {{ BIO_MAX }}</p>
           <p v-if="bioError" class="error">{{ bioError }}</p>
           <div class="row">
-            <button :disabled="bioSaving" @click="saveBio">Save</button>
-            <button class="secondary" :disabled="bioSaving" @click="editingBio = false">Cancel</button>
+            <button :disabled="bioSaving" @click="saveBio">{{ $t('common.buttons.save') }}</button>
+            <button class="secondary" :disabled="bioSaving" @click="editingBio = false">
+              {{ $t('common.buttons.cancel') }}
+            </button>
           </div>
         </template>
 
         <pre v-else-if="profile.bio" class="bio">{{ profile.bio }}</pre>
-        <p v-else class="muted">This player has not written a bio yet.</p>
+        <p v-else class="muted">{{ $t('profile.bio.empty') }}</p>
       </section>
 
       <div v-if="reportOpen" class="report-backdrop" @click.self="reportOpen = false">
-        <div class="report-dialog" role="dialog" aria-label="Report profile">
-          <h2>Report {{ profile.userName }}</h2>
-          <p class="muted">A moderator will review this profile.</p>
+        <div class="report-dialog" role="dialog" :aria-label="$t('profile.reportDialog.ariaLabel')">
+          <h2>{{ $t('profile.reportDialog.title', { userName: profile.userName }) }}</h2>
+          <p class="muted">{{ $t('profile.reportDialog.hint') }}</p>
           <label>
-            Reason
+            {{ $t('profile.reportDialog.reason') }}
             <input
               v-model="reportReason"
               type="text"
               maxlength="200"
-              placeholder="e.g. offensive bio"
+              :placeholder="$t('profile.reportDialog.reasonPlaceholder')"
               @keyup.enter="sendReport"
             />
           </label>
           <label>
-            Note (optional)
+            {{ $t('profile.reportDialog.note') }}
             <textarea v-model="reportNote" rows="3" maxlength="2000"></textarea>
           </label>
           <p v-if="reportError" class="error">{{ reportError }}</p>
           <div class="row">
-            <button :disabled="reportSending" @click="sendReport">Send report</button>
+            <button :disabled="reportSending" @click="sendReport">
+              {{ $t('profile.reportDialog.send') }}
+            </button>
             <button class="secondary" :disabled="reportSending" @click="reportOpen = false">
-              Cancel
+              {{ $t('common.buttons.cancel') }}
             </button>
           </div>
         </div>

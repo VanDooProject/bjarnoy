@@ -191,6 +191,57 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task A_user_can_set_and_clear_their_locale_and_it_round_trips_through_me_and_login()
+    {
+        using var client = _fixture.CreateClient();
+        var (userName, accessToken, userId) = await CreatePlayerAsync(client);
+        Authorize(client, accessToken);
+
+        var updated = await client.PutJsonAsync(
+            "/api/v1/profiles/me/locale", new UpdateLocaleRequest("de"), Ct);
+        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+        var user = await updated.ReadStrictAsync<UserResponse>(Ct);
+        Assert.Equal(userId, user.Id);
+        Assert.Equal("de", user.PreferredLocale);
+
+        // It follows the account, not just the response of the PUT itself.
+        var me = await client.GetAsync("/api/v1/auth/me", Ct);
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        var meUser = await me.ReadStrictAsync<UserResponse>(Ct);
+        Assert.Equal("de", meUser.PreferredLocale);
+
+        var loggedIn = await client.PostJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(userName, "correct-horse-battery"), Ct);
+        Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
+        var loggedInAuth = await loggedIn.ReadStrictAsync<AuthResponse>(Ct);
+        Assert.Equal("de", loggedInAuth.User.PreferredLocale);
+
+        // Null clears it.
+        var cleared = await client.PutJsonAsync(
+            "/api/v1/profiles/me/locale", new UpdateLocaleRequest(null), Ct);
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        var clearedUser = await cleared.ReadStrictAsync<UserResponse>(Ct);
+        Assert.Null(clearedUser.PreferredLocale);
+    }
+
+    [Fact]
+    public async Task Locale_updates_require_authentication_and_reject_unsupported_values()
+    {
+        using var anonymous = _fixture.CreateClient();
+        var unauthorized = await anonymous.PutJsonAsync(
+            "/api/v1/profiles/me/locale", new UpdateLocaleRequest("de"), Ct);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        using var client = _fixture.CreateClient();
+        var (_, accessToken, _) = await CreatePlayerAsync(client);
+        Authorize(client, accessToken);
+
+        var unsupported = await client.PutJsonAsync(
+            "/api/v1/profiles/me/locale", new UpdateLocaleRequest("fr"), Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, unsupported.StatusCode);
+    }
+
+    [Fact]
     public async Task A_player_can_report_another_players_profile_but_not_their_own_and_not_twice_while_pending()
     {
         using var client = _fixture.CreateClient();

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../i18n/schema';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import { findAtlasFrame, type AtlasFrameRect } from '../lib/map/atlas';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
+const { t, te, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => catalogue.load());
 
@@ -30,10 +34,7 @@ function showcaseTile(family: string, decorated: boolean): AtlasFrameRect {
 // building; coastal water is a Sea hex with RequiresCoastalWater instead).
 interface TileEntry {
   id: string;
-  title: string;
   art: AtlasFrameRect;
-  lore: string;
-  generation: string;
   terrain: string | null;
   coastal?: boolean;
 }
@@ -42,73 +43,23 @@ interface TileEntry {
 // (BeachThreshold, MountainThreshold, ForestRockiness, MountainRockiness) —
 // see that file for the exact fractions if a world overrides them.
 const TILES: TileEntry[] = [
-  {
-    id: 'sea',
-    title: 'Sea',
-    art: showcaseTile('watertile', false),
-    lore: 'Open water. Nothing stands on it, and nothing is grown or mined here — it only ever separates islands.',
-    generation: "Every hex outside an island's radius.",
-    terrain: 'sea',
-  },
-  {
-    id: 'coastal-water',
-    title: 'Coastal water',
-    art: showcaseTile('coastalwatertile', false),
-    lore:
-      'Still plain sea underneath — the same terrain as the open water beyond it — but close enough to the shore for a dock.',
-    generation: 'A sea hex with at least one land neighbour: the ring hugging every island.',
-    terrain: null,
-    coastal: true,
-  },
-  {
-    id: 'sand',
-    title: 'Sand',
-    art: showcaseTile('sandtile', false),
-    lore: "An island's beach — the coastal ring settlers actually land on when founding a settlement.",
-    generation: "The outer edge of an island: beyond 82% of its radius from centre.",
-    terrain: 'sand',
-  },
-  {
-    id: 'grass',
-    title: 'Grass',
-    art: showcaseTile('grasstile', true),
-    lore: 'Open lowland — most of a settlement is built here.',
-    generation: 'Lowland too smooth to be forest and too far from the centre to be mountain.',
-    terrain: 'grass',
-  },
-  {
-    id: 'forest',
-    title: 'Forest',
-    art: showcaseTile('foresttile', true),
-    lore: 'Lowland gone rocky enough to grow trees instead of open grass.',
-    generation: 'Rockiness above the forest threshold, but not steep enough for mountain.',
-    terrain: 'forest',
-  },
-  {
-    id: 'mountain',
-    title: 'Mountain',
-    art: showcaseTile('mountaintile', false),
-    lore: 'The rockiest ground an island has.',
-    generation: "Confined to an island's interior (within 40% of its radius) so ridges never form on the coast.",
-    terrain: 'mountain',
-  },
+  { id: 'sea', art: showcaseTile('watertile', false), terrain: 'sea' },
+  { id: 'coastal-water', art: showcaseTile('coastalwatertile', false), terrain: null, coastal: true },
+  { id: 'sand', art: showcaseTile('sandtile', false), terrain: 'sand' },
+  { id: 'grass', art: showcaseTile('grasstile', true), terrain: 'grass' },
+  { id: 'forest', art: showcaseTile('foresttile', true), terrain: 'forest' },
+  { id: 'mountain', art: showcaseTile('mountaintile', false), terrain: 'mountain' },
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  storagehouse: 'Storage house',
-  fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
-  pumpkinfarm: 'Pumpkin farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  archeryrange: 'Archery range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great storehouse',
-  fisherhut: 'Fisher hut',
-};
+// `docs.tiles.entries.*` keys are camelCase (existing JSON convention),
+// while tile ids stay kebab-case for URL anchors — e.g. 'coastal-water'.
+function tileEntryKey(id: string): string {
+  return id.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
 
 function typeLabel(type: string): string {
-  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+  const key = `docs.buildingTypes.${type}`;
+  return te(key) ? t(key) : type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 const buildingsByTile = computed(() => {
@@ -131,23 +82,32 @@ const buildingsByTile = computed(() => {
 <template>
   <div class="tile-docs">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
-      <button class="back" @click="router.push('/docs')">← Docs</button>
+      <span class="brand">{{ $t('common.brand.name') }}</span>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <button class="back" @click="router.push('/docs')">{{ $t('docs.backToDocs') }}</button>
+      </div>
     </header>
     <main class="body">
-      <h1>Tiles</h1>
-      <p class="intro">The terrain a world is made of, how it generates, and what can be built on it.</p>
+      <h1>{{ $t('docs.tiles.title') }}</h1>
+      <p class="intro">{{ $t('docs.tiles.intro') }}</p>
 
-      <p v-if="catalogue.loading" class="status">Loading…</p>
+      <p v-if="catalogue.loading" class="status">{{ $t('docs.status.loading') }}</p>
       <p v-else-if="catalogue.error" class="status error">{{ catalogue.error }}</p>
       <p v-else-if="catalogue.source === 'fallback'" class="status">
-        Showing bundled reference data{{
-          catalogue.generatedAt ? ` (snapshot from ${new Date(catalogue.generatedAt).toLocaleDateString()})` : ''
-        }} — not live backend data.
+        {{
+          $t('docs.status.fallback', {
+            snapshot: catalogue.generatedAt
+              ? $t('docs.status.fallbackSnapshot', { date: d(new Date(catalogue.generatedAt), 'short') })
+              : '',
+          })
+        }}
       </p>
 
-      <nav class="toc" aria-label="Table of contents">
-        <a v-for="tile in TILES" :key="tile.id" class="toc-link" :href="`#${tile.id}`">{{ tile.title }}</a>
+      <nav class="toc" :aria-label="$t('docs.status.toc')">
+        <a v-for="tile in TILES" :key="tile.id" class="toc-link" :href="`#${tile.id}`">{{
+          t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`)
+        }}</a>
       </nav>
 
       <section v-for="tile in TILES" :key="tile.id" :id="tile.id" class="tile">
@@ -156,13 +116,15 @@ const buildingsByTile = computed(() => {
             <AtlasSprite :frame="tile.art" />
           </div>
           <div class="tile-intro">
-            <h2>{{ tile.title }}</h2>
-            <p class="lore">{{ tile.lore }}</p>
-            <p class="generation">Generation: {{ tile.generation }}</p>
+            <h2>{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.title`) }}</h2>
+            <p class="lore">{{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.lore`) }}</p>
+            <p class="generation">
+              {{ $t('docs.tiles.generation') }} {{ t(`docs.tiles.entries.${tileEntryKey(tile.id)}.generation`) }}
+            </p>
             <p class="buildings">
-              Buildings:
+              {{ $t('docs.tiles.buildings') }}
               <span v-if="buildingsByTile[tile.id]?.length">{{ buildingsByTile[tile.id]!.join(', ') }}</span>
-              <span v-else>none</span>
+              <span v-else>{{ $t('docs.tiles.none') }}</span>
             </p>
           </div>
         </div>
@@ -183,6 +145,11 @@ const buildingsByTile = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;

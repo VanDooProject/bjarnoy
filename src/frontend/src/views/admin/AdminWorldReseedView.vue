@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, markRaw, onMounted, ref, shallowRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import WorldMapCanvas from '../../components/map/WorldMapCanvas.vue';
 import { api, ApiError } from '../../api/client';
 import { WorldModel } from '../../lib/map/WorldModel';
 import type { AdminWorldResponse, WorldSeedPreviewResponse } from '../../api/types';
 import type { TileOrientation } from '../../lib/map/types';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #133: pick a candidate seed, look at the map it produces, and only
 // then commit it. Committing regenerates the world's islands, which deletes
@@ -64,9 +68,9 @@ onMounted(async () => {
     // everywhere else in this section too (see stores/adminWorld.ts).
     const worlds = await api.adminListWorlds();
     world.value = worlds.find((w) => w.id === worldId.value) ?? null;
-    if (!world.value) loadError.value = 'No such world.';
+    if (!world.value) loadError.value = t('adminWorldReseed.noSuchWorld');
   } catch {
-    loadError.value = 'Could not load the world.';
+    loadError.value = t('adminWorldReseed.loadError');
   } finally {
     loading.value = false;
   }
@@ -77,7 +81,7 @@ async function runPreview() {
   if (previewing.value) return;
   const seed = parsedSeed.value;
   if (seed === null) {
-    previewError.value = 'A seed must be a whole number.';
+    previewError.value = t('adminWorldReseed.seedMustBeInteger');
     return;
   }
 
@@ -88,7 +92,7 @@ async function runPreview() {
     preview.value = result;
     previewModel.value = markRaw(buildPreviewModel(result));
   } catch (err) {
-    previewError.value = err instanceof ApiError ? err.message : 'Could not generate a preview.';
+    previewError.value = err instanceof ApiError ? err.message : t('adminWorldReseed.previewError');
     preview.value = null;
     previewModel.value = null;
   } finally {
@@ -133,10 +137,11 @@ async function commit() {
   // Same window.confirm() pattern as AdminWorldsView's run-state actions, but
   // behind the re-typed world name above: unlike a pause, this one cannot be
   // undone by clicking the opposite button.
-  const message =
-    `Reseed "${world.value.name}" to seed ${preview.value.seed}?\n\n` +
-    `This deletes every settlement in the world (${world.value.playerCount} today) ` +
-    'and cannot be undone.';
+  const message = t('adminWorldReseed.confirmReseed', {
+    name: world.value.name,
+    seed: preview.value.seed,
+    playerCount: world.value.playerCount,
+  });
   if (!window.confirm(message)) return;
 
   committing.value = true;
@@ -154,7 +159,7 @@ async function commit() {
     };
     confirmName.value = '';
   } catch (err) {
-    commitError.value = err instanceof ApiError ? err.message : 'Could not reseed the world.';
+    commitError.value = err instanceof ApiError ? err.message : t('adminWorldReseed.reseedError');
   } finally {
     committing.value = false;
   }
@@ -167,61 +172,58 @@ function back() {
 
 <template>
   <div class="reseed">
-    <p v-if="loading">Loading…</p>
+    <p v-if="loading">{{ $t('adminWorldReseed.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else-if="world">
       <header class="head">
-        <h1>Reseed “{{ world.name }}”</h1>
-        <button class="secondary" @click="back">Back to worlds</button>
+        <h1>{{ $t('adminWorldReseed.heading', { name: world.name }) }}</h1>
+        <button class="secondary" @click="back">{{ $t('adminWorldReseed.backToWorlds') }}</button>
       </header>
 
       <p class="warning">
-        Regenerating this map replaces its islands, so every settlement in the world is deleted with them
-        ({{ world.playerCount }} today). Worlds holding another player's settlement are refused outright.
+        {{ $t('adminWorldReseed.warning', { playerCount: world.playerCount }) }}
       </p>
 
       <section class="panel">
         <div class="controls">
-          <label for="seed">Seed</label>
+          <label for="seed">{{ $t('adminWorldReseed.seedLabel') }}</label>
           <input id="seed" v-model="seedInput" type="number" step="1" />
-          <button class="secondary" @click="randomizeSeed">Randomize</button>
+          <button class="secondary" @click="randomizeSeed">{{ $t('adminWorldReseed.randomize') }}</button>
           <button :disabled="previewing" @click="runPreview">
-            {{ previewing ? 'Generating…' : 'Preview seed' }}
+            {{ previewing ? $t('adminWorldReseed.generating') : $t('adminWorldReseed.previewSeed') }}
           </button>
         </div>
 
         <p v-if="previewError" class="error">{{ previewError }}</p>
         <p v-else-if="preview" class="summary" data-testid="preview-summary">
-          Seed {{ preview.seed }}: {{ preview.islandCount }} islands, {{ preview.landTileCount }} land hexes.
-          Nothing has been saved yet.
+          {{ $t('adminWorldReseed.previewSummary', { seed: preview.seed, islandCount: preview.islandCount, landTileCount: preview.landTileCount }) }}
         </p>
       </section>
 
       <section v-if="previewModel" class="map-panel" :class="{ fullscreen }">
         <WorldMapCanvas :world-model="previewModel" player-id="admin-preview" />
         <button class="expand" @click="fullscreen = !fullscreen">
-          {{ fullscreen ? 'Exit full screen' : 'Full screen' }}
+          {{ fullscreen ? $t('adminWorldReseed.exitFullScreen') : $t('adminWorldReseed.fullScreen') }}
         </button>
       </section>
 
       <section v-if="preview" class="panel danger">
-        <h2>Commit this map</h2>
+        <h2>{{ $t('adminWorldReseed.commitHeading') }}</h2>
         <p>
-          Type the world's name (<code>{{ world.name }}</code
-          >) to confirm.
+          {{ $t('adminWorldReseed.confirmNamePrefix') }}<code>{{ world.name }}</code
+          >{{ $t('adminWorldReseed.confirmNameSuffix') }}
         </p>
         <div class="controls">
-          <label for="confirm-name">World name</label>
+          <label for="confirm-name">{{ $t('adminWorldReseed.worldNameLabel') }}</label>
           <input id="confirm-name" v-model="confirmName" type="text" autocomplete="off" />
           <button class="destructive" :disabled="!canCommit || committing" @click="commit">
-            {{ committing ? 'Reseeding…' : 'Reseed world' }}
+            {{ committing ? $t('adminWorldReseed.reseeding') : $t('adminWorldReseed.reseedWorld') }}
           </button>
         </div>
         <p v-if="commitError" class="error">{{ commitError }}</p>
         <p v-if="committed" class="done" data-testid="reseed-done">
-          Reseeded to seed {{ committed.seed }}: {{ committed.islandCount }} islands,
-          {{ committed.deletedSettlements }} settlement(s) deleted.
+          {{ $t('adminWorldReseed.reseedDone', { seed: committed.seed, islandCount: committed.islandCount, deletedSettlements: committed.deletedSettlements }) }}
         </p>
       </section>
     </template>

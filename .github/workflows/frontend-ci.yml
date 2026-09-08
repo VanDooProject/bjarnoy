@@ -45,6 +45,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Lint (hardcoded strings, i18n)
+        run: npm run lint
+
       - name: Unit tests
         run: npm run test:unit
 

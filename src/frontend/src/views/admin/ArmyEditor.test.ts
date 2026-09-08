@@ -4,6 +4,10 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ArmyEditor from './ArmyEditor.vue';
 import type { AdminArmyResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import armyEditor from '../../i18n/locales/en/armyEditor.json';
+
+const global = { plugins: [createTestI18n({ armyEditor })] };
 
 const { adminListArmies, adminEditArmy } = vi.hoisted(() => ({
   adminListArmies: vi.fn(),
@@ -50,7 +54,7 @@ function army(overrides: Partial<AdminArmyResponse['army']> = {}): AdminArmyResp
 
 async function open() {
   adminListArmies.mockResolvedValue([army()]);
-  const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' } });
+  const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' }, global });
   await flushPromises();
   await wrapper.findAll('button').find((b) => b.text() === 'Edit')!.trigger('click');
   return wrapper;
@@ -65,7 +69,7 @@ describe('ArmyEditor', () => {
   it('lists a settlement\'s armies with their units and position', async () => {
     adminListArmies.mockResolvedValue([army()]);
 
-    const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' } });
+    const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' }, global });
     await flushPromises();
 
     expect(adminListArmies).toHaveBeenCalledWith({ settlementId: 'settlement-1' });
@@ -76,7 +80,7 @@ describe('ArmyEditor', () => {
   it('says so when a settlement has no armies in the field', async () => {
     adminListArmies.mockResolvedValue([]);
 
-    const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' } });
+    const wrapper = mount(ArmyEditor, { props: { settlementId: 'settlement-1' }, global });
     await flushPromises();
 
     expect(wrapper.text()).toContain('No armies in the field');

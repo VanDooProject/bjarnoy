@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { ResourceLine, SettlementResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #98: `before` is the settlement's stock *before* this grant — needed
 // to tell a clamped grant (hit storage capacity) apart from one that fully
@@ -35,7 +39,12 @@ async function submit() {
       const actualDelta = updated.resources.stock[key] - before[key];
       if (actualDelta < requestedDelta - 0.5) {
         clamped.push(
-          `${key}: granted ${Math.floor(actualDelta)} of ${requestedDelta} — storage full at ${Math.floor(updated.resources.capacity[key])}`,
+          t('grantResourcesForm.clampLine', {
+            key,
+            actual: Math.floor(actualDelta),
+            requested: requestedDelta,
+            capacity: Math.floor(updated.resources.capacity[key]),
+          }),
         );
       }
     }
@@ -47,7 +56,7 @@ async function submit() {
     deltas.food = 0;
     deltas.iron = 0;
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Could not grant resources.';
+    error.value = err instanceof ApiError ? err.message : t('grantResourcesForm.grantError');
   } finally {
     saving.value = false;
   }
@@ -56,27 +65,29 @@ async function submit() {
 
 <template>
   <form class="grant-form" @submit.prevent="submit">
-    <h3>Grant resources</h3>
-    <p class="hint">Positive adds, negative removes. A removal never takes stock below zero.</p>
+    <h3>{{ $t('grantResourcesForm.title') }}</h3>
+    <p class="hint">{{ $t('grantResourcesForm.hint') }}</p>
     <div class="fields">
       <label>
-        Wood
+        {{ $t('grantResourcesForm.wood') }}
         <input v-model.number="deltas.wood" type="number" step="1" />
       </label>
       <label>
-        Stone
+        {{ $t('grantResourcesForm.stone') }}
         <input v-model.number="deltas.stone" type="number" step="1" />
       </label>
       <label>
-        Food
+        {{ $t('grantResourcesForm.food') }}
         <input v-model.number="deltas.food" type="number" step="1" />
       </label>
       <label>
-        Iron
+        {{ $t('grantResourcesForm.iron') }}
         <input v-model.number="deltas.iron" type="number" step="1" />
       </label>
     </div>
-    <button type="submit" :disabled="saving">{{ saving ? 'Applying…' : 'Apply' }}</button>
+    <button type="submit" :disabled="saving">
+      {{ saving ? $t('grantResourcesForm.applying') : $t('grantResourcesForm.apply') }}
+    </button>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="clampNotice" class="clamp-notice">{{ clampNotice }}</p>
   </form>

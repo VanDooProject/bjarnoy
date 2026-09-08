@@ -12,6 +12,15 @@ import { mount } from '@vue/test-utils';
 import BuildQueuePanel from './BuildQueuePanel.vue';
 import { useWorldStore } from '../../stores/world';
 import type { BuildOrderResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import enHud from '../../i18n/locales/en/hud.json';
+import enCatalogue from '../../i18n/locales/en/catalogue.json';
+
+function mountPanel() {
+  return mount(BuildQueuePanel, {
+    global: { plugins: [createTestI18n({ hud: enHud, catalogue: enCatalogue })] },
+  });
+}
 
 function order(overrides: Partial<BuildOrderResponse> = {}): BuildOrderResponse {
   return {
@@ -47,7 +56,7 @@ describe('BuildQueuePanel', () => {
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [order({ completesInSeconds: 100, totalSeconds: 100 })];
 
-    const wrapper = mount(BuildQueuePanel);
+    const wrapper = mountPanel();
     const initial = fillWidth(wrapper);
 
     vi.advanceTimersByTime(20_000);
@@ -64,7 +73,7 @@ describe('BuildQueuePanel', () => {
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [order({ completesInSeconds: 100, totalSeconds: 100 })];
 
-    const wrapper = mount(BuildQueuePanel);
+    const wrapper = mountPanel();
 
     vi.advanceTimersByTime(60_000);
     world.hud.tick += 1;
@@ -91,7 +100,7 @@ describe('BuildQueuePanel', () => {
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [order({ id: 'order-1', completesInSeconds: 100, totalSeconds: 100 })];
 
-    const wrapper = mount(BuildQueuePanel);
+    const wrapper = mountPanel();
     vi.advanceTimersByTime(90_000);
     world.hud.tick += 1;
     await wrapper.vm.$nextTick();
@@ -126,7 +135,7 @@ describe('BuildQueuePanel', () => {
       }),
     ];
 
-    const wrapper = mount(BuildQueuePanel);
+    const wrapper = mountPanel();
     await wrapper.vm.$nextTick();
 
     expect(wrapper.text()).toContain('2 / 2 slots');
@@ -149,13 +158,13 @@ describe('BuildQueuePanel', () => {
     world.hud.queueFetchedAt = Date.now();
     world.hud.queue = [order()];
 
-    const noReserve = mount(BuildQueuePanel);
+    const noReserve = mountPanel();
     await noReserve.vm.$nextTick();
     expect(noReserve.find('.reserved-footer').exists()).toBe(false);
     noReserve.unmount();
 
     world.hud.reserved = { wood: 100, stone: 80, food: 0, iron: 0 };
-    const withReserve = mount(BuildQueuePanel);
+    const withReserve = mountPanel();
     await withReserve.vm.$nextTick();
     const footer = withReserve.find('.reserved-footer');
     expect(footer.exists()).toBe(true);

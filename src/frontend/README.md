@@ -169,6 +169,102 @@ avoids that shape entirely:
   hex via the inverse pixel→hex transform, not via one interactive display
   object and event listener per tile.
 
+## Internationalization (i18n)
+
+The app ships in English and German via [vue-i18n](https://vue-i18n.intlify.dev/),
+with English as the schema's source of truth. Everything lives under
+`src/i18n/`:
+
+```
+src/i18n/locales/en/*.json   one JSON namespace file per view/component (English)
+src/i18n/locales/de/*.json   the same namespaces, German
+src/i18n/schema.ts           imports the en/ files, types MessageSchema against them
+src/i18n/index.ts            imports en/ + de/, registers createI18n({ messages: {...} })
+src/i18n/locale.ts           SUPPORTED_LOCALES, detection + persistence (DOM-free, unit-tested)
+src/i18n/locales.test.ts     the parity test (key sets, empty strings, placeholders)
+src/i18n/formats.ts          shared date/number formats passed to createI18n
+src/test/i18n.ts             createTestI18n() — throwing test helper, see below
+```
+
+### Conventions
+
+- **One namespace per view/component.** `ProfileView.vue` reads from
+  `profile.json`, `AdminUsersView.vue` from `adminUsers.json`, etc. — pick
+  the namespace name to match the component, not the feature area, so it's
+  obvious where a string lives.
+- **Typed access via `useI18n`.** Every component that renders translated
+  text sets up:
+  ```ts
+  const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+  ```
+  and then calls `t('namespace.key')` (or `t('namespace.key', { param })` for
+  interpolation) in `<script setup>`, or `$t('namespace.key')` directly in
+  the template. `MessageSchema` (`i18n/schema.ts`) is built from the English
+  JSON files, so referencing a namespace or key that doesn't exist is a
+  `vue-tsc -b` (`npm run typecheck`) error, not a runtime surprise.
+- **Key naming.** Keys nest by UI section, e.g. `bio.title`, `bio.edit`,
+  `reportDialog.reason` (see `i18n/locales/en/profile.json`) rather than one
+  flat namespace-wide list — this keeps a dialog's or panel's strings
+  grouped and lets a JSON diff show what part of a view changed.
+  Interpolation placeholders use `{name}` (e.g. `"tooLong": "The bio is
+  limited to {max} characters."`), matched by the parity test across
+  locales. For pluralization, use vue-i18n's own `|`-separated plural forms
+  (see the [vue-i18n pluralization guide](https://vue-i18n.intlify.dev/guide/essentials/pluralization))
+  rather than hand-rolled conditionals.
+- **The ESLint guardrail.** `eslint.config.js` enables
+  `@intlify/vue-i18n/no-raw-text` to catch new hardcoded template text.
+  `LEGACY_UNMIGRATED_VUE_FILES` in that file is the (currently short)
+  exemption list for files not yet extracted — remove a file from it once
+  it's migrated and `npm run lint` passes with the rule re-enabled.
+- **English-only ("en-only") namespaces are a supported pattern**, not a
+  gap to fix later. The admin surface (`src/views/admin/**`,
+  `adminActivity.json` and friends) ships English-only on purpose: no
+  `de/` file exists for those namespaces, and `index.ts` only registers
+  them under `messages.en`. This works cleanly with existing
+  infrastructure — `createI18n({ fallbackLocale: DEFAULT_LOCALE, ... })`
+  falls back to English for a locale with no translation, and the parity
+  test (below) only compares locales that actually have a file for a given
+  namespace, so an en-only namespace isn't flagged as a failure. Follow
+  this same pattern for any other surface that should defer German rather
+  than shipping partial/machine-translated strings.
+
+### Adding a new locale
+
+1. Add the locale code to `SUPPORTED_LOCALES` in `src/i18n/locale.ts` (also
+   update `DEFAULT_LOCALE`/`fallbackLocale` only if the new locale should
+   become the default — it shouldn't, normally).
+2. Add a JSON file per existing namespace under `src/i18n/locales/<code>/`,
+   matching the key shape of the English file.
+3. Import and register each new file in `src/i18n/index.ts`'s
+   `messages.<code>` block, mirroring the existing `en`/`de` blocks.
+4. Run `npx vitest run src/i18n/locales.test.ts` — it will fail on any
+   namespace where the new locale's keys, empty strings, or interpolation
+   placeholders don't match the baseline.
+
+`detectInitialLocale()` (`src/i18n/locale.ts`) picks the active locale in
+this order: an explicit `?lang=` query override, the authenticated user's
+saved `preferredLocale`, a previously persisted device choice
+(`localStorage`, via `persistLocale`/`readStoredLocale`), the browser's
+`navigator.language`, then `DEFAULT_LOCALE`. `setLocale()` updates the
+active locale, persists it, and syncs `<html lang>`.
+
+### The parity test
+
+`src/i18n/locales.test.ts` eagerly globs every `src/i18n/locales/*/*.json`
+file and, for each namespace, checks — across only the locales that
+actually have a file for that namespace (see the en-only pattern above):
+
+- identical key sets (a key added to `en/foo.json` but not `de/foo.json` is
+  a failure, and vice versa)
+- no empty-string values
+- matching `{placeholder}` interpolation tokens between locales
+
+This is what catches an untranslated or drifted key at CI time rather than
+in production. Separately, `src/test/i18n.ts`'s `createTestI18n()` is a
+component-test-scoped i18n instance with a *throwing* `missing` handler —
+mount a component with it and an unextracted or typo'd `t()`/`$t()` key
+fails the test loudly instead of silently rendering the raw key string.
+
 ## Layout
 
 ```
@@ -185,6 +281,7 @@ src/components/map/     WorldMapCanvas.vue, SettlementCanvas.vue
 src/components/hud/     TopBar, ResourceBar, RealmPanel
 src/components/onboarding/  NicknamePrompt (shown only after landfall)
 src/views/              LandingView (world map), SettlementView (village)
+src/i18n/               locale JSON namespaces, schema, setup — see above
 src/lib/hex/*.test.ts   Vitest unit tests (hex geometry math)
 e2e/                    Playwright end-to-end tests (real browser flows)
 ```

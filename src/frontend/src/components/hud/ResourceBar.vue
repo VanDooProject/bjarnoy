@@ -6,7 +6,9 @@
 // pill also carries a cap (`WorldModel.storageCapForDisplay`) and a fill-progress
 // underline, matching the reference's "4,965 / 12,000" + green bar.
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
+import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
   // Issue #16 "ring menu": dims the resource pills while a ring is open, to
@@ -17,6 +19,7 @@ const props = defineProps<{
 }>();
 
 const world = useWorldStore();
+const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
@@ -32,8 +35,8 @@ const pills = computed(() => [
 
 const population = computed(() => world.hud.population);
 
-function fmt(n: number): string {
-  return Math.floor(n).toLocaleString();
+function fmt(value: number): string {
+  return n(Math.floor(value), 'integer');
 }
 
 function fillPct(value: number, cap: number): number {
@@ -62,10 +65,10 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
       <span class="hex-icon" :style="{ background: pill.color }" />
       <div class="numbers">
         <span class="value">
-          {{ fmt(pill.value) }}<span class="cap">/{{ fmt(pill.cap) }}</span>
-          <span v-if="pill.reserved > 0" class="reserved-hint">({{ fmt(pill.reserved) }} reserved)</span>
+          {{ fmt(pill.value) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap) }) }}</span>
+          <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
         </span>
-        <span class="rate">+{{ Math.round(pill.rate) }}/h</span>
+        <span class="rate">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
         <span class="fill-track">
           <span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" />
           <span
@@ -82,8 +85,8 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
     <div v-if="population.max > 0" class="resource population">
       <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
       <div class="numbers">
-        <span class="value">{{ fmt(population.current) }}<span class="cap">/{{ fmt(population.max) }}</span></span>
-        <span class="rate">+{{ Math.round(population.rate) }}/h</span>
+        <span class="value">{{ fmt(population.current) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(population.max) }) }}</span></span>
+        <span class="rate">{{ t('hud.resourceBar.rate', { n: Math.round(population.rate) }) }}</span>
         <span class="fill-track"><span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" /></span>
       </div>
     </div>

@@ -1,44 +1,43 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const router = useRouter();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 interface DocPage {
   to: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
 }
 
 // The list a future doc page (e.g. resources, world generation) joins —
 // see docs/tech/backend.md for the pattern this follows on the API side.
 const PAGES: DocPage[] = [
-  {
-    to: '/tech-tree',
-    title: 'Tech tree',
-    description: 'Every building, and what each of its ten levels costs, produces, and requires.',
-  },
-  {
-    to: '/docs/tiles',
-    title: 'Tiles',
-    description: 'The terrain a world is made of, how it generates, and what can be built on it.',
-  },
+  { to: '/tech-tree', titleKey: 'docs.hub.pages.techTree.title', descriptionKey: 'docs.hub.pages.techTree.description' },
+  { to: '/docs/tiles', titleKey: 'docs.hub.pages.tiles.title', descriptionKey: 'docs.hub.pages.tiles.description' },
 ];
 </script>
 
 <template>
   <div class="docs">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
-      <button class="back" @click="router.push('/')">← Back</button>
+      <span class="brand">{{ $t('common.brand.name') }}</span>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <button class="back" @click="router.push('/')">{{ $t('docs.back') }}</button>
+      </div>
     </header>
     <main class="body">
-      <h1>Docs</h1>
-      <p class="intro">Reference pages for the game's rules and content.</p>
+      <h1>{{ $t('docs.hub.title') }}</h1>
+      <p class="intro">{{ $t('docs.hub.intro') }}</p>
 
       <div class="pages">
         <button v-for="page in PAGES" :key="page.to" class="page-card" @click="router.push(page.to)">
-          <span class="page-title">{{ page.title }}</span>
-          <span class="page-description">{{ page.description }}</span>
+          <span class="page-title">{{ t(page.titleKey) }}</span>
+          <span class="page-description">{{ t(page.descriptionKey) }}</span>
         </button>
       </div>
     </main>
@@ -57,6 +56,11 @@ const PAGES: DocPage[] = [
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;

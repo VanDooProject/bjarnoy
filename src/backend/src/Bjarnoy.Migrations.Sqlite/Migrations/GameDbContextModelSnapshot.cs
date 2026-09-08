@@ -1165,6 +1165,10 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PreferredLocale")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("RenownSettledAt")
                         .HasColumnType("TEXT");
 

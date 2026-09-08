@@ -5,8 +5,11 @@
 // hex detail screen (Viking Realm.dc.html's `sel` overlay): art on the left,
 // name/level/description/action on the right.
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Tile } from '../../lib/map/types';
 import type { ResourceLine } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
+import { buildingName, terrainName, resourceName, runeTypeName, runeRarityName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 import {
   BOOST_TERRAIN,
@@ -14,9 +17,12 @@ import {
   buildingUpgradeCost,
   matchingNeighbourCount,
   type BuildingKind,
+  type BuildingOutput,
+  type BuildingModifier,
 } from '../../lib/map/buildingEconomy';
 
 const world = useWorldStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
 import AtlasSprite from '../AtlasSprite.vue';
@@ -42,17 +48,6 @@ function shrineSlotsFor(level: number): number {
   return 1;
 }
 
-const RUNE_TYPE_LABELS: Record<string, string> = {
-  fehu: 'Fehu',
-  jera: 'Jera',
-  othala: 'Othala',
-};
-const RUNE_RARITY_LABELS: Record<string, string> = {
-  carved: 'Carved',
-  bound: 'Bound',
-  blooded: 'Blooded',
-};
-
 const isShrine = computed(
   () => props.tile.buildingType === 'shrineofthor' || props.tile.buildingType === 'shrineoffreyja',
 );
@@ -77,7 +72,7 @@ async function slotHere(runeId: string) {
   try {
     await world.slotRuneLive(runeId, { q: props.tile.q, r: props.tile.r });
   } catch {
-    runeError.value = 'Could not slot that rune — it may already be slotted, or this shrine has no free slot.';
+    runeError.value = t('hud.buildingModal.slotRuneError');
   } finally {
     runeBusy.value = false;
   }
@@ -89,40 +84,11 @@ async function unslot(runeId: string) {
   try {
     await world.unslotRuneLive(runeId);
   } catch {
-    runeError.value = 'Could not unslot that rune.';
+    runeError.value = t('hud.buildingModal.unslotRuneError');
   } finally {
     runeBusy.value = false;
   }
 }
-
-const BUILDING_NAMES: Record<string, string> = {
-  hut: 'Hut',
-  farm: 'Farm',
-  tower: 'Watchtower',
-  longhouse: 'Longhouse',
-  fishinghut: 'Fishing Hut',
-  magictower: 'Magic Tower',
-  pumpkinfarm: 'Pumpkin Farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  lumberjack: 'Lumberjack',
-  quarry: 'Quarry',
-  storagehouse: 'Storehouse',
-  archeryrange: 'Archery Range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great Storehouse',
-  barracks: 'Barracks',
-  fisherhut: 'Fisher Hut',
-  sawmill: 'Sawmill',
-};
-
-const TERRAIN_NAMES: Record<string, string> = {
-  grass: 'Grassland',
-  forest: 'Forest',
-  mountain: 'Mountain',
-  sand: 'Shore',
-  sea: 'Open water',
-};
 
 const art = computed(() => {
   const { buildingType, buildingLevel, terrain } = props.tile;
@@ -136,11 +102,12 @@ const art = computed(() => {
 const buildable = computed(() => props.tile.terrain !== 'sea' || props.tile.buildingType === 'fishinghut');
 
 const name = computed(() =>
-  props.tile.buildingType ? BUILDING_NAMES[props.tile.buildingType] : TERRAIN_NAMES[props.tile.terrain],
+  props.tile.buildingType ? buildingName(props.tile.buildingType) : terrainName(props.tile.terrain),
 );
 const sub = computed(() => {
-  if (!props.tile.buildingType) return props.mine ? 'Empty, claimed ground' : (props.ownerLabel ?? 'Unclaimed');
-  return props.ownerLabel ?? 'Wild ruin';
+  if (!props.tile.buildingType)
+    return props.mine ? t('hud.buildingModal.subEmptyClaimed') : (props.ownerLabel ?? t('hud.buildingModal.subUnclaimed'));
+  return props.ownerLabel ?? t('hud.buildingModal.subWildRuin');
 });
 const level = computed(() => props.tile.buildingLevel ?? 0);
 
@@ -153,11 +120,58 @@ const matchingNeighbours = computed(() => {
   return boostTerrain ? matchingNeighbourCount(props.tile, boostTerrain, getTile) : 0;
 });
 
+// Mirrors HexTooltip.vue's formatOutput/formatModifier.
+function formatOutput(output: BuildingOutput): string {
+  switch (output.kind) {
+    case 'resourceRate':
+      return t('hud.hoverTooltip.outputResourceRate', { amount: output.amount, resource: resourceName(output.resource) });
+    case 'populationCapacity':
+      return t('hud.hoverTooltip.outputPopulationCapacity', { amount: output.amount });
+    case 'storageCapacity':
+      return t('hud.hoverTooltip.outputStorageCapacity', { amount: output.amount });
+    case 'visionRing':
+      return t('hud.hoverTooltip.outputVisionRing', { amount: output.amount });
+  }
+}
+
+function formatModifier(modifier: BuildingModifier): string {
+  switch (modifier.kind) {
+    case 'borderAnchor':
+      return t('hud.hoverTooltip.modifierBorderAnchor');
+    case 'trainsLandTroops':
+      return t('hud.hoverTooltip.modifierTrainsLandTroops');
+    case 'trainsShips':
+      return t('hud.hoverTooltip.modifierTrainsShips');
+    case 'garrison':
+      return t('hud.hoverTooltip.modifierGarrison');
+    case 'terrainBoost':
+      return t('hud.hoverTooltip.modifierTerrainBoost', { terrain: terrainName(modifier.terrain), percent: modifier.percent });
+    case 'coastal':
+      return modifier.percent
+        ? t('hud.hoverTooltip.modifierCoastalBoost', { percent: modifier.percent })
+        : t('hud.hoverTooltip.modifierCoastal');
+    case 'arcane':
+      return t('hud.hoverTooltip.modifierArcane');
+    case 'shrineFavour':
+      return t('hud.hoverTooltip.modifierShrineFavour', {
+        percent: modifier.percent,
+        domain: modifier.domain === 'woodStone' ? t('hud.hoverTooltip.domainWoodStone') : t('hud.hoverTooltip.domainFood'),
+      });
+  }
+}
+
 // The existing building's current-level output/modifier/workers — undefined
 // (and hidden) for an empty tile, since there's nothing standing yet.
+const buildingStats = computed(() =>
+  props.tile.buildingType ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value) : undefined,
+);
 const currentStats = computed(() =>
-  props.tile.buildingType
-    ? buildingStatsFor(props.tile.buildingType, level.value, matchingNeighbours.value)
+  buildingStats.value
+    ? {
+        output: buildingStats.value.output ? formatOutput(buildingStats.value.output) : undefined,
+        modifier: buildingStats.value.modifier ? formatModifier(buildingStats.value.modifier) : undefined,
+        workers: buildingStats.value.workers ? t('hud.hoverTooltip.workersValue', { cap: buildingStats.value.workers.cap }) : undefined,
+      }
     : undefined,
 );
 
@@ -168,16 +182,10 @@ const upgradeType = computed<BuildingKind>(() => props.tile.buildingType ?? 'hut
 const upgradeLevel = computed(() => level.value + 1);
 const upgradeCost = computed<ResourceLine>(() => buildingUpgradeCost(upgradeType.value, upgradeLevel.value));
 
-const RESOURCE_LABELS: Record<keyof ResourceLine, string> = {
-  wood: 'Wood',
-  stone: 'Stone',
-  food: 'Food',
-  iron: 'Iron',
-};
 const costLine = computed(() =>
   (Object.keys(upgradeCost.value) as (keyof ResourceLine)[])
     .filter((key) => upgradeCost.value[key] > 0)
-    .map((key) => `${upgradeCost.value[key]} ${RESOURCE_LABELS[key]}`)
+    .map((key) => `${upgradeCost.value[key]} ${resourceName(key)}`)
     .join(' · '),
 );
 
@@ -215,10 +223,12 @@ const noFreeSlot = computed(() => world.hud.construction.slotsUsed >= world.hud.
 const noSlotNoQueue = computed(() => noFreeSlot.value && world.hud.construction.maxWaitingOrders === 0);
 
 const actionLabel = computed(() => {
-  if (props.busy) return 'Queuing…';
-  if (noSlotNoQueue.value) return 'No free slot — Premium required';
-  if (noFreeSlot.value) return 'Queue build';
-  return props.tile.buildingType ? `Upgrade to level ${level.value + 1}` : 'Build here';
+  if (props.busy) return t('hud.buildingModal.queuing');
+  if (noSlotNoQueue.value) return t('hud.buildingModal.noFreeSlotPremium');
+  if (noFreeSlot.value) return t('hud.buildingModal.queueBuild');
+  return props.tile.buildingType
+    ? t('hud.buildingModal.upgradeToLevel', { level: level.value + 1 })
+    : t('hud.buildingModal.buildHere');
 });
 </script>
 
@@ -228,69 +238,65 @@ const actionLabel = computed(() => {
       <div class="art">
         <AtlasSprite v-if="art?.kind === 'atlas'" :frame="art.frame" class="art-img" />
         <img v-else-if="art?.kind === 'png'" class="art-img" :src="art.url" alt="" />
-        <span class="coord">Hex {{ tile.q }}, {{ tile.r }}</span>
+        <span class="coord">{{ t('hud.buildingModal.hexCoord', { q: tile.q, r: tile.r }) }}</span>
       </div>
       <div class="body">
         <div class="head">
           <div>
             <div class="name">{{ name }}</div>
-            <div class="sub">{{ level > 0 ? `Level ${level} · ${sub}` : sub }}</div>
+            <div class="sub">{{ level > 0 ? t('hud.buildingModal.levelSub', { level, sub }) : sub }}</div>
           </div>
-          <button class="close" @click="emit('close')">✕</button>
+          <button class="close" @click="emit('close')">{{ t('hud.buildingModal.close') }}</button>
         </div>
 
         <p v-if="!mine && tile.buildingType" class="desc">
-          Held by another jarl. You cannot build or upgrade here.
+          {{ t('hud.buildingModal.descHeldByOther') }}
         </p>
-        <p v-else-if="!mine" class="desc">Outside your realm's border — claim more land to build here.</p>
-        <p v-else-if="!buildable" class="desc">Open water. No building can stand here.</p>
+        <p v-else-if="!mine" class="desc">{{ t('hud.buildingModal.descOutsideBorder') }}</p>
+        <p v-else-if="!buildable" class="desc">{{ t('hud.buildingModal.descOpenWater') }}</p>
         <p v-else class="desc">
-          {{
-            tile.buildingType
-              ? 'Raise this building further to grow what it produces for your settlement.'
-              : 'Empty ground inside your border. Raise a building here to put it to work.'
-          }}
+          {{ tile.buildingType ? t('hud.buildingModal.descUpgrade') : t('hud.buildingModal.descBuildEmpty') }}
         </p>
 
         <dl v-if="currentStats && (currentStats.output || currentStats.modifier || currentStats.workers)" class="stats">
           <template v-if="currentStats.output">
-            <dt>Output</dt>
+            <dt>{{ t('hud.hoverTooltip.output') }}</dt>
             <dd>{{ currentStats.output }}</dd>
           </template>
           <template v-if="currentStats.modifier">
-            <dt>Modifier</dt>
+            <dt>{{ t('hud.hoverTooltip.modifier') }}</dt>
             <dd>{{ currentStats.modifier }}</dd>
           </template>
           <template v-if="currentStats.workers">
-            <dt>Workers</dt>
+            <dt>{{ t('hud.hoverTooltip.workers') }}</dt>
             <dd>{{ currentStats.workers }}</dd>
           </template>
         </dl>
 
         <div v-if="isShrine && mine && shrineBuilt" class="runes">
           <div class="runes-head">
-            Runes: {{ slottedRunes.length }} / {{ shrineSlots }} slotted
+            {{ t('hud.buildingModal.runesSlotted', { slotted: slottedRunes.length, total: shrineSlots }) }}
           </div>
           <p v-if="runeError" class="rune-error">{{ runeError }}</p>
 
           <ul v-if="slottedRunes.length" class="rune-list">
             <li v-for="rune in slottedRunes" :key="rune.id">
-              <span>{{ RUNE_TYPE_LABELS[rune.type] ?? rune.type }} ({{ RUNE_RARITY_LABELS[rune.rarity] ?? rune.rarity }})</span>
-              <button class="ghost" :disabled="runeBusy" @click="unslot(rune.id)">Unslot</button>
+              <span>{{ runeTypeName(rune.type) }} ({{ runeRarityName(rune.rarity) }})</span>
+              <button class="ghost" :disabled="runeBusy" @click="unslot(rune.id)">{{ t('hud.buildingModal.unslot') }}</button>
             </li>
           </ul>
 
           <template v-if="storedRunes.length">
-            <div class="runes-head">In storage</div>
+            <div class="runes-head">{{ t('hud.buildingModal.inStorage') }}</div>
             <ul class="rune-list">
               <li v-for="rune in storedRunes" :key="rune.id">
-                <span>{{ RUNE_TYPE_LABELS[rune.type] ?? rune.type }} ({{ RUNE_RARITY_LABELS[rune.rarity] ?? rune.rarity }})</span>
+                <span>{{ runeTypeName(rune.type) }} ({{ runeRarityName(rune.rarity) }})</span>
                 <button
                   class="ghost"
                   :disabled="runeBusy || slottedRunes.length >= shrineSlots"
                   @click="slotHere(rune.id)"
                 >
-                  Slot here
+                  {{ t('hud.buildingModal.slotHere') }}
                 </button>
               </li>
             </ul>
@@ -298,17 +304,18 @@ const actionLabel = computed(() => {
         </div>
 
         <div v-if="mine && buildable && waitingOrderHere" class="actions">
-          <p class="desc queued-note">Queued — waiting for a construction slot.</p>
+          <p class="desc queued-note">{{ t('hud.buildingModal.queuedNote') }}</p>
         </div>
         <div v-else-if="mine && buildable" class="actions">
-          <div class="cost">{{ tile.buildingType ? 'Upgrade cost' : 'Build cost' }}: {{ costLine }}</div>
+          <div class="cost">
+            {{ tile.buildingType ? t('hud.buildingModal.upgradeCost') : t('hud.buildingModal.buildCost') }}: {{ costLine }}
+          </div>
           <p v-if="!canAfford" class="desc afford-note">
-            Not enough resources available (some may be reserved for queued construction).
+            {{ t('hud.buildingModal.notEnoughResources') }}
           </p>
-          <p v-if="noSlotNoQueue" class="desc afford-note">
-            Every construction slot is busy, and this account has no waiting queue to fall back
-            on — that's a <strong>Premium</strong> feature.
-          </p>
+          <i18n-t v-if="noSlotNoQueue" keypath="hud.buildingModal.premiumRequired" tag="p" class="desc afford-note">
+            <template #premium><strong>{{ t('hud.buildingModal.premium') }}</strong></template>
+          </i18n-t>
           <p v-if="error" class="desc afford-note">{{ error }}</p>
           <button
             v-if="tile.buildingType"

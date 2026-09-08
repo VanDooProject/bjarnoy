@@ -1,0 +1,129 @@
+{
+  "back": "← Zurück",
+  "backToDocs": "← Docs",
+  "hub": {
+    "title": "Docs",
+    "intro": "Referenzseiten für die Regeln und Inhalte des Spiels.",
+    "pages": {
+      "techTree": {
+        "title": "Techbaum",
+        "description": "Jedes Gebäude und was jede seiner zehn Stufen kostet, produziert und benötigt."
+      },
+      "tiles": {
+        "title": "Kacheln",
+        "description": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann."
+      }
+    }
+  },
+  "status": {
+    "loading": "Lädt…",
+    "fallback": "Zeigt gebündelte Referenzdaten{snapshot} — keine Live-Backend-Daten.",
+    "fallbackSnapshot": " (Momentaufnahme vom {date})",
+    "toc": "Inhaltsverzeichnis"
+  },
+  "buildingTypes": {
+    "storagehouse": "Lagerhaus",
+    "fishinghut": "Fischerhütte",
+    "magictower": "Magischer Turm",
+    "pumpkinfarm": "Kürbisfarm",
+    "shrineofthor": "Schrein des Thor",
+    "shrineoffreyja": "Schrein der Freyja",
+    "archeryrange": "Schießplatz",
+    "dockyard": "Werft",
+    "greatstorehouse": "Großes Lagerhaus",
+    "fisherhut": "Fischerhütte"
+  },
+  "techTree": {
+    "title": "Techbaum",
+    "intro": "Jedes Gebäude und was jede seiner zehn Stufen kostet, produziert und benötigt.",
+    "terrain": "Gelände:",
+    "terrainCoastal": "Flaches (Küsten-)Wasser",
+    "terrainAny": "Jedes bebaubare Land",
+    "needsFirst": "Benötigt zuerst: {prerequisites}",
+    "graphEyebrow": "Docs · Techbaum",
+    "categories": {
+      "anchor": "Anker",
+      "production": "Produktion",
+      "military": "Militär",
+      "logistics": "Logistik"
+    },
+    "lore": {
+      "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und wie viele Siedler im Dorf leben — jede Siedlung beginnt mit einem, stehend auf Gras.",
+      "lumberjack": "Fällt Holz auf bewaldetem Grund — das Holz hinter jeder Wand und jedem Dach.",
+      "quarry": "Bricht Stein aus einem Bergkamm — die Knochen jeder Festung.",
+      "farm": "Zieht Nahrung auf offenem Grasland und hält den Tisch des Langhauses gefüllt.",
+      "storagehouse": "Zusätzlicher Platz für die Ernte auf Gras, damit ein volles Lager die Produktion nie stoppt.",
+      "tower": "Ein Wachturm auf Gras oder Sand an der Grenze, der das beanspruchte Gebiet weiter hinausschiebt.",
+      "fishinghut": "Ein Steg über flachem Wasser, der die Untiefen befischt, die ein Bauernhof nie erreichen könnte.",
+      "magictower": "Arkanes Eisen aus Grasland — kein Erz, keine Ader, nur die Arbeit selbst.",
+      "pumpkinfarm": "Eine zweite Ernte für Gras — Kürbisse neben den gewöhnlichen Feldern.",
+      "shrineofthor": "Für Thor errichtet auf Gras — seine Gunst steigert die Holz- und Steinproduktion.",
+      "shrineoffreyja": "Für Freyja errichtet auf Gras — ihre Gunst steigert die Nahrungsproduktion.",
+      "archeryrange": "Bildet die Landarmee aus — von Speerkämpfern bis Katapulten — auf Gras oder Sand, anstelle des Langhauses.",
+      "dockyard": "Bildet Schiffe auf flachem (Küsten-)Wasser aus, anstelle des Langhauses.",
+      "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras, die sowohl das Langhaus als auch das eigene Lagerhaus dieser Siedlung auf Stufe 10 benötigt.",
+      "barracks": "Eine Garnison, errichtet auf Gras oder Sand an der Grenze.",
+      "fisherhut": "Ein zweiter Steg für den Tisch, der Grasland wie ein Bauernhof bewirtschaftet statt der Untiefen.",
+      "sawmill": "Verarbeitet Holz auf Gras, neben einem benachbarten Holzfäller — sein Aussehen ändert sich, wenn es neben einem Fluss oder einer Flussbiegung gebaut wird."
+    },
+    "table": {
+      "level": "Stufe",
+      "wood": "Holz",
+      "stone": "Stein",
+      "food": "Nahrung",
+      "iron": "Eisen",
+      "buildTime": "Bauzeit",
+      "productionPerHour": "Produktion/h",
+      "storage": "Lager",
+      "requiresLonghouse": "Benötigt Langhaus",
+      "unitWood": "w",
+      "unitStone": "s",
+      "unitFood": "f",
+      "unitIron": "i",
+      "storagePrefix": "+"
+    }
+  },
+  "tiles": {
+    "title": "Kacheln",
+    "intro": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann.",
+    "generation": "Entstehung:",
+    "buildings": "Gebäude:",
+    "none": "keine",
+    "entries": {
+      "sea": {
+        "title": "Meer",
+        "lore": "Offenes Wasser. Nichts steht darauf, und hier wächst oder wird nichts abgebaut — es trennt nur Inseln voneinander.",
+        "generation": "Jede Kachel außerhalb des Radius einer Insel."
+      },
+      "coastalWater": {
+        "title": "Küstenwasser",
+        "lore": "Darunter noch schlichtes Meer — dasselbe Gelände wie das offene Wasser dahinter — aber nah genug am Ufer für einen Steg.",
+        "generation": "Eine Meereskachel mit mindestens einem Landnachbarn: der Ring, der jede Insel umschließt."
+      },
+      "sand": {
+        "title": "Sand",
+        "lore": "Der Strand einer Insel — der Küstenring, auf dem Siedler bei der Gründung einer Siedlung tatsächlich landen.",
+        "generation": "Der äußere Rand einer Insel: jenseits von 82 % ihres Radius vom Zentrum aus."
+      },
+      "grass": {
+        "title": "Gras",
+        "lore": "Offenes Flachland — der Großteil einer Siedlung wird hier gebaut.",
+        "generation": "Flachland, zu glatt für Wald und zu weit vom Zentrum entfernt für Gebirge."
+      },
+      "forest": {
+        "title": "Wald",
+        "lore": "Flachland, das felsig genug geworden ist, um Bäume statt offenem Gras wachsen zu lassen.",
+        "generation": "Felsigkeit über dem Waldschwellenwert, aber nicht steil genug für Gebirge."
+      },
+      "mountain": {
+        "title": "Gebirge",
+        "lore": "Der felsigste Grund, den eine Insel hat.",
+        "generation": "Auf das Innere einer Insel beschränkt (innerhalb von 40 % ihres Radius), damit sich an der Küste nie Grate bilden."
+      }
+    }
+  },
+  "impressum": {
+    "title": "Impressum",
+    "body": "Fjørdhold ist ein Hobbyprojekt für die VanDooProject-Community. Diese Platzhalterseite existiert, damit die echte Landingpage etwas hat, worauf sie verlinken kann — ersetze sie durch dein tatsächliches Impressum (Betreiber, Kontaktadresse und alle Angaben, die deine Rechtsordnung verlangt), bevor du live gehst."
+  }
+}

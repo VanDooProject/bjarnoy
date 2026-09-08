@@ -7,9 +7,11 @@
 // All of the geometry and traversal lives in lib/techtree (and is tested
 // there); this file is the rendering and the hover state.
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { AtlasFrameRect } from '../../lib/map/atlas';
 import type { BuildingDefinitionResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
 import {
   GRAPH_CATEGORY_COLOR,
   GRAPH_LEGEND,
@@ -31,6 +33,8 @@ import { buildTechTreeNodes, prerequisitesOf } from '../../lib/techtree/nodes';
 import { pathD, routeEdges } from '../../lib/techtree/routing';
 
 const props = defineProps<{ byType: Record<string, BuildingDefinitionResponse[] | undefined> }>();
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const hovered = ref<string | null>(null);
 const hoveredCategory = ref<GraphCategory | null>(null);
@@ -140,7 +144,7 @@ function clear() {
   <section class="tech-graph" aria-labelledby="tech-graph-heading">
     <div class="graph-head">
       <div>
-        <p id="tech-graph-heading" class="eyebrow">Docs · Tech tree</p>
+        <p id="tech-graph-heading" class="eyebrow">{{ t('docs.techTree.graphEyebrow') }}</p>
         <p class="status" aria-live="polite">{{ status }}</p>
       </div>
       <ul class="legend">

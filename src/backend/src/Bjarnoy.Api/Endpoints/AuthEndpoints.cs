@@ -58,11 +58,13 @@ public static class AuthEndpoints
 
         if (result.Outcome == AuthOutcome.UserNameTaken)
         {
-            return Results.Conflict(new ProblemDetails
+            var problem = new ProblemDetails
             {
                 Title = "That username is taken.",
                 Status = StatusCodes.Status409Conflict,
-            });
+            };
+            problem.Extensions["rejection"] = "UsernameTaken";
+            return Results.Conflict(problem);
         }
 
         return Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens));
@@ -80,7 +82,7 @@ public static class AuthEndpoints
 
         return result.Outcome switch
         {
-            AuthOutcome.InvalidCredentials => Results.Unauthorized(),
+            AuthOutcome.InvalidCredentials => InvalidCredentials(),
             AuthOutcome.Banned => Banned(),
             _ => Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens)),
         };
@@ -98,7 +100,7 @@ public static class AuthEndpoints
 
         return result.Outcome switch
         {
-            RefreshOutcome.Invalid => Results.Unauthorized(),
+            RefreshOutcome.Invalid => InvalidRefreshToken(),
             RefreshOutcome.Banned => Banned(),
             _ => Results.Ok(ToAuthResponse(result.User!, result.RefreshToken!, tokens)),
         };
@@ -123,18 +125,27 @@ public static class AuthEndpoints
         var idClaim = principal.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(idClaim, out var id))
         {
-            return Results.Unauthorized();
+            return Unauthenticated();
         }
 
         // Read live state rather than trusting the token's claims, so a status
         // change (locked/banned) shows up here immediately rather than only
         // once the access token expires.
         var user = await authService.GetByIdAsync(id, cancellationToken);
-        return user is null ? Results.Unauthorized() : Results.Ok(UserResponse.From(user));
+        return user is null ? Unauthenticated() : Results.Ok(UserResponse.From(user));
     }
 
     private static IResult Banned() =>
         Results.Json(new AuthErrorResponse("user_banned"), statusCode: StatusCodes.Status403Forbidden);
+
+    private static IResult InvalidCredentials() =>
+        Results.Json(new AuthErrorResponse("invalid_credentials"), statusCode: StatusCodes.Status401Unauthorized);
+
+    private static IResult InvalidRefreshToken() =>
+        Results.Json(new AuthErrorResponse("invalid_refresh_token"), statusCode: StatusCodes.Status401Unauthorized);
+
+    private static IResult Unauthenticated() =>
+        Results.Json(new AuthErrorResponse("authentication_required"), statusCode: StatusCodes.Status401Unauthorized);
 
     private static AuthResponse ToAuthResponse(
         Bjarnoy.Infrastructure.Entities.UserEntity user, string refreshToken, JwtTokenService tokens) =>

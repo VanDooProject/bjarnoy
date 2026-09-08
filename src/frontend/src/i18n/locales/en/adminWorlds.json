@@ -1,0 +1,61 @@
+{
+  "title": "Worlds",
+  "loading": "Loading…",
+  "loadError": "Could not load worlds.",
+  "create": {
+    "heading": "Create a world",
+    "name": "Name",
+    "namePlaceholder": "Midgard",
+    "seed": "Seed",
+    "seedPlaceholder": "random",
+    "radius": "Radius",
+    "maxPlayers": "Max players",
+    "generating": "Generating…",
+    "submit": "Create world",
+    "nameTooShort": "A world name needs at least three characters.",
+    "createError": "Could not create the world."
+  },
+  "columns": {
+    "name": "Name",
+    "status": "Status",
+    "runState": "Run state",
+    "players": "Players",
+    "joinable": "Joinable",
+    "endboss": "Endboss"
+  },
+  "joins": {
+    "closed": "Closed",
+    "open": "Open"
+  },
+  "endbossStatus": {
+    "triggered": "Triggered",
+    "scheduled": "Scheduled",
+    "none": "—"
+  },
+  "fields": {
+    "speedFactor": "Speed factor",
+    "startsAt": "Starts at",
+    "closedToNewPlayers": "Closed to new players",
+    "endbossAt": "Endboss at"
+  },
+  "speedFactorTooLow": "Speed factor must be greater than 0.",
+  "saveError": "Could not save.",
+  "runStateError": "Could not update run state.",
+  "saving": "Saving…",
+  "saveSettings": "Save settings",
+  "runStateLabels": {
+    "pause": "Pause",
+    "maintenance": "Enter maintenance",
+    "lock": "Lock",
+    "resume": "Resume"
+  },
+  "runStateActions": {
+    "pause": "Pause",
+    "maintenance": "Maintenance",
+    "lock": "Lock",
+    "resume": "Resume"
+  },
+  "graceMinutes": "Grace (min)",
+  "reseedLink": "Reseed map…",
+  "confirmRunState": "{label} world \"{name}\"?"
+}

@@ -25,8 +25,10 @@
 // closes. This component owns layout and navigation only — the caller
 // supplies the tree and reacts to `select`, the same contract as before.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import AtlasSprite from '../AtlasSprite.vue';
 import type { ArtRef } from '../../lib/map/buildingArt';
+import type { MessageSchema } from '../../i18n/schema';
 import {
   BUB1,
   BUB2,
@@ -102,6 +104,8 @@ const props = withDefaults(
   }>(),
   { categories: () => [], terrainLabel: '', coordLabel: '', bounds: undefined, cardBounds: undefined, stock: undefined },
 );
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const emit = defineEmits<{
   select: [id: string];
@@ -230,7 +234,7 @@ const costChips = computed(() => {
     }));
 });
 
-const hubLabel = computed(() => (atRoot.value ? props.terrainLabel : 'BUILD'));
+const hubLabel = computed(() => (atRoot.value ? props.terrainLabel : t('hud.ringMenu.buildHub')));
 const hubSub = computed(() => (atRoot.value ? props.coordLabel : props.terrainLabel));
 
 function goUp() {
@@ -329,7 +333,7 @@ function onBackdropPointerDown(e: PointerEvent) {
     <button
       class="ring-hub"
       :style="{ left: `${x}px`, top: `${y}px`, width: `${HUB}px`, height: `${HUB}px` }"
-      :title="atRoot ? undefined : 'Back'"
+      :title="atRoot ? undefined : t('hud.ringMenu.back')"
       @click="goUp"
     >
       <span class="hub-label">{{ hubLabel }}</span>
@@ -368,7 +372,7 @@ function onBackdropPointerDown(e: PointerEvent) {
       :style="{ left: `${backSpot.x}px`, top: `${backSpot.y}px`, width: `${BUB1}px`, height: `${BUB1}px` }"
       @click="goUp"
     >
-      ‹ BACK
+      {{ t('hud.ringMenu.backButton') }}
     </button>
 
     <button
@@ -402,15 +406,17 @@ function onBackdropPointerDown(e: PointerEvent) {
         <img v-else-if="hovered.art?.kind === 'png'" class="card-art-img" :src="hovered.art.url" alt="" />
         <div class="card-head">
           <span class="card-name">{{ hovered.label }}</span>
-          <span class="card-sub">Level 1 · {{ hovered.lock ? 'locked' : 'ready' }}</span>
+          <span class="card-sub">
+            {{ t('hud.ringMenu.level1', { status: hovered.lock ? t('hud.ringMenu.locked') : t('hud.ringMenu.ready') }) }}
+          </span>
           <span class="card-badge" :class="{ locked: !!hovered.lock }">
-            {{ hovered.lock ? hovered.lock.toUpperCase() : 'BUILDABLE HERE' }}
+            {{ hovered.lock ? hovered.lock.toUpperCase() : t('hud.ringMenu.buildableHere') }}
           </span>
         </div>
       </div>
       <dl class="card-rows">
         <template v-if="costChips.length">
-          <dt>Cost</dt>
+          <dt>{{ t('hud.ringMenu.cost') }}</dt>
           <dd class="cost">
             <span v-for="chip in costChips" :key="chip.key" class="chip">
               <i :style="{ background: chip.color }" />
@@ -419,11 +425,11 @@ function onBackdropPointerDown(e: PointerEvent) {
           </dd>
         </template>
         <template v-if="hovered.time">
-          <dt>Build time</dt>
+          <dt>{{ t('hud.ringMenu.buildTime') }}</dt>
           <dd>{{ hovered.time }}</dd>
         </template>
         <template v-if="hovered.gives">
-          <dt>Gives</dt>
+          <dt>{{ t('hud.ringMenu.gives') }}</dt>
           <dd class="nowrap">{{ hovered.gives }}</dd>
         </template>
       </dl>
@@ -433,7 +439,7 @@ function onBackdropPointerDown(e: PointerEvent) {
         :disabled="!!hovered.lock || !!hovered.disabled"
         @click="onBuildingClick(hovered)"
       >
-        {{ hovered.lock ? 'LOCKED' : `BUILD ${hovered.label.toUpperCase()}` }}
+        {{ hovered.lock ? t('hud.ringMenu.lockedCta') : t('hud.ringMenu.buildCta', { label: hovered.label.toUpperCase() }) }}
       </button>
     </div>
   </div>

@@ -5,8 +5,11 @@
 // duplicating it — see SimulatorResponse's own comment on why its field
 // shape deliberately mirrors BattleReportResponse's.
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { BattleReportAttackerLine, BattleReportDefenderLine, BattleReportSiege, ResourceLine } from '../../api/types';
-import { missionLabel, outcomeLabel, siegeSummaryLine, totalLoot } from '../../lib/units/battleReports';
+import type { MessageSchema } from '../../i18n/schema';
+import { resourceName, unitName } from '../../i18n/catalogueNames';
+import { isVictoryFor, missionLabel, outcomeLabel, siegeSummaryLine, totalLoot } from '../../lib/units/battleReports';
 
 /**
  * Everything the card needs to render — deliberately just the fields
@@ -32,74 +35,77 @@ const props = defineProps<{
   occurredAt?: string | null;
 }>();
 
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+const victory = computed(() => isVictoryFor(props.report, props.side));
 const outcome = computed(() => outcomeLabel(props.report, props.side));
 const loot = computed(() => totalLoot(props.report.lootTaken));
 const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props.report.siege) : null));
 </script>
 
 <template>
-  <div class="card" :class="outcome === 'Victory' ? 'victory' : 'defeat'">
+  <div class="card" :class="victory ? 'victory' : 'defeat'">
     <div class="card-header">
       <span class="banner">{{ outcome }}</span>
       <span class="mission-pill">{{ missionLabel(report.mission) }}</span>
     </div>
-    <p v-if="occurredAt" class="occurred">{{ new Date(occurredAt).toLocaleString() }}</p>
+    <p v-if="occurredAt" class="occurred">{{ d(new Date(occurredAt), 'long') }}</p>
 
     <div class="power-row">
       <div class="power">
-        <span class="power-label">Attack power</span>
+        <span class="power-label">{{ t('hud.battleReport.attackPower') }}</span>
         <span class="power-value">{{ Math.round(report.attackPower) }}</span>
       </div>
       <div class="power">
-        <span class="power-label">Defense power</span>
+        <span class="power-label">{{ t('hud.battleReport.defensePower') }}</span>
         <span class="power-value">{{ Math.round(report.defensePower) }}</span>
       </div>
     </div>
 
     <div class="sides">
       <section class="side">
-        <h3>Attacker</h3>
+        <h3>{{ t('hud.battleReport.attacker') }}</h3>
         <table class="lines">
           <thead>
             <tr>
-              <th>Unit</th>
-              <th>Sent</th>
-              <th>Lost</th>
-              <th>Survived</th>
+              <th>{{ t('hud.battleReport.unit') }}</th>
+              <th>{{ t('hud.battleReport.sent') }}</th>
+              <th>{{ t('hud.battleReport.lost') }}</th>
+              <th>{{ t('hud.battleReport.survived') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="line in report.attackerLines" :key="line.unit">
-              <td>{{ line.unit }}</td>
+              <td>{{ unitName(line.unit) }}</td>
               <td>{{ line.sent }}</td>
               <td class="lost">{{ line.lost }}</td>
               <td class="survived">{{ line.survived }}</td>
             </tr>
             <tr v-if="!report.attackerLines.length">
-              <td colspan="4" class="empty">No stacks recorded.</td>
+              <td colspan="4" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
             </tr>
           </tbody>
         </table>
       </section>
 
       <section class="side">
-        <h3>Defender</h3>
+        <h3>{{ t('hud.battleReport.defender') }}</h3>
         <table class="lines">
           <thead>
             <tr>
-              <th>Unit</th>
-              <th>Lost</th>
-              <th>Survived</th>
+              <th>{{ t('hud.battleReport.unit') }}</th>
+              <th>{{ t('hud.battleReport.lost') }}</th>
+              <th>{{ t('hud.battleReport.survived') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="line in report.defenderLines" :key="line.unit">
-              <td>{{ line.unit }}</td>
+              <td>{{ unitName(line.unit) }}</td>
               <td class="lost">{{ line.lost }}</td>
               <td class="survived">{{ line.survived }}</td>
             </tr>
             <tr v-if="!report.defenderLines.length">
-              <td colspan="3" class="empty">No stacks recorded.</td>
+              <td colspan="3" class="empty">{{ t('hud.battleReport.noStacksRecorded') }}</td>
             </tr>
           </tbody>
         </table>
@@ -107,20 +113,20 @@ const siegeSummary = computed(() => (props.report.siege ? siegeSummaryLine(props
     </div>
 
     <div v-if="loot > 0" class="loot">
-      <h3>Loot taken</h3>
+      <h3>{{ t('hud.battleReport.lootTaken') }}</h3>
       <div class="loot-row">
-        <span>Wood {{ Math.round(report.lootTaken.wood) }}</span>
-        <span>Stone {{ Math.round(report.lootTaken.stone) }}</span>
-        <span>Food {{ Math.round(report.lootTaken.food) }}</span>
-        <span>Iron {{ Math.round(report.lootTaken.iron) }}</span>
+        <span>{{ resourceName('wood') }} {{ Math.round(report.lootTaken.wood) }}</span>
+        <span>{{ resourceName('stone') }} {{ Math.round(report.lootTaken.stone) }}</span>
+        <span>{{ resourceName('food') }} {{ Math.round(report.lootTaken.food) }}</span>
+        <span>{{ resourceName('iron') }} {{ Math.round(report.lootTaken.iron) }}</span>
       </div>
     </div>
 
     <div v-if="report.siege" class="siege" :class="{ razed: report.siege.settlementRazed }">
-      <div v-if="report.siege.settlementRazed" class="razed-banner">Settlement razed</div>
-      <h3>Siege</h3>
+      <div v-if="report.siege.settlementRazed" class="razed-banner">{{ t('hud.battleReport.settlementRazed') }}</div>
+      <h3>{{ t('hud.battleReport.siege') }}</h3>
       <p>{{ siegeSummary }}</p>
-      <p class="siege-coord">Hex ({{ report.siege.targetCoord.q }}, {{ report.siege.targetCoord.r }})</p>
+      <p class="siege-coord">{{ t('hud.battleReport.hexCoord', { q: report.siege.targetCoord.q, r: report.siege.targetCoord.r }) }}</p>
     </div>
   </div>
 </template>

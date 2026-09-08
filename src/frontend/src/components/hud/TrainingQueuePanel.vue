@@ -14,25 +14,13 @@
 // there is something to show — same as BuildQueuePanel not rendering when
 // `world.hud.queue` is empty.
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../../i18n/schema';
+import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
 
 const world = useWorldStore();
-
-const UNIT_LABELS: Record<string, string> = {
-  thrall: 'Thrall',
-  spearman: 'Spearman',
-  axeman: 'Axeman',
-  bowman: 'Bowman',
-  berserker: 'Berserker',
-  provisioner: 'Provisioner',
-  catapult: 'Catapult',
-  karve: 'Karve',
-  longship: 'Longship',
-};
-
-function unitLabel(unit: string): string {
-  return UNIT_LABELS[unit] ?? unit;
-}
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Mirrors Settlement.MaxTrainingQueueLength (backend) — no endpoint exposes
 // this as data, so it's kept in sync here the same way BuildQueuePanel pins
@@ -74,11 +62,11 @@ const orders = computed(() => {
     const done = remainingNow !== null && remainingNow <= 0.5;
     return {
       key: o.id,
-      name: `${o.count}× ${unitLabel(o.unit)}`,
+      name: t('hud.trainingQueue.orderName', { count: o.count, unit: unitName(o.unit) }),
       remaining: remainingNow === null ? '—' : fmt(remainingNow),
       progress,
       done,
-      subtext: `${o.completedCount} / ${o.count} trained`,
+      subtext: t('hud.trainingQueue.trainedCount', { completed: o.completedCount, total: o.count }),
     };
   });
 });
@@ -86,7 +74,7 @@ const orders = computed(() => {
 const garrison = computed(() =>
   world.hud.garrison
     .filter((g) => g.count > 0)
-    .map((g) => ({ key: g.unit, label: unitLabel(g.unit), count: g.count })),
+    .map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
 );
 
 // Issue #40 phase 4: guest (Support) armies currently stationed at this
@@ -102,10 +90,10 @@ const garrison = computed(() =>
 const guests = computed(() =>
   world.guestArmies.map((g) => ({
     key: g.armyId,
-    ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? 'Unknown settlement',
+    ownerName: world.model.getSettlement(g.ownerSettlementId)?.name ?? t('hud.trainingQueue.unknownSettlement'),
     composition: g.stacks
       .filter((s) => s.count > 0)
-      .map((s) => `${s.count}× ${unitLabel(s.unit)}`)
+      .map((s) => t('hud.trainingQueue.orderName', { count: s.count, unit: unitName(s.unit) }))
       .join(', ') || '—',
   })),
 );
@@ -115,8 +103,8 @@ const guests = computed(() =>
   <div v-if="orders.length || garrison.length || guests.length" class="status-card training-queue-panel">
     <template v-if="orders.length">
       <div class="status-card-header">
-        <span class="status-card-title">Training</span>
-        <span class="status-card-count">{{ orders.length }} / {{ MAX_TRAINING_QUEUE_LENGTH }} slots</span>
+        <span class="status-card-title">{{ t('hud.trainingQueue.title') }}</span>
+        <span class="status-card-count">{{ t('hud.trainingQueue.slots', { used: orders.length, total: MAX_TRAINING_QUEUE_LENGTH }) }}</span>
       </div>
       <div v-for="o in orders" :key="o.key" class="status-row">
         <div class="status-row-top">
@@ -136,7 +124,7 @@ const guests = computed(() =>
 
     <div class="garrison" :class="{ 'has-orders-above': orders.length }">
       <div class="status-card-header">
-        <span class="status-card-title">Garrison</span>
+        <span class="status-card-title">{{ t('hud.trainingQueue.garrison') }}</span>
       </div>
       <div v-if="garrison.length" class="garrison-grid">
         <div v-for="g in garrison" :key="g.key" class="garrison-row">
@@ -144,12 +132,12 @@ const guests = computed(() =>
           <span class="garrison-count">{{ g.count }}</span>
         </div>
       </div>
-      <div v-else class="status-subtext garrison-empty">No units standing here yet.</div>
+      <div v-else class="status-subtext garrison-empty">{{ t('hud.trainingQueue.garrisonEmpty') }}</div>
     </div>
 
     <div v-if="guests.length" class="guests has-orders-above">
       <div class="status-card-header">
-        <span class="status-card-title">Guests</span>
+        <span class="status-card-title">{{ t('hud.trainingQueue.guests') }}</span>
         <span class="status-card-count">{{ guests.length }}</span>
       </div>
       <div class="guests-grid">

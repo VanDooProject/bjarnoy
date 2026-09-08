@@ -1,0 +1,15 @@
+{
+  "brand": "Fjørdhold",
+  "title": "Log in",
+  "usernameLabel": "Username",
+  "passwordLabel": "Password",
+  "submit": "Log in",
+  "submitting": "Logging in…",
+  "registerLink": "Playing anonymously? Create an account",
+  "back": "← Back",
+  "errors": {
+    "banned": "This account has been banned.",
+    "invalidCredentials": "Wrong username or password.",
+    "generic": "Could not log in. Try again."
+  }
+}

@@ -78,23 +78,29 @@ const EXIT_RANGE = { min: 0.05, max: 0.5, step: 0.02 };
 const FADE_RANGE = { min: 0, max: 800, step: 20 };
 const fmt = (v: number) => `${v.toFixed(2)}×`;
 const fmtMs = (v: number) => `${v}ms`;
+
+const ENABLED_LABEL = 'Zoom-driven transition enabled';
+const ZOOM_LABEL = 'Current zoom';
+const ENTER_LABEL = 'Zoom in → settlement at';
+const EXIT_LABEL = 'Zoom out → world at';
+const FADE_LABEL = 'Fade duration';
 </script>
 
 <template>
   <DebugPanel class="zoom-debug" title="Zoom transition" storage-key="zoom">
     <label class="row">
       <input type="checkbox" v-model="tuning.enabled" @change="save" />
-      <span>Zoom-driven transition enabled</span>
+      <span>{{ ENABLED_LABEL }}</span>
     </label>
 
     <div v-if="liveZoom !== null" class="row readout">
-      <span>Current zoom</span>
+      <span>{{ ZOOM_LABEL }}</span>
       <span class="value">{{ fmt(liveZoom) }}</span>
     </div>
 
     <div class="row slider-row" :class="{ disabled: !tuning.enabled }">
       <span class="slider-label">
-        Zoom in &rarr; settlement at
+        {{ ENTER_LABEL }}
         <span class="slider-value">{{ fmt(tuning.enterSettlementZoom) }}</span>
       </span>
       <input
@@ -110,7 +116,7 @@ const fmtMs = (v: number) => `${v}ms`;
 
     <div class="row slider-row" :class="{ disabled: !tuning.enabled }">
       <span class="slider-label">
-        Zoom out &rarr; world at
+        {{ EXIT_LABEL }}
         <span class="slider-value">{{ fmt(tuning.exitToWorldZoom) }}</span>
       </span>
       <input
@@ -126,7 +132,7 @@ const fmtMs = (v: number) => `${v}ms`;
 
     <div class="row slider-row" :class="{ disabled: !tuning.enabled }">
       <span class="slider-label">
-        Fade duration
+        {{ FADE_LABEL }}
         <span class="slider-value">{{ fmtMs(tuning.fadeMs) }}</span>
       </span>
       <input

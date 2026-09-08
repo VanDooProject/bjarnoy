@@ -4,6 +4,8 @@ import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminWorldsView from './AdminWorldsView.vue';
 import type { AdminWorldResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import adminWorlds from '../../i18n/locales/en/adminWorlds.json';
 
 const { adminListWorlds, adminCreateWorld, adminUpdateWorldSettings, adminSetWorldRunState } = vi.hoisted(
   () => ({
@@ -44,7 +46,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
 async function mountView(worlds: AdminWorldResponse[] = [world()]) {
   adminListWorlds.mockResolvedValue(worlds);
   const wrapper = mount(AdminWorldsView, {
-    global: { stubs: { RouterLink: RouterLinkStub } },
+    global: { stubs: { RouterLink: RouterLinkStub }, plugins: [createTestI18n({ adminWorlds })] },
   });
   await flushPromises();
   return wrapper;

@@ -15,6 +15,7 @@
 // A successful response self-heals the stale flag (see `runSimulation`) so
 // the notice clears without needing a re-login either.
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api } from '../api/client';
 import { DEMO_MODE } from '../config';
 import { useAuthStore } from '../stores/auth';
@@ -22,6 +23,10 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
 import { buildSimulatorRequest, isPremiumRequiredError } from '../lib/units/simulator';
 import type { SimulatorResponse } from '../api/types';
+import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const auth = useAuthStore();
 const catalogue = useUnitCatalogueStore();
@@ -73,7 +78,7 @@ async function runSimulation() {
     seed.value,
   );
   if (!request) {
-    errorMessage.value = 'Add at least one attacking unit first.';
+    errorMessage.value = t('simulator.errors.noAttacker');
     return;
   }
 
@@ -90,7 +95,7 @@ async function runSimulation() {
     if (isPremiumRequiredError(err)) {
       premiumRequired.value = true;
     } else {
-      errorMessage.value = err instanceof Error ? err.message : 'Simulation failed.';
+      errorMessage.value = err instanceof Error ? err.message : t('simulator.errors.simulationFailed');
     }
   } finally {
     loading.value = false;
@@ -101,39 +106,30 @@ async function runSimulation() {
 <template>
   <div class="simulator-view">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
-      <router-link to="/reports" class="back">← Reports</router-link>
+      <span class="brand">{{ $t('common.brand.name') }}</span>
+      <div class="topbar-actions">
+        <LocaleSwitcher />
+        <router-link to="/reports" class="back">{{ $t('simulator.back') }}</router-link>
+      </div>
     </header>
 
     <main class="body">
-      <h1>Fight simulator</h1>
-      <p class="subtitle">
-        A premium feature: resolve a hypothetical battle with no army, settlement, or database
-        involved — nothing here touches your real game state.
-      </p>
+      <h1>{{ $t('simulator.title') }}</h1>
+      <p class="subtitle">{{ $t('simulator.subtitle') }}</p>
 
-      <p v-if="DEMO_MODE" class="hint">
-        The simulator calls the real backend and needs a logged-in premium account — it isn't
-        wired up in demo mode.
-      </p>
+      <p v-if="DEMO_MODE" class="hint">{{ $t('simulator.demoModeHint') }}</p>
 
       <template v-else>
         <div v-if="premiumBlocked" class="premium-card">
-          <h2>Premium feature</h2>
-          <p v-if="premiumRequired">
-            The fight simulator is a premium feature. This account isn't premium, so the server
-            turned that last request down.
-          </p>
-          <p v-else>The fight simulator is a premium feature. This account isn't premium.</p>
-          <p class="honest-note">
-            There's no upgrade flow in this game yet — nowhere here actually sells premium — so
-            there's nothing more to click. Ask whoever runs this world if you think that's wrong.
-          </p>
+          <h2>{{ $t('simulator.premium.title') }}</h2>
+          <p v-if="premiumRequired">{{ $t('simulator.premium.rejected') }}</p>
+          <p v-else>{{ $t('simulator.premium.notPremium') }}</p>
+          <p class="honest-note">{{ $t('simulator.premium.honestNote') }}</p>
         </div>
 
         <form class="sim-form" @submit.prevent="runSimulation">
           <section class="stack-section">
-            <h2>Attacker</h2>
+            <h2>{{ $t('simulator.sections.attacker') }}</h2>
             <div class="unit-grid">
               <label v-for="def in catalogue.definitions" :key="'a-' + def.type" class="unit-field">
                 <span>{{ def.type }}</span>
@@ -148,8 +144,8 @@ async function runSimulation() {
           </section>
 
           <section class="stack-section">
-            <h2>Defender</h2>
-            <p class="section-hint">Leave empty to simulate an undefended settlement.</p>
+            <h2>{{ $t('simulator.sections.defender') }}</h2>
+            <p class="section-hint">{{ $t('simulator.sections.defenderHint') }}</p>
             <div class="unit-grid">
               <label v-for="def in catalogue.definitions" :key="'d-' + def.type" class="unit-field">
                 <span>{{ def.type }}</span>
@@ -164,8 +160,8 @@ async function runSimulation() {
           </section>
 
           <section class="stack-section">
-            <h2>Guest defenders</h2>
-            <p class="section-hint">Optional — combined with the defender's own garrison, like a real Support army.</p>
+            <h2>{{ $t('simulator.sections.guestDefenders') }}</h2>
+            <p class="section-hint">{{ $t('simulator.sections.guestDefendersHint') }}</p>
             <div class="unit-grid">
               <label v-for="def in catalogue.definitions" :key="'g-' + def.type" class="unit-field">
                 <span>{{ def.type }}</span>
@@ -181,26 +177,26 @@ async function runSimulation() {
 
           <section class="options-row">
             <label class="option-field">
-              <span>Tower level</span>
+              <span>{{ $t('simulator.options.towerLevel') }}</span>
               <input type="number" min="0" v-model.number="towerLevel" />
             </label>
             <label class="option-field">
-              <span>Mission</span>
+              <span>{{ $t('simulator.options.mission') }}</span>
               <select v-model="mission">
-                <option value="attack">Attack</option>
-                <option value="raid">Raid</option>
+                <option value="attack">{{ $t('simulator.options.attack') }}</option>
+                <option value="raid">{{ $t('simulator.options.raid') }}</option>
               </select>
             </label>
             <label class="option-field">
-              <span>Seed (optional)</span>
-              <input type="number" v-model="seedText" placeholder="random" />
+              <span>{{ $t('simulator.options.seed') }}</span>
+              <input type="number" v-model="seedText" :placeholder="$t('simulator.options.seedPlaceholder')" />
             </label>
           </section>
 
           <p v-if="errorMessage" class="hint error">{{ errorMessage }}</p>
 
           <button type="submit" class="simulate-btn" :disabled="loading">
-            {{ loading ? 'Simulating…' : 'Simulate' }}
+            {{ loading ? $t('simulator.simulating') : $t('simulator.simulate') }}
           </button>
         </form>
 
@@ -222,6 +218,11 @@ async function runSimulation() {
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .brand {
   font-weight: 600;

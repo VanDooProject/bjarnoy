@@ -999,7 +999,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_paused_world_refuses_new_builds()
+    public async Task A_paused_world_refuses_new_builds_with_a_machine_readable_reason()
     {
         using var client = Client();
         var (worldId, settlement) = await FoundAsync(client);
@@ -1012,6 +1012,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("WorldPaused", await response.RejectionAsync(Ct));
     }
 
     [Fact]
@@ -1232,6 +1233,26 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             Ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Training_a_unit_not_yet_unlocked_carries_a_machine_readable_rejection_code()
+    {
+        // A count of 0 or less never reaches TrainRejection.InvalidCount at all — it's
+        // refused by TrainUnitsRequest's [Range(1, int.MaxValue)] model validation as a
+        // plain 400 before the request hits the domain. "axeman" requires longhouse
+        // level 3, so it's refused by the domain (a real 409) at a freshly-founded
+        // settlement's starting longhouse level.
+        using var client = Client();
+        var (_, settlement) = await FoundAsync(client);
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/settlements/{settlement.Id}/units",
+            new TrainUnitsRequest("axeman", 1),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("UnitNotAvailable", await response.RejectionAsync(Ct));
     }
 
     [Fact]

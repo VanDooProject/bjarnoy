@@ -6,6 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConversationView from './ConversationView.vue';
 import type { MessageResponse, ProfileResponse } from '../api/types';
 import { useAuthStore } from '../stores/auth';
+import { createTestI18n } from '../test/i18n';
+import enMessages from '../i18n/locales/en/messages.json';
+
+function mountConversationView() {
+  return mount(ConversationView, {
+    global: { plugins: [testRouter(), createTestI18n({ messages: enMessages })] },
+  });
+}
 
 // ConversationView renders <router-link> for its "back to messages" and
 // profile links — a real (memory-history) router resolves those to actual
@@ -80,7 +88,15 @@ beforeEach(() => {
   markConversationRead.mockResolvedValue({ markedRead: 0 });
 
   const auth = useAuthStore();
-  auth.user = { id: 'user-1', userName: 'ragnar', role: 'player', status: 'active', displayName: null, isPremium: false };
+  auth.user = {
+    id: 'user-1',
+    userName: 'ragnar',
+    role: 'player',
+    status: 'active',
+    displayName: null,
+    isPremium: false,
+    preferredLocale: null,
+  };
 });
 
 describe('ConversationView', () => {
@@ -96,7 +112,7 @@ describe('ConversationView', () => {
       pageSize: 50,
     });
 
-    const wrapper = mount(ConversationView, { global: { plugins: [testRouter()] } });
+    const wrapper = mountConversationView();
     await flushPromises();
 
     const bodies = wrapper.findAll('.body').map((b) => b.text());
@@ -109,7 +125,7 @@ describe('ConversationView', () => {
     getConversation.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 50 });
     sendMessage.mockResolvedValue(message({ id: 'msg-new', senderUserId: 'user-1', body: 'hello!' }));
 
-    const wrapper = mount(ConversationView, { global: { plugins: [testRouter()] } });
+    const wrapper = mountConversationView();
     await flushPromises();
 
     await wrapper.find('textarea').setValue('hello!');
@@ -125,7 +141,7 @@ describe('ConversationView', () => {
     getConversation.mockResolvedValue({ items: [message()], totalCount: 1, page: 1, pageSize: 50 });
     reportMessage.mockResolvedValue({});
 
-    const wrapper = mount(ConversationView, { global: { plugins: [testRouter()] } });
+    const wrapper = mountConversationView();
     await flushPromises();
 
     await wrapper.find('.report-link').trigger('click');
@@ -155,7 +171,7 @@ describe('ConversationView', () => {
       pageSize: 50,
     });
 
-    const wrapper = mount(ConversationView, { global: { plugins: [testRouter()] } });
+    const wrapper = mountConversationView();
     await flushPromises();
 
     expect(wrapper.text()).toContain('Read');

@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminSettlementSummary, SettlementResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
 import { useAdminWorldStore } from '../../stores/adminWorld';
 import ArmyEditor from './ArmyEditor.vue';
 import GarrisonForm from './GarrisonForm.vue';
 import GrantResourcesForm from './GrantResourcesForm.vue';
 import SettlementLayoutEditor from './SettlementLayoutEditor.vue';
 
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const adminWorld = useAdminWorldStore();
 
 const settlements = ref<AdminSettlementSummary[]>([]);
@@ -48,7 +51,7 @@ async function load() {
     settlements.value = result.items;
     totalCount.value = result.totalCount;
   } catch {
-    loadError.value = 'Could not load settlements.';
+    loadError.value = t('adminSettlements.loadError');
   } finally {
     loading.value = false;
   }
@@ -115,7 +118,7 @@ async function refreshDetail() {
     applySummary(updated);
     detailError.value = null;
   } catch (err) {
-    detailError.value = err instanceof ApiError ? err.message : 'Could not load settlement detail.';
+    detailError.value = err instanceof ApiError ? err.message : t('adminSettlements.detailError');
   }
 }
 
@@ -135,7 +138,7 @@ async function manage(settlement: AdminSettlementSummary) {
     detail.value = await api.adminGetSettlement(settlement.id);
     startDetailPolling();
   } catch (err) {
-    detailError.value = err instanceof ApiError ? err.message : 'Could not load settlement detail.';
+    detailError.value = err instanceof ApiError ? err.message : t('adminSettlements.detailError');
   } finally {
     detailLoading.value = false;
   }
@@ -151,29 +154,29 @@ onBeforeUnmount(stopDetailPolling);
 
 <template>
   <div class="settlements">
-    <h1>Settlements</h1>
+    <h1>{{ $t('adminSettlements.title') }}</h1>
 
     <div class="filters">
-      <input v-model="owner" type="text" placeholder="Owner name" @keyup.enter="onSearch" />
-      <button @click="onSearch">Search</button>
+      <input v-model="owner" type="text" :placeholder="$t('adminSettlements.ownerPlaceholder')" @keyup.enter="onSearch" />
+      <button @click="onSearch">{{ $t('adminSettlements.search') }}</button>
     </div>
 
     <p v-if="!adminWorld.selectedWorldId" class="hint">
-      Select a world above to search its settlements.
+      {{ $t('adminSettlements.selectWorldHint') }}
     </p>
-    <p v-else-if="loading">Loading…</p>
+    <p v-else-if="loading">{{ $t('adminSettlements.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <template v-else>
       <table class="table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Owner</th>
-            <th>World</th>
-            <th>Position</th>
-            <th>Longhouse</th>
-            <th>Actions</th>
+            <th>{{ $t('adminSettlements.columns.name') }}</th>
+            <th>{{ $t('adminSettlements.columns.owner') }}</th>
+            <th>{{ $t('adminSettlements.columns.world') }}</th>
+            <th>{{ $t('adminSettlements.columns.position') }}</th>
+            <th>{{ $t('adminSettlements.columns.longhouse') }}</th>
+            <th>{{ $t('adminSettlements.columns.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -190,23 +193,23 @@ onBeforeUnmount(stopDetailPolling);
                   :disabled="detailLoading"
                   @click="refreshDetail"
                 >
-                  Refresh
+                  {{ $t('adminSettlements.actions.refresh') }}
                 </button>
                 <button @click="manage(settlement)">
-                  {{ selectedId === settlement.id ? 'Close' : 'Manage' }}
+                  {{ selectedId === settlement.id ? $t('adminSettlements.actions.close') : $t('adminSettlements.actions.manage') }}
                 </button>
               </td>
             </tr>
             <tr v-if="selectedId === settlement.id" class="detail-row">
               <td colspan="6">
-                <p v-if="detailLoading">Loading detail…</p>
+                <p v-if="detailLoading">{{ $t('adminSettlements.loadingDetail') }}</p>
                 <p v-else-if="detailError" class="error">{{ detailError }}</p>
                 <div v-else-if="detail" class="detail">
                   <div class="stocks">
-                    <span>Wood {{ Math.floor(detail.resources.stock.wood) }} / {{ Math.floor(detail.resources.capacity.wood) }}</span>
-                    <span>Stone {{ Math.floor(detail.resources.stock.stone) }} / {{ Math.floor(detail.resources.capacity.stone) }}</span>
-                    <span>Food {{ Math.floor(detail.resources.stock.food) }} / {{ Math.floor(detail.resources.capacity.food) }}</span>
-                    <span>Iron {{ Math.floor(detail.resources.stock.iron) }} / {{ Math.floor(detail.resources.capacity.iron) }}</span>
+                    <span>{{ $t('adminSettlements.stocks.wood', { stock: Math.floor(detail.resources.stock.wood), capacity: Math.floor(detail.resources.capacity.wood) }) }}</span>
+                    <span>{{ $t('adminSettlements.stocks.stone', { stock: Math.floor(detail.resources.stock.stone), capacity: Math.floor(detail.resources.capacity.stone) }) }}</span>
+                    <span>{{ $t('adminSettlements.stocks.food', { stock: Math.floor(detail.resources.stock.food), capacity: Math.floor(detail.resources.capacity.food) }) }}</span>
+                    <span>{{ $t('adminSettlements.stocks.iron', { stock: Math.floor(detail.resources.stock.iron), capacity: Math.floor(detail.resources.capacity.iron) }) }}</span>
                   </div>
                   <div class="forms">
                     <GrantResourcesForm
@@ -234,9 +237,9 @@ onBeforeUnmount(stopDetailPolling);
       </table>
 
       <div class="pager">
-        <button :disabled="page <= 1" @click="changePage(-1)">Previous</button>
-        <span>Page {{ page }} · {{ totalCount }} settlements</span>
-        <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">Next</button>
+        <button :disabled="page <= 1" @click="changePage(-1)">{{ $t('adminSettlements.pager.previous') }}</button>
+        <span>{{ $t('adminSettlements.pager.summary', { page, total: totalCount }) }}</span>
+        <button :disabled="page * pageSize >= totalCount" @click="changePage(1)">{{ $t('adminSettlements.pager.next') }}</button>
       </div>
     </template>
   </div>

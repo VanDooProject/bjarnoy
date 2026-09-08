@@ -1,17 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { useGuildStore } from '../stores/guild';
 import { useWorldStore } from '../stores/world';
 import type { GuildBoardTopicKind, GuildFeeTier, GuildRole } from '../api/types';
+import type { MessageSchema } from '../i18n/schema';
 
 const world = useWorldStore();
 const auth = useAuthStore();
 const guild = useGuildStore();
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-const feeTierLabels: Record<GuildFeeTier, string> = { copper: 'Copper', silver: 'Silver', gold: 'Gold' };
+const feeTierLabels: Record<GuildFeeTier, string> = {
+  copper: t('guild.feeTier.copper'),
+  silver: t('guild.feeTier.silver'),
+  gold: t('guild.feeTier.gold'),
+};
 const feeTierOrder: GuildFeeTier[] = ['copper', 'silver', 'gold'];
-const roleLabels: Record<GuildRole, string> = { leader: 'Leader', officer: 'Officer', member: 'Member' };
+const roleLabels: Record<GuildRole, string> = {
+  leader: t('guild.role.leader'),
+  officer: t('guild.role.officer'),
+  member: t('guild.role.member'),
+};
 
 // Local aliases for the store's nullable fields: template `v-if`/`v-else`
 // narrows a plain ref/computed cleanly, but not a Pinia state property
@@ -166,50 +177,52 @@ function guildLabel(id: string): string {
 }
 
 function formattedDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+  return d(new Date(iso), 'long');
 }
 </script>
 
 <template>
   <div class="guild-view">
-    <h1>Guild</h1>
+    <h1>{{ $t('guild.title') }}</h1>
 
-    <p v-if="!world.worldId" class="hint">No live world to show guilds for.</p>
+    <p v-if="!world.worldId" class="hint">{{ $t('guild.noWorld') }}</p>
 
     <template v-else-if="!current">
       <section class="directory">
         <div class="directory-head">
-          <h2>Guilds in this world</h2>
-          <button v-if="auth.isAuthenticated" @click="openFound">Found a guild</button>
+          <h2>{{ $t('guild.directory.title') }}</h2>
+          <button v-if="auth.isAuthenticated" @click="openFound">{{ $t('guild.directory.found') }}</button>
         </div>
 
-        <p v-if="guild.guildsLoading">Loading…</p>
+        <p v-if="guild.guildsLoading">{{ $t('guild.directory.loading') }}</p>
         <p v-else-if="guild.guildsError" class="error">{{ guild.guildsError }}</p>
-        <p v-else-if="guild.guilds.length === 0" class="hint">No guilds yet — be the first to found one.</p>
+        <p v-else-if="guild.guilds.length === 0" class="hint">{{ $t('guild.directory.empty') }}</p>
 
         <ul v-else class="guild-list">
           <li v-for="g in guild.guilds" :key="g.id" class="guild-row">
             <div>
               <strong>[{{ g.tag }}] {{ g.name }}</strong>
-              <span class="muted"> · {{ feeTierLabels[g.feeTier] }} · {{ g.memberCount }} members</span>
+              <span class="muted">
+                · {{ feeTierLabels[g.feeTier] }} · {{ $t('guild.directory.memberCount', { count: g.memberCount }) }}
+              </span>
               <p v-if="g.description" class="muted description">{{ g.description }}</p>
             </div>
             <div class="row">
-              <button class="secondary" @click="selectGuild(g.id)">View</button>
+              <button class="secondary" @click="selectGuild(g.id)">{{ $t('guild.directory.view') }}</button>
               <button v-if="auth.isAuthenticated" :disabled="guild.actionPending" @click="join(g.id)">
-                Join
+                {{ $t('guild.directory.join') }}
               </button>
             </div>
           </li>
         </ul>
 
         <div v-if="foundOpen" class="backdrop" @click.self="foundOpen = false">
-          <div class="dialog" role="dialog" aria-label="Found a guild">
-            <h2>Found a guild</h2>
-            <label>Name <input v-model="foundName" maxlength="50" /></label>
-            <label>Tag <input v-model="foundTag" maxlength="5" /></label>
+          <div class="dialog" role="dialog" :aria-label="$t('guild.foundDialog.ariaLabel')">
+            <h2>{{ $t('guild.foundDialog.title') }}</h2>
+            <label>{{ $t('guild.foundDialog.name') }} <input v-model="foundName" maxlength="50" /></label>
+            <label>{{ $t('guild.foundDialog.tag') }} <input v-model="foundTag" maxlength="5" /></label>
             <label>
-              Description (optional)
+              {{ $t('guild.foundDialog.description') }}
               <textarea v-model="foundDescription" rows="3" maxlength="500"></textarea>
             </label>
             <p v-if="guild.actionError" class="error">{{ guild.actionError }}</p>
@@ -218,10 +231,10 @@ function formattedDate(iso: string): string {
                 :disabled="guild.actionPending || !foundName.trim() || !foundTag.trim()"
                 @click="submitFound"
               >
-                Found
+                {{ $t('guild.foundDialog.found') }}
               </button>
               <button class="secondary" :disabled="guild.actionPending" @click="foundOpen = false">
-                Cancel
+                {{ $t('guild.foundDialog.cancel') }}
               </button>
             </div>
           </div>
@@ -231,9 +244,9 @@ function formattedDate(iso: string): string {
 
     <template v-else>
       <section class="detail">
-        <button class="secondary back" @click="backToDirectory">&larr; Back to guild list</button>
+        <button class="secondary back" @click="backToDirectory">{{ $t('guild.detail.back') }}</button>
 
-        <p v-if="guild.currentLoading">Loading…</p>
+        <p v-if="guild.currentLoading">{{ $t('guild.detail.loading') }}</p>
         <p v-else-if="guild.currentError" class="error">{{ guild.currentError }}</p>
 
         <template v-else>
@@ -250,10 +263,10 @@ function formattedDate(iso: string): string {
                 :disabled="guild.actionPending"
                 @click="leaveCurrent"
               >
-                {{ guild.isLeader && current.memberCount === 1 ? 'Disband' : 'Leave' }}
+                {{ guild.isLeader && current.memberCount === 1 ? $t('guild.detail.disband') : $t('guild.detail.leave') }}
               </button>
               <button v-else-if="auth.isAuthenticated" :disabled="guild.actionPending" @click="join(current.id)">
-                Join
+                {{ $t('guild.detail.join') }}
               </button>
             </div>
           </header>
@@ -261,27 +274,27 @@ function formattedDate(iso: string): string {
           <p v-if="guild.actionError" class="error">{{ guild.actionError }}</p>
 
           <section v-if="perks" class="perks">
-            <h3>Perks &amp; caps</h3>
+            <h3>{{ $t('guild.perks.title') }}</h3>
             <dl class="facts">
               <div>
-                <dt>Member cap</dt>
+                <dt>{{ $t('guild.perks.memberCap') }}</dt>
                 <dd>{{ current.memberCount }} / {{ perks.memberCap }}</dd>
               </div>
               <div>
-                <dt>Peace treaty cap</dt>
+                <dt>{{ $t('guild.perks.peaceTreatyCap') }}</dt>
                 <dd>{{ perks.maxActivePeaceTreaties }}</dd>
               </div>
               <div>
-                <dt>Trade bonus</dt>
-                <dd>+{{ Math.round(perks.tradeCapacityBonus * 100) }}%</dd>
+                <dt>{{ $t('guild.perks.tradeBonus') }}</dt>
+                <dd>{{ `+${Math.round(perks.tradeCapacityBonus * 100)}%` }}</dd>
               </div>
               <div>
-                <dt>Unit support</dt>
-                <dd>{{ perks.allowUnitSupport ? 'Yes' : 'No' }}</dd>
+                <dt>{{ $t('guild.perks.unitSupport') }}</dt>
+                <dd>{{ perks.allowUnitSupport ? $t('guild.perks.yes') : $t('guild.perks.no') }}</dd>
               </div>
             </dl>
             <div v-if="guild.isLeader" class="row">
-              <span class="muted">Fee tier:</span>
+              <span class="muted">{{ $t('guild.perks.feeTierLabel') }}</span>
               <button
                 v-for="tier in feeTierOrder"
                 :key="tier"
@@ -298,21 +311,25 @@ function formattedDate(iso: string): string {
 
           <section v-if="guild.myMembership" class="fee">
             <span :class="{ overdue: guild.myMembership.feeOverdue }">
-              Your fee is {{ guild.myMembership.feeOverdue ? 'overdue' : 'paid up' }}.
+              {{
+                $t('guild.fee.status', {
+                  status: guild.myMembership.feeOverdue ? $t('guild.fee.overdue') : $t('guild.fee.paidUp'),
+                })
+              }}
             </span>
-            <button :disabled="guild.actionPending" @click="payFee">Pay fee</button>
+            <button :disabled="guild.actionPending" @click="payFee">{{ $t('guild.fee.payFee') }}</button>
           </section>
 
           <section class="roster">
-            <h3>Roster ({{ current.memberCount }})</h3>
+            <h3>{{ $t('guild.roster.title', { count: current.memberCount }) }}</h3>
             <ul class="member-list">
               <li v-for="m in current.members" :key="m.userId" class="member-row">
                 <span class="member-id">{{ m.userId.slice(0, 8) }}</span>
                 <span class="badge">{{ roleLabels[m.role] }}</span>
-                <span v-if="m.feeOverdue" class="badge overdue">overdue</span>
+                <span v-if="m.feeOverdue" class="badge overdue">{{ $t('guild.roster.overdue') }}</span>
                 <span v-if="guild.isLeader && m.role !== 'leader'" class="row member-actions">
                   <button class="secondary small" :disabled="guild.actionPending" @click="promote(m.userId, 'leader')">
-                    Make leader
+                    {{ $t('guild.roster.makeLeader') }}
                   </button>
                   <button
                     v-if="m.role !== 'officer'"
@@ -320,7 +337,7 @@ function formattedDate(iso: string): string {
                     :disabled="guild.actionPending"
                     @click="promote(m.userId, 'officer')"
                   >
-                    Make officer
+                    {{ $t('guild.roster.makeOfficer') }}
                   </button>
                   <button
                     v-else
@@ -328,10 +345,10 @@ function formattedDate(iso: string): string {
                     :disabled="guild.actionPending"
                     @click="promote(m.userId, 'member')"
                   >
-                    Demote
+                    {{ $t('guild.roster.demote') }}
                   </button>
                   <button class="secondary small" :disabled="guild.actionPending" @click="kick(m.userId)">
-                    Kick
+                    {{ $t('guild.roster.kick') }}
                   </button>
                 </span>
                 <button
@@ -340,48 +357,53 @@ function formattedDate(iso: string): string {
                   :disabled="guild.actionPending"
                   @click="kick(m.userId)"
                 >
-                  Kick
+                  {{ $t('guild.roster.kick') }}
                 </button>
               </li>
             </ul>
           </section>
 
           <section class="board">
-            <h3>Board</h3>
-            <p v-if="guild.topicsLoading">Loading…</p>
+            <h3>{{ $t('guild.board.title') }}</h3>
+            <p v-if="guild.topicsLoading">{{ $t('guild.board.loading') }}</p>
             <p v-else-if="guild.topicsError" class="error">{{ guild.topicsError }}</p>
 
             <template v-else-if="!activeTopicId">
               <ul class="topic-list">
-                <li v-if="guild.topics.length === 0" class="muted">No topics yet.</li>
+                <li v-if="guild.topics.length === 0" class="muted">{{ $t('guild.board.noTopics') }}</li>
                 <li v-for="t in guild.topics" :key="t.id" class="topic-row" @click="openTopic(t.id)">
-                  <span v-if="t.pinned" class="badge">pinned</span>
+                  <span v-if="t.pinned" class="badge">{{ $t('guild.board.pinned') }}</span>
                   <span class="badge">{{ t.kind }}</span>
                   <strong>{{ t.title }}</strong>
                 </li>
               </ul>
 
               <div v-if="guild.myMembership" class="new-topic">
-                <h4>Start a topic</h4>
-                <input v-model="newTopicTitle" maxlength="120" placeholder="Title" />
+                <h4>{{ $t('guild.board.startTopic') }}</h4>
+                <input v-model="newTopicTitle" maxlength="120" :placeholder="$t('guild.board.titlePlaceholder')" />
                 <select v-model="newTopicKind">
-                  <option value="discussion">Discussion</option>
-                  <option value="announcement">Announcement</option>
-                  <option value="report">Report</option>
+                  <option value="discussion">{{ $t('guild.board.discussion') }}</option>
+                  <option value="announcement">{{ $t('guild.board.announcement') }}</option>
+                  <option value="report">{{ $t('guild.board.report') }}</option>
                 </select>
-                <textarea v-model="newTopicBody" rows="3" maxlength="4000" placeholder="Message…"></textarea>
+                <textarea
+                  v-model="newTopicBody"
+                  rows="3"
+                  maxlength="4000"
+                  :placeholder="$t('guild.board.messagePlaceholder')"
+                ></textarea>
                 <button
                   :disabled="guild.actionPending || !newTopicTitle.trim() || !newTopicBody.trim()"
                   @click="submitTopic"
                 >
-                  Post
+                  {{ $t('guild.board.post') }}
                 </button>
               </div>
             </template>
 
             <div v-else class="topic-thread">
-              <button class="secondary" @click="backToTopics">&larr; Back to topics</button>
-              <p v-if="guild.activeTopicLoading">Loading…</p>
+              <button class="secondary" @click="backToTopics">{{ $t('guild.board.backToTopics') }}</button>
+              <p v-if="guild.activeTopicLoading">{{ $t('guild.board.loading') }}</p>
               <p v-else-if="guild.activeTopicError" class="error">{{ guild.activeTopicError }}</p>
               <template v-else-if="activeTopic">
                 <h4>{{ activeTopic.title }}</h4>
@@ -392,46 +414,57 @@ function formattedDate(iso: string): string {
                   </li>
                 </ul>
                 <div v-if="guild.myMembership && !activeTopic.locked" class="reply-form">
-                  <textarea v-model="replyBody" rows="2" maxlength="4000" placeholder="Reply…"></textarea>
-                  <button :disabled="guild.actionPending || !replyBody.trim()" @click="submitReply">Reply</button>
+                  <textarea
+                    v-model="replyBody"
+                    rows="2"
+                    maxlength="4000"
+                    :placeholder="$t('guild.board.replyPlaceholder')"
+                  ></textarea>
+                  <button :disabled="guild.actionPending || !replyBody.trim()" @click="submitReply">
+                    {{ $t('guild.board.reply') }}
+                  </button>
                 </div>
               </template>
             </div>
           </section>
 
           <section class="treaties">
-            <h3>Peace treaties</h3>
-            <p v-if="guild.treatiesLoading">Loading…</p>
+            <h3>{{ $t('guild.treaties.title') }}</h3>
+            <p v-if="guild.treatiesLoading">{{ $t('guild.treaties.loading') }}</p>
             <p v-else-if="guild.treatiesError" class="error">{{ guild.treatiesError }}</p>
             <ul v-else class="treaty-list">
-              <li v-if="guild.treaties.length === 0" class="muted">No treaties yet.</li>
+              <li v-if="guild.treaties.length === 0" class="muted">{{ $t('guild.treaties.noTreaties') }}</li>
               <li v-for="t in guild.treaties" :key="t.id" class="treaty-row">
-                <span>{{ guildLabel(t.proposerGuildId) }} &harr; {{ guildLabel(t.targetGuildId) }}</span>
+                <span>{{ `${guildLabel(t.proposerGuildId)} ↔ ${guildLabel(t.targetGuildId)}` }}</span>
                 <span class="badge">{{ t.status }}</span>
                 <span
                   v-if="guild.isOfficerOrLeader && t.status === 'proposed' && t.targetGuildId === current.id"
                   class="row"
                 >
-                  <button class="secondary small" @click="guild.respondTreaty(t.id, true)">Accept</button>
-                  <button class="secondary small" @click="guild.respondTreaty(t.id, false)">Reject</button>
+                  <button class="secondary small" @click="guild.respondTreaty(t.id, true)">
+                    {{ $t('guild.treaties.accept') }}
+                  </button>
+                  <button class="secondary small" @click="guild.respondTreaty(t.id, false)">
+                    {{ $t('guild.treaties.reject') }}
+                  </button>
                 </span>
                 <button
                   v-if="guild.isLeader && t.status === 'active'"
                   class="secondary small"
                   @click="guild.breakTreaty(t.id)"
                 >
-                  Break
+                  {{ $t('guild.treaties.break') }}
                 </button>
               </li>
             </ul>
 
             <div v-if="guild.isOfficerOrLeader" class="propose-form">
               <select v-model="proposeTargetId">
-                <option value="" disabled>Choose a guild…</option>
+                <option value="" disabled>{{ $t('guild.treaties.chooseGuild') }}</option>
                 <option v-for="g in treatyCandidates" :key="g.id" :value="g.id">[{{ g.tag }}] {{ g.name }}</option>
               </select>
               <button :disabled="guild.actionPending || !proposeTargetId" @click="submitPropose">
-                Propose peace
+                {{ $t('guild.treaties.proposePeace') }}
               </button>
             </div>
           </section>

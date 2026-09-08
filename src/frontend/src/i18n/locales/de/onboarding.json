@@ -1,0 +1,9 @@
+{
+  "nicknamePrompt": {
+    "title": "Landung geglückt.",
+    "body": "Dein Langschiff hat Land erreicht. Benenne deinen Jarl, bevor die See davon Notiz nimmt — kein Konto, kein Passwort, nur ein Name.",
+    "placeholder": "Der Name deines Jarls",
+    "skip": "Später überspringen",
+    "confirm": "Namen festlegen"
+  }
+}

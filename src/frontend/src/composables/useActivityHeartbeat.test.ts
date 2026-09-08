@@ -64,6 +64,7 @@ function authenticate() {
     status: 'active',
     displayName: null,
     isPremium: false,
+    preferredLocale: null,
   };
 }
 

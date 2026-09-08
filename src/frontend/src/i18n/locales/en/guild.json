@@ -1,0 +1,89 @@
+{
+  "title": "Guild",
+  "noWorld": "No live world to show guilds for.",
+  "directory": {
+    "title": "Guilds in this world",
+    "found": "Found a guild",
+    "loading": "Loading…",
+    "empty": "No guilds yet — be the first to found one.",
+    "memberCount": "{count} members",
+    "view": "View",
+    "join": "Join"
+  },
+  "feeTier": {
+    "copper": "Copper",
+    "silver": "Silver",
+    "gold": "Gold"
+  },
+  "role": {
+    "leader": "Leader",
+    "officer": "Officer",
+    "member": "Member"
+  },
+  "foundDialog": {
+    "ariaLabel": "Found a guild",
+    "title": "Found a guild",
+    "name": "Name",
+    "tag": "Tag",
+    "description": "Description (optional)",
+    "found": "Found",
+    "cancel": "Cancel"
+  },
+  "detail": {
+    "back": "← Back to guild list",
+    "loading": "Loading…",
+    "disband": "Disband",
+    "leave": "Leave",
+    "join": "Join"
+  },
+  "perks": {
+    "title": "Perks & caps",
+    "memberCap": "Member cap",
+    "peaceTreatyCap": "Peace treaty cap",
+    "tradeBonus": "Trade bonus",
+    "unitSupport": "Unit support",
+    "yes": "Yes",
+    "no": "No",
+    "feeTierLabel": "Fee tier:"
+  },
+  "fee": {
+    "overdue": "overdue",
+    "paidUp": "paid up",
+    "status": "Your fee is {status}.",
+    "payFee": "Pay fee"
+  },
+  "roster": {
+    "title": "Roster ({count})",
+    "overdue": "overdue",
+    "makeLeader": "Make leader",
+    "makeOfficer": "Make officer",
+    "demote": "Demote",
+    "kick": "Kick"
+  },
+  "board": {
+    "title": "Board",
+    "loading": "Loading…",
+    "noTopics": "No topics yet.",
+    "pinned": "pinned",
+    "startTopic": "Start a topic",
+    "titlePlaceholder": "Title",
+    "discussion": "Discussion",
+    "announcement": "Announcement",
+    "report": "Report",
+    "messagePlaceholder": "Message…",
+    "post": "Post",
+    "backToTopics": "← Back to topics",
+    "replyPlaceholder": "Reply…",
+    "reply": "Reply"
+  },
+  "treaties": {
+    "title": "Peace treaties",
+    "loading": "Loading…",
+    "noTreaties": "No treaties yet.",
+    "accept": "Accept",
+    "reject": "Reject",
+    "break": "Break",
+    "chooseGuild": "Choose a guild…",
+    "proposePeace": "Propose peace"
+  }
+}

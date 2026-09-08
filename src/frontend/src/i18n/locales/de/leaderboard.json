@@ -1,0 +1,41 @@
+{
+  "title": "Ranglisten",
+  "noWorld": "Keine aktive Welt, für die Ranglisten angezeigt werden können.",
+  "jumpToMyRank": "Zu meinem Rang springen",
+  "current": "Aktuell",
+  "weekOf": "Woche vom {date}",
+  "noEntries": "Noch keine Einträge.",
+  "table": {
+    "rank": "Rang",
+    "name": "Name",
+    "value": "Wert",
+    "change": "Änderung"
+  },
+  "badge": {
+    "new": "neu",
+    "flat": "—"
+  },
+  "loadMore": "Mehr laden",
+  "scopes": {
+    "user": "Spieler",
+    "settlement": "Siedlungen",
+    "guild": "Gilden"
+  },
+  "categories": {
+    "score": "Punkte",
+    "biggestSettlement": "Größte Siedlung",
+    "weeklyScoreGained": "Punkte diese Woche",
+    "weeklyFightsWon": "Gewonnene Kämpfe diese Woche",
+    "weeklyFightsLost": "Verlorene Kämpfe diese Woche",
+    "weeklyResourcesLooted": "Erbeutete Rohstoffe diese Woche",
+    "biggestArmy": "Größte Armee"
+  },
+  "darkReasons": {
+    "noBattleSystemYet": "Wird freigeschaltet, sobald es Kämpfe gibt.",
+    "noArmySystemYet": "Wird freigeschaltet, sobald es Armeen gibt.",
+    "noGuildSystemYet": "Wird freigeschaltet, sobald es Gilden gibt.",
+    "noWeeklyWindowsYet": "Wird freigeschaltet, sobald wöchentliche Zeiträume erfasst werden.",
+    "notComputedYet": "Noch nicht berechnet — schau später wieder vorbei.",
+    "unknownBoard": "Diese Rangliste gibt es nicht."
+  }
+}

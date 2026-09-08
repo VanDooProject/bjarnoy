@@ -1,40 +1,44 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { useLeaderboardStore } from '../stores/leaderboard';
 import { useWorldStore } from '../stores/world';
 import type { LeaderboardCategory, LeaderboardScope } from '../api/types';
+import type { MessageSchema } from '../i18n/schema';
+
+const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const auth = useAuthStore();
 const leaderboard = useLeaderboardStore();
 
-const scopeLabels: Record<LeaderboardScope, string> = {
-  user: 'Players',
-  settlement: 'Settlements',
-  guild: 'Guilds',
-};
+const scopeLabels = computed<Record<LeaderboardScope, string>>(() => ({
+  user: t('leaderboard.scopes.user'),
+  settlement: t('leaderboard.scopes.settlement'),
+  guild: t('leaderboard.scopes.guild'),
+}));
 
-const categoryLabels: Record<LeaderboardCategory, string> = {
-  score: 'Score',
-  biggestSettlement: 'Biggest settlement',
-  weeklyScoreGained: 'Weekly score gained',
-  weeklyFightsWon: 'Weekly fights won',
-  weeklyFightsLost: 'Weekly fights lost',
-  weeklyResourcesLooted: 'Weekly resources looted',
-  biggestArmy: 'Biggest army',
-};
+const categoryLabels = computed<Record<LeaderboardCategory, string>>(() => ({
+  score: t('leaderboard.categories.score'),
+  biggestSettlement: t('leaderboard.categories.biggestSettlement'),
+  weeklyScoreGained: t('leaderboard.categories.weeklyScoreGained'),
+  weeklyFightsWon: t('leaderboard.categories.weeklyFightsWon'),
+  weeklyFightsLost: t('leaderboard.categories.weeklyFightsLost'),
+  weeklyResourcesLooted: t('leaderboard.categories.weeklyResourcesLooted'),
+  biggestArmy: t('leaderboard.categories.biggestArmy'),
+}));
 
 // Mirrors the reasons `LeaderboardCatalogue.cs` hands back — kept as a plain
 // map so a reason with no entry here still renders something (its raw code).
-const darkReasonLabels: Record<string, string> = {
-  noBattleSystemYet: 'Unlocks once battles exist.',
-  noArmySystemYet: 'Unlocks once armies exist.',
-  noGuildSystemYet: 'Unlocks once guilds exist.',
-  noWeeklyWindowsYet: 'Unlocks once weekly windows are tracked.',
-  notComputedYet: 'Not computed yet — check back soon.',
-  unknownBoard: 'This board does not exist.',
-};
+const darkReasonLabels = computed<Record<string, string>>(() => ({
+  noBattleSystemYet: t('leaderboard.darkReasons.noBattleSystemYet'),
+  noArmySystemYet: t('leaderboard.darkReasons.noArmySystemYet'),
+  noGuildSystemYet: t('leaderboard.darkReasons.noGuildSystemYet'),
+  noWeeklyWindowsYet: t('leaderboard.darkReasons.noWeeklyWindowsYet'),
+  notComputedYet: t('leaderboard.darkReasons.notComputedYet'),
+  unknownBoard: t('leaderboard.darkReasons.unknownBoard'),
+}));
 
 const scopeOrder: LeaderboardScope[] = ['user', 'settlement', 'guild'];
 const groupedBoards = computed(() =>
@@ -60,7 +64,7 @@ function selectTab(scope: LeaderboardScope, category: LeaderboardCategory) {
 const windowOptions = computed(() => [...leaderboard.weeklyWindows].reverse());
 
 function windowLabel(periodStart: string) {
-  return new Date(periodStart).toLocaleDateString();
+  return d(new Date(periodStart), 'short');
 }
 
 function selectWindow(periodStart: string | null) {
@@ -88,12 +92,12 @@ watch(() => world.worldId, loadForCurrentWorld);
 
 <template>
   <div class="leaderboard">
-    <h1>Leaderboards</h1>
+    <h1>{{ $t('leaderboard.title') }}</h1>
 
-    <p v-if="!world.worldId" class="hint">No live world to show leaderboards for.</p>
+    <p v-if="!world.worldId" class="hint">{{ $t('leaderboard.noWorld') }}</p>
 
     <template v-else>
-      <p v-if="leaderboard.directoryLoading">Loading…</p>
+      <p v-if="leaderboard.directoryLoading">{{ $t('common.states.loading') }}</p>
       <p v-else-if="leaderboard.directoryError" class="error">{{ leaderboard.directoryError }}</p>
 
       <template v-else>
@@ -120,7 +124,7 @@ watch(() => world.worldId, loadForCurrentWorld);
           <div class="board-header">
             <h2>{{ categoryLabels[activeBoard.category] }}</h2>
             <button v-if="canJumpToMyRank" type="button" class="jump-btn" @click="jumpToMyRank">
-              Jump to my rank
+              {{ $t('leaderboard.jumpToMyRank') }}
             </button>
           </div>
 
@@ -131,7 +135,7 @@ watch(() => world.worldId, loadForCurrentWorld);
               :class="{ active: leaderboard.selectedPeriodStart === null }"
               @click="selectWindow(null)"
             >
-              Current
+              {{ $t('leaderboard.current') }}
             </button>
             <button
               v-for="window in windowOptions"
@@ -141,7 +145,7 @@ watch(() => world.worldId, loadForCurrentWorld);
               :class="{ active: leaderboard.selectedPeriodStart === window.periodStart }"
               @click="selectWindow(window.periodStart)"
             >
-              Week of {{ windowLabel(window.periodStart) }}
+              {{ $t('leaderboard.weekOf', { date: windowLabel(window.periodStart) }) }}
             </button>
           </div>
 
@@ -152,18 +156,20 @@ watch(() => world.worldId, loadForCurrentWorld);
           <template v-else>
             <p v-if="leaderboard.myRankError" class="error">{{ leaderboard.myRankError }}</p>
 
-            <p v-if="leaderboard.boardLoading && leaderboard.entries.length === 0">Loading…</p>
+            <p v-if="leaderboard.boardLoading && leaderboard.entries.length === 0">
+              {{ $t('common.states.loading') }}
+            </p>
             <p v-else-if="leaderboard.boardError" class="error">{{ leaderboard.boardError }}</p>
-            <p v-else-if="leaderboard.entries.length === 0">No entries yet.</p>
+            <p v-else-if="leaderboard.entries.length === 0">{{ $t('leaderboard.noEntries') }}</p>
 
             <template v-else>
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Rank</th>
-                    <th>Name</th>
-                    <th>Value</th>
-                    <th>Change</th>
+                    <th>{{ $t('leaderboard.table.rank') }}</th>
+                    <th>{{ $t('leaderboard.table.name') }}</th>
+                    <th>{{ $t('leaderboard.table.value') }}</th>
+                    <th>{{ $t('leaderboard.table.change') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,10 +182,10 @@ watch(() => world.worldId, loadForCurrentWorld);
                     <td>{{ entry.subjectName }}</td>
                     <td>{{ Math.round(entry.value) }}</td>
                     <td>
-                      <span v-if="entry.previousRank === null" class="badge new">new</span>
-                      <span v-else-if="entry.delta && entry.delta > 0" class="badge up">▲ {{ entry.delta }}</span>
-                      <span v-else-if="entry.delta && entry.delta < 0" class="badge down">▼ {{ -entry.delta }}</span>
-                      <span v-else class="badge flat">—</span>
+                      <span v-if="entry.previousRank === null" class="badge new">{{ $t('leaderboard.badge.new') }}</span>
+                      <span v-else-if="entry.delta && entry.delta > 0" class="badge up">{{ `▲ ${entry.delta}` }}</span>
+                      <span v-else-if="entry.delta && entry.delta < 0" class="badge down">{{ `▼ ${-entry.delta}` }}</span>
+                      <span v-else class="badge flat">{{ $t('leaderboard.badge.flat') }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -187,7 +193,7 @@ watch(() => world.worldId, loadForCurrentWorld);
 
               <div class="pager">
                 <button :disabled="leaderboard.boardLoading || !leaderboard.nextAfterRank" @click="loadMore">
-                  {{ leaderboard.boardLoading ? 'Loading…' : 'Load more' }}
+                  {{ leaderboard.boardLoading ? $t('common.states.loading') : $t('leaderboard.loadMore') }}
                 </button>
               </div>
             </template>

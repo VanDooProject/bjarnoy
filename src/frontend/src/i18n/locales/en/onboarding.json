@@ -1,0 +1,9 @@
+{
+  "nicknamePrompt": {
+    "title": "Landfall made.",
+    "body": "Your longship has broken ground. Name your jarl before the sea takes notice — no account, no password, just a name.",
+    "placeholder": "Your jarl's name",
+    "skip": "Skip for now",
+    "confirm": "Set name"
+  }
+}

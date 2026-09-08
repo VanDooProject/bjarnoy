@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { AdminWorldResponse } from '../../api/types';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const worlds = ref<AdminWorldResponse[]>([]);
 const loading = ref(true);
@@ -63,7 +67,7 @@ async function createWorld() {
   if (newWorld.creating) return;
 
   if (newWorld.name.trim().length < 3) {
-    newWorld.error = 'A world name needs at least three characters.';
+    newWorld.error = t('adminWorlds.create.nameTooShort');
     return;
   }
 
@@ -84,7 +88,7 @@ async function createWorld() {
     newWorld.name = '';
     newWorld.seed = '';
   } catch (err) {
-    newWorld.error = err instanceof ApiError ? err.message : 'Could not create the world.';
+    newWorld.error = err instanceof ApiError ? err.message : t('adminWorlds.create.createError');
   } finally {
     newWorld.creating = false;
   }
@@ -99,7 +103,7 @@ async function load() {
       drafts[world.id] = draftFor(world);
     }
   } catch {
-    loadError.value = 'Could not load worlds.';
+    loadError.value = t('adminWorlds.loadError');
   } finally {
     loading.value = false;
   }
@@ -119,7 +123,7 @@ async function saveSettings(world: AdminWorldResponse) {
 
   const speedFactor = Number(draft.speedFactor);
   if (!Number.isFinite(speedFactor) || speedFactor <= 0) {
-    draft.error = 'Speed factor must be greater than 0.';
+    draft.error = t('adminWorlds.speedFactorTooLow');
     return;
   }
 
@@ -134,25 +138,25 @@ async function saveSettings(world: AdminWorldResponse) {
     });
     applyUpdated(updated);
   } catch (err) {
-    draft.error = err instanceof ApiError ? err.message : 'Could not save.';
+    draft.error = err instanceof ApiError ? err.message : t('adminWorlds.saveError');
   } finally {
     draft.saving = false;
   }
 }
 
-const RUN_STATE_LABELS: Record<string, string> = {
-  pause: 'Pause',
-  maintenance: 'Enter maintenance',
-  lock: 'Lock',
-  resume: 'Resume',
-};
+const RUN_STATE_LABELS = computed<Record<string, string>>(() => ({
+  pause: t('adminWorlds.runStateLabels.pause'),
+  maintenance: t('adminWorlds.runStateLabels.maintenance'),
+  lock: t('adminWorlds.runStateLabels.lock'),
+  resume: t('adminWorlds.runStateLabels.resume'),
+}));
 
 async function setRunState(world: AdminWorldResponse, action: string) {
   const draft = drafts[world.id];
   if (!draft || draft.saving) return;
 
-  const label = RUN_STATE_LABELS[action] ?? action;
-  if (!window.confirm(`${label} world "${world.name}"?`)) return;
+  const label = RUN_STATE_LABELS.value[action] ?? action;
+  if (!window.confirm(t('adminWorlds.confirmRunState', { label, name: world.name }))) return;
 
   draft.saving = true;
   draft.error = null;
@@ -161,7 +165,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
     const updated = await api.adminSetWorldRunState(world.id, { action, graceMinutes });
     applyUpdated(updated);
   } catch (err) {
-    draft.error = err instanceof ApiError ? err.message : 'Could not update run state.';
+    draft.error = err instanceof ApiError ? err.message : t('adminWorlds.runStateError');
   } finally {
     draft.saving = false;
   }
@@ -170,46 +174,46 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 
 <template>
   <div class="worlds">
-    <h1>Worlds</h1>
+    <h1>{{ $t('adminWorlds.title') }}</h1>
 
     <form class="create" @submit.prevent="createWorld">
-      <h2>Create a world</h2>
+      <h2>{{ $t('adminWorlds.create.heading') }}</h2>
       <div class="create-fields">
         <label>
-          Name
-          <input v-model="newWorld.name" type="text" placeholder="Midgard" />
+          {{ $t('adminWorlds.create.name') }}
+          <input v-model="newWorld.name" type="text" :placeholder="$t('adminWorlds.create.namePlaceholder')" />
         </label>
         <label>
-          Seed
-          <input v-model="newWorld.seed" type="number" step="1" placeholder="random" />
+          {{ $t('adminWorlds.create.seed') }}
+          <input v-model="newWorld.seed" type="number" step="1" :placeholder="$t('adminWorlds.create.seedPlaceholder')" />
         </label>
         <label>
-          Radius
+          {{ $t('adminWorlds.create.radius') }}
           <input v-model="newWorld.radius" type="number" min="1" max="1000" step="1" />
         </label>
         <label>
-          Max players
+          {{ $t('adminWorlds.create.maxPlayers') }}
           <input v-model="newWorld.maxPlayers" type="number" min="1" step="1" />
         </label>
         <button type="submit" :disabled="newWorld.creating">
-          {{ newWorld.creating ? 'Generating…' : 'Create world' }}
+          {{ newWorld.creating ? $t('adminWorlds.create.generating') : $t('adminWorlds.create.submit') }}
         </button>
       </div>
       <p v-if="newWorld.error" class="error">{{ newWorld.error }}</p>
     </form>
 
-    <p v-if="loading">Loading…</p>
+    <p v-if="loading">{{ $t('adminWorlds.loading') }}</p>
     <p v-else-if="loadError" class="error">{{ loadError }}</p>
 
     <table v-else class="table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Status</th>
-          <th>Run state</th>
-          <th>Players</th>
-          <th>Joinable</th>
-          <th>Endboss</th>
+          <th>{{ $t('adminWorlds.columns.name') }}</th>
+          <th>{{ $t('adminWorlds.columns.status') }}</th>
+          <th>{{ $t('adminWorlds.columns.runState') }}</th>
+          <th>{{ $t('adminWorlds.columns.players') }}</th>
+          <th>{{ $t('adminWorlds.columns.joinable') }}</th>
+          <th>{{ $t('adminWorlds.columns.endboss') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -218,8 +222,8 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <td>{{ world.status }}</td>
           <td>{{ world.runState }}</td>
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
-          <td>{{ world.joinsClosed ? 'Closed' : 'Open' }}</td>
-          <td>{{ world.endbossTriggeredAt ? 'Triggered' : world.endbossAt ? 'Scheduled' : '—' }}</td>
+          <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
+          <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
         </tr>
       </tbody>
     </table>
@@ -228,7 +232,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
       <h2>{{ world.name }}</h2>
 
       <div class="fields">
-        <label :for="`speed-${world.id}`">Speed factor</label>
+        <label :for="`speed-${world.id}`">{{ $t('adminWorlds.fields.speedFactor') }}</label>
         <input
           :id="`speed-${world.id}`"
           v-model="drafts[world.id].speedFactor"
@@ -237,13 +241,13 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           step="0.1"
         />
 
-        <label :for="`starts-${world.id}`">Starts at</label>
+        <label :for="`starts-${world.id}`">{{ $t('adminWorlds.fields.startsAt') }}</label>
         <input :id="`starts-${world.id}`" v-model="drafts[world.id].startsAt" type="datetime-local" />
 
-        <label :for="`closed-${world.id}`">Closed to new players</label>
+        <label :for="`closed-${world.id}`">{{ $t('adminWorlds.fields.closedToNewPlayers') }}</label>
         <input :id="`closed-${world.id}`" v-model="drafts[world.id].joinsClosed" type="checkbox" />
 
-        <label :for="`endboss-${world.id}`">Endboss at</label>
+        <label :for="`endboss-${world.id}`">{{ $t('adminWorlds.fields.endbossAt') }}</label>
         <input :id="`endboss-${world.id}`" v-model="drafts[world.id].endbossAt" type="datetime-local" />
       </div>
 
@@ -251,25 +255,25 @@ async function setRunState(world: AdminWorldResponse, action: string) {
 
       <div class="actions">
         <button :disabled="drafts[world.id]?.saving" @click="saveSettings(world)">
-          {{ drafts[world.id]?.saving ? 'Saving…' : 'Save settings' }}
+          {{ drafts[world.id]?.saving ? $t('adminWorlds.saving') : $t('adminWorlds.saveSettings') }}
         </button>
 
         <span class="run-state-actions">
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'pause')">Pause</button>
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'maintenance')">Maintenance</button>
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'lock')">Lock</button>
+          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'pause')">{{ $t('adminWorlds.runStateActions.pause') }}</button>
+          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'maintenance')">{{ $t('adminWorlds.runStateActions.maintenance') }}</button>
+          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'lock')">{{ $t('adminWorlds.runStateActions.lock') }}</button>
           <label class="grace">
-            Grace (min)
+            {{ $t('adminWorlds.graceMinutes') }}
             <input v-model="drafts[world.id].graceMinutes" type="number" min="0" step="1" />
           </label>
-          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'resume')">Resume</button>
+          <button :disabled="drafts[world.id]?.saving" @click="setRunState(world, 'resume')">{{ $t('adminWorlds.runStateActions.resume') }}</button>
         </span>
 
         <!-- Issue #133. Its own route, not a button here: regenerating the map
              is previewed full-screen before it can be committed, and unlike
              everything else on this panel it deletes every settlement in the
              world. -->
-        <router-link class="reseed-link" :to="`/admin/worlds/${world.id}/reseed`">Reseed map…</router-link>
+        <router-link class="reseed-link" :to="`/admin/worlds/${world.id}/reseed`">{{ $t('adminWorlds.reseedLink') }}</router-link>
       </div>
     </section>
   </div>

@@ -1,0 +1,33 @@
+{
+  "back": "← Berichte",
+  "title": "Kampfsimulator",
+  "subtitle": "Ein Premium-Feature: löst einen hypothetischen Kampf ohne Armee, Siedlung oder Datenbank auf — nichts hier berührt deinen echten Spielstand.",
+  "demoModeHint": "Der Simulator ruft das echte Backend auf und benötigt ein angemeldetes Premium-Konto — im Demo-Modus nicht verfügbar.",
+  "premium": {
+    "title": "Premium-Feature",
+    "rejected": "Der Kampfsimulator ist ein Premium-Feature. Dieses Konto ist nicht Premium, daher hat der Server die letzte Anfrage abgelehnt.",
+    "notPremium": "Der Kampfsimulator ist ein Premium-Feature. Dieses Konto ist nicht Premium.",
+    "honestNote": "Es gibt in diesem Spiel noch keinen Upgrade-Weg — hier wird nirgends tatsächlich Premium verkauft — also gibt es nichts weiter zu klicken. Frag denjenigen, der diese Welt betreibt, wenn du das für falsch hältst."
+  },
+  "sections": {
+    "attacker": "Angreifer",
+    "defender": "Verteidiger",
+    "defenderHint": "Leer lassen, um eine unverteidigte Siedlung zu simulieren.",
+    "guestDefenders": "Gastverteidiger",
+    "guestDefendersHint": "Optional — wird mit der eigenen Garnison des Verteidigers kombiniert, wie eine echte Unterstützungsarmee."
+  },
+  "options": {
+    "towerLevel": "Turmstufe",
+    "mission": "Mission",
+    "attack": "Angriff",
+    "raid": "Plünderung",
+    "seed": "Seed (optional)",
+    "seedPlaceholder": "zufällig"
+  },
+  "errors": {
+    "noAttacker": "Füge zuerst mindestens eine angreifende Einheit hinzu.",
+    "simulationFailed": "Simulation fehlgeschlagen."
+  },
+  "simulating": "Simuliere…",
+  "simulate": "Simulieren"
+}

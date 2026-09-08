@@ -1,0 +1,56 @@
+{
+  "title": "Users",
+  "loading": "Loading users…",
+  "loadError": "Could not load users.",
+  "saveError": "Could not save.",
+  "statusError": "Could not update status.",
+  "premiumError": "Could not update premium status.",
+  "searchPlaceholder": "Search username or display name",
+  "search": "Search",
+  "filters": {
+    "allStatuses": "All statuses",
+    "active": "Active",
+    "locked": "Locked",
+    "banned": "Banned"
+  },
+  "columns": {
+    "userName": "Username",
+    "displayName": "Display name",
+    "role": "Role",
+    "status": "Status",
+    "premium": "Premium",
+    "settlements": "Settlements",
+    "created": "Created",
+    "lastLogin": "Last login",
+    "actions": "Actions"
+  },
+  "roles": {
+    "player": "Player",
+    "admin": "Admin"
+  },
+  "premium": {
+    "revoke": "Revoke premium",
+    "grant": "Grant premium"
+  },
+  "statusLabels": {
+    "active": "Unlock / unban",
+    "locked": "Lock",
+    "banned": "Ban"
+  },
+  "actions": {
+    "save": "Save",
+    "unlockUnban": "Unlock/unban",
+    "lock": "Lock",
+    "ban": "Ban"
+  },
+  "cannotLockSelf": "You cannot lock your own account.",
+  "cannotBanSelf": "You cannot ban your own account.",
+  "confirmStatusChange": "{label} user \"{userName}\"?",
+  "reasonPrompt": "Reason (optional):",
+  "noLastLogin": "—",
+  "pager": {
+    "previous": "Previous",
+    "next": "Next",
+    "summary": "Page {page} · {total} users"
+  }
+}

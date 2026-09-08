@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminActivityView from './AdminActivityView.vue';
 import ActivityChart from '../../components/admin/ActivityChart.vue';
 import { ApiError } from '../../api/client';
+import { createTestI18n } from '../../test/i18n';
+import adminActivity from '../../i18n/locales/en/adminActivity.json';
 import type {
   ActivitySummaryResponse,
   AdminActivityUser,
@@ -79,13 +81,14 @@ beforeEach(() => {
 // tests only care that the right buckets/bucketUnit are handed down, so the
 // chart is stubbed out here rather than duplicating that setup.
 const stubs = { ActivityChart: true };
+const global = { stubs, plugins: [createTestI18n({ adminActivity })] };
 
 describe('AdminActivityView', () => {
   it('loads the summary and users on mount and renders them', async () => {
     adminGetActivitySummary.mockResolvedValue(summary());
     adminListActivityUsers.mockResolvedValue(usersPage());
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
 
     expect(adminGetActivitySummary).toHaveBeenCalledWith(
@@ -107,7 +110,7 @@ describe('AdminActivityView', () => {
     adminGetActivitySummary.mockRejectedValue(new ApiError(400, { detail: 'Range exceeds 92 days.' }));
     adminListActivityUsers.mockResolvedValue(usersPage());
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
 
     expect(wrapper.text()).toContain('Range exceeds 92 days.');
@@ -119,7 +122,7 @@ describe('AdminActivityView', () => {
     adminGetActivitySummary.mockResolvedValue(summary());
     adminListActivityUsers.mockResolvedValue(usersPage({ items: [], totalCount: 0 }));
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
 
     expect(wrapper.text()).toContain('No users.');
@@ -129,7 +132,7 @@ describe('AdminActivityView', () => {
     adminGetActivitySummary.mockResolvedValue(summary());
     adminListActivityUsers.mockResolvedValue(usersPage());
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
     adminGetActivitySummary.mockClear();
 
@@ -146,7 +149,7 @@ describe('AdminActivityView', () => {
     adminListActivityUsers.mockResolvedValue(usersPage());
     adminGetUserActivityDetail.mockResolvedValue(detail());
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
 
     const row = wrapper.findAll('tr.user-row').find((r) => r.text().includes('ragnar'))!;
@@ -167,7 +170,7 @@ describe('AdminActivityView', () => {
     adminListActivityUsers.mockResolvedValue(usersPage());
     adminGetUserActivityDetail.mockResolvedValue(detail());
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
 
     const row = wrapper.findAll('tr.user-row').find((r) => r.text().includes('ragnar'))!;
@@ -185,7 +188,7 @@ describe('AdminActivityView', () => {
     adminListActivityUsers.mockResolvedValue(usersPage({ items: [user()], totalCount: 1 }));
     adminGetUserActivityDetail.mockRejectedValue(new ApiError(404, { title: 'Not Found' }));
 
-    const wrapper = mount(AdminActivityView, { global: { stubs } });
+    const wrapper = mount(AdminActivityView, { global });
     await flushPromises();
 
     const row = wrapper.findAll('tr.user-row').find((r) => r.text().includes('ragnar'))!;

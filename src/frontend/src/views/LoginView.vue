@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
+import type { MessageSchema } from '../i18n/schema';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const userName = ref('');
 const password = ref('');
@@ -24,11 +28,11 @@ async function onSubmit() {
     await router.push(redirect);
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
-      error.value = 'This account has been banned.';
+      error.value = t('login.errors.banned');
     } else if (err instanceof ApiError && err.status === 401) {
-      error.value = 'Wrong username or password.';
+      error.value = t('login.errors.invalidCredentials');
     } else {
-      error.value = 'Could not log in. Try again.';
+      error.value = t('login.errors.generic');
     }
   } finally {
     submitting.value = false;
@@ -53,27 +57,28 @@ onMounted(() => {
 <template>
   <div class="login">
     <header class="topbar">
-      <span class="brand">Fjørdhold</span>
+      <span class="brand">{{ t('login.brand') }}</span>
+      <LocaleSwitcher />
     </header>
     <main class="body">
-      <h1>Log in</h1>
+      <h1>{{ t('login.title') }}</h1>
       <form class="form" @submit.prevent="onSubmit">
-        <label for="userName">Username</label>
+        <label for="userName">{{ t('login.usernameLabel') }}</label>
         <input id="userName" v-model="userName" type="text" autocomplete="username" required />
 
-        <label for="password">Password</label>
+        <label for="password">{{ t('login.passwordLabel') }}</label>
         <input id="password" v-model="password" type="password" autocomplete="current-password" required />
 
         <p v-if="error" class="error">{{ error }}</p>
 
         <button class="submit" type="submit" :disabled="submitting">
-          {{ submitting ? 'Logging in…' : 'Log in' }}
+          {{ submitting ? t('login.submitting') : t('login.submit') }}
         </button>
       </form>
       <button class="link" @click="router.push({ path: '/register', query: route.query })">
-        Playing anonymously? Create an account
+        {{ t('login.registerLink') }}
       </button>
-      <button class="back" @click="router.push('/')">← Back</button>
+      <button class="back" @click="router.push('/')">{{ t('login.back') }}</button>
     </main>
   </div>
 </template>
@@ -86,6 +91,9 @@ onMounted(() => {
   background: var(--shell);
 }
 .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 20px 28px;
 }
 .brand {

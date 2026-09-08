@@ -10,6 +10,8 @@ import { mount } from '@vue/test-utils';
 import TechTreeGraph from './TechTreeGraph.vue';
 import catalogue from '../../data/building-catalogue.json';
 import type { BuildingDefinitionResponse } from '../../api/types';
+import { createTestI18n } from '../../test/i18n';
+import enDocs from '../../i18n/locales/en/docs.json';
 
 const byType: Record<string, BuildingDefinitionResponse[]> = {};
 for (const definition of catalogue.data as BuildingDefinitionResponse[]) {
@@ -17,7 +19,8 @@ for (const definition of catalogue.data as BuildingDefinitionResponse[]) {
 }
 for (const list of Object.values(byType)) list.sort((a, b) => a.level - b.level);
 
-const mountGraph = () => mount(TechTreeGraph, { props: { byType } });
+const mountGraph = () =>
+  mount(TechTreeGraph, { props: { byType }, global: { plugins: [createTestI18n({ docs: enDocs })] } });
 const card = (wrapper: ReturnType<typeof mountGraph>, type: string) => wrapper.get(`a[href="#${type}"]`);
 
 describe('TechTreeGraph', () => {

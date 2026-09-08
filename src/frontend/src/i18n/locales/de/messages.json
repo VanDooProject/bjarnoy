@@ -1,0 +1,32 @@
+{
+  "title": "Nachrichten",
+  "empty": "Noch keine Unterhaltungen — besuche das Profil eines Spielers, um ihm eine Nachricht zu senden.",
+  "loadError": "Deine Nachrichten konnten nicht geladen werden.",
+  "pager": {
+    "previous": "Zurück",
+    "next": "Weiter",
+    "page": "Seite {page}"
+  },
+  "conversation": {
+    "backToMessages": "Zurück zu den Nachrichten",
+    "loadError": "Diese Unterhaltung konnte nicht geladen werden.",
+    "noSuchPlayer": "Diesen Spieler gibt es nicht.",
+    "read": "Gelesen {date}",
+    "unread": "Ungelesen",
+    "report": "Melden",
+    "reported": "Gemeldet",
+    "composerPlaceholder": "Nachricht schreiben…",
+    "send": "Senden",
+    "sendError": "Die Nachricht konnte nicht gesendet werden.",
+    "reportDialog": {
+      "ariaLabel": "Nachricht melden",
+      "title": "Diese Nachricht melden",
+      "hint": "Ein Moderator wird sie überprüfen.",
+      "reason": "Grund",
+      "reasonPlaceholder": "z. B. Belästigung",
+      "reasonRequired": "Ein Grund ist erforderlich.",
+      "send": "Meldung senden",
+      "sendError": "Die Meldung konnte nicht gesendet werden."
+    }
+  }
+}

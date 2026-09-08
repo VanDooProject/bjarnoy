@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api, ApiError } from '../../api/client';
 import type { SettlementResponse, UnitStackResponse } from '../../api/types';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import type { MessageSchema } from '../../i18n/schema';
+
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Troop creation via admin (issue #105): units land straight in the garrison,
 // free of cost and training time, and are ordinary units from then on —
@@ -49,7 +53,7 @@ async function submit(sign: 1 | -1) {
     });
     emit('changed', updated);
   } catch (err) {
-    error.value = err instanceof ApiError ? err.message : 'Could not change the garrison.';
+    error.value = err instanceof ApiError ? err.message : t('garrisonForm.changeError');
   } finally {
     saving.value = false;
   }
@@ -58,10 +62,10 @@ async function submit(sign: 1 | -1) {
 
 <template>
   <form class="garrison-form" @submit.prevent="submit(1)">
-    <h3>Create troops</h3>
+    <h3>{{ $t('garrisonForm.title') }}</h3>
 
     <p class="standing">
-      <template v-if="garrison.length === 0">Garrison empty.</template>
+      <template v-if="garrison.length === 0">{{ $t('garrisonForm.empty') }}</template>
       <template v-else>
         <span v-for="stack in garrison" :key="stack.unit" class="stack">
           {{ stack.unit }} {{ stack.count }}
@@ -71,24 +75,28 @@ async function submit(sign: 1 | -1) {
 
     <div class="fields">
       <label>
-        Unit
+        {{ $t('garrisonForm.unit') }}
         <select v-model="unit">
           <option v-for="name in options" :key="name" :value="name">{{ name }}</option>
         </select>
       </label>
       <label>
-        Count
+        {{ $t('garrisonForm.count') }}
         <input v-model.number="count" type="number" min="1" step="1" />
       </label>
     </div>
 
     <div class="actions">
-      <button type="submit" :disabled="saving || !unit">{{ saving ? 'Working…' : 'Create' }}</button>
-      <button type="button" class="danger" :disabled="saving || !unit" @click="submit(-1)">Remove</button>
+      <button type="submit" :disabled="saving || !unit">
+        {{ saving ? $t('garrisonForm.working') : $t('garrisonForm.create') }}
+      </button>
+      <button type="button" class="danger" :disabled="saving || !unit" @click="submit(-1)">
+        {{ $t('garrisonForm.remove') }}
+      </button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="options.length === 0" class="hint">Loading the unit roster…</p>
+    <p v-else-if="options.length === 0" class="hint">{{ $t('garrisonForm.loadingRoster') }}</p>
   </form>
 </template>
 

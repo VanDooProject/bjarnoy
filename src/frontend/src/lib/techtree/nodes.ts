@@ -3,9 +3,56 @@
 // chips. Everything here is real catalogue data — the only thing this file
 // decides is how to word it.
 import type { BuildingDefinitionResponse } from '../../api/types';
-import { buildingStatsFor, type BuildingKind } from '../map/buildingEconomy';
+import {
+  buildingStatsFor,
+  type BuildingKind,
+  type BuildingModifier,
+  type BuildingOutput,
+} from '../map/buildingEconomy';
 import { graphCategoryOf, shortLabel, typeLabel, type GraphCategory } from './buildingPresentation';
 import { ANCHOR, columnX, rowY, TECH_TREE_LAYOUT, type Slot } from './layout';
+
+const TERRAIN_LABELS: Record<string, string> = {
+  forest: 'Forest',
+  mountain: 'Mountain',
+};
+
+// The graph is raw English by design (see buildingPresentation.ts) — mirrors
+// MapView.vue/HexTooltip.vue's formatOutput/formatModifier but without
+// routing through vue-i18n, since this module is plain data, not a component.
+function formatOutput(output: BuildingOutput): string {
+  switch (output.kind) {
+    case 'resourceRate':
+      return `+${output.amount} ${output.resource}/h`;
+    case 'populationCapacity':
+      return `+${output.amount} population capacity`;
+    case 'storageCapacity':
+      return `+${output.amount} storage capacity`;
+    case 'visionRing':
+      return `Vision +${output.amount} ring`;
+  }
+}
+
+function formatModifier(modifier: BuildingModifier): string {
+  switch (modifier.kind) {
+    case 'borderAnchor':
+      return 'Border anchor';
+    case 'trainsLandTroops':
+      return 'Trains land troops';
+    case 'trainsShips':
+      return 'Trains ships';
+    case 'garrison':
+      return 'Garrison';
+    case 'terrainBoost':
+      return `${TERRAIN_LABELS[modifier.terrain] ?? modifier.terrain} (+${modifier.percent}%)`;
+    case 'coastal':
+      return modifier.percent ? `Coastal (+${modifier.percent}%)` : 'Coastal';
+    case 'arcane':
+      return 'Arcane';
+    case 'shrineFavour':
+      return `+${modifier.percent}% ${modifier.domain === 'woodStone' ? 'Wood/Stone' : 'Food'} production`;
+  }
+}
 
 export interface TechTreeChip {
   text: string;
@@ -76,7 +123,7 @@ export function buildTechTreeNodes(
     nodes.push({
       type,
       label: typeLabel(type),
-      gives: stats.output ?? stats.modifier ?? '',
+      gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : '',
       category: graphCategoryOf(type),
       x: columnX(col),
       y: rowY(row),

@@ -15,16 +15,20 @@
 // support, the world map's army markers) should fold this panel's polling
 // into that same live-sync mechanism rather than leave two parallel ones.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { MessageSchema } from '../../i18n/schema';
 import { useWorldStore } from '../../stores/world';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
-import { api, ApiError } from '../../api/client';
+import { api } from '../../api/client';
+import { apiErrorMessage } from '../../i18n/apiErrors';
 import { DEMO_MODE } from '../../config';
 import type { ArmySummary, RenownResponse, SettlementResponse } from '../../api/types';
 
 const world = useWorldStore();
 const player = usePlayerStore();
 const auth = useAuthStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const visible = computed(() => !DEMO_MODE && auth.isAuthenticated && !!world.selectedSettlementId);
 
@@ -79,7 +83,7 @@ async function trainSettlerCrews() {
     await api.trainUnits(world.selectedSettlementId, { unit: 'settlercrew', count: 3 });
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : 'Training failed.';
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.trainingFailed'));
   } finally {
     busy.value = false;
   }
@@ -98,7 +102,7 @@ async function dispatchFounding() {
     });
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : 'Dispatch failed.';
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.dispatchFailed'));
   } finally {
     busy.value = false;
   }
@@ -111,7 +115,7 @@ async function recall(armyId: string) {
     await api.recallArmy(armyId);
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : 'Recall failed.';
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.recallFailed'));
   } finally {
     busy.value = false;
   }
@@ -130,7 +134,7 @@ async function confirmRetarget() {
     retargetFor.value = null;
     await refresh();
   } catch (e) {
-    error.value = e instanceof ApiError ? (e.problem?.detail ?? e.message) : 'Retarget failed.';
+    error.value = apiErrorMessage(e, t('hud.expansionPanel.retargetFailed'));
   } finally {
     busy.value = false;
   }
@@ -165,14 +169,14 @@ watch(visible, (isVisible) => {
 <template>
   <div v-if="visible" class="status-card expansion-card">
     <div class="status-card-header">
-      <span class="status-card-title">Expansion</span>
+      <span class="status-card-title">{{ t('hud.expansionPanel.title') }}</span>
       <span v-if="renown" class="status-card-count">
-        Renown {{ Math.floor(renown.total) }} / {{ Math.round(renown.requiredForNextSettlement) }}
+        {{ t('hud.expansionPanel.renown', { total: Math.floor(renown.total), required: Math.round(renown.requiredForNextSettlement) }) }}
       </span>
     </div>
 
     <div v-if="mySettlements.length > 1" class="expansion-switcher">
-      <label for="settlement-switcher">Settlement</label>
+      <label for="settlement-switcher">{{ t('hud.expansionPanel.settlement') }}</label>
       <select
         id="settlement-switcher"
         :value="world.selectedSettlementId"
@@ -183,44 +187,44 @@ watch(visible, (isVisible) => {
     </div>
 
     <div class="expansion-row">
-      <span>Settler crews in garrison</span>
+      <span>{{ t('hud.expansionPanel.settlerCrewsInGarrison') }}</span>
       <strong>{{ settlerCrewCount }}</strong>
     </div>
     <button type="button" class="expansion-button" :disabled="busy" @click="trainSettlerCrews">
-      Train 3 settler crews
+      {{ t('hud.expansionPanel.trainSettlerCrews') }}
     </button>
 
     <template v-if="renown">
       <div class="expansion-row">
-        <span>Can found another settlement</span>
-        <strong>{{ renown.canFoundAnother ? 'Yes' : 'Not yet' }}</strong>
+        <span>{{ t('hud.expansionPanel.canFoundAnother') }}</span>
+        <strong>{{ renown.canFoundAnother ? t('hud.expansionPanel.yes') : t('hud.expansionPanel.notYet') }}</strong>
       </div>
     </template>
 
     <div v-if="settlerCrewCount >= 3 && renown?.canFoundAnother" class="expansion-form">
       <div class="expansion-form-row">
-        <label>Target hex</label>
+        <label>{{ t('hud.expansionPanel.targetHex') }}</label>
         <input v-model.number="destQ" type="number" aria-label="Target Q" />
         <input v-model.number="destR" type="number" aria-label="Target R" />
       </div>
       <div class="expansion-form-row">
-        <label>Provisions</label>
+        <label>{{ t('hud.expansionPanel.provisions') }}</label>
         <input v-model.number="provisions" type="number" min="0" aria-label="Provisions" />
       </div>
       <button type="button" class="expansion-button" :disabled="busy" @click="dispatchFounding">
-        Found settlement here
+        {{ t('hud.expansionPanel.foundHere') }}
       </button>
     </div>
 
     <div v-if="foundingConvoys.length" class="expansion-convoys">
       <div v-for="c in foundingConvoys" :key="c.id" class="status-row">
         <div class="status-row-top">
-          <span class="status-row-name">Settler convoy</span>
+          <span class="status-row-name">{{ t('hud.expansionPanel.settlerConvoy') }}</span>
           <span class="status-row-time">{{ c.position.q }}, {{ c.position.r }}</span>
         </div>
         <div class="expansion-form-row">
           <button type="button" class="expansion-button-small" :disabled="busy" @click="recall(c.id)">
-            Recall
+            {{ t('hud.expansionPanel.recall') }}
           </button>
           <button
             type="button"
@@ -228,14 +232,14 @@ watch(visible, (isVisible) => {
             :disabled="busy"
             @click="beginRetarget(c.id)"
           >
-            Retarget
+            {{ t('hud.expansionPanel.retarget') }}
           </button>
         </div>
         <div v-if="retargetFor === c.id" class="expansion-form-row">
           <input v-model.number="destQ" type="number" aria-label="New target Q" />
           <input v-model.number="destR" type="number" aria-label="New target R" />
           <button type="button" class="expansion-button-small" :disabled="busy" @click="confirmRetarget">
-            Confirm
+            {{ t('hud.expansionPanel.confirm') }}
           </button>
         </div>
       </div>
