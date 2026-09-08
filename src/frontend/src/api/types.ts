@@ -858,6 +858,15 @@ export interface LeaderboardMeResponse {
   items: LeaderboardEntryResponse[];
 }
 
+/**
+ * Another building the settlement must already have standing, at `level` or
+ * higher, before this one may be placed — see BuildingPrerequisiteResponse.
+ */
+export interface BuildingPrerequisiteResponse {
+  type: string;
+  level: number;
+}
+
 /** A single (building type, level) entry from the tech-tree catalogue — see `GET /api/v1/buildings`. */
 export interface BuildingDefinitionResponse {
   type: string;
@@ -883,6 +892,14 @@ export interface BuildingDefinitionResponse {
    * tower itself).
    */
   claimRadius: number;
+  /**
+   * Other buildings that must stand before this one may be placed — *all* of
+   * them, not any one. Empty when there are none. These gate placement, so
+   * they are listed on the level whose construction they gate: level 1 for
+   * every building today, and every level for `greatstorehouse` (a flat
+   * level-10-only tier).
+   */
+  prerequisites: BuildingPrerequisiteResponse[];
 }
 
 // Mirrors src/backend/src/Bjarnoy.Api/Contracts/GuildContracts.cs.

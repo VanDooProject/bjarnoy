@@ -33,6 +33,59 @@ public static class BuildingCatalogue
     public static IReadOnlyList<BuildingType> AllTypes { get; } =
         Enum.GetValues<BuildingType>();
 
+    /// <summary>
+    /// Which buildings a settlement must already have standing before it may
+    /// place another — the tech tree's shape, in one table.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every entry must be met, not any one of them. These are deliberately
+    /// production-led: the two anchors a settlement always starts able to
+    /// build (Lumberjack, Farm) open logistics and the second food tier, the
+    /// water line runs Fishing Hut → Dockyard, and the military line runs
+    /// Barracks → Archery Range so the basic melee roster comes before the
+    /// archer/siege one (see <see cref="Units.UnitCatalogue"/>, where Spearman
+    /// trains at the Barracks and Bowman at the Archery Range).
+    /// </para>
+    /// <para>
+    /// Quarry deliberately gates nothing. It needs a Mountain hex, and
+    /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
+    /// of a starting position — anything behind a Quarry would be unreachable
+    /// for an unlucky map roll rather than merely expensive.
+    /// </para>
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>> PrerequisiteTable =
+        new Dictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>>
+        {
+            [BuildingType.StorageHouse] =
+                [new(BuildingType.Lumberjack, 5), new(BuildingType.Farm, 3)],
+            [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 6)],
+            [BuildingType.PumpkinFarm] = [new(BuildingType.Farm, 5)],
+            [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 4)],
+            [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 3)],
+            [BuildingType.ShrineOfFreyja] =
+                [new(BuildingType.ShrineOfThor, 5), new(BuildingType.PumpkinFarm, 6)],
+            [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
+        };
+
+    /// <summary>
+    /// The prerequisites attached to one level's definition. Prerequisites gate
+    /// <em>placing</em> a building, so they sit on the level whose construction
+    /// they gate — level 1 — and a building's own
+    /// <see cref="BuildingDefinition.RequiredLonghouseLevel"/> curve governs the
+    /// rest of its ladder. <see cref="BuildingType.GreatStorehouse"/> is the
+    /// exception: a flat level-10-only tier, so every level is that level.
+    /// </summary>
+    private static IReadOnlyList<BuildingPrerequisite> PrerequisitesFor(BuildingType type, int level)
+    {
+        if (!PrerequisiteTable.TryGetValue(type, out var prerequisites))
+        {
+            return [];
+        }
+
+        return level == 1 || type == BuildingType.GreatStorehouse ? prerequisites : [];
+    }
+
     /// <summary>The definition for a level, or <see langword="null"/> if out of range.</summary>
     public static BuildingDefinition? TryGet(BuildingType type, int level)
     {
@@ -41,7 +94,7 @@ public static class BuildingCatalogue
             return null;
         }
 
-        return type switch
+        var definition = type switch
         {
             BuildingType.Longhouse => Longhouse(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 30, 0, 0, 0)),
@@ -67,6 +120,11 @@ public static class BuildingCatalogue
                     with { RequiresRiverShape = SawmillRiverShapes },
             _ => null,
         };
+
+        // Attached here rather than in each helper so the tech tree's shape
+        // lives in exactly one table, and every building goes through the same
+        // rule for which of its levels the prerequisites gate.
+        return definition is null ? null : definition with { Prerequisites = PrerequisitesFor(type, level) };
     }
 
     public static BuildingDefinition Get(BuildingType type, int level) =>
@@ -290,7 +348,10 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 120, Stone: 200, Food: 0, Iron: 10) * CostFactor(level),
         BuildDuration = Duration(8, level),
         AllowedTerrain = SandOrGrass,
-        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+        // Later than the other border buildings on purpose: a tower extends
+        // the realm, so opening it at the very first longhouse level made
+        // expansion the obvious first move rather than a decision.
+        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
         // This tower's own satellite-disc claim radius, centred on the tower
         // rather than the settlement — see Settlement.ClaimDiscsFor, which
         // reads this back for every standing Tower. One hex of reach per
@@ -353,7 +414,10 @@ public static class BuildingCatalogue
     /// A flat level-10-only late-game storage tier: both the Longhouse and
     /// the settlement's own <see cref="BuildingType.StorageHouse"/> must
     /// already be level 10 (see <see cref="Settlement.PlanBuild"/>'s
-    /// <see cref="BuildingDefinition.RequiredBuildingType"/> check).
+    /// <see cref="BuildingDefinition.Prerequisites"/> check). Unlike every
+    /// other building's prerequisites, which gate level 1 only, this one is
+    /// carried on every level — the tier is flat, so there is only ever one
+    /// rung to gate.
     /// </summary>
     private static BuildingDefinition GreatStorehouse(int level) => new()
     {
@@ -364,8 +428,6 @@ public static class BuildingCatalogue
         StorageCapacity = ResourceAmounts.Uniform(2000) * level,
         AllowedTerrain = Grass,
         RequiredLonghouseLevel = 10,
-        RequiredBuildingType = BuildingType.StorageHouse,
-        RequiredBuildingLevel = 10,
     };
 
     /// <summary>
@@ -421,6 +483,9 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 15) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
-        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+        // The entry point to the whole military line (Archery Range sits
+        // behind it), held back so raising an army is a mid-game commitment
+        // rather than something a settlement can start with.
+        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 }

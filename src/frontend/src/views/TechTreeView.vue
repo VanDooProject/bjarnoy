@@ -1,41 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
+import TopBar from '../components/hud/TopBar.vue';
+import HudNav from '../components/hud/HudNav.vue';
+import TechTreeGraph from '../components/docs/TechTreeGraph.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
-import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  art,
+  categoryOf,
+  typeLabel,
+} from '../lib/techtree/buildingPresentation';
+import { HIDDEN_FROM_DOCS } from '../lib/techtree/layout';
+import { prerequisitesOf } from '../lib/techtree/nodes';
 
-const router = useRouter();
 const catalogue = useBuildingCatalogueStore();
 
 onMounted(() => catalogue.load());
-
-// Same showcase atlas art HexMapRenderer/BuildingModal/RingMenu use — reused
-// here rather than duplicated, so a doc-page thumbnail is never out of sync
-// with what a building actually looks like in game. Each entry is the level
-// this preview shows (an upgraded building looks more built-up, so pick a
-// representative rung rather than always level 1); quarry has no building
-// sprite of its own (the map renders it as its terrain, mountain, with no
-// distinct prop), so it falls through to `terrainArt('mountain')` below.
-const PREVIEW_LEVEL: Record<string, number> = {
-  longhouse: 4,
-  storagehouse: 4,
-  farm: 1,
-  lumberjack: 2,
-  tower: 0,
-  pumpkinfarm: 1,
-  shrineofthor: 2,
-  shrineoffreyja: 2,
-  archeryrange: 2,
-  dockyard: 7,
-  greatstorehouse: 4,
-  barracks: 2,
-  fisherhut: 2,
-  // Flat/inland family only — same simplification buildingArt.ts's preview
-  // card makes, regardless of where the actual tile sits next to a river.
-  sawmill: 2,
-};
 
 const LORE: Record<string, string> = {
   longhouse:
@@ -60,77 +43,26 @@ const LORE: Record<string, string> = {
     'Refines timber on grass, alongside a neighbouring Lumberjack — its look changes when built next to a river or a river bend.',
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  storagehouse: 'Storage house',
-  fishinghut: 'Fishing hut',
-  magictower: 'Magic tower',
-  pumpkinfarm: 'Pumpkin farm',
-  shrineofthor: 'Shrine of Thor',
-  shrineoffreyja: 'Shrine of Freyja',
-  archeryrange: 'Archery range',
-  dockyard: 'Dockyard',
-  greatstorehouse: 'Great storehouse',
-  fisherhut: 'Fisher hut',
-};
-
-function typeLabel(type: string): string {
-  return TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
-}
-
-// Mirrors prototypes/MECHANICS.md's building categories (anchor / production
-// / military / logistics) — the closest thing this codebase has to a
-// canonical grouping — rather than inventing a new taxonomy for this page.
-const CATEGORY_ORDER = ['anchor', 'production', 'military', 'logistics'] as const;
-type Category = (typeof CATEGORY_ORDER)[number];
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  anchor: 'Anchor',
-  production: 'Production',
-  military: 'Military',
-  logistics: 'Logistics',
-};
-
-const CATEGORY_OF: Record<string, Category> = {
-  longhouse: 'anchor',
-  farm: 'production',
-  pumpkinfarm: 'production',
-  lumberjack: 'production',
-  quarry: 'production',
-  fishinghut: 'production',
-  magictower: 'production',
-  fisherhut: 'production',
-  sawmill: 'production',
-  tower: 'military',
-  archeryrange: 'military',
-  barracks: 'military',
-  storagehouse: 'logistics',
-  greatstorehouse: 'logistics',
-  dockyard: 'logistics',
-};
-
-function categoryOf(type: string): Category {
-  return CATEGORY_OF[type] ?? 'production';
-}
+// Buildings on their way out of the game are left off the page entirely —
+// graph and tables both — so the docs stop advertising something a player
+// shouldn't invest in. They stay in the catalogue; this is a docs-only
+// omission (see HIDDEN_FROM_DOCS).
+const documented = computed(() => catalogue.types.filter((t) => !HIDDEN_FROM_DOCS.includes(t)));
 
 const categories = computed(() =>
   CATEGORY_ORDER.map((id) => ({
     id,
     label: CATEGORY_LABELS[id],
-    types: catalogue.types.filter((t) => categoryOf(t) === id),
+    types: documented.value.filter((t) => categoryOf(t) === id),
   })).filter((c) => c.types.length > 0),
 );
-
-function art(type: string): ArtRef {
-  if (type === 'quarry') return terrainArt('mountain');
-  return buildingArt(type, PREVIEW_LEVEL[type] ?? 1) ?? terrainArt('grass');
-}
 
 // Computed once per building type rather than called from the template.
 // Split into two lookups (rather than one ArtRef-keyed map) so the template
 // doesn't need to narrow a discriminated union through an indexed access.
 const atlasThumbs = computed<Record<string, AtlasFrameRect>>(() => {
   const result: Record<string, AtlasFrameRect> = {};
-  for (const type of catalogue.types) {
+  for (const type of documented.value) {
     const a = art(type);
     if (a.kind === 'atlas') result[type] = a.frame;
   }
@@ -138,12 +70,22 @@ const atlasThumbs = computed<Record<string, AtlasFrameRect>>(() => {
 });
 const pngThumbs = computed<Record<string, string>>(() => {
   const result: Record<string, string> = {};
-  for (const type of catalogue.types) {
+  for (const type of documented.value) {
     const a = art(type);
     if (a.kind === 'png') result[type] = a.url;
   }
   return result;
 });
+
+/**
+ * The buildings that must already stand before this one can go up — the same
+ * rule the graph above draws, spelled out for the building's own section.
+ */
+function prerequisiteLabel(type: string): string | null {
+  const prerequisites = prerequisitesOf(catalogue.byType, type);
+  if (prerequisites.length === 0) return null;
+  return prerequisites.map((p) => `${typeLabel(p.type)} level ${p.level}`).join(' and ');
+}
 
 function terrainLabel(requiresCoastalWater: boolean, terrain: string[]): string {
   if (requiresCoastalWater) return 'Shallow (coastal) water';
@@ -165,14 +107,17 @@ function formatAmount(value: number): string {
 
 <template>
   <div class="tech-tree">
-    <header class="topbar">
-      <span class="brand">Fjørdhold</span>
-      <button class="back" @click="router.push('/docs')">← Docs</button>
-    </header>
+    <TopBar docked title="Tech tree" caption="DOCS · DEPENDENCIES">
+      <HudNav />
+    </TopBar>
+    <div class="graph-wrap">
+      <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
+    </div>
     <main class="body">
-      <h1>Tech tree</h1>
+      <h1>Every building, level by level</h1>
       <p class="intro">
-        Every building, and what each of its ten levels costs, produces, and requires.
+        What each of a building's ten levels costs, produces, and requires. The graph above is the
+        same catalogue, drawn as the dependency tree.
       </p>
 
       <p v-if="catalogue.loading" class="status">Loading…</p>
@@ -210,6 +155,9 @@ function formatAmount(value: number): string {
                     catalogue.byType[type]![0]!.allowedTerrain,
                   )
                 }}
+              </p>
+              <p v-if="prerequisiteLabel(type)" class="terrain">
+                Needs first: {{ prerequisiteLabel(type) }}
               </p>
             </div>
           </div>
@@ -272,21 +220,17 @@ function formatAmount(value: number): string {
   overflow: auto;
   background: var(--shell);
 }
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 28px;
-}
-.brand {
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--text);
+/* The graph is wider than the prose column, and wider than most windows —
+   it gets the full page width and scrolls sideways inside itself. */
+.graph-wrap {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 28px;
 }
 .body {
   max-width: 90ch;
   margin: 0 auto;
-  padding: 0 28px 60px;
+  padding: 24px 28px 60px;
   color: var(--text);
 }
 .intro {
@@ -336,14 +280,17 @@ function formatAmount(value: number): string {
 .category {
   margin-top: 44px;
 }
+/* Clears the docked TopBar (64px) plus a gap, so a link from the graph or
+   the table of contents doesn't land underneath it. Only works because
+   .tech-tree is the scroll container the sticky bar is measured against. */
 .category-title {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--panel-border);
-  scroll-margin-top: 20px;
+  scroll-margin-top: 84px;
 }
 .building {
   margin-top: 32px;
-  scroll-margin-top: 20px;
+  scroll-margin-top: 84px;
 }
 .building-header {
   display: flex;
@@ -404,17 +351,5 @@ th {
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.05em;
-}
-.back {
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.back:hover {
-  border-color: var(--gold);
 }
 </style>

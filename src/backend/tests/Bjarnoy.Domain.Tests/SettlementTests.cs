@@ -220,8 +220,120 @@ public class BuildingCatalogueTests
         var definition = BuildingCatalogue.Get(BuildingType.GreatStorehouse, 1);
 
         Assert.Equal(10, definition.RequiredLonghouseLevel);
-        Assert.Equal(BuildingType.StorageHouse, definition.RequiredBuildingType);
-        Assert.Equal(10, definition.RequiredBuildingLevel);
+        var prerequisite = Assert.Single(definition.Prerequisites);
+        Assert.Equal(BuildingType.StorageHouse, prerequisite.Type);
+        Assert.Equal(10, prerequisite.Level);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.StorageHouse, BuildingType.Lumberjack, 5)]
+    [InlineData(BuildingType.StorageHouse, BuildingType.Farm, 3)]
+    [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 6)]
+    [InlineData(BuildingType.PumpkinFarm, BuildingType.Farm, 5)]
+    [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 4)]
+    [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 3)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.ShrineOfThor, 5)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 6)]
+    [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 10)]
+    public void The_catalogue_carries_the_agreed_prerequisites(
+        BuildingType type, BuildingType required, int requiredLevel)
+    {
+        Assert.Contains(
+            new BuildingPrerequisite(required, requiredLevel),
+            BuildingCatalogue.Get(type, 1).Prerequisites);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Lumberjack)]
+    [InlineData(BuildingType.Farm)]
+    [InlineData(BuildingType.Quarry)]
+    [InlineData(BuildingType.FishingHut)]
+    [InlineData(BuildingType.Tower)]
+    [InlineData(BuildingType.Barracks)]
+    [InlineData(BuildingType.ShrineOfThor)]
+    public void The_tech_trees_roots_have_no_building_prerequisite(BuildingType type)
+    {
+        Assert.Empty(BuildingCatalogue.Get(type, 1).Prerequisites);
+    }
+
+    [Fact]
+    public void The_quarry_gates_nothing()
+    {
+        // It needs a Mountain hex and WorldGenerator does not guarantee one
+        // near a starting position, so anything behind it would be unreachable
+        // rather than merely expensive.
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+            {
+                Assert.DoesNotContain(
+                    BuildingCatalogue.Get(type, level).Prerequisites,
+                    p => p.Type == BuildingType.Quarry);
+            }
+        }
+    }
+
+    [Fact]
+    public void Prerequisites_gate_only_the_first_level_except_the_great_storehouse()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            for (var level = 2; level <= BuildingCatalogue.MaxLevel; level++)
+            {
+                var prerequisites = BuildingCatalogue.Get(type, level).Prerequisites;
+                if (type == BuildingType.GreatStorehouse)
+                {
+                    Assert.NotEmpty(prerequisites);
+                }
+                else
+                {
+                    Assert.Empty(prerequisites);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Every_prerequisite_names_a_real_building_and_a_reachable_level()
+    {
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            foreach (var prerequisite in BuildingCatalogue.Get(type, 1).Prerequisites)
+            {
+                Assert.NotEqual(type, prerequisite.Type);
+                Assert.InRange(prerequisite.Level, 1, BuildingCatalogue.MaxLevel);
+                Assert.NotNull(BuildingCatalogue.TryGet(prerequisite.Type, prerequisite.Level));
+            }
+        }
+    }
+
+    [Fact]
+    public void The_prerequisite_graph_has_no_cycles()
+    {
+        var visiting = new HashSet<BuildingType>();
+        var settled = new HashSet<BuildingType>();
+
+        void Walk(BuildingType type)
+        {
+            if (settled.Contains(type))
+            {
+                return;
+            }
+
+            Assert.True(visiting.Add(type), $"{type} sits on a prerequisite cycle.");
+            foreach (var prerequisite in BuildingCatalogue.Get(type, 1).Prerequisites)
+            {
+                Walk(prerequisite.Type);
+            }
+
+            visiting.Remove(type);
+            settled.Add(type);
+        }
+
+        foreach (var type in BuildingCatalogue.AllTypes)
+        {
+            Walk(type);
+        }
     }
 
     [Fact]
@@ -468,12 +580,12 @@ public class SettlementTests
         var firstTower = new HexCoord(1, 0);
         var settlement = Found() with
         {
-            // Longhouse level 2, not 1: a new Tower's RequiredLonghouseLevel
-            // (BuildingCatalogue.Tower) is 2 at level 1 — this test is about
+            // Longhouse level 3, not 1: a new Tower's RequiredLonghouseLevel
+            // (BuildingCatalogue.Tower) is 3 at level 1 — this test is about
             // the claim check, not the longhouse-prerequisite one.
             Buildings =
             [
-                new PlacedBuilding(Centre, BuildingType.Longhouse, 2), // ClaimRadius == 3
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 3), // ClaimRadius == 3
                 new PlacedBuilding(firstTower, BuildingType.Tower, 10), // TowerClaimRadius(10) == 10
             ],
         };
@@ -893,18 +1005,134 @@ public class SettlementTests
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
-    /// <summary>A settlement with the given longhouse level and a lot of stock, so affordability is never the thing under test.</summary>
-    private static Settlement FoundAtLonghouseLevel(int level)
+    [Fact]
+    public void A_prerequisite_is_judged_by_the_settlements_highest_building_of_that_type()
     {
+        // Two storage houses: an unfinished level-0 stub on the lower coord and
+        // the real level-10 one behind it. The check must find the level 10,
+        // not whichever building happens to come first.
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
+                new PlacedBuilding(new HexCoord(2, 0), BuildingType.StorageHouse, 10),
+            ],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                ResourceAmounts.Zero,
+                ResourceAmounts.Uniform(1_000_000),
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.GreatStorehouse, new HexCoord(3, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_level_zero_foundation_does_not_satisfy_a_prerequisite()
+    {
+        var settlement = Found() with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.StorageHouse, 0),
+            ],
+            Resources = ResourcePool.Create(
+                ResourceAmounts.Uniform(1_000_000),
+                ResourceAmounts.Zero,
+                ResourceAmounts.Uniform(1_000_000),
+                T0),
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.GreatStorehouse, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, decision.Rejection);
+        Assert.Equal(BuildingType.StorageHouse, decision.MissingPrerequisite?.Type);
+        Assert.Equal(10, decision.MissingPrerequisite?.Level);
+    }
+
+    /// <summary>
+    /// A settlement with the given longhouse level and a lot of stock, so
+    /// affordability is never the thing under test. <paramref name="standing"/>
+    /// places any prerequisite buildings a test needs met, laid out along a
+    /// row away from the centre.
+    /// </summary>
+    private static Settlement FoundAtLonghouseLevel(
+        int level, params (BuildingType Type, int Level)[] standing)
+    {
+        var buildings = new List<PlacedBuilding>
+        {
+            new(Centre, BuildingType.Longhouse, level),
+        };
+        buildings.AddRange(standing.Select(
+            (b, i) => new PlacedBuilding(new HexCoord(-2 - i, 0), b.Type, b.Level)));
+
         return Found() with
         {
-            Buildings = [new PlacedBuilding(Centre, BuildingType.Longhouse, level)],
+            Buildings = buildings,
             Resources = ResourcePool.Create(
                 ResourceAmounts.Uniform(1_000_000),
                 BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).ProductionPerHour,
                 BuildingCatalogue.Totals([(BuildingType.Longhouse, level)]).Capacity,
                 T0),
         };
+    }
+
+    [Fact]
+    public void A_building_with_two_prerequisites_is_refused_while_either_is_missing()
+    {
+        // Shrine of Freyja wants Shrine of Thor 5 and Pumpkin farm 6.
+        var withoutPumpkin = FoundAtLonghouseLevel(10, (BuildingType.ShrineOfThor, 5));
+        var withoutThor = FoundAtLonghouseLevel(10, (BuildingType.PumpkinFarm, 6));
+
+        var missingPumpkin = withoutPumpkin.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingThor = withoutThor.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingPumpkin.Rejection);
+        Assert.Equal(BuildingType.PumpkinFarm, missingPumpkin.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingThor.Rejection);
+        Assert.Equal(BuildingType.ShrineOfThor, missingThor.MissingPrerequisite?.Type);
+    }
+
+    [Fact]
+    public void A_building_with_two_prerequisites_is_accepted_once_both_stand()
+    {
+        var settlement = FoundAtLonghouseLevel(
+            10, (BuildingType.ShrineOfThor, 5), (BuildingType.PumpkinFarm, 6));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void An_existing_gated_building_still_upgrades_without_its_prerequisite()
+    {
+        // Prerequisites gate placement, not the ladder: an archery range that
+        // already stands keeps levelling even with no barracks behind it.
+        var settlement = FoundAtLonghouseLevel(10) with
+        {
+            Buildings =
+            [
+                new PlacedBuilding(Centre, BuildingType.Longhouse, 10),
+                new PlacedBuilding(new HexCoord(1, 0), BuildingType.ArcheryRange, 1),
+            ],
+        };
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ArcheryRange, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+        Assert.Equal(2, decision.Order!.TargetLevel);
     }
 
     [Fact]
@@ -1009,7 +1237,7 @@ public class SettlementTests
     [InlineData(RiverTileShape.Bend)]
     public void A_sawmill_may_be_built_on_a_straight_or_bend_river_tile(RiverTileShape shape)
     {
-        var settlement = FoundAtLonghouseLevel(5);
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Lumberjack, 6));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),

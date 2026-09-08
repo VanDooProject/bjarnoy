@@ -232,13 +232,20 @@ public static class SettlementEndpoints
         var problem = new ProblemDetails
         {
             Title = "The build was refused.",
-            Detail = Describe(result.Rejection),
+            Detail = Describe(result.Rejection, result.MissingPrerequisite),
             Status = StatusCodes.Status409Conflict,
         };
         // Machine-readable, same pattern as founding's Problem(...) — the
         // frontend needs to tell NoFreeSlot (premium upsell) apart from
         // AlreadyQueuedOnHex/QueueFull without parsing Detail text.
         problem.Extensions["rejection"] = result.Rejection.ToString();
+        if (result.MissingPrerequisite is { } missing)
+        {
+            // Same reasoning: a client that wants to link to (or highlight) the
+            // building that is missing shouldn't have to parse Detail's prose.
+            problem.Extensions["requiredBuilding"] = missing.Type.ToWireName();
+            problem.Extensions["requiredLevel"] = missing.Level;
+        }
 
         return result.Rejection == BuildRejection.UnknownBuildingLevel
             ? TypedResults.NotFound()
@@ -481,8 +488,14 @@ public static class SettlementEndpoints
         return problem;
     }
 
-    private static string Describe(BuildRejection rejection) => rejection switch
+    private static string Describe(
+        BuildRejection rejection,
+        BuildingPrerequisite? missingPrerequisite = null) => rejection switch
     {
+        // Named when the caller knows which prerequisite failed; the bare
+        // sentence stays for anything that reports the rejection without one.
+        BuildRejection.RequiredBuildingTooLow when missingPrerequisite is { } missing =>
+            $"Needs a {missing.Type.ToWireName()} at level {missing.Level} first.",
         BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
         BuildRejection.HexOccupied => "Another building already stands there.",
