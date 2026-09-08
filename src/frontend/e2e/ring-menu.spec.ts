@@ -139,7 +139,7 @@ test.describe('ring menu drill-down', () => {
     // The detail card is what the redesign added on top of navigation: the
     // player asked to see "resource cost, build time, can I afford it" without
     // committing to anything. It must also be honest about the gate — the
-    // watchtower is RequiredLonghouseLevel 2 (BuildingCatalogue.cs), so a
+    // watchtower is RequiredLonghouseLevel 3 (BuildingCatalogue.cs), so a
     // fresh level-1 realm cannot place one, and the ring says why rather than
     // letting the click silently do nothing.
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
@@ -169,11 +169,11 @@ test.describe('ring menu drill-down', () => {
     await expect(card).toBeVisible();
     // Cost, time and the gate all come from the building catalogue, so these
     // are the backend's own numbers: 120 wood / 200 stone / 10 iron, 8:00,
-    // longhouse 2.
+    // longhouse 3.
     await expect(card).toContainText('120');
     await expect(card).toContainText('200');
     await expect(card).toContainText('8:00');
-    await expect(card).toContainText('REQUIRES LONGHOUSE 2');
+    await expect(card).toContainText('REQUIRES LONGHOUSE 3');
     await expect(watchtower).toHaveClass(/locked/);
 
     await watchtower.click({ force: true });

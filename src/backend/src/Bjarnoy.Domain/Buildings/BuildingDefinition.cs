@@ -4,6 +4,14 @@ using Bjarnoy.Domain.World;
 namespace Bjarnoy.Domain.Buildings;
 
 /// <summary>
+/// One cross-building prerequisite: another of the settlement's own buildings
+/// that must stand at <paramref name="Level"/> or higher before the building
+/// listing it may be placed. See <see cref="BuildingDefinition.Prerequisites"/>
+/// for how a list of these is read.
+/// </summary>
+public readonly record struct BuildingPrerequisite(BuildingType Type, int Level = 1);
+
+/// <summary>
 /// What one building at one level costs, takes, and gives.
 /// </summary>
 /// <remarks>
@@ -90,17 +98,33 @@ public sealed record BuildingDefinition
     public int RequiredLonghouseLevel { get; init; } = 1;
 
     /// <summary>
-    /// Another of this settlement's own buildings that must stand at
-    /// <see cref="RequiredBuildingLevel"/> or higher before this one may be
-    /// built — a cross-building prerequisite alongside (not instead of)
-    /// <see cref="RequiredLonghouseLevel"/>. <see langword="null"/> (the
-    /// default) means no such prerequisite. Mirrors
+    /// Other buildings of this settlement's own that must already stand before
+    /// this one may be built — cross-building prerequisites alongside (not
+    /// instead of) <see cref="RequiredLonghouseLevel"/>. Empty (the default)
+    /// means no such prerequisite. Mirrors
     /// <see cref="Units.UnitDefinition.RequiredUnitType"/>'s shape for units.
     /// </summary>
-    public BuildingType? RequiredBuildingType { get; init; }
-
-    /// <summary>The level <see cref="RequiredBuildingType"/> must reach. Meaningless when that is <see langword="null"/>.</summary>
-    public int RequiredBuildingLevel { get; init; } = 1;
+    /// <remarks>
+    /// <para>
+    /// <b>All</b> entries must be satisfied, not any one of them — a building
+    /// with two prerequisites needs both. A prerequisite is met when the
+    /// settlement's <em>highest-level</em> building of that type stands at
+    /// <see cref="BuildingPrerequisite.Level"/> or higher; a level-0
+    /// foundation stub does not count, since it is not standing yet.
+    /// </para>
+    /// <para>
+    /// These gate <em>placing</em> a building, not upgrading one: the
+    /// catalogue attaches them to a type's level-1 definition only, so once a
+    /// building stands its own <see cref="RequiredLonghouseLevel"/> curve
+    /// governs the rest of its ladder. <see cref="BuildingType.GreatStorehouse"/>
+    /// is the deliberate exception — it carries its prerequisite on every
+    /// level, being a flat level-10-only tier. This is data, not a rule in
+    /// <see cref="Settlement.PlanBuild"/>: the check simply enforces whatever
+    /// the target level's definition lists, so a future "level 5 of X needs Y"
+    /// is a catalogue edit rather than a code change.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<BuildingPrerequisite> Prerequisites { get; init; } = [];
 
     /// <summary>
     /// How many construction slots one order for this building occupies while

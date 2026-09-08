@@ -287,10 +287,23 @@ public sealed record WorldClockResponse(
         gameNow);
 }
 
+/// <summary>
+/// Another building the settlement must already have standing, at
+/// <paramref name="Level"/> or higher, before this one may be placed.
+/// </summary>
+public sealed record BuildingPrerequisiteResponse(string Type, int Level);
+
 /// <param name="AllowedTerrain">
 /// Empty both for "any land" and for a <paramref name="RequiresCoastalWater"/>
 /// building — check that flag first; it means <em>land</em> terrain plays no
 /// part in this building's placement at all, not "anywhere."
+/// </param>
+/// <param name="Prerequisites">
+/// Other buildings that must stand before this one may be placed — <em>all</em>
+/// of them, not any one. Empty when there are none. These gate placement, so
+/// they are listed on the level whose construction they gate: level 1 for
+/// every building today, and every level for the Great Storehouse (a flat
+/// level-10-only tier).
 /// </param>
 public sealed record BuildingDefinitionResponse(
     string Type,
@@ -304,7 +317,8 @@ public sealed record BuildingDefinitionResponse(
     int RequiredLonghouseLevel,
     int SlotCost,
     bool OccupiesAllSlots,
-    int ClaimRadius)
+    int ClaimRadius,
+    IReadOnlyList<BuildingPrerequisiteResponse> Prerequisites)
 {
     public static BuildingDefinitionResponse From(BuildingDefinition definition)
     {
@@ -322,7 +336,8 @@ public sealed record BuildingDefinitionResponse(
             definition.RequiredLonghouseLevel,
             definition.SlotCost,
             definition.OccupiesAllSlots,
-            definition.ClaimRadius);
+            definition.ClaimRadius,
+            [.. definition.Prerequisites.Select(p => new BuildingPrerequisiteResponse(p.Type.ToWireName(), p.Level))]);
     }
 }
 

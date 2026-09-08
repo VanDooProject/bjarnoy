@@ -96,11 +96,23 @@ public enum BuildRejection
 }
 
 /// <summary>The outcome of asking to build something.</summary>
-public sealed record BuildDecision(BuildRejection Rejection, BuildOrder? Order = null)
+/// <param name="MissingPrerequisite">
+/// Set only for <see cref="BuildRejection.RequiredBuildingTooLow"/>: the first
+/// prerequisite (in catalogue order) the settlement does not meet, so the
+/// caller can name the building that is missing rather than only report that
+/// one is.
+/// </param>
+public sealed record BuildDecision(
+    BuildRejection Rejection,
+    BuildOrder? Order = null,
+    BuildingPrerequisite? MissingPrerequisite = null)
 {
     public bool Accepted => Rejection == BuildRejection.None && Order is not null;
 
     public static BuildDecision Rejected(BuildRejection reason) => new(reason);
+
+    public static BuildDecision Rejected(BuildRejection reason, BuildingPrerequisite missing) =>
+        new(reason, null, missing);
 
     public static BuildDecision Accept(BuildOrder order) => new(BuildRejection.None, order);
 }

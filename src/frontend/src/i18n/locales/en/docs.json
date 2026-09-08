@@ -39,6 +39,8 @@
     "terrain": "Terrain:",
     "terrainCoastal": "Shallow (coastal) water",
     "terrainAny": "Any buildable land",
+    "needsFirst": "Needs first: {prerequisites}",
+    "graphEyebrow": "Docs · Tech tree",
     "categories": {
       "anchor": "Anchor",
       "production": "Production",

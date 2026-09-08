@@ -39,6 +39,8 @@
     "terrain": "Gelände:",
     "terrainCoastal": "Flaches (Küsten-)Wasser",
     "terrainAny": "Jedes bebaubare Land",
+    "needsFirst": "Benötigt zuerst: {prerequisites}",
+    "graphEyebrow": "Docs · Techbaum",
     "categories": {
       "anchor": "Anker",
       "production": "Produktion",
