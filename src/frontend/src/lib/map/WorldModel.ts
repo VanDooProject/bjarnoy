@@ -268,13 +268,49 @@ export class WorldModel {
     return this.getTile(q, r).terrain !== 'sea';
   }
 
+  /**
+   * Whether `at` would satisfy the backend's own start-position rule
+   * (`WorldGenerator.FindStartPositions`): a Grass hex with at least one
+   * Forest and two Grass neighbours, and no sea within two hexes. Demo mode
+   * has no backend to ask for a real start position — `findLandfall` uses
+   * this to steer clear of a coastal sliver of sand or a lone tile at an
+   * island's tip, which the literal nearest land hex to a click can
+   * otherwise be, leaving almost nothing settleable around it.
+   */
+  private isGoodStartCandidate(at: AxialCoord): boolean {
+    const tile = this.getTile(at.q, at.r);
+    if (tile.terrain !== 'grass') return false;
+
+    let forest = 0;
+    let grass = 0;
+    for (const n of neighbors(at)) {
+      const terrain = this.getTile(n.q, n.r).terrain;
+      if (terrain === 'forest') forest++;
+      else if (terrain === 'grass') grass++;
+    }
+    if (forest < 1 || grass < 2) return false;
+
+    return hexesInRadius(at, 2).every((c) => this.isLand(c.q, c.r));
+  }
+
+  /**
+   * The nearest hex to `near` worth founding a settlement on. Prefers a hex
+   * satisfying `isGoodStartCandidate` (same quality bar the backend's own
+   * `FindStartPositions` enforces for a live world); if none turns up within
+   * `maxRadius`, falls back to the plain nearest land hex rather than
+   * failing outright — better than refusing to land at all on a world too
+   * small or too rocky to offer a "good" spot.
+   */
   findLandfall(near: AxialCoord, maxRadius = 40): AxialCoord | null {
+    let firstLand: AxialCoord | null = null;
     for (let radius = 0; radius <= maxRadius; radius++) {
       for (const c of hexesInRadius(near, radius)) {
-        if (this.isLand(c.q, c.r)) return c;
+        if (!this.isLand(c.q, c.r)) continue;
+        firstLand ??= c;
+        if (this.isGoodStartCandidate(c)) return c;
       }
     }
-    return null;
+    return firstLand;
   }
 
   foundSettlement(ownerId: string, ownerName: string, name: string, at: AxialCoord): Settlement {

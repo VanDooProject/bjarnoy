@@ -26,6 +26,42 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
   throw new Error('no land border-edge hex found — pick a different test seed');
 }
 
+// Regression: findLandfall used to return the literal nearest land hex to
+// the click, which for some seeds (see the demo seed, 20260824 — the case
+// that surfaced this after WorldGenerationOptions.IslandMinRadius/
+// IslandMaxRadius grew) can be a lone tile at an island's tip: almost every
+// hex in the settlement's own realm ends up sea. findLandfall now prefers a
+// hex meeting the same quality bar the backend's own FindStartPositions
+// enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
+// hexes) over the merely-nearest land hex.
+describe('WorldModel.findLandfall', () => {
+  it.each([1, 7, 42, 20260824, 20260825])(
+    'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
+    (seed) => {
+      const model = new WorldModel(seed);
+      const at = model.findLandfall({ q: 0, r: 0 });
+      if (!at) throw new Error(`no land found near origin for seed ${seed} — pick a different test seed`);
+
+      const tile = model.getTile(at.q, at.r);
+      expect(tile.terrain).toBe('grass');
+
+      let forest = 0;
+      let grass = 0;
+      for (const n of neighbors(at)) {
+        const t = model.getTile(n.q, n.r).terrain;
+        if (t === 'forest') forest++;
+        else if (t === 'grass') grass++;
+      }
+      expect(forest).toBeGreaterThanOrEqual(1);
+      expect(grass).toBeGreaterThanOrEqual(2);
+
+      for (const c of hexesInRadius(at, 2)) {
+        expect(model.isLand(c.q, c.r)).toBe(true);
+      }
+    },
+  );
+});
+
 // Regression: the landing-page "empty plot" preview used to show other
 // players' already-existing buildings because `registerSettlement` painted
 // a settlement's home tile unconditionally. Registration and territory
@@ -266,6 +302,13 @@ describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
   it('places a fisher hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
+    // A settlement's *founding* spot is guaranteed no sea within two hexes
+    // (findLandfall/the backend's FindStartPositions both enforce this), so
+    // a level-1 realm (claimRadiusForLevel(1) === 2) never actually reaches
+    // the coast — levelling up first grows the claimed radius far enough to
+    // reach real coastal water, same as a settlement would need to in play.
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
     const radius = model.borderRadius(settlement);
     const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
 
