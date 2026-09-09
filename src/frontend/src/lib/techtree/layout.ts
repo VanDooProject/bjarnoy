@@ -44,16 +44,18 @@ export type Slot = readonly [col: number, row: number];
  * house with great storehouse, fishing hut with dockyard, and tower with
  * barracks and archery range.
  *
- * The two multi-parent capstones (Shrine of Freyja needs Farm *and* Pumpkin
- * Farm; Shrine of Thor needs Barracks *and* Archery Range) sit on that same
- * row too, one column past their nearer parent (Pumpkin Farm, Archery
- * Range). The link from their *farther* parent (Farm, Barracks) doesn't need
- * its own routing at all — `routing.ts`'s `reuseSameRowChain` notices the
- * whole row is already a chain of real adjacent edges and just extends the
- * hops already drawn, rather than routing around the nearer parent's card.
- * Sawmill sits a column further out than its one hop from Lumberjack would
- * otherwise place it, alongside the other late-game (flat LH10) buildings —
- * column 2 of its row is left empty so that link still runs flat.
+ * Every capstone (Great Storehouse, both shrines) sits in the rightmost
+ * column, on its nearer parent's row, so the whole run of "late-game tier"
+ * cards reads as one column. Their farther parent's link doesn't need its
+ * own routing at all — `routing.ts`'s `reuseSameRowChain` notices the row
+ * is already a chain of real edges (adjacent ones, or ones already routed
+ * straight through an empty cell) and just extends the hops already drawn,
+ * rather than routing a separate line around the nearer parent's card.
+ *
+ * Two cells are left empty on purpose so a same-row link can pass straight
+ * through them instead of detouring: [2, 0] for Lumberjack -> Sawmill, and
+ * [2, 1] for Farm -> Pumpkin Farm. [2, 3] and [3, 3] are likewise left empty
+ * for Storage House -> Great Storehouse.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 2],
@@ -66,15 +68,17 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   tower: [1, 5],
 
   // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
-  pumpkinfarm: [2, 1],
-  greatstorehouse: [2, 3],
+  // [2, 1] intentionally empty — the lane Farm -> Pumpkin Farm runs through.
   dockyard: [2, 4],
   barracks: [2, 5],
 
   sawmill: [3, 0],
-  shrineoffreyja: [3, 1],
+  pumpkinfarm: [3, 1],
+  // [3, 3] intentionally empty — the lane Storage House -> Great Storehouse runs through.
   archeryrange: [3, 5],
 
+  greatstorehouse: [4, 3],
+  shrineoffreyja: [4, 1],
   shrineofthor: [4, 5],
 };
 
