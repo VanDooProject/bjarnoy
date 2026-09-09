@@ -652,6 +652,10 @@ public sealed record Army
             ReturnCumulativeHours = movement.ReturnCumulativeHours,
             TurnAroundAt = battleInstant,
             IsReturning = true,
+            // A battle-forced retreat is immune to further interception
+            // (issue #206 §5) — not something a player triggers on demand,
+            // unlike a voluntary Recall.
+            RetreatImmune = true,
         };
 
         var survivorArmy = army with
@@ -951,6 +955,10 @@ public sealed record Army
                 ReturnCumulativeHours = movement.ReturnCumulativeHours,
                 TurnAroundAt = movement.TurnAroundAt,
                 IsReturning = true,
+                // Natural provisions-driven turnaround is immune to
+                // interception (issue #206 §5) — not something a player
+                // triggers on demand.
+                RetreatImmune = true,
             };
 
             var turned = this with
@@ -1051,6 +1059,63 @@ public sealed record Army
         };
 
         return this with { Location = new ArmyLocation.InTransit(recallMovement), Provisions = provisionsNow };
+    }
+
+    /// <summary>
+    /// Puts this army onto an immediate, non-cancellable, direct-path-home
+    /// march (issue #206 §5) — the mechanical consequence of losing (or
+    /// tying) a <see cref="FieldBattleResolver"/> interception. Deliberately
+    /// not built through <see cref="Recall"/>: the resulting <see cref="Movement"/>
+    /// carries <see cref="Movement.RetreatImmune"/> so it cannot itself be
+    /// intercepted again (unlike a voluntary Recall), and this army cannot
+    /// take a fresh <see cref="Recall"/>/<see cref="PlanFieldOrder"/> while it
+    /// holds — both require <see cref="Movement.IsReturning"/> to be
+    /// <see langword="false"/>, which a forced retreat never is again once
+    /// applied.
+    /// </summary>
+    /// <param name="battleInstant">
+    /// When the fight happened — the new leg's <see cref="Movement.DepartedAt"/>,
+    /// exactly like <see cref="Army.SettleArrival"/>'s own post-battle return.
+    /// </param>
+    /// <param name="fromHex">Where the fight happened — always a hex this army's original route actually passed through.</param>
+    /// <returns>
+    /// <see langword="null"/> only if no route home exists at all — should
+    /// not happen in practice for an army that was already mid-journey
+    /// (issue #159's river-crossing case aside, no hex on a reachable route is
+    /// ever itself unreachable), but handled defensively rather than throwing.
+    /// </returns>
+    public Army ForceFieldRetreat(
+        DateTimeOffset battleInstant, HexCoord fromHex, HexCoord home, Func<HexCoord, Terrain> terrainAt,
+        double speedFactor = 1.0, Func<HexCoord, bool>? isRiver = null)
+    {
+        ArgumentNullException.ThrowIfNull(terrainAt);
+
+        var isLandUnit = Stacks.Count == 0 || Stacks.Any(s => UnitCatalogue.Get(s.Type).Class != UnitClass.Ship);
+
+        // No route home is not expected in practice (this army's original
+        // route already crossed fromHex), but rather than throw, it is left
+        // standing exactly where it fought — still immune, just going
+        // nowhere — a safe degenerate case rather than a crash.
+        var path = HexPathfinder.FindPath(fromHex, home, terrainAt, isLandUnit, isRiver) is { Count: > 0 } found
+            ? found
+            : (List<HexCoord>)[fromHex];
+
+        var speed = TotalSpeed;
+        var cumulativeHours = HexPathfinder.CumulativeHours(path, terrainAt, speed, isLandUnit, speedFactor, isRiver);
+
+        var retreatMovement = new Movement.Movement
+        {
+            DepartedAt = battleInstant,
+            Path = path,
+            CumulativeHours = cumulativeHours,
+            ReturnPath = path,
+            ReturnCumulativeHours = cumulativeHours,
+            TurnAroundAt = battleInstant,
+            IsReturning = true,
+            RetreatImmune = true,
+        };
+
+        return this with { Location = new ArmyLocation.InTransit(retreatMovement) };
     }
 
     /// <summary>

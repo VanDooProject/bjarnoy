@@ -250,6 +250,23 @@
     "siege": "Belagerung",
     "hexCoord": "Hex ({q}, {r})"
   },
+  "fieldBattleReport": {
+    "title": "Feldschlacht",
+    "won": "Gewonnen",
+    "lost": "Verloren",
+    "tied": "Unentschieden",
+    "sideA": "Seite A",
+    "sideB": "Seite B",
+    "you": "Du",
+    "opponent": "Gegner",
+    "defending": "verteidigend",
+    "power": "Stärke",
+    "summaryWon": "gewonnen, {n} verloren",
+    "summaryLost": "verloren, {n} verloren",
+    "summaryTied": "unentschieden, {n} verloren",
+    "summaryLooted": "{n} erbeutet",
+    "hexCoord": "Hex ({q}, {r})"
+  },
   "armyStatus": {
     "arriving": "Kommt an",
     "atHome": "Zu Hause",

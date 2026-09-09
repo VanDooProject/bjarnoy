@@ -3,6 +3,9 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
+- u are allowed to, and should, open a PR for actual code changes (anything that modifies files in the repo — feat/fix/refactor/etc.) without needing to be asked first
+- docs, answering questions, and other work that doesn't modify files in the repo does not need a PR
+- when unsure whether something needs a PR, ask
 - when asked to "squash this PR" (or similar, with nothing more specific said), that means squash-merge the PR via GitHub (rewriting the branch's own commit history by hand is not what's meant) — keep the branch's full commit history intact, and use GitHub's squash-merge so the PR title becomes the one resulting commit message on the base branch
 - squash always means GitHub's squash-merge, never a local rewrite of history — and never force-push, on any branch, as a way to get there
 
@@ -17,6 +20,44 @@
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
+
+# unrelated/pre-existing CI failures found while driving a PR to green
+- if a PR you're driving to green has a CI failure unrelated to that PR's
+  own diff (confirmed pre-existing, e.g. it also fails on `main` at the
+  PR's own base commit), do not fix it inside that PR — it stays scoped to
+  its own change
+- before starting any fix work for it, **ask me first** — don't just spin
+  up a fix on your own initiative for an unrelated failure, test flake, or
+  CI issue you stumbled into. Tell me what's failing and why you think
+  it's unrelated, and wait for a go-ahead
+- once I say go: check for an existing open PR (and existing branches)
+  already fixing that same test/CI issue before starting — search open PRs
+  by title/branch/linked test name. If one already exists, don't start a
+  duplicate fix; either help drive the existing one or say so. This matters
+  most when multiple agents/sessions could be working in parallel — two
+  agents racing to fix the same known-broken test wastes work and risks
+  conflicting fixes
+- if no existing PR covers it, you're allowed to spin off a new,
+  independent PR for just that fix: branch off latest `main` (not off the
+  PR branch that surfaced it), fix + test it there, open its own PR, drive
+  it to green, then squash-merge it via GitHub
+- afterwards, update the original PR by merging `main` back into its branch
+  so it picks up the fix (see "squash always means GitHub's squash-merge"
+  above for how the merge lands on `main`)
+- when asking me for the go-ahead, judge the fix's complexity from what
+  you already read to diagnose it (the failing log/test, the code path
+  it touches).
+  Include that judgment and ask me which model to run the fix with:
+  Sonnet is the default for anything you assess as a simple/localized
+  fix; suggest Opus or Fable when you assess it as architecturally
+  complex or ambiguous. If the codebase area is unfamiliar rather than
+  just the fix being complex, use a quick Explore-agent read to orient
+  yourself first — that's research, not a complexity rating, and only
+  worth it when you're actually lost
+- a failure that a rerun clears counts as **flaky**, not "unrelated" —
+  flaky still means broken and gets fixed like any other bug (same
+  ask-first + dedupe-check + own-PR flow above), it does not stand down
+  just because a rerun happened to pass
 
 # tests
 - tests need to be meaningful and not test third party stuff

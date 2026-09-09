@@ -23,6 +23,7 @@ import type {
   CreateGuildTopicRequest,
   CreateWorldRequest,
   DispatchArmyRequest,
+  FieldBattleReportResponse,
   FieldOrderRequest,
   FoundSettlementRequest,
   GrantResourcesRequest,
@@ -513,6 +514,13 @@ export const api = {
   getReport: (reportId: string) => request<BattleReportResponse>(`/reports/${reportId}`),
   getSettlementReports: (settlementId: string) =>
     request<BattleReportResponse[]>(`/settlements/${settlementId}/reports`),
+  // Issue #206: field battle reports (in-flight interception). Mirrors
+  // ArmyEndpoints.cs's `/field-reports/{reportId}` and
+  // `/settlements/{settlementId}/field-reports` — same flat, unpaged shape
+  // as the battle-report endpoints above.
+  getFieldReport: (reportId: string) => request<FieldBattleReportResponse>(`/field-reports/${reportId}`),
+  getSettlementFieldReports: (settlementId: string) =>
+    request<FieldBattleReportResponse[]>(`/settlements/${settlementId}/field-reports`),
   getMyLeaderboardRank: (
     worldId: string,
     scope: LeaderboardScope,

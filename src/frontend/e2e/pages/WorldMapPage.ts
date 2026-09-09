@@ -1,6 +1,6 @@
 // See RingMenuComponent.ts for why `expect` is not imported from `../fixtures`.
 import { type Locator, type Page } from '@playwright/test';
-import { foundSettlement, gotoWorldMap } from '../helpers';
+import { captureCanvas, foundSettlement, gotoWorldMap } from '../helpers';
 import type { ScreenPoint } from './SettlementPage';
 
 /**
@@ -53,9 +53,15 @@ export class WorldMapPage {
     return { x: box.x + dx, y: box.y + dy };
   }
 
-  /** A raw frame of the canvas, for `Buffer.compare` against a later one. */
-  screenshot(): Promise<Buffer> {
-    return this.canvas.screenshot();
+  /**
+   * A raw frame of the canvas, for `Buffer.compare` against a later one.
+   *
+   * Clipped to the canvas's own box rather than taken off the canvas
+   * locator — see `captureCanvas`, which is where the (large, frame-rate
+   * bound) difference between those two spellings is written down.
+   */
+  async screenshot(): Promise<Buffer> {
+    return captureCanvas(this.page, await this.box());
   }
 
   /** Moves the pointer to a page-coordinate point. */

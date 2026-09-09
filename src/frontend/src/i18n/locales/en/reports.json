@@ -15,6 +15,7 @@
   "tabs": {
     "all": "All",
     "battle": "Battle",
+    "field": "Field",
     "trade": "Trade"
   },
   "noReports": "No reports yet.",
