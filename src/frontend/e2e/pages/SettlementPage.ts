@@ -1,6 +1,6 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
 import { type Locator, type Page } from '@playwright/test';
-import { claimLandfall, foundSettlement, waitForMapReady } from '../helpers';
+import { captureCanvas, claimLandfall, foundSettlement, waitForMapReady } from '../helpers';
 import { RingMenuComponent } from './RingMenuComponent';
 
 export interface HexCoord {
@@ -101,6 +101,16 @@ export class SettlementPage {
   async canvasBox(): Promise<{ x: number; y: number; width: number; height: number }> {
     this.canvasBoxCache ??= (await this.canvas.boundingBox())!;
     return this.canvasBoxCache;
+  }
+
+  /**
+   * A raw frame of the canvas, for `Buffer.compare` against a later one.
+   * Clipped to the canvas's box rather than taken off the canvas locator —
+   * `captureCanvas` documents why that difference is worth several seconds
+   * per frame on a software-rendered runner.
+   */
+  async screenshot(): Promise<Buffer> {
+    return captureCanvas(this.page, await this.canvasBox());
   }
 
   /** Canvas centre, in page coordinates. */

@@ -79,6 +79,14 @@ public static class ArmyEndpoints
             .WithName("ListSettlementBattleReports")
             .WithSummary("Lists battle reports touching a settlement, as attacker or defender, newest first.");
 
+        reports.MapGet("/field-reports/{reportId:guid}", GetFieldReport)
+            .WithName("GetFieldBattleReport")
+            .WithSummary("Fetches one in-flight field battle report by id (issue #206).");
+
+        reports.MapGet("/settlements/{settlementId:guid}/field-reports", ListFieldReportsForSettlement)
+            .WithName("ListSettlementFieldBattleReports")
+            .WithSummary("Lists field battle reports touching a settlement, either side, newest first (issue #206).");
+
         return app;
     }
 
@@ -370,6 +378,27 @@ public static class ArmyEndpoints
     {
         var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
         IReadOnlyList<BattleReportResponse> response = [.. entities.Select(BattleReportResponse.From)];
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Ok<FieldBattleReportResponse>, NotFound>> GetFieldReport(
+        Guid reportId,
+        FieldBattleReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var report = await reports.GetAsync(reportId, cancellationToken);
+        return report is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(FieldBattleReportResponse.From(report));
+    }
+
+    private static async Task<Ok<IReadOnlyList<FieldBattleReportResponse>>> ListFieldReportsForSettlement(
+        Guid settlementId,
+        FieldBattleReportService reports,
+        CancellationToken cancellationToken)
+    {
+        var entities = await reports.GetForSettlementAsync(settlementId, cancellationToken);
+        IReadOnlyList<FieldBattleReportResponse> response = [.. entities.Select(FieldBattleReportResponse.From)];
         return TypedResults.Ok(response);
     }
 

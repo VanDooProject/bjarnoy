@@ -242,7 +242,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     const settlement = await SettlementPage.found(page);
     const { x: cx, y: cy } = await settlement.canvasCentre();
 
-    const before = await settlement.canvas.screenshot();
+    const before = await settlement.screenshot();
 
     await page.mouse.move(cx, cy);
     await page.mouse.down();
@@ -253,7 +253,7 @@ test.describe('settlement view interactions', { tag: '@g2' }, () => {
     await page.mouse.up();
     await page.waitForTimeout(300);
 
-    const after = await settlement.canvas.screenshot();
+    const after = await settlement.screenshot();
     expect(Buffer.compare(before, after)).not.toBe(0);
   });
 });

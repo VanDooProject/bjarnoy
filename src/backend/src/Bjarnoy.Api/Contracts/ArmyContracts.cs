@@ -294,3 +294,57 @@ public sealed record BattleReportResponse(
             BattleReportSiegeResponse.From(domain.Siege));
     }
 }
+
+public sealed record FieldBattleReportLineResponse(string Side, bool IsLoss, string Unit, int Count)
+{
+    public static FieldBattleReportLineResponse From(FieldBattleReportLineEntity line) =>
+        new(line.Side.ToString().ToLowerInvariant(), line.IsLoss, line.UnitType.ToWireName(), line.Count);
+}
+
+/// <summary>
+/// A resolved in-flight interception (issue #206), as read from either side's
+/// inbox — the army-vs-army sibling of <see cref="BattleReportResponse"/>. No
+/// siege section (nobody was besieging anybody) and no attacker/defender
+/// asymmetry baked into the shape: <c>SideAWasDefending</c>/<c>SideBWasDefending</c>
+/// instead say whether that side happened to be standing on its own claimed
+/// territory when the fight was resolved as asymmetric.
+/// </summary>
+public sealed record FieldBattleReportResponse(
+    Guid Id,
+    DateTimeOffset OccurredAt,
+    HexPointResponse Hex,
+    Guid SideAArmyId,
+    Guid SideASettlementId,
+    Guid SideBArmyId,
+    Guid SideBSettlementId,
+    string Winner,
+    double SideAPower,
+    double SideBPower,
+    bool SideAWasDefending,
+    bool SideBWasDefending,
+    int Seed,
+    ResourceAmountsResponse LootTaken,
+    IReadOnlyList<FieldBattleReportLineResponse> Lines)
+{
+    public static FieldBattleReportResponse From(FieldBattleReportEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new FieldBattleReportResponse(
+            entity.Id,
+            entity.OccurredAt,
+            new HexPointResponse(entity.HexQ, entity.HexR),
+            entity.SideAArmyId,
+            entity.SideASettlementId,
+            entity.SideBArmyId,
+            entity.SideBSettlementId,
+            ((FieldBattleWinner)entity.Winner).ToString().ToLowerInvariant(),
+            entity.SideAPower,
+            entity.SideBPower,
+            entity.SideAWasDefending,
+            entity.SideBWasDefending,
+            entity.Seed,
+            new ResourceAmountsResponse(entity.LootWood, entity.LootStone, entity.LootFood, entity.LootIron),
+            [.. entity.Lines.Select(FieldBattleReportLineResponse.From)]);
+    }
+}
