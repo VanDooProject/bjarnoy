@@ -51,6 +51,13 @@ const DEFAULT_GENERATION = {
   islandChance: 0.45,
   islandMinRadius: 4.8,
   islandMaxRadius: 11.2,
+  islandMinLobes: 2,
+  islandMaxLobes: 4,
+  islandMaxElongation: 1.0,
+  islandBendiness: 1.6,
+  islandLobeBlend: 0.25,
+  islandCoastWarp: 1.5,
+  islandCoastWarpScale: 5.0,
   beachThreshold: 0.82,
   mountainThreshold: 0.4,
   mountainRockiness: 0.72,
@@ -242,6 +249,30 @@ describe('AdminWorldReseedView', () => {
     expect((wrapper.find('#gen-islandMinRadius').element as HTMLInputElement).value).toBe('4.8');
     expect((wrapper.find('#gen-islandMaxRadius').element as HTMLInputElement).value).toBe('11.2');
     expect((wrapper.find('#gen-minimumIslandTiles').element as HTMLInputElement).value).toBe('6');
+  });
+
+  it("pre-fills the island-shape form fields with the world's current values", async () => {
+    const wrapper = await mountView();
+
+    expect((wrapper.find('#gen-islandMinLobes').element as HTMLInputElement).value).toBe('2');
+    expect((wrapper.find('#gen-islandMaxLobes').element as HTMLInputElement).value).toBe('4');
+    expect((wrapper.find('#gen-islandMaxElongation').element as HTMLInputElement).value).toBe('1');
+    expect((wrapper.find('#gen-islandBendiness').element as HTMLInputElement).value).toBe('1.6');
+    expect((wrapper.find('#gen-islandLobeBlend').element as HTMLInputElement).value).toBe('0.25');
+    expect((wrapper.find('#gen-islandCoastWarp').element as HTMLInputElement).value).toBe('1.5');
+    expect((wrapper.find('#gen-islandCoastWarpScale').element as HTMLInputElement).value).toBe('5');
+  });
+
+  it('sends an edited island-shape parameter to the preview endpoint', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('#gen-islandMaxLobes').setValue('3');
+    await previewSeed(wrapper);
+
+    expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', {
+      seed: 4242,
+      generation: { ...DEFAULT_GENERATION, islandMaxLobes: 3 },
+    });
   });
 
   it('sends an edited generation parameter to the preview endpoint', async () => {

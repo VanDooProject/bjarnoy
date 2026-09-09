@@ -31,7 +31,7 @@ const loadError = ref<string | null>(null);
 
 const seedInput = ref('');
 
-/** The nine island/mountain knobs a preview/reseed request can override — see `GENERATION_FIELDS` for the form. */
+/** The island/mountain knobs a preview/reseed request can override — see `GENERATION_FIELDS` for the form. */
 type GenerationForm = Required<WorldGenerationSettingsOverrides>;
 
 function formFrom(settings: WorldGenerationSettings): GenerationForm {
@@ -50,6 +50,13 @@ const GENERATION_FIELDS: {
   { key: 'islandChance', labelKey: 'islandChanceLabel', min: 0.01, max: 1, step: 0.01 },
   { key: 'islandMinRadius', labelKey: 'islandMinRadiusLabel', min: 0.1, step: 0.1 },
   { key: 'islandMaxRadius', labelKey: 'islandMaxRadiusLabel', min: 0.1, step: 0.1 },
+  { key: 'islandMinLobes', labelKey: 'islandMinLobesLabel', min: 1, max: 5, step: 1 },
+  { key: 'islandMaxLobes', labelKey: 'islandMaxLobesLabel', min: 1, max: 5, step: 1 },
+  { key: 'islandMaxElongation', labelKey: 'islandMaxElongationLabel', min: 0, max: 1.5, step: 0.05 },
+  { key: 'islandBendiness', labelKey: 'islandBendinessLabel', min: 0, max: 3, step: 0.1 },
+  { key: 'islandLobeBlend', labelKey: 'islandLobeBlendLabel', min: 0, max: 0.5, step: 0.01 },
+  { key: 'islandCoastWarp', labelKey: 'islandCoastWarpLabel', min: 0, max: 4, step: 0.1 },
+  { key: 'islandCoastWarpScale', labelKey: 'islandCoastWarpScaleLabel', min: 2, max: 12, step: 0.5 },
   { key: 'beachThreshold', labelKey: 'beachThresholdLabel', min: 0, max: 1, step: 0.01 },
   { key: 'mountainThreshold', labelKey: 'mountainThresholdLabel', min: 0, max: 1, step: 0.01 },
   { key: 'mountainRockiness', labelKey: 'mountainRockinessLabel', min: 0, max: 1, step: 0.01 },
