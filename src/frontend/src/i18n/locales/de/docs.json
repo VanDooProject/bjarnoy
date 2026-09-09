@@ -89,6 +89,15 @@
     "generation": "Entstehung:",
     "buildings": "Gebäude:",
     "none": "keine",
+    "riverVariants": "Form:",
+    "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einer Flusskachel steht — nur auf einer geraden oder gebogenen.",
+    "riverShapes": {
+      "spring": "Quelle",
+      "straight": "Gerade",
+      "bend": "Biegung",
+      "bend60": "Biegung (60°)",
+      "confluence": "Zusammenfluss"
+    },
     "entries": {
       "sea": {
         "title": "Meer",
@@ -119,6 +128,11 @@
         "title": "Gebirge",
         "lore": "Der felsigste Grund, den eine Insel hat.",
         "generation": "Auf das Innere einer Insel beschränkt (innerhalb von 40 % ihres Radius), damit sich an der Küste nie Grate bilden."
+      },
+      "river": {
+        "title": "Fluss",
+        "lore": "Wasser, das sich durch das Land selbst gräbt, von einer Bergquelle hinunter zum Meer — die Kachel eines Flusses ersetzt vollständig das Landgelände, über das er fließt.",
+        "generation": "Verläuft bergab von einer Quelle auf einem geeigneten Gebirgscluster (2+ verbundene Gebirgskacheln) bis zur Küste und mäandert dabei; zwei sich kreuzende Flüsse verschmelzen zu einem Zusammenfluss, alles unter 2 Kacheln Länge wird verworfen."
       }
     }
   },

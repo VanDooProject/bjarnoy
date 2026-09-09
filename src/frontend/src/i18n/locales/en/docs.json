@@ -89,6 +89,15 @@
     "generation": "Generation:",
     "buildings": "Buildings:",
     "none": "none",
+    "riverVariants": "Shape:",
+    "riverSawmillNote": "The Sawmill is the one building that goes directly on a river tile — only a Straight or Bend one.",
+    "riverShapes": {
+      "spring": "Spring",
+      "straight": "Straight",
+      "bend": "Bend",
+      "bend60": "Bend (60°)",
+      "confluence": "Confluence"
+    },
     "entries": {
       "sea": {
         "title": "Sea",
@@ -119,6 +128,11 @@
         "title": "Mountain",
         "lore": "The rockiest ground an island has.",
         "generation": "Confined to an island's interior (within 40% of its radius) so ridges never form on the coast."
+      },
+      "river": {
+        "title": "River",
+        "lore": "Water cut through the land itself, from a mountain spring down to the sea — a river tile's art fully replaces whatever land terrain it flows over.",
+        "generation": "Traced downhill from a spring on a qualifying mountain cluster (2+ connected mountain tiles) to the coast, meandering as it goes; two rivers that cross merge into a confluence, and anything shorter than 2 tiles is discarded."
       }
     }
   },
