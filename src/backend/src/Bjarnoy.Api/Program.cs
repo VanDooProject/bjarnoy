@@ -40,6 +40,7 @@ builder.Services.AddScoped<TradeService>();
 builder.Services.AddScoped<FieldBattleService>();
 builder.Services.AddScoped<ArmyService>();
 builder.Services.AddScoped<BattleReportService>();
+builder.Services.AddScoped<FieldBattleReportService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<GuildService>();
