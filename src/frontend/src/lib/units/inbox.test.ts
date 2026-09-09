@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { filterInbox, inboxUnreadCount, isInboxItemUnread, mergeInbox } from './inbox';
-import type { BattleReportResponse, TradeReportResponse } from '../../api/types';
+import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../../api/types';
 
 function battle(id: string, occurredAt: string): BattleReportResponse {
   return {
@@ -18,6 +18,26 @@ function battle(id: string, occurredAt: string): BattleReportResponse {
     attackerLines: [],
     defenderLines: [],
     siege: null,
+  };
+}
+
+function field(id: string, occurredAt: string): FieldBattleReportResponse {
+  return {
+    id,
+    occurredAt,
+    hex: { q: 0, r: 0 },
+    sideAArmyId: 'army-a',
+    sideASettlementId: 'a',
+    sideBArmyId: 'army-b',
+    sideBSettlementId: 'b',
+    winner: 'sidea',
+    sideAPower: 10,
+    sideBPower: 5,
+    sideAWasDefending: false,
+    sideBWasDefending: false,
+    seed: 1,
+    lootTaken: { wood: 0, stone: 0, food: 0, iron: 0 },
+    lines: [],
   };
 }
 
@@ -48,8 +68,19 @@ describe('mergeInbox', () => {
     expect(merged.map((item) => item.kind)).toEqual(['trade', 'battle', 'trade']);
   });
 
-  it('is empty when both lists are empty', () => {
+  it('is empty when all lists are empty', () => {
     expect(mergeInbox([], [])).toEqual([]);
+  });
+
+  it('folds field-battle reports (issue #206) into the same newest-first order', () => {
+    const merged = mergeInbox(
+      [battle('b1', '2026-08-29T10:00:00.000Z')],
+      [trade('t1', '2026-08-29T09:00:00.000Z')],
+      [field('f1', '2026-08-29T11:00:00.000Z')],
+    );
+
+    expect(merged.map((item) => item.report.id)).toEqual(['f1', 'b1', 't1']);
+    expect(merged.map((item) => item.kind)).toEqual(['field', 'battle', 'trade']);
   });
 });
 
@@ -64,6 +95,15 @@ describe('filterInbox', () => {
   });
   it("'trade' keeps only trade reports", () => {
     expect(filterInbox(items, 'trade').map((i) => i.kind)).toEqual(['trade']);
+  });
+
+  it("'field' keeps only field-battle reports", () => {
+    const withField = mergeInbox(
+      [battle('b1', '2026-08-29T10:00:00.000Z')],
+      [trade('t1', '2026-08-29T12:00:00.000Z')],
+      [field('f1', '2026-08-29T11:00:00.000Z')],
+    );
+    expect(filterInbox(withField, 'field').map((i) => i.kind)).toEqual(['field']);
   });
 });
 
