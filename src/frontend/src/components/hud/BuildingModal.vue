@@ -48,9 +48,8 @@ function shrineSlotsFor(level: number): number {
   return 1;
 }
 
-const isShrine = computed(
-  () => props.tile.buildingType === 'shrineofthor' || props.tile.buildingType === 'shrineoffreyja',
-);
+const SHRINE_TYPES = new Set(['shrineofthor', 'shrineoffreyja', 'shrineofullr', 'shrineofnjord']);
+const isShrine = computed(() => SHRINE_TYPES.has(props.tile.buildingType ?? ''));
 // Level 0 is the foundation stub while the shrine is still under
 // construction (Enqueue) — it grants no favour and has no slots yet, mirrored
 // by Settlement.SlotRune/ActiveEffect rejecting it backend-side.
@@ -153,9 +152,18 @@ function formatModifier(modifier: BuildingModifier): string {
     case 'arcane':
       return t('hud.hoverTooltip.modifierArcane');
     case 'shrineFavour':
+      if (modifier.domain === 'storage') {
+        return t('hud.hoverTooltip.modifierShrineFavourStorage', { percent: modifier.percent });
+      }
       return t('hud.hoverTooltip.modifierShrineFavour', {
         percent: modifier.percent,
-        domain: modifier.domain === 'woodStone' ? t('hud.hoverTooltip.domainWoodStone') : t('hud.hoverTooltip.domainFood'),
+        domain: t(
+          modifier.domain === 'woodStone'
+            ? 'hud.hoverTooltip.domainWoodStone'
+            : modifier.domain === 'wood'
+              ? 'hud.hoverTooltip.domainWood'
+              : 'hud.hoverTooltip.domainFood',
+        ),
       });
   }
 }

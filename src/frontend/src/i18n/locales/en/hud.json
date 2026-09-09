@@ -49,8 +49,10 @@
     "modifierCoastalBoost": "Coastal (+{percent}%)",
     "modifierArcane": "Arcane",
     "modifierShrineFavour": "+{percent}% {domain} production",
+    "modifierShrineFavourStorage": "+{percent}% storage capacity",
     "domainWoodStone": "Wood/Stone",
-    "domainFood": "Food"
+    "domainFood": "Food",
+    "domainWood": "Wood"
   },
   "ringMenu": {
     "back": "Back",

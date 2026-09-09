@@ -21,6 +21,12 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   longhouse: 'greathall',
   shrineofthor: 'thorshrine',
   shrineoffreyja: 'freyjashrine',
+  // Placeholder art only — Ullr and Njörd have no art of their own in the
+  // pack yet, so their shrines borrow Thor's/Freyja's family (both already
+  // in the glob list below) rather than falling back to a bare terrain tile.
+  // Swap these for dedicated families once the art exists.
+  shrineofullr: 'thorshrine',
+  shrineofnjord: 'freyjashrine',
   farm: 'farm_crop',
   tower: 'towerbuilding',
   pumpkinfarm: 'farm_pumpkin',

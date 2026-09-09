@@ -49,8 +49,10 @@
     "modifierCoastalBoost": "Küste (+{percent}%)",
     "modifierArcane": "Arkan",
     "modifierShrineFavour": "+{percent}% {domain}-Produktion",
+    "modifierShrineFavourStorage": "+{percent}% Lagerkapazität",
     "domainWoodStone": "Holz/Stein",
-    "domainFood": "Nahrung"
+    "domainFood": "Nahrung",
+    "domainWood": "Holz"
   },
   "ringMenu": {
     "back": "Zurück",

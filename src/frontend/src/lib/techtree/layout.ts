@@ -56,8 +56,10 @@ export type Slot = readonly [col: number, row: number];
  * sits in column 2, so that parent's link can pass straight through to
  * column 4 instead of detouring: [3, 1] for Pumpkin Farm -> Shrine of
  * Freyja, and [3, 3] for Storage House -> Great Storehouse ([2, 3] is empty
- * too, since Great Storehouse has no column-2 parent at all). [2, 0] is
- * likewise left empty for Lumberjack -> Sawmill.
+ * too, since Great Storehouse has no column-2 parent at all), and [3, 4] for
+ * Dockyard -> Shrine of Njörd. [2, 0] is likewise left empty for Lumberjack
+ * -> Sawmill — Shrine of Ullr's own nearer parent (Sawmill) already sits in
+ * column 3, right next to it, so its row needs no further empty cell.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 2],
@@ -77,10 +79,13 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   sawmill: [3, 0],
   // [3, 1] intentionally empty — the lane Pumpkin Farm -> Shrine of Freyja runs through.
   // [3, 3] intentionally empty — the lane Storage House -> Great Storehouse runs through.
+  // [3, 4] intentionally empty — the lane Dockyard -> Shrine of Njörd runs through.
   archeryrange: [3, 5],
 
   greatstorehouse: [4, 3],
   shrineoffreyja: [4, 1],
+  shrineofullr: [4, 0],
+  shrineofnjord: [4, 4],
   shrineofthor: [4, 5],
 };
 

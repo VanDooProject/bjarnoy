@@ -77,6 +77,10 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   longhouse: 'greathall',
   shrineofthor: 'thorshrine',
   shrineoffreyja: 'freyjashrine',
+  // Placeholder art only — see buildingArt.ts's BUILDING_ART_FAMILIES for
+  // the matching docs-page choice.
+  shrineofullr: 'thorshrine',
+  shrineofnjord: 'freyjashrine',
   farm: 'farm_crop',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjackhut',

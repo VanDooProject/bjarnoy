@@ -50,7 +50,10 @@ function formatModifier(modifier: BuildingModifier): string {
     case 'arcane':
       return 'Arcane';
     case 'shrineFavour':
-      return `+${modifier.percent}% ${modifier.domain === 'woodStone' ? 'Wood/Stone' : 'Food'} production`;
+      if (modifier.domain === 'storage') return `+${modifier.percent}% storage capacity`;
+      return `+${modifier.percent}% ${
+        modifier.domain === 'woodStone' ? 'Wood/Stone' : modifier.domain === 'wood' ? 'Wood' : 'Food'
+      } production`;
   }
 }
 

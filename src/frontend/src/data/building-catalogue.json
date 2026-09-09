@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-09T13:15:53.470Z"
+    "generatedAt": "2026-09-09T17:14:30.143Z"
   },
   "data": [
     {
@@ -5487,6 +5487,664 @@
       "buildSeconds": 9226.40625,
       "productionPerHour": {
         "wood": 260,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 1,
+      "cost": {
+        "wood": 180,
+        "stone": 140,
+        "food": 60,
+        "iron": 0
+      },
+      "buildSeconds": 720,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "lumberjack",
+          "level": 10
+        },
+        {
+          "type": "sawmill",
+          "level": 10
+        }
+      ]
+    },
+    {
+      "type": "shrineofullr",
+      "level": 2,
+      "cost": {
+        "wood": 288,
+        "stone": 224,
+        "food": 96,
+        "iron": 0
+      },
+      "buildSeconds": 1080,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 3,
+      "cost": {
+        "wood": 460.80000000000007,
+        "stone": 358.4000000000001,
+        "food": 153.60000000000002,
+        "iron": 0
+      },
+      "buildSeconds": 1620,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 4,
+      "cost": {
+        "wood": 737.2800000000002,
+        "stone": 573.4400000000002,
+        "food": 245.76000000000005,
+        "iron": 0
+      },
+      "buildSeconds": 2430,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 5,
+      "cost": {
+        "wood": 1179.6480000000001,
+        "stone": 917.5040000000001,
+        "food": 393.21600000000007,
+        "iron": 0
+      },
+      "buildSeconds": 3645,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 6,
+      "cost": {
+        "wood": 1887.4368000000004,
+        "stone": 1468.0064000000004,
+        "food": 629.1456000000002,
+        "iron": 0
+      },
+      "buildSeconds": 5467.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 7,
+      "cost": {
+        "wood": 3019.898880000001,
+        "stone": 2348.8102400000007,
+        "food": 1006.6329600000004,
+        "iron": 0
+      },
+      "buildSeconds": 8201.25,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 8,
+      "cost": {
+        "wood": 4831.838208000002,
+        "stone": 3758.0963840000013,
+        "food": 1610.6127360000005,
+        "iron": 0
+      },
+      "buildSeconds": 12301.875,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 9,
+      "cost": {
+        "wood": 7730.941132800004,
+        "stone": 6012.954214400003,
+        "food": 2576.9803776000012,
+        "iron": 0
+      },
+      "buildSeconds": 18452.8125,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofullr",
+      "level": 10,
+      "cost": {
+        "wood": 12369.505812480005,
+        "stone": 9620.726743040004,
+        "food": 4123.168604160002,
+        "iron": 0
+      },
+      "buildSeconds": 27679.21875,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 1,
+      "cost": {
+        "wood": 180,
+        "stone": 140,
+        "food": 60,
+        "iron": 0
+      },
+      "buildSeconds": 720,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "fishinghut",
+          "level": 10
+        },
+        {
+          "type": "dockyard",
+          "level": 10
+        }
+      ]
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 2,
+      "cost": {
+        "wood": 288,
+        "stone": 224,
+        "food": 96,
+        "iron": 0
+      },
+      "buildSeconds": 1080,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 3,
+      "cost": {
+        "wood": 460.80000000000007,
+        "stone": 358.4000000000001,
+        "food": 153.60000000000002,
+        "iron": 0
+      },
+      "buildSeconds": 1620,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 4,
+      "cost": {
+        "wood": 737.2800000000002,
+        "stone": 573.4400000000002,
+        "food": 245.76000000000005,
+        "iron": 0
+      },
+      "buildSeconds": 2430,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 5,
+      "cost": {
+        "wood": 1179.6480000000001,
+        "stone": 917.5040000000001,
+        "food": 393.21600000000007,
+        "iron": 0
+      },
+      "buildSeconds": 3645,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 6,
+      "cost": {
+        "wood": 1887.4368000000004,
+        "stone": 1468.0064000000004,
+        "food": 629.1456000000002,
+        "iron": 0
+      },
+      "buildSeconds": 5467.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 7,
+      "cost": {
+        "wood": 3019.898880000001,
+        "stone": 2348.8102400000007,
+        "food": 1006.6329600000004,
+        "iron": 0
+      },
+      "buildSeconds": 8201.25,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 8,
+      "cost": {
+        "wood": 4831.838208000002,
+        "stone": 3758.0963840000013,
+        "food": 1610.6127360000005,
+        "iron": 0
+      },
+      "buildSeconds": 12301.875,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 9,
+      "cost": {
+        "wood": 7730.941132800004,
+        "stone": 6012.954214400003,
+        "food": 2576.9803776000012,
+        "iron": 0
+      },
+      "buildSeconds": 18452.8125,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "shrineofnjord",
+      "level": 10,
+      "cost": {
+        "wood": 12369.505812480005,
+        "stone": 9620.726743040004,
+        "food": 4123.168604160002,
+        "iron": 0
+      },
+      "buildSeconds": 27679.21875,
+      "productionPerHour": {
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0

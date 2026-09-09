@@ -21,7 +21,7 @@ export type BuildingModifier =
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'arcane' }
-  | { kind: 'shrineFavour'; percent: number; domain: 'woodStone' | 'food' };
+  | { kind: 'shrineFavour'; percent: number; domain: 'woodStone' | 'food' | 'wood' | 'storage' };
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
@@ -188,9 +188,18 @@ export function buildingStatsFor(
     // Mirrors ShrineCatalogue.Favour.cs: +10% at level 1, +3%/level after,
     // capped at level 5 (+22%) so slotted runes always have headroom.
     case 'shrineofthor':
-    case 'shrineoffreyja': {
+    case 'shrineoffreyja':
+    case 'shrineofullr':
+    case 'shrineofnjord': {
       const favour = Math.round((0.10 + 0.03 * (Math.min(level, 5) - 1)) * 100);
-      const domain = type === 'shrineofthor' ? 'woodStone' : 'food';
+      const domain =
+        type === 'shrineofthor'
+          ? 'woodStone'
+          : type === 'shrineoffreyja'
+            ? 'food'
+            : type === 'shrineofullr'
+              ? 'wood'
+              : 'storage';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
     default:
@@ -220,6 +229,8 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   tower: { wood: 120, stone: 200, food: 0, iron: 10 },
   shrineofthor: { wood: 180, stone: 140, food: 60, iron: 0 },
   shrineoffreyja: { wood: 180, stone: 140, food: 60, iron: 0 },
+  shrineofullr: { wood: 180, stone: 140, food: 60, iron: 0 },
+  shrineofnjord: { wood: 180, stone: 140, food: 60, iron: 0 },
   storagehouse: { wood: 150, stone: 120, food: 0, iron: 0 },
   greatstorehouse: { wood: 300, stone: 260, food: 0, iron: 0 },
   archeryrange: { wood: 140, stone: 100, food: 0, iron: 20 },

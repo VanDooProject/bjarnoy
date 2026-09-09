@@ -139,7 +139,9 @@ export interface Tile {
     | 'greatstorehouse'
     | 'barracks'
     | 'fisherhut'
-    | 'sawmill';
+    | 'sawmill'
+    | 'shrineofullr'
+    | 'shrineofnjord';
   buildingLevel?: number;
 }
 
