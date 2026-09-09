@@ -142,12 +142,17 @@ function clear() {
 
 <template>
   <section class="tech-graph" aria-labelledby="tech-graph-heading">
-    <div class="graph-head">
+    <!-- Bound to the grid's own width rather than stretching to fill
+         whatever page wraps this component: on a wide window the grid (a
+         fixed, much narrower size — see GRID_W) would otherwise sit under a
+         legend spread far off to the right of it, reading as a tiny graph
+         lost in a mostly-empty header. -->
+    <div class="graph-head" :style="{ maxWidth: `${GRID_W}px` }">
       <div>
         <p id="tech-graph-heading" class="eyebrow">{{ t('docs.techTree.graphEyebrow') }}</p>
         <p class="status" aria-live="polite">{{ status }}</p>
       </div>
-      <ul class="legend">
+      <ul class="legend" @mouseleave="clear">
         <li v-for="entry in legend" :key="entry.id">
           <button
             type="button"
