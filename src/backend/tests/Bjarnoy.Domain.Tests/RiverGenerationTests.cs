@@ -87,11 +87,14 @@ public class RiverGenerationTests
     [Fact]
     public void Confluence_tiles_have_exactly_two_inflows()
     {
-        // Confluences are rare — only 3 of these 7 seeds produce one even at
-        // radius 60 (verified independently under Node), so this needs a
-        // wider net than the other tests to find at least one to check.
+        // Confluences are rare, so this needs a wider net than the other
+        // tests to find at least one to check. Seeds verified directly
+        // against the C# generator (a scan of seeds 0-299 at radius 60).
+        // Seed 9's only confluence sits exactly on the radius-60 boundary,
+        // where the river is clipped by the generation window rather than
+        // actually reaching the sea, so it's excluded here.
         var checkedAny = false;
-        foreach (var seed in new[] { 1, 7, 42, 1337, -5, 2147483, 0 })
+        foreach (var seed in new[] { 3, 14, 15, 17, 21, 24, 26, 27, 28 })
         {
             var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed) with { Radius = 60 });
             var world = Generate(seed, radius: 60);

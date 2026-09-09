@@ -269,15 +269,20 @@ public class TileFeatureTests
     // counterpart at all, a pre-existing frontend/backend drift discovered
     // while regenerating these fixtures for the bigger-island change, not
     // introduced by it. Out of scope here; left for a follow-up.
+    //
+    // Regenerated again for the multi-lobe island shape change (see
+    // TerrainSampler.IslandCellDepth / worldGenerator.ts's islandCellDepth) —
+    // both the shape algorithm and the default radius/cellSize values
+    // changed, which moves every seed's terrain.
     public static TheoryData<int, string, string> FrontendChecksums => new()
     {
-        { 1, "279ac19a62ad41204e6f75ffbf243bcc9475ba974e779aef570e42ddc5db0e8e", "25354b757ce3750214cfda98a66ccabb681670fc244214cae73e92af67e7ad72" },
-        { 7, "2e10da150937248798aeeb97350c8693e4fd6532135385767905467b0eb4a2da", "58198d244cf0da1046723eb7878efadaceb6cc10f3dbda0bde4d5c14c2e2cc48" },
-        { 42, "4ce2250cdcbd086ca40b0ad2ff7242d4736bbf4cf389fa937621a64ffe5c2d97", "d2c5cac7aed0edda604c05448bb2369f04e923ed7070fa89afdbe55126a548d0" },
-        { 1337, "9aab8466a54539469b26a7cbca16f74c4d3c0a275bddee2d866e5abbcc92c126", "7310e9f12803ca207e09c1ba94ba95bf9e874522e33388ca97e2a35b31fbd934" },
-        { -5, "d942009d9b5b0dba4366579e048969c1276524dd74d32bf0ba6bd69a44b78b7a", "384080829a9851cd856d8d155b4d440d54b181fbbd728bd6ec8cba959cd7fd21" },
-        { 2147483, "a34dad7946d1dad83bac82427f1f0c776c278ba8cb23f94900029a53da200da6", "661ca1448532ee5b217f1bfa97f8d8acd9d4cd1561070c78daaa768317893efb" },
-        { 0, "8c38fe4a342da73d3773685957f86948ee45c625875489b5801f6a7bb5677278", "cc7c4dd7ea9fa3946c85327faecfe8d282098ab70dbb33880f58c3fccbf8640c" },
+        { 1, "f0aa21628a37713b03720850c10ae7d728389034ac67155b0ca2843f90e9020b", "cd62d0567e3cdf77132695a1a4c9c5f4415cfeaa82e46340d8256849dc6bf075" },
+        { 7, "397d72927ed831eed4732010afe261b0c4937e7d3a9dbe136b526a10ddcfb608", "0f050259d00f2be8ab2af5397780d74edf7d3bc7bb94ea7720ac9ba476a7c9c8" },
+        { 42, "4ed7acc87823c1e724b35672453d3b66bec5b8bbdd3921b30cf672030d38acfb", "7113f06b4e324d9a91d9378e42ac299583485cf18803e7a5215a5641ee7d7027" },
+        { 1337, "3244f3d46700029e2060d8018ade26b79262b7867f53b2f294a322f9aa32f4c1", "ae82e4f2c769adf8079356242371d9f0a195139488b8acdf981e4a83cce9e25d" },
+        { -5, "1268a6d6ca5e0138aba7daca6c74e65046a51c7b01cfd032d712cb05b777878c", "5d94d99f61fdb8943a421173fbefc69835b7b6a9af994fe86a134e3f8be5ed66" },
+        { 2147483, "e8cf55d51fb15fcab9e637d11ad0622e537f18fb13d035b4cf378c66f70ca675", "baa934d8406baa65a132660cb7633ea6b52dc5a219dd7abe26aa433eda807f68" },
+        { 0, "865d9f67f0cb2b43441af54c5117a8f795371ecdc8d4588bdf82f5b4de5f5c69", "0bfee5e456c01fdec2242bae59e3c6c278d26c134636a629d24e9d0d8d6033d2" },
     };
 
     [Theory]

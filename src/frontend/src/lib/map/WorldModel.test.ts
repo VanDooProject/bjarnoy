@@ -424,22 +424,20 @@ describe('WorldModel.sawmillArtVariantOf', () => {
 describe('WorldModel.seaFacingDirectionOf', () => {
   it('finds the real sea neighbour of a coastal tile', () => {
     // Confirmed against DEFAULT_GENERATION's own terrainAt for this seed: of
-    // (-39,-17)'s six neighbours, only W (-40,-17) is sea — NW/SW are sand
-    // and E/NE/SE are forest. Originally reproduced a real in-game bug where
-    // a mouth tile rendered a straight line toward the inflow's geometric
-    // opposite instead of curving toward the actual sea neighbour; the
-    // coordinates here were re-picked when the island generator's default
-    // size grew (see WorldGenerationOptions.IslandMinRadius/IslandMaxRadius),
-    // which moved every seed's terrain.
+    // (-60,-37)'s six neighbours, only NE is sea — the rest are land.
+    // Originally reproduced a real in-game bug where a mouth tile rendered a
+    // straight line toward the inflow's geometric opposite instead of
+    // curving toward the actual sea neighbour; the coordinates here were
+    // re-picked when the island generator switched to multi-lobe shapes
+    // (see TerrainSampler.IslandCellDepth), which moved every seed's terrain.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -39, r: -17 })).toBe('W');
+    expect(model.seaFacingDirectionOf({ q: -60, r: -37 })).toBe('NE');
   });
 
   it('returns null when no neighbour is sea', () => {
-    // Same seed as above, but (-39,-16) — one hex further from that
-    // coastline — confirmed to have all six neighbours as land (forest/
-    // sand/grass).
+    // Same seed as above; (-60,-36) confirmed to have all six neighbours as
+    // land.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -39, r: -16 })).toBeNull();
+    expect(model.seaFacingDirectionOf({ q: -60, r: -36 })).toBeNull();
   });
 });

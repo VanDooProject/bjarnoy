@@ -31,6 +31,15 @@ export interface WorldGenerationResponse {
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
+  islandMinLobes: number;
+  islandMaxLobes: number;
+  islandMaxElongation: number;
+  islandBendiness: number;
+  islandLobeBlend: number;
+  islandLobeMinScale: number;
+  islandLobeMaxScale: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
 }
 
 /** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
@@ -404,6 +413,13 @@ export interface WorldGenerationSettings {
   mountainRockiness: number;
   forestRockiness: number;
   minimumIslandTiles: number;
+  islandMinLobes: number;
+  islandMaxLobes: number;
+  islandMaxElongation: number;
+  islandBendiness: number;
+  islandLobeBlend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
 }
 
 /**
@@ -421,6 +437,13 @@ export interface WorldGenerationSettingsOverrides {
   mountainRockiness?: number;
   forestRockiness?: number;
   minimumIslandTiles?: number;
+  islandMinLobes?: number;
+  islandMaxLobes?: number;
+  islandMaxElongation?: number;
+  islandBendiness?: number;
+  islandLobeBlend?: number;
+  islandCoastWarp?: number;
+  islandCoastWarpScale?: number;
 }
 
 /**

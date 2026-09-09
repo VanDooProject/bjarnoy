@@ -46,6 +46,15 @@ export interface WorldGenerationConstants {
   islandChance: number;
   islandMinRadius: number;
   islandMaxRadius: number;
+  islandMinLobes: number;
+  islandMaxLobes: number;
+  islandMaxElongation: number;
+  islandBendiness: number;
+  islandLobeBlend: number;
+  islandLobeMinScale: number;
+  islandLobeMaxScale: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
   beachThreshold: number;
   mountainThreshold: number;
   mountainRockiness: number;
@@ -54,10 +63,19 @@ export interface WorldGenerationConstants {
 
 /** `WorldGenerationOptions`'s own C# defaults — demo mode's world (no backend to ask). */
 export const DEFAULT_GENERATION: WorldGenerationConstants = {
-  islandCellSize: 20,
+  islandCellSize: 23,
   islandChance: 0.45,
-  islandMinRadius: 4.8,
-  islandMaxRadius: 11.2,
+  islandMinRadius: 5.5,
+  islandMaxRadius: 12.9,
+  islandMinLobes: 2,
+  islandMaxLobes: 4,
+  islandMaxElongation: 1.0,
+  islandBendiness: 1.6,
+  islandLobeBlend: 0.25,
+  islandLobeMinScale: 0.55,
+  islandLobeMaxScale: 0.85,
+  islandCoastWarp: 1.5,
+  islandCoastWarpScale: 5.0,
   beachThreshold: 0.82,
   mountainThreshold: 0.4,
   mountainRockiness: 0.72,
@@ -69,6 +87,97 @@ export interface WorldSeed {
   generation: WorldGenerationConstants;
 }
 
+/** Polynomial smooth minimum: a hard `Math.min` at k = 0. */
+function smoothMin(a: number, b: number, k: number): number {
+  if (k <= 0) return Math.min(a, b);
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+
+/**
+ * The shortest depth a single island cell's shape gives the (possibly
+ * domain-warped) sample point `(px, py)`: a chain of 1-5 lobes (offset
+ * discs) walked out from the jittered centre along a spine that bends by a
+ * per-island amount, smooth-blended where lobes meet — mirrors the
+ * backend's `TerrainSampler.IslandCellDepth` exactly (down to using no
+ * trigonometry, so both sides rotate the spine direction identically).
+ * With `islandMinLobes`/`islandMaxLobes` both 1 this reduces to exactly the
+ * single-disc circle the original algorithm produced.
+ */
+function islandCellDepth(
+  cellCol: number,
+  cellRow: number,
+  seed: number,
+  centerCol: number,
+  centerRow: number,
+  radius: number,
+  px: number,
+  py: number,
+  gen: WorldGenerationConstants,
+): number {
+  const dx0 = px - centerCol;
+  const dy0 = py - centerRow;
+  let best = Math.sqrt(dx0 * dx0 + dy0 * dy0) / radius;
+
+  const minLobes = gen.islandMinLobes;
+  const maxLobes = gen.islandMaxLobes;
+  const lobeCount =
+    minLobes + Math.floor(hash2(cellCol, cellRow, seed + 19) * (maxLobes - minLobes + 1));
+
+  if (lobeCount <= 1) return best;
+
+  const ax = hash2(cellCol, cellRow, seed + 23) - 0.5;
+  const ay = hash2(cellCol, cellRow, seed + 47) - 0.5;
+  const len = Math.sqrt(ax * ax + ay * ay);
+  let ux: number;
+  let uy: number;
+  if (len < 1e-9) {
+    ux = 1;
+    uy = 0;
+  } else {
+    ux = ax / len;
+    uy = ay / len;
+  }
+
+  const curl = (hash2(cellCol, cellRow, seed + 59) - 0.5) * 2;
+  const turn = curl * gen.islandBendiness;
+  const elongFraction = hash2(cellCol, cellRow, seed + 61);
+  const spineLength = radius * gen.islandMaxElongation * elongFraction;
+  const step = spineLength / (lobeCount - 1);
+
+  let lx = centerCol;
+  let ly = centerRow;
+  const blend = gen.islandLobeBlend;
+
+  for (let lobe = 1; lobe < lobeCount; lobe++) {
+    lx += ux * step;
+    ly += uy * step;
+
+    const lobeScale =
+      gen.islandLobeMinScale +
+      hash2(cellCol, cellRow, seed + 200 + lobe) * (gen.islandLobeMaxScale - gen.islandLobeMinScale);
+    const lobeRadius = radius * lobeScale;
+
+    const ddx = px - lx;
+    const ddy = py - ly;
+    const lobeDepth = Math.sqrt(ddx * ddx + ddy * ddy) / lobeRadius;
+
+    best = smoothMin(best, lobeDepth, blend);
+
+    // Rotate (ux, uy) by turn radians' worth of curl for the next segment,
+    // without trigonometry: u + turn * perp(u), renormalised.
+    const tx = ux - turn * uy;
+    const ty = uy + turn * ux;
+    const tl = Math.sqrt(tx * tx + ty * ty);
+    if (tl > 1e-9) {
+      ux = tx / tl;
+      uy = ty / tl;
+    }
+  }
+
+  return best;
+}
+
 // Islands are seeded on a coarse grid of cells (in odd-q offset space, which
 // is roughly square so islands read as evenly, not axially, spread out).
 // Each cell independently rolls whether it holds an island, where its
@@ -76,6 +185,18 @@ export interface WorldSeed {
 // cell's own coordinates, so a hex's terrain never depends on generating
 // its neighbours.
 function closestIsland(col: number, row: number, seed: number, gen: WorldGenerationConstants): { t: number } | null {
+  // A cheap domain warp applied once per hex, before distance is measured
+  // against any island's lobes, so coastlines wobble instead of tracing
+  // perfect arcs. Zero when islandCoastWarp is 0, which keeps this
+  // identical to the un-warped sample point.
+  let px = col;
+  let py = row;
+  if (gen.islandCoastWarp > 0) {
+    const warpScale = gen.islandCoastWarpScale;
+    px += (valueNoise(col, row, seed + 53, warpScale) - 0.5) * 2 * gen.islandCoastWarp;
+    py += (valueNoise(col, row, seed + 71, warpScale) - 0.5) * 2 * gen.islandCoastWarp;
+  }
+
   let best: { t: number } | null = null;
   for (let dcx = -1; dcx <= 1; dcx++) {
     for (let dcy = -1; dcy <= 1; dcy++) {
@@ -89,8 +210,7 @@ function closestIsland(col: number, row: number, seed: number, gen: WorldGenerat
         cellRow * gen.islandCellSize + gen.islandCellSize / 2 + (hash2(cellCol, cellRow, seed + 13) - 0.5) * jitter;
       const radius =
         gen.islandMinRadius + hash2(cellCol, cellRow, seed + 17) * (gen.islandMaxRadius - gen.islandMinRadius);
-      const dist = Math.hypot(col - centerCol, row - centerRow);
-      const t = dist / radius;
+      const t = islandCellDepth(cellCol, cellRow, seed, centerCol, centerRow, radius, px, py, gen);
       if (t <= 1 && (!best || t < best.t)) best = { t };
     }
   }

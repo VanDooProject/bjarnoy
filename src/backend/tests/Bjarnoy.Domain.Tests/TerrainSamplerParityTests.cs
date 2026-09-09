@@ -29,13 +29,13 @@ public class TerrainSamplerParityTests
 
     public static TheoryData<int, string> FrontendChecksums => new()
     {
-        { 1, "fef2c988adda950e66667e758656782207cbaeb0e863f741de8dff7b188f3759" },
-        { 7, "8dda5769fbced3fc0a4c873b33e2a61cd2cf8f75cbb6ffc02e9c86a37b9042d5" },
-        { 42, "f18e2d018fb455d29201dc3799944042edfb1a78b770ba8cccf43fb7739aa11a" },
-        { 1337, "c4368d871acc5bc45f01747eed5e27b54ba88248e27a1791d02568a0eaf96216" },
-        { -5, "e000c4d0227e1ac59e2d19d9b5d49ca5ec43f7e473d018f3cf9f25f1757c06b6" },
-        { 2147483, "825c803efec8620d5ca90bf10f5198003ca4c8bacb7dddbb0a99a4fc35e4009f" },
-        { 0, "ff645470018eb0e019d660a0a170aeab48f45bf5613bee744a37eef9df8043f7" },
+        { 1, "23a753dc49798e582a1f39f3ba73cec2cf64c57b918e9fda38173e92742cf929" },
+        { 7, "7e161aa15c2936a2135e583017b0380df0d30ebc401b3c1431e22543131ab514" },
+        { 42, "1d0320c024bcfdb2f9b6e9fd7c2f405759d922b0a7f3b9598eb11c03f3462f3f" },
+        { 1337, "2f151a60aff022abb5ad124be2c23c323297a28fa33cb133399445664ca5d25d" },
+        { -5, "dd48716fd99606b7caa34bdeb1b6817264b97b1abe238d4d85c6ff6ad5c19a7b" },
+        { 2147483, "a0e78b92e5414de6faecc2e484a9683824ae3d8a67ca6688e0e64fa087d266d9" },
+        { 0, "b609582d6dc3e0410527608f67ed9886c86b2a749c8e1995da2062240d749389" },
     };
 
     [Theory]

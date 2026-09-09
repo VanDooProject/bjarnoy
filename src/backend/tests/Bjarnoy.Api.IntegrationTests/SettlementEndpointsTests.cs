@@ -201,12 +201,12 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
     {
         using var client = Client();
-        // Seed 141, not 21: re-picked when the island generator's default
-        // size grew (see WorldGenerationOptions.IslandMinRadius/
-        // IslandMaxRadius) — 21/60 no longer places two islands close enough
-        // to exercise the cross-island case below.
+        // Seed 5: re-picked after the multi-lobe elongated island shape
+        // change (see TerrainSampler.IslandCellDepth) — 141/60 no longer
+        // places two islands close enough to exercise the cross-island case
+        // below.
         var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 141, 60), Ct))
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 5, 60), Ct))
             .ReadStrictAsync<WorldResponse>(Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
@@ -240,7 +240,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(sameIsland is not null, "Seed 21/radius 60 no longer has an island dense enough to exercise same-island spacing.");
+        Assert.True(sameIsland is not null, "Seed 5/radius 60 no longer has an island dense enough to exercise same-island spacing.");
         var (islandId, first, second) = sameIsland!.Value;
 
         var founded = await client.PostJsonAsync(
@@ -271,7 +271,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
             }
         }
 
-        Assert.True(crossIsland is not null, "Seed 21/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
+        Assert.True(crossIsland is not null, "Seed 5/radius 60 no longer has two islands close enough to exercise cross-island spacing.");
         var (crossIslandId, crossPlot) = crossIsland!.Value;
 
         var crossFounded = await client.PostJsonAsync(
