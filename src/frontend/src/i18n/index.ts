@@ -35,6 +35,7 @@ import enDocs from './locales/en/docs.json';
 import deDocs from './locales/de/docs.json';
 import enAdminActivityChart from './locales/en/adminActivityChart.json';
 import enAdminActivity from './locales/en/adminActivity.json';
+import enAdminIslandLab from './locales/en/adminIslandLab.json';
 import enAdminLayout from './locales/en/adminLayout.json';
 import enAdminReports from './locales/en/adminReports.json';
 import enAdminSettlements from './locales/en/adminSettlements.json';
@@ -106,6 +107,7 @@ export const i18n = createI18n({
       // namespaces with no de/ file).
       adminActivityChart: enAdminActivityChart,
       adminActivity: enAdminActivity,
+      adminIslandLab: enAdminIslandLab,
       adminLayout: enAdminLayout,
       adminReports: enAdminReports,
       adminSettlements: enAdminSettlements,

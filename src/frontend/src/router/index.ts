@@ -164,6 +164,15 @@ export const router = createRouter({
           name: 'admin-activity',
           component: () => import('../views/admin/AdminActivityView.vue'),
         },
+        {
+          // A live, backend-free playground for the island-shape generation
+          // params (worldGenerator.ts mirrors the backend algorithm exactly)
+          // — lets an admin compare several seed/parameter combos' minimaps
+          // side by side without touching a real world via reseed.
+          path: 'island-lab',
+          name: 'admin-island-lab',
+          component: () => import('../views/admin/AdminIslandLabView.vue'),
+        },
       ],
     },
   ],
