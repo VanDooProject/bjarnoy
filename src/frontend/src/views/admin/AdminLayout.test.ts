@@ -47,6 +47,17 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runState: 'running',
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
+    generation: {
+      islandCellSize: 20,
+      islandChance: 0.45,
+      islandMinRadius: 4.8,
+      islandMaxRadius: 11.2,
+      beachThreshold: 0.82,
+      mountainThreshold: 0.4,
+      mountainRockiness: 0.72,
+      forestRockiness: 0.52,
+      minimumIslandTiles: 6,
+    },
     ...overrides,
   };
 }

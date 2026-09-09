@@ -46,6 +46,18 @@ vi.mock('../../components/map/WorldMapCanvas.vue', () => ({
   },
 }));
 
+const DEFAULT_GENERATION = {
+  islandCellSize: 20,
+  islandChance: 0.45,
+  islandMinRadius: 4.8,
+  islandMaxRadius: 11.2,
+  beachThreshold: 0.82,
+  mountainThreshold: 0.4,
+  mountainRockiness: 0.72,
+  forestRockiness: 0.52,
+  minimumIslandTiles: 6,
+};
+
 function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse {
   return {
     id: 'world-1',
@@ -61,6 +73,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runState: 'running',
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
+    generation: DEFAULT_GENERATION,
     ...overrides,
   };
 }
@@ -120,7 +133,10 @@ describe('AdminWorldReseedView', () => {
 
     await previewSeed(wrapper);
 
-    expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', { seed: 4242 });
+    expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', {
+      seed: 4242,
+      generation: DEFAULT_GENERATION,
+    });
     expect(adminReseedWorld).not.toHaveBeenCalled();
     expect(wrapper.find('[data-testid="preview-summary"]').text()).toContain('1 islands');
     expect(wrapper.find('.map-container').exists()).toBe(true);
@@ -184,7 +200,11 @@ describe('AdminWorldReseedView', () => {
     await flushPromises();
 
     expect(window.confirm).toHaveBeenCalledOnce();
-    expect(adminReseedWorld).toHaveBeenCalledWith('world-1', { confirmWorldName: 'Midgard', seed: 9001 });
+    expect(adminReseedWorld).toHaveBeenCalledWith('world-1', {
+      confirmWorldName: 'Midgard',
+      seed: 9001,
+      generation: DEFAULT_GENERATION,
+    });
     expect(wrapper.find('[data-testid="reseed-done"]').text()).toContain('2 settlement(s) deleted');
   });
 
@@ -214,5 +234,50 @@ describe('AdminWorldReseedView', () => {
 
     expect(wrapper.text()).toContain('The world has real players in it.');
     expect(wrapper.find('[data-testid="reseed-done"]').exists()).toBe(false);
+  });
+
+  it("pre-fills the generation form with the world's current values", async () => {
+    const wrapper = await mountView();
+
+    expect((wrapper.find('#gen-islandMinRadius').element as HTMLInputElement).value).toBe('4.8');
+    expect((wrapper.find('#gen-islandMaxRadius').element as HTMLInputElement).value).toBe('11.2');
+    expect((wrapper.find('#gen-minimumIslandTiles').element as HTMLInputElement).value).toBe('6');
+  });
+
+  it('sends an edited generation parameter to the preview endpoint', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('#gen-islandMinRadius').setValue('9.5');
+    await previewSeed(wrapper);
+
+    expect(adminPreviewWorldSeed).toHaveBeenCalledWith('world-1', {
+      seed: 4242,
+      generation: { ...DEFAULT_GENERATION, islandMinRadius: 9.5 },
+    });
+  });
+
+  it('disables committing once a generation field changes after the preview it would commit', async () => {
+    const wrapper = await mountView();
+    await previewSeed(wrapper);
+    await wrapper.find('#confirm-name').setValue('Midgard');
+
+    const reseedButton = () => wrapper.findAll('button').find((b) => b.text().includes('Reseed world'))!;
+    expect(reseedButton().attributes('disabled')).toBeUndefined();
+
+    await wrapper.find('#gen-islandChance').setValue('0.6');
+    expect(reseedButton().attributes('disabled')).toBeDefined();
+
+    // Re-previewing with the new value re-enables it.
+    await previewSeed(wrapper);
+    expect(reseedButton().attributes('disabled')).toBeUndefined();
+  });
+
+  it('restores the generation form to the world\'s current values on "Reset to current"', async () => {
+    const wrapper = await mountView();
+
+    await wrapper.find('#gen-islandMinRadius').setValue('9.5');
+    await wrapper.find('[data-testid="reset-generation"]').trigger('click');
+
+    expect((wrapper.find('#gen-islandMinRadius').element as HTMLInputElement).value).toBe('4.8');
   });
 });

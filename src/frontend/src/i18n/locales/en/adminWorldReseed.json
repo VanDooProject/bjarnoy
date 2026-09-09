@@ -22,5 +22,18 @@
   "reseeding": "Reseeding…",
   "reseedWorld": "Reseed world",
   "reseedDone": "Reseeded to seed {seed}: {islandCount} islands, {deletedSettlements} settlement(s) deleted.",
-  "confirmReseed": "Reseed \"{name}\" to seed {seed}?\n\nThis deletes every settlement in the world ({playerCount} today) and cannot be undone."
+  "confirmReseed": "Reseed \"{name}\" to seed {seed}?\n\nThis deletes every settlement in the world ({playerCount} today) and cannot be undone.",
+  "generationHeading": "Generation parameters",
+  "generationHint": "Pre-filled with this world's current values. Change any of these before previewing to try a different-looking map on the next preview.",
+  "resetToCurrent": "Reset to current",
+  "islandCellSizeLabel": "Island spacing (cell size)",
+  "islandChanceLabel": "Island chance",
+  "islandMinRadiusLabel": "Island min radius",
+  "islandMaxRadiusLabel": "Island max radius",
+  "beachThresholdLabel": "Beach threshold",
+  "mountainThresholdLabel": "Mountain threshold",
+  "mountainRockinessLabel": "Mountain rockiness",
+  "forestRockinessLabel": "Forest rockiness",
+  "minimumIslandTilesLabel": "Minimum island tiles",
+  "generationValidationError": "Fix the highlighted generation parameter(s) before previewing."
 }
