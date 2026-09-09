@@ -100,6 +100,9 @@ public class ArmyEntity
 
     public bool IsReturning { get; set; }
 
+    /// <summary>Persisted mirror of <see cref="Movement.RetreatImmune"/> (issue #206 §5).</summary>
+    public bool RetreatImmune { get; set; }
+
     /// <summary>Rebuilds the domain aggregate from the stored columns.</summary>
     public Army ToDomain()
     {
@@ -116,6 +119,7 @@ public class ArmyEntity
                     ReturnCumulativeHours = ReturnCumulativeHours,
                     TurnAroundAt = TurnAroundAt,
                     IsReturning = IsReturning,
+                    RetreatImmune = RetreatImmune,
                 });
 
         return new Army
@@ -174,6 +178,7 @@ public class ArmyEntity
                 ReturnCumulativeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
+                RetreatImmune = false;
                 break;
 
             case ArmyLocation.Supporting supporting:
@@ -187,6 +192,7 @@ public class ArmyEntity
                 ReturnCumulativeHours = [];
                 TurnAroundAt = default;
                 IsReturning = false;
+                RetreatImmune = false;
                 break;
 
             case ArmyLocation.InTransit inTransit:
@@ -200,6 +206,7 @@ public class ArmyEntity
                 ReturnCumulativeHours = [.. movement.ReturnCumulativeHours];
                 TurnAroundAt = movement.TurnAroundAt;
                 IsReturning = movement.IsReturning;
+                RetreatImmune = movement.RetreatImmune;
                 break;
         }
     }

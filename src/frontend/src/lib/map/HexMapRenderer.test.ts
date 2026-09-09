@@ -83,11 +83,21 @@ describe('worldLayerOrder', () => {
   });
 
   it('contains every layer exactly once in both modes', () => {
+    // World mode gets one extra layer, 'rivers' (the vector-line river
+    // strokes) — settlement mode draws rivers as sprite tile art baked into
+    // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
+    // 'rivers' to its own order.
+    const expectedLength = { world: 10, settlement: 9 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
-      expect(order).toHaveLength(9);
+      expect(order).toHaveLength(expectedLength[mode]);
     }
+  });
+
+  it('draws rivers above the terrain fill and below realm borders in world mode', () => {
+    expect(indexIn('world', 'terrainFlat')).toBeLessThan(indexIn('world', 'rivers'));
+    expect(indexIn('world', 'rivers')).toBeLessThan(indexIn('world', 'borders'));
   });
 });
 

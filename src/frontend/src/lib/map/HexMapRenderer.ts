@@ -50,6 +50,7 @@ import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
 import { bakeWaterMask } from './water/waterMask';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
+import { riverPathFor } from './riverPath';
 import {
   TILE_ART_NATIVE_H,
   TILE_ART_NATIVE_W,
@@ -797,6 +798,8 @@ const WHEEL_IDLE_MS = 180;
 // --- Army/route overlay (issues #40 phase 2, #93, #94) ---
 /** The selected army's own route colour — muted blue, distinct from the gold a draft route gets. */
 const ROUTE_COLOR = 0x5ab0e6;
+/** World-map river stroke colour — a sibling tone to ROUTE_COLOR, tuned to read against WORLD_TERRAIN_FILL's grass/forest. */
+const RIVER_COLOR = 0x4fa8d8;
 /** An army already turned around and heading home. */
 const RETURNING_COLOR = 0x8fa3af;
 /** Attack target indicator (crossed sword + axe) — the one red in the overlay, matching RIVAL's "someone else's" reading. */
@@ -819,6 +822,7 @@ export type WorldLayerName =
   | 'terrainBase'
   | 'waves'
   | 'terrainFlat'
+  | 'rivers'
   | 'borders'
   | 'hover'
   | 'terrainTop'
@@ -859,8 +863,13 @@ export type WorldLayerName =
  */
 export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] {
   const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'range', 'highlight'];
+  // Rivers only get their own vector-line layer in world mode — settlement
+  // mode already draws them as sprite tile art baked into terrainBase/
+  // terrainTop (see riverTexturesFor), so riverLayer is simply never added
+  // to the scene graph there (rebuildRivers is never called for that mode
+  // either, so it always stays empty).
   return mode === 'world'
-    ? ['water', 'terrainBase', 'waves', 'terrainFlat', ...rest]
+    ? ['water', 'terrainBase', 'waves', 'terrainFlat', 'rivers', ...rest]
     : ['terrainBase', 'waves', 'terrainFlat', 'water', ...rest];
 }
 
@@ -898,6 +907,7 @@ export class HexMapRenderer {
   // frames between rebuilds during a drag.
   private deepFogOnly = false;
   private borderLayer = new Graphics();
+  private riverLayer = new Graphics();
   private hoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
   // on `options.highlightCoord`, redrawn every tick since the pulse itself
@@ -1144,6 +1154,7 @@ export class HexMapRenderer {
       terrainBase: this.terrainBase.container,
       waves: this.waveLayer,
       terrainFlat: this.terrainFlat,
+      rivers: this.riverLayer,
       borders: this.borderLayer,
       hover: this.hoverLayer,
       terrainTop: this.terrainTop.container,
@@ -1924,6 +1935,12 @@ export class HexMapRenderer {
     }
     fogPerfStats.terrainMs = performance.now() - phaseStart;
 
+    if (this.options.mode === 'world' && !deepFogOnly) {
+      this.rebuildRivers(coords, fogActive);
+    } else {
+      this.riverLayer.clear();
+    }
+
     phaseStart = performance.now();
     this.rebuildBorders(coords, fogActive, deepFogOnly);
     fogPerfStats.bordersMs = performance.now() - phaseStart;
@@ -2193,6 +2210,54 @@ export class HexMapRenderer {
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
       this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
       fogPerfStats.terrainDrawnCount++;
+    }
+  }
+
+  // World mode has no tile art (see WORLD_TERRAIN_FILL above), so unlike
+  // the settlement view's sprite-based river tiles (riverTexturesFor), a
+  // river here is a stroked vector line — riverPathFor computes each hex's
+  // segment(s), this just draws them. Same cull/fog gating as
+  // rebuildTerrainFlat (its own sibling), so a river never pokes out past
+  // where the terrain under it stops being drawn.
+  private rebuildRivers(coords: AxialCoord[], fogActive: boolean) {
+    const { worldModel } = this.options;
+    this.riverLayer.clear();
+    const fogSources =
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+
+    for (const c of coords) {
+      const river = worldModel.getRiverTile(c.q, c.r);
+      if (!river) continue;
+
+      if (
+        fogActive &&
+        fogDebugFlags.terrainCull &&
+        !worldModel.isExplored(c.q, c.r) &&
+        this.isPastTerrainCull(c.q, c.r, fogSources)
+      ) {
+        continue;
+      }
+
+      const seaDirection = river.shape === 'mouth' ? worldModel.seaFacingDirectionOf(c) : null;
+      const { segments, springDot } = riverPathFor(c, river, seaDirection, TILE_W, TILE_H);
+
+      for (const { from, control, to } of segments) {
+        // Double stroke, same "wide soft casing under a crisp line" trick
+        // rebuildBorders uses for the realm-border glow — here tuned as a
+        // darker casing under a brighter core rather than a glow, since a
+        // river reads better as a groove in the terrain than a highlight.
+        this.riverLayer
+          .moveTo(from.x, from.y)
+          .quadraticCurveTo(control.x, control.y, to.x, to.y)
+          .stroke({ width: 5, color: RIVER_COLOR, alpha: 0.35, cap: 'round', join: 'round' });
+        this.riverLayer
+          .moveTo(from.x, from.y)
+          .quadraticCurveTo(control.x, control.y, to.x, to.y)
+          .stroke({ width: 2.2, color: RIVER_COLOR, alpha: 0.95, cap: 'round', join: 'round' });
+      }
+      if (springDot) {
+        this.riverLayer.circle(springDot.x, springDot.y, 3).fill({ color: RIVER_COLOR, alpha: 0.95 });
+      }
     }
   }
 
@@ -3261,6 +3326,7 @@ export class HexMapRenderer {
       this.terrainFlat.clear();
       this.waveLayer.clear();
       this.wavePoints = [];
+      this.riverLayer.clear();
     }
 
     this.options.mode = mode;

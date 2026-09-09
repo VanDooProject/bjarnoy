@@ -18,11 +18,18 @@ import { useI18n } from 'vue-i18n';
 import { usePlayerStore } from '../stores/player';
 import { useReportsStore } from '../stores/reports';
 import { DEMO_MODE } from '../config';
-import type { BattleReportResponse, TradeReportResponse } from '../api/types';
+import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../api/types';
 import { isVictoryFor, missionLabel, outcomeLabel, reportSummaryLine, sideFor } from '../lib/units/battleReports';
+import {
+  fieldBattleOutcomeLabel,
+  fieldBattleSideFor,
+  fieldBattleSummaryLine,
+  isFieldBattleVictoryFor,
+} from '../lib/units/fieldBattleReports';
 import { tradeSideFor, tradeSummaryLine } from '../lib/units/tradeReports';
 import { type InboxKindFilter, filterInbox } from '../lib/units/inbox';
 import BattleReportCard from '../components/battle/BattleReportCard.vue';
+import FieldBattleReportCard from '../components/battle/FieldBattleReportCard.vue';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
@@ -60,6 +67,11 @@ function sideOf(report: BattleReportResponse): 'attacker' | 'defender' {
   return sideFor(report, player.settlementId) ?? 'attacker';
 }
 
+function fieldSideOf(report: FieldBattleReportResponse): 'sidea' | 'sideb' {
+  if (!player.settlementId) return 'sidea';
+  return fieldBattleSideFor(report, player.settlementId) ?? 'sidea';
+}
+
 function tradeSideOf(report: TradeReportResponse): 'poster' | 'acceptor' {
   if (!player.settlementId) return 'poster';
   return tradeSideFor(report, player.settlementId) ?? 'poster';
@@ -76,8 +88,22 @@ const rows = computed(() =>
         id: item.report.id,
         outcome: outcomeLabel(item.report, side),
         isVictory: isVictoryFor(item.report, side),
+        isTie: false,
         mission: missionLabel(item.report.mission),
         summary: reportSummaryLine(item.report, side),
+        when: d(new Date(item.report.occurredAt), 'long'),
+      };
+    }
+    if (item.kind === 'field') {
+      const side = fieldSideOf(item.report);
+      return {
+        kind: 'field' as const,
+        id: item.report.id,
+        outcome: fieldBattleOutcomeLabel(item.report, side),
+        isVictory: isFieldBattleVictoryFor(item.report, side),
+        isTie: item.report.winner === 'tie',
+        mission: t('hud.fieldBattleReport.title'),
+        summary: fieldBattleSummaryLine(item.report, side),
         when: d(new Date(item.report.occurredAt), 'long'),
       };
     }
@@ -87,6 +113,7 @@ const rows = computed(() =>
       id: item.report.id,
       outcome: null,
       isVictory: false,
+      isTie: false,
       mission: item.report.guildTrade ? t('reports.trade.guildTrade') : t('reports.trade.trade'),
       summary: tradeSummaryLine(item.report, side),
       when: d(new Date(item.report.completedAt), 'long'),
@@ -96,8 +123,10 @@ const rows = computed(() =>
 
 const detailItem = computed(() => reports.inboxItems.find((item) => item.report.id === reportId.value) ?? null);
 const detail = computed(() => (detailItem.value?.kind === 'battle' ? detailItem.value.report : null));
+const fieldDetail = computed(() => (detailItem.value?.kind === 'field' ? detailItem.value.report : null));
 const tradeDetail = computed(() => (detailItem.value?.kind === 'trade' ? detailItem.value.report : null));
 const detailSide = computed(() => (detail.value ? sideOf(detail.value) : 'attacker'));
+const fieldDetailSide = computed(() => (fieldDetail.value ? fieldSideOf(fieldDetail.value) : 'sidea'));
 const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDetail.value) : 'poster'));
 </script>
 
@@ -152,12 +181,16 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
         <BattleReportCard :report="detail" :side="detailSide" :occurred-at="detail.occurredAt" />
       </template>
 
+      <template v-else-if="fieldDetail">
+        <FieldBattleReportCard :report="fieldDetail" :side="fieldDetailSide" :occurred-at="fieldDetail.occurredAt" />
+      </template>
+
       <template v-else>
         <h1>{{ $t('reports.title') }}</h1>
 
         <div class="kind-tabs">
           <button
-            v-for="tab in (['all', 'battle', 'trade'] as const)"
+            v-for="tab in (['all', 'battle', 'field', 'trade'] as const)"
             :key="tab"
             type="button"
             class="kind-tab"
@@ -175,7 +208,11 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
         <div v-else class="list">
           <button v-for="row in rows" :key="row.id" type="button" class="row" @click="open(row.id)">
             <div class="row-top">
-              <span v-if="row.kind === 'battle'" class="outcome" :class="row.isVictory ? 'victory' : 'defeat'">
+              <span
+                v-if="row.kind === 'battle' || row.kind === 'field'"
+                class="outcome"
+                :class="row.isTie ? 'tie' : row.isVictory ? 'victory' : 'defeat'"
+              >
                 {{ row.outcome }}
               </span>
               <span v-else class="outcome trade-outcome">{{ $t('reports.trade.trade') }}</span>
@@ -307,6 +344,9 @@ const tradeDetailSide = computed(() => (tradeDetail.value ? tradeSideOf(tradeDet
 }
 .outcome.defeat {
   color: #e08a8a;
+}
+.outcome.tie {
+  color: var(--muted);
 }
 .outcome.trade-outcome {
   color: var(--gold);

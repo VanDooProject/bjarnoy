@@ -97,6 +97,7 @@ public sealed class ArmyService(
     SettlementService settlementService,
     RenownService renownService,
     AuthService authService,
+    FieldBattleService fieldBattleService,
     ILogger<ArmyService> logger)
 {
     private readonly GameDbContext _dbContext = dbContext;
@@ -104,6 +105,7 @@ public sealed class ArmyService(
     private readonly SettlementService _settlementService = settlementService;
     private readonly RenownService _renownService = renownService;
     private readonly AuthService _authService = authService;
+    private readonly FieldBattleService _fieldBattleService = fieldBattleService;
     private readonly ILogger<ArmyService> _logger = logger;
 
     /// <summary>
@@ -767,6 +769,19 @@ public sealed class ArmyService(
     {
         var domain = army.ToDomain();
 
+        // In-flight interception (issue #206) is checked before any
+        // mission-specific arrival handling below: a march that has already
+        // met a hostile army mid-route never gets to finish that leg as
+        // planned, whatever its mission was. When a battle is found and
+        // resolved here, the army's post-battle state (winner continuing on
+        // its original movement, or a loser's forced retreat) is applied
+        // immediately and any further arrival-specific processing is left
+        // for this army's next settle call.
+        if (await _fieldBattleService.TryResolveAsync(army, domain, now, cancellationToken).ConfigureAwait(false))
+        {
+            return ArmySettleOutcome.Updated;
+        }
+
         if (domain.Mission is ArmyMission.Attack or ArmyMission.Raid
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } inTransit
             && now >= inTransit.Movement.ArrivesAt)
@@ -1092,6 +1107,7 @@ public sealed class ArmyService(
             .Include(a => a.Stacks)
             .Include(a => a.TargetSettlement)
             .Include(a => a.Settlement!).ThenInclude(s => s.World)
+            .Include(a => a.Settlement!).ThenInclude(s => s.Owner)
             .Include(a => a.Settlement!).ThenInclude(s => s.Buildings)
             .Include(a => a.Settlement!).ThenInclude(s => s.Queue)
             .Include(a => a.Settlement!).ThenInclude(s => s.Garrison)
