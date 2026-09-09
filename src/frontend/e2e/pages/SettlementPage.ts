@@ -209,7 +209,15 @@ export class SettlementPage {
       const world = (window as unknown as {
         __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void };
       }).__demoWorld();
-      world.model.getSettlement(world.selectedSettlementId).level = value;
+      const settlement = world.model.getSettlement(world.selectedSettlementId);
+      settlement.level = value;
+      // Border radius grows with level (WorldModel.borderRadius) — re-claim
+      // so the wider territory is actually owned, not just reported by
+      // borderRadius(). Without this, a hex a test expects to reach after
+      // levelling up (e.g. coastal water just past the level-1 radius)
+      // never gets marked as owned, since claimTerritory is what paints
+      // ownership and it only ran once, at founding, against the old level.
+      world.model.claimTerritory(settlement.id);
       world.syncHud();
     }, level);
   }
