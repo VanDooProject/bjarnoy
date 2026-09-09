@@ -283,15 +283,44 @@ public sealed class TerrainSampler
     /// Per-terrain variant count the tile art pack actually has, everything else
     /// falling back to 1. Grass has a plain top image plus <c>variant000</c>-
     /// <c>variant002</c> (4); forest has a plain image plus <c>variant000</c>-
-    /// <c>variant001</c> (3); mountain isn't base/top split and the pack has no
-    /// <c>mountaintile*variant*</c> files at all, so it never gets more than its
-    /// one composited image.
+    /// <c>variant001</c> (3); mountain has four distinct shapes — Cone, Table,
+    /// Saddleback, Corrie (<see cref="MountainShape"/>) — each its own
+    /// composited (not base/top split) render, so <see cref="VariantAt"/>'s
+    /// index doubles as that enum's numeric value; see <see cref="MountainShapeAt"/>.
     /// </summary>
     private static readonly IReadOnlyDictionary<Terrain, int> VariantCounts = new Dictionary<Terrain, int>
     {
         [Terrain.Grass] = 4,
         [Terrain.Forest] = 3,
+        [Terrain.Mountain] = 4,
     };
+
+    /// <summary>
+    /// Which of the four mountain shapes (<see cref="MountainShape"/>) a hex
+    /// renders with — <see cref="VariantAt"/>'s own index for
+    /// <see cref="Terrain.Mountain"/>, just typed. Meaningless for a hex that
+    /// isn't a mountain, same as <see cref="VariantAt"/> itself.
+    /// </summary>
+    public MountainShape MountainShapeAt(HexCoord coord) => (MountainShape)VariantAt(coord);
+
+    /// <summary>
+    /// Which spring-capable mountain shape (<see cref="MountainShape.Saddleback"/>
+    /// or <see cref="MountainShape.Corrie"/>) a hex should render as once it's
+    /// known to carry a river's <see cref="RiverTileShape.Spring"/> tile —
+    /// only those two shapes shipped a <c>_spring</c> art cut (see
+    /// <see cref="MountainShapeExtensions.IsSpringCapable"/>), so a spring
+    /// always renders as one of them regardless of what <see cref="MountainShapeAt"/>
+    /// would otherwise have picked for the same coordinate. Pure and
+    /// independent of whether the coordinate actually ends up being a spring
+    /// — the caller (river rendering) is what knows that, the same way
+    /// <see cref="FishingHutOrientation"/> is a pure answer fed to an
+    /// external override hook rather than state stored anywhere.
+    /// </summary>
+    public MountainShape SpringMountainShapeAt(HexCoord coord)
+    {
+        var hash = ValueNoise.Hash2(coord.Q, coord.R, _options.Seed + 37);
+        return hash < 0.5 ? MountainShape.Saddleback : MountainShape.Corrie;
+    }
 
     /// <summary>
     /// Seed-stable variant index for a hex, in <c>[0, N)</c> where <c>N</c> is

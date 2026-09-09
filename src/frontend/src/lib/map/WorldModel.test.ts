@@ -379,21 +379,24 @@ describe('WorldModel.sawmillArtVariantOf', () => {
 });
 
 describe('WorldModel.seaFacingDirectionOf', () => {
-  it('finds the real sea neighbour reported disconnected in-game: seed 783131215, island Jarlskar, mouth tile (-8,4)', () => {
-    // Confirmed against the backend's own TerrainSampler for this seed: of
-    // (-8,4)'s six neighbours, only SE (-8,5) is sea — E/NE/NW are sand and
-    // W/SW are forest. Before this fix, the mouth tile rendered a straight
-    // line toward W/SW (the inflow's geometric opposite) instead of curving
-    // toward the sea at SE.
+  it('finds the real sea neighbour of a coastal tile', () => {
+    // Confirmed against DEFAULT_GENERATION's own terrainAt for this seed: of
+    // (-39,-17)'s six neighbours, only W (-40,-17) is sea — NW/SW are sand
+    // and E/NE/SE are forest. Originally reproduced a real in-game bug where
+    // a mouth tile rendered a straight line toward the inflow's geometric
+    // opposite instead of curving toward the actual sea neighbour; the
+    // coordinates here were re-picked when the island generator's default
+    // size grew (see WorldGenerationOptions.IslandMinRadius/IslandMaxRadius),
+    // which moved every seed's terrain.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -8, r: 4 })).toBe('SE');
+    expect(model.seaFacingDirectionOf({ q: -39, r: -17 })).toBe('W');
   });
 
   it('returns null when no neighbour is sea', () => {
-    // Same seed/island as above, but (-4,2) — Jarlskar's interior, well
-    // inland — confirmed against the backend's TerrainSampler to have all
-    // six neighbours as land (grass/forest).
+    // Same seed as above, but (-39,-16) — one hex further from that
+    // coastline — confirmed to have all six neighbours as land (forest/
+    // sand/grass).
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -4, r: 2 })).toBeNull();
+    expect(model.seaFacingDirectionOf({ q: -39, r: -16 })).toBeNull();
   });
 });

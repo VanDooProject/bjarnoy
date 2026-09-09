@@ -160,6 +160,7 @@ public class TileFeatureTests
     [Theory]
     [InlineData(Terrain.Grass)]
     [InlineData(Terrain.Forest)]
+    [InlineData(Terrain.Mountain)]
     public void Variants_stay_within_the_terrains_known_range(Terrain terrain)
     {
         var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
@@ -177,12 +178,11 @@ public class TileFeatureTests
             maxSeen = Math.Max(maxSeen, variant);
         }
 
-        // Sea/sand/mountain aren't asserted here — they only ever fall back to
-        // variant 0 (mountain isn't base/top split and the art pack has no
-        // mountaintile*variant* files at all) — but grass/forest should each
-        // show more than one variant over a big enough sample, or the "not
-        // all have variants" fallback would be indistinguishable from a bug
-        // that always returns 0.
+        // Sea/sand aren't asserted here — they only ever fall back to variant
+        // 0 — but grass/forest/mountain should each show more than one
+        // variant over a big enough sample, or the "not all have variants"
+        // fallback would be indistinguishable from a bug that always
+        // returns 0.
         Assert.True(maxSeen > 0, $"expected {terrain} to show more than one variant over this sample");
     }
 
@@ -194,10 +194,61 @@ public class TileFeatureTests
         foreach (var coord in HexCoord.Origin.WithinRadius(60))
         {
             var terrain = sampler.TerrainAt(coord);
-            if (terrain is Terrain.Sea or Terrain.Sand or Terrain.Mountain)
+            if (terrain is Terrain.Sea or Terrain.Sand)
             {
                 Assert.Equal(0, sampler.VariantAt(coord));
             }
+        }
+    }
+
+    [Fact]
+    public void MountainShapeAt_matches_VariantAt_for_mountain_hexes()
+    {
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
+        var checkedAny = false;
+
+        foreach (var coord in HexCoord.Origin.WithinRadius(60))
+        {
+            if (sampler.TerrainAt(coord) != Terrain.Mountain)
+            {
+                continue;
+            }
+
+            checkedAny = true;
+            Assert.Equal((MountainShape)sampler.VariantAt(coord), sampler.MountainShapeAt(coord));
+        }
+
+        Assert.True(checkedAny, "expected at least one mountain hex in this sample");
+    }
+
+    [Fact]
+    public void SpringMountainShapeAt_only_ever_returns_a_spring_capable_shape()
+    {
+        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(11));
+        var seenSaddleback = false;
+        var seenCorrie = false;
+
+        foreach (var coord in HexCoord.Origin.WithinRadius(60))
+        {
+            var shape = sampler.SpringMountainShapeAt(coord);
+            Assert.True(shape.IsSpringCapable(), $"{shape} at {coord} is not spring-capable");
+            seenSaddleback |= shape == MountainShape.Saddleback;
+            seenCorrie |= shape == MountainShape.Corrie;
+        }
+
+        Assert.True(seenSaddleback, "expected at least one Saddleback pick over this sample");
+        Assert.True(seenCorrie, "expected at least one Corrie pick over this sample");
+    }
+
+    [Fact]
+    public void SpringMountainShapeAt_is_seed_stable_and_independent_of_MountainShapeAt()
+    {
+        var a = new TerrainSampler(WorldGenerationOptions.ForSeed(21));
+        var b = new TerrainSampler(WorldGenerationOptions.ForSeed(21));
+
+        foreach (var coord in HexCoord.Origin.WithinRadius(20))
+        {
+            Assert.Equal(a.SpringMountainShapeAt(coord), b.SpringMountainShapeAt(coord));
         }
     }
 
@@ -212,15 +263,21 @@ public class TileFeatureTests
     /// checksum, and the variant digit itself for the variant checksum, both
     /// in q-major order.
     /// </summary>
+    // NB: the variant checksums below intentionally match the frontend's
+    // variantAt *without* its coastal-water weighting branch — that branch
+    // (COASTAL_WATER_VARIANT_WEIGHTS in worldGenerator.ts) has no backend
+    // counterpart at all, a pre-existing frontend/backend drift discovered
+    // while regenerating these fixtures for the bigger-island change, not
+    // introduced by it. Out of scope here; left for a follow-up.
     public static TheoryData<int, string, string> FrontendChecksums => new()
     {
-        { 1, "415b88f6388671232e76a94be27b42575c4f5523a3985dd00b9cfd1a8d7b2fe0", "11b649fd1f18d0c3ef9794ca002b58a0938ba529aa9ffea5867b40627c2470d1" },
-        { 7, "a495087fe797726e77f67541252861c81a7aaf37eafa445f5cd13b0c0c7e44a7", "3b6fd160b05ac1e715728972bb91098f2ac5cff3ea068fba2121b5c7c94ffbc9" },
-        { 42, "ce2fb78d592a6607f216843f6f9ff62cabff4f214df05fcc463ec12efe03a067", "14b38d0fcb2102546951a5166e5d34fa1e9dca51ec27b9f5867c897ba258bc39" },
-        { 1337, "10e3b133c8f87cecb9133aaa008148a074a5f4e2d772e010a47ed0696cdfbdfe", "56ca0ee574da6fc22fb12a77faf4874367e960450914a6bc952d6dbff9d88205" },
-        { -5, "642a52baef34bf512ebf04097878a2f84c83b40ed87944685c0b372cdae12e86", "4ff9984a91c8f56fc4c2abae6eb2eebee5a8e8b23f4d9022f347ea60c0403763" },
-        { 2147483, "0ca5191ff76def31c433f299b6036abe7301ee9d35be1adf58bfbec97718c80c", "648d3d6501d09432ab122a0bbf591c0aaf31a50f074c32c9a190eded8fe4216d" },
-        { 0, "3ec7fea9cf6ccc2369f5d026d2a1aa29be1b32c788b176af4a978804df38e601", "66355d016541f7ca1fab84b41acbd25dbfa8191faffea5ad6ad08f158c517ac4" },
+        { 1, "279ac19a62ad41204e6f75ffbf243bcc9475ba974e779aef570e42ddc5db0e8e", "25354b757ce3750214cfda98a66ccabb681670fc244214cae73e92af67e7ad72" },
+        { 7, "2e10da150937248798aeeb97350c8693e4fd6532135385767905467b0eb4a2da", "58198d244cf0da1046723eb7878efadaceb6cc10f3dbda0bde4d5c14c2e2cc48" },
+        { 42, "4ce2250cdcbd086ca40b0ad2ff7242d4736bbf4cf389fa937621a64ffe5c2d97", "d2c5cac7aed0edda604c05448bb2369f04e923ed7070fa89afdbe55126a548d0" },
+        { 1337, "9aab8466a54539469b26a7cbca16f74c4d3c0a275bddee2d866e5abbcc92c126", "7310e9f12803ca207e09c1ba94ba95bf9e874522e33388ca97e2a35b31fbd934" },
+        { -5, "d942009d9b5b0dba4366579e048969c1276524dd74d32bf0ba6bd69a44b78b7a", "384080829a9851cd856d8d155b4d440d54b181fbbd728bd6ec8cba959cd7fd21" },
+        { 2147483, "a34dad7946d1dad83bac82427f1f0c776c278ba8cb23f94900029a53da200da6", "661ca1448532ee5b217f1bfa97f8d8acd9d4cd1561070c78daaa768317893efb" },
+        { 0, "8c38fe4a342da73d3773685957f86948ee45c625875489b5801f6a7bb5677278", "cc7c4dd7ea9fa3946c85327faecfe8d282098ab70dbb33880f58c3fccbf8640c" },
     };
 
     [Theory]

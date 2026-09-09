@@ -165,3 +165,41 @@ public readonly record struct RiverTile(
 Not wired through `GeneratedTile`/`TileResponse`/the frontend in this pass — see "why this can't be a pure
 per-tile function" above. That wiring, plus the level-not-affecting-building-graphics bug and the missing
 buildings from the rest of issue #24, are follow-ups.
+
+## Mountain shapes and spring-capable art
+
+VanDooProject/3D_assets PR #36 split the single mountain render into four shapes — Cone, Table, Saddleback,
+Corrie (`MountainShape` in the backend, mirrored in `worldGenerator.ts`'s `VARIANT_COUNTS.mountain = 4`) — and
+added a `_spring` art cut (`hextile046_..._saddleback_spring`, `hextile047_..._corrie_spring`) for only two of
+them: Cone and Table have no spring graphic at all.
+
+`TerrainSampler.MountainShapeAt(coord)` is just `VariantAt(coord)` typed as the enum — the tile art pack has
+no base/top split for mountains, so this, like grass/forest variants, is a seed-stable pure function of the
+coordinate alone, independent of rivers.
+
+Whether a given mountain hex *is* a spring is a whole-island question (see "why this can't be a pure per-tile
+function" above) — `RiverTile.Shape == Spring` at that coordinate. `TerrainSampler.SpringMountainShapeAt(coord)`
+(mirrored as `springMountainShapeAt` in `worldGenerator.ts`) answers a *different*, deliberately pure question:
+if this coordinate turns out to be a spring, which of the two spring-capable shapes should it render as —
+regardless of what `MountainShapeAt` would otherwise have picked. This is the same pattern `FishingHutOrientation`
+already uses: a pure answer fed to an external override hook, not state threaded through generation. The
+renderer is expected to call it only once it already knows (via the `RiverTile`) that a coordinate is a spring,
+and to use its result — not `MountainShapeAt`'s — for that one tile's mountain family.
+
+This intentionally does **not** restrict which mountain a river's spring lands on (`RiverGenerator.PickSpring`
+is unchanged): a spring always renders with a spring-capable shape, even where `MountainShapeAt` would have
+picked Cone or Table for that coordinate.
+
+As of this note, only the generation-side hooks above exist; the atlas doesn't yet vendor the new
+`mountaintile_saddleback`/`_corrie`(`_spring`)/`_table` families, and `textures.ts`'s `KEY_FAMILY`/river
+rendering hasn't been wired to consume `MountainShapeAt`/`SpringMountainShapeAt` yet. That's the remaining
+follow-up once the atlas is repacked with the new shapes.
+
+## Bigger islands, more rivers
+
+`WorldGenerationOptions.IslandMinRadius`/`IslandMaxRadius` were doubled (2.4–5.6 → 4.8–11.2, `IslandCellSize`
+scaled to match, 9 → 20) because most islands were coming out too small to reliably grow a qualifying (2+
+tile) mountain cluster — the only thing that gives an island a river at all (see "Spring placement" above).
+Bigger islands mean more inland area for mountains to form in, and therefore more islands with rivers, without
+any change to the river algorithm itself. `WorldGenerationOptions.Radius`'s default moved from 60 to 90 to
+match, so a default-sized world still has room for several islands side by side.

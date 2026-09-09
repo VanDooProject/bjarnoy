@@ -11,22 +11,34 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Radius of the generated sea, in hexes from the origin. The number of hexes
-    /// is <c>3r(r+1)+1</c>, so a radius of 60 is ~11k hexes.
+    /// is <c>3r(r+1)+1</c>, so a radius of 90 is ~25k hexes. Raised alongside
+    /// <see cref="IslandMinRadius"/>/<see cref="IslandMaxRadius"/> so a bigger
+    /// default world still has room for several islands rather than one or two
+    /// dominating the whole sea.
     /// </summary>
-    public int Radius { get; init; } = 60;
+    public int Radius { get; init; } = 90;
 
     /// <summary>
     /// Edge length, in offset columns/rows, of the grid cell each island is seeded
-    /// in. Larger cells mean fewer, further-apart islands.
+    /// in. Larger cells mean fewer, further-apart islands. Scaled up alongside
+    /// <see cref="IslandMinRadius"/>/<see cref="IslandMaxRadius"/> so bigger
+    /// islands keep roughly the same overlap/spacing ratio the smaller ones had.
     /// </summary>
-    public int IslandCellSize { get; init; } = 9;
+    public int IslandCellSize { get; init; } = 20;
 
     /// <summary>Probability that a given cell holds an island at all.</summary>
     public double IslandChance { get; init; } = 0.45;
 
-    public double IslandMinRadius { get; init; } = 2.4;
+    /// <summary>
+    /// Doubled from the original 2.4/5.6 pair: most islands were coming out too
+    /// small to reliably grow a qualifying (2+ tile) mountain cluster, which is
+    /// the only thing that gives an island a river — bigger islands mean more
+    /// inland area for mountains to form in, and therefore more islands with
+    /// rivers, without changing the river algorithm itself.
+    /// </summary>
+    public double IslandMinRadius { get; init; } = 4.8;
 
-    public double IslandMaxRadius { get; init; } = 5.6;
+    public double IslandMaxRadius { get; init; } = 11.2;
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which

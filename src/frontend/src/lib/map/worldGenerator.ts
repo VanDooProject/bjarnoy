@@ -54,10 +54,10 @@ export interface WorldGenerationConstants {
 
 /** `WorldGenerationOptions`'s own C# defaults — demo mode's world (no backend to ask). */
 export const DEFAULT_GENERATION: WorldGenerationConstants = {
-  islandCellSize: 9,
+  islandCellSize: 20,
   islandChance: 0.45,
-  islandMinRadius: 2.4,
-  islandMaxRadius: 5.6,
+  islandMinRadius: 4.8,
+  islandMaxRadius: 11.2,
   beachThreshold: 0.82,
   mountainThreshold: 0.4,
   mountainRockiness: 0.72,
@@ -239,13 +239,15 @@ export function orientationAt(q: number, r: number, world: WorldSeed): TileOrien
  * Per-terrain variant count the tile art pack actually has, everything else
  * falling back to 1. Grass has a plain top image plus `variant000`-
  * `variant002` (4); forest has a plain image plus `variant000`-`variant001`
- * (3); mountain isn't base/top split and the pack has no
- * `mountaintile*variant*` files at all, so it never gets more than its one
- * composited image.
+ * (3); mountain has four distinct shapes — cone, table, saddleback, corrie
+ * (mirrors the backend's `MountainShape`) — each its own composited (not
+ * base/top split) render, so this index doubles as that shape's own numeric
+ * value.
  */
 const VARIANT_COUNTS: Partial<Record<Terrain, number>> = {
   grass: 4,
   forest: 3,
+  mountain: 4,
 };
 
 /**
@@ -284,6 +286,20 @@ export function variantAt(q: number, r: number, world: WorldSeed): number {
   if (count <= 1) return 0;
   const index = Math.floor(h * count);
   return index >= count ? count - 1 : index;
+}
+
+/**
+ * Which spring-capable mountain shape (saddleback=2 or corrie=3, see
+ * `VARIANT_COUNTS`'s doc comment) a hex should render as once it's known to
+ * carry a river's `spring` tile — mirrors the backend's
+ * `TerrainSampler.SpringMountainShapeAt` exactly (same seed offset, same
+ * threshold), since only those two mountain shapes shipped a `_spring` art
+ * cut. Pure and independent of whether the hex actually ends up being a
+ * spring; the caller (river rendering) is what knows that.
+ */
+export function springMountainShapeAt(q: number, r: number, world: WorldSeed): number {
+  const h = hash2(q, r, world.seed + 37);
+  return h < 0.5 ? 2 : 3;
 }
 
 export function generateTile(q: number, r: number, world: WorldSeed): Tile {

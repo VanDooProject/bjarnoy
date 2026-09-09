@@ -38,8 +38,11 @@ public class WorldGeneratorTests
     public void A_world_contains_several_islands_rather_than_one_landmass()
     {
         // The legacy generator kept only the largest blob, so a world was one
-        // island; MECHANICS.md wants a sea full of them.
-        var world = Generate(7);
+        // island; MECHANICS.md wants a sea full of them. Radius 80, not the
+        // helper's default 40: islands got bigger (see WorldGenerationOptions'
+        // IslandMinRadius/IslandMaxRadius), so a small test world no longer has
+        // room for several of them side by side.
+        var world = Generate(7, radius: 80);
 
         Assert.True(world.Islands.Count > 3, $"expected an archipelago, got {world.Islands.Count} islands");
     }
