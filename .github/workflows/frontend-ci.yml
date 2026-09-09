@@ -78,14 +78,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: g1
-            args: --grep @g1
-          - name: g2
-            args: --grep @g2
-          - name: g3
-            args: --grep @g3
           - name: rest
-            args: --grep-invert "@g1|@g2|@g3"
+            args: --grep @debug
     steps:
       - uses: actions/checkout@v4
 
