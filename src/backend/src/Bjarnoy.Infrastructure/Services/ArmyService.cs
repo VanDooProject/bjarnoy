@@ -849,9 +849,19 @@ public sealed class ArmyService(
             .Select(g => new UnitStack(g.Key, g.Sum(s => s.Count)))
             .ToList();
 
+        // The attacker's own settlement's shrine favour (Thor/Njörd) boosts
+        // its army's attack power — read-only here, so no write tracking is
+        // needed even when the origin settlement is also the target of a
+        // simultaneous attack from elsewhere.
+        var attackerEntity = await LoadSettlementAsync(armyEntity.SettlementId, cancellationToken).ConfigureAwait(false);
+        var attackerSettlement = attackerEntity?.ToDomain();
+        var landAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Infantry) ?? 0;
+        var shipAttackBonusPercent = attackerSettlement?.AttackBonusPercent(UnitClass.Ship) ?? 0;
+
         var seed = Random.Shared.Next();
         var arrival = Army.SettleArrival(
-            domain, defenderEntity.ToDomain(), defenderEntity.World.SpeedFactor, now, seed, guestDefenderStacks);
+            domain, defenderEntity.ToDomain(), defenderEntity.World.SpeedFactor, now, seed, guestDefenderStacks,
+            landAttackBonusPercent, shipAttackBonusPercent);
 
         // Guaranteed true: the caller only reaches this method when the
         // outbound leg's ArrivesAt has already passed for a not-yet-returning

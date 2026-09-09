@@ -524,7 +524,9 @@ public sealed record Army
     /// </remarks>
     public static ArmyArrivalResult SettleArrival(
         Army army, Settlement defenderSettlement, double defenderSpeedFactor, DateTimeOffset now, int seed,
-        IReadOnlyList<UnitStack>? guestDefenderStacks = null)
+        IReadOnlyList<UnitStack>? guestDefenderStacks = null,
+        double landAttackBonusPercent = 0,
+        double shipAttackBonusPercent = 0)
     {
         ArgumentNullException.ThrowIfNull(army);
         ArgumentNullException.ThrowIfNull(defenderSettlement);
@@ -570,7 +572,10 @@ public sealed record Army
         // outcome itself) properly reflects everyone standing on the wall.
         var combinedDefense = MergeStacksByType(settledDefender.Garrison, guestDefenderStacks);
         var plan = BattleResolver.Resolve(
-            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed, raid: army.Mission == ArmyMission.Raid);
+            army.Stacks, combinedDefense, defenseBonusPercent, lootAvailable, seed,
+            raid: army.Mission == ArmyMission.Raid,
+            landAttackBonusPercent: landAttackBonusPercent,
+            shipAttackBonusPercent: shipAttackBonusPercent);
 
         // Loot leaves the defender's stock at the instant of battle even
         // though it does not reach the attacker's own stock until the

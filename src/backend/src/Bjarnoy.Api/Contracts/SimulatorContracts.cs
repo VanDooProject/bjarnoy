@@ -27,6 +27,17 @@ namespace Bjarnoy.Api.Contracts;
 /// <see cref="Bjarnoy.Domain.Buildings.BuildingCatalogue.TowerDefenseBonusPercent"/>,
 /// same as a real battle.
 /// </param>
+/// <param name="LandAttackBonusPercent">
+/// The hypothetical attacker's Thor shrine favour, as a percentage — see
+/// <see cref="Bjarnoy.Domain.Buildings.Settlement.AttackBonusPercent"/>. The
+/// simulator models no real settlement, so this is supplied directly rather
+/// than derived, same as <paramref name="TowerLevel"/> stands in for a real
+/// Tower.
+/// </param>
+/// <param name="ShipAttackBonusPercent">
+/// The hypothetical attacker's Njörd shrine favour, as a percentage — the
+/// ship-attack counterpart to <paramref name="LandAttackBonusPercent"/>.
+/// </param>
 /// <param name="Mission">
 /// <c>"attack"</c> (default) or <c>"raid"</c> — see <see cref="ArmyMission.Raid"/>
 /// and <see cref="BattleResolver.Resolve"/>'s <c>raid</c> parameter for what
@@ -44,6 +55,8 @@ public sealed record SimulatorRequest(
     IReadOnlyList<UnitCountRequest>? DefenderStacks,
     IReadOnlyList<UnitCountRequest>? GuestDefenderStacks,
     [property: Range(0, int.MaxValue)] int TowerLevel = 0,
+    [property: Range(0, 100)] double LandAttackBonusPercent = 0,
+    [property: Range(0, 100)] double ShipAttackBonusPercent = 0,
     string? Mission = null,
     int? Seed = null);
 
