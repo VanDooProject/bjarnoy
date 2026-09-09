@@ -43,8 +43,7 @@
   above for how the merge lands on `main`)
 - when asking me for the go-ahead, judge the fix's complexity from what
   you already read to diagnose it (the failing log/test, the code path
-  it touches) — don't spin up a separate subagent just to rate
-  complexity, that's an extra round-trip most fixes don't earn back.
+  it touches).
   Include that judgment and ask me which model to run the fix with:
   Sonnet is the default for anything you assess as a simple/localized
   fix; suggest Opus or Fable when you assess it as architecturally
