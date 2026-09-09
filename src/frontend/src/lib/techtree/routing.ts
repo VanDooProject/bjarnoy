@@ -94,6 +94,11 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
   const segments: RoutedSegment[] = [];
   const nextLane = laneAllocator();
 
+  // The final flat hop of every adjacent edge, keyed so a same-row distant
+  // edge can find and extend it instead of drawing its own line — see
+  // `reuseSameRowChain` below.
+  const leafSegmentByEdge = new Map<EdgeKey, RoutedSegment>();
+
   // An edge spanning more than one column can't use its source's trunk (that
   // only reaches the next column), so it gets its own run into a lane
   // reserved for the target — shared by every long edge arriving there, since
@@ -128,7 +133,9 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
 
     // A lone target already at the source's height needs no trunk at all.
     if (targets.length === 1 && midOf(targets[0]!) === sy) {
-      segments.push({ points: [[sx, sy], [leftOf(targets[0]!), sy]], keys });
+      const segment: RoutedSegment = { points: [[sx, sy], [leftOf(targets[0]!), sy]], keys };
+      segments.push(segment);
+      leafSegmentByEdge.set(keys[0]!, segment);
       continue;
     }
 
@@ -150,13 +157,47 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
 
     for (const target of targets) {
       const ty = midOf(target);
-      segments.push({ points: [[trunkX, ty], [leftOf(target), ty]], keys: [edgeKey(source, target)] });
+      const edge = edgeKey(source, target);
+      const segment: RoutedSegment = { points: [[trunkX, ty], [leftOf(target), ty]], keys: [edge] };
+      segments.push(segment);
+      leafSegmentByEdge.set(edge, segment);
     }
+  }
+
+  /**
+   * A distant edge whose source and target share a row, with every cell
+   * between them filled by real intermediate nodes on the *same* chain (e.g.
+   * Shrine of Freyja's own Farm and Pumpkin Farm prerequisites sit right next
+   * to each other) doesn't need its own line at all: the adjacent hops
+   * already drawn between those nodes trace the identical path. Extending
+   * their `keys` instead of drawing a new one means hovering Farm lights the
+   * exact same run hovering Pumpkin Farm does, one card further.
+   */
+  function reuseSameRowChain(from: string, to: string): boolean {
+    const y = midOf(from);
+    if (midOf(to) !== y) return false;
+
+    const hopSegments: RoutedSegment[] = [];
+    let current = from;
+    while (current !== to) {
+      const next = (adjacent.get(current) ?? []).find((candidate) => midOf(candidate) === y);
+      if (!next) return false;
+      const segment = leafSegmentByEdge.get(edgeKey(current, next));
+      if (!segment) return false;
+      hopSegments.push(segment);
+      current = next;
+    }
+
+    const key = edgeKey(from, to);
+    for (const segment of hopSegments) (segment.keys as EdgeKey[]).push(key);
+    return true;
   }
 
   for (const { from, to } of distant.sort(
     (a, b) => colOf(a.from) - colOf(b.from) || a.to.localeCompare(b.to),
   )) {
+    if (reuseSameRowChain(from, to)) continue;
+
     const key = edgeKey(from, to);
     const sx = rightOf(from);
     const sy = midOf(from);

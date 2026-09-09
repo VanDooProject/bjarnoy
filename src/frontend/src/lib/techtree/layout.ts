@@ -40,20 +40,23 @@ export type Slot = readonly [col: number, row: number];
 
 /**
  * Column is dependency depth; row is chosen so that most links are a single
- * horizontal run, one row per chain — sources sit level with everything they
- * feed: lumberjack with sawmill, storage house with great storehouse,
- * fishing hut with dockyard, and tower with barracks and archery range.
+ * horizontal run — sources sit level with everything they feed: storage
+ * house with great storehouse, fishing hut with dockyard, and tower with
+ * barracks and archery range.
  *
  * The two multi-parent capstones (Shrine of Freyja needs Farm *and* Pumpkin
- * Farm; Shrine of Thor needs Barracks *and* Archery Range) each get a row of
- * their own instead — every other building in their row would otherwise sit
- * directly between one of their two sources and their own card, which a
- * flat same-row link can't route through without crossing it. A vertical
- * jump into a fresh row for both parents sidesteps that instead of leaning
- * on a deliberately-left-empty cell the way a single-parent skip would.
+ * Farm; Shrine of Thor needs Barracks *and* Archery Range) sit on that same
+ * row too, one column past their nearer parent (Pumpkin Farm, Archery
+ * Range). The link from their *farther* parent (Farm, Barracks) doesn't need
+ * its own routing at all — `routing.ts`'s `reuseSameRowChain` notices the
+ * whole row is already a chain of real adjacent edges and just extends the
+ * hops already drawn, rather than routing around the nearer parent's card.
+ * Sawmill sits a column further out than its one hop from Lumberjack would
+ * otherwise place it, alongside the other late-game (flat LH10) buildings —
+ * column 2 of its row is left empty so that link still runs flat.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
-  longhouse: [0, 3],
+  longhouse: [0, 2],
 
   lumberjack: [1, 0],
   farm: [1, 1],
@@ -62,16 +65,17 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   fishinghut: [1, 4],
   tower: [1, 5],
 
-  sawmill: [2, 0],
+  // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
   pumpkinfarm: [2, 1],
   greatstorehouse: [2, 3],
   dockyard: [2, 4],
   barracks: [2, 5],
 
+  sawmill: [3, 0],
+  shrineoffreyja: [3, 1],
   archeryrange: [3, 5],
 
-  shrineoffreyja: [3, 6],
-  shrineofthor: [4, 7],
+  shrineofthor: [4, 5],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;
