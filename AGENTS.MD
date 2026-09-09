@@ -41,6 +41,21 @@
 - afterwards, update the original PR by merging `main` back into its branch
   so it picks up the fix (see "squash always means GitHub's squash-merge"
   above for how the merge lands on `main`)
+- when asking me for the go-ahead, judge the fix's complexity from what
+  you already read to diagnose it (the failing log/test, the code path
+  it touches) — don't spin up a separate subagent just to rate
+  complexity, that's an extra round-trip most fixes don't earn back.
+  Include that judgment and ask me which model to run the fix with:
+  Sonnet is the default for anything you assess as a simple/localized
+  fix; suggest Opus or Fable when you assess it as architecturally
+  complex or ambiguous. If the codebase area is unfamiliar rather than
+  just the fix being complex, use a quick Explore-agent read to orient
+  yourself first — that's research, not a complexity rating, and only
+  worth it when you're actually lost
+- a failure that a rerun clears counts as **flaky**, not "unrelated" —
+  flaky still means broken and gets fixed like any other bug (same
+  ask-first + dedupe-check + own-PR flow above), it does not stand down
+  just because a rerun happened to pass
 
 # tests
 - tests need to be meaningful and not test third party stuff
