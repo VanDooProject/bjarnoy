@@ -17,11 +17,16 @@ public enum FieldBattleWinner
 
 /// <summary>
 /// One side's claim to defend the meeting hex (issue #206 §2) — whether its
-/// own territory (or a guildmate's) covers the hex, and, if so, the
-/// already-halved defense-bonus percent that grants.
+/// own settlement's territory covers the hex, and, if so, the already-halved
+/// defense-bonus percent that grants. Deliberately scoped to the army's own
+/// settlement only, not any guildmate's — no other defense-bonus computation
+/// in this codebase looks past a single settlement's own buildings either
+/// (see <c>Army.SettleArrival</c>'s own <c>defenseBonusPercent</c>), so a
+/// field battle staying consistent with that is the minimal-surprise choice;
+/// see the PR's implementation notes.
 /// </summary>
 /// <param name="Claims">
-/// True when the hex falls inside this side's (or a guildmate's) <see cref="Settlement.ClaimDiscs"/>.
+/// True when the hex falls inside this side's own <see cref="Settlement.ClaimDiscs"/>.
 /// </param>
 /// <param name="DefenseBonusPercent">
 /// Half of the bonus that disc's building would grant in ordinary settlement

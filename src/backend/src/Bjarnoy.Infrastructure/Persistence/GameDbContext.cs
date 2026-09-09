@@ -42,6 +42,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<BattleReportDefenderLineEntity> BattleReportDefenderLines => Set<BattleReportDefenderLineEntity>();
 
+    public DbSet<FieldBattleClaimEntity> FieldBattleClaims => Set<FieldBattleClaimEntity>();
+
+    public DbSet<FieldBattleReportEntity> FieldBattleReports => Set<FieldBattleReportEntity>();
+
+    public DbSet<FieldBattleReportLineEntity> FieldBattleReportLines => Set<FieldBattleReportLineEntity>();
+
     public DbSet<UserEntity> Users => Set<UserEntity>();
 
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
@@ -318,6 +324,11 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithOne(s => s.Army!)
                 .HasForeignKey(s => s.ArmyId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // FieldBattleService's per-army scan (issue #206) filters
+            // in-transit, non-home, non-guest armies before doing anything
+            // else — this index covers exactly that predicate.
+            army.HasIndex(a => new { a.AtHome, a.IsSupporting });
         });
 
         modelBuilder.Entity<ArmyUnitStackEntity>(stack =>
@@ -364,6 +375,40 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
             line.ToTable("battle_report_defender_lines");
             line.HasKey(l => l.Id);
             line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.UnitType).HasConversion<int>();
+        });
+
+        modelBuilder.Entity<FieldBattleClaimEntity>(claim =>
+        {
+            claim.ToTable("field_battle_claims");
+            claim.HasKey(c => c.Id);
+            claim.Property(c => c.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<FieldBattleReportEntity>(report =>
+        {
+            report.ToTable("field_battle_reports");
+            report.HasKey(r => r.Id);
+            report.Property(r => r.Id).ValueGeneratedNever();
+            report.Property(r => r.Winner).HasConversion<int>();
+
+            // Both sides' inboxes read by settlement id — mirrors
+            // BattleReportEntity's own two indexes.
+            report.HasIndex(r => r.SideASettlementId);
+            report.HasIndex(r => r.SideBSettlementId);
+
+            report.HasMany(r => r.Lines)
+                .WithOne(l => l.FieldBattleReport!)
+                .HasForeignKey(l => l.FieldBattleReportId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FieldBattleReportLineEntity>(line =>
+        {
+            line.ToTable("field_battle_report_lines");
+            line.HasKey(l => l.Id);
+            line.Property(l => l.Id).ValueGeneratedNever();
+            line.Property(l => l.Side).HasConversion<int>();
             line.Property(l => l.UnitType).HasConversion<int>();
         });
 
