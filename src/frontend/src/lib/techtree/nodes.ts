@@ -50,10 +50,9 @@ function formatModifier(modifier: BuildingModifier): string {
     case 'arcane':
       return 'Arcane';
     case 'shrineFavour':
-      if (modifier.domain === 'storage') return `+${modifier.percent}% storage capacity`;
-      return `+${modifier.percent}% ${
-        modifier.domain === 'woodStone' ? 'Wood/Stone' : modifier.domain === 'wood' ? 'Wood' : 'Food'
-      } production`;
+      if (modifier.domain === 'shipAttack') return `+${modifier.percent}% ship attack`;
+      if (modifier.domain === 'landAttack') return `+${modifier.percent}% land unit attack`;
+      return `+${modifier.percent}% ${modifier.domain === 'wood' ? 'Wood' : 'Food'} production`;
   }
 }
 

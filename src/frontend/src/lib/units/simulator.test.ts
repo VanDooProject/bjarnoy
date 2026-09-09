@@ -49,6 +49,16 @@ describe('buildSimulatorRequest', () => {
     });
   });
 
+  it('includes land/ship attack bonus percent only when set', () => {
+    const request = buildSimulatorRequest({ spearman: 10 }, {}, {}, 0, 'attack', undefined, 15, 20);
+    expect(request).toEqual({
+      attackerStacks: [{ unit: 'spearman', count: 10 }],
+      landAttackBonusPercent: 15,
+      shipAttackBonusPercent: 20,
+      mission: 'attack',
+    });
+  });
+
   it('omits seed when null/undefined', () => {
     expect(buildSimulatorRequest({ spearman: 1 }, {}, {}, 0, 'attack', null)).toEqual({
       attackerStacks: [{ unit: 'spearman', count: 1 }],

@@ -1233,15 +1233,20 @@ export interface FieldBattleReportResponse {
  * `defenderStacks`: the hypothetical home garrison; omit/empty for an
  * undefended settlement. `guestDefenderStacks`: optional Support-style
  * guest stacks folded into the defense alongside `defenderStacks`, mirroring
- * a real battle. `towerLevel` defaults to 0 (no Tower). `mission` is
- * `'attack'` (default) or `'raid'`. `seed` lets a caller replay the exact
- * same simulated outcome; omit to have the server pick one.
+ * a real battle. `towerLevel` defaults to 0 (no Tower). `landAttackBonusPercent`/
+ * `shipAttackBonusPercent` default to 0 (no Shrine of Thor/Njörd favour) —
+ * the simulator models no real settlement, so these stand in for it the same
+ * way `towerLevel` stands in for a real Tower. `mission` is `'attack'`
+ * (default) or `'raid'`. `seed` lets a caller replay the exact same
+ * simulated outcome; omit to have the server pick one.
  */
 export interface SimulatorRequest {
   attackerStacks: UnitCountRequest[];
   defenderStacks?: UnitCountRequest[];
   guestDefenderStacks?: UnitCountRequest[];
   towerLevel?: number;
+  landAttackBonusPercent?: number;
+  shipAttackBonusPercent?: number;
   mission?: string;
   seed?: number;
 }

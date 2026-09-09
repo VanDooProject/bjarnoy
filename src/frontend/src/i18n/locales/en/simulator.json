@@ -18,6 +18,8 @@
   },
   "options": {
     "towerLevel": "Tower level",
+    "landAttackBonusPercent": "Land attack bonus %",
+    "shipAttackBonusPercent": "Ship attack bonus %",
     "mission": "Mission",
     "attack": "Attack",
     "raid": "Raid",

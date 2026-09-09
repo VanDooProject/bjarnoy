@@ -18,7 +18,10 @@ function stacksFrom(counts: Record<string, number>): UnitCountRequest[] {
  * having filled the section in (an undefended settlement), not as an
  * explicit `[]`. `towerLevel` below 1 and an empty/omitted seed are likewise
  * left out so the request matches what a bare-minimum form actually asked
- * for. Returns `null` when there's nothing to attack with yet (mirrors
+ * for. `landAttackBonusPercent`/`shipAttackBonusPercent` stand in for a
+ * Shrine of Thor/Njörd favour bonus the same way `towerLevel` stands in for
+ * a real Tower — both default to 0 and are omitted the same way. Returns
+ * `null` when there's nothing to attack with yet (mirrors
  * `buildAttackDispatchRequest`'s own "nothing to send" null).
  */
 export function buildSimulatorRequest(
@@ -28,6 +31,8 @@ export function buildSimulatorRequest(
   towerLevel: number,
   mission: 'attack' | 'raid',
   seed?: number | null,
+  landAttackBonusPercent = 0,
+  shipAttackBonusPercent = 0,
 ): SimulatorRequest | null {
   const attackerStacks = stacksFrom(attackerCounts);
   if (attackerStacks.length === 0) return null;
@@ -40,6 +45,8 @@ export function buildSimulatorRequest(
     ...(defenderStacks.length > 0 ? { defenderStacks } : {}),
     ...(guestDefenderStacks.length > 0 ? { guestDefenderStacks } : {}),
     ...(towerLevel > 0 ? { towerLevel } : {}),
+    ...(landAttackBonusPercent > 0 ? { landAttackBonusPercent } : {}),
+    ...(shipAttackBonusPercent > 0 ? { shipAttackBonusPercent } : {}),
     mission,
     ...(seed !== undefined && seed !== null ? { seed } : {}),
   };

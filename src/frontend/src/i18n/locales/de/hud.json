@@ -49,8 +49,8 @@
     "modifierCoastalBoost": "Küste (+{percent}%)",
     "modifierArcane": "Arkan",
     "modifierShrineFavour": "+{percent}% {domain}-Produktion",
-    "modifierShrineFavourStorage": "+{percent}% Lagerkapazität",
-    "domainWoodStone": "Holz/Stein",
+    "modifierShrineFavourLandAttack": "+{percent}% Angriff für Landeinheiten",
+    "modifierShrineFavourShipAttack": "+{percent}% Schiffsangriff",
     "domainFood": "Nahrung",
     "domainWood": "Holz"
   },

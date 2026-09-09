@@ -21,7 +21,7 @@ export type BuildingModifier =
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'arcane' }
-  | { kind: 'shrineFavour'; percent: number; domain: 'woodStone' | 'food' | 'wood' | 'storage' };
+  | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' };
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
@@ -194,12 +194,12 @@ export function buildingStatsFor(
       const favour = Math.round((0.10 + 0.03 * (Math.min(level, 5) - 1)) * 100);
       const domain =
         type === 'shrineofthor'
-          ? 'woodStone'
+          ? 'landAttack'
           : type === 'shrineoffreyja'
             ? 'food'
             : type === 'shrineofullr'
               ? 'wood'
-              : 'storage';
+              : 'shipAttack';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
     default:
