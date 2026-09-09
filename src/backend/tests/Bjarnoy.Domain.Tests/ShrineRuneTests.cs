@@ -32,6 +32,26 @@ public class ShrineCatalogueTests
         Assert.Equal(0, favour.ProductionBonus.Stone, 6);
     }
 
+    [Fact]
+    public void Ullr_boosts_wood_only()
+    {
+        var favour = ShrineCatalogue.Favour(GodType.Ullr, 1);
+
+        Assert.Equal(0.10, favour.ProductionBonus.Wood, 6);
+        Assert.Equal(0, favour.ProductionBonus.Stone, 6);
+        Assert.Equal(0, favour.ProductionBonus.Food, 6);
+        Assert.Equal(0, favour.StorageBonus, 6);
+    }
+
+    [Fact]
+    public void Njord_boosts_storage_only()
+    {
+        var favour = ShrineCatalogue.Favour(GodType.Njord, 1);
+
+        Assert.Equal(0.10, favour.StorageBonus, 6);
+        Assert.True(favour.ProductionBonus == ResourceAmounts.Zero);
+    }
+
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 1)]

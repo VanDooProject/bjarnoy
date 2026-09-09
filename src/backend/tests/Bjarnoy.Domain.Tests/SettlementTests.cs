@@ -145,6 +145,10 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ShrineOfThor, Terrain.Mountain, false)]
     [InlineData(BuildingType.ShrineOfFreyja, Terrain.Grass, true)]
     [InlineData(BuildingType.ShrineOfFreyja, Terrain.Sand, false)]
+    [InlineData(BuildingType.ShrineOfUllr, Terrain.Grass, true)]
+    [InlineData(BuildingType.ShrineOfUllr, Terrain.Forest, false)]
+    [InlineData(BuildingType.ShrineOfNjord, Terrain.Grass, true)]
+    [InlineData(BuildingType.ShrineOfNjord, Terrain.Sand, false)]
     public void Producers_are_gated_to_their_terrain(BuildingType type, Terrain terrain, bool allowed)
     {
         // This is the rule the legacy AllowedTiles list encoded by holding a
@@ -235,6 +239,10 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ShrineOfThor, BuildingType.ArcheryRange, 10)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 10)]
+    [InlineData(BuildingType.ShrineOfUllr, BuildingType.Lumberjack, 10)]
+    [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 10)]
+    [InlineData(BuildingType.ShrineOfNjord, BuildingType.FishingHut, 10)]
+    [InlineData(BuildingType.ShrineOfNjord, BuildingType.Dockyard, 10)]
     [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 10)]
     public void The_catalogue_carries_the_agreed_prerequisites(
         BuildingType type, BuildingType required, int requiredLevel)

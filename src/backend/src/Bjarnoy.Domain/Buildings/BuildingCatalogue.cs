@@ -48,7 +48,7 @@ public static class BuildingCatalogue
     /// Barracks and Bowman at the Archery Range).
     /// </para>
     /// <para>
-    /// The two shrines and the Sawmill are late-game capstones rather than
+    /// The four shrines and the Sawmill are late-game capstones rather than
     /// early unlocks: each needs a maxed-out pair (or single building) from
     /// its own line standing before it can go up at all — see their
     /// <c>RequiredLonghouseLevel = 10</c> in <see cref="Shrine"/> and the
@@ -76,6 +76,10 @@ public static class BuildingCatalogue
                 [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
             [BuildingType.ShrineOfFreyja] =
                 [new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10)],
+            [BuildingType.ShrineOfUllr] =
+                [new(BuildingType.Lumberjack, 10), new(BuildingType.Sawmill, 10)],
+            [BuildingType.ShrineOfNjord] =
+                [new(BuildingType.FishingHut, 10), new(BuildingType.Dockyard, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
         };
 
@@ -118,6 +122,8 @@ public static class BuildingCatalogue
             BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
+            BuildingType.ShrineOfUllr => Shrine(type, level),
+            BuildingType.ShrineOfNjord => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
@@ -249,6 +255,8 @@ public static class BuildingCatalogue
     {
         BuildingType.ShrineOfThor => GodType.Thor,
         BuildingType.ShrineOfFreyja => GodType.Freyja,
+        BuildingType.ShrineOfUllr => GodType.Ullr,
+        BuildingType.ShrineOfNjord => GodType.Njord,
         _ => null,
     };
 
@@ -413,7 +421,7 @@ public static class BuildingCatalogue
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
     /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm/
-    /// MagicTower. Both shrines are late-game capstones now — a maxed pair
+    /// MagicTower. Every shrine is a late-game capstone now — a maxed pair
     /// standing from their own line (see PrerequisiteTable) — so the
     /// longhouse gate is flat 10 rather than the usual early-unlock curve.
     /// </summary>

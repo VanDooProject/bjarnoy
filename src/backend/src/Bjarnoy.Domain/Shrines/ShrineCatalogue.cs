@@ -32,6 +32,12 @@ public static class ShrineCatalogue
         {
             GodType.Thor => new ShrineEffect(new ResourceAmounts(Wood: perLevel, Stone: perLevel, Food: 0, Iron: 0), StorageBonus: 0),
             GodType.Freyja => new ShrineEffect(new ResourceAmounts(Wood: 0, Stone: 0, Food: perLevel, Iron: 0), StorageBonus: 0),
+            GodType.Ullr => new ShrineEffect(new ResourceAmounts(Wood: perLevel, Stone: 0, Food: 0, Iron: 0), StorageBonus: 0),
+            // Sea-trade wealth rather than a harvest, so Njörd's favour boosts
+            // storage capacity instead of any resource's production — the one
+            // unused ShrineEffect axis (see ShrineEffect.StorageBonus), which
+            // keeps this from overlapping either Thor's or Freyja's domain.
+            GodType.Njord => new ShrineEffect(ResourceAmounts.Zero, StorageBonus: perLevel),
             _ => throw new ArgumentOutOfRangeException(nameof(god), god, "Unknown god"),
         };
     }
