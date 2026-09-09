@@ -201,8 +201,12 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Spacing_is_enforced_within_an_island_but_never_across_separate_islands()
     {
         using var client = Client();
+        // Seed 141, not 21: re-picked when the island generator's default
+        // size grew (see WorldGenerationOptions.IslandMinRadius/
+        // IslandMaxRadius) — 21/60 no longer places two islands close enough
+        // to exercise the cross-island case below.
         var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
+            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 141, 60), Ct))
             .ReadStrictAsync<WorldResponse>(Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
