@@ -70,6 +70,25 @@ public sealed record Movement
     /// </summary>
     public bool IsReturning { get; init; }
 
+    /// <summary>
+    /// True only for the two immune-to-interception return legs (issue #206
+    /// §5): the existing natural provisions-driven turnaround
+    /// (<c>Army.SettleTo</c>'s turn-around branch) and a battle-forced retreat
+    /// (<c>Army.SettleArrival</c>'s post-battle survivor return, and the new
+    /// field-battle loser's direct-path-home march). Both are immune because
+    /// neither is something a player can trigger on demand at will.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately distinct from <see cref="IsReturning"/>: a voluntary
+    /// <c>Army.Recall</c> also sets <see cref="IsReturning"/> but must remain
+    /// fully interceptable (issue #206 §5) — recalling the instant a player
+    /// spots an incoming interception would otherwise trivially dodge every
+    /// fight. Only <see cref="IsReturning"/> &amp;&amp; <see cref="RetreatImmune"/>
+    /// together mean "immune"; <see cref="IsReturning"/> alone (a plain
+    /// Recall) does not.
+    /// </remarks>
+    public bool RetreatImmune { get; init; }
+
     /// <summary>When this leg's <see cref="Path"/> is fully travelled.</summary>
     public DateTimeOffset ArrivesAt => DepartedAt + TimeSpan.FromHours(CumulativeHours[^1]);
 

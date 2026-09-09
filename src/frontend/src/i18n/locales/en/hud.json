@@ -248,6 +248,23 @@
     "siege": "Siege",
     "hexCoord": "Hex ({q}, {r})"
   },
+  "fieldBattleReport": {
+    "title": "Field battle",
+    "won": "Won",
+    "lost": "Lost",
+    "tied": "Tied",
+    "sideA": "Side A",
+    "sideB": "Side B",
+    "you": "You",
+    "opponent": "Opponent",
+    "defending": "defending",
+    "power": "Power",
+    "summaryWon": "won, {n} lost",
+    "summaryLost": "lost, {n} lost",
+    "summaryTied": "tied, {n} lost",
+    "summaryLooted": "{n} looted",
+    "hexCoord": "Hex ({q}, {r})"
+  },
   "armyStatus": {
     "arriving": "Arriving",
     "atHome": "At home",
