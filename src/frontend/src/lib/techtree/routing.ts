@@ -176,8 +176,10 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
    *
    * Only edges already in `leafSegmentByEdge` count as a hop, so this only
    * ever reuses a line actually drawn, never a hypothetical one — and since
-   * `distant` is processed in column order, an earlier (nearer) hop is
-   * always routed, and so available to reuse, before a later edge needs it.
+   * `distant` is processed shortest-span first, a nearer hop (e.g. Pumpkin
+   * Farm -> Shrine of Freyja, two columns) is always routed, and so
+   * available to reuse, before a farther edge over the same row (Farm ->
+   * Shrine of Freyja, three columns) needs it.
    */
   function reuseSameRowChain(from: string, to: string): boolean {
     const y = midOf(from);
@@ -199,8 +201,11 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
     return true;
   }
 
+  // Shortest span first, so a nearer hop a same-row chain might reuse is
+  // always routed before the farther edge that wants to reuse it.
+  const span = (edge: { from: string; to: string }) => colOf(edge.to) - colOf(edge.from);
   for (const { from, to } of distant.sort(
-    (a, b) => colOf(a.from) - colOf(b.from) || a.to.localeCompare(b.to),
+    (a, b) => span(a) - span(b) || colOf(a.from) - colOf(b.from) || a.to.localeCompare(b.to),
   )) {
     if (reuseSameRowChain(from, to)) continue;
 

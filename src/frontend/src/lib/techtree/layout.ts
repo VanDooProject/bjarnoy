@@ -52,10 +52,12 @@ export type Slot = readonly [col: number, row: number];
  * straight through an empty cell) and just extends the hops already drawn,
  * rather than routing a separate line around the nearer parent's card.
  *
- * Two cells are left empty on purpose so a same-row link can pass straight
- * through them instead of detouring: [2, 0] for Lumberjack -> Sawmill, and
- * [2, 1] for Farm -> Pumpkin Farm. [2, 3] and [3, 3] are likewise left empty
- * for Storage House -> Great Storehouse.
+ * A column-3 cell is left empty on every row whose capstone's nearer parent
+ * sits in column 2, so that parent's link can pass straight through to
+ * column 4 instead of detouring: [3, 1] for Pumpkin Farm -> Shrine of
+ * Freyja, and [3, 3] for Storage House -> Great Storehouse ([2, 3] is empty
+ * too, since Great Storehouse has no column-2 parent at all). [2, 0] is
+ * likewise left empty for Lumberjack -> Sawmill.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 2],
@@ -68,12 +70,12 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   tower: [1, 5],
 
   // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
-  // [2, 1] intentionally empty — the lane Farm -> Pumpkin Farm runs through.
+  pumpkinfarm: [2, 1],
   dockyard: [2, 4],
   barracks: [2, 5],
 
   sawmill: [3, 0],
-  pumpkinfarm: [3, 1],
+  // [3, 1] intentionally empty — the lane Pumpkin Farm -> Shrine of Freyja runs through.
   // [3, 3] intentionally empty — the lane Storage House -> Great Storehouse runs through.
   archeryrange: [3, 5],
 
