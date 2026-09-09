@@ -226,14 +226,15 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.StorageHouse, BuildingType.Lumberjack, 5)]
-    [InlineData(BuildingType.StorageHouse, BuildingType.Farm, 3)]
-    [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 6)]
+    [InlineData(BuildingType.Sawmill, BuildingType.Lumberjack, 10)]
     [InlineData(BuildingType.PumpkinFarm, BuildingType.Farm, 5)]
     [InlineData(BuildingType.Dockyard, BuildingType.FishingHut, 4)]
+    [InlineData(BuildingType.Barracks, BuildingType.Tower, 5)]
     [InlineData(BuildingType.ArcheryRange, BuildingType.Barracks, 3)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.ShrineOfThor, 5)]
-    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 6)]
+    [InlineData(BuildingType.ShrineOfThor, BuildingType.Barracks, 10)]
+    [InlineData(BuildingType.ShrineOfThor, BuildingType.ArcheryRange, 10)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Farm, 10)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 10)]
     [InlineData(BuildingType.GreatStorehouse, BuildingType.StorageHouse, 10)]
     public void The_catalogue_carries_the_agreed_prerequisites(
         BuildingType type, BuildingType required, int requiredLevel)
@@ -249,8 +250,7 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Quarry)]
     [InlineData(BuildingType.FishingHut)]
     [InlineData(BuildingType.Tower)]
-    [InlineData(BuildingType.Barracks)]
-    [InlineData(BuildingType.ShrineOfThor)]
+    [InlineData(BuildingType.StorageHouse)]
     public void The_tech_trees_roots_have_no_building_prerequisite(BuildingType type)
     {
         Assert.Empty(BuildingCatalogue.Get(type, 1).Prerequisites);
@@ -1087,26 +1087,26 @@ public class SettlementTests
     [Fact]
     public void A_building_with_two_prerequisites_is_refused_while_either_is_missing()
     {
-        // Shrine of Freyja wants Shrine of Thor 5 and Pumpkin farm 6.
-        var withoutPumpkin = FoundAtLonghouseLevel(10, (BuildingType.ShrineOfThor, 5));
-        var withoutThor = FoundAtLonghouseLevel(10, (BuildingType.PumpkinFarm, 6));
+        // Shrine of Freyja wants a maxed Farm and Pumpkin Farm.
+        var withoutPumpkin = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
+        var withoutFarm = FoundAtLonghouseLevel(10, (BuildingType.PumpkinFarm, 10));
 
         var missingPumpkin = withoutPumpkin.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
-        var missingThor = withoutThor.PlanBuild(
+        var missingFarm = withoutFarm.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingPumpkin.Rejection);
         Assert.Equal(BuildingType.PumpkinFarm, missingPumpkin.MissingPrerequisite?.Type);
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingThor.Rejection);
-        Assert.Equal(BuildingType.ShrineOfThor, missingThor.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingFarm.Rejection);
+        Assert.Equal(BuildingType.Farm, missingFarm.MissingPrerequisite?.Type);
     }
 
     [Fact]
     public void A_building_with_two_prerequisites_is_accepted_once_both_stand()
     {
         var settlement = FoundAtLonghouseLevel(
-            10, (BuildingType.ShrineOfThor, 5), (BuildingType.PumpkinFarm, 6));
+            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
@@ -1136,9 +1136,9 @@ public class SettlementTests
     }
 
     [Fact]
-    public void Barracks_is_buildable_once_its_longhouse_gate_is_met()
+    public void Barracks_is_buildable_once_its_longhouse_gate_and_tower_prerequisite_are_met()
     {
-        var settlement = FoundAtLonghouseLevel(5);
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Tower, 5));
 
         var decision = settlement.PlanBuild(BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
@@ -1146,9 +1146,27 @@ public class SettlementTests
     }
 
     [Fact]
-    public void A_shrine_is_buildable_on_grass_once_its_longhouse_gate_is_met()
+    public void Barracks_is_refused_without_a_level_5_tower()
     {
-        var settlement = FoundAtLonghouseLevel(5);
+        var withoutTower = FoundAtLonghouseLevel(5);
+        var withLowTower = FoundAtLonghouseLevel(5, (BuildingType.Tower, 4));
+
+        var missingTower = withoutTower.PlanBuild(
+            BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var lowTower = withLowTower.PlanBuild(
+            BuildingType.Barracks, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingTower.Rejection);
+        Assert.Equal(BuildingType.Tower, missingTower.MissingPrerequisite?.Type);
+        Assert.Equal(5, missingTower.MissingPrerequisite?.Level);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, lowTower.Rejection);
+        Assert.Equal(BuildingType.Tower, lowTower.MissingPrerequisite?.Type);
+    }
+
+    [Fact]
+    public void A_shrine_is_buildable_on_grass_once_its_longhouse_gate_and_prerequisites_are_met()
+    {
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
 
         var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
@@ -1237,7 +1255,7 @@ public class SettlementTests
     [InlineData(RiverTileShape.Bend)]
     public void A_sawmill_may_be_built_on_a_straight_or_bend_river_tile(RiverTileShape shape)
     {
-        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Lumberjack, 6));
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Lumberjack, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.Sawmill, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),

@@ -842,9 +842,10 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         Assert.Equal(
             [new BuildingPrerequisiteResponse("fishinghut", 4)],
             levelOne.Single(d => d.Type == "dockyard").Prerequisites);
+        Assert.Empty(levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
         Assert.Equal(
-            [new BuildingPrerequisiteResponse("lumberjack", 5), new BuildingPrerequisiteResponse("farm", 3)],
-            levelOne.Single(d => d.Type == "storagehouse").Prerequisites);
+            [new BuildingPrerequisiteResponse("barracks", 10), new BuildingPrerequisiteResponse("archeryrange", 10)],
+            levelOne.Single(d => d.Type == "shrineofthor").Prerequisites);
 
         // Prerequisites gate placement, so they sit on level 1 only — bar the
         // Great Storehouse, a flat level-10-only tier.

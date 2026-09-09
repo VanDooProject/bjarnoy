@@ -57,7 +57,13 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
         return (await loggedIn.ReadStrictAsync<AuthResponse>(Ct)).AccessToken;
     }
 
-    /// <summary>Founds a settlement, then raises its Longhouse to level 3 (a shrine's prerequisite) via admin god-mode.</summary>
+    /// <summary>
+    /// Founds a settlement, then raises its Longhouse to level 10 and stands
+    /// a level-10 Barracks and Archery Range — a Shrine of Thor's full
+    /// prerequisite chain (BuildingCatalogue.PrerequisiteTable: Tower ->
+    /// Barracks -> Archery Range -> Shrine of Thor) — all via admin
+    /// god-mode rather than walking the real queue up through each rung.
+    /// </summary>
     private async Task<SettlementResponse> FoundWithLonghouseLevelThreeAsync(HttpClient client)
     {
         var world = await (await client.PostJsonAsync(
@@ -83,13 +89,33 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
         client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
         Authorize(client, await CreateAdminTokenAsync(client));
-        var leveled = await (await client.PutJsonAsync(
+        var leveledLonghouse = await client.PutJsonAsync(
             $"/api/v1/admin/settlements/{founded.Id}/buildings/{founded.Q}/{founded.R}/level",
-            new SetBuildingLevelRequest(3), Ct))
-            .ReadStrictAsync<SettlementResponse>(Ct);
+            new SetBuildingLevelRequest(10), Ct);
+        Assert.Equal(HttpStatusCode.OK, leveledLonghouse.StatusCode);
+
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{founded.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var grassHexes = layout!.Hexes
+            .Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass")
+            .Take(2)
+            .ToList();
+        Assert.Equal(2, grassHexes.Count);
+
+        var placedBarracks = await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{grassHexes[0].Q}/{grassHexes[0].R}",
+            new PlaceBuildingRequest("barracks", 10), Ct);
+        Assert.Equal(HttpStatusCode.OK, placedBarracks.StatusCode);
+        var placedArcheryRange = await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{founded.Id}/buildings/{grassHexes[1].Q}/{grassHexes[1].R}",
+            new PlaceBuildingRequest("archeryrange", 10), Ct);
+        Assert.Equal(HttpStatusCode.OK, placedArcheryRange.StatusCode);
+
+        var leveled = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{founded.Id}", SqliteApiFixture.StrictJson, Ct);
 
         client.DefaultRequestHeaders.Authorization = null;
-        return leveled;
+        return leveled!;
     }
 
     /// <summary>
