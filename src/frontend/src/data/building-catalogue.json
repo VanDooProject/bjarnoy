@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-07T02:21:19.796Z"
+    "generatedAt": "2026-09-09T13:15:53.470Z"
   },
   "data": [
     {
@@ -1314,16 +1314,7 @@
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
-      "prerequisites": [
-        {
-          "type": "lumberjack",
-          "level": 5
-        },
-        {
-          "type": "farm",
-          "level": 3
-        }
-      ]
+      "prerequisites": []
     },
     {
       "type": "storagehouse",
@@ -2914,11 +2905,20 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
-      "prerequisites": []
+      "prerequisites": [
+        {
+          "type": "barracks",
+          "level": 10
+        },
+        {
+          "type": "archeryrange",
+          "level": 10
+        }
+      ]
     },
     {
       "type": "shrineofthor",
@@ -2946,7 +2946,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -2978,7 +2978,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3010,7 +3010,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3042,7 +3042,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3074,7 +3074,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3106,7 +3106,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 6,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3138,7 +3138,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 6,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3170,7 +3170,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 7,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3202,7 +3202,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 7,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3234,18 +3234,18 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
       "prerequisites": [
         {
-          "type": "shrineofthor",
-          "level": 5
+          "type": "farm",
+          "level": 10
         },
         {
           "type": "pumpkinfarm",
-          "level": 6
+          "level": 10
         }
       ]
     },
@@ -3275,7 +3275,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3307,7 +3307,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3339,7 +3339,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3371,7 +3371,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3403,7 +3403,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3435,7 +3435,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 6,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3467,7 +3467,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 6,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3499,7 +3499,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 7,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3531,7 +3531,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 7,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3934,7 +3934,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 2,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -3972,7 +3972,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 2,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4005,7 +4005,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 6,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4038,7 +4038,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 6,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4071,7 +4071,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 7,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4104,7 +4104,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 7,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4137,7 +4137,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 8,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4170,7 +4170,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 8,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4203,7 +4203,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 6,
+      "requiredLonghouseLevel": 9,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4236,7 +4236,7 @@
         "sand"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 6,
+      "requiredLonghouseLevel": 9,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -4578,7 +4578,12 @@
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
-      "prerequisites": []
+      "prerequisites": [
+        {
+          "type": "tower",
+          "level": 5
+        }
+      ]
     },
     {
       "type": "barracks",
@@ -5203,14 +5208,14 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 1,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
       "prerequisites": [
         {
           "type": "lumberjack",
-          "level": 6
+          "level": 10
         }
       ]
     },
@@ -5240,7 +5245,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 1,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5272,7 +5277,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 2,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5304,7 +5309,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 2,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5336,7 +5341,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5368,7 +5373,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 3,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5400,7 +5405,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5432,7 +5437,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 4,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5464,7 +5469,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,
@@ -5496,7 +5501,7 @@
         "grass"
       ],
       "requiresCoastalWater": false,
-      "requiredLonghouseLevel": 5,
+      "requiredLonghouseLevel": 10,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,

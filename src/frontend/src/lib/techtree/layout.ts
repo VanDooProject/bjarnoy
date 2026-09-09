@@ -34,17 +34,23 @@ export const ANCHOR = 'longhouse';
  */
 export const HIDDEN_FROM_DOCS: readonly string[] = ['magictower', 'fisherhut'];
 
-export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Capstone'];
+export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 
 export type Slot = readonly [col: number, row: number];
 
 /**
  * Column is dependency depth; row is chosen so that most links are a single
- * horizontal run. Sources sit level with the building they feed — lumberjack
- * with sawmill, farm with storage house, fishing hut with dockyard, barracks
- * with archery range — and column 2's row 3 is left deliberately empty so
- * Shrine of Thor can run flat across it to Shrine of Freyja without passing
- * over a card.
+ * horizontal run, one row per chain — sources sit level with everything they
+ * feed: lumberjack with sawmill, storage house with great storehouse,
+ * fishing hut with dockyard, and tower with barracks and archery range.
+ *
+ * The two multi-parent capstones (Shrine of Freyja needs Farm *and* Pumpkin
+ * Farm; Shrine of Thor needs Barracks *and* Archery Range) each get a row of
+ * their own instead — every other building in their row would otherwise sit
+ * directly between one of their two sources and their own card, which a
+ * flat same-row link can't route through without crossing it. A vertical
+ * jump into a fresh row for both parents sidesteps that instead of leaning
+ * on a deliberately-left-empty cell the way a single-parent skip would.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 3],
@@ -52,20 +58,20 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   lumberjack: [1, 0],
   farm: [1, 1],
   quarry: [1, 2],
-  shrineofthor: [1, 3],
+  storagehouse: [1, 3],
   fishinghut: [1, 4],
-  barracks: [1, 5],
-  tower: [1, 6],
+  tower: [1, 5],
 
   sawmill: [2, 0],
-  storagehouse: [2, 1],
-  pumpkinfarm: [2, 2],
-  // [2, 3] intentionally empty — the lane Shrine of Thor runs through.
+  pumpkinfarm: [2, 1],
+  greatstorehouse: [2, 3],
   dockyard: [2, 4],
-  archeryrange: [2, 5],
+  barracks: [2, 5],
 
-  greatstorehouse: [3, 1],
-  shrineoffreyja: [3, 3],
+  archeryrange: [3, 5],
+
+  shrineoffreyja: [3, 6],
+  shrineofthor: [4, 7],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

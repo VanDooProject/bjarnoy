@@ -89,7 +89,7 @@ describe('routeEdges', () => {
   });
 
   it('emits one trunk for a fan-out, not one line per target', () => {
-    // The longhouse feeds seven roots; it should still leave its card once.
+    // The longhouse feeds every root; it should still leave its card once.
     const longhouseX = columnX(0) + CARD_W;
     const stubs = segments.filter(
       (s) =>
@@ -137,13 +137,20 @@ describe('routeEdges', () => {
     ]);
   });
 
-  it('runs a two-column link straight through the cell left empty for it', () => {
-    // Shrine of Thor reaches Shrine of Freyja across column 2, whose row 3 is
-    // deliberately unoccupied — see layout.ts.
-    const link = segments.find((s) => s.keys[0] === edgeKey('shrineofthor', 'shrineoffreyja'));
+  it('routes a multi-parent capstone from both its sources without crossing either row', () => {
+    // Shrine of Thor needs Barracks and Archery Range, which sit on a row
+    // full of other cards — its own row is empty, so both parents reach it
+    // by a vertical jump into the gutter rather than a flat run through
+    // whatever else shares their row (see layout.ts).
+    const fromBarracks = segments.find(
+      (s) => s.keys.length === 1 && s.keys[0] === edgeKey('barracks', 'shrineofthor'),
+    );
+    const fromArcheryRange = segments.find(
+      (s) => s.keys.length === 1 && s.keys[0] === edgeKey('archeryrange', 'shrineofthor'),
+    );
 
-    expect(link!.points).toHaveLength(2);
-    expect(link!.points[0]![1]).toBe(link!.points[1]![1]);
+    expect(fromBarracks).toBeDefined();
+    expect(fromArcheryRange).toBeDefined();
   });
 
   it('is stable across calls, so the picture never reshuffles', () => {
@@ -164,9 +171,10 @@ describe('crossesCard', () => {
 
     // The gap below the row's cards.
     expect(crossesCard(TECH_TREE_LAYOUT, rowY(row) + CARD_H + 4, 0, 2000)).toBe(false);
-    // Column 2, row 3 is empty by design.
+    // Column 2, row 6 is empty by design — only Shrine of Freyja's own
+    // column (3) is occupied on that row.
     expect(
-      crossesCard(TECH_TREE_LAYOUT, rowY(3) + CARD_H / 2, columnX(col), columnX(col) + CARD_W),
+      crossesCard(TECH_TREE_LAYOUT, rowY(6) + CARD_H / 2, columnX(col), columnX(col) + CARD_W),
     ).toBe(false);
   });
 });
