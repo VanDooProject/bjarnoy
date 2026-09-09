@@ -3,6 +3,7 @@ import { expect, test } from './fixtures';
 import { HEAVY_MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { WorldMapPage } from './pages';
 import { waitForMapReady } from './helpers';
+import { DEFAULT_ENTER_SETTLEMENT_ZOOM } from '../src/lib/map/zoomTransition';
 
 // docs/design/zoom-transition.md: a wheel/pinch zoom crossing a threshold
 // switches world<->settlement mode in place — one persistent HexMapRenderer
@@ -99,11 +100,30 @@ test.describe('zoom-driven world/settlement transition', () => {
     // the panel renders.
     await panel.locator('input[type="checkbox"]').uncheck();
 
-    for (let i = 0; i < 60; i++) {
+    // uncheck() leaves the pointer parked over the checkbox in the debug
+    // panel — every wheel event below would scroll the panel instead of
+    // reaching the canvas (and the loop below would spin its full budget
+    // without the camera ever moving) unless the pointer is put back over
+    // the map first.
+    await world.moveTo(await world.centre());
+
+    // Bounded by "clearly crossed the enter threshold" rather than a fixed
+    // count of 60: on a bigger/slower-to-render world (see this PR's world
+    // generation change) each wheel event costs a full render frame, so a
+    // fixed large count risks the heavy-spec timeout for no extra signal —
+    // once the zoom is well past where the (enabled) transition would have
+    // fired, further wheeling proves nothing new.
+    for (let i = 0; i < 20; i++) {
+      if ((await cameraZoom(page)) > DEFAULT_ENTER_SETTLEMENT_ZOOM * 1.2) break;
       await page.mouse.wheel(0, -120);
       await page.waitForTimeout(15);
     }
     await page.waitForTimeout(300);
+
+    // The gesture actually reached the canvas and crossed the threshold the
+    // (enabled) transition would react to...
+    expect(await cameraZoom(page)).toBeGreaterThan(DEFAULT_ENTER_SETTLEMENT_ZOOM);
+    // ...and yet, with the panel's checkbox unchecked, no transition fired.
     await expect(page).toHaveURL(/\/world/);
   });
 
