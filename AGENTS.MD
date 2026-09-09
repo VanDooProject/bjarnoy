@@ -3,6 +3,9 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
+- u are allowed to, and should, open a PR for actual code changes (anything that modifies files in the repo — feat/fix/refactor/etc.) without needing to be asked first
+- docs, answering questions, and other work that doesn't modify files in the repo does not need a PR
+- when unsure whether something needs a PR, ask
 - when asked to "squash this PR" (or similar, with nothing more specific said), that means squash-merge the PR via GitHub (rewriting the branch's own commit history by hand is not what's meant) — keep the branch's full commit history intact, and use GitHub's squash-merge so the PR title becomes the one resulting commit message on the base branch
 - squash always means GitHub's squash-merge, never a local rewrite of history — and never force-push, on any branch, as a way to get there
 
