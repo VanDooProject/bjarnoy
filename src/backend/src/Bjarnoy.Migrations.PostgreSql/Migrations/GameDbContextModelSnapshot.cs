@@ -1308,14 +1308,41 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<double>("ForestRockiness")
                         .HasColumnType("double precision");
 
+                    b.Property<double>("IslandBendiness")
+                        .HasColumnType("double precision");
+
                     b.Property<int>("IslandCellSize")
                         .HasColumnType("integer");
 
                     b.Property<double>("IslandChance")
                         .HasColumnType("double precision");
 
+                    b.Property<double>("IslandCoastWarp")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandCoastWarpScale")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandLobeBlend")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandLobeMaxScale")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandLobeMinScale")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("IslandMaxElongation")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("IslandMaxLobes")
+                        .HasColumnType("integer");
+
                     b.Property<double>("IslandMaxRadius")
                         .HasColumnType("double precision");
+
+                    b.Property<int>("IslandMinLobes")
+                        .HasColumnType("integer");
 
                     b.Property<double>("IslandMinRadius")
                         .HasColumnType("double precision");

@@ -325,6 +325,13 @@ public static class AdminWorldEndpoints
             MountainRockiness = generation?.MountainRockiness ?? world.MountainRockiness,
             ForestRockiness = generation?.ForestRockiness ?? world.ForestRockiness,
             MinimumIslandTiles = generation?.MinimumIslandTiles ?? world.MinimumIslandTiles,
+            IslandMinLobes = generation?.IslandMinLobes ?? world.IslandMinLobes,
+            IslandMaxLobes = generation?.IslandMaxLobes ?? world.IslandMaxLobes,
+            IslandMaxElongation = generation?.IslandMaxElongation ?? world.IslandMaxElongation,
+            IslandBendiness = generation?.IslandBendiness ?? world.IslandBendiness,
+            IslandLobeBlend = generation?.IslandLobeBlend ?? world.IslandLobeBlend,
+            IslandCoastWarp = generation?.IslandCoastWarp ?? world.IslandCoastWarp,
+            IslandCoastWarpScale = generation?.IslandCoastWarpScale ?? world.IslandCoastWarpScale,
         };
 
         try

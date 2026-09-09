@@ -61,6 +61,32 @@ public class WorldEntity
 
     public int MinimumIslandTiles { get; set; }
 
+    /// <summary>
+    /// Island-shape parameters added alongside the multi-lobe generator. New
+    /// worlds get <see cref="WorldGenerationOptions"/>'s own C# defaults;
+    /// existing rows are backfilled by migration to values that collapse the
+    /// new math back to the original single-disc circle (<c>MinLobes</c> =
+    /// <c>MaxLobes</c> = 1, everything else 0) so their persisted shape never
+    /// changes under them. See <c>docs/design/river-generation.md</c>.
+    /// </summary>
+    public int IslandMinLobes { get; set; }
+
+    public int IslandMaxLobes { get; set; }
+
+    public double IslandMaxElongation { get; set; }
+
+    public double IslandBendiness { get; set; }
+
+    public double IslandLobeBlend { get; set; }
+
+    public double IslandLobeMinScale { get; set; }
+
+    public double IslandLobeMaxScale { get; set; }
+
+    public double IslandCoastWarp { get; set; }
+
+    public double IslandCoastWarpScale { get; set; }
+
     public int MaxPlayers { get; set; }
 
     public WorldStatus Status { get; set; } = WorldStatus.Active;
@@ -164,6 +190,15 @@ public class WorldEntity
         MountainRockiness = MountainRockiness,
         ForestRockiness = ForestRockiness,
         MinimumIslandTiles = MinimumIslandTiles,
+        IslandMinLobes = IslandMinLobes,
+        IslandMaxLobes = IslandMaxLobes,
+        IslandMaxElongation = IslandMaxElongation,
+        IslandBendiness = IslandBendiness,
+        IslandLobeBlend = IslandLobeBlend,
+        IslandLobeMinScale = IslandLobeMinScale,
+        IslandLobeMaxScale = IslandLobeMaxScale,
+        IslandCoastWarp = IslandCoastWarp,
+        IslandCoastWarpScale = IslandCoastWarpScale,
     };
 
     public void ApplyGenerationOptions(WorldGenerationOptions options)
@@ -181,5 +216,14 @@ public class WorldEntity
         MountainRockiness = options.MountainRockiness;
         ForestRockiness = options.ForestRockiness;
         MinimumIslandTiles = options.MinimumIslandTiles;
+        IslandMinLobes = options.IslandMinLobes;
+        IslandMaxLobes = options.IslandMaxLobes;
+        IslandMaxElongation = options.IslandMaxElongation;
+        IslandBendiness = options.IslandBendiness;
+        IslandLobeBlend = options.IslandLobeBlend;
+        IslandLobeMinScale = options.IslandLobeMinScale;
+        IslandLobeMaxScale = options.IslandLobeMaxScale;
+        IslandCoastWarp = options.IslandCoastWarp;
+        IslandCoastWarpScale = options.IslandCoastWarpScale;
     }
 }

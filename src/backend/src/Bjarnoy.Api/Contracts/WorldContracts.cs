@@ -73,7 +73,16 @@ public sealed record WorldGenerationResponse(
     double BeachThreshold,
     double MountainThreshold,
     double MountainRockiness,
-    double ForestRockiness)
+    double ForestRockiness,
+    int IslandMinLobes,
+    int IslandMaxLobes,
+    double IslandMaxElongation,
+    double IslandBendiness,
+    double IslandLobeBlend,
+    double IslandLobeMinScale,
+    double IslandLobeMaxScale,
+    double IslandCoastWarp,
+    double IslandCoastWarpScale)
 {
     public static WorldGenerationResponse From(WorldGenerationOptions options)
     {
@@ -87,7 +96,16 @@ public sealed record WorldGenerationResponse(
             options.BeachThreshold,
             options.MountainThreshold,
             options.MountainRockiness,
-            options.ForestRockiness);
+            options.ForestRockiness,
+            options.IslandMinLobes,
+            options.IslandMaxLobes,
+            options.IslandMaxElongation,
+            options.IslandBendiness,
+            options.IslandLobeBlend,
+            options.IslandLobeMinScale,
+            options.IslandLobeMaxScale,
+            options.IslandCoastWarp,
+            options.IslandCoastWarpScale);
     }
 }
 

@@ -60,7 +60,14 @@ public sealed record WorldGenerationSettingsResponse(
     double MountainThreshold,
     double MountainRockiness,
     double ForestRockiness,
-    int MinimumIslandTiles)
+    int MinimumIslandTiles,
+    int IslandMinLobes,
+    int IslandMaxLobes,
+    double IslandMaxElongation,
+    double IslandBendiness,
+    double IslandLobeBlend,
+    double IslandCoastWarp,
+    double IslandCoastWarpScale)
 {
     public static WorldGenerationSettingsResponse From(WorldGenerationOptions options)
     {
@@ -75,7 +82,14 @@ public sealed record WorldGenerationSettingsResponse(
             options.MountainThreshold,
             options.MountainRockiness,
             options.ForestRockiness,
-            options.MinimumIslandTiles);
+            options.MinimumIslandTiles,
+            options.IslandMinLobes,
+            options.IslandMaxLobes,
+            options.IslandMaxElongation,
+            options.IslandBendiness,
+            options.IslandLobeBlend,
+            options.IslandCoastWarp,
+            options.IslandCoastWarpScale);
     }
 }
 
@@ -94,7 +108,14 @@ public sealed record WorldGenerationSettingsOverrides(
     double? MountainThreshold = null,
     double? MountainRockiness = null,
     double? ForestRockiness = null,
-    int? MinimumIslandTiles = null);
+    int? MinimumIslandTiles = null,
+    int? IslandMinLobes = null,
+    int? IslandMaxLobes = null,
+    double? IslandMaxElongation = null,
+    double? IslandBendiness = null,
+    double? IslandLobeBlend = null,
+    double? IslandCoastWarp = null,
+    double? IslandCoastWarpScale = null);
 
 /// <param name="SpeedFactor">Omit to leave unchanged. Must be greater than 0 when sent.</param>
 /// <param name="StartsAt">

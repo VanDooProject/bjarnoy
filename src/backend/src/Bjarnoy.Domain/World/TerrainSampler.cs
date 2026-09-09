@@ -54,6 +54,19 @@ public sealed class TerrainSampler
         var baseCol = (int)Math.Floor((double)col / cellSize);
         var baseRow = (int)Math.Floor((double)row / cellSize);
 
+        // A cheap domain warp applied once per hex, before distance is measured
+        // against any island's lobes, so coastlines wobble instead of tracing
+        // perfect arcs. Zero when IslandCoastWarp is 0 (the legacy default),
+        // which keeps this identical to the un-warped sample point.
+        var px = (double)col;
+        var py = (double)row;
+        if (_options.IslandCoastWarp > 0)
+        {
+            var warpScale = _options.IslandCoastWarpScale;
+            px += (ValueNoise.Sample(col, row, seed + 53, warpScale) - 0.5) * 2.0 * _options.IslandCoastWarp;
+            py += (ValueNoise.Sample(col, row, seed + 71, warpScale) - 0.5) * 2.0 * _options.IslandCoastWarp;
+        }
+
         double? best = null;
 
         for (var dCol = -1; dCol <= 1; dCol++)
@@ -76,9 +89,7 @@ public sealed class TerrainSampler
                     + (ValueNoise.Hash2(cellCol, cellRow, seed + 17)
                         * (_options.IslandMaxRadius - _options.IslandMinRadius));
 
-                var dx = col - centreCol;
-                var dy = row - centreRow;
-                var depth = Math.Sqrt((dx * dx) + (dy * dy)) / radius;
+                var depth = IslandCellDepth(cellCol, cellRow, seed, centreCol, centreRow, radius, px, py);
 
                 if (depth <= 1.0 && (best is null || depth < best))
                 {
@@ -88,6 +99,108 @@ public sealed class TerrainSampler
         }
 
         return best;
+    }
+
+    /// <summary>
+    /// The shortest depth a single island cell's shape gives the warped sample
+    /// point <paramref name="px"/>/<paramref name="py"/>: a chain of 1-5 lobes
+    /// (offset discs) walked out from the jittered centre along a spine that
+    /// bends by a per-island amount, smooth-blended where lobes meet so the
+    /// waist between them fills in rather than pinching to a hairline.
+    /// </summary>
+    /// <remarks>
+    /// With <see cref="WorldGenerationOptions.IslandMinLobes"/> and
+    /// <see cref="WorldGenerationOptions.IslandMaxLobes"/> both 1 this reduces
+    /// to exactly the single-disc circle the original algorithm produced
+    /// (existing worlds are migrated to those values so their shape never
+    /// changes under them — see <c>docs/design/river-generation.md</c>).
+    /// No trigonometry is used anywhere in this method: every direction is
+    /// built and rotated with plain vector arithmetic so the frontend mirror
+    /// in <c>worldGenerator.ts</c> can stay bit-for-bit identical.
+    /// </remarks>
+    private double IslandCellDepth(
+        int cellCol, int cellRow, int seed, double centreCol, double centreRow, double radius, double px, double py)
+    {
+        var dx0 = px - centreCol;
+        var dy0 = py - centreRow;
+        var best = Math.Sqrt((dx0 * dx0) + (dy0 * dy0)) / radius;
+
+        var minLobes = _options.IslandMinLobes;
+        var maxLobes = _options.IslandMaxLobes;
+        var lobeCount = minLobes
+            + (int)Math.Floor(ValueNoise.Hash2(cellCol, cellRow, seed + 19) * ((maxLobes - minLobes) + 1));
+
+        if (lobeCount <= 1)
+        {
+            return best;
+        }
+
+        var ax = ValueNoise.Hash2(cellCol, cellRow, seed + 23) - 0.5;
+        var ay = ValueNoise.Hash2(cellCol, cellRow, seed + 47) - 0.5;
+        var len = Math.Sqrt((ax * ax) + (ay * ay));
+        double ux, uy;
+        if (len < 1e-9)
+        {
+            ux = 1.0;
+            uy = 0.0;
+        }
+        else
+        {
+            ux = ax / len;
+            uy = ay / len;
+        }
+
+        var curl = (ValueNoise.Hash2(cellCol, cellRow, seed + 59) - 0.5) * 2.0;
+        var turn = curl * _options.IslandBendiness;
+        var elongFraction = ValueNoise.Hash2(cellCol, cellRow, seed + 61);
+        var spineLength = radius * _options.IslandMaxElongation * elongFraction;
+        var step = spineLength / (lobeCount - 1);
+
+        var lx = centreCol;
+        var ly = centreRow;
+        var blend = _options.IslandLobeBlend;
+
+        for (var lobe = 1; lobe < lobeCount; lobe++)
+        {
+            lx += ux * step;
+            ly += uy * step;
+
+            var lobeScale = _options.IslandLobeMinScale
+                + (ValueNoise.Hash2(cellCol, cellRow, seed + 200 + lobe)
+                    * (_options.IslandLobeMaxScale - _options.IslandLobeMinScale));
+            var lobeRadius = radius * lobeScale;
+
+            var ddx = px - lx;
+            var ddy = py - ly;
+            var lobeDepth = Math.Sqrt((ddx * ddx) + (ddy * ddy)) / lobeRadius;
+
+            best = SmoothMin(best, lobeDepth, blend);
+
+            // Rotate (ux, uy) by turn radians' worth of curl for the next
+            // segment, without trigonometry: u + turn * perp(u), renormalised.
+            var tx = ux - (turn * uy);
+            var ty = uy + (turn * ux);
+            var tl = Math.Sqrt((tx * tx) + (ty * ty));
+            if (tl > 1e-9)
+            {
+                ux = tx / tl;
+                uy = ty / tl;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>Polynomial smooth minimum: a hard <see cref="Math.Min"/> at <paramref name="k"/> = 0.</summary>
+    private static double SmoothMin(double a, double b, double k)
+    {
+        if (k <= 0.0)
+        {
+            return Math.Min(a, b);
+        }
+
+        var h = Math.Max(k - Math.Abs(a - b), 0.0) / k;
+        return Math.Min(a, b) - (h * h * k * 0.25);
     }
 
     /// <summary>The terrain of a single hex.</summary>

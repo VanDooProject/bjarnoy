@@ -23,22 +23,72 @@ public sealed record WorldGenerationOptions
     /// in. Larger cells mean fewer, further-apart islands. Scaled up alongside
     /// <see cref="IslandMinRadius"/>/<see cref="IslandMaxRadius"/> so bigger
     /// islands keep roughly the same overlap/spacing ratio the smaller ones had.
+    /// Also the hard reach budget for the multi-lobe shape below: see
+    /// <see cref="Validate"/> and <c>docs/design/river-generation.md</c>.
     /// </summary>
-    public int IslandCellSize { get; init; } = 20;
+    public int IslandCellSize { get; init; } = 23;
 
     /// <summary>Probability that a given cell holds an island at all.</summary>
     public double IslandChance { get; init; } = 0.45;
 
     /// <summary>
-    /// Doubled from the original 2.4/5.6 pair: most islands were coming out too
-    /// small to reliably grow a qualifying (2+ tile) mountain cluster, which is
-    /// the only thing that gives an island a river — bigger islands mean more
-    /// inland area for mountains to form in, and therefore more islands with
-    /// rivers, without changing the river algorithm itself.
+    /// Raised alongside <see cref="IslandCellSize"/> to compensate for the
+    /// multi-lobe shape (below) covering less area than a single disc of the
+    /// same radius would — without this bump, elongated/bent islands would
+    /// read as noticeably smaller than the round ones they replaced.
     /// </summary>
-    public double IslandMinRadius { get; init; } = 4.8;
+    public double IslandMinRadius { get; init; } = 5.5;
 
-    public double IslandMaxRadius { get; init; } = 11.2;
+    public double IslandMaxRadius { get; init; } = 12.9;
+
+    /// <summary>
+    /// How many lobes (offset discs chained along a bending spine) an island's
+    /// shape is built from. 1 lobe is exactly the old single-disc circle;
+    /// 2-4 lobes is what turns the silhouette into an elongated, L- or
+    /// U-like shape. See <c>docs/design/river-generation.md</c> for the full
+    /// shape algorithm and the hash-offset registry.
+    /// </summary>
+    public int IslandMinLobes { get; init; } = 2;
+
+    public int IslandMaxLobes { get; init; } = 4;
+
+    /// <summary>
+    /// Total spine length an island's lobe chain can stretch to, as a
+    /// multiple of its envelope radius. 0 collapses every lobe onto the
+    /// centre (back to a circle); 1.0 lets the chain reach out to roughly
+    /// the island's own radius beyond the first lobe.
+    /// </summary>
+    public double IslandMaxElongation { get; init; } = 1.0;
+
+    /// <summary>
+    /// How sharply the lobe spine can turn from one segment to the next.
+    /// 0 keeps the spine straight (elongated ovals); larger values let it
+    /// curl into an L or, near the top of the range, a U/C shape.
+    /// </summary>
+    public double IslandBendiness { get; init; } = 1.6;
+
+    /// <summary>
+    /// Smooth-minimum blend factor applied where two lobes' depths meet, so
+    /// the waist between them fills in rather than pinching to a hairline.
+    /// 0 is a hard union (today's min-of-discs behaviour).
+    /// </summary>
+    public double IslandLobeBlend { get; init; } = 0.25;
+
+    /// <summary>Smallest a non-primary lobe's radius can be, as a fraction of the envelope radius.</summary>
+    public double IslandLobeMinScale { get; init; } = 0.55;
+
+    /// <summary>Largest a non-primary lobe's radius can be, as a fraction of the envelope radius.</summary>
+    public double IslandLobeMaxScale { get; init; } = 0.85;
+
+    /// <summary>
+    /// Amplitude, in hexes, of the domain warp applied to the sample point
+    /// before measuring distance to a lobe — makes coastlines wobble instead
+    /// of tracing perfect arcs. 0 disables the warp entirely.
+    /// </summary>
+    public double IslandCoastWarp { get; init; } = 1.5;
+
+    /// <summary>Wavelength, in hexes, of the coastline warp's underlying noise field.</summary>
+    public double IslandCoastWarpScale { get; init; } = 5.0;
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
@@ -108,12 +158,58 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(RiverMeanderWeight);
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinLobes, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMinLobes, 5);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxLobes, IslandMinLobes);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxLobes, 5);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandMaxElongation);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxElongation, 1.5);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandBendiness);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandBendiness, 3.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandLobeBlend);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandLobeBlend, 0.5);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandLobeMinScale, 0.3);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandLobeMinScale, 1.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandLobeMaxScale, IslandLobeMinScale);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandLobeMaxScale, 1.0);
+        ArgumentOutOfRangeException.ThrowIfNegative(IslandCoastWarp);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastWarp, 4.0);
+        ArgumentOutOfRangeException.ThrowIfLessThan(IslandCoastWarpScale, 2.0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandCoastWarpScale, 12.0);
+
         if (MountainThreshold >= BeachThreshold)
         {
             throw new ArgumentException(
                 $"{nameof(MountainThreshold)} ({MountainThreshold}) must be inside " +
                 $"{nameof(BeachThreshold)} ({BeachThreshold}); otherwise mountains would form on the coast.",
                 nameof(MountainThreshold));
+        }
+
+        // Reach budget: an island's shape is only ever looked up by hexes in the
+        // 3x3 block of cells around its own (jittered by up to 0.275*cellSize),
+        // so the farthest any lobe/warp can put land from the island's cell
+        // centre must stay inside that block. See docs/design/river-generation.md.
+        var maxReach = IslandMaxRadius * (IslandMaxElongation + IslandLobeMaxScale) + IslandCoastWarp;
+        var reachBudget = 1.225 * IslandCellSize;
+        if (maxReach > reachBudget)
+        {
+            throw new ArgumentException(
+                $"Island shape can reach {maxReach:0.##} hexes from its centre, which exceeds the " +
+                $"{reachBudget:0.##}-hex budget the {nameof(IslandCellSize)} scan allows; raise " +
+                $"{nameof(IslandCellSize)} or lower {nameof(IslandMaxRadius)}/{nameof(IslandMaxElongation)}/" +
+                $"{nameof(IslandLobeMaxScale)}/{nameof(IslandCoastWarp)}.",
+                nameof(IslandCellSize));
+        }
+
+        // Keeps the coastline warp a diffeomorphism (max gradient 1.5/scale per
+        // axis, staying below 1) so it can never fold the sample space onto
+        // itself and detach a sliver of land from its island.
+        if (IslandCoastWarp * 1.5 >= IslandCoastWarpScale)
+        {
+            throw new ArgumentException(
+                $"{nameof(IslandCoastWarp)} ({IslandCoastWarp}) is too large relative to " +
+                $"{nameof(IslandCoastWarpScale)} ({IslandCoastWarpScale}); it could tear the coastline apart.",
+                nameof(IslandCoastWarp));
         }
     }
 }
