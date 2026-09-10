@@ -320,8 +320,9 @@ void nextTick(redrawAll);
     <p class="hint">{{ $t('adminIslandLab.hint') }}</p>
 
     <section class="panel docs">
-      <button class="secondary" data-testid="docs-toggle" @click="docsOpen = !docsOpen">
-        {{ $t('adminIslandLab.docsToggle') }} {{ docsOpen ? '▲' : '▼' }}
+      <button class="secondary docs-toggle" :class="{ open: docsOpen }" data-testid="docs-toggle" @click="docsOpen = !docsOpen">
+        {{ $t('adminIslandLab.docsToggle') }}
+        <span class="docs-toggle-caret" aria-hidden="true" />
       </button>
       <div v-if="docsOpen" class="docs-body" data-testid="docs-body">
         <p>{{ $t('adminIslandLab.docsIntro') }}</p>
@@ -440,6 +441,22 @@ void nextTick(redrawAll);
 }
 .docs {
   margin-bottom: 16px;
+}
+.docs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.docs-toggle-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 0.15s ease;
+}
+.docs-toggle.open .docs-toggle-caret {
+  transform: rotate(180deg);
 }
 .docs-body {
   margin-top: 12px;
