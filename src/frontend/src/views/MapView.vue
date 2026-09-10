@@ -43,7 +43,7 @@ import {
 import { formatBuildTime, longhouseLock, riverShapeLock } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
-import { totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
+import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
 import { reachableRange, type PathContext } from '../lib/map/hexPath';
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -187,6 +187,14 @@ const armyOverlayData = computed<ArmyOverlayData>(() => {
     position: a.position,
     selected: a.id === world.selectedArmyId,
     returning: !!a.movement?.isReturning,
+    // docs/design/ship-movement.md §4: ship marker for a fleet, flag for a
+    // land army — reuses the same classification dispatch already relies on
+    // to keep the two unit-class families from mixing in one army.
+    isFleet:
+      classifyUnitSelection(
+        Object.fromEntries(a.stacks.map((s) => [s.unit, s.count])),
+        unitCatalogue.byType,
+      ) === 'fleet',
     // Issue #94: hand the renderer the whole frozen leg, not a position —
     // it interpolates along it every frame (see HexMapRenderer's
     // `resolveArmyPoint`). An `atHome`/`supporting` army has no movement at

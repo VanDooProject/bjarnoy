@@ -395,6 +395,14 @@ export interface ArmyOverlayMarker {
   position: AxialCoord;
   selected: boolean;
   returning: boolean;
+  /**
+   * Whether every unit in this army is a ship (`classifyUnitSelection` ===
+   * `'fleet'` — see `lib/units/armyDispatch.ts`). Picks the marker: the ship
+   * icon for a fleet, the flag for a land army (docs/design/ship-movement.md
+   * §4). A mixed army can't be dispatched at all, so this is effectively a
+   * two-way choice in practice.
+   */
+  isFleet: boolean;
   /** Issue #94: present only while in transit — the renderer interpolates along it every frame. */
   movement?: ArmyOverlayMovement;
 }
@@ -3209,30 +3217,54 @@ export class HexMapRenderer {
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;
       const size = army.selected ? 40 : 32;
-      // The banner flies the way the army is marching (the icon is authored
-      // pointing right — see the icon set's README), so a column's direction
-      // is readable from the marker alone, without following the route line.
+      // Both markers are authored pointing right (+x) — see the icon set's
+      // README — so a plain heading-sign flip orients either one with no
+      // per-icon correction.
       const flipX = (point.heading?.x ?? 0) < 0;
-      if (
-        !this.drawIcon('flag', p.x, p.y, {
-          size,
-          color,
-          // The pole's foot, not the sprite's centre, is what stands on the
-          // army's position (see flag.svg's own geometry).
-          anchorX: flipX ? 1 - 22.5 / 64 : 22.5 / 64,
-          anchorY: 60 / 64,
-          flipX,
-        })
-      ) {
-        const r = army.selected ? 9 : 7;
-        this.markerLayer
-          .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
-          .fill({ color })
-          .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+      if (army.isFleet) {
+        // ship.svg's waterline sits at the sprite's vertical centre (unlike
+        // the flag's pole-foot anchor), so the hull floats on the army's
+        // position rather than standing on it.
+        if (
+          !this.drawIcon('ship', p.x, p.y, {
+            size,
+            color,
+            anchorX: 0.5,
+            anchorY: 0.5,
+            flipX,
+          })
+        ) {
+          const r = army.selected ? 9 : 7;
+          this.markerLayer
+            .poly([p.x - r, p.y, p.x + r * 0.4, p.y - r * 0.4, p.x + r, p.y, p.x + r * 0.4, p.y + r * 0.4])
+            .fill({ color })
+            .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+        }
+        // A wake ellipse, not a ground shadow — this marker floats on water,
+        // it doesn't stand on land.
+        this.markerLayer.ellipse(p.x, p.y + size * 0.28, 7, 3).stroke({ width: 1.5, color: 0xbfe3f0, alpha: 0.4 });
+      } else {
+        if (
+          !this.drawIcon('flag', p.x, p.y, {
+            size,
+            color,
+            // The pole's foot, not the sprite's centre, is what stands on the
+            // army's position (see flag.svg's own geometry).
+            anchorX: flipX ? 1 - 22.5 / 64 : 22.5 / 64,
+            anchorY: 60 / 64,
+            flipX,
+          })
+        ) {
+          const r = army.selected ? 9 : 7;
+          this.markerLayer
+            .poly([p.x, p.y - r, p.x + r, p.y, p.x, p.y + r, p.x - r, p.y])
+            .fill({ color })
+            .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.9 });
+        }
+        // A small ground shadow anchors the banner to its point — without it
+        // a pole drawn upward from the position reads as hovering above the map.
+        this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
       }
-      // A small ground shadow anchors the banner to its point — without it a
-      // pole drawn upward from the position reads as hovering above the map.
-      this.markerLayer.ellipse(p.x, p.y, 7, 3).fill({ color: 0x0b1116, alpha: 0.35 });
     }
 
     // §1c: pushed every tick, independent of any mask fetch — see
