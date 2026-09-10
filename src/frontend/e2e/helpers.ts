@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { CDPSession, Locator, Page } from '@playwright/test';
 
 /**
  * Waits for the map container's own mount-complete signal (`data-map-ready`,
@@ -180,4 +180,49 @@ export function rectsOf(locator: Locator): Promise<ElementRect[]> {
 /** Centre-to-centre distance from `(x, y)` to a rect returned by rectsOf. */
 export function distanceFrom(rect: ElementRect, x: number, y: number): number {
   return Math.hypot(rect.x + rect.width / 2 - x, rect.y + rect.height / 2 - y);
+}
+
+/** One CDP session per page — opening a second one per screenshot would cost more than it saves. */
+const cdpSessions = new WeakMap<Page, Promise<CDPSession>>();
+
+/**
+ * A raw frame of the map canvas, for `Buffer.compare` against a later one.
+ *
+ * Same idea (and the same root cause) as `rectsOf` above: on a software-
+ * rendered runner this app's frames take hundreds of milliseconds, and any
+ * Playwright API that waits out animation frames pays that price several
+ * times over. `locator.screenshot()` is the worst of them — before it
+ * captures anything it scrolls the element into view and waits for its box
+ * to hold still across consecutive rAFs, so its cost is *frame-rate bound*
+ * rather than proportional to the pixels involved. Measured against this
+ * view (world map, fog off), at 3 fps under CPU throttling and at the ~4 fps
+ * GitHub's 2-vCPU runner manages:
+ *
+ *   locator.screenshot() .............. 8.2s throttled / 5.07s on CI
+ *   page.screenshot({ clip }) ......... 2.9s throttled
+ *   Page.captureScreenshot (this) ..... 0.7s throttled
+ *
+ * 5.07s is what made `world-map-interactions.spec.ts`'s hover test fail on
+ * CI: its `expect.poll` has a 5s budget, and a single screenshot ate all of
+ * it before the predicate could return even once — a timeout that said
+ * nothing about the highlight it was polling for, which the same run's
+ * diagnostics showed rendering perfectly well. Going through CDP directly
+ * skips the waiting (there is nothing to wait for: the canvas is a
+ * fixed, viewport-filling element that never moves) and captures exactly
+ * the same pixels.
+ */
+export async function captureCanvas(
+  page: Page,
+  box: { x: number; y: number; width: number; height: number },
+): Promise<Buffer> {
+  let session = cdpSessions.get(page);
+  if (!session) {
+    session = page.context().newCDPSession(page);
+    cdpSessions.set(page, session);
+  }
+  const { data } = await (await session).send('Page.captureScreenshot', {
+    format: 'png',
+    clip: { ...box, scale: 1 },
+  });
+  return Buffer.from(data, 'base64');
 }

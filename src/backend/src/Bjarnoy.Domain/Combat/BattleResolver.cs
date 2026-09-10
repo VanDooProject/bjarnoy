@@ -148,7 +148,7 @@ public static class BattleResolver
         }
 
         var loot = winner == BattleWinner.Attacker
-            ? ComputeLoot(attackerSurvivors, lootAvailable)
+            ? ComputeLoot(attackerSurvivors.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count), lootAvailable)
             : ResourceAmounts.Zero;
 
         return new BattlePlan(
@@ -177,6 +177,35 @@ public static class BattleResolver
     /// always the correctly-rounded figure, deterministically for a given
     /// seed, without every stack being biased downward.
     /// </remarks>
+    /// <summary>
+    /// A raid caps any loss fraction at 0.5 — see <see cref="Resolve"/>'s
+    /// <c>raid</c> remarks. Exposed internally so
+    /// <see cref="FieldBattleResolver"/> can apply the exact same cap without
+    /// re-deriving it (issue #206 — field battles always raid-cap, per the
+    /// design's explicit "no field-battle-specific rounding carve-out" call).
+    /// </summary>
+    internal static double RaidLossFractionInternal(double fraction) => RaidLossFraction(fraction);
+
+    /// <summary>
+    /// Exposes <see cref="ApplyProportionalLosses"/> to <see cref="FieldBattleResolver"/>
+    /// (issue #206), which needs the exact same floor + largest-remainder
+    /// rounding for its own losses — reused as-is, not re-derived, per the
+    /// design's explicit "no new rounding rule" call.
+    /// </summary>
+    internal static (IReadOnlyList<UnitStack> Losses, IReadOnlyList<UnitStack> Survivors) ApplyProportionalLossesInternal(
+        IReadOnlyList<UnitStack> stacks, double fraction, Random rng) => ApplyProportionalLosses(stacks, fraction, rng);
+
+    /// <summary>
+    /// Exposes the water-fill loot split to <see cref="FieldBattleResolver"/>
+    /// (issue #206), which needs to fill a winner's *remaining* carry capacity
+    /// (its own pre-existing <c>Army.Loot</c> already counted against it) from
+    /// a defeated army's carried loot, rather than a settlement's stock —
+    /// same algorithm, an explicit capacity instead of one derived fresh from
+    /// survivors alone.
+    /// </summary>
+    internal static ResourceAmounts ComputeLootWithCapacity(double carryCapacity, ResourceAmounts available) =>
+        ComputeLoot(carryCapacity, available);
+
     private static (IReadOnlyList<UnitStack> Losses, IReadOnlyList<UnitStack> Survivors) ApplyProportionalLosses(
         IReadOnlyList<UnitStack> stacks, double fraction, Random rng)
     {
@@ -251,9 +280,8 @@ public static class BattleResolver
     /// loot, just skewed toward wood, rather than 3/4 loot with the iron
     /// quarter wasted.
     /// </remarks>
-    private static ResourceAmounts ComputeLoot(IReadOnlyList<UnitStack> survivors, ResourceAmounts available)
+    private static ResourceAmounts ComputeLoot(double carryCapacity, ResourceAmounts available)
     {
-        var carryCapacity = survivors.Sum(s => (double)UnitCatalogue.Get(s.Type).CarryCapacity * s.Count);
         if (carryCapacity <= 0)
         {
             return ResourceAmounts.Zero;

@@ -1249,6 +1249,40 @@ export interface BattleReportResponse {
   siege: BattleReportSiege | null;
 }
 
+// Issue #206 (frontend): in-flight field battles — army-vs-army interception
+// mid-march. Mirrors `FieldBattleReportLineResponse`/`FieldBattleReportResponse`
+// in ArmyContracts.cs. Deliberately reuses `BattleReportCard.vue`'s shape
+// (issue #206's own ask) minus the siege section: a field battle is fought
+// entirely in the open between two symmetric sides (`sideA`/`sideB`, no
+// attacker/defender asymmetry — see `FieldBattleReportSide`), so there is
+// nothing for a catapult to have hit.
+
+export interface FieldBattleReportLine {
+  side: 'sidea' | 'sideb';
+  isLoss: boolean;
+  unit: string;
+  count: number;
+}
+
+/** `winner` is `'sidea'`, `'sideb'`, or `'tie'` (see `FieldBattleWinner`). */
+export interface FieldBattleReportResponse {
+  id: string;
+  occurredAt: string;
+  hex: HexPoint;
+  sideAArmyId: string;
+  sideASettlementId: string;
+  sideBArmyId: string;
+  sideBSettlementId: string;
+  winner: string;
+  sideAPower: number;
+  sideBPower: number;
+  sideAWasDefending: boolean;
+  sideBWasDefending: boolean;
+  seed: number;
+  lootTaken: ResourceLine;
+  lines: FieldBattleReportLine[];
+}
+
 // Issue #40 phase 7 (frontend): the premium fight simulator. Mirrors
 // `SimulatorRequest`/`SimulatorResponse` in SimulatorContracts.cs exactly.
 // `POST /simulator` is gated by `PremiumUserEndpointFilter` — see

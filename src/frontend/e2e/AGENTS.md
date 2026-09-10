@@ -15,7 +15,11 @@ production build via `vite preview`, no backend — specs mock the API themselve
   needs already has an intent method.
 - `helpers.ts` — `waitForMapReady(page)`, `gotoWorldMap(page)`,
   `claimLandfall(page)`, `foundSettlement(page)`, `rectsOf(locator)` /
-  `distanceFrom(rect, x, y)`.
+  `distanceFrom(rect, x, y)`, `captureCanvas(page, box)` — the last one is how
+  a spec takes a comparable frame of the map: `locator.screenshot()` waits out
+  animation frames, which costs *seconds* per frame on a software-rendered
+  runner (see its own comment for the measurements, and prefer the page
+  objects' `screenshot()` methods, which call it for you).
 - `budgets.ts` — `MAP_SPEC_TIMEOUT_MS`, `HEAVY_MAP_SPEC_TIMEOUT_MS`.
 - `globals.d.ts` — the app's `window.__fogDebug` / `__waterDebug` hooks. Don't
   add a `declare global` to a spec; two specs doing that with different shapes

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ApiError, api } from '../api/client';
-import type { BattleReportResponse, TradeReportResponse } from '../api/types';
+import type { BattleReportResponse, FieldBattleReportResponse, TradeReportResponse } from '../api/types';
 import { type InboxItem, inboxUnreadCount, mergeInbox } from '../lib/units/inbox';
 
 // How often the badge/inbox re-polls while a HUD nav is mounted — battle
@@ -31,12 +31,17 @@ const LAST_SEEN_KEY = 'bjarnoy.reportsLastSeenAt';
  * store, `tradeItems` is fetched alongside `items` in the same `load`/poll
  * cycle, and `inboxItems`/`unreadCount` below are computed over the merge
  * of both (see `lib/units/inbox.ts`).
+ *
+ * Issue #206 folds in a third kind, `fieldItems` (in-flight interceptions),
+ * the same way — fetched alongside the other two rather than given its own
+ * store/polling loop.
  */
 export const useReportsStore = defineStore('reports', {
   state: () => ({
     settlementId: null as string | null,
     items: [] as BattleReportResponse[],
     tradeItems: [] as TradeReportResponse[],
+    fieldItems: [] as FieldBattleReportResponse[],
     loading: false,
     error: null as string | null,
     lastSeenAt: (() => {
@@ -49,30 +54,37 @@ export const useReportsStore = defineStore('reports', {
     pollHandle: null as ReturnType<typeof setInterval> | null,
   }),
   getters: {
-    /** Both report kinds, merged newest-first — see `lib/units/inbox.ts`. */
+    /** All three report kinds, merged newest-first — see `lib/units/inbox.ts`. */
     inboxItems(state): InboxItem[] {
-      return mergeInbox(state.items, state.tradeItems);
+      return mergeInbox(state.items, state.tradeItems, state.fieldItems);
     },
     unreadCount(state): number {
-      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems), state.lastSeenAt);
+      return inboxUnreadCount(mergeInbox(state.items, state.tradeItems, state.fieldItems), state.lastSeenAt);
     },
   },
   actions: {
-    /** Fetches (or re-fetches) this settlement's battle and trade reports, each newest first. */
+    /** Fetches (or re-fetches) this settlement's battle, field-battle, and trade reports, each newest first. */
     async load(settlementId: string) {
       this.settlementId = settlementId;
       this.loading = true;
       this.error = null;
       try {
-        const [battleItems, tradeItems] = await Promise.all([
+        const [battleItems, tradeItems, fieldItems] = await Promise.all([
           api.getSettlementReports(settlementId),
           api.getSettlementTradeReports(settlementId),
+          api.getSettlementFieldReports(settlementId),
         ]);
         this.items = [...battleItems].sort(
           (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
         );
         this.tradeItems = [...tradeItems].sort(
           (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+        );
+        // The backend already returns these newest-first (FieldBattleReportService),
+        // but sorting client-side too keeps this store's own invariant explicit
+        // regardless of that.
+        this.fieldItems = [...fieldItems].sort(
+          (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
         );
       } catch (err) {
         this.error = err instanceof ApiError ? err.message : 'Could not load reports.';
@@ -86,6 +98,16 @@ export const useReportsStore = defineStore('reports', {
       if (cached) return cached;
       try {
         return await api.getReport(reportId);
+      } catch {
+        return null;
+      }
+    },
+    /** The field-battle sibling of `getById` — see its own comment. */
+    async getFieldById(reportId: string): Promise<FieldBattleReportResponse | null> {
+      const cached = this.fieldItems.find((r) => r.id === reportId);
+      if (cached) return cached;
+      try {
+        return await api.getFieldReport(reportId);
       } catch {
         return null;
       }
