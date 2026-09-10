@@ -270,19 +270,20 @@ public class TileFeatureTests
     // while regenerating these fixtures for the bigger-island change, not
     // introduced by it. Out of scope here; left for a follow-up.
     //
-    // Regenerated again for the multi-lobe island shape change (see
-    // TerrainSampler.IslandCellDepth / worldGenerator.ts's islandCellDepth) —
-    // both the shape algorithm and the default radius/cellSize values
-    // changed, which moves every seed's terrain.
+    // Regenerated again for the de-rounded island-shape retune (see
+    // WorldGenerationOptions's IslandMaxElongation/IslandCellSize doc
+    // comments) — both the default radius/cellSize/elongation/lobe values
+    // changed, which moves every seed's terrain and, with it, orientation
+    // and variant.
     public static TheoryData<int, string, string> FrontendChecksums => new()
     {
-        { 1, "f0aa21628a37713b03720850c10ae7d728389034ac67155b0ca2843f90e9020b", "cd62d0567e3cdf77132695a1a4c9c5f4415cfeaa82e46340d8256849dc6bf075" },
-        { 7, "397d72927ed831eed4732010afe261b0c4937e7d3a9dbe136b526a10ddcfb608", "0f050259d00f2be8ab2af5397780d74edf7d3bc7bb94ea7720ac9ba476a7c9c8" },
-        { 42, "4ed7acc87823c1e724b35672453d3b66bec5b8bbdd3921b30cf672030d38acfb", "7113f06b4e324d9a91d9378e42ac299583485cf18803e7a5215a5641ee7d7027" },
-        { 1337, "3244f3d46700029e2060d8018ade26b79262b7867f53b2f294a322f9aa32f4c1", "ae82e4f2c769adf8079356242371d9f0a195139488b8acdf981e4a83cce9e25d" },
-        { -5, "1268a6d6ca5e0138aba7daca6c74e65046a51c7b01cfd032d712cb05b777878c", "5d94d99f61fdb8943a421173fbefc69835b7b6a9af994fe86a134e3f8be5ed66" },
-        { 2147483, "e8cf55d51fb15fcab9e637d11ad0622e537f18fb13d035b4cf378c66f70ca675", "baa934d8406baa65a132660cb7633ea6b52dc5a219dd7abe26aa433eda807f68" },
-        { 0, "865d9f67f0cb2b43441af54c5117a8f795371ecdc8d4588bdf82f5b4de5f5c69", "0bfee5e456c01fdec2242bae59e3c6c278d26c134636a629d24e9d0d8d6033d2" },
+        { 1, "5cda829c7a61a1db4fb11a7d3e80b3777eb984425c88dbbc834500e0aa3ab006", "203c2bf505745a7cc2c335170ae10578f35cf84bd26051e01444b14067b06688" },
+        { 7, "f4b0ed310d0d6b6258ebdec73192398a1ed43a6931f951e67283ff9cb3863d48", "fb36916cd980eaef15d770eb36e4a8ed224cae52543123308ef4b17ec46443a5" },
+        { 42, "e07986114909a18be4955d2a2ceb8861a014b2edf31a1c106b2f61a06dfcac7c", "232c00c468f3d611f0fc7b637400655069f3ca175fcc365781911e4c8fdd4a12" },
+        { 1337, "078f11e7487ae33a92b0bb1c54b4c8e92ade7df0c8ce2d47b87dd3af98e28fbd", "b5044cfa12ca4074f8ec4bc77f3a3a621f9210a57796af6873a530b629fc6d21" },
+        { -5, "9487f166a78af661b72ccc96058e796f66ba793e7406d30508fcf4b01a4f0c2f", "4698ea7c33a1c3e766c114cd613f83310d8831ae154dc40a468e671f036f53db" },
+        { 2147483, "4c15491175ffde03cd24c993e6ac54112c4140a552295126fd7f0699e3b9202c", "050cb12228a38f6e472843ccc096b768e1fd06c71ca1dd7ab21a1c57dc21651f" },
+        { 0, "ac2a959db5fe774c26bae3693c60bad60988643120372a3141996041b8c1dcad", "bce472b021db23a20f7376ae4808e46df02787cf1b976f904f75e888edcf552f" },
     };
 
     [Theory]

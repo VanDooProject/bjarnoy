@@ -20,13 +20,17 @@ public sealed record WorldGenerationOptions
 
     /// <summary>
     /// Edge length, in offset columns/rows, of the grid cell each island is seeded
-    /// in. Larger cells mean fewer, further-apart islands. Scaled up alongside
-    /// <see cref="IslandMinRadius"/>/<see cref="IslandMaxRadius"/> so bigger
-    /// islands keep roughly the same overlap/spacing ratio the smaller ones had.
+    /// in. Larger cells mean fewer, further-apart islands. Bumped 23-&gt;36 to fit
+    /// the reach budget of the wider <see cref="IslandMaxElongation"/> range below
+    /// (de-rounding islands needs more spine length, which needs more headroom
+    /// per cell) — <see cref="Radius"/> is deliberately left alone rather than
+    /// scaled to match, so island density drops a bit instead of ~2.4x'ing the
+    /// world's hex count and risking the render-time regressions a bigger map
+    /// already caused once this PR (see zoom-transition.spec.ts's history).
     /// Also the hard reach budget for the multi-lobe shape below: see
     /// <see cref="Validate"/> and <c>docs/design/river-generation.md</c>.
     /// </summary>
-    public int IslandCellSize { get; init; } = 23;
+    public int IslandCellSize { get; init; } = 36;
 
     /// <summary>Probability that a given cell holds an island at all.</summary>
     public double IslandChance { get; init; } = 0.45;
@@ -35,60 +39,84 @@ public sealed record WorldGenerationOptions
     /// Raised alongside <see cref="IslandCellSize"/> to compensate for the
     /// multi-lobe shape (below) covering less area than a single disc of the
     /// same radius would — without this bump, elongated/bent islands would
-    /// read as noticeably smaller than the round ones they replaced.
+    /// read as noticeably smaller than the round ones they replaced. Trimmed
+    /// slightly (12.9-&gt;11.5) from the "bigger islands" pass now that the lobe
+    /// chain itself, not the envelope disc, supplies most of an island's reach.
     /// </summary>
-    public double IslandMinRadius { get; init; } = 5.5;
+    public double IslandMinRadius { get; init; } = 5.0;
 
-    public double IslandMaxRadius { get; init; } = 12.9;
+    public double IslandMaxRadius { get; init; } = 11.5;
 
     /// <summary>
     /// How many lobes (offset discs chained along a bending spine) an island's
     /// shape is built from. 1 lobe is exactly the old single-disc circle;
     /// 2-4 lobes is what turns the silhouette into an elongated, L- or
-    /// U-like shape. See <c>docs/design/river-generation.md</c> for the full
-    /// shape algorithm and the hash-offset registry.
+    /// U-like shape. Raised 2-4 -&gt; 3-6: at low elongation a 2-lobe chain barely
+    /// left the envelope disc's own footprint, which is why islands still read
+    /// as circles even after the initial multi-lobe rewrite. The hard ceiling
+    /// (see <see cref="Validate"/>) is raised 5-&gt;8 alongside it so 6 sits with
+    /// headroom below the cap rather than pinned at the edge, for further
+    /// UI-based tuning. See <c>docs/design/river-generation.md</c> for the
+    /// full shape algorithm and the hash-offset registry.
     /// </summary>
-    public int IslandMinLobes { get; init; } = 2;
+    public int IslandMinLobes { get; init; } = 3;
 
-    public int IslandMaxLobes { get; init; } = 4;
+    public int IslandMaxLobes { get; init; } = 6;
 
     /// <summary>
     /// Total spine length an island's lobe chain can stretch to, as a
     /// multiple of its envelope radius. 0 collapses every lobe onto the
     /// centre (back to a circle); 1.0 lets the chain reach out to roughly
-    /// the island's own radius beyond the first lobe.
+    /// the island's own radius beyond the first lobe. At the original default
+    /// of 1.0 the spine averaged only ~0.5x the radius, so extra lobes landed
+    /// almost on top of the core disc instead of actually breaking its
+    /// silhouette — raised to 2.0 (validation ceiling raised 1.5-&gt;4.0 to give
+    /// room both below and above this default) so the chain visibly leaves
+    /// the disc's own footprint.
     /// </summary>
-    public double IslandMaxElongation { get; init; } = 1.0;
+    public double IslandMaxElongation { get; init; } = 2.0;
 
     /// <summary>
     /// How sharply the lobe spine can turn from one segment to the next.
     /// 0 keeps the spine straight (elongated ovals); larger values let it
-    /// curl into an L or, near the top of the range, a U/C shape.
+    /// curl into an L or, near the top of the range, a U/C shape. Raised
+    /// alongside <see cref="IslandMaxElongation"/> — a longer spine needs more
+    /// bend to read as a natural coastline rather than a straight sliver.
     /// </summary>
-    public double IslandBendiness { get; init; } = 1.6;
+    public double IslandBendiness { get; init; } = 2.8;
 
     /// <summary>
     /// Smooth-minimum blend factor applied where two lobes' depths meet, so
     /// the waist between them fills in rather than pinching to a hairline.
-    /// 0 is a hard union (today's min-of-discs behaviour).
+    /// 0 is a hard union (today's min-of-discs behaviour). Lowered so the
+    /// notches between lobes read as real bays/inlets instead of being
+    /// smoothed away into one uniform blob.
     /// </summary>
-    public double IslandLobeBlend { get; init; } = 0.25;
+    public double IslandLobeBlend { get; init; } = 0.12;
 
-    /// <summary>Smallest a non-primary lobe's radius can be, as a fraction of the envelope radius.</summary>
-    public double IslandLobeMinScale { get; init; } = 0.55;
+    /// <summary>
+    /// Smallest a non-primary lobe's radius can be, as a fraction of the
+    /// envelope radius. Widened alongside <see cref="IslandLobeMaxScale"/> so
+    /// lobes vary enough in size to read as headlands/islets rather than a
+    /// chain of same-sized lumps.
+    /// </summary>
+    public double IslandLobeMinScale { get; init; } = 0.32;
 
     /// <summary>Largest a non-primary lobe's radius can be, as a fraction of the envelope radius.</summary>
-    public double IslandLobeMaxScale { get; init; } = 0.85;
+    public double IslandLobeMaxScale { get; init; } = 0.98;
 
     /// <summary>
     /// Amplitude, in hexes, of the domain warp applied to the sample point
     /// before measuring distance to a lobe — makes coastlines wobble instead
-    /// of tracing perfect arcs. 0 disables the warp entirely.
+    /// of tracing perfect arcs. 0 disables the warp entirely. Raised (with
+    /// <see cref="IslandCoastWarpScale"/> lowered) so the warp amplitude is a
+    /// large-enough fraction of its own wavelength to actually ragged-up the
+    /// coast instead of just gently rippling it.
     /// </summary>
-    public double IslandCoastWarp { get; init; } = 1.5;
+    public double IslandCoastWarp { get; init; } = 2.8;
 
     /// <summary>Wavelength, in hexes, of the coastline warp's underlying noise field.</summary>
-    public double IslandCoastWarpScale { get; init; } = 5.0;
+    public double IslandCoastWarpScale { get; init; } = 4.5;
 
     /// <summary>
     /// Fraction of an island's radius, measured from its centre, beyond which
@@ -159,11 +187,11 @@ public sealed record WorldGenerationOptions
         ArgumentOutOfRangeException.ThrowIfNegative(SharpBendPenalty);
 
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMinLobes, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMinLobes, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMinLobes, 8);
         ArgumentOutOfRangeException.ThrowIfLessThan(IslandMaxLobes, IslandMinLobes);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxLobes, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxLobes, 8);
         ArgumentOutOfRangeException.ThrowIfNegative(IslandMaxElongation);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxElongation, 1.5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandMaxElongation, 4.0);
         ArgumentOutOfRangeException.ThrowIfNegative(IslandBendiness);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(IslandBendiness, 3.0);
         ArgumentOutOfRangeException.ThrowIfNegative(IslandLobeBlend);
