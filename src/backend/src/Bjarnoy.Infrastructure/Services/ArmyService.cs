@@ -820,20 +820,36 @@ public sealed class ArmyService(
         // arrival-specific branch above: SettleTo has no notion of "standing
         // at a destination that happens to be a dock", only "outbound" vs.
         // "returning".
+        //
+        // §2's last paragraph closes the matching gap: a Move dispatch names
+        // only a hex, not a target settlement, so nothing above stops one
+        // from landing on a *foreign* Dockyard settlement's centre — and
+        // ordinary Move arrival (the domain.SettleTo(now) fallback below)
+        // would otherwise let a fleet stand there peacefully forever, a free
+        // scouting/blockade stop no Attack/Support dispatch gets. A fleet
+        // reaching a Dockyard settlement it doesn't own is redirected into
+        // the same battle resolution an explicit Attack dispatch gets
+        // instead (never Support — nothing here establishes host consent).
         if (domain.Mission == ArmyMission.Move
             && domain.IsFleet
             && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } moveTransit
             && now >= moveTransit.Movement.ArrivesAt)
         {
             var destination = moveTransit.Movement.Path[^1];
-            var dockyardSettlement = await FindOwnedDockyardSettlementAsync(
-                army.Settlement!.WorldId, army.Settlement.OwnerId, army.SettlementId, destination, cancellationToken)
+            var dockyardSettlement = await FindDockyardSettlementAtAsync(
+                army.Settlement!.WorldId, army.SettlementId, destination, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (dockyardSettlement is not null)
+            if (dockyardSettlement is not null && dockyardSettlement.OwnerId == army.Settlement.OwnerId)
             {
                 FoldIntoDock(army, dockyardSettlement, domain, now);
                 return ArmySettleOutcome.FoldedHome;
+            }
+
+            if (dockyardSettlement is not null)
+            {
+                var asAttack = domain with { Mission = ArmyMission.Attack, TargetSettlementId = dockyardSettlement.Id };
+                return await ResolveBattleAsync(army, asAttack, now, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -1103,15 +1119,19 @@ public sealed class ArmyService(
     }
 
     /// <summary>
-    /// The settlement standing at <paramref name="hex"/> in <paramref name="worldId"/>,
-    /// if it belongs to <paramref name="ownerId"/>, isn't <paramref name="excludeSettlementId"/>
-    /// itself, and has a Dockyard — the three conditions
-    /// docs/design/ship-movement.md §1-2 require for a fleet to dock there
-    /// and make it a new home. <see langword="null"/> when no settlement
-    /// sits on that hex at all, same as any other "nothing docked" case.
+    /// The Dockyard settlement standing at <paramref name="hex"/> in
+    /// <paramref name="worldId"/>, if any and if it isn't
+    /// <paramref name="excludeSettlementId"/> itself — the arriving fleet's
+    /// own settlement of origin is never itself a docking target, whether or
+    /// not it owns the hex it just departed from. Ownership is deliberately
+    /// left to the caller: a fleet reaching an *owned* Dockyard folds into
+    /// it (docs/design/ship-movement.md §2), while reaching a *foreign* one
+    /// resolves through battle instead (§2's last paragraph) — both need
+    /// this same lookup first. <see langword="null"/> when no settlement
+    /// sits on that hex at all, or it has no Dockyard.
     /// </summary>
-    private async Task<SettlementEntity?> FindOwnedDockyardSettlementAsync(
-        Guid worldId, string ownerId, Guid excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
+    private async Task<SettlementEntity?> FindDockyardSettlementAtAsync(
+        Guid worldId, Guid excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
     {
         var candidate = await _dbContext.Settlements
             .Include(s => s.World)
@@ -1123,7 +1143,7 @@ public sealed class ArmyService(
             .FirstOrDefaultAsync(s => s.WorldId == worldId && s.CentreQ == hex.Q && s.CentreR == hex.R, cancellationToken)
             .ConfigureAwait(false);
 
-        if (candidate is null || candidate.Id == excludeSettlementId || candidate.OwnerId != ownerId)
+        if (candidate is null || candidate.Id == excludeSettlementId)
         {
             return null;
         }
