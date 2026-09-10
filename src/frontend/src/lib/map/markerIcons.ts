@@ -15,7 +15,7 @@
 // private submodule that may be absent, while these ship with the app.
 import { Assets, Texture } from 'pixi.js';
 
-export const MARKER_ICON_NAMES = ['sword', 'axe', 'shield', 'flag', 'waypoint-pin', 'arrowhead'] as const;
+export const MARKER_ICON_NAMES = ['sword', 'axe', 'shield', 'flag', 'ship', 'waypoint-pin', 'arrowhead'] as const;
 
 export type MarkerIconName = (typeof MARKER_ICON_NAMES)[number];
 
