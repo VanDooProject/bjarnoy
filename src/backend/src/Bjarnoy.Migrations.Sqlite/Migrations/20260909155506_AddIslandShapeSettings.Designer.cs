@@ -3,6 +3,7 @@ using System;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Bjarnoy.Migrations.Sqlite.Migrations
 {
     [DbContext(typeof(GameDbContext))]
-    partial class GameDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260909155506_AddIslandShapeSettings")]
+    partial class AddIslandShapeSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -60,9 +63,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Property<double>("Provisions")
                         .HasColumnType("REAL");
 
-                    b.Property<bool>("RetreatImmune")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("ReturnCumulativeHours")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -89,8 +89,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SettlementId");
-
-                    b.HasIndex("AtHome", "IsSupporting");
 
                     b.HasIndex("TargetSettlementId", "IsSupporting");
 
@@ -278,111 +276,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                         .IsUnique();
 
                     b.ToTable("build_orders", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.FieldBattleClaimEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("ClaimedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("field_battle_claims", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.FieldBattleReportEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("HexQ")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("HexR")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<double>("LootFood")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("LootIron")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("LootStone")
-                        .HasColumnType("REAL");
-
-                    b.Property<double>("LootWood")
-                        .HasColumnType("REAL");
-
-                    b.Property<DateTimeOffset>("OccurredAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Seed")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("SideAArmyId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<double>("SideAPower")
-                        .HasColumnType("REAL");
-
-                    b.Property<Guid>("SideASettlementId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("SideAWasDefending")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("SideBArmyId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<double>("SideBPower")
-                        .HasColumnType("REAL");
-
-                    b.Property<Guid>("SideBSettlementId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("SideBWasDefending")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Winner")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SideASettlementId");
-
-                    b.HasIndex("SideBSettlementId");
-
-                    b.ToTable("field_battle_reports", (string)null);
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.FieldBattleReportLineEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Count")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("FieldBattleReportId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsLoss")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Side")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("UnitType")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FieldBattleReportId");
-
-                    b.ToTable("field_battle_report_lines", (string)null);
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
@@ -1565,17 +1458,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("Settlement");
                 });
 
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.FieldBattleReportLineEntity", b =>
-                {
-                    b.HasOne("Bjarnoy.Infrastructure.Entities.FieldBattleReportEntity", "FieldBattleReport")
-                        .WithMany("Lines")
-                        .HasForeignKey("FieldBattleReportId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FieldBattleReport");
-                });
-
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardPostEntity", b =>
                 {
                     b.HasOne("Bjarnoy.Infrastructure.Entities.GuildBoardTopicEntity", "Topic")
@@ -1930,11 +1812,6 @@ namespace Bjarnoy.Migrations.Sqlite.Migrations
                     b.Navigation("AttackerLines");
 
                     b.Navigation("DefenderLines");
-                });
-
-            modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.FieldBattleReportEntity", b =>
-                {
-                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Bjarnoy.Infrastructure.Entities.GuildBoardTopicEntity", b =>

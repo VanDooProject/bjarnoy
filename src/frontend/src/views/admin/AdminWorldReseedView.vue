@@ -5,7 +5,12 @@ import { useRoute, useRouter } from 'vue-router';
 import WorldMapCanvas from '../../components/map/WorldMapCanvas.vue';
 import { api, ApiError } from '../../api/client';
 import { WorldModel } from '../../lib/map/WorldModel';
-import type { AdminWorldResponse, WorldSeedPreviewResponse } from '../../api/types';
+import type {
+  AdminWorldResponse,
+  WorldGenerationSettings,
+  WorldGenerationSettingsOverrides,
+  WorldSeedPreviewResponse,
+} from '../../api/types';
 import type { TileOrientation } from '../../lib/map/types';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -25,6 +30,53 @@ const loading = ref(true);
 const loadError = ref<string | null>(null);
 
 const seedInput = ref('');
+
+/** The island/mountain knobs a preview/reseed request can override — see `GENERATION_FIELDS` for the form. */
+type GenerationForm = Required<WorldGenerationSettingsOverrides>;
+
+function formFrom(settings: WorldGenerationSettings): GenerationForm {
+  return { ...settings };
+}
+
+/** Order the form renders in, plus each field's i18n label key and `<input>` constraints. */
+const GENERATION_FIELDS: {
+  key: keyof GenerationForm;
+  labelKey: string;
+  min: number;
+  max?: number;
+  step: number;
+}[] = [
+  { key: 'islandCellSize', labelKey: 'islandCellSizeLabel', min: 2, step: 1 },
+  { key: 'islandChance', labelKey: 'islandChanceLabel', min: 0.01, max: 1, step: 0.01 },
+  { key: 'islandMinRadius', labelKey: 'islandMinRadiusLabel', min: 0.1, step: 0.1 },
+  { key: 'islandMaxRadius', labelKey: 'islandMaxRadiusLabel', min: 0.1, step: 0.1 },
+  { key: 'islandMinLobes', labelKey: 'islandMinLobesLabel', min: 1, max: 8, step: 1 },
+  { key: 'islandMaxLobes', labelKey: 'islandMaxLobesLabel', min: 1, max: 8, step: 1 },
+  { key: 'islandMaxElongation', labelKey: 'islandMaxElongationLabel', min: 0, max: 4, step: 0.05 },
+  { key: 'islandBendiness', labelKey: 'islandBendinessLabel', min: 0, max: 3, step: 0.1 },
+  { key: 'islandLobeBlend', labelKey: 'islandLobeBlendLabel', min: 0, max: 0.5, step: 0.01 },
+  { key: 'islandCoastWarp', labelKey: 'islandCoastWarpLabel', min: 0, max: 4, step: 0.1 },
+  { key: 'islandCoastWarpScale', labelKey: 'islandCoastWarpScaleLabel', min: 2, max: 12, step: 0.5 },
+  { key: 'beachThreshold', labelKey: 'beachThresholdLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'mountainThreshold', labelKey: 'mountainThresholdLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'mountainRockiness', labelKey: 'mountainRockinessLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'forestRockiness', labelKey: 'forestRockinessLabel', min: 0, max: 1, step: 0.01 },
+  { key: 'minimumIslandTiles', labelKey: 'minimumIslandTilesLabel', min: 0, step: 1 },
+];
+
+// Pre-filled from the world's current values once it loads (see onMounted),
+// so leaving every field untouched previews/reseeds exactly what the world
+// already has. Cast away null only because it's briefly unset before the
+// world response arrives; every field is always present by the time the
+// form (v-if="world") renders.
+const generation = ref<GenerationForm>({} as GenerationForm);
+/** The generation values the current `preview` was actually generated with — reseed commits these, not whatever `generation` has drifted to since (same reasoning as the seed check in `canCommit`). */
+const previewedGeneration = ref<GenerationForm | null>(null);
+
+function resetGenerationToCurrent() {
+  if (world.value) generation.value = formFrom(world.value.generation);
+}
+
 const preview = ref<WorldSeedPreviewResponse | null>(null);
 // Outside Vue's reactivity for the same reason stores/world.ts keeps its own
 // model out of it: the renderer reads this every frame.
@@ -56,10 +108,19 @@ const nameMatches = computed(
   () => world.value !== null && confirmName.value.trim() === world.value.name,
 );
 
-// Only a seed that has actually been looked at may be committed — the whole
-// point of the preview is that nobody reseeds a map sight-unseen.
+function generationMatches(a: GenerationForm | null, b: GenerationForm | null): boolean {
+  return a !== null && b !== null && GENERATION_FIELDS.every((f) => a[f.key] === b[f.key]);
+}
+
+// Only a seed *and* a generation-parameter set that have actually been looked
+// at may be committed — the whole point of the preview is that nobody
+// reseeds a map sight-unseen, generation knobs included.
 const canCommit = computed(
-  () => preview.value !== null && parsedSeed.value === preview.value.seed && nameMatches.value,
+  () =>
+    preview.value !== null &&
+    parsedSeed.value === preview.value.seed &&
+    generationMatches(generation.value, previewedGeneration.value) &&
+    nameMatches.value,
 );
 
 onMounted(async () => {
@@ -68,7 +129,11 @@ onMounted(async () => {
     // everywhere else in this section too (see stores/adminWorld.ts).
     const worlds = await api.adminListWorlds();
     world.value = worlds.find((w) => w.id === worldId.value) ?? null;
-    if (!world.value) loadError.value = t('adminWorldReseed.noSuchWorld');
+    if (!world.value) {
+      loadError.value = t('adminWorldReseed.noSuchWorld');
+    } else {
+      resetGenerationToCurrent();
+    }
   } catch {
     loadError.value = t('adminWorldReseed.loadError');
   } finally {
@@ -88,12 +153,15 @@ async function runPreview() {
   previewing.value = true;
   previewError.value = null;
   try {
-    const result = await api.adminPreviewWorldSeed(worldId.value, { seed });
+    const requestedGeneration = { ...generation.value };
+    const result = await api.adminPreviewWorldSeed(worldId.value, { seed, generation: requestedGeneration });
     preview.value = result;
+    previewedGeneration.value = requestedGeneration;
     previewModel.value = markRaw(buildPreviewModel(result));
   } catch (err) {
     previewError.value = err instanceof ApiError ? err.message : t('adminWorldReseed.previewError');
     preview.value = null;
+    previewedGeneration.value = null;
     previewModel.value = null;
   } finally {
     previewing.value = false;
@@ -150,6 +218,8 @@ async function commit() {
     const result = await api.adminReseedWorld(worldId.value, {
       confirmWorldName: confirmName.value.trim(),
       seed: preview.value.seed,
+      // canCommit already guarantees this matches the last preview.
+      generation: previewedGeneration.value ?? undefined,
     });
     world.value = result.world;
     committed.value = {
@@ -158,6 +228,8 @@ async function commit() {
       deletedSettlements: result.deletedSettlements,
     };
     confirmName.value = '';
+    resetGenerationToCurrent();
+    previewedGeneration.value = null;
   } catch (err) {
     commitError.value = err instanceof ApiError ? err.message : t('adminWorldReseed.reseedError');
   } finally {
@@ -184,6 +256,28 @@ function back() {
       <p class="warning">
         {{ $t('adminWorldReseed.warning', { playerCount: world.playerCount }) }}
       </p>
+
+      <section class="panel">
+        <h2>{{ $t('adminWorldReseed.generationHeading') }}</h2>
+        <p class="hint">{{ $t('adminWorldReseed.generationHint') }}</p>
+        <div class="generation-grid">
+          <div v-for="field in GENERATION_FIELDS" :key="field.key" class="generation-field">
+            <label :for="`gen-${field.key}`">{{ $t(`adminWorldReseed.${field.labelKey}`) }}</label>
+            <input
+              :id="`gen-${field.key}`"
+              v-model.number="generation[field.key]"
+              type="number"
+              :min="field.min"
+              :max="field.max"
+              :step="field.step"
+              :data-testid="`gen-${field.key}`"
+            />
+          </div>
+        </div>
+        <button class="secondary" data-testid="reset-generation" @click="resetGenerationToCurrent">
+          {{ $t('adminWorldReseed.resetToCurrent') }}
+        </button>
+      </section>
 
       <section class="panel">
         <div class="controls">
@@ -273,6 +367,30 @@ function back() {
   margin: 12px 0 0;
   font-size: 13px;
   color: var(--muted);
+}
+.hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 70ch;
+}
+.generation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.generation-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.generation-field label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.generation-field input {
+  width: 100%;
 }
 .done {
   font-size: 13px;

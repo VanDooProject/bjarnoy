@@ -31,6 +31,7 @@ async function onLogout() {
         <router-link to="/admin/settlements" class="tab">{{ $t('adminLayout.tabs.settlements') }}</router-link>
         <router-link to="/admin/reports" class="tab">{{ $t('adminLayout.tabs.reports') }}</router-link>
         <router-link to="/admin/activity" class="tab">{{ $t('adminLayout.tabs.activity') }}</router-link>
+        <router-link to="/admin/island-lab" class="tab">{{ $t('adminLayout.tabs.tools') }}</router-link>
       </nav>
       <div class="world-select">
         <select

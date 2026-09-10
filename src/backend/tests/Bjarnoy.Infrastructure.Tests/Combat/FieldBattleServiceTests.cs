@@ -51,10 +51,19 @@ public sealed class FieldBattleServiceTests : IDisposable
     {
         Seed = 1,
         Radius = 500,
-        IslandCellSize = 2,
+        // IslandCellSize bumped 2->250 and the multi-lobe/warp fields zeroed
+        // out: with the island-shape retune, the reach-budget check (see
+        // WorldGenerationOptions.Validate) scales with IslandMaxElongation/
+        // IslandLobeMaxScale/IslandCoastWarp, none of which this all-land
+        // hack cares about (it just wants huge overlapping plain circles).
+        IslandCellSize = 250,
         IslandChance = 1.0,
         IslandMinRadius = 1000,
         IslandMaxRadius = 1000,
+        IslandMaxElongation = 0.0,
+        IslandLobeMinScale = 0.3,
+        IslandLobeMaxScale = 0.3,
+        IslandCoastWarp = 0.0,
         BeachThreshold = 1.0,
         MountainThreshold = 0.0,
         MountainRockiness = 2.0,

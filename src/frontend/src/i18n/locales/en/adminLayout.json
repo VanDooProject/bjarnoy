@@ -5,7 +5,8 @@
     "users": "Users",
     "settlements": "Settlements",
     "reports": "Reports",
-    "activity": "Activity"
+    "activity": "Activity",
+    "tools": "Tools"
   },
   "noWorlds": "No worlds yet — create one",
   "logout": "Log out"

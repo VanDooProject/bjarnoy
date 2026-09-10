@@ -26,6 +26,42 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
   throw new Error('no land border-edge hex found — pick a different test seed');
 }
 
+// Regression: findLandfall used to return the literal nearest land hex to
+// the click, which for some seeds (see the demo seed, 20260824 — the case
+// that surfaced this after WorldGenerationOptions.IslandMinRadius/
+// IslandMaxRadius grew) can be a lone tile at an island's tip: almost every
+// hex in the settlement's own realm ends up sea. findLandfall now prefers a
+// hex meeting the same quality bar the backend's own FindStartPositions
+// enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
+// hexes) over the merely-nearest land hex.
+describe('WorldModel.findLandfall', () => {
+  it.each([1, 7, 42, 20260824, 20260826])(
+    'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
+    (seed) => {
+      const model = new WorldModel(seed);
+      const at = model.findLandfall({ q: 0, r: 0 });
+      if (!at) throw new Error(`no land found near origin for seed ${seed} — pick a different test seed`);
+
+      const tile = model.getTile(at.q, at.r);
+      expect(tile.terrain).toBe('grass');
+
+      let forest = 0;
+      let grass = 0;
+      for (const n of neighbors(at)) {
+        const t = model.getTile(n.q, n.r).terrain;
+        if (t === 'forest') forest++;
+        else if (t === 'grass') grass++;
+      }
+      expect(forest).toBeGreaterThanOrEqual(1);
+      expect(grass).toBeGreaterThanOrEqual(2);
+
+      for (const c of hexesInRadius(at, 2)) {
+        expect(model.isLand(c.q, c.r)).toBe(true);
+      }
+    },
+  );
+});
+
 // Regression: the landing-page "empty plot" preview used to show other
 // players' already-existing buildings because `registerSettlement` painted
 // a settlement's home tile unconditionally. Registration and territory
@@ -266,6 +302,13 @@ describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
   it('places a fisher hut directly on a coastal-water hex, like the fishing hut/dockyard', () => {
     const model = new WorldModel(20260825);
     const { settlement } = foundLandedSettlement(model);
+    // A settlement's *founding* spot is guaranteed no sea within two hexes
+    // (findLandfall/the backend's FindStartPositions both enforce this), so
+    // a level-1 realm (claimRadiusForLevel(1) === 2) never actually reaches
+    // the coast — levelling up first grows the claimed radius far enough to
+    // reach real coastal water, same as a settlement would need to in play.
+    settlement.level = 6;
+    model.claimTerritory(settlement.id);
     const radius = model.borderRadius(settlement);
     const coastal = findOwnedHex(model, settlement, radius, (c) => model.getTile(c.q, c.r).isCoastalWater === true);
 
@@ -379,21 +422,23 @@ describe('WorldModel.sawmillArtVariantOf', () => {
 });
 
 describe('WorldModel.seaFacingDirectionOf', () => {
-  it('finds the real sea neighbour reported disconnected in-game: seed 783131215, island Jarlskar, mouth tile (-8,4)', () => {
-    // Confirmed against the backend's own TerrainSampler for this seed: of
-    // (-8,4)'s six neighbours, only SE (-8,5) is sea — E/NE/NW are sand and
-    // W/SW are forest. Before this fix, the mouth tile rendered a straight
-    // line toward W/SW (the inflow's geometric opposite) instead of curving
-    // toward the sea at SE.
+  it('finds the real sea neighbour of a coastal tile', () => {
+    // Confirmed against DEFAULT_GENERATION's own terrainAt for this seed: of
+    // (-70,-31)'s six neighbours, only SW is sea — the rest are land.
+    // Originally reproduced a real in-game bug where a mouth tile rendered a
+    // straight line toward the inflow's geometric opposite instead of
+    // curving toward the actual sea neighbour; the coordinates here were
+    // re-picked when the island generator's defaults were de-rounded (see
+    // WorldGenerationOptions's IslandMaxElongation/IslandCellSize doc
+    // comments), which moved every seed's terrain.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -8, r: 4 })).toBe('SE');
+    expect(model.seaFacingDirectionOf({ q: -70, r: -31 })).toBe('SW');
   });
 
   it('returns null when no neighbour is sea', () => {
-    // Same seed/island as above, but (-4,2) — Jarlskar's interior, well
-    // inland — confirmed against the backend's TerrainSampler to have all
-    // six neighbours as land (grass/forest).
+    // Same seed as above; (-70,-36) confirmed to have all six neighbours as
+    // land.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -4, r: 2 })).toBeNull();
+    expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
   });
 });

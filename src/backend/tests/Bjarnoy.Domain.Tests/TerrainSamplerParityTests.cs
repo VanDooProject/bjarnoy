@@ -27,15 +27,19 @@ public class TerrainSamplerParityTests
 {
     private const int Extent = 60;
 
+    // Regenerated for the de-rounded island-shape retune (see
+    // WorldGenerationOptions's IslandMaxElongation/IslandCellSize doc
+    // comments) - the default radius/cellSize/elongation/lobe values all
+    // changed, which moves every seed's terrain.
     public static TheoryData<int, string> FrontendChecksums => new()
     {
-        { 1, "9a29edc4b0cf92da9998cd77aa39fe5ca5116091f49122ed8373f4c440e20bf1" },
-        { 7, "18bd29a41f98fc999be8d0ae09673b02042b96b146da0328cf36bd32cb00558d" },
-        { 42, "7a1ee11195876ef6f80d8aa0dd27410549a4dd377c172c44dbd99ad6d6f461d7" },
-        { 1337, "bde5374b1963b75bf9bbe8f80f67075fac90e8c36f0e1fe9c616ce040191bc24" },
-        { -5, "7ed4a0d48df5dafbaeb12fa70522566227738e91f84d25963d1c5b77f9b5f373" },
-        { 2147483, "871d17acfe0d129ccd75d6727fa47ef7974958b8b9cf21b7db0894aad6d9fb6f" },
-        { 0, "2a7e13706982c4ace524540aebeb3b35f1750e3a870a7355446aaac3d2a14631" },
+        { 1, "cd248b8d080dfcf95a7c397a90af32db0818398240902c14e809958e1c389447" },
+        { 7, "397f6dc63f0462213b7d735e29f6e936d9200216cf9696ecb871bf051b8535bd" },
+        { 42, "178bf7b62247508074f6904bb66bc068b570f2c12f42fa85fc60c8257c14ea51" },
+        { 1337, "1c903578bf431233a49659647a64c15e6e7bbb196ffff30cdc09871de7ba7e59" },
+        { -5, "a5afcb5f2a48615008fcbf885ba08be26f7d936afb5fb823b70cd14b5c635319" },
+        { 2147483, "ae25751a180f682834bfc054751ea110320ce4802f675eba4a88a416a2449164" },
+        { 0, "3586848bfbcec5fed7ab6386d7d143a7003ae163cfa4bb6307ab56dfc0212428" },
     };
 
     [Theory]

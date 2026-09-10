@@ -29,6 +29,24 @@ const WORLD = {
   runState: 'running',
   runStateSince: '2026-01-01T00:00:00Z',
   createdAt: '2026-01-01T00:00:00Z',
+  generation: {
+    islandCellSize: 20,
+    islandChance: 0.45,
+    islandMinRadius: 4.8,
+    islandMaxRadius: 11.2,
+    islandMinLobes: 2,
+    islandMaxLobes: 4,
+    islandMaxElongation: 1.0,
+    islandBendiness: 1.6,
+    islandLobeBlend: 0.25,
+    islandCoastWarp: 1.5,
+    islandCoastWarpScale: 5.0,
+    beachThreshold: 0.82,
+    mountainThreshold: 0.4,
+    mountainRockiness: 0.72,
+    forestRockiness: 0.52,
+    minimumIslandTiles: 6,
+  },
 };
 
 /**
@@ -105,7 +123,10 @@ test.describe('admin world reseed', { tag: '@g2' }, () => {
     await page.getByRole('button', { name: 'Preview seed' }).click();
 
     await expect(page.getByTestId('preview-summary')).toContainText('2 islands');
-    expect(previewBody).toEqual({ seed: PREVIEW.seed });
+    // The generation form is pre-filled from the world's current values (see
+    // AdminWorldReseedView's resetGenerationToCurrent), so an untouched
+    // preview request sends them back unchanged.
+    expect(previewBody).toEqual({ seed: PREVIEW.seed, generation: WORLD.generation });
 
     // The real renderer mounted and drew a frame — same signal every other
     // map-bearing spec waits on.
@@ -131,6 +152,10 @@ test.describe('admin world reseed', { tag: '@g2' }, () => {
     await commit.click();
 
     await expect(page.getByTestId('reseed-done')).toContainText('1 settlement(s) deleted');
-    expect(reseedBody).toEqual({ confirmWorldName: WORLD.name, seed: PREVIEW.seed });
+    expect(reseedBody).toEqual({
+      confirmWorldName: WORLD.name,
+      seed: PREVIEW.seed,
+      generation: WORLD.generation,
+    });
   });
 });

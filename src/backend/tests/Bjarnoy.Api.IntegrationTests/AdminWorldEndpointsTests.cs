@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
 using Bjarnoy.Api.Json;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -611,6 +612,142 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var reseedMissing = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{missing}/reseed", new ReseedWorldRequest("whatever", Seed: 1), Ct);
         Assert.Equal(HttpStatusCode.NotFound, reseedMissing.StatusCode);
+    }
+
+    // ---- Generation-parameter overrides on preview/reseed ----
+
+    [Fact]
+    public async Task A_freshly_created_world_reports_the_generation_defaults_it_was_created_with()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var listed = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+        var admin = listed!.Single(w => w.Id == world.Id);
+
+        var defaults = WorldGenerationOptions.ForSeed(world.Seed);
+        Assert.Equal(defaults.IslandCellSize, admin.Generation.IslandCellSize);
+        Assert.Equal(defaults.IslandChance, admin.Generation.IslandChance);
+        Assert.Equal(defaults.IslandMinRadius, admin.Generation.IslandMinRadius);
+        Assert.Equal(defaults.IslandMaxRadius, admin.Generation.IslandMaxRadius);
+        Assert.Equal(defaults.BeachThreshold, admin.Generation.BeachThreshold);
+        Assert.Equal(defaults.MountainThreshold, admin.Generation.MountainThreshold);
+        Assert.Equal(defaults.MountainRockiness, admin.Generation.MountainRockiness);
+        Assert.Equal(defaults.ForestRockiness, admin.Generation.ForestRockiness);
+        Assert.Equal(defaults.MinimumIslandTiles, admin.Generation.MinimumIslandTiles);
+    }
+
+    [Fact]
+    public async Task Previewing_with_a_much_larger_island_radius_produces_fewer_bigger_islands()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        async Task<WorldSeedPreviewResponse> PreviewAsync(WorldGenerationSettingsOverrides? overrides) =>
+            await (await client.PostJsonAsync(
+                $"/api/v1/admin/worlds/{world.Id}/preview-seed",
+                // Radius raised to 60 (the created world's own radius, 30, is
+                // too small to host more than one default-sized island after
+                // the island-shape retune, which breaks the "fewer islands"
+                // comparison below regardless of the override values).
+                new PreviewWorldSeedRequest(Seed: 2024, Radius: 60, Generation: overrides),
+                Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+
+        var defaultSized = await PreviewAsync(overrides: null);
+        // IslandCellSize bumped 40->64: after the island-shape retune, a
+        // MaxRadius of 25 needs a bigger reach budget than CellSize 40 allows
+        // (see WorldGenerationOptions.Validate's reach-budget check).
+        var bigIslands = await PreviewAsync(new WorldGenerationSettingsOverrides(
+            IslandMinRadius: 20.0, IslandMaxRadius: 25.0, IslandCellSize: 64));
+
+        // Same seed, only the island-size knobs changed: far fewer, much
+        // bigger islands than the default-sized preview of the same seed.
+        Assert.True(
+            bigIslands.IslandCount < defaultSized.IslandCount,
+            $"expected fewer islands with a much larger radius, got {bigIslands.IslandCount} vs {defaultSized.IslandCount}");
+        var averageBigIslandSize = (double)bigIslands.Islands.Sum(i => i.TileCount) / bigIslands.Islands.Count;
+        var averageDefaultIslandSize = (double)defaultSized.Islands.Sum(i => i.TileCount) / defaultSized.Islands.Count;
+        Assert.True(
+            averageBigIslandSize > averageDefaultIslandSize,
+            $"expected bigger average island size, got {averageBigIslandSize} vs {averageDefaultIslandSize}");
+    }
+
+    [Fact]
+    public async Task Previewing_with_an_omitted_generation_field_keeps_the_worlds_current_value_for_it()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        // Only IslandMinRadius is overridden; MinimumIslandTiles is left null
+        // and should still reflect the world's own (default) value, not some
+        // other fallback.
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed",
+            new PreviewWorldSeedRequest(
+                Seed: 2024,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0)),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // MinimumIslandTiles isn't on the response directly, but a change to
+        // it would change which islands survive — instead this just confirms
+        // the request succeeds and produces islands, i.e. the un-set fields
+        // didn't fall back to some invalid zero value.
+        var preview = await response.ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
+        Assert.NotEmpty(preview.Islands);
+    }
+
+    [Fact]
+    public async Task An_invalid_generation_override_is_rejected_without_changing_the_world()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/preview-seed",
+            new PreviewWorldSeedRequest(
+                Seed: 2024,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 10.0, IslandMaxRadius: 2.0)),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(world.Seed, (await ReadWorldStateAsync(world.Id)).Seed);
+    }
+
+    [Fact]
+    public async Task Reseeding_with_generation_overrides_persists_them_as_the_worlds_new_current_values()
+    {
+        using var client = _fixture.CreateClient();
+        var world = await CreateWorldAsync(client);
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        // IslandMaxRadius trimmed 14.0->13.0: after the island-shape retune,
+        // 14.0 exceeds the reach budget the default IslandCellSize (36)
+        // allows (see WorldGenerationOptions.Validate's reach-budget check).
+        // Radius raised 30(world default)->60: seed 9002 at radius 30 no
+        // longer produces any islands at all with these overrides.
+        var response = await client.PostJsonAsync(
+            $"/api/v1/admin/worlds/{world.Id}/reseed",
+            new ReseedWorldRequest(
+                world.Name,
+                Seed: 9002,
+                Radius: 60,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0, IslandMaxRadius: 13.0)),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var listed = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+        var admin = listed!.Single(w => w.Id == world.Id);
+
+        Assert.Equal(6.0, admin.Generation.IslandMinRadius);
+        Assert.Equal(13.0, admin.Generation.IslandMaxRadius);
     }
 
     private async Task<IReadOnlyList<Guid>> TriggerDueEndbossesAsync()

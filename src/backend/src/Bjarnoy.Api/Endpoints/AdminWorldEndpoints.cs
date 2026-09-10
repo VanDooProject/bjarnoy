@@ -211,7 +211,7 @@ public static class AdminWorldEndpoints
             return TypedResults.NotFound();
         }
 
-        if (!TryBuildOptions(world, request.Seed, request.Radius, out var options, out var errors))
+        if (!TryBuildOptions(world, request.Seed, request.Radius, request.Generation, out var options, out var errors))
         {
             return TypedResults.ValidationProblem(errors);
         }
@@ -257,7 +257,7 @@ public static class AdminWorldEndpoints
             });
         }
 
-        if (!TryBuildOptions(world, request.Seed, request.Radius, out var options, out var errors))
+        if (!TryBuildOptions(world, request.Seed, request.Radius, request.Generation, out var options, out var errors))
         {
             return TypedResults.ValidationProblem(errors);
         }
@@ -299,12 +299,16 @@ public static class AdminWorldEndpoints
 
     /// <summary>
     /// The generation options a preview/reseed request asks for: the world's own
-    /// parameters, with the seed and radius the admin chose laid over them.
+    /// parameters, with the seed, radius, and any <paramref name="generation"/>
+    /// overrides the admin chose laid over them. A <see langword="null"/> field
+    /// on <paramref name="generation"/> keeps the world's current value for
+    /// that parameter — this is what makes every one of them optional to send.
     /// </summary>
     private static bool TryBuildOptions(
         WorldEntity world,
         int? seed,
         int? radius,
+        WorldGenerationSettingsOverrides? generation,
         out WorldGenerationOptions options,
         out Dictionary<string, string[]> errors)
     {
@@ -312,6 +316,22 @@ public static class AdminWorldEndpoints
         {
             Seed = seed ?? Random.Shared.Next(),
             Radius = radius ?? world.Radius,
+            IslandCellSize = generation?.IslandCellSize ?? world.IslandCellSize,
+            IslandChance = generation?.IslandChance ?? world.IslandChance,
+            IslandMinRadius = generation?.IslandMinRadius ?? world.IslandMinRadius,
+            IslandMaxRadius = generation?.IslandMaxRadius ?? world.IslandMaxRadius,
+            BeachThreshold = generation?.BeachThreshold ?? world.BeachThreshold,
+            MountainThreshold = generation?.MountainThreshold ?? world.MountainThreshold,
+            MountainRockiness = generation?.MountainRockiness ?? world.MountainRockiness,
+            ForestRockiness = generation?.ForestRockiness ?? world.ForestRockiness,
+            MinimumIslandTiles = generation?.MinimumIslandTiles ?? world.MinimumIslandTiles,
+            IslandMinLobes = generation?.IslandMinLobes ?? world.IslandMinLobes,
+            IslandMaxLobes = generation?.IslandMaxLobes ?? world.IslandMaxLobes,
+            IslandMaxElongation = generation?.IslandMaxElongation ?? world.IslandMaxElongation,
+            IslandBendiness = generation?.IslandBendiness ?? world.IslandBendiness,
+            IslandLobeBlend = generation?.IslandLobeBlend ?? world.IslandLobeBlend,
+            IslandCoastWarp = generation?.IslandCoastWarp ?? world.IslandCoastWarp,
+            IslandCoastWarpScale = generation?.IslandCoastWarpScale ?? world.IslandCoastWarpScale,
         };
 
         try

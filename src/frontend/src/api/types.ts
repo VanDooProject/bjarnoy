@@ -31,6 +31,15 @@ export interface WorldGenerationResponse {
   mountainThreshold: number;
   mountainRockiness: number;
   forestRockiness: number;
+  islandMinLobes: number;
+  islandMaxLobes: number;
+  islandMaxElongation: number;
+  islandBendiness: number;
+  islandLobeBlend: number;
+  islandLobeMinScale: number;
+  islandLobeMaxScale: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
 }
 
 /** Mirrors `WorldMovementResponse` — see that record's own doc comments for field semantics. */
@@ -384,6 +393,57 @@ export interface AdminWorldResponse {
   runState: string;
   runStateSince: string;
   createdAt: string;
+  generation: WorldGenerationSettings;
+}
+
+/**
+ * The world's current island/mountain generation parameters (everything in
+ * `WorldGenerationOptions` but the seed and radius, which the admin UI
+ * already surfaces separately) — read-only; see
+ * `WorldGenerationSettingsOverrides` for the settable counterpart sent on
+ * preview/reseed requests.
+ */
+export interface WorldGenerationSettings {
+  islandCellSize: number;
+  islandChance: number;
+  islandMinRadius: number;
+  islandMaxRadius: number;
+  beachThreshold: number;
+  mountainThreshold: number;
+  mountainRockiness: number;
+  forestRockiness: number;
+  minimumIslandTiles: number;
+  islandMinLobes: number;
+  islandMaxLobes: number;
+  islandMaxElongation: number;
+  islandBendiness: number;
+  islandLobeBlend: number;
+  islandCoastWarp: number;
+  islandCoastWarpScale: number;
+}
+
+/**
+ * Same fields as `WorldGenerationSettings`, all optional: a preview/reseed
+ * request only overrides the ones it sends, leaving every other parameter at
+ * the world's current value.
+ */
+export interface WorldGenerationSettingsOverrides {
+  islandCellSize?: number;
+  islandChance?: number;
+  islandMinRadius?: number;
+  islandMaxRadius?: number;
+  beachThreshold?: number;
+  mountainThreshold?: number;
+  mountainRockiness?: number;
+  forestRockiness?: number;
+  minimumIslandTiles?: number;
+  islandMinLobes?: number;
+  islandMaxLobes?: number;
+  islandMaxElongation?: number;
+  islandBendiness?: number;
+  islandLobeBlend?: number;
+  islandCoastWarp?: number;
+  islandCoastWarpScale?: number;
 }
 
 /**
@@ -409,6 +469,7 @@ export interface SetWorldRunStateRequest {
 export interface PreviewWorldSeedRequest {
   seed?: number;
   radius?: number;
+  generation?: WorldGenerationSettingsOverrides;
 }
 
 /**
@@ -443,6 +504,7 @@ export interface ReseedWorldRequest {
   confirmWorldName: string;
   seed?: number;
   radius?: number;
+  generation?: WorldGenerationSettingsOverrides;
 }
 
 export interface ReseedWorldResponse {
