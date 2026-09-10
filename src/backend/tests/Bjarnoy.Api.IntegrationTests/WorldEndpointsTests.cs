@@ -191,7 +191,9 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task Tiles_for_the_same_window_are_stable_across_requests()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client, seed: 99, radius: 30);
+        // Radius bumped 30->32: after the island-shape retune, seed 99 at
+        // radius 30 no longer places any island at all.
+        var world = await CreateWorldAsync(client, seed: 99, radius: 32);
         const string url = "/api/v1/worlds/{0}/tiles?qMin=-8&qMax=8&rMin=-8&rMax=8";
 
         var first = await client.GetFromJsonAsync<TileChunkResponse>(

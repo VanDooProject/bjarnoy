@@ -649,12 +649,19 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         async Task<WorldSeedPreviewResponse> PreviewAsync(WorldGenerationSettingsOverrides? overrides) =>
             await (await client.PostJsonAsync(
                 $"/api/v1/admin/worlds/{world.Id}/preview-seed",
-                new PreviewWorldSeedRequest(Seed: 2024, Generation: overrides),
+                // Radius raised to 60 (the created world's own radius, 30, is
+                // too small to host more than one default-sized island after
+                // the island-shape retune, which breaks the "fewer islands"
+                // comparison below regardless of the override values).
+                new PreviewWorldSeedRequest(Seed: 2024, Radius: 60, Generation: overrides),
                 Ct)).ReadStrictAsync<WorldSeedPreviewResponse>(Ct);
 
         var defaultSized = await PreviewAsync(overrides: null);
+        // IslandCellSize bumped 40->64: after the island-shape retune, a
+        // MaxRadius of 25 needs a bigger reach budget than CellSize 40 allows
+        // (see WorldGenerationOptions.Validate's reach-budget check).
         var bigIslands = await PreviewAsync(new WorldGenerationSettingsOverrides(
-            IslandMinRadius: 20.0, IslandMaxRadius: 25.0, IslandCellSize: 40));
+            IslandMinRadius: 20.0, IslandMaxRadius: 25.0, IslandCellSize: 64));
 
         // Same seed, only the island-size knobs changed: far fewer, much
         // bigger islands than the default-sized preview of the same seed.
@@ -719,12 +726,18 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var world = await CreateWorldAsync(client);
         Authorize(client, await CreateAdminTokenAsync(client));
 
+        // IslandMaxRadius trimmed 14.0->13.0: after the island-shape retune,
+        // 14.0 exceeds the reach budget the default IslandCellSize (36)
+        // allows (see WorldGenerationOptions.Validate's reach-budget check).
+        // Radius raised 30(world default)->60: seed 9002 at radius 30 no
+        // longer produces any islands at all with these overrides.
         var response = await client.PostJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/reseed",
             new ReseedWorldRequest(
                 world.Name,
                 Seed: 9002,
-                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0, IslandMaxRadius: 14.0)),
+                Radius: 60,
+                Generation: new WorldGenerationSettingsOverrides(IslandMinRadius: 6.0, IslandMaxRadius: 13.0)),
             Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -734,7 +747,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var admin = listed!.Single(w => w.Id == world.Id);
 
         Assert.Equal(6.0, admin.Generation.IslandMinRadius);
-        Assert.Equal(14.0, admin.Generation.IslandMaxRadius);
+        Assert.Equal(13.0, admin.Generation.IslandMaxRadius);
     }
 
     private async Task<IReadOnlyList<Guid>> TriggerDueEndbossesAsync()
