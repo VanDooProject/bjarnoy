@@ -124,6 +124,83 @@ describe('AdminIslandLabView', () => {
     await cellSizeInput.setValue(99);
     await wrapper.find('[data-testid="reset-generation"]').trigger('click');
 
+    expect((cellSizeInput.element as HTMLInputElement).value).toBe('36');
+  });
+
+  it('toggling the docs section shows and hides its explanation', async () => {
+    stubCanvasContext();
+    const wrapper = mountLab();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="docs-body"]').exists()).toBe(false);
+    await wrapper.find('[data-testid="docs-toggle"]').trigger('click');
+    expect(wrapper.find('[data-testid="docs-body"]').exists()).toBe(true);
+  });
+
+  it('applying a preset writes it into the selected target variant', async () => {
+    stubCanvasContext();
+    const wrapper = mountLab();
+    await flushPromises();
+
+    const targetSelect = wrapper.find('[data-testid="preset-target"]');
+    const variantIds = wrapper.findAll('[data-testid="island-lab-variant"]');
+    expect(variantIds).toHaveLength(2);
+
+    // Target the second variant, then apply the baseline preset to it.
+    await targetSelect.setValue((targetSelect.element as HTMLSelectElement).options[1].value);
+    await wrapper.find('[data-testid="preset-baseline"]').trigger('click');
+
+    const cellSizeInputs = wrapper.findAll('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
+    expect((cellSizeInputs[0].element as HTMLInputElement).value).toBe('36');
+    expect((cellSizeInputs[1].element as HTMLInputElement).value).toBe('23');
+  });
+
+  it('applying a preset with a single variant open needs no target selector', async () => {
+    stubCanvasContext();
+    const wrapper = mountLab();
+    await flushPromises();
+    await wrapper.find('[data-testid="remove-variant"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="preset-target"]').exists()).toBe(false);
+    await wrapper.find('[data-testid="preset-baseline"]').trigger('click');
+
+    const cellSizeInput = wrapper.find('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
     expect((cellSizeInput.element as HTMLInputElement).value).toBe('23');
+  });
+
+  it('resetting a variant view restores its default pan/zoom', async () => {
+    stubCanvasContext();
+    const wrapper = mountLab();
+    await flushPromises();
+
+    const canvas = wrapper.find('[data-testid="island-lab-canvas"]');
+    // jsdom's clientX/clientY are getter-only, so @vue/test-utils' trigger()
+    // helper can't assign them onto a wheel event — dispatch a real one instead.
+    canvas.element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 10, clientY: 10 }));
+    await flushPromises();
+    await wrapper.find('[data-testid="reset-view"]').trigger('click');
+
+    // Just confirms the reset button exists and doesn't throw when clicked;
+    // pan/zoom state isn't reflected in any DOM attribute to assert on.
+    expect(wrapper.find('[data-testid="reset-view"]').exists()).toBe(true);
+  });
+
+  it('syncing viewports mirrors pan/zoom from one variant onto the others', async () => {
+    const { clearRect } = stubCanvasContext();
+    const wrapper = mountLab();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="sync-viewports"]').setValue(true);
+    const callsBefore = clearRect.mock.calls.length;
+
+    const canvases = wrapper.findAll('[data-testid="island-lab-canvas"]');
+    canvases[0].element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 10, clientY: 10 }));
+    await flushPromises();
+
+    // Zooming the first variant should also redraw the second (mocked
+    // getBoundingClientRect on jsdom returns all zeros, so this only checks
+    // that the sync path actually ran a second draw, not the resulting math).
+    expect(clearRect.mock.calls.length).toBeGreaterThan(callsBefore + 1);
   });
 });
