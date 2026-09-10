@@ -40,31 +40,46 @@ public static class BuildingCatalogue
     /// <remarks>
     /// <para>
     /// Every entry must be met, not any one of them. These are deliberately
-    /// production-led: the two anchors a settlement always starts able to
-    /// build (Lumberjack, Farm) open logistics and the second food tier, the
+    /// production-led: Farm opens the second food tier (Pumpkin Farm), the
     /// water line runs Fishing Hut → Dockyard, and the military line runs
-    /// Barracks → Archery Range so the basic melee roster comes before the
-    /// archer/siege one (see <see cref="Units.UnitCatalogue"/>, where Spearman
-    /// trains at the Barracks and Bowman at the Archery Range).
+    /// Tower → Barracks → Archery Range, so the border watch comes first,
+    /// then the basic melee roster, then the archer/siege one (see
+    /// <see cref="Units.UnitCatalogue"/>, where Spearman trains at the
+    /// Barracks and Bowman at the Archery Range).
     /// </para>
     /// <para>
-    /// Quarry deliberately gates nothing. It needs a Mountain hex, and
-    /// <see cref="World.WorldGenerator"/> does not guarantee one within reach
-    /// of a starting position — anything behind a Quarry would be unreachable
-    /// for an unlucky map roll rather than merely expensive.
+    /// The four shrines and the Sawmill are late-game capstones rather than
+    /// early unlocks: each needs a maxed-out pair (or single building) from
+    /// its own line standing before it can go up at all — see their
+    /// <c>RequiredLonghouseLevel = 10</c> in <see cref="Shrine"/> and the
+    /// <see cref="BuildingType.Sawmill"/> case in <see cref="TryGet"/>.
+    /// </para>
+    /// <para>
+    /// Storage House deliberately gates nothing — it is the settlement's
+    /// early safety valve against overflow, not a reward for reaching
+    /// somewhere else first. Quarry likewise gates nothing: it needs a
+    /// Mountain hex, and <see cref="World.WorldGenerator"/> does not
+    /// guarantee one within reach of a starting position — anything behind a
+    /// Quarry would be unreachable for an unlucky map roll rather than
+    /// merely expensive.
     /// </para>
     /// </remarks>
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>> PrerequisiteTable =
         new Dictionary<BuildingType, IReadOnlyList<BuildingPrerequisite>>
         {
-            [BuildingType.StorageHouse] =
-                [new(BuildingType.Lumberjack, 5), new(BuildingType.Farm, 3)],
-            [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 6)],
+            [BuildingType.Sawmill] = [new(BuildingType.Lumberjack, 10)],
             [BuildingType.PumpkinFarm] = [new(BuildingType.Farm, 5)],
             [BuildingType.Dockyard] = [new(BuildingType.FishingHut, 4)],
+            [BuildingType.Barracks] = [new(BuildingType.Tower, 5)],
             [BuildingType.ArcheryRange] = [new(BuildingType.Barracks, 3)],
+            [BuildingType.ShrineOfThor] =
+                [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
             [BuildingType.ShrineOfFreyja] =
-                [new(BuildingType.ShrineOfThor, 5), new(BuildingType.PumpkinFarm, 6)],
+                [new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10)],
+            [BuildingType.ShrineOfUllr] =
+                [new(BuildingType.Lumberjack, 10), new(BuildingType.Sawmill, 10)],
+            [BuildingType.ShrineOfNjord] =
+                [new(BuildingType.FishingHut, 10), new(BuildingType.Dockyard, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
         };
 
@@ -107,6 +122,8 @@ public static class BuildingCatalogue
             BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
+            BuildingType.ShrineOfUllr => Shrine(type, level),
+            BuildingType.ShrineOfNjord => Shrine(type, level),
             BuildingType.GreatStorehouse => GreatStorehouse(level),
             BuildingType.ArcheryRange => ArcheryRange(level),
             BuildingType.Dockyard => Dockyard(level),
@@ -114,10 +131,12 @@ public static class BuildingCatalogue
             BuildingType.FisherHut => FisherHut(level),
             // Grass qualifies terrain-wise, but only a hex that is itself a
             // Straight/Bend river tile is actually buildable — see
-            // BuildingDefinition.RequiresRiverShape.
+            // BuildingDefinition.RequiresRiverShape. A late-game capstone on
+            // a maxed Lumberjack (see PrerequisiteTable), so its longhouse
+            // gate overrides Producer's usual early-unlock curve.
             BuildingType.Sawmill =>
                 Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
-                    with { RequiresRiverShape = SawmillRiverShapes },
+                    with { RequiresRiverShape = SawmillRiverShapes, RequiredLonghouseLevel = 10 },
             _ => null,
         };
 
@@ -236,6 +255,8 @@ public static class BuildingCatalogue
     {
         BuildingType.ShrineOfThor => GodType.Thor,
         BuildingType.ShrineOfFreyja => GodType.Freyja,
+        BuildingType.ShrineOfUllr => GodType.Ullr,
+        BuildingType.ShrineOfNjord => GodType.Njord,
         _ => null,
     };
 
@@ -350,7 +371,9 @@ public static class BuildingCatalogue
         AllowedTerrain = SandOrGrass,
         // Later than the other border buildings on purpose: a tower extends
         // the realm, so opening it at the very first longhouse level made
-        // expansion the obvious first move rather than a decision.
+        // expansion the obvious first move rather than a decision. Also now
+        // the entry point to the military line — Barracks needs a level-5
+        // Tower before it can go up (see PrerequisiteTable).
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
         // This tower's own satellite-disc claim radius, centred on the tower
         // rather than the settlement — see Settlement.ClaimDiscsFor, which
@@ -398,7 +421,9 @@ public static class BuildingCatalogue
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
     /// folded into <see cref="Settlement.CurrentTotals"/> instead of summed
     /// here alongside the additive totals. Grass-only, like Farm/PumpkinFarm/
-    /// MagicTower.
+    /// MagicTower. Every shrine is a late-game capstone now — a maxed pair
+    /// standing from their own line (see PrerequisiteTable) — so the
+    /// longhouse gate is flat 10 rather than the usual early-unlock curve.
     /// </summary>
     private static BuildingDefinition Shrine(BuildingType type, int level) => new()
     {
@@ -406,7 +431,7 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 180, Stone: 140, Food: 60, Iron: 0) * CostFactor(level),
         BuildDuration = Duration(12, level),
-        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+        RequiredLonghouseLevel = 10,
         AllowedTerrain = Grass,
     };
 
@@ -445,7 +470,9 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 140, Stone: 100, Food: 0, Iron: 20) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
-        RequiredLonghouseLevel = 2 + ((level - 1) / 2),
+        // The deepest tier of the military line (Tower -> Barracks ->
+        // Archery Range), held back further than either behind it.
+        RequiredLonghouseLevel = 5 + ((level - 1) / 2),
     };
 
     // Same shape as FishingHut: RequiresCoastalWater rather than
@@ -483,9 +510,10 @@ public static class BuildingCatalogue
         Cost = new ResourceAmounts(Wood: 130, Stone: 110, Food: 0, Iron: 15) * CostFactor(level),
         BuildDuration = Duration(7, level),
         AllowedTerrain = SandOrGrass,
-        // The entry point to the whole military line (Archery Range sits
-        // behind it), held back so raising an army is a mid-game commitment
-        // rather than something a settlement can start with.
+        // The middle rung of the military line: needs a level-5 Tower
+        // standing first (see PrerequisiteTable) and gates Archery Range in
+        // turn, so raising an army is a mid-game commitment rather than
+        // something a settlement can start with.
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 }

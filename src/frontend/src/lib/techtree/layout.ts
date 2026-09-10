@@ -34,38 +34,59 @@ export const ANCHOR = 'longhouse';
  */
 export const HIDDEN_FROM_DOCS: readonly string[] = ['magictower', 'fisherhut'];
 
-export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Capstone'];
+export const COLUMN_TITLES: readonly string[] = ['Anchor', 'First works', 'Refining', 'Advanced', 'Capstone'];
 
 export type Slot = readonly [col: number, row: number];
 
 /**
  * Column is dependency depth; row is chosen so that most links are a single
- * horizontal run. Sources sit level with the building they feed — lumberjack
- * with sawmill, farm with storage house, fishing hut with dockyard, barracks
- * with archery range — and column 2's row 3 is left deliberately empty so
- * Shrine of Thor can run flat across it to Shrine of Freyja without passing
- * over a card.
+ * horizontal run — sources sit level with everything they feed: storage
+ * house with great storehouse, fishing hut with dockyard, and tower with
+ * barracks and archery range.
+ *
+ * Every capstone (Great Storehouse, both shrines) sits in the rightmost
+ * column, on its nearer parent's row, so the whole run of "late-game tier"
+ * cards reads as one column. Their farther parent's link doesn't need its
+ * own routing at all — `routing.ts`'s `reuseSameRowChain` notices the row
+ * is already a chain of real edges (adjacent ones, or ones already routed
+ * straight through an empty cell) and just extends the hops already drawn,
+ * rather than routing a separate line around the nearer parent's card.
+ *
+ * A column-3 cell is left empty on every row whose capstone's nearer parent
+ * sits in column 2, so that parent's link can pass straight through to
+ * column 4 instead of detouring: [3, 1] for Pumpkin Farm -> Shrine of
+ * Freyja, and [3, 3] for Storage House -> Great Storehouse ([2, 3] is empty
+ * too, since Great Storehouse has no column-2 parent at all), and [3, 4] for
+ * Dockyard -> Shrine of Njörd. [2, 0] is likewise left empty for Lumberjack
+ * -> Sawmill — Shrine of Ullr's own nearer parent (Sawmill) already sits in
+ * column 3, right next to it, so its row needs no further empty cell.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
-  longhouse: [0, 3],
+  longhouse: [0, 2],
 
   lumberjack: [1, 0],
   farm: [1, 1],
   quarry: [1, 2],
-  shrineofthor: [1, 3],
+  storagehouse: [1, 3],
   fishinghut: [1, 4],
-  barracks: [1, 5],
-  tower: [1, 6],
+  tower: [1, 5],
 
-  sawmill: [2, 0],
-  storagehouse: [2, 1],
-  pumpkinfarm: [2, 2],
-  // [2, 3] intentionally empty — the lane Shrine of Thor runs through.
+  // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
+  pumpkinfarm: [2, 1],
   dockyard: [2, 4],
-  archeryrange: [2, 5],
+  barracks: [2, 5],
 
-  greatstorehouse: [3, 1],
-  shrineoffreyja: [3, 3],
+  sawmill: [3, 0],
+  // [3, 1] intentionally empty — the lane Pumpkin Farm -> Shrine of Freyja runs through.
+  // [3, 3] intentionally empty — the lane Storage House -> Great Storehouse runs through.
+  // [3, 4] intentionally empty — the lane Dockyard -> Shrine of Njörd runs through.
+  archeryrange: [3, 5],
+
+  greatstorehouse: [4, 3],
+  shrineoffreyja: [4, 1],
+  shrineofullr: [4, 0],
+  shrineofnjord: [4, 4],
+  shrineofthor: [4, 5],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

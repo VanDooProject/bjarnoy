@@ -1687,7 +1687,19 @@ public sealed record Settlement
             }
         }
 
-        return total.Capped(MaxEffectBonus, MaxEffectBonus);
+        return total.Capped(MaxEffectBonus, MaxEffectBonus, MaxEffectBonus);
+    }
+
+    /// <summary>
+    /// This settlement's current attack bonus, as a percentage — the
+    /// attacker-side counterpart to <see cref="BuildingCatalogue.TowerDefenseBonusPercent"/>,
+    /// sourced from standing shrine favour and slotted runes (Thor for land
+    /// units, Njörd for ships — see <see cref="Shrines.ShrineCatalogue.Favour"/>).
+    /// </summary>
+    public double AttackBonusPercent(UnitClass unitClass)
+    {
+        var effect = ActiveEffect(Buildings, Runes);
+        return (unitClass == UnitClass.Ship ? effect.ShipAttackBonus : effect.LandAttackBonus) * 100;
     }
 
     /// <summary>

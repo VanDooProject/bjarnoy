@@ -94,6 +94,11 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
   const segments: RoutedSegment[] = [];
   const nextLane = laneAllocator();
 
+  // The final flat hop of every adjacent edge, keyed so a same-row distant
+  // edge can find and extend it instead of drawing its own line — see
+  // `reuseSameRowChain` below.
+  const leafSegmentByEdge = new Map<EdgeKey, RoutedSegment>();
+
   // An edge spanning more than one column can't use its source's trunk (that
   // only reaches the next column), so it gets its own run into a lane
   // reserved for the target — shared by every long edge arriving there, since
@@ -128,7 +133,9 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
 
     // A lone target already at the source's height needs no trunk at all.
     if (targets.length === 1 && midOf(targets[0]!) === sy) {
-      segments.push({ points: [[sx, sy], [leftOf(targets[0]!), sy]], keys });
+      const segment: RoutedSegment = { points: [[sx, sy], [leftOf(targets[0]!), sy]], keys };
+      segments.push(segment);
+      leafSegmentByEdge.set(keys[0]!, segment);
       continue;
     }
 
@@ -150,13 +157,58 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
 
     for (const target of targets) {
       const ty = midOf(target);
-      segments.push({ points: [[trunkX, ty], [leftOf(target), ty]], keys: [edgeKey(source, target)] });
+      const edge = edgeKey(source, target);
+      const segment: RoutedSegment = { points: [[trunkX, ty], [leftOf(target), ty]], keys: [edge] };
+      segments.push(segment);
+      leafSegmentByEdge.set(edge, segment);
     }
   }
 
+  /**
+   * A distant edge whose source and target share a row, with every cell
+   * between them filled by real intermediate nodes on the *same* chain (e.g.
+   * Shrine of Freyja's own Farm and Pumpkin Farm prerequisites sit right next
+   * to each other) doesn't need its own line at all: the hops already drawn
+   * between those nodes — adjacent ones, or distant ones already routed
+   * straight through an empty cell — trace the identical path. Extending
+   * their `keys` instead of drawing a new one means hovering Farm lights the
+   * exact same run hovering Pumpkin Farm does, one card further.
+   *
+   * Only edges already in `leafSegmentByEdge` count as a hop, so this only
+   * ever reuses a line actually drawn, never a hypothetical one — and since
+   * `distant` is processed shortest-span first, a nearer hop (e.g. Pumpkin
+   * Farm -> Shrine of Freyja, two columns) is always routed, and so
+   * available to reuse, before a farther edge over the same row (Farm ->
+   * Shrine of Freyja, three columns) needs it.
+   */
+  function reuseSameRowChain(from: string, to: string): boolean {
+    const y = midOf(from);
+    if (midOf(to) !== y) return false;
+
+    const hopSegments: RoutedSegment[] = [];
+    let current = from;
+    while (current !== to) {
+      const next = graph.edges.find(
+        (e) => e.from === current && placed(e.to) && midOf(e.to) === y && leafSegmentByEdge.has(edgeKey(e.from, e.to)),
+      );
+      if (!next) return false;
+      hopSegments.push(leafSegmentByEdge.get(edgeKey(current, next.to))!);
+      current = next.to;
+    }
+
+    const key = edgeKey(from, to);
+    for (const segment of hopSegments) (segment.keys as EdgeKey[]).push(key);
+    return true;
+  }
+
+  // Shortest span first, so a nearer hop a same-row chain might reuse is
+  // always routed before the farther edge that wants to reuse it.
+  const span = (edge: { from: string; to: string }) => colOf(edge.to) - colOf(edge.from);
   for (const { from, to } of distant.sort(
-    (a, b) => colOf(a.from) - colOf(b.from) || a.to.localeCompare(b.to),
+    (a, b) => span(a) - span(b) || colOf(a.from) - colOf(b.from) || a.to.localeCompare(b.to),
   )) {
+    if (reuseSameRowChain(from, to)) continue;
+
     const key = edgeKey(from, to);
     const sx = rightOf(from);
     const sy = midOf(from);
@@ -165,7 +217,9 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
 
     // Straight through, when the layout has kept the cells between clear.
     if (sy === ty && !crossesCard(layout, sy, sx, tx)) {
-      segments.push({ points: [[sx, sy], [tx, ty]], keys: [key] });
+      const segment: RoutedSegment = { points: [[sx, sy], [tx, ty]], keys: [key] };
+      segments.push(segment);
+      leafSegmentByEdge.set(key, segment);
       continue;
     }
 

@@ -54,6 +54,32 @@ public class BattleResolverTests
     }
 
     [Fact]
+    public void Land_attack_bonus_percent_scales_only_non_ship_attack_power()
+    {
+        // 10 Spearmen (Attack 15 each = 150 land) + 2 Longships (Attack 60 each = 120 ship).
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 2) };
+        var defender = new[] { new UnitStack(UnitType.Spearman, 1) };
+
+        var noBonus = BattleResolver.Resolve(attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1);
+        Assert.Equal(270, noBonus.AttackPower);
+
+        var withLandBonus = BattleResolver.Resolve(
+            attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1, landAttackBonusPercent: 20);
+        Assert.Equal(150 * 1.2 + 120, withLandBonus.AttackPower, 6);
+    }
+
+    [Fact]
+    public void Ship_attack_bonus_percent_scales_only_ship_attack_power()
+    {
+        var attacker = new[] { new UnitStack(UnitType.Spearman, 10), new UnitStack(UnitType.Longship, 2) };
+        var defender = new[] { new UnitStack(UnitType.Spearman, 1) };
+
+        var withShipBonus = BattleResolver.Resolve(
+            attacker, defender, defenseBonusPercent: 0, Abundant, seed: 1, shipAttackBonusPercent: 50);
+        Assert.Equal(150 + 120 * 1.5, withShipBonus.AttackPower, 6);
+    }
+
+    [Fact]
     public void An_exact_tie_goes_to_the_defender_and_annihilates_both_sides()
     {
         // Both sides commit exactly equal power: 7 Spearmen attacking

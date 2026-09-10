@@ -21,6 +21,12 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   longhouse: 'greathall',
   shrineofthor: 'thorshrine',
   shrineoffreyja: 'freyjashrine',
+  // Placeholder art only — Ullr and Njörd have no art of their own in the
+  // pack yet, so their shrines borrow Thor's/Freyja's family (both already
+  // in the glob list below) rather than falling back to a bare terrain tile.
+  // Swap these for dedicated families once the art exists.
+  shrineofullr: 'thorshrine',
+  shrineofnjord: 'freyjashrine',
   farm: 'farm_crop',
   tower: 'towerbuilding',
   pumpkinfarm: 'farm_pumpkin',
@@ -74,6 +80,40 @@ const TERRAIN_SHOWCASE_FAMILY: Record<string, string> = {
   mountain: 'mountaintile',
 };
 
+/**
+ * Terrain has no per-level "showcase" atlas art (the `terrain` webp atlas
+ * only carries the runtime's split base/top layers, not a single flattened
+ * picture per hex) — this is the same single, pre-composited loose PNG
+ * `pngBuildingArt` falls back to for buildings, just keyed by the terrain
+ * family name instead of a building family. `coastalwatertile` is the only
+ * family the pack ships a decorated `_variant000`/`_variant001` loose PNG
+ * for; the rest only have the plain, undecorated flattened image.
+ */
+const terrainArtModules = import.meta.glob(
+  '../../../vendor/bg_assets_hextile/hextiles/{watertile,coastalwatertile,sandtile,grasstile,foresttile,mountaintile,rivertile,rivertile_bend,rivertile_bend60,rivertile_spring,rivertile_y_narrow}_SE*.png',
+  { eager: true, import: 'default' },
+) as Record<string, string>;
+
+const terrainPngByName: Record<string, string> = {};
+for (const [path, url] of Object.entries(terrainArtModules)) {
+  const name = path.slice(path.lastIndexOf('/') + 1, -'.png'.length);
+  terrainPngByName[name] = url;
+}
+
+/**
+ * The river art pack's five shapes (`RiverTileShape` minus `mouth`, which
+ * has no art of its own — see `types.ts`'s `mouthOrientationOf`), each as
+ * one flattened loose PNG rather than a runtime base/top split, same as
+ * `terrainPngByName` above.
+ */
+const RIVER_SHAPE_FAMILY: Record<string, string> = {
+  straight: 'rivertile',
+  bend: 'rivertile_bend',
+  bend60: 'rivertile_bend60',
+  spring: 'rivertile_spring',
+  confluence: 'rivertile_y_narrow',
+};
+
 /** Same fallback as `textures.ts`'s `clampIndex`: a level past this building's art rungs renders at the richest one it has. */
 function clampLevel(level: number, maxLevel: number): number {
   return Math.min(Math.max(level, 0), maxLevel);
@@ -105,10 +145,38 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
   return pngUrl ? { kind: 'png', url: pngUrl } : undefined;
 }
 
+/**
+ * Art for one terrain-art-pack family. Tries the "showcase" atlas first
+ * (currently never populated — see `terrainPngByName` above — but kept as
+ * the preferred source the way `buildingArt` does, in case a future pack
+ * ships it), then the flattened loose PNG. `decorated` picks the
+ * `_variant000` frame/PNG when the family has one — the plain, undecorated
+ * one otherwise (or always, when the family has no decorated frame at all).
+ */
+function terrainFamilyArt(family: string, decorated: boolean): ArtRef {
+  const frame = decorated
+    ? (findAtlasFrame('showcase', `${family}_SE_variant000`) ?? findAtlasFrame('showcase', `${family}_SE`))
+    : (findAtlasFrame('showcase', `${family}_SE`) ?? findAtlasFrame('showcase', `${family}_SE_level000`));
+  if (frame) return { kind: 'atlas', frame };
+  const pngUrl = decorated
+    ? (terrainPngByName[`${family}_SE_variant000`] ?? terrainPngByName[`${family}_SE`])
+    : terrainPngByName[`${family}_SE`];
+  if (!pngUrl) throw new Error(`buildingArt.ts: no terrain art for family "${family}"`);
+  return { kind: 'png', url: pngUrl };
+}
+
 /** Art for a bare hex, used when there's no building to show. Grass/forest use the decorated variant so the picture matches what the tile looks like in-game. */
 export function terrainArt(terrain: string): ArtRef {
   const family = TERRAIN_SHOWCASE_FAMILY[terrain] ?? TERRAIN_SHOWCASE_FAMILY.grass!;
-  const decorated = findAtlasFrame('showcase', `${family}_SE_variant000`);
-  const frame = decorated ?? findAtlasFrame('showcase', `${family}_SE`) ?? findAtlasFrame('showcase', `${family}_SE_level000`);
-  return { kind: 'atlas', frame: frame! };
+  return terrainFamilyArt(family, terrain === 'grass' || terrain === 'forest');
+}
+
+/** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */
+export function coastalWaterArt(): ArtRef {
+  return terrainFamilyArt('coastalwatertile', false);
+}
+
+/** Art for one of a river's five drawn shapes (`mouth` renders as `straight`/`bend`, same as the map — see `mouthOrientationOf`). */
+export function riverArt(shape: 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence'): ArtRef {
+  return terrainFamilyArt(RIVER_SHAPE_FAMILY[shape]!, false);
 }

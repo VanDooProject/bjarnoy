@@ -36,6 +36,8 @@ const attackerCounts = reactive<Record<string, number>>({});
 const defenderCounts = reactive<Record<string, number>>({});
 const guestCounts = reactive<Record<string, number>>({});
 const towerLevel = ref(0);
+const landAttackBonusPercent = ref(0);
+const shipAttackBonusPercent = ref(0);
 const mission = ref<'attack' | 'raid'>('attack');
 const seedText = ref('');
 
@@ -76,6 +78,8 @@ async function runSimulation() {
     towerLevel.value,
     mission.value,
     seed.value,
+    landAttackBonusPercent.value,
+    shipAttackBonusPercent.value,
   );
   if (!request) {
     errorMessage.value = t('simulator.errors.noAttacker');
@@ -179,6 +183,14 @@ async function runSimulation() {
             <label class="option-field">
               <span>{{ $t('simulator.options.towerLevel') }}</span>
               <input type="number" min="0" v-model.number="towerLevel" />
+            </label>
+            <label class="option-field">
+              <span>{{ $t('simulator.options.landAttackBonusPercent') }}</span>
+              <input type="number" min="0" max="100" v-model.number="landAttackBonusPercent" />
+            </label>
+            <label class="option-field">
+              <span>{{ $t('simulator.options.shipAttackBonusPercent') }}</span>
+              <input type="number" min="0" max="100" v-model.number="shipAttackBonusPercent" />
             </label>
             <label class="option-field">
               <span>{{ $t('simulator.options.mission') }}</span>

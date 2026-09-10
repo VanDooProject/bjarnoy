@@ -39,14 +39,15 @@ describe('buildTechTreeNodes', () => {
   });
 
   it('lists real prerequisites as short chips', () => {
-    expect(byName.get('storagehouse')!.chips).toEqual([
-      { text: 'LH 1', kind: 'longhouse' },
-      { text: 'Lumber 5', kind: 'building' },
-      { text: 'Farm 3', kind: 'building' },
-    ]);
+    expect(byName.get('storagehouse')!.chips).toEqual([{ text: 'LH 1', kind: 'longhouse' }]);
     expect(byName.get('greatstorehouse')!.chips).toEqual([
       { text: 'LH 10', kind: 'longhouse' },
       { text: 'Storage 10', kind: 'building' },
+    ]);
+    expect(byName.get('shrineofthor')!.chips).toEqual([
+      { text: 'LH 10', kind: 'longhouse' },
+      { text: 'Barracks 10', kind: 'building' },
+      { text: 'Archery 10', kind: 'building' },
     ]);
   });
 

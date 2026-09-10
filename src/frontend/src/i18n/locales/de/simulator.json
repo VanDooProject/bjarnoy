@@ -18,6 +18,8 @@
   },
   "options": {
     "towerLevel": "Turmstufe",
+    "landAttackBonusPercent": "Angriffsbonus Landeinheiten %",
+    "shipAttackBonusPercent": "Angriffsbonus Schiffe %",
     "mission": "Mission",
     "attack": "Angriff",
     "raid": "Plünderung",

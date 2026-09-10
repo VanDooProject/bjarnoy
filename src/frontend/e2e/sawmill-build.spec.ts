@@ -22,11 +22,12 @@ test('building a sawmill from the ring menu places it without a rendering error'
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.found(page);
 
-  // Sawmill is RequiredLonghouseLevel 2 (BuildingCatalogue.cs's Producer:
-  // 1 + ((level - 1) / 2) is overridden per-building — Sawmill/Barracks/
-  // ArcheryRange/Dockyard all use 2 + ((level - 1) / 2) at level 1). Level
+  // Sawmill is RequiredLonghouseLevel 10 (BuildingCatalogue.cs's Sawmill case
+  // in TryGet overrides the Producer default — it is a late-game capstone of
+  // the resource line, like the four shrines). The ring menu reads that gate
+  // off the building catalogue and shows a locked bubble below it, so level
   // the longhouse up first, same approach shrine-build.spec.ts uses.
-  await settlement.setSettlementLevel(2);
+  await settlement.setSettlementLevel(10);
 
   // Same grass-hex search as shrine-build.spec.ts — Sawmill lives in the
   // "Resource" category alongside Farm/PumpkinFarm. Since it's built

@@ -660,6 +660,8 @@ export class WorldModel {
       'pumpkinfarm',
       'shrineofthor',
       'shrineoffreyja',
+      'shrineofullr',
+      'shrineofnjord',
       'lumberjack',
       'quarry',
       'storagehouse',

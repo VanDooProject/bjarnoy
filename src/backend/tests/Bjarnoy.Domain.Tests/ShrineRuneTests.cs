@@ -1,6 +1,7 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Shrines;
+using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -16,9 +17,20 @@ public class ShrineCatalogueTests
     {
         var favour = ShrineCatalogue.Favour(GodType.Thor, level);
 
-        Assert.Equal(expectedBonus, favour.ProductionBonus.Wood, 6);
-        Assert.Equal(expectedBonus, favour.ProductionBonus.Stone, 6);
-        Assert.Equal(0, favour.ProductionBonus.Food, 6);
+        Assert.Equal(expectedBonus, favour.LandAttackBonus, 6);
+        Assert.Equal(0, favour.ShipAttackBonus, 6);
+        Assert.True(favour.ProductionBonus == ResourceAmounts.Zero);
+        Assert.Equal(0, favour.StorageBonus, 6);
+    }
+
+    [Fact]
+    public void Thor_boosts_land_attack_only()
+    {
+        var favour = ShrineCatalogue.Favour(GodType.Thor, 1);
+
+        Assert.Equal(0.10, favour.LandAttackBonus, 6);
+        Assert.Equal(0, favour.ShipAttackBonus, 6);
+        Assert.True(favour.ProductionBonus == ResourceAmounts.Zero);
         Assert.Equal(0, favour.StorageBonus, 6);
     }
 
@@ -30,6 +42,28 @@ public class ShrineCatalogueTests
         Assert.Equal(0.10, favour.ProductionBonus.Food, 6);
         Assert.Equal(0, favour.ProductionBonus.Wood, 6);
         Assert.Equal(0, favour.ProductionBonus.Stone, 6);
+    }
+
+    [Fact]
+    public void Ullr_boosts_wood_only()
+    {
+        var favour = ShrineCatalogue.Favour(GodType.Ullr, 1);
+
+        Assert.Equal(0.10, favour.ProductionBonus.Wood, 6);
+        Assert.Equal(0, favour.ProductionBonus.Stone, 6);
+        Assert.Equal(0, favour.ProductionBonus.Food, 6);
+        Assert.Equal(0, favour.StorageBonus, 6);
+    }
+
+    [Fact]
+    public void Njord_boosts_ship_attack_only()
+    {
+        var favour = ShrineCatalogue.Favour(GodType.Njord, 1);
+
+        Assert.Equal(0.10, favour.ShipAttackBonus, 6);
+        Assert.Equal(0, favour.LandAttackBonus, 6);
+        Assert.True(favour.ProductionBonus == ResourceAmounts.Zero);
+        Assert.Equal(0, favour.StorageBonus, 6);
     }
 
     [Theory]
@@ -104,26 +138,26 @@ public class SettlementShrineTests
     [Fact]
     public void A_shrines_own_favour_boosts_totals_with_no_rune_slotted()
     {
-        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
+        var settlement = FoundWithShrine(BuildingType.ShrineOfUllr, 1);
         var (baseProduction, _) = BuildingCatalogue.Totals(
         [
             (BuildingType.Longhouse, 3),
-            (BuildingType.ShrineOfThor, 1),
+            (BuildingType.ShrineOfUllr, 1),
         ]);
-        var favour = ShrineCatalogue.Favour(GodType.Thor, 1);
+        var favour = ShrineCatalogue.Favour(GodType.Ullr, 1);
 
         var (production, _) = settlement.CurrentTotals();
 
         Assert.Equal(baseProduction.Wood * (1 + favour.ProductionBonus.Wood), production.Wood, 6);
-        Assert.Equal(baseProduction.Stone * (1 + favour.ProductionBonus.Stone), production.Stone, 6);
-        // Food is not in Thor's domain — untouched by the shrine.
+        // Stone and Food are not in Ullr's domain — untouched by the shrine.
+        Assert.Equal(baseProduction.Stone, production.Stone, 6);
         Assert.Equal(baseProduction.Food, production.Food, 6);
     }
 
     [Fact]
     public void Slotting_a_rune_adds_its_effect_on_top_of_the_shrines_own_favour()
     {
-        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
+        var settlement = FoundWithShrine(BuildingType.ShrineOfUllr, 1);
         var rune = NewRune(RuneType.Fehu, RuneRarity.Carved);
         settlement = settlement.GrantRune(rune);
 
@@ -133,9 +167,9 @@ public class SettlementShrineTests
         var (baseProduction, _) = BuildingCatalogue.Totals(
         [
             (BuildingType.Longhouse, 3),
-            (BuildingType.ShrineOfThor, 1),
+            (BuildingType.ShrineOfUllr, 1),
         ]);
-        var favour = ShrineCatalogue.Favour(GodType.Thor, 1);
+        var favour = ShrineCatalogue.Favour(GodType.Ullr, 1);
         var runeEffect = RuneCatalogue.Effect(RuneType.Fehu, RuneRarity.Carved);
 
         var (production, _) = result.Settlement!.CurrentTotals();
@@ -149,7 +183,7 @@ public class SettlementShrineTests
     [Fact]
     public void Unslotting_a_rune_removes_its_effect_and_returns_it_to_storage()
     {
-        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
+        var settlement = FoundWithShrine(BuildingType.ShrineOfUllr, 1);
         var rune = NewRune(RuneType.Fehu, RuneRarity.Carved);
         settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex, T0).Settlement!;
 
@@ -160,7 +194,7 @@ public class SettlementShrineTests
         Assert.Null(unslotted.Runes.Single(r => r.Id == rune.Id).SlottedAt);
 
         var (withoutRune, _) = unslotted.CurrentTotals();
-        var (withShrineOnly, _) = FoundWithShrine(BuildingType.ShrineOfThor, 1).CurrentTotals();
+        var (withShrineOnly, _) = FoundWithShrine(BuildingType.ShrineOfUllr, 1).CurrentTotals();
         Assert.Equal(withShrineOnly.Wood, withoutRune.Wood, 6);
     }
 
@@ -274,7 +308,7 @@ public class SettlementShrineTests
     [Fact]
     public void Stacked_bonuses_are_capped_at_MaxEffectBonus()
     {
-        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 5); // 3 slots, +22% favour
+        var settlement = FoundWithShrine(BuildingType.ShrineOfUllr, 5); // 3 slots, +22% favour
         var runes = new[]
         {
             NewRune(RuneType.Fehu, RuneRarity.Blooded), // +12%
@@ -297,7 +331,7 @@ public class SettlementShrineTests
         var (baseProduction, _) = BuildingCatalogue.Totals(
         [
             (BuildingType.Longhouse, 3),
-            (BuildingType.ShrineOfThor, 5),
+            (BuildingType.ShrineOfUllr, 5),
         ]);
 
         var (production, _) = settlement.CurrentTotals();
@@ -340,7 +374,7 @@ public class SettlementShrineTests
     [Fact]
     public void SettleTo_carries_shrine_favour_into_the_persisted_rate()
     {
-        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
+        var settlement = FoundWithShrine(BuildingType.ShrineOfUllr, 1);
         var order = settlement.PlanBuild(BuildingType.Lumberjack, new HexCoord(2, 0), Terrain.Forest, T0, Guid.CreateVersion7());
         Assert.True(order.Accepted);
         var queued = settlement.Enqueue(order.Order!, T0);
@@ -349,5 +383,58 @@ public class SettlementShrineTests
 
         var (expectedProduction, _) = settled.CurrentTotals();
         Assert.Equal(expectedProduction.Wood, settled.Resources.RatePerHour.Wood, 6);
+    }
+
+    [Fact]
+    public void A_Thor_shrine_boosts_land_attack_bonus_percent_only()
+    {
+        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 1);
+
+        Assert.Equal(10, settlement.AttackBonusPercent(UnitClass.Infantry), 6);
+        Assert.Equal(0, settlement.AttackBonusPercent(UnitClass.Ship), 6);
+
+        // Thor no longer touches production or storage — that domain moved
+        // entirely to attack.
+        var (production, capacity) = settlement.CurrentTotals();
+        var (baseProduction, baseCapacity) = BuildingCatalogue.Totals(
+        [
+            (BuildingType.Longhouse, 3),
+            (BuildingType.ShrineOfThor, 1),
+        ]);
+        Assert.Equal(baseProduction.Wood, production.Wood, 6);
+        Assert.Equal(baseCapacity.Wood, capacity.Wood, 6);
+    }
+
+    [Fact]
+    public void A_Njord_shrine_boosts_ship_attack_bonus_percent_only()
+    {
+        var settlement = FoundWithShrine(BuildingType.ShrineOfNjord, 1);
+
+        Assert.Equal(10, settlement.AttackBonusPercent(UnitClass.Ship), 6);
+        Assert.Equal(0, settlement.AttackBonusPercent(UnitClass.Infantry), 6);
+
+        // Njörd no longer touches storage or production — that domain moved
+        // entirely to ship attack.
+        var (production, capacity) = settlement.CurrentTotals();
+        var (baseProduction, baseCapacity) = BuildingCatalogue.Totals(
+        [
+            (BuildingType.Longhouse, 3),
+            (BuildingType.ShrineOfNjord, 1),
+        ]);
+        Assert.Equal(baseProduction.Wood, production.Wood, 6);
+        Assert.Equal(baseCapacity.Wood, capacity.Wood, 6);
+    }
+
+    [Fact]
+    public void Attack_bonus_percent_is_capped_at_MaxEffectBonus_and_stacks_with_runes()
+    {
+        var settlement = FoundWithShrine(BuildingType.ShrineOfThor, 5); // 3 slots, +22% favour
+        // No attack-boosting rune exists today (Fehu/Jera/Othala all target
+        // production/storage), so slotting one here just proves it does not
+        // spuriously contribute to the attack axis.
+        var rune = NewRune(RuneType.Fehu, RuneRarity.Blooded);
+        settlement = settlement.GrantRune(rune).SlotRune(rune.Id, ShrineHex, T0).Settlement!;
+
+        Assert.Equal(22, settlement.AttackBonusPercent(UnitClass.Infantry), 6);
     }
 }

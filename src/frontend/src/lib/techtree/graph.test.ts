@@ -20,14 +20,14 @@ const graph = buildGraph(types, (type) => prerequisitesOf(byType, type));
 
 describe('buildGraph', () => {
   it('takes its edges from the catalogue', () => {
-    expect(graph.parents.get('storagehouse')).toEqual(['lumberjack', 'farm']);
+    expect(graph.parents.get('barracks')).toEqual(['tower']);
     expect(graph.parents.get('archeryrange')).toEqual(['barracks']);
     expect(graph.parents.get('greatstorehouse')).toEqual(['storagehouse']);
   });
 
   it('hangs everything with no prerequisite of its own off the longhouse', () => {
     expect(graph.parents.get('lumberjack')).toEqual(['longhouse']);
-    expect(graph.parents.get('barracks')).toEqual(['longhouse']);
+    expect(graph.parents.get('storagehouse')).toEqual(['longhouse']);
     expect(graph.parents.get('longhouse')).toBeUndefined();
   });
 
@@ -51,16 +51,20 @@ describe('buildGraph', () => {
 
 describe('ancestry', () => {
   it('walks the whole chain, not just direct parents', () => {
-    expect(ancestorsOf(graph, 'greatstorehouse')).toEqual(
-      new Set(['storagehouse', 'lumberjack', 'farm', 'longhouse']),
+    // Shrine of Thor needs both Barracks and Archery Range, and the latter
+    // is itself downstream of the former — the join should still dedupe to
+    // one flat ancestor set, not double-count the shared Tower/Longhouse root.
+    expect(ancestorsOf(graph, 'shrineofthor')).toEqual(
+      new Set(['barracks', 'archeryrange', 'tower', 'longhouse']),
     );
   });
 
   it('reports what a building leads to', () => {
-    expect(descendantsOf(graph, 'farm')).toEqual(
-      new Set(['storagehouse', 'greatstorehouse', 'pumpkinfarm', 'shrineoffreyja']),
+    expect(descendantsOf(graph, 'farm')).toEqual(new Set(['pumpkinfarm', 'shrineoffreyja']));
+    expect(descendantsOf(graph, 'tower')).toEqual(
+      new Set(['barracks', 'archeryrange', 'shrineofthor']),
     );
-    expect(descendantsOf(graph, 'tower')).toEqual(new Set());
+    expect(descendantsOf(graph, 'quarry')).toEqual(new Set());
   });
 });
 
@@ -77,17 +81,9 @@ describe('hoverSets', () => {
   it('lights the hovered card and its prerequisites, with their edges', () => {
     const sets = hoverSets(graph, 'greatstorehouse');
 
-    expect(sets.up).toEqual(
-      new Set(['greatstorehouse', 'storagehouse', 'lumberjack', 'farm', 'longhouse']),
-    );
+    expect(sets.up).toEqual(new Set(['greatstorehouse', 'storagehouse', 'longhouse']));
     expect(sets.upKeys).toEqual(
-      new Set([
-        edgeKey('longhouse', 'lumberjack'),
-        edgeKey('longhouse', 'farm'),
-        edgeKey('lumberjack', 'storagehouse'),
-        edgeKey('farm', 'storagehouse'),
-        edgeKey('storagehouse', 'greatstorehouse'),
-      ]),
+      new Set([edgeKey('longhouse', 'storagehouse'), edgeKey('storagehouse', 'greatstorehouse')]),
     );
     expect(sets.down.size).toBe(0);
   });
@@ -95,11 +91,17 @@ describe('hoverSets', () => {
   it('keeps what the hovered card leads to in its own, dimmer set', () => {
     const sets = hoverSets(graph, 'barracks');
 
-    expect(sets.up).toEqual(new Set(['barracks', 'longhouse']));
-    expect(sets.down).toEqual(new Set(['archeryrange']));
-    expect(sets.downKeys).toEqual(new Set([edgeKey('barracks', 'archeryrange')]));
+    expect(sets.up).toEqual(new Set(['barracks', 'tower', 'longhouse']));
+    expect(sets.down).toEqual(new Set(['archeryrange', 'shrineofthor']));
+    expect(sets.downKeys).toEqual(
+      new Set([
+        edgeKey('barracks', 'archeryrange'),
+        edgeKey('archeryrange', 'shrineofthor'),
+        edgeKey('barracks', 'shrineofthor'),
+      ]),
+    );
     // The edge into the hovered card belongs to the prerequisite side.
-    expect(sets.upKeys).toEqual(new Set([edgeKey('longhouse', 'barracks')]));
+    expect(sets.upKeys).toEqual(new Set([edgeKey('longhouse', 'tower'), edgeKey('tower', 'barracks')]));
   });
 
   it('never puts one edge in both sets', () => {

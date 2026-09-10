@@ -84,9 +84,15 @@ function formatModifier(modifier: BuildingModifier): string {
     case 'arcane':
       return t('hud.hoverTooltip.modifierArcane');
     case 'shrineFavour':
+      if (modifier.domain === 'shipAttack') {
+        return t('hud.hoverTooltip.modifierShrineFavourShipAttack', { percent: modifier.percent });
+      }
+      if (modifier.domain === 'landAttack') {
+        return t('hud.hoverTooltip.modifierShrineFavourLandAttack', { percent: modifier.percent });
+      }
       return t('hud.hoverTooltip.modifierShrineFavour', {
         percent: modifier.percent,
-        domain: modifier.domain === 'woodStone' ? t('hud.hoverTooltip.domainWoodStone') : t('hud.hoverTooltip.domainFood'),
+        domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
   }
 }

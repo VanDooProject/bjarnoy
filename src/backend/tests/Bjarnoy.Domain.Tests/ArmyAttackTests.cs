@@ -326,6 +326,31 @@ public class ArmyAttackTests
         Assert.True(withBonus.Battle!.DefensePower > withoutBonus.Battle!.DefensePower);
     }
 
+    [Fact]
+    public void Attacker_shrine_favour_bonus_raises_attack_power_but_not_from_the_ship_axis()
+    {
+        // AllGrass() (this file's terrain fixture) has no water for a Karve
+        // to path across, so only land units are exercised here — the
+        // land/ship split of BattleResolver.Resolve itself is covered
+        // directly by BattleResolverTests, which is not terrain-bound.
+        var settlement = Found();
+        var decision = DispatchAttack(
+            settlement, Guid.CreateVersion7(), provisions: 100, requested: [new UnitStack(UnitType.Axeman, 10)]);
+        var army = decision.Army!;
+        var movement = ((ArmyLocation.InTransit)army.Location).Movement;
+
+        var defender = Found(centre: TargetHex, garrison: [new UnitStack(UnitType.Spearman, 1)]);
+
+        var noBonus = Army.SettleArrival(army, defender, 1.0, movement.ArrivesAt, seed: 1);
+        var withLandBonus = Army.SettleArrival(
+            army, defender, 1.0, movement.ArrivesAt, seed: 1, landAttackBonusPercent: 20);
+        var withShipBonus = Army.SettleArrival(
+            army, defender, 1.0, movement.ArrivesAt, seed: 1, shipAttackBonusPercent: 20);
+
+        Assert.True(withLandBonus.Battle!.AttackPower > noBonus.Battle!.AttackPower);
+        Assert.Equal(noBonus.Battle!.AttackPower, withShipBonus.Battle!.AttackPower);
+    }
+
     // --- Catapult targeting & building destruction (issue #40 phase 5) ---
 
     /// <summary>

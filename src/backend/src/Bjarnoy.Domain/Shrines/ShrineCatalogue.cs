@@ -30,8 +30,15 @@ public static class ShrineCatalogue
 
         return god switch
         {
-            GodType.Thor => new ShrineEffect(new ResourceAmounts(Wood: perLevel, Stone: perLevel, Food: 0, Iron: 0), StorageBonus: 0),
+            // A war-god's favour, so Thor boosts land unit attack rather
+            // than any resource's production — keeps this from overlapping
+            // Freyja's or Ullr's domain.
+            GodType.Thor => new ShrineEffect(ResourceAmounts.Zero, StorageBonus: 0, LandAttackBonus: perLevel),
             GodType.Freyja => new ShrineEffect(new ResourceAmounts(Wood: 0, Stone: 0, Food: perLevel, Iron: 0), StorageBonus: 0),
+            GodType.Ullr => new ShrineEffect(new ResourceAmounts(Wood: perLevel, Stone: 0, Food: 0, Iron: 0), StorageBonus: 0),
+            // A sea-raiding god's favour, so Njörd boosts ship attack rather
+            // than storage capacity or any resource's production.
+            GodType.Njord => new ShrineEffect(ResourceAmounts.Zero, StorageBonus: 0, ShipAttackBonus: perLevel),
             _ => throw new ArgumentOutOfRangeException(nameof(god), god, "Unknown god"),
         };
     }

@@ -89,7 +89,7 @@ describe('routeEdges', () => {
   });
 
   it('emits one trunk for a fan-out, not one line per target', () => {
-    // The longhouse feeds seven roots; it should still leave its card once.
+    // The longhouse feeds every root; it should still leave its card once.
     const longhouseX = columnX(0) + CARD_W;
     const stubs = segments.filter(
       (s) =>
@@ -129,7 +129,7 @@ describe('routeEdges', () => {
     // Barracks and archery range share a row, so their link is one segment.
     const [barracksCol, barracksRow] = TECH_TREE_LAYOUT.barracks!;
     const y = rowY(barracksRow) + CARD_H / 2;
-    const straight = segments.find((s) => s.keys.length === 1 && s.keys[0] === edgeKey('barracks', 'archeryrange'));
+    const straight = segments.find((s) => s.keys.includes(edgeKey('barracks', 'archeryrange')));
 
     expect(straight!.points).toEqual([
       [columnX(barracksCol) + CARD_W, y],
@@ -137,13 +137,20 @@ describe('routeEdges', () => {
     ]);
   });
 
-  it('runs a two-column link straight through the cell left empty for it', () => {
-    // Shrine of Thor reaches Shrine of Freyja across column 2, whose row 3 is
-    // deliberately unoccupied — see layout.ts.
-    const link = segments.find((s) => s.keys[0] === edgeKey('shrineofthor', 'shrineoffreyja'));
+  it("reuses a multi-parent capstone's own row instead of routing its far parent separately", () => {
+    // Shrine of Thor needs both Barracks and Archery Range, which already sit
+    // adjacent on Shrine of Thor's own row (Barracks -> Archery Range is its
+    // own real edge) — the Barracks -> Shrine of Thor link should reuse that
+    // exact run and the Archery Range -> Shrine of Thor leaf, rather than
+    // drawing a third line of its own.
+    const barracksToShrine = edgeKey('barracks', 'shrineofthor');
+    const barracksToArchery = segments.find((s) => s.keys.includes(edgeKey('barracks', 'archeryrange')));
+    const archeryToShrine = segments.find((s) => s.keys.includes(edgeKey('archeryrange', 'shrineofthor')));
 
-    expect(link!.points).toHaveLength(2);
-    expect(link!.points[0]![1]).toBe(link!.points[1]![1]);
+    expect(barracksToArchery!.keys).toContain(barracksToShrine);
+    expect(archeryToShrine!.keys).toContain(barracksToShrine);
+    // No separate line was drawn just for it.
+    expect(segments.filter((s) => s.keys.includes(barracksToShrine))).toHaveLength(2);
   });
 
   it('is stable across calls, so the picture never reshuffles', () => {
@@ -160,13 +167,16 @@ describe('crossesCard', () => {
   });
 
   it('lets a run pass between rows, and through an empty cell', () => {
-    const [col, row] = TECH_TREE_LAYOUT.pumpkinfarm!;
+    const [, row] = TECH_TREE_LAYOUT.pumpkinfarm!;
 
     // The gap below the row's cards.
     expect(crossesCard(TECH_TREE_LAYOUT, rowY(row) + CARD_H + 4, 0, 2000)).toBe(false);
-    // Column 2, row 3 is empty by design.
+    // Column 2, row 0 is empty by design — the lane Lumberjack -> Sawmill
+    // (column 1 to column 3) runs through, since Sawmill sits a column
+    // further out than its one real hop from Lumberjack would suggest.
+    const [sawmillCol, sawmillRow] = TECH_TREE_LAYOUT.sawmill!;
     expect(
-      crossesCard(TECH_TREE_LAYOUT, rowY(3) + CARD_H / 2, columnX(col), columnX(col) + CARD_W),
+      crossesCard(TECH_TREE_LAYOUT, rowY(sawmillRow) + CARD_H / 2, columnX(sawmillCol - 1), columnX(sawmillCol)),
     ).toBe(false);
   });
 });

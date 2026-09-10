@@ -105,6 +105,22 @@ public enum BuildingType
     /// modelled here.
     /// </summary>
     Sawmill = 16,
+
+    /// <summary>
+    /// Raised to Ullr. Its favour, plus any slotted runes, boosts Wood
+    /// production — the wood/hunting line's own capstone, alongside
+    /// <see cref="ShrineOfThor"/> and <see cref="ShrineOfFreyja"/>.
+    /// </summary>
+    ShrineOfUllr = 17,
+
+    /// <summary>
+    /// Raised to Njörd. Its favour, plus any slotted runes, boosts storage
+    /// capacity rather than any resource's production — sea-trade wealth
+    /// rather than a harvest — so it never overlaps with
+    /// <see cref="ShrineOfThor"/> or <see cref="ShrineOfFreyja"/>. The
+    /// water line's own capstone, alongside <see cref="Dockyard"/>.
+    /// </summary>
+    ShrineOfNjord = 18,
 }
 
 public static class BuildingTypeExtensions
@@ -128,6 +144,8 @@ public static class BuildingTypeExtensions
         BuildingType.Barracks => "barracks",
         BuildingType.FisherHut => "fisherhut",
         BuildingType.Sawmill => "sawmill",
+        BuildingType.ShrineOfUllr => "shrineofullr",
+        BuildingType.ShrineOfNjord => "shrineofnjord",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown building type"),
     };
 }

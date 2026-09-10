@@ -99,7 +99,8 @@ public static class SimulatorEndpoints
         var raid = mission == ArmyMission.Raid;
 
         var plan = BattleResolver.Resolve(
-            attackerStacks, combinedDefense, defenseBonusPercent, AbundantLoot, seed, raid);
+            attackerStacks, combinedDefense, defenseBonusPercent, AbundantLoot, seed, raid,
+            request.LandAttackBonusPercent, request.ShipAttackBonusPercent);
 
         var siege = plan.Winner == BattleWinner.Attacker
             ? SiegeResolver.Resolve(plan.AttackerSurvivors, NominalDefenderBuildings, requestedTargetCoord: null, seed)

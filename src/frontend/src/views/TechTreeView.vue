@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
@@ -7,8 +7,8 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import TechTreeGraph from '../components/docs/TechTreeGraph.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
+import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { MessageSchema } from '../i18n/schema';
-import { art } from '../lib/techtree/buildingPresentation';
 import { HIDDEN_FROM_DOCS } from '../lib/techtree/layout';
 import { prerequisitesOf } from '../lib/techtree/nodes';
 
@@ -79,25 +79,47 @@ const categories = computed(() =>
   })).filter((c) => c.types.length > 0),
 );
 
-// Computed once per building type rather than called from the template.
-// Split into two lookups (rather than one ArtRef-keyed map) so the template
-// doesn't need to narrow a discriminated union through an indexed access.
-const atlasThumbs = computed<Record<string, AtlasFrameRect>>(() => {
-  const result: Record<string, AtlasFrameRect> = {};
-  for (const type of documented.value) {
-    const a = art(type);
-    if (a.kind === 'atlas') result[type] = a.frame;
-  }
-  return result;
-});
-const pngThumbs = computed<Record<string, string>>(() => {
-  const result: Record<string, string> = {};
-  for (const type of documented.value) {
-    const a = art(type);
-    if (a.kind === 'png') result[type] = a.url;
-  }
-  return result;
-});
+/**
+ * A building's thumbnail follows the level row the pointer is over, so the
+ * picture actually changes as the table below it is read — undefined means
+ * "no row hovered", which shows the richest (max) level rather than one
+ * hardcoded rung. Keyed by type so hovering one building's table never
+ * moves another's thumbnail.
+ */
+const hoveredLevel = ref<Record<string, number>>({});
+
+function maxLevelOf(type: string): number {
+  const levels = catalogue.byType[type];
+  return levels && levels.length > 0 ? levels[levels.length - 1]!.level : 1;
+}
+
+/** Hovering the picture itself previews level 0 — the art pack's own starting rung, one below the level-1 a building's first table row is (buildingArt/terrainArt fall back to the bare plot for the handful of types with no level-0 art at all). */
+function hoverThumb(type: string) {
+  hoveredLevel.value[type] = 0;
+}
+function hoverRow(type: string, level: number) {
+  hoveredLevel.value[type] = level;
+}
+function resetThumb(type: string) {
+  delete hoveredLevel.value[type];
+}
+
+function thumbArt(type: string): ArtRef {
+  if (type === 'quarry') return terrainArt('mountain');
+  const level = hoveredLevel.value[type] ?? maxLevelOf(type);
+  return buildingArt(type, level) ?? terrainArt('grass');
+}
+
+// Split into two lookups (rather than exposing one ArtRef-keyed function) so
+// the template doesn't need to narrow a discriminated union through a call.
+function thumbFrame(type: string): AtlasFrameRect | null {
+  const a = thumbArt(type);
+  return a.kind === 'atlas' ? a.frame : null;
+}
+function thumbUrl(type: string): string | null {
+  const a = thumbArt(type);
+  return a.kind === 'png' ? a.url : null;
+}
 
 /**
  * The buildings that must already stand before this one can go up — the same
@@ -132,6 +154,7 @@ function formatAmount(value: number): string {
     <TopBar docked title="Tech tree" caption="DOCS · DEPENDENCIES">
       <HudNav />
     </TopBar>
+    <div class="page">
     <div class="graph-wrap">
       <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
     </div>
@@ -165,9 +188,9 @@ function formatAmount(value: number): string {
 
         <section v-for="type in cat.types" :key="type" :id="type" class="building">
           <div class="building-header">
-            <div class="thumb">
-              <AtlasSprite v-if="atlasThumbs[type]" :frame="atlasThumbs[type]!" />
-              <img v-else-if="pngThumbs[type]" class="thumb-img" :src="pngThumbs[type]" alt="" />
+            <div class="thumb" @mouseenter="hoverThumb(type)" @mouseleave="resetThumb(type)">
+              <AtlasSprite v-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
+              <img v-else-if="thumbUrl(type)" class="thumb-img" :src="thumbUrl(type)!" alt="" />
             </div>
             <div class="building-intro">
               <h3>{{ typeLabel(type) }}</h3>
@@ -187,7 +210,7 @@ function formatAmount(value: number): string {
             </div>
           </div>
           <div class="table-scroll">
-            <table>
+            <table @mouseleave="resetThumb(type)">
               <thead>
                 <tr>
                   <th>{{ $t('docs.techTree.table.level') }}</th>
@@ -202,7 +225,7 @@ function formatAmount(value: number): string {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="def in catalogue.byType[type]" :key="def.level">
+                <tr v-for="def in catalogue.byType[type]" :key="def.level" @mouseenter="hoverRow(type, def.level)">
                   <td>{{ def.level }}</td>
                   <td>{{ formatAmount(def.cost.wood) }}</td>
                   <td>{{ formatAmount(def.cost.stone) }}</td>
@@ -259,6 +282,7 @@ function formatAmount(value: number): string {
         </section>
       </div>
     </main>
+    </div>
   </div>
 </template>
 
@@ -269,17 +293,23 @@ function formatAmount(value: number): string {
   overflow: auto;
   background: var(--shell);
 }
-/* The graph is wider than the prose column, and wider than most windows —
-   it gets the full page width and scrolls sideways inside itself. */
-.graph-wrap {
+/* One shared column, so the graph above and the prose below start at the
+   same left edge instead of each centering itself independently (the graph
+   is wider than 90ch, so two independent auto-margins landed at two
+   different left edges). */
+.page {
   max-width: 1440px;
   margin: 0 auto;
   padding: 0 28px;
 }
+/* The graph is wider than the prose column, and wider than most windows —
+   it gets the full page width and scrolls sideways inside itself. */
+.graph-wrap {
+  padding-top: 24px;
+}
 .body {
   max-width: 90ch;
-  margin: 0 auto;
-  padding: 24px 28px 60px;
+  padding: 24px 0 60px;
   color: var(--text);
 }
 .intro {

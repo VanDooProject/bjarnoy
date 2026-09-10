@@ -21,12 +21,13 @@ test('building a shrine from the ring menu places it without a rendering error',
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.found(page);
 
-  // Shrines are RequiredLonghouseLevel 3 (BuildingCatalogue.cs), and the ring
-  // menu now reads that gate off the building catalogue and refuses to place
-  // a locked building — so a fresh level-1 realm genuinely cannot build one.
-  // Level the longhouse up first, which is what a player would have to do,
-  // rather than weakening the gate for the test.
-  await settlement.setSettlementLevel(3);
+  // Shrines are RequiredLonghouseLevel 10 (BuildingCatalogue.cs's Shrine —
+  // late-game capstones of their lines), and the ring menu reads that gate
+  // off the building catalogue and refuses to place a locked building — so
+  // a fresh level-1 realm genuinely cannot build one. Level the longhouse up
+  // first, which is what a player would have to do, rather than weakening
+  // the gate for the test.
+  await settlement.setSettlementLevel(10);
 
   // Same approach as settlement-interactions.spec.ts's build test: ask the
   // model for a real empty, owned, grass hex (grass is what carries the new
@@ -44,7 +45,7 @@ test('building a shrine from the ring menu places it without a rendering error',
 
   const shrineBubble = settlement.ring.child('Shrine of Thor').first();
   await expect(shrineBubble).toBeVisible();
-  // Unlocked at longhouse 3, so it is a normal buildable bubble, not the
+  // Unlocked at longhouse 10, so it is a normal buildable bubble, not the
   // dashed locked treatment.
   await expect(shrineBubble).not.toHaveClass(/locked/);
   await shrineBubble.click();

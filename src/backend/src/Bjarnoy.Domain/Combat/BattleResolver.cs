@@ -65,12 +65,25 @@ public static class BattleResolver
     /// smaller than the default (<see langword="false"/>, which preserves the
     /// original <see cref="Armies.ArmyMission.Attack"/> behavior exactly).
     /// </param>
+    /// <param name="landAttackBonusPercent">
+    /// Added to every non-<see cref="Units.UnitClass.Ship"/> attacker stack's
+    /// attack power as a percentage — the attacker's own settlement's Thor
+    /// shrine favour (see <see cref="Buildings.Settlement.AttackBonusPercent"/>).
+    /// </param>
+    /// <param name="shipAttackBonusPercent">
+    /// Added to every <see cref="Units.UnitClass.Ship"/> attacker stack's
+    /// attack power as a percentage — the attacker's own settlement's Njörd
+    /// shrine favour.
+    /// </param>
     /// <remarks>
     /// <para>
-    /// Attack power is Σ(count × Attack); defense power is Σ(count × Defense)
-    /// × (1 + <paramref name="defenseBonusPercent"/>/100). The higher power
-    /// wins; an exact tie goes to the defender — the attacker needs a real
-    /// edge, not parity, to take a settlement.
+    /// Attack power is Σ(count × Attack × (1 + bonus/100)), each stack's bonus
+    /// being <paramref name="shipAttackBonusPercent"/> for
+    /// <see cref="Units.UnitClass.Ship"/> stacks and
+    /// <paramref name="landAttackBonusPercent"/> for every other stack;
+    /// defense power is Σ(count × Defense) × (1 + <paramref name="defenseBonusPercent"/>/100).
+    /// The higher power wins; an exact tie goes to the defender — the
+    /// attacker needs a real edge, not parity, to take a settlement.
     /// </para>
     /// <para>
     /// Outside a raid, the loser loses every committed unit, and the winner
@@ -95,12 +108,19 @@ public static class BattleResolver
         double defenseBonusPercent,
         ResourceAmounts lootAvailable,
         int seed,
-        bool raid = false)
+        bool raid = false,
+        double landAttackBonusPercent = 0,
+        double shipAttackBonusPercent = 0)
     {
         ArgumentNullException.ThrowIfNull(attackerStacks);
         ArgumentNullException.ThrowIfNull(defenderGarrison);
 
-        var attackPower = attackerStacks.Sum(s => (double)UnitCatalogue.Get(s.Type).Attack * s.Count);
+        var attackPower = attackerStacks.Sum(s =>
+        {
+            var definition = UnitCatalogue.Get(s.Type);
+            var bonusPercent = definition.Class == UnitClass.Ship ? shipAttackBonusPercent : landAttackBonusPercent;
+            return definition.Attack * s.Count * (1 + (bonusPercent / 100.0));
+        });
         var defensePower = defenderGarrison.Sum(s => (double)UnitCatalogue.Get(s.Type).Defense * s.Count)
             * (1 + (defenseBonusPercent / 100.0));
 

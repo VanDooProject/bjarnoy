@@ -27,9 +27,9 @@ describe('TechTreeGraph', () => {
   it('draws a card per building with its prerequisite chips', () => {
     const wrapper = mountGraph();
 
-    expect(card(wrapper, 'storagehouse').text()).toContain('Storage house');
-    expect(card(wrapper, 'storagehouse').text()).toContain('Lumber 5');
-    expect(card(wrapper, 'storagehouse').text()).toContain('Farm 3');
+    expect(card(wrapper, 'shrineoffreyja').text()).toContain('Shrine of Freyja');
+    expect(card(wrapper, 'shrineoffreyja').text()).toContain('Farm 10');
+    expect(card(wrapper, 'shrineoffreyja').text()).toContain('Pumpkin 10');
     wrapper.unmount();
   });
 
@@ -52,16 +52,16 @@ describe('TechTreeGraph', () => {
   it('lights prerequisites, half-lights what a building leads to, dims the rest', async () => {
     const wrapper = mountGraph();
 
-    await card(wrapper, 'storagehouse').trigger('mouseenter');
+    await card(wrapper, 'archeryrange').trigger('mouseenter');
 
-    // Needs these.
-    for (const type of ['storagehouse', 'lumberjack', 'farm', 'longhouse']) {
+    // Needs these — the whole Tower -> Barracks -> Archery Range chain.
+    for (const type of ['archeryrange', 'barracks', 'tower', 'longhouse']) {
       expect(card(wrapper, type).classes(), type).toContain('card--full');
     }
     // Leads to this.
-    expect(card(wrapper, 'greatstorehouse').classes()).toContain('card--soft');
+    expect(card(wrapper, 'shrineofthor').classes()).toContain('card--soft');
     // Unrelated.
-    expect(card(wrapper, 'barracks').classes()).toContain('card--dim');
+    expect(card(wrapper, 'quarry').classes()).toContain('card--dim');
 
     expect(wrapper.find('.link--full').exists()).toBe(true);
     expect(wrapper.find('.link--soft').exists()).toBe(true);
