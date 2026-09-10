@@ -183,10 +183,13 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_fleet_does_not_fold_into_a_Dockyard_settlement_it_does_not_own()
+    public async Task A_fleet_attacks_a_Dockyard_settlement_it_does_not_own_instead_of_folding_or_standing()
     {
+        // docs/design/ship-movement.md §2's last paragraph: a foreign dock is
+        // never a free stop. Reaching one always resolves through battle,
+        // the same as an explicit Attack dispatch would.
         using var client = Client();
-        Guid armyId;
+        Guid armyId, rivalId;
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
@@ -197,19 +200,27 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
             var rival = MakeSettlement(worldId, islandId, AddUser(db), $"rival-{Guid.CreateVersion7():N}", 10, 0, withDockyard: true);
             db.Settlements.AddRange(origin, rival);
             await db.SaveChangesAsync(Ct);
+            rivalId = rival.Id;
 
             armyId = await PlantArrivingArmyAsync(db, origin.Id, UnitType.Karve, 3);
         }
 
         _factory.Time.Advance(TimeSpan.FromHours(1.1));
 
-        // Still standing at its destination, not silently absorbed into a
-        // rival's garrison — arriving fleets only ever fold into a Dockyard
-        // *the dispatching player owns*.
+        // Never silently absorbed into a rival's garrison — a foreign
+        // Dockyard doesn't fold arrivals no matter who reaches it.
+        var rivalSettlement = await client.GetFromJsonAsync<SettlementResponse>(
+            $"/api/v1/settlements/{rivalId}", SqliteApiFixture.StrictJson, Ct);
+        Assert.DoesNotContain(rivalSettlement!.Garrison, s => s.Unit == "karve");
+
+        // Redirected into an actual attack against the rival settlement (an
+        // undefended one, so the fleet wins and starts its way home) rather
+        // than left standing at its destination as a plain Move would.
         var army = await client.GetFromJsonAsync<ArmyResponse>(
             $"/api/v1/armies/{armyId}", SqliteApiFixture.StrictJson, Ct);
         Assert.NotNull(army);
-        Assert.False(army!.AtHome);
+        Assert.Equal("attack", army!.Mission);
+        Assert.Equal(rivalId, army.TargetSettlementId);
     }
 
     [Fact]
