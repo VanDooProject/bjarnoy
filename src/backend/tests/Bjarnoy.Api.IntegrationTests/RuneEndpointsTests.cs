@@ -151,16 +151,26 @@ public sealed class RuneEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_completed_shrine_boosts_matching_production_with_no_rune_slotted()
+    public async Task A_completed_shrine_of_thor_leaves_production_untouched_with_no_rune_slotted()
     {
         using var client = Client();
         var settlement = await FoundWithLonghouseLevelThreeAsync(client);
-        var before = settlement.Resources.RatePerHour.Wood;
+        var before = settlement.Resources.RatePerHour;
 
         var built = await BuildShrineOfThorAsync(client, settlement);
 
-        // Thor's own favour alone (no rune) is a real, positive boost to Wood.
-        Assert.True(built.Resources.RatePerHour.Wood > before);
+        // Thor's own favour is a land-unit attack bonus (ShrineCatalogue.Favour:
+        // LandAttackBonus, ResourceAmounts.Zero) — it used to boost Wood, and
+        // this pins that a bare shrine no longer moves any production rate.
+        // The attack bonus itself is asserted at the domain level
+        // (ShrineRuneTests / BattleResolverTests); SettlementResponse does not
+        // surface it. A shrine consumes no workers and produces nothing, and
+        // nothing else changed between the two reads (the day advanced only
+        // clears the build), so the rates are exactly equal, not merely close.
+        Assert.Equal(before.Wood, built.Resources.RatePerHour.Wood, 6);
+        Assert.Equal(before.Stone, built.Resources.RatePerHour.Stone, 6);
+        Assert.Equal(before.Food, built.Resources.RatePerHour.Food, 6);
+        Assert.Equal(before.Iron, built.Resources.RatePerHour.Iron, 6);
     }
 
     [Fact]
