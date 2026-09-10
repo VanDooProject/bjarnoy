@@ -12,7 +12,6 @@ import {
   emptyResources,
   TILE_ORIENTATIONS,
   type CartShipment,
-  type Fleet,
   type IslandLabel,
   type ResourceKind,
   type Resources,
@@ -94,7 +93,6 @@ export class WorldModel {
   readonly generation: WorldGenerationConstants;
   private tiles = new Map<string, Tile>();
   private settlements = new Map<string, Settlement>();
-  private fleets = new Map<string, Fleet>();
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
   private explored = new Set<string>();
@@ -814,18 +812,6 @@ export class WorldModel {
       this.explored.add(coordKey(c));
     }
     return true;
-  }
-
-  addFleet(fleet: Fleet) {
-    this.fleets.set(fleet.id, fleet);
-  }
-
-  listFleets(): Fleet[] {
-    const now = Date.now();
-    for (const [id, fleet] of this.fleets) {
-      if (fleet.etaAt < now - 5000) this.fleets.delete(id);
-    }
-    return [...this.fleets.values()];
   }
 
   /** Demo mode: registers one cosmetic cart — see `acceptTradeOffer` and `CartShipment`'s own doc comment. */

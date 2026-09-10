@@ -609,9 +609,9 @@ export const useWorldStore = defineStore('world', {
       this.hud.shipments = shipments;
 
       // Issue #46 phase 3: mirror in-transit shipments into the WorldModel
-      // so the world map can render a cart marker + ETA the same way it
-      // already does for `Fleet`s — see `CartShipment`'s own doc comment
-      // for why this is a full replace rather than a per-shipment add
+      // so the world map can render a cart marker + ETA — see
+      // `CartShipment`'s own doc comment for why this is a full replace
+      // rather than a per-shipment add
       // (ShipmentResponse's own from/to Q/R are already frozen hex
       // coordinates — see ShipmentEntity — so no settlement-id lookup is
       // needed here).

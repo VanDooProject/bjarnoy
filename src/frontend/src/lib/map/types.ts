@@ -168,23 +168,11 @@ export interface Settlement {
   islandId?: string;
 }
 
-export interface Fleet {
-  id: string;
-  ownerId: string;
-  fromQ: number;
-  fromR: number;
-  toQ: number;
-  toR: number;
-  departedAt: number;
-  etaAt: number;
-}
-
 /**
  * A trade cart in transit between two settlements, interpolated on the
- * world map exactly like `Fleet` above (same `{from,to}Q/R` +
- * `departedAt`/`etaAt` shape, both wall-clock-comparable millisecond
- * timestamps) — see `HexMapRenderer`'s cart-rendering loop, which shares
- * that interpolation code rather than inventing a second scheme. Live mode
+ * world map (same `{from,to}Q/R` + `departedAt`/`etaAt` shape as a fleet's
+ * army overlay leg, both wall-clock-comparable millisecond timestamps) —
+ * see `HexMapRenderer`'s cart-rendering loop. Live mode
  * populates this straight from `ShipmentResponse`'s own frozen path
  * endpoints (`WorldModel.setCartShipments`, see `stores/world.ts`'s
  * `refreshTradeAsync`); demo mode seeds one cosmetic cart per accepted

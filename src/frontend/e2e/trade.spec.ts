@@ -70,8 +70,8 @@ test('posting and accepting a trade offer updates the board and resources', asyn
 /**
  * PR 3 (issue #46): accepting the seeded rival offer also drops a cosmetic
  * cart into `WorldModel`'s cart-shipment list (see
- * `WorldModel.acceptTradeOffer`), interpolated on the world map exactly
- * like a `Fleet` (`HexMapRenderer`'s cart-rendering loop). There is no
+ * `WorldModel.acceptTradeOffer`), interpolated on the world map by
+ * `HexMapRenderer`'s cart-rendering loop. There is no
  * real travel time to wait out here — same "the trade settles
  * synchronously" reasoning as the resource assertions above — this only
  * checks that the map has something to render, not the trade's own

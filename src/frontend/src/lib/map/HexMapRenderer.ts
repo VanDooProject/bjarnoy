@@ -2607,40 +2607,13 @@ export class HexMapRenderer {
     }
 
     const now = Date.now();
-    for (const fleet of worldModel.listFleets()) {
-      const t = Math.min(1, Math.max(0, (now - fleet.departedAt) / (fleet.etaAt - fleet.departedAt || 1)));
-      const fromGrid = isoGridPosition({ q: fleet.fromQ, r: fleet.fromR }, TILE_W, TILE_H);
-      const toGrid = isoGridPosition({ q: fleet.toQ, r: fleet.toR }, TILE_W, TILE_H);
-      const world = {
-        x: fromGrid.x + (toGrid.x - fromGrid.x) * t,
-        y: fromGrid.y + (toGrid.y - fromGrid.y) * t,
-      };
-      // A fleet's current position is only worth showing an ETA for once
-      // it's sailed into scouted waters — same rule as everything else fog
-      // gates, checked against its *current* (interpolated) hex rather than
-      // its endpoints so it fades into view exactly when it crosses the
-      // scouted ring, not at departure or arrival.
-      const fleetCoord = isoPixelToAxial(world, TILE_W, TILE_H);
-      if (fogActive && !worldModel.isExplored(fleetCoord.q, fleetCoord.r)) continue;
-      const screen = this.toScreen(world);
-      const remainingMs = Math.max(0, fleet.etaAt - now);
-      const label = this.acquireLabel();
-      label.text = formatEta(remainingMs);
-      label.style.fill = 0xe8f0f5;
-      label.style.fontFamily = 'sans-serif';
-      label.style.fontWeight = 'normal';
-      label.style.fontSize = 11;
-      label.style.letterSpacing = 0;
-      label.style.dropShadow = false;
-      label.anchor.set(0, 0);
-      label.position.set(screen.x + 8, screen.y - 8);
-      label.visible = true;
-    }
 
-    // Issue #46 phase 3: trade carts in transit — same interpolation +
-    // fog-gating as the fleet loop just above (do not invent a second
-    // scheme), plus an actual marker dot since a cart, unlike a fleet, has
-    // no ship sprite of its own yet to carry the eye to its ETA label.
+    // Issue #46 phase 3: trade carts in transit, interpolated between their
+    // frozen endpoints and fog-gated against their *current* (interpolated)
+    // hex, same rule as everything else fog gates, so a cart fades into view
+    // exactly when it crosses the scouted ring rather than at departure or
+    // arrival. (Fleets ride the backend-fed army overlay's own marker/route
+    // instead of a world-mode loop like this one — see `drawArmyOverlay`.)
     for (const cart of worldModel.listCartShipments()) {
       const t = Math.min(1, Math.max(0, (now - cart.departedAt) / (cart.etaAt - cart.departedAt || 1)));
       const fromGrid = isoGridPosition({ q: cart.fromQ, r: cart.fromR }, TILE_W, TILE_H);
