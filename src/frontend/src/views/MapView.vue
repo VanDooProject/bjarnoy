@@ -743,15 +743,12 @@ const ringCoordLabel = computed(() => {
 const ringOpen = computed(() => !!(selectedTile.value && ringScreen.value));
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
-  // World mode: same click-to-enter as the old WorldMapView.onHexClick
-  // (ignores which hex was clicked, always goes to the player's own
-  // settlement) — the zoom-driven transition is additional, not a
-  // replacement for it. None of the ring-menu/dispatch logic below applies
-  // at world zoom.
-  if (mode.value === 'world') {
-    router.push('/settlement');
-    return;
-  }
+  // docs/design/ship-movement.md §5: fleet waypoints/orders must work at
+  // world zoom too, not just settlement zoom — ships range over open water
+  // the settlement view never shows. So a dispatch/field-order draft in
+  // progress claims the click *before* the world-mode click-to-enter below,
+  // at both zoom levels alike.
+  //
   // Issue #40 phase 2: while a dispatch is being composed (ArmyPanel's
   // "Dispatch army" flow), a click plots the next waypoint instead of
   // opening the usual ring menu — the two interaction modes are mutually
@@ -765,6 +762,15 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   // does — mutually exclusive interaction modes, same as above.
   if (world.fieldOrderDraft) {
     world.addFieldOrderWaypoint(coord);
+    return;
+  }
+  // World mode: same click-to-enter as the old WorldMapView.onHexClick
+  // (ignores which hex was clicked, always goes to the player's own
+  // settlement) — the zoom-driven transition is additional, not a
+  // replacement for it. None of the ring-menu logic below applies at world
+  // zoom; only a fleet's own draft (handled above) does.
+  if (mode.value === 'world') {
+    router.push('/settlement');
     return;
   }
   hoverInfo.value = null;
@@ -991,6 +997,15 @@ async function upgrade() {
         @close="closeTrainModal"
         @trained="closeTrainModal"
       />
+    </template>
+    <template v-else>
+      <!-- docs/design/ship-movement.md §5: fleet orders (dispatch, field
+           orders, recall) work at world zoom too, not just settlement zoom
+           — a ship's whole journey happens on water the settlement view
+           never shows. Everything else in the settlement-only template
+           above (building ring menu, construction/training panels) stays
+           settlement-only; only the army/fleet panel is mode-agnostic. -->
+      <ArmyPanel />
     </template>
   </div>
 </template>
