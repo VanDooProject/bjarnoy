@@ -215,14 +215,14 @@ Bigger islands made a pre-existing cosmetic problem harder to ignore: every isla
 after the radius change above, a bigger perfect circle) — `IslandDepthAt` measured distance-to-centre against
 a single disc. Real coastlines aren't discs, and a round island reads as obviously synthetic at the larger
 size. `TerrainSampler.IslandCellDepth` (private, called from `IslandDepthAt` once per candidate island cell)
-replaces that single-disc distance with a chain of 1-5 offset discs ("lobes") walked out from the island's
+replaces that single-disc distance with a chain of 1-8 offset discs ("lobes") walked out from the island's
 jittered centre along a spine, blended together, so islands come out elongated and occasionally bent into
 rough U/L shapes instead of uniformly round. It's mirrored bit-for-bit in `worldGenerator.ts`'s
 `islandCellDepth`, the same way `IslandDepthAt` itself already was.
 
 The shape per island cell, all seed-hashed off that cell's own coordinates (so still O(1), no map needed):
 
-1. **Lobe count**: an integer in `[IslandMinLobes, IslandMaxLobes]` (both 1-5, default 2-4). At exactly 1 lobe
+1. **Lobe count**: an integer in `[IslandMinLobes, IslandMaxLobes]` (both 1-8, default 3-6). At exactly 1 lobe
    this degenerates to the original single disc — the algorithm change is additive, not a replacement, and
    existing worlds are migrated to `MinLobes = MaxLobes = 1` so their shape never changes under them (see the
    `AddIslandShapeSettings` migration).
@@ -233,7 +233,7 @@ The shape per island cell, all seed-hashed off that cell's own coordinates (so s
    the frontend mirror needs no `Math.cos`/`Math.sin` either. A high enough `IslandBendiness` with several
    lobes is what produces the bent U/L shapes rather than a straight elongated ellipse.
 3. **Lobe radius**: each lobe after the first scales the cell's base radius by a per-lobe random factor in
-   `[IslandLobeMinScale, IslandLobeMaxScale]` (default 0.55-0.85, not admin-exposed — see below) so lobes taper
+   `[IslandLobeMinScale, IslandLobeMaxScale]` (default 0.32-0.98, not admin-exposed — see below) so lobes taper
    rather than all being the same size as the original disc.
 4. **Blend**: each lobe's disc-distance is combined into the running "best" (shortest) depth via a polynomial
    smooth-minimum (`SmoothMin`, `k = IslandLobeBlend`) instead of a hard `Math.Min`, so the waist between two
@@ -246,7 +246,7 @@ both directions). This is what keeps the coast from tracing a mathematically per
 lobe. `IslandCoastWarp = 0` (not the new default, but the pre-change value) reproduces the un-warped sample
 point exactly.
 
-Two related knobs (`IslandLobeMinScale`/`IslandLobeMaxScale`, default 0.55-0.85) are deliberately left
+Two related knobs (`IslandLobeMinScale`/`IslandLobeMaxScale`, default 0.32-0.98) are deliberately left
 code-only rather than exposed in the admin reseed form alongside the other seven — they change the *taper*
 between lobes rather than the overall silhouette, and didn't come up as something worth live-tuning per world
 when the admin UI for this was scoped.
@@ -254,7 +254,7 @@ when the admin UI for this was scoped.
 ### Guardrails in `WorldGenerationOptions.Validate()`
 
 Two constraints exist purely to stop the new knobs from producing broken or unrenderable output, on top of
-each parameter's own range check (`IslandMinLobes`/`IslandMaxLobes` 1-5, `IslandMaxElongation` 0-1.5,
+each parameter's own range check (`IslandMinLobes`/`IslandMaxLobes` 1-8, `IslandMaxElongation` 0-4.0,
 `IslandBendiness` 0-3.0, `IslandLobeBlend` 0-0.5, `IslandLobeMinScale`/`IslandLobeMaxScale` 0.3-1.0,
 `IslandCoastWarp` 0-4.0, `IslandCoastWarpScale` 2.0-12.0):
 
