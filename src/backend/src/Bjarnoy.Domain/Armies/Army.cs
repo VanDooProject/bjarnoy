@@ -98,6 +98,15 @@ public sealed record Army
 
     public IReadOnlyList<UnitStack> Stacks { get; init; } = [];
 
+    /// <summary>
+    /// True when every stack is <see cref="UnitClass.Ship"/> — an army is
+    /// either a fleet or a land army, never both (see this file's own class
+    /// remarks), so checking any one stack settles it for the whole army.
+    /// False for an empty army, same as every other <c>isFleet</c> check in
+    /// this file.
+    /// </summary>
+    public bool IsFleet => Stacks.Count > 0 && Stacks.Any(s => UnitCatalogue.Get(s.Type).Class == UnitClass.Ship);
+
     public required ArmyLocation Location { get; init; }
 
     /// <summary>

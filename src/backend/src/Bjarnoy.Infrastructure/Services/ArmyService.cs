@@ -810,6 +810,33 @@ public sealed class ArmyService(
             return ArmySettleOutcome.Updated;
         }
 
+        // docs/design/ship-movement.md §2: a fleet's home is the last owned
+        // Dockyard settlement it docked at. A plain Move whose destination
+        // hex turns out to be a *different* settlement the same player owns
+        // (with a Dockyard) folds into that settlement's garrison right away
+        // — same "arrival, then fold" treatment as coming home, just pointed
+        // at wherever it actually landed. Checked before the generic
+        // domain.SettleTo(now) below, same as every other mission's own
+        // arrival-specific branch above: SettleTo has no notion of "standing
+        // at a destination that happens to be a dock", only "outbound" vs.
+        // "returning".
+        if (domain.Mission == ArmyMission.Move
+            && domain.IsFleet
+            && domain.Location is ArmyLocation.InTransit { Movement.IsReturning: false } moveTransit
+            && now >= moveTransit.Movement.ArrivesAt)
+        {
+            var destination = moveTransit.Movement.Path[^1];
+            var dockyardSettlement = await FindOwnedDockyardSettlementAsync(
+                army.Settlement!.WorldId, army.Settlement.OwnerId, army.SettlementId, destination, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (dockyardSettlement is not null)
+            {
+                FoldIntoDock(army, dockyardSettlement, domain, now);
+                return ArmySettleOutcome.FoldedHome;
+            }
+        }
+
         var result = domain.SettleTo(now);
         if (!result.Changed)
         {
@@ -1029,22 +1056,79 @@ public sealed class ArmyService(
     /// </summary>
     private void FoldHome(ArmyEntity armyEntity, Army returnedArmy, DateTimeOffset now)
     {
-        var settlementEntity = armyEntity.Settlement!;
-        var settled = settlementEntity.ToDomain()
-            .SettleTo(now, settlementEntity.World!.SpeedFactor).Settlement;
-
-        var merged = MergeIntoGarrison(settled, returnedArmy.Stacks);
-        if (!returnedArmy.Loot.IsZero)
-        {
-            merged = merged with { Resources = merged.Resources.Deposit(returnedArmy.Loot, now) };
-        }
-
-        settlementEntity.ApplyDomain(merged);
-        _dbContext.Armies.Remove(armyEntity);
+        FoldStacksInto(armyEntity.Settlement!, armyEntity, returnedArmy, now);
 
         _logger.LogInformation(
             "Army {ArmyId} arrived home at settlement {SettlementId}; folded into garrison.",
             armyEntity.Id, armyEntity.SettlementId);
+    }
+
+    /// <summary>
+    /// docs/design/ship-movement.md §2: a fleet reaching a *different*
+    /// settlement it owns (with a Dockyard) folds into that settlement's
+    /// garrison exactly like <see cref="FoldHome"/> does for a return to
+    /// origin — this is what makes that settlement the fleet's new home,
+    /// with no separate "home" field to track. Kept as its own method
+    /// (rather than a parameter on <see cref="FoldHome"/>) so the two
+    /// call sites' log messages stay distinct: one is "came home", the other
+    /// is "made a new home".
+    /// </summary>
+    private void FoldIntoDock(ArmyEntity armyEntity, SettlementEntity dockyardSettlement, Army dockedFleet, DateTimeOffset now)
+    {
+        FoldStacksInto(dockyardSettlement, armyEntity, dockedFleet, now);
+
+        _logger.LogInformation(
+            "Fleet {ArmyId} docked at settlement {SettlementId}, which it owns but did not depart from ({OriginId}); folded into its garrison.",
+            armyEntity.Id, dockyardSettlement.Id, armyEntity.SettlementId);
+    }
+
+    /// <summary>
+    /// Shared body of <see cref="FoldHome"/>/<see cref="FoldIntoDock"/>:
+    /// merges an arrived army's stacks and loot into <paramref name="destinationEntity"/>'s
+    /// garrison and stock, then removes the army row.
+    /// </summary>
+    private void FoldStacksInto(SettlementEntity destinationEntity, ArmyEntity armyEntity, Army arrivedArmy, DateTimeOffset now)
+    {
+        var settled = destinationEntity.ToDomain()
+            .SettleTo(now, destinationEntity.World!.SpeedFactor).Settlement;
+
+        var merged = MergeIntoGarrison(settled, arrivedArmy.Stacks);
+        if (!arrivedArmy.Loot.IsZero)
+        {
+            merged = merged with { Resources = merged.Resources.Deposit(arrivedArmy.Loot, now) };
+        }
+
+        destinationEntity.ApplyDomain(merged);
+        _dbContext.Armies.Remove(armyEntity);
+    }
+
+    /// <summary>
+    /// The settlement standing at <paramref name="hex"/> in <paramref name="worldId"/>,
+    /// if it belongs to <paramref name="ownerId"/>, isn't <paramref name="excludeSettlementId"/>
+    /// itself, and has a Dockyard — the three conditions
+    /// docs/design/ship-movement.md §1-2 require for a fleet to dock there
+    /// and make it a new home. <see langword="null"/> when no settlement
+    /// sits on that hex at all, same as any other "nothing docked" case.
+    /// </summary>
+    private async Task<SettlementEntity?> FindOwnedDockyardSettlementAsync(
+        Guid worldId, string ownerId, Guid excludeSettlementId, HexCoord hex, CancellationToken cancellationToken)
+    {
+        var candidate = await _dbContext.Settlements
+            .Include(s => s.World)
+            .Include(s => s.Buildings)
+            .Include(s => s.Queue)
+            .Include(s => s.Garrison)
+            .Include(s => s.TrainingQueue)
+            .Include(s => s.Runes)
+            .FirstOrDefaultAsync(s => s.WorldId == worldId && s.CentreQ == hex.Q && s.CentreR == hex.R, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (candidate is null || candidate.Id == excludeSettlementId || candidate.OwnerId != ownerId)
+        {
+            return null;
+        }
+
+        return candidate.Buildings.Any(b => b.Type == BuildingType.Dockyard) ? candidate : null;
     }
 
     /// <summary>
