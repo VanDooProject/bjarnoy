@@ -1205,9 +1205,11 @@ export class HexMapRenderer {
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
     // only settlement mode loads it. The army/route marker icons (issues
-    // #93/#94) are settlement-only too (the world map never gets an army
-    // overlay), and load alongside the small terrain atlas rather than
-    // after it: six small SVGs is no reason to lengthen the mount.
+    // #93/#94, and the ship marker added for docs/design/ship-movement.md
+    // §4-5) draw in *both* modes — a fleet's journey happens mostly on open
+    // water the settlement view never shows — and load alongside the small
+    // terrain atlas rather than after it: six small SVGs is no reason to
+    // lengthen the mount.
     //
     // Only the terrain atlas is awaited here — mount() (and its first
     // rebuildAll() below) can paint terrain-only tiles the moment that
@@ -1490,8 +1492,11 @@ export class HexMapRenderer {
    * them, so grabbing a pin stays equally easy at every zoom level.
    */
   private draftWaypointAt(screen: { x: number; y: number } | null): number | null {
+    // docs/design/ship-movement.md §5: a fleet's draft waypoints drag the
+    // same way at world zoom as at settlement zoom — water crossings are
+    // routed on the world map, not the settlement one.
     const waypoints = this.armyOverlay?.draftWaypoints;
-    if (!screen || !waypoints?.length || this.options.mode !== 'settlement') return null;
+    if (!screen || !waypoints?.length) return null;
     let best: number | null = null;
     let bestDistance = WAYPOINT_GRAB_RADIUS_PX;
     waypoints.forEach((c, i) => {
@@ -2512,8 +2517,8 @@ export class HexMapRenderer {
       this.hideUnusedIcons();
       return;
     }
-    this.hideUnusedIcons();
     if (this.options.mode !== 'world') {
+      this.hideUnusedIcons();
       this.labelPool.forEach((l) => (l.visible = false));
       return;
     }
@@ -2644,6 +2649,17 @@ export class HexMapRenderer {
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
     }
+
+    // docs/design/ship-movement.md §5: a fleet's waypoints, route, and
+    // vision ring need to show at world zoom too, not just settlement zoom
+    // — ships spend most of their journey on open water the settlement view
+    // never renders. drawArmyOverlay itself is mode-agnostic (it only reads
+    // hexCenterScreen/toScreen, the same camera projection every mode
+    // shares), so calling it here needs no change on its side; the fleet
+    // marker it draws uses drawIcon (pooled Sprite), which is why
+    // hideUnusedIcons() moves to after this call instead of before it.
+    this.drawArmyOverlay();
+    this.hideUnusedIcons();
     for (let i = this.labelsUsed; i < this.labelPool.length; i++) this.labelPool[i].visible = false;
   }
 
