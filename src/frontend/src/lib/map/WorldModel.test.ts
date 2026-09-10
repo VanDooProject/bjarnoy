@@ -35,7 +35,7 @@ function findLandBorderEdge(model: WorldModel, settlementCenter: AxialCoord, rad
 // enforces (Grass, >=1 Forest and >=2 Grass neighbours, no sea within two
 // hexes) over the merely-nearest land hex.
 describe('WorldModel.findLandfall', () => {
-  it.each([1, 7, 42, 20260824, 20260825])(
+  it.each([1, 7, 42, 20260824, 20260826])(
     'prefers a start-quality hex over the merely-nearest land hex (seed %i)',
     (seed) => {
       const model = new WorldModel(seed);
@@ -424,20 +424,21 @@ describe('WorldModel.sawmillArtVariantOf', () => {
 describe('WorldModel.seaFacingDirectionOf', () => {
   it('finds the real sea neighbour of a coastal tile', () => {
     // Confirmed against DEFAULT_GENERATION's own terrainAt for this seed: of
-    // (-60,-37)'s six neighbours, only NE is sea — the rest are land.
+    // (-70,-31)'s six neighbours, only SW is sea — the rest are land.
     // Originally reproduced a real in-game bug where a mouth tile rendered a
     // straight line toward the inflow's geometric opposite instead of
     // curving toward the actual sea neighbour; the coordinates here were
-    // re-picked when the island generator switched to multi-lobe shapes
-    // (see TerrainSampler.IslandCellDepth), which moved every seed's terrain.
+    // re-picked when the island generator's defaults were de-rounded (see
+    // WorldGenerationOptions's IslandMaxElongation/IslandCellSize doc
+    // comments), which moved every seed's terrain.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -60, r: -37 })).toBe('NE');
+    expect(model.seaFacingDirectionOf({ q: -70, r: -31 })).toBe('SW');
   });
 
   it('returns null when no neighbour is sea', () => {
-    // Same seed as above; (-60,-36) confirmed to have all six neighbours as
+    // Same seed as above; (-70,-36) confirmed to have all six neighbours as
     // land.
     const model = new WorldModel(783131215);
-    expect(model.seaFacingDirectionOf({ q: -60, r: -36 })).toBeNull();
+    expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
   });
 });
