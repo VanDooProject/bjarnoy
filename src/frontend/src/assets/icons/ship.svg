@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Longship hull, prow to the right (+x) — the fleet's marker
+       (docs/design/ship-movement.md §4). The waterline sits at the
+       sprite's vertical centre so it reads as floating on the hex it is
+       placed at, unlike the flag's pole-foot anchor. -->
+  <path d="M4 34 Q10 44 22 44 L46 44 Q58 44 60 32 Q54 38 46 38 L14 38 Q7 38 4 34 Z" fill="#fff"/>
+  <path d="M10 34 L54 34 L50 30 L14 30 Z" fill="#9fb2bd"/>
+  <rect x="30" y="8" width="3" height="26" fill="#cbd6dd"/>
+  <path d="M33 12 L48 20 L33 26 Z" fill="#fff"/>
+</svg>
