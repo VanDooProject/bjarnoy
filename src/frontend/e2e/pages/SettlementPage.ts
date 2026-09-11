@@ -65,6 +65,18 @@ export class SettlementPage {
   readonly statusCard: Locator;
   readonly realmPanel: Locator;
   readonly ring: RingMenuComponent;
+  /** Design handoff "2a": the animated next-step arrow (GuidancePointer.vue). */
+  readonly guidancePointer: Locator;
+  /** The guided-onboarding checklist tray (OnboardingChecklist.vue). */
+  readonly checklist: Locator;
+  /** The landfall/completion pill banner (OnboardingBanner.vue) — filter with `.landfall`/`.complete`. */
+  readonly banner: Locator;
+  /** The completion banner's explicit hand-off to /settlement. */
+  readonly continueButton: Locator;
+  /** The ring's persistent "why it's dim" note (RingMenu.vue's `note` prop). */
+  readonly ringNote: Locator;
+  /** The profile-mark tooltip that replaces the old nickname modal (ProfileNudge.vue). */
+  readonly profileNudge: Locator;
 
   private canvasBoxCache: { x: number; y: number; width: number; height: number } | null = null;
 
@@ -77,6 +89,12 @@ export class SettlementPage {
     this.statusCard = page.locator('.status-card');
     this.realmPanel = page.locator('.realm-panel');
     this.ring = new RingMenuComponent(page);
+    this.guidancePointer = page.getByTestId('guidance-pointer');
+    this.checklist = page.getByTestId('onboarding-checklist');
+    this.banner = page.getByTestId('onboarding-banner');
+    this.continueButton = page.getByTestId('onboarding-continue');
+    this.ringNote = page.getByTestId('ring-note');
+    this.profileNudge = page.getByTestId('profile-nudge');
   }
 
   /** Founds a settlement via the shared helper and returns its view. */

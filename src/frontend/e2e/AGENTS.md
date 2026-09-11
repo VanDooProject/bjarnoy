@@ -64,7 +64,7 @@ one-off abstraction inside the spec.
 
 | Class | Covers |
 | --- | --- |
-| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver })`, `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. |
+| `SettlementPage` | The settlement view and the landing page's onboarding step: `found()` / `openLanding()`, `findHex({ terrain, notTerrain, coastalWater, withRiver })`, `centreHex()`, `clickHex()`, `countBuildings()`, `buildingTypeAt()`, `setSettlementLevel()`, `setResources()`, `hudResources()`, `canvasBox()` / `canvasCentre()`, plus `.ring`. Guided-onboarding UI (design handoff "2a"): `.guidancePointer`, `.checklist`, `.banner` (filter `.landfall`/`.complete`), `.continueButton`, `.ringNote`, `.profileNudge`. |
 | `RingMenuComponent` | The radial menu: `bubbles` / `backBubble` / `categoryBubbles` / `childBubbles` / `card`, `action()` / `category()` / `child()`, `hover()`, `openBuildCategories()`, `openCategory()`. |
 | `WorldMapPage` | `/world`: `open()`, `box()`, `centre()`, `pointAt(dx, dy)`, `moveTo(point)`, `screenshot()` for the canvas pixel-diff assertions. |
 | `AdminAuthFixture` | The mocked session. Reached as the **`adminAuth` fixture** (`async ({ page, adminAuth })`), then `adminAuth.login()` / `loginAsPlayer(name)`. |

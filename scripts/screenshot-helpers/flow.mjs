@@ -1,8 +1,14 @@
 // Walks the demo-mode onboarding flow once and screenshots every stop along
 // it, so verifying a UI change doesn't mean re-deriving the click path each
-// time (landing -> world map -> landfall -> settlement -> panned settlement
-// all live on one path, so one script drives all of them instead of one
-// script per screen).
+// time (landing -> landfall -> settlement -> panned settlement all live on
+// one path, so one script drives all of them instead of one script per
+// screen).
+//
+// zip 6a rewrote the landing page itself into the village view (no
+// separate world-map click-through before founding), and design handoff
+// "2a" replaced the forced nickname modal with a dismissible profile-mark
+// nudge — this script no longer clicks `button.cta` ("Enter the world",
+// gone) or "Skip for now" (nothing to skip anymore) accordingly.
 //
 // Usage: node scripts/screenshot-helpers/flow.mjs [outDir] [baseUrl] [stops...]
 //   outDir  default: current directory
@@ -37,16 +43,19 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto(baseUrl + '/', { waitUntil: 'networkidle' });
 await shoot(page, 'landing');
 
-await page.click('button.cta'); // "Enter the world" -> /world
-await page.waitForTimeout(1000);
-await shoot(page, 'world_map');
-
-await page.mouse.click(380, 100); // click a green island hex -> landfall
-await page.waitForTimeout(1500);
+// The deterministic starter plot (LandingView's own screenBiasX=0.16 bias,
+// same math as e2e/helpers.ts's claimLandfall) — there is no world map to
+// click through first; the landing page already is the village view.
+{
+  const box = await page.locator('canvas').boundingBox();
+  await page.mouse.click(box.x + box.width * (0.5 + 0.16), box.y + box.height / 2);
+}
+await page.waitForFunction(() => !!window.__demoWorld?.()?.selectedSettlementId);
+await page.waitForTimeout(500);
 await shoot(page, 'landfall');
 
-await page.click('button:has-text("Skip for now")'); // landfall modal, no nickname needed
-await page.waitForTimeout(500);
+// Design handoff "2a": onboarding no longer forces a modal here, so nothing
+// blocks going straight to the settlement view.
 await page.getByRole('button', { name: 'Settlement', exact: true }).click(); // HudNav tab
 await page.waitForTimeout(2000);
 await shoot(page, 'settlement');

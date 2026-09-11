@@ -51,7 +51,7 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div ref="anchorEl" class="anchor" :style="{ '--rotate': `${angle}deg` }">
+  <div ref="anchorEl" class="anchor" data-testid="guidance-pointer" :style="{ '--rotate': `${angle}deg` }">
     <div class="rotate">
       <div class="bob">
         <svg width="110" height="110" viewBox="0 0 150 150" class="arrow-svg">

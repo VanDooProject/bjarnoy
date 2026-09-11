@@ -37,6 +37,14 @@ export default defineConfig({
     // (plus the bjarnoy.locale fixture in fixtures.ts) keeps the suite
     // locale-stable regardless of what a given CI runner reports.
     locale: 'en-US',
+    // The guided-onboarding overlays (design handoff "2a": GuidancePointer,
+    // OnboardingChecklist's current-row pulse, ResourceTicker, ProfileNudge)
+    // all pair their CSS keyframes with a prefers-reduced-motion override
+    // that stills the animation without changing the DOM under test — this
+    // just emulates that media feature at the browser level, same spirit as
+    // captureCanvas avoiding real screenshot waits, rather than branching any
+    // app code on being under test.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

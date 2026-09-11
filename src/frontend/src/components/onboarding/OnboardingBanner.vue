@@ -14,7 +14,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 </script>
 
 <template>
-  <div class="banner" :class="variant">
+  <div class="banner" :class="variant" data-testid="onboarding-banner">
     <span class="check" aria-hidden="true" />
     <span class="title">
       {{ variant === 'landfall' ? t('landing.banner.landfallTitle') : t('landing.banner.completeTitle') }}

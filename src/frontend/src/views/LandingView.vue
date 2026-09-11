@@ -630,10 +630,14 @@ watch(
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
+    <!-- Frame 2: the landfall banner floats near the top ALONGSIDE the
+         checklist (still at the bottom) — the mockup shows both at once,
+         unlike completion, where the banner replaces the checklist
+         entirely since there's nothing left to check off. -->
     <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
-    <OnboardingBanner v-else-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
+    <OnboardingBanner v-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
     <OnboardingChecklist
-      v-else-if="!joinBlocked"
+      v-if="!joinBlocked && !guidance.complete"
       :guidance="guidance"
       :has-founded="player.hasFoundedSettlement"
     />

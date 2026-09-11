@@ -21,14 +21,16 @@ function nameYourJarl() {
 </script>
 
 <template>
-  <div class="nudge panel">
+  <div class="nudge panel" data-testid="profile-nudge">
     <div class="notch" />
     <div class="eyebrow">{{ t('onboarding.profileNudge.eyebrow') }}</div>
     <div class="title">{{ t('onboarding.profileNudge.title') }}</div>
     <p class="body">{{ t('onboarding.profileNudge.body') }}</p>
     <div class="actions">
-      <button type="button" class="cta" @click="nameYourJarl">{{ t('onboarding.profileNudge.cta') }}</button>
-      <button type="button" class="later" @click="player.dismissProfileNudge()">
+      <button type="button" class="cta" data-testid="profile-nudge-cta" @click="nameYourJarl">
+        {{ t('onboarding.profileNudge.cta') }}
+      </button>
+      <button type="button" class="later" data-testid="profile-nudge-later" @click="player.dismissProfileNudge()">
         {{ t('onboarding.profileNudge.later') }}
       </button>
     </div>

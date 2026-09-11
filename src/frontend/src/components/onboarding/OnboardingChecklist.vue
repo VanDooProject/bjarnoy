@@ -30,7 +30,7 @@ function subtextFor(row: ChecklistRow): string {
 </script>
 
 <template>
-  <div class="tray panel">
+  <div class="tray panel" data-testid="onboarding-checklist">
     <div class="tray-header">
       <span class="tray-title">{{ t('landing.tray.title') }}</span>
       <span class="tray-step">{{ t('landing.tray.stepOf', { step: guidance.step, total: guidance.totalSteps }) }}</span>

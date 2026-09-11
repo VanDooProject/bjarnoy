@@ -482,6 +482,7 @@ function onBackdropPointerDown(e: PointerEvent) {
     <div
       v-if="note && layout.note"
       class="ring-note"
+      data-testid="ring-note"
       :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
     >
       <div class="note-title">{{ note.title }}</div>
