@@ -19,11 +19,20 @@ export interface AsyncBakeInput {
 
 export class WaterMaskBaker {
   private worker: Worker | null = null;
-  /** Bumped per request; a response carrying anything older has been superseded. */
+  /** Bumped per request, so a response can be matched against the request still outstanding. */
   private nextId = 1;
-  private inFlightId = 0;
   private onDone: ((mask: WaterMask, region: WaterMaskRegion, bakeMs: number) => void) | null = null;
-  private pending: { region: WaterMaskRegion } | null = null;
+  /**
+   * The one request still outstanding, with the region it was made for.
+   *
+   * Both halves matter. The id is how a superseded response is recognised and
+   * dropped — applying it would put an older, smaller mask over a newer one.
+   * The region is carried here rather than read back off the response because
+   * the renderer records it as what the current mask covers, and a region that
+   * did not come from the request being answered would make that coverage
+   * check lie about the mask actually on screen.
+   */
+  private pending: { id: number; region: WaterMaskRegion } | null = null;
 
   constructor(handle: (mask: WaterMask, region: WaterMaskRegion, bakeMs: number) => void) {
     this.onDone = handle;
@@ -37,11 +46,6 @@ export class WaterMaskBaker {
         this.pending = null;
       };
     }
-  }
-
-  /** Whether a bake is currently out with the worker. */
-  get busy(): boolean {
-    return this.pending !== null;
   }
 
   /** The region the in-flight bake covers, or null when nothing is out. */
@@ -61,8 +65,7 @@ export class WaterMaskBaker {
   bake(input: AsyncBakeInput, terrain: TerrainLookup, mustBakeInline: boolean): WaterMask | null {
     if (mustBakeInline || !this.worker) return bakeWaterMask(input.region, input.tileWidth, input.tileHeight, terrain);
     const id = this.nextId++;
-    this.inFlightId = id;
-    this.pending = { region: input.region };
+    this.pending = { id, region: input.region };
     const request: BakeRequest = {
       id,
       region: input.region,
@@ -77,7 +80,6 @@ export class WaterMaskBaker {
 
   /** Drops any in-flight result, for when the renderer has invalidated the mask outright (a mode flip, a reseed). */
   discardPending() {
-    this.inFlightId = this.nextId++;
     this.pending = null;
   }
 
@@ -89,10 +91,20 @@ export class WaterMaskBaker {
   }
 
   private receive(response: BakeResponse) {
-    const region = this.pending?.region;
+    const pending = this.pending;
+    // Superseded, or discarded outright. This deliberately does *not* clear
+    // `pending`: it refers to a different, newer request that has not answered
+    // yet, and dropping it here would throw that answer away when it arrives —
+    // leaving the renderer with a mask it never installed and a coverage check
+    // that keeps asking for a bake that was already made.
+    if (!pending || response.id !== pending.id) return;
     this.pending = null;
-    if (response.id !== this.inFlightId || !region || !this.onDone) return;
-    this.onDone({ data: response.data, width: response.width, height: response.height, region }, region, response.bakeMs);
+    if (!this.onDone) return;
+    this.onDone(
+      { data: response.data, width: response.width, height: response.height, region: pending.region },
+      pending.region,
+      response.bakeMs,
+    );
   }
 }
 
