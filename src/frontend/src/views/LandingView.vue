@@ -360,6 +360,9 @@ async function foundHere(coord: AxialCoord) {
       screenBiasX: 0,
       lockCamera: false,
     });
+    // Design handoff "2a" frame 2: the one-shot landfall burst, fired
+    // alongside the camera move/fog reveal above.
+    canvasRef.value?.renderer?.setLandfallBurst(coord);
   } catch (err) {
     // A 409 covers several distinct rejections (see FoundingRejection) —
     // only AlreadyFounded actually means "you already have a settlement,
