@@ -93,6 +93,10 @@
     "generation": "Generation:",
     "buildings": "Buildings:",
     "none": "none",
+    "movement": "Movement:",
+    "movementLand": "Land armies — {percent}% speed (impassable to ships)",
+    "movementSea": "Ships — {percent}% speed (impassable to land armies)",
+    "movementRiverNote": "Land armies pay a one-time crossing penalty of {cost} extra hex-equivalents entering a river tile, on top of the terrain underneath it. Ships never cross rivers.",
     "riverVariants": "Shape:",
     "riverSawmillNote": "The Sawmill is the one building that goes directly on a river tile — only a Straight or Bend one.",
     "riverShapes": {

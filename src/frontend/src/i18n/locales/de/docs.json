@@ -93,6 +93,10 @@
     "generation": "Entstehung:",
     "buildings": "Gebäude:",
     "none": "keine",
+    "movement": "Bewegung:",
+    "movementLand": "Landarmeen — {percent}% Geschwindigkeit (für Schiffe unpassierbar)",
+    "movementSea": "Schiffe — {percent}% Geschwindigkeit (für Landarmeen unpassierbar)",
+    "movementRiverNote": "Landarmeen zahlen beim Betreten einer Flusskachel einmalig {cost} zusätzliche Hex-Äquivalente an Übergangskosten, zusätzlich zum darunterliegenden Gelände. Schiffe überqueren nie Flüsse.",
     "riverVariants": "Form:",
     "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einer Flusskachel steht — nur auf einer geraden oder gebogenen.",
     "riverShapes": {
