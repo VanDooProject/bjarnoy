@@ -16,6 +16,8 @@ import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
 import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
+import ResourceTicker, { type ResourceTick } from '../components/onboarding/ResourceTicker.vue';
+import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
   findGuidedTarget,
@@ -395,6 +397,30 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   closeRing();
 }
 
+// Design handoff "2a" frames 2/4/5: a rising "+N {resource}/h" the moment a
+// guided building is actually placed, at its own real output
+// (buildingEconomy.ts — the same formula the hover tooltip/build card use),
+// not an invented number. Fires in both demo and live mode alike, since
+// it's derived from the building's own static definition rather than
+// world.hud.rates — which live mode's poll updates for real, but demo mode
+// fixes at founding and never changes (see WorldModel.foundSettlement), so
+// a rates-delta watch would never fire there at all.
+const resourceTicks = ref<ResourceTick[]>([]);
+let tickIdSeq = 0;
+function fireResourceTick(type: 'farm' | 'lumberjack', coord: AxialCoord) {
+  const boostTerrain = BOOST_TERRAIN[type];
+  const neighbours = boostTerrain
+    ? matchingNeighbourCount(coord, boostTerrain, (q, r) => world.model.getTile(q, r))
+    : 0;
+  const output = buildingStatsFor(type, 1, neighbours).output;
+  const screen = canvasRef.value?.renderer?.hexCenterScreen(coord);
+  if (!screen || output?.kind !== 'resourceRate') return;
+  resourceTicks.value.push({ id: ++tickIdSeq, resource: output.resource, amount: output.amount, ...screen });
+}
+function onResourceTickExpire(id: number) {
+  resourceTicks.value = resourceTicks.value.filter((tick) => tick.id !== id);
+}
+
 async function onRingSelect(type: string) {
   const coord = ringCoord.value;
   if (!world.selectedSettlementId || !coord) return;
@@ -403,6 +429,7 @@ async function onRingSelect(type: string) {
     canvasRef.value?.renderer?.forceRebuild();
     world.syncHud();
     closeRing();
+    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
     return;
   }
   // Always close, win or lose — matching SettlementView's own onRingSelect
@@ -412,6 +439,7 @@ async function onRingSelect(type: string) {
   closeRing();
   try {
     await world.queueBuildLive(type, coord);
+    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
     showInvalidClickMessage(t('landing.invalidClick.orderFailed'));
@@ -591,6 +619,7 @@ watch(
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
     />
+    <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
     <OnboardingChecklist v-if="!joinBlocked" :guidance="guidance" :has-founded="player.hasFoundedSettlement" />
 
