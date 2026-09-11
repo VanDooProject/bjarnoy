@@ -5,9 +5,19 @@
 // `WorldModel.populationFor` / `stores/world.ts`'s `hud.population`. Each
 // pill also carries a cap (`WorldModel.storageCapForDisplay`) and a fill-progress
 // underline, matching the reference's "4,965 / 12,000" + green bar.
-import { computed } from 'vue';
+//
+// Each material pill (not population — its current/max/rate all fit on one
+// line already) now cycles through three display stages on tap: current
+// stock, production rate, max storage — one at a time on a narrow phone,
+// with a small label so it's always clear which one is showing, or all
+// three at once on a wide enough viewport where there's room to just show
+// them (see useMediaQuery.ts). The fill bar underneath is never part of the
+// cycle — it stays visible in every stage.
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
+import { useMediaQuery } from '../../composables/useMediaQuery';
+import { resourceName } from '../../i18n/catalogueNames';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -20,6 +30,35 @@ const props = defineProps<{
 
 const world = useWorldStore();
 const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
+// A wide phone (or tablet/desktop) has room to just show current/rate/max
+// together, so tap-cycling is a narrow-viewport concession, not the primary
+// design — see the task notes for the chosen breakpoint's rationale (it
+// isn't tied to any single device, just "there's clearly room here").
+const isWide = useMediaQuery('(min-width: 700px)');
+
+type Stage = 'current' | 'rate' | 'cap';
+const STAGES: Stage[] = ['current', 'rate', 'cap'];
+const stageByKey = reactive<Record<string, Stage>>({ wood: 'current', stone: 'current', food: 'current', iron: 'current' });
+
+function stageOf(key: string): Stage {
+  return stageByKey[key] ?? 'current';
+}
+
+function cycleStage(key: string) {
+  const next = STAGES[(STAGES.indexOf(stageOf(key)) + 1) % STAGES.length];
+  stageByKey[key] = next;
+}
+
+function stageLabel(stage: Stage): string {
+  if (stage === 'rate') return t('hud.resourceBar.stageRate');
+  if (stage === 'cap') return t('hud.resourceBar.stageMax');
+  return t('hud.resourceBar.stageCurrent');
+}
+
+function stageAriaLabel(key: string): string {
+  return t('hud.resourceBar.cycleAriaLabel', { resource: resourceName(key), stage: stageLabel(stageOf(key)) });
+}
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
@@ -64,11 +103,25 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
     <div v-for="pill in pills" :key="pill.key" class="resource">
       <span class="hex-icon" :style="{ background: pill.color }" />
       <div class="numbers">
-        <span class="value">
-          {{ fmt(pill.value) }}<span class="cap">{{ t('hud.resourceBar.capSuffix', { n: fmt(pill.cap) }) }}</span>
-          <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
-        </span>
-        <span class="rate">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
+        <template v-if="isWide">
+          <span class="value">
+            {{ fmt(pill.value) }}
+            <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
+          </span>
+          <span class="wide-extra">
+            <span class="rate">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
+            <span class="cap">{{ t('hud.resourceBar.max', { n: fmt(pill.cap) }) }}</span>
+          </span>
+        </template>
+        <button v-else type="button" class="stage-toggle" @click="cycleStage(pill.key)" :aria-label="stageAriaLabel(pill.key)">
+          <span class="stage-label">{{ stageLabel(stageOf(pill.key)) }}</span>
+          <span v-if="stageOf(pill.key) === 'current'" class="value">
+            {{ fmt(pill.value) }}
+            <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
+          </span>
+          <span v-else-if="stageOf(pill.key) === 'rate'" class="value rate">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
+          <span v-else class="value cap">{{ t('hud.resourceBar.max', { n: fmt(pill.cap) }) }}</span>
+        </button>
         <span class="fill-track">
           <span class="fill" :style="{ width: fillPct(pill.value, pill.cap) + '%', background: pill.color }" />
           <span
@@ -137,6 +190,43 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
 .rate {
   font-size: 11px;
   color: var(--food);
+}
+/* Narrow-viewport tap-to-cycle control: reset to a plain, left-aligned
+   button so it reads as part of the pill rather than an obviously
+   clickable control, and adds a small caption so the active stage is
+   always legible, not just implied by the number's shape. */
+.stage-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+.stage-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.value.rate,
+.value.cap {
+  color: var(--text);
+}
+/* Wide-viewport variant: current stock stays the headline number, rate and
+   max storage sit together underneath it since there's room to just show
+   both rather than making the viewer tap for them. */
+.wide-extra {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+}
+.wide-extra .cap {
+  color: var(--muted);
 }
 .fill-track {
   position: relative;

@@ -14,7 +14,12 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserviert)",
-    "rate": "+{n}/h"
+    "rate": "+{n}/h",
+    "max": "Max {n}",
+    "stageCurrent": "Aktuell",
+    "stageRate": "Rate",
+    "stageMax": "Max",
+    "cycleAriaLabel": "{resource}, zeigt {stage}. Tippen zum Wechseln."
   },
   "dragHandle": {
     "expand": "Warteschlangen-Übersicht ausklappen",

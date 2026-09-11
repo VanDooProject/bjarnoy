@@ -8,7 +8,7 @@
 // appears (and only ever sits within the filled portion) when there is
 // actually something reserved.
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ResourceBar from './ResourceBar.vue';
 import { useWorldStore } from '../../stores/world';
@@ -21,9 +21,26 @@ function mountResourceBar() {
   });
 }
 
+// jsdom's matchMedia always reports no match — realistic enough for the
+// narrow/tap-cycle default these existing tests rely on, but the
+// wide-viewport tests below need to force a match to exercise that branch.
+function mockMatchMedia(matches: boolean) {
+  window.matchMedia = ((query: string) => ({
+    matches,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia;
+}
+
 describe('ResourceBar', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    // @ts-expect-error -- restoring jsdom's own stub, not a real browser API
+    delete window.matchMedia;
   });
 
   it('shows no reserved segment or hint when nothing is reserved', () => {
@@ -81,6 +98,69 @@ describe('ResourceBar', () => {
 
     expect(left).toBeCloseTo(0, 5);
     expect(width).toBeCloseTo(5, 5); // clamped to the 50/1000 stock actually on hand
+    wrapper.unmount();
+  });
+
+  it('starts each pill on the current-stock stage and cycles independently on tap', async () => {
+    mockMatchMedia(false);
+    const world = useWorldStore();
+    world.hud.resources = { wood: 400, stone: 300, food: 0, iron: 0 };
+    world.hud.rates = { wood: 60, stone: 45, food: 0, iron: 0 };
+    world.hud.storageCap = { wood: 1000, stone: 1000, food: 1000, iron: 1000 };
+
+    const wrapper = mountResourceBar();
+    const toggles = wrapper.findAll('.stage-toggle');
+
+    expect(toggles[0].get('.stage-label').text()).toBe('Current');
+    expect(toggles[0].get('.value').text()).toBe('400');
+    expect(toggles[1].get('.stage-label').text()).toBe('Current');
+
+    await toggles[0].trigger('click');
+
+    expect(toggles[0].get('.stage-label').text()).toBe('Rate');
+    expect(toggles[0].get('.value').text()).toBe('+60/h');
+    // The other pill's stage is untouched by the first one's tap.
+    expect(toggles[1].get('.stage-label').text()).toBe('Current');
+
+    await toggles[0].trigger('click');
+    expect(toggles[0].get('.stage-label').text()).toBe('Max');
+    expect(toggles[0].get('.value').text()).toBe('Max 1,000');
+
+    await toggles[0].trigger('click');
+    expect(toggles[0].get('.stage-label').text()).toBe('Current');
+    wrapper.unmount();
+  });
+
+  it('always shows the fill bar underneath, regardless of which stage is active', async () => {
+    mockMatchMedia(false);
+    const world = useWorldStore();
+    world.hud.resources = { wood: 400, stone: 0, food: 0, iron: 0 };
+    world.hud.storageCap = { wood: 1000, stone: 0, food: 0, iron: 0 };
+
+    const wrapper = mountResourceBar();
+    const toggle = wrapper.findAll('.stage-toggle')[0];
+
+    for (let i = 0; i < 3; i++) {
+      expect(wrapper.findAll('.fill-track')[0].exists()).toBe(true);
+      await toggle.trigger('click');
+    }
+    wrapper.unmount();
+  });
+
+  it('shows current, rate, and max together without tap-cycling on a wide viewport', () => {
+    mockMatchMedia(true);
+    const world = useWorldStore();
+    world.hud.resources = { wood: 400, stone: 0, food: 0, iron: 0 };
+    world.hud.rates = { wood: 60, stone: 0, food: 0, iron: 0 };
+    world.hud.storageCap = { wood: 1000, stone: 0, food: 0, iron: 0 };
+
+    const wrapper = mountResourceBar();
+
+    expect(wrapper.find('.stage-toggle').exists()).toBe(false);
+    const firstPill = wrapper.findAll('.resource')[0];
+    expect(firstPill.get('.value').text()).toBe('400');
+    expect(firstPill.get('.rate').text()).toBe('+60/h');
+    expect(firstPill.get('.cap').text()).toBe('Max 1,000');
     wrapper.unmount();
   });
 });
