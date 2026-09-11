@@ -31,7 +31,8 @@
     "clickThisPlot": "Click this plot",
     "anyGlowingPlot": "Any glowing plot",
     "nowBuildHere": "Now build here",
-    "oneMore": "One more — the {terrain}"
+    "oneMore": "One more — the {terrain}",
+    "thisOneFits": "This one fits {terrain}"
   },
   "foundHere": {
     "namedRealm": "{nickname}'s realm",

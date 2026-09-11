@@ -31,7 +31,8 @@
     "clickThisPlot": "Klicke dieses Grundstück an",
     "anyGlowingPlot": "Jedes leuchtende Grundstück",
     "nowBuildHere": "Jetzt hier bauen",
-    "oneMore": "Noch eins — {terrain}"
+    "oneMore": "Noch eins — {terrain}",
+    "thisOneFits": "Das hier passt zu {terrain}"
   },
   "foundHere": {
     "namedRealm": "{nickname}s Reich",

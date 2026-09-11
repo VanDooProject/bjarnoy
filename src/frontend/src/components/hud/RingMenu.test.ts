@@ -281,6 +281,32 @@ describe('RingMenu', () => {
     expect(wrapper.find('.ring-card').exists()).toBe(true);
   });
 
+  // Design handoff "2a" frame 3: GuidancePointer.vue aims at the enabled
+  // guided building's spot, read from this emit rather than duplicating
+  // ringLayout's own placement maths in the caller.
+  it('emits each lane1 bubble\'s screen spot by action id, including on the very first render', () => {
+    const wrapper = ring({
+      categories: [],
+      actions: [{ id: 'farm', label: 'Farm' }, { id: 'lumberjack', label: 'Lumberjack', disabled: true }],
+    });
+    const events = wrapper.emitted('layout');
+    expect(events).toBeTruthy();
+    const spots = events![events!.length - 1][0] as Record<string, { x: number; y: number }>;
+    expect(Object.keys(spots).sort()).toEqual(['farm', 'lumberjack']);
+    const farmStyle = bubble(wrapper, 'Farm').attributes('style') ?? '';
+    const left = parseFloat(/left:\s*([\d.]+)px/.exec(farmStyle)?.[1] ?? 'NaN');
+    const top = parseFloat(/top:\s*([\d.]+)px/.exec(farmStyle)?.[1] ?? 'NaN');
+    expect(spots.farm.x).toBeCloseTo(left);
+    expect(spots.farm.y).toBeCloseTo(top);
+  });
+
+  it('re-emits layout when the menu is re-anchored on another tile', async () => {
+    const wrapper = ring({ categories: [], actions: [{ id: 'farm', label: 'Farm' }] });
+    const before = wrapper.emitted('layout')!.length;
+    await wrapper.setProps({ x: 600, y: 420 });
+    expect(wrapper.emitted('layout')!.length).toBeGreaterThan(before);
+  });
+
   it('resets to the root when the menu is re-anchored on another tile', async () => {
     const wrapper = ring();
     await bubble(wrapper, 'Build').trigger('mouseenter');

@@ -197,9 +197,14 @@ watch(onboardingComplete, (complete) => {
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTerrain = ref<Terrain | null>(null);
+// Design handoff "2a" frame 3: each lane1 bubble's screen spot, keyed by
+// action id — from RingMenu's own `layout` emit, so the pointer aims at
+// exactly where the bubble is actually drawn.
+const ringLaneSpots = ref<Record<string, { x: number; y: number }>>({});
 
 watch(ringScreen, (screen) => {
   canvasRef.value?.renderer?.setInteractionLocked(!!screen);
+  if (!screen) ringLaneSpots.value = {};
 });
 
 const ringActions = computed<RingAction[]>(() =>
@@ -308,15 +313,34 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
   );
 });
 
-// The single animated pointer: which hex it aims at and what it says,
-// across every pre-completion screen. Hidden while the ring is open (task
-// 6 aims a separate pointer at the lit ring bubble instead) or once both
-// guided buildings are standing (nothing left to point at).
+// The single animated pointer: which hex (or, with the ring open, which
+// screen spot) it aims at and what it says, across every pre-completion
+// screen. `mode: 'hex'` follows the camera via GuidancePointer's own
+// useMapAnchor; `mode: 'screen'` is the ring-open case, a fixed point since
+// opening the ring already locks camera drag.
 const pointerTarget = computed(() => {
-  if (joinBlocked.value || ringScreen.value) return null;
+  if (joinBlocked.value) return null;
+  if (ringScreen.value) {
+    // Frame 3: "This one fits {terrain}" — aimed at whichever guided
+    // building's bubble is actually enabled for this hex's terrain. No
+    // pointer at all for the (rare) hex that fits neither (sand, mountain);
+    // there's nothing correct to point at.
+    if (!ringTerrain.value) return null;
+    const reason = ringNoteReason(ringTerrain.value);
+    if (reason.kind !== 'oneFits') return null;
+    const spot = ringLaneSpots.value[reason.fit];
+    if (!spot) return null;
+    return {
+      mode: 'screen' as const,
+      screen: spot,
+      label: t('landing.pointer.thisOneFits', { terrain: terrainName(GUIDED_TERRAIN_FOR[reason.fit]) }),
+      angle: 30,
+    };
+  }
   if (!player.hasFoundedSettlement) {
     if (!previewCoord.value) return null;
     return {
+      mode: 'hex' as const,
       coord: previewCoord.value,
       label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
@@ -329,6 +353,7 @@ const pointerTarget = computed(() => {
   const oneDone = world.hud.placedBuildingTypes.length > 1;
   const remainingType = nextGuidedType(world.hud.placedBuildingTypes);
   return {
+    mode: 'hex' as const,
     coord: nextGuidedTargetCoord.value,
     label: oneDone && remainingType
       ? t('landing.pointer.oneMore', { terrain: terrainName(GUIDED_TERRAIN_FOR[remainingType]) })
@@ -560,8 +585,9 @@ watch(
 
     <GuidancePointer
       v-if="pointerTarget"
-      :coord="pointerTarget.coord"
-      :renderer="canvasRef?.renderer"
+      :coord="pointerTarget.mode === 'hex' ? pointerTarget.coord : undefined"
+      :renderer="pointerTarget.mode === 'hex' ? canvasRef?.renderer : undefined"
+      :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
     />
@@ -588,6 +614,7 @@ watch(
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"
+      @layout="ringLaneSpots = $event"
     />
     <NicknamePrompt v-if="showPrompt" @close="closePrompt" />
   </div>

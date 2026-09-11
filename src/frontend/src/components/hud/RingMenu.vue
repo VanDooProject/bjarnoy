@@ -132,6 +132,10 @@ const emit = defineEmits<{
   // back so the caller can turn that one gesture straight into a map drag —
   // a plain `close` on click only fires on release, too late for that.
   outsidePointerDown: [event: PointerEvent];
+  // Design handoff "2a": the screen spot of every current lane1 bubble, by
+  // action id — GuidancePointer.vue aims at the enabled guided building's
+  // spot for the onboarding ring (frame 3, "This one fits {terrain}").
+  layout: [spots: Record<string, { x: number; y: number }>];
 }>();
 
 /** [] = root · ['build'] = categories · ['build', catId] = that category's buildings. */
@@ -224,6 +228,19 @@ const lane1 = computed(() =>
 );
 /** ‹ BACK owns the reserved last slot, and stays full size even when the rest collapse to dots. */
 const backSpot = computed(() => (atRoot.value ? null : (layout.value.lane1[props.categories.length] ?? null)));
+
+// Re-emitted whenever a bubble's placement actually changes (opening,
+// re-anchoring, an edge-case reflow) — not a one-off at mount, since the
+// caller's pointer needs to track the same spot the bubble is drawn at.
+watch(
+  lane1,
+  (entries) => {
+    const spots: Record<string, { x: number; y: number }> = {};
+    for (const entry of entries) spots[entry.item.id] = { x: entry.x, y: entry.y };
+    emit('layout', spots);
+  },
+  { immediate: true },
+);
 
 const lane2 = computed(() => {
   const category = activeCategory.value;

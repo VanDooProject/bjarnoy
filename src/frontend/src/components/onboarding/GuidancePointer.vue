@@ -13,14 +13,19 @@
 // The label chip is deliberately kept outside that rotated/bobbing frame
 // (upright, positioned to the side) so it stays legible instead of tilting
 // and drifting with the arrow.
-import { ref } from 'vue';
+// Two anchor modes: a hex (`coord`+`renderer`, following the camera via
+// useMapAnchor — frames 1/1b/2/4) or a fixed screen point (`screen`, the
+// ring menu's own bubble spot for frame 3's "this one fits {terrain}" —
+// static while the ring is open, since opening it locks camera drag).
+import { ref, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
 
 const props = withDefaults(
   defineProps<{
-    coord: AxialCoord;
-    renderer: MapAnchorRenderer | null | undefined;
+    coord?: AxialCoord;
+    renderer?: MapAnchorRenderer | null;
+    screen?: { x: number; y: number };
     label: string;
     /** Degrees; the mockup's arrow points down-and-toward the hex at roughly this range across its frames. */
     angle?: number;
@@ -33,9 +38,16 @@ const props = withDefaults(
 const anchorEl = ref<HTMLElement | null>(null);
 useMapAnchor(
   anchorEl,
-  () => props.renderer,
-  () => props.coord,
+  () => (props.coord ? props.renderer : null),
+  () => props.coord ?? null,
 );
+watchEffect(() => {
+  const screen = props.screen;
+  const el = anchorEl.value;
+  if (!screen || !el) return;
+  el.style.setProperty('--anchor-x', `${screen.x}px`);
+  el.style.setProperty('--anchor-y', `${screen.y}px`);
+});
 </script>
 
 <template>
@@ -67,7 +79,10 @@ useMapAnchor(
   left: var(--anchor-x, 50%);
   top: var(--anchor-y, 50%);
   transform: translate(-50%, -50%);
-  z-index: 20;
+  /* Above RingMenu's own backdrop/bubbles (z-index 30) for the ring-bubble
+     anchor mode — the two modes never coexist, so a single z-index works
+     for both. */
+  z-index: 36;
   pointer-events: none;
 }
 .rotate {
