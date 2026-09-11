@@ -216,6 +216,18 @@ export interface FogPerfStats {
   wavesMs: number;
   /** Wave squiggles kept by rebuildWaves — the ones drawWaves re-strokes every frame. */
   waveDrawnCount: number;
+  /**
+   * `drawWaves` itself — the per-*frame* cost of re-stroking those squiggles,
+   * as a mean over the last second.
+   *
+   * Separate from `wavesMs`, which times only their *placement* and so runs
+   * once per rebuild. This is the one that runs every tick: the layer is
+   * cleared and every surviving point re-recorded as two quadratic curves,
+   * which PixiJS then re-flattens and re-tessellates on the CPU. It is also
+   * the one number here that is not part of `totalMs` — it is not part of a
+   * rebuild at all.
+   */
+  waveDrawMs: number;
   /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
   waveCulledCount: number;
   /**
@@ -255,6 +267,7 @@ export const fogPerfStats: FogPerfStats = {
   wavesMs: 0,
   waveDrawnCount: 0,
   waveCulledCount: 0,
+  waveDrawMs: 0,
   waterMaskMs: 0,
   totalMs: 0,
   hexCount: 0,
@@ -1380,6 +1393,9 @@ export class HexMapRenderer {
       this.world.alpha = Math.min(1, this.world.alpha + (1 - this.world.alpha) * k);
     }
     if (this.options.mode === 'world' && !this.deepFogOnly && waterDebugFlags.legacyWaveSquiggles) this.drawWaves();
+    // Not drawing them this frame costs nothing, and a stale reading of what
+    // they used to cost would be worse than no reading.
+    else fogPerfStats.waveDrawMs = 0;
     // The settle path for a bake a gesture deferred (see waterMaskDirty). One
     // check per frame, and it can only ever do work on the first frame after
     // the gesture that owes it ends.
@@ -2448,8 +2464,10 @@ export class HexMapRenderer {
   private drawWaves() {
     if (this.wavePoints.length === 0) {
       this.waveLayer.clear();
+      fogPerfStats.waveDrawMs = 0;
       return;
     }
+    const drawStart = performance.now();
     const now = Date.now();
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
@@ -2463,6 +2481,10 @@ export class HexMapRenderer {
         .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + bump, x + WAVE_WIDTH, y)
         .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
     }
+    // Smoothed over roughly a second: this is a per-frame number and a raw
+    // sample of it jitters too much to read off a panel that polls at 4Hz.
+    const elapsed = performance.now() - drawStart;
+    fogPerfStats.waveDrawMs += (elapsed - fogPerfStats.waveDrawMs) * 0.05;
   }
 
   private syncSpriteLayer(

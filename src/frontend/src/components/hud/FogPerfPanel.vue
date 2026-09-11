@@ -122,6 +122,18 @@ const ROWS = computed<Row[]>(() => [
   },
 ]);
 
+/**
+ * Not a row above, because it is not part of the rebuild the rest of this
+ * panel breaks down — it is paid every frame, and the total would be lying if
+ * it included something that never ran during it.
+ *
+ * Worth having in front of the rebuild numbers anyway: everything above
+ * happens once per camera move, this happens sixty times a second, and the
+ * two are easy to confuse when the only wave row on the panel is the
+ * placement pass.
+ */
+const waveDrawMs = computed(() => stats.waveDrawMs);
+
 function ms(v: number): string {
   return `${v.toFixed(2)} ms`;
 }
@@ -179,6 +191,11 @@ const openSeaSkipped = computed(() =>
       <span class="label">Total</span>
       <span class="bar-track" />
       <span class="value">{{ ms(stats.totalMs) }}</span>
+    </div>
+    <div class="row per-frame">
+      <span class="label">Wave strokes, per frame</span>
+      <span class="bar-track" />
+      <span class="value">{{ ms(waveDrawMs) }}</span>
     </div>
     <div class="meta">
       <span>{{ stats.hexCount.toLocaleString() }} hexes scanned</span>
@@ -271,6 +288,14 @@ const openSeaSkipped = computed(() =>
   min-width: 72px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* Outside the total on purpose — see waveDrawMs. */
+.row.per-frame {
+  font-size: 11px;
+  color: var(--muted);
+}
+.row.per-frame .value {
+  color: var(--text);
 }
 .meta {
   margin-top: 8px;
