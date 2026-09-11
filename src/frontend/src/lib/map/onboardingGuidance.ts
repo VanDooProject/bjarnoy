@@ -121,3 +121,22 @@ export function findGuidedTarget(
   }
   return best;
 }
+
+/** Which guided type fits a hex's terrain, and which doesn't — the decision behind the ring's "why it's dim" note. */
+export type RingNoteReason =
+  | { kind: 'oneFits'; fit: GuidedBuildType; dim: GuidedBuildType }
+  | { kind: 'neitherFits' };
+
+/**
+ * The onboarding ring only ever guides toward farm (grass) or lumberjack
+ * (forest) — different terrain each — so a given hex fits at most one of
+ * them. This is the decision `LandingView.vue`'s ring note explains; kept
+ * pure (no i18n) so the actual "which one is dim" logic is testable apart
+ * from the translated copy.
+ */
+export function ringNoteReason(hexTerrain: Terrain): RingNoteReason {
+  const fit = GUIDED_BUILD_TYPES.find((type) => GUIDED_BUILD_TERRAIN[type] === hexTerrain);
+  if (!fit) return { kind: 'neitherFits' };
+  const dim = GUIDED_BUILD_TYPES.find((type) => type !== fit)!;
+  return { kind: 'oneFits', fit, dim };
+}

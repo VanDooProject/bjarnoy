@@ -22,7 +22,10 @@
   },
   "ring": {
     "finishGuidedFirst": "Finish the guided buildings first",
-    "needsTerrain": "Needs {terrain} terrain — try a different hex"
+    "needsTerrain": "Only fits {terrain}",
+    "dimNoteTitle": "Why it's dim",
+    "dimNoteBody": "{otherBuilding} needs {otherTerrain}. This hex is {hexTerrain}, so {fitBuilding} is the fit here.",
+    "neitherFitsBody": "Neither guided building fits {hexTerrain}. Try a grass or forest hex instead."
   },
   "pointer": {
     "clickThisPlot": "Click this plot",

@@ -38,6 +38,7 @@ import {
   LANE1,
   LANE2,
   layoutRing,
+  NOTE_W,
   type Rect,
 } from '../../lib/map/ringLayout';
 
@@ -101,8 +102,25 @@ const props = withDefaults(
     cardBounds?: Rect;
     /** Stock, used to mark a cost the player can't currently afford. */
     stock?: { wood: number; stone: number; food: number; iron: number };
+    /**
+     * Design handoff "2a": a persistent, muted explanation shown beside a
+     * flat ring (no `categories`) — e.g. why the one disabled guided
+     * building doesn't fit this hex. Explains the *hex*, not the click, so
+     * it reads as information rather than an error. Ignored once the ring
+     * has categories: a drilled-in ring shows its own per-building detail
+     * card instead.
+     */
+    note?: { title: string; body: string } | null;
   }>(),
-  { categories: () => [], terrainLabel: '', coordLabel: '', bounds: undefined, cardBounds: undefined, stock: undefined },
+  {
+    categories: () => [],
+    terrainLabel: '',
+    coordLabel: '',
+    bounds: undefined,
+    cardBounds: undefined,
+    stock: undefined,
+    note: null,
+  },
 );
 
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -186,6 +204,7 @@ const layout = computed(() =>
     lane2Count: buildings.value.length,
     parentIndex: activeCategory.value ? props.categories.indexOf(activeCategory.value) : -1,
     cardAnchor: hoveredIndex.value,
+    wantsNote: !!props.note,
   }),
 );
 
@@ -441,6 +460,15 @@ function onBackdropPointerDown(e: PointerEvent) {
       >
         {{ hovered.lock ? t('hud.ringMenu.lockedCta') : t('hud.ringMenu.buildCta', { label: hovered.label.toUpperCase() }) }}
       </button>
+    </div>
+
+    <div
+      v-if="note && layout.note"
+      class="ring-note"
+      :style="{ left: `${layout.note.x}px`, top: `${layout.note.y}px`, width: `${NOTE_W}px` }"
+    >
+      <div class="note-title">{{ note.title }}</div>
+      <div class="note-body">{{ note.body }}</div>
     </div>
   </div>
 </template>
@@ -698,5 +726,27 @@ function onBackdropPointerDown(e: PointerEvent) {
   background: rgba(255, 197, 92, 0.22);
   color: #8a7448;
   cursor: not-allowed;
+}
+.ring-note {
+  position: absolute;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: rgba(10, 20, 27, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.note-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.note-body {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #c3d2da;
 }
 </style>

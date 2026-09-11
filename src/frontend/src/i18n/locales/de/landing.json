@@ -22,7 +22,10 @@
   },
   "ring": {
     "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",
-    "needsTerrain": "Benötigt {terrain}-Gelände — versuche ein anderes Feld"
+    "needsTerrain": "Passt nur auf {terrain}",
+    "dimNoteTitle": "Warum es ausgegraut ist",
+    "dimNoteBody": "{otherBuilding} benötigt {otherTerrain}. Dieses Feld ist {hexTerrain}, daher passt hier {fitBuilding}.",
+    "neitherFitsBody": "Kein geführtes Gebäude passt auf {hexTerrain}. Versuche stattdessen ein Gras- oder Waldfeld."
   },
   "pointer": {
     "clickThisPlot": "Klicke dieses Grundstück an",

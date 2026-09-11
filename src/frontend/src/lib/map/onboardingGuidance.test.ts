@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AxialCoord } from '../hex/coords';
 import type { Terrain } from './types';
-import { deriveOnboardingGuidance, findGuidedTarget, nextGuidedType } from './onboardingGuidance';
+import { deriveOnboardingGuidance, findGuidedTarget, nextGuidedType, ringNoteReason } from './onboardingGuidance';
 
 describe('deriveOnboardingGuidance', () => {
   it('before founding: longhouse is current, both guided rows upcoming, step 1 of 3', () => {
@@ -99,5 +99,20 @@ describe('findGuidedTarget', () => {
 
   it('never returns a hex isBuildable rejects, even if the terrain matches', () => {
     expect(findGuidedTarget(center, 3, 'lumberjack', terrainAt, () => false)).toBeNull();
+  });
+});
+
+describe('ringNoteReason', () => {
+  it('grass fits farm; lumberjack is the dim one', () => {
+    expect(ringNoteReason('grass')).toEqual({ kind: 'oneFits', fit: 'farm', dim: 'lumberjack' });
+  });
+
+  it('forest fits lumberjack; farm is the dim one', () => {
+    expect(ringNoteReason('forest')).toEqual({ kind: 'oneFits', fit: 'lumberjack', dim: 'farm' });
+  });
+
+  it('neither guided building fits sand or mountain', () => {
+    expect(ringNoteReason('sand')).toEqual({ kind: 'neitherFits' });
+    expect(ringNoteReason('mountain')).toEqual({ kind: 'neitherFits' });
   });
 });

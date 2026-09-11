@@ -20,6 +20,7 @@ import {
   deriveOnboardingGuidance,
   findGuidedTarget,
   nextGuidedType,
+  ringNoteReason,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
 import { useWorldStore } from '../stores/world';
@@ -223,6 +224,31 @@ const ringActions = computed<RingAction[]>(() =>
 // building on it yet, so it's the bare terrain plus the hex coordinate.
 const ringTerrainLabel = computed(() => (ringTerrain.value ? terrainName(ringTerrain.value) : ''));
 const ringCoordLabel = computed(() => (ringCoord.value ? `HEX ${ringCoord.value.q}, ${ringCoord.value.r}` : ''));
+
+// Design handoff "2a": a persistent "why it's dim" note instead of a
+// hover-only tooltip that reads as an error. ringNoteReason (pure, tested)
+// decides which guided type fits this hex's terrain; this just translates
+// that into copy.
+const ringNote = computed(() => {
+  const terrain = ringTerrain.value;
+  if (!terrain) return null;
+  const reason = ringNoteReason(terrain);
+  if (reason.kind === 'neitherFits') {
+    return {
+      title: t('landing.ring.dimNoteTitle'),
+      body: t('landing.ring.neitherFitsBody', { hexTerrain: terrainName(terrain) }),
+    };
+  }
+  return {
+    title: t('landing.ring.dimNoteTitle'),
+    body: t('landing.ring.dimNoteBody', {
+      otherBuilding: buildingName(reason.dim),
+      otherTerrain: terrainName(GUIDED_TERRAIN_FOR[reason.dim]),
+      hexTerrain: terrainName(terrain),
+      fitBuilding: buildingName(reason.fit),
+    }),
+  };
+});
 
 function closeRing() {
   ringScreen.value = null;
@@ -558,6 +584,7 @@ watch(
       :actions="ringActions"
       :terrain-label="ringTerrainLabel"
       :coord-label="ringCoordLabel"
+      :note="ringNote"
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"

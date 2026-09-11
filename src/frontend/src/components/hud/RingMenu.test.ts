@@ -253,6 +253,34 @@ describe('RingMenu', () => {
     expect(wrapper.emitted('select')).toEqual([['farm']]);
   });
 
+  // Design handoff "2a": the flat onboarding ring's dimmed option gets a
+  // persistent, muted explanation instead of only a hover tooltip that reads
+  // as an error.
+  it('shows the note beside a flat ring when one is given, without waiting for a hover', () => {
+    const wrapper = ring({
+      categories: [],
+      actions: [{ id: 'farm', label: 'Farm' }, { id: 'lumberjack', label: 'Lumberjack', disabled: true }],
+      note: { title: "Why it's dim", body: 'Lumberjack needs forest. This hex is grass, so Farm is the fit here.' },
+    });
+    const note = wrapper.get('.ring-note');
+    expect(note.text()).toContain("Why it's dim");
+    expect(note.text()).toContain('Lumberjack needs forest');
+  });
+
+  it('shows no note when none is given', () => {
+    const wrapper = ring({ categories: [], actions: [{ id: 'farm', label: 'Farm' }] });
+    expect(wrapper.find('.ring-note').exists()).toBe(false);
+  });
+
+  it('shows no note for a drilled-in ring even when one is given — that ring has its own detail card', async () => {
+    const wrapper = ring({ note: { title: 'x', body: 'y' } });
+    await bubble(wrapper, 'Build').trigger('mouseenter');
+    await bubble(wrapper, 'Housing').trigger('mouseenter');
+    await bubble(wrapper, 'Hut').trigger('mouseenter');
+    expect(wrapper.find('.ring-note').exists()).toBe(false);
+    expect(wrapper.find('.ring-card').exists()).toBe(true);
+  });
+
   it('resets to the root when the menu is re-anchored on another tile', async () => {
     const wrapper = ring();
     await bubble(wrapper, 'Build').trigger('mouseenter');
