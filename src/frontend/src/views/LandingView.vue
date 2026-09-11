@@ -17,6 +17,7 @@ import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
 import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
 import ResourceTicker, { type ResourceTick } from '../components/onboarding/ResourceTicker.vue';
+import OnboardingBanner from '../components/onboarding/OnboardingBanner.vue';
 import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
@@ -36,9 +37,6 @@ import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-
-// Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
-const ONBOARDING_TARGET_BUILDINGS = 3;
 
 // Issue: the onboarding build step used to pop BuildingModal — a single
 // "Build here" button with no type picker, hardcoded to 'farm' (live) or
@@ -176,21 +174,32 @@ const joinBlockedMessage = computed(() => {
   return t('landing.joinBlocked.notAcceptingPlayers');
 });
 
-const buildingsPlaced = computed(() => world.hud.buildingsPlaced);
-const onboardingComplete = computed(() => buildingsPlaced.value >= ONBOARDING_TARGET_BUILDINGS);
-
 // Guided checklist (design handoff "2a"): derived purely from what's
 // actually standing rather than a fixed step order — see
-// onboardingGuidance.ts's own doc comment.
+// onboardingGuidance.ts's own doc comment. This is also now the single
+// source of truth for "is onboarding done" (previously a separate
+// count-of-any-building-type check, `buildingsPlaced >= 3`) — the checklist
+// already tells the player completion means both guided buildings, not any
+// three, so the actual gate matches what's on screen.
 const guidance = computed(() =>
   deriveOnboardingGuidance(player.hasFoundedSettlement, world.hud.placedBuildingTypes),
 );
 
-// Covers both "just crossed the threshold" and "arrived here mid-onboarding,
-// already past it" (a reload right as the last build order completed).
-watch(onboardingComplete, (complete) => {
-  if (complete) showPrompt.value = true;
-}, { immediate: true });
+// Persists the moment it's genuinely true, independent of whether the
+// player has seen/dismissed the completion banner — covers both "just
+// crossed the threshold" and "arrived here mid-onboarding, already past it"
+// (a reload right as the last build order completed).
+watch(
+  () => guidance.value.complete,
+  (complete) => {
+    if (complete) player.completeOnboarding();
+  },
+  { immediate: true },
+);
+
+function onContinueToSettlement() {
+  router.push('/settlement');
+}
 
 // Ring menu state for the onboarding build step — mirrors SettlementView's
 // own ringScreen/selectedCoord, but flat (one ring, no build-categories /
@@ -314,6 +323,14 @@ const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
     },
   );
 });
+
+// Frame 2: the landfall banner is the moment right after founding, before
+// the player has even opened the ring for the first guided building — gone
+// the instant they do (the ring/note/pointer take over telling the story),
+// so it never overlaps the "why it's dim" note or the completion banner.
+const showLandfallBanner = computed(
+  () => player.hasFoundedSettlement && world.hud.placedBuildingTypes.length <= 1 && !ringScreen.value,
+);
 
 // The single animated pointer: which hex (or, with the ring open, which
 // screen spot) it aims at and what it says, across every pre-completion
@@ -621,7 +638,13 @@ watch(
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
-    <OnboardingChecklist v-if="!joinBlocked" :guidance="guidance" :has-founded="player.hasFoundedSettlement" />
+    <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
+    <OnboardingBanner v-else-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
+    <OnboardingChecklist
+      v-else-if="!joinBlocked"
+      :guidance="guidance"
+      :has-founded="player.hasFoundedSettlement"
+    />
 
     <div class="footer">
       <span>{{ t('landing.footer.sea') }}</span>

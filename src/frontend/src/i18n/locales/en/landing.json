@@ -51,5 +51,12 @@
     "sea": "Kettil Sea",
     "noAccount": "No account",
     "nothingToInstall": "Nothing to install"
+  },
+  "banner": {
+    "landfallTitle": "Landfall made.",
+    "landfallBody": "Your longhouse stands. Two buildings to go.",
+    "completeTitle": "All three placed.",
+    "completeBody": "The grain is counting. Drag the map, or click any hex to keep building.",
+    "continueCta": "Enter your settlement"
   }
 }

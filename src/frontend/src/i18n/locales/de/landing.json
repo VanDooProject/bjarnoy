@@ -51,5 +51,12 @@
     "sea": "Kettil-See",
     "noAccount": "Kein Konto",
     "nothingToInstall": "Nichts zu installieren"
+  },
+  "banner": {
+    "landfallTitle": "Landung geglückt.",
+    "landfallBody": "Dein Langhaus steht. Noch zwei Gebäude.",
+    "completeTitle": "Alle drei stehen.",
+    "completeBody": "Das Getreide wird gezählt. Verschiebe die Karte oder klicke ein Feld an, um weiterzubauen.",
+    "continueCta": "Betritt deine Siedlung"
   }
 }

@@ -73,8 +73,13 @@ export async function claimLandfall(page: Page): Promise<void> {
  * Founds a settlement on the landing page (zip 6a: the landing page is the
  * village view — the starter plot is deterministic, so there's exactly one
  * hex to click, not a grid sweep across a world map), places the 2 guided
- * onboarding buildings, confirms the nickname prompt, and waits for
- * /settlement.
+ * onboarding buildings, confirms the completion banner's hand-off, and
+ * waits for /settlement.
+ *
+ * Design handoff "2a": onboarding's own forced nickname modal is gone —
+ * completion now shows a dismissible banner with an explicit "Enter your
+ * settlement" CTA (OnboardingBanner.vue), which is what this now waits on
+ * and clicks instead of the old button.confirm.
  */
 export async function foundSettlement(page: Page): Promise<void> {
   // foundSettlement() alone — page load plus a real PixiJS/texture mount —
@@ -89,17 +94,20 @@ export async function foundSettlement(page: Page): Promise<void> {
   // `mount()` has wired up pointer handling at all.
   await waitForMapReady(page);
 
-  const prompt = page.getByText('Landfall made.');
   await claimLandfall(page);
 
   // Places the 2 guided onboarding buildings directly against the model —
   // real click-to-build UI is settlement-interactions.spec's job to cover;
-  // this helper only needs the onboarding *gate* (hud.buildingsPlaced,
-  // NicknamePrompt) to fire reliably, and the settlement's own zoom (picked
-  // by zoomForFogMargin to keep a wide fog margin on screen) makes clicking
-  // a specific nearby hex by pixel offset unreliable. __demoWorld is the
-  // same test/debug hook main.ts documents for exactly this kind of
-  // "drive WorldModel directly" case.
+  // this helper only needs the onboarding *gate*
+  // (onboardingGuidance.deriveOnboardingGuidance's `complete`, which now
+  // specifically requires farm + lumberjack rather than any 3 buildings) to
+  // fire reliably, and the settlement's own zoom (picked by
+  // zoomForFogMargin to keep a wide fog margin on screen) makes clicking a
+  // specific nearby hex by pixel offset unreliable. __demoWorld is the same
+  // test/debug hook main.ts documents for exactly this kind of "drive
+  // WorldModel directly" case. placeBuilding itself doesn't enforce
+  // terrain (only the ring UI does — see LandingView's GUIDED_BUILD_TERRAIN),
+  // so any nearby empty hex works for either type.
   await page.evaluate(() => {
     const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
     const settlement = world.model.getSettlement(world.selectedSettlementId);
@@ -111,23 +119,23 @@ export async function foundSettlement(page: Page): Promise<void> {
       [-1, 1],
       [0, 1],
     ];
+    const guidedTypes = ['farm', 'lumberjack'];
     let placed = 0;
-    for (let radius = 1; radius <= 2 && placed < 2; radius++) {
+    for (let radius = 1; radius <= 2 && placed < guidedTypes.length; radius++) {
       for (const [dq, dr] of dirs) {
-        if (placed >= 2) break;
+        if (placed >= guidedTypes.length) break;
         const at = { q: settlement.q + dq * radius, r: settlement.r + dr * radius };
-        if (world.model.placeBuilding(world.selectedSettlementId, at, 'hut')) placed++;
+        if (world.model.placeBuilding(world.selectedSettlementId, at, guidedTypes[placed])) placed++;
       }
     }
     world.syncHud();
   });
 
-  await prompt.waitFor({ state: 'visible', timeout: 10_000 });
-  await page.locator('button.confirm').click();
+  await page.getByTestId('onboarding-continue').click();
   await page.waitForURL('**/settlement');
-  // The confirm click navigates to a *new* SettlementCanvas mount (a fresh
-  // renderer, not the landing page's preview one) — wait for its own
-  // mount-complete signal instead of guessing how long that takes.
+  // The click navigates to a *new* SettlementCanvas mount (a fresh renderer,
+  // not the landing page's preview one) — wait for its own mount-complete
+  // signal instead of guessing how long that takes.
   await waitForMapReady(page);
 }
 
