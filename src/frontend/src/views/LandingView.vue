@@ -14,6 +14,8 @@ import HudNav from '../components/hud/HudNav.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
+import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
+import { deriveOnboardingGuidance } from '../lib/map/onboardingGuidance';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
@@ -167,6 +169,13 @@ const joinBlockedMessage = computed(() => {
 
 const buildingsPlaced = computed(() => world.hud.buildingsPlaced);
 const onboardingComplete = computed(() => buildingsPlaced.value >= ONBOARDING_TARGET_BUILDINGS);
+
+// Guided checklist (design handoff "2a"): derived purely from what's
+// actually standing rather than a fixed step order — see
+// onboardingGuidance.ts's own doc comment.
+const guidance = computed(() =>
+  deriveOnboardingGuidance(player.hasFoundedSettlement, world.hud.placedBuildingTypes),
+);
 
 // Covers both "just crossed the threshold" and "arrived here mid-onboarding,
 // already past it" (a reload right as the last build order completed).
@@ -447,37 +456,7 @@ watch(
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
 
-    <div v-if="!joinBlocked" class="tray panel">
-      <div class="tray-item" :class="{ done: player.hasFoundedSettlement }">
-        <div class="dot" />
-        <div>
-          <div class="name">{{ t('landing.tray.longhouseName') }}</div>
-          <div class="sub">
-            {{ player.hasFoundedSettlement ? t('landing.tray.placed') : t('landing.tray.clickToPlace') }}
-          </div>
-        </div>
-      </div>
-      <div
-        v-for="n in 2"
-        :key="n"
-        class="tray-item"
-        :class="{ done: buildingsPlaced >= n + 1, current: player.hasFoundedSettlement && buildingsPlaced === n }"
-      >
-        <div class="dot" />
-        <div>
-          <div class="name">{{ t('landing.tray.buildingName', { n: n + 1 }) }}</div>
-          <div class="sub">
-            {{
-              buildingsPlaced >= n + 1
-                ? t('landing.tray.placed')
-                : player.hasFoundedSettlement
-                  ? t('landing.tray.clickEmptyHex')
-                  : t('landing.tray.foundFirst')
-            }}
-          </div>
-        </div>
-      </div>
-    </div>
+    <OnboardingChecklist v-if="!joinBlocked" :guidance="guidance" :has-founded="player.hasFoundedSettlement" />
 
     <div class="footer">
       <span>{{ t('landing.footer.sea') }}</span>
@@ -543,69 +522,6 @@ h1 {
   margin-top: 14px;
   font-size: 14px;
   color: var(--gold);
-}
-.tray {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 96px;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-}
-.tray-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 15px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.tray-item.current {
-  background: var(--gold);
-  border-color: var(--gold);
-}
-.tray-item.current .name,
-.tray-item.current .sub {
-  color: #20160a;
-}
-.tray-item.done {
-  opacity: 0.55;
-}
-.dot {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Issue #95: a completed step used to only dim (`.tray-item.done`'s
-   opacity) — nothing on the row itself said "done" versus "not started
-   yet", so progress never visibly ticked off as buildings queued.  A
-   checkmark on the dot gives each row its own explicit done state. */
-.tray-item.done .dot {
-  background: var(--gold);
-  color: #20160a;
-  font-size: 15px;
-  font-weight: 700;
-}
-.tray-item.done .dot::after {
-  content: '✓';
-}
-.name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-.sub {
-  font-size: 12px;
-  color: var(--muted);
 }
 .footer {
   position: absolute;

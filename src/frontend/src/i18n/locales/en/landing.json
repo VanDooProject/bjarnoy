@@ -26,10 +26,11 @@
     "unnamedRealm": "Unnamed realm"
   },
   "tray": {
+    "title": "Your first three moves",
+    "stepOf": "Step {step} of {total}",
     "longhouseName": "Longhouse & yard",
     "placed": "Placed",
     "clickToPlace": "Click your plot to place it",
-    "buildingName": "Building {n}",
     "clickEmptyHex": "Click an empty hex in your border",
     "foundFirst": "Found your longhouse first"
   },

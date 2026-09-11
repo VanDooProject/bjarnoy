@@ -26,10 +26,11 @@
     "unnamedRealm": "Unbenanntes Reich"
   },
   "tray": {
+    "title": "Deine ersten drei Schritte",
+    "stepOf": "Schritt {step} von {total}",
     "longhouseName": "Langhaus & Hof",
     "placed": "Platziert",
     "clickToPlace": "Klicke dein Grundstück an, um es zu platzieren",
-    "buildingName": "Gebäude {n}",
     "clickEmptyHex": "Klicke ein leeres Feld in deiner Grenze an",
     "foundFirst": "Gründe zuerst dein Langhaus"
   },
