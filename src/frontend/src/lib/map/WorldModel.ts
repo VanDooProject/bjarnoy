@@ -398,6 +398,27 @@ export class WorldModel {
     return count;
   }
 
+  /**
+   * Which building types a settlement actually has standing, deduplicated —
+   * `countBuildings`'s sibling for the guided onboarding checklist (zip 6a),
+   * which needs to know *which* of the two guided buildings (farm,
+   * lumberjack) is done so either can be ticked off regardless of which one
+   * the player placed first, rather than a fixed step order. Reads the same
+   * tile data `countBuildings` does, so it stays correct in both demo mode
+   * (the only source of truth) and live mode (mirrors whatever the last
+   * server snapshot painted onto the tiles).
+   */
+  listPlacedBuildings(settlementId: string): Tile['buildingType'][] {
+    const settlement = this.settlements.get(settlementId);
+    if (!settlement) return [];
+    const types = new Set<Tile['buildingType']>();
+    for (const c of this.claimedHexes(settlement)) {
+      const tile = this.getTile(c.q, c.r);
+      if (tile.ownerId === settlementId && tile.buildingType) types.add(tile.buildingType);
+    }
+    return [...types];
+  }
+
   listSettlements(): Settlement[] {
     return [...this.settlements.values()];
   }

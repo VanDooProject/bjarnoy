@@ -29,7 +29,7 @@ import { WorldModel } from '../lib/map/WorldModel';
 import { fogPerfStats } from '../lib/map/HexMapRenderer';
 import { buildDemoFogMask, DEMO_MASK_RADIUS } from '../lib/map/fog/demoFogMask';
 import { DEFAULT_GENERATION, enumerateIslands } from '../lib/map/worldGenerator';
-import type { CartShipment, ResourceKind, Resources, TileOrientation } from '../lib/map/types';
+import type { CartShipment, ResourceKind, Resources, Tile, TileOrientation } from '../lib/map/types';
 import { emptyResources } from '../lib/map/types';
 
 // How often live mode re-polls a settlement to pick up build-queue
@@ -120,6 +120,13 @@ export const useWorldStore = defineStore('world', {
       // longhouse counts as the first) rather than a separately tracked
       // counter that could drift from what's really on the ground.
       buildingsPlaced: 0,
+      // zip 6a follow-up: the guided onboarding checklist needs to know
+      // *which* building types are standing (not just how many) so either
+      // guided type can be ticked off regardless of build order — see
+      // `WorldModel.listPlacedBuildings`. Unlike `hud.buildings` below, this
+      // is populated in both demo and live mode, since onboarding runs in
+      // both.
+      placedBuildingTypes: [] as Tile['buildingType'][],
       // RealmPanel's displayed territory size (WorldModel.claimedHexCount) —
       // refreshed here alongside buildingsPlaced rather than read directly
       // off `model` in a computed, since `model` is `markRaw` and a Tower
@@ -1070,6 +1077,7 @@ export const useWorldStore = defineStore('world', {
       this.hud.settlementName = settlement.name;
       this.hud.level = settlement.level;
       this.hud.buildingsPlaced = this.model.countBuildings(settlement.id);
+      this.hud.placedBuildingTypes = this.model.listPlacedBuildings(settlement.id);
       this.hud.claimedHexes = this.model.claimedHexCount(settlement.id);
       this.hud.population = this.model.populationFor(settlement.id);
       this.hud.tick += 1;
