@@ -4,7 +4,10 @@
     "notOpenTitle": "Not open yet.",
     "title": "Put your longhouse somewhere.",
     "lede": "That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting. Nobody asks your name until you have something worth naming.",
-    "makingLandfall": "Making landfall…"
+    "makingLandfall": "Making landfall…",
+    "plotsFreeOne": "One plot free on this island",
+    "plotsFreeMany": "{count} plots free on this island",
+    "plotsFreeSuffix": "— any of them is yours"
   },
   "joinBlocked": {
     "opensAt": "This world opens {date}.",
@@ -20,6 +23,12 @@
   "ring": {
     "finishGuidedFirst": "Finish the guided buildings first",
     "needsTerrain": "Needs {terrain} terrain — try a different hex"
+  },
+  "pointer": {
+    "clickThisPlot": "Click this plot",
+    "anyGlowingPlot": "Any glowing plot",
+    "nowBuildHere": "Now build here",
+    "oneMore": "One more — the {terrain}"
   },
   "foundHere": {
     "namedRealm": "{nickname}'s realm",

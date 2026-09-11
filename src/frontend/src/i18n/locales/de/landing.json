@@ -4,7 +4,10 @@
     "notOpenTitle": "Noch nicht geöffnet.",
     "title": "Errichte irgendwo dein Langhaus.",
     "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
-    "makingLandfall": "Landung wird gemacht…"
+    "makingLandfall": "Landung wird gemacht…",
+    "plotsFreeOne": "Ein Grundstück frei auf dieser Insel",
+    "plotsFreeMany": "{count} Grundstücke frei auf dieser Insel",
+    "plotsFreeSuffix": "— jedes davon gehört dir"
   },
   "joinBlocked": {
     "opensAt": "Diese Welt öffnet {date}.",
@@ -20,6 +23,12 @@
   "ring": {
     "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",
     "needsTerrain": "Benötigt {terrain}-Gelände — versuche ein anderes Feld"
+  },
+  "pointer": {
+    "clickThisPlot": "Klicke dieses Grundstück an",
+    "anyGlowingPlot": "Jedes leuchtende Grundstück",
+    "nowBuildHere": "Jetzt hier bauen",
+    "oneMore": "Noch eins — {terrain}"
   },
   "foundHere": {
     "namedRealm": "{nickname}s Reich",

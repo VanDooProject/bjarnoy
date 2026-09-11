@@ -15,7 +15,13 @@ import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
-import { deriveOnboardingGuidance } from '../lib/map/onboardingGuidance';
+import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
+import {
+  deriveOnboardingGuidance,
+  findGuidedTarget,
+  nextGuidedType,
+  GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
+} from '../lib/map/onboardingGuidance';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
@@ -252,6 +258,59 @@ function withinBuildableRange(coord: AxialCoord): boolean {
   return hexDistance({ q: settlement.q, r: settlement.r }, coord) <= claimRadiusForLevel(settlement.level);
 }
 
+// Design handoff "2a": the nearest still-buildable hex for whichever guided
+// building isn't placed yet — what the map pointer (frames 2/4, "Now build
+// here" / "One more — the {terrain}") aims at. `findGuidedTarget` itself is
+// pure (onboardingGuidance.ts); this just supplies it with this settlement's
+// centre/claim radius and a terrain/buildability lookup against the real
+// WorldModel, mirroring onHexClick's own buildable-tile rule above.
+const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
+  if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
+  const settlement = world.model.getSettlement(world.selectedSettlementId);
+  if (!settlement) return null;
+  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  if (!type) return null;
+  return findGuidedTarget(
+    { q: settlement.q, r: settlement.r },
+    claimRadiusForLevel(settlement.level),
+    type,
+    (c) => world.model.getTile(c.q, c.r).terrain,
+    (c) => {
+      const tile = world.model.getTile(c.q, c.r);
+      return tile.ownerId === settlement.id && !tile.buildingType;
+    },
+  );
+});
+
+// The single animated pointer: which hex it aims at and what it says,
+// across every pre-completion screen. Hidden while the ring is open (task
+// 6 aims a separate pointer at the lit ring bubble instead) or once both
+// guided buildings are standing (nothing left to point at).
+const pointerTarget = computed(() => {
+  if (joinBlocked.value || ringScreen.value) return null;
+  if (!player.hasFoundedSettlement) {
+    if (!previewCoord.value) return null;
+    return {
+      coord: previewCoord.value,
+      label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
+      angle: 38,
+    };
+  }
+  if (!nextGuidedTargetCoord.value) return null;
+  // Right after founding (only the longhouse is down) vs. one guided
+  // building already placed — matches the mockup's frame 2 vs. frame 4
+  // copy/angle.
+  const oneDone = world.hud.placedBuildingTypes.length > 1;
+  const remainingType = nextGuidedType(world.hud.placedBuildingTypes);
+  return {
+    coord: nextGuidedTargetCoord.value,
+    label: oneDone && remainingType
+      ? t('landing.pointer.oneMore', { terrain: terrainName(GUIDED_TERRAIN_FOR[remainingType]) })
+      : t('landing.pointer.nowBuildHere'),
+    angle: oneDone ? 52 : 38,
+  };
+});
+
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   if (!player.hasFoundedSettlement) {
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
@@ -455,9 +514,31 @@ watch(
       <p class="lede">
         {{ t('landing.hero.lede') }}
       </p>
+      <!-- Live mode offers up to 6 plots (the suggestion plus its
+           alternatives — PlotReservationOptions.AlternativeCount); demo mode
+           has exactly one findLandfall hex and shows no count at all. -->
+      <p v-if="!DEMO_MODE && nearbyStartCoords.length > 0" class="plot-count">
+        <span class="plot-count-dot" />
+        <span class="plot-count-text">
+          {{
+            nearbyStartCoords.length === 1
+              ? t('landing.hero.plotsFreeOne')
+              : t('landing.hero.plotsFreeMany', { count: nearbyStartCoords.length })
+          }}
+        </span>
+        <span class="plot-count-suffix">{{ t('landing.hero.plotsFreeSuffix') }}</span>
+      </p>
       <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
+
+    <GuidancePointer
+      v-if="pointerTarget"
+      :coord="pointerTarget.coord"
+      :renderer="canvasRef?.renderer"
+      :label="pointerTarget.label"
+      :angle="pointerTarget.angle"
+    />
 
     <OnboardingChecklist v-if="!joinBlocked" :guidance="guidance" :has-founded="player.hasFoundedSettlement" />
 
@@ -525,6 +606,28 @@ h1 {
   margin-top: 14px;
   font-size: 14px;
   color: var(--gold);
+}
+.plot-count {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 0;
+}
+.plot-count-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  background: var(--gold);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+.plot-count-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gold);
+}
+.plot-count-suffix {
+  font-size: 13px;
+  color: var(--muted);
 }
 .footer {
   position: absolute;
