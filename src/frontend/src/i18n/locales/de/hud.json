@@ -16,6 +16,10 @@
     "reserved": "({n} reserviert)",
     "rate": "+{n}/h"
   },
+  "dragHandle": {
+    "expand": "Warteschlangen-Übersicht ausklappen",
+    "collapse": "Warteschlangen-Übersicht einklappen"
+  },
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Reich beansprucht {count} Hexfelder",

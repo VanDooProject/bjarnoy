@@ -16,6 +16,10 @@
     "reserved": "({n} reserved)",
     "rate": "+{n}/h"
   },
+  "dragHandle": {
+    "expand": "Expand queue summary",
+    "collapse": "Collapse queue summary"
+  },
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Realm claims {count} hexes",

@@ -8,6 +8,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
+import HudQueueSummary from '../components/hud/HudQueueSummary.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
@@ -956,9 +957,12 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" />
-    <TopBar :hide-title="mode === 'settlement'" :position="hudPosition">
+    <TopBar :hide-title="mode === 'settlement'" :position="hudPosition" :draggable="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav />
+      <template #expanded>
+        <HudQueueSummary />
+      </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
       <RealmPanel :ring-open="ringOpen" />

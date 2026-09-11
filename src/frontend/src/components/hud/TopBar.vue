@@ -6,7 +6,10 @@
 // layout. The hex logo stands for the game (Bjarnoy) on its own, as in the
 // reference — see its title attribute for the accessible name.
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
+import { useDragSheet } from '../../composables/useDragSheet';
+import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
   /**
@@ -35,9 +38,24 @@ const props = defineProps<{
    * document.
    */
   position?: 'top' | 'bottom';
+  /**
+   * Replaces the plain header with a draggable bar: a drag handle appears
+   * on its free edge, and dragging (or tapping) it toggles the `expanded`
+   * slot open/closed beneath (or above, when `position` is "bottom") the
+   * bar. Off by default — only the mobile map HUD opts in.
+   */
+  draggable?: boolean;
 }>();
 
 const world = useWorldStore();
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+const isBottom = computed(() => !props.docked && props.position === 'bottom');
+// useHudPosition is a debug/UX-research flag only (see its own comments) —
+// it isn't expected to flip mid-session, so the drag direction is fixed at
+// mount rather than kept reactive to props.position.
+const { expanded, onPointerDown, onPointerMove, onPointerUp } = useDragSheet(false, {
+  expandDirection: isBottom.value ? 'up' : 'down',
+});
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
 
 const islandName = computed(() => {
@@ -72,7 +90,28 @@ const caption = computed(() => {
     <div class="hud-bar-right">
       <slot />
     </div>
+    <button
+      v-if="draggable"
+      type="button"
+      class="drag-handle"
+      :class="{ 'drag-handle--bottom': isBottom }"
+      :aria-expanded="expanded"
+      :aria-label="expanded ? t('hud.dragHandle.collapse') : t('hud.dragHandle.expand')"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
+    >
+      <span class="drag-handle-pill" aria-hidden="true" />
+    </button>
   </header>
+  <div
+    v-if="draggable"
+    class="hud-expanded"
+    :class="{ 'hud-expanded--open': expanded, 'hud-expanded--bottom': isBottom }"
+  >
+    <slot name="expanded" />
+  </div>
 </template>
 
 <style scoped>
@@ -168,5 +207,64 @@ const caption = computed(() => {
   flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-end;
+}
+/* Drag handle: a small pill hanging off the bar's free edge (below it for a
+   top-pinned bar, above it for a bottom-pinned one) so it reads as
+   belonging to that edge rather than floating in the middle of the map. */
+.drag-handle {
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.drag-handle--bottom {
+  bottom: auto;
+  top: -14px;
+}
+.drag-handle-pill {
+  display: block;
+  margin: 4px auto 0;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--panel-border);
+}
+.drag-handle--bottom .drag-handle-pill {
+  margin: 0 auto 4px;
+}
+/* The expanded panel (construction/training summary, etc.) sits directly
+   against the bar's free edge, collapsed to zero height until dragged (or
+   tapped) open — see useDragSheet.ts. */
+.hud-expanded {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 64px;
+  z-index: 39;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: max-height 0.2s ease;
+}
+.hud-expanded--open {
+  max-height: 320px;
+  pointer-events: auto;
+  border-top: 1px solid var(--panel-border);
+}
+.hud-expanded--bottom {
+  top: auto;
+  bottom: 64px;
+}
+.hud-expanded--bottom.hud-expanded--open {
+  border-top: none;
+  border-bottom: 1px solid var(--panel-border);
 }
 </style>
