@@ -1201,6 +1201,20 @@ export class HexMapRenderer {
     window.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointerleave', this.onPointerLeave);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    // A tap that opens the ring menu (via onPointerUp -> handleClick, below)
+    // is otherwise followed by the browser's own compatibility `click` event
+    // for that touch — dispatched *after* Vue has already mounted the ring's
+    // DOM, so it hit-tests against the freshly rendered ring-hub button
+    // (centred exactly on the tap point) instead of the canvas, immediately
+    // triggering the hub's own click handler (goUp -> close). All real
+    // interaction here already goes through Pointer Events, which cover
+    // touch too, so this canvas never needs the native touch/click events —
+    // suppressing them via preventDefault on `touchstart` (not `pointerup`/
+    // `pointerdown`: per Chromium's behaviour, only canceling the touch
+    // event itself — not the pointer event derived from it — suppresses the
+    // compatibility click, see RingMenu.vue's onBuildingTouchStart) removes
+    // the ghost click at the source instead of trying to ignore it later.
+    canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
 
     // World mode never renders tile-art sprites (see WORLD_TERRAIN_FILL
     // above), so it has no need for the (large) building atlas at all —
@@ -1454,6 +1468,10 @@ export class HexMapRenderer {
         .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
     }
   }
+
+  private onTouchStart = (e: TouchEvent) => {
+    e.preventDefault();
+  };
 
   private onPointerDown = (e: PointerEvent) => {
     // Normally unreachable while a ring is open — its backdrop overlay
@@ -3374,6 +3392,7 @@ export class HexMapRenderer {
     window.removeEventListener('pointerup', this.onPointerUp);
     canvas?.removeEventListener('pointerleave', this.onPointerLeave);
     canvas?.removeEventListener('wheel', this.onWheel as EventListener);
+    canvas?.removeEventListener('touchstart', this.onTouchStart);
     // Otherwise a zoom gesture still settling when the renderer goes away
     // would fire its rebuild into a torn-down app (see noteZoomActivity).
     if (this.wheelIdleTimer !== null) {

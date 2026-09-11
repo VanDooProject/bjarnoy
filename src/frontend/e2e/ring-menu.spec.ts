@@ -342,6 +342,30 @@ test.describe('ring menu drill-down', () => {
 test.describe('ring menu touch build', { tag: '@g1' }, () => {
   test.use({ hasTouch: true });
 
+  // Regression: opening the ring with a *real* touch tap (page.touchscreen,
+  // not a mouse click a touch-capable context also happens to allow) used to
+  // close it again immediately. The tap opens the ring synchronously
+  // (onPointerUp -> handleClick), but the browser then dispatches its usual
+  // compatibility `click` for that touch afterwards — by then Vue has
+  // already mounted the ring's hub button centred exactly on the tap point,
+  // so that ghost click hit the hub instead of the canvas and triggered its
+  // own click handler (goUp -> close), all within the same gesture that
+  // opened it.
+  test('a real touch tap opens the ring menu and it stays open', async ({ page }) => {
+    test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    const settlement = await SettlementPage.found(page);
+    const { x: cx, y: cy } = await settlement.canvasCentre();
+
+    await page.touchscreen.tap(cx, cy);
+    await settlement.ring.waitForOpen();
+
+    // Give the ghost click every chance to land before declaring it safe —
+    // it would arrive within the same task/microtask turn as the tap, well
+    // inside this window.
+    await page.waitForTimeout(300);
+    await expect(settlement.ring.bubbles.first()).toBeVisible();
+  });
+
   test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
