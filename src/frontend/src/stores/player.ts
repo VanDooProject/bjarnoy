@@ -40,6 +40,16 @@ const persistedSettlementId = DEMO_MODE ? null : localStorage.getItem('bjarnoy.s
 // reload, same as persistedSettlementId above.
 const persistedOnboardingComplete = DEMO_MODE ? false : localStorage.getItem('bjarnoy.onboardingComplete') === '1';
 
+// Design handoff "2a": has the player already dismissed ("Later") the
+// profile-mark nudge that replaces the old forced nickname modal? Same
+// persistence shape as persistedOnboardingComplete just above — demo mode
+// resets every reload (nothing there survives a reload anyway), live mode
+// remembers it so "Later" actually means later, not "ask again on every
+// visit".
+const persistedProfileNudgeDismissed = DEMO_MODE
+  ? false
+  : localStorage.getItem('bjarnoy.profileNudgeDismissed') === '1';
+
 // Deferred onboarding (zip 4): a stable local id is generated for free so
 // the world can attribute the settlement the player is about to found; a
 // display name / real account is only asked for after that first real move.
@@ -50,6 +60,7 @@ export const usePlayerStore = defineStore('player', {
     hasFoundedSettlement: persistedSettlementId !== null,
     settlementId: persistedSettlementId,
     onboardingComplete: persistedOnboardingComplete,
+    profileNudgeDismissed: persistedProfileNudgeDismissed,
   }),
   getters: {
     // Live mode needs an owner name (2-100 chars) at the moment a settlement
@@ -88,6 +99,12 @@ export const usePlayerStore = defineStore('player', {
     completeOnboarding() {
       this.onboardingComplete = true;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.onboardingComplete', '1');
+    },
+    // Design handoff "2a": "Later" on the profile-mark nudge (ProfileNudge.vue)
+    // — same persistence shape as completeOnboarding above.
+    dismissProfileNudge() {
+      this.profileNudgeDismissed = true;
+      if (!DEMO_MODE) localStorage.setItem('bjarnoy.profileNudgeDismissed', '1');
     },
   },
 });

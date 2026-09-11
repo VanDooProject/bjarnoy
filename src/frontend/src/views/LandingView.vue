@@ -13,7 +13,6 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
-import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
 import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
 import ResourceTicker, { type ResourceTick } from '../components/onboarding/ResourceTicker.vue';
@@ -69,7 +68,6 @@ const previewCoord = ref<AxialCoord | null>(null);
 // plot that's actually clickable, not just a single suggested one.
 const nearbyStartCoords = ref<AxialCoord[]>([]);
 const founding = ref(false);
-const showPrompt = ref(false);
 const invalidClickMessage = ref<string | null>(null);
 let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -538,12 +536,6 @@ async function foundHere(coord: AxialCoord) {
   }
 }
 
-function closePrompt() {
-  showPrompt.value = false;
-  player.completeOnboarding();
-  router.push('/settlement');
-}
-
 // Fog v2 (map-fog-v2.md §3): same watcher as SettlementView.vue's — without
 // it, founding here (world.startHudSync() in foundHere, above) leaves the
 // fog quads on their opaque "fully unknown" placeholder forever, since
@@ -668,7 +660,6 @@ watch(
       @outside-pointer-down="closeRing"
       @layout="ringLaneSpots = $event"
     />
-    <NicknamePrompt v-if="showPrompt" @close="closePrompt" />
   </div>
 </template>
 
