@@ -47,7 +47,7 @@ import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
-import { bakeWaterMask } from './water/waterMask';
+import { bakeWaterMask, type TerrainLookup } from './water/waterMask';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import { riverPathFor } from './riverPath';
@@ -907,6 +907,27 @@ export class HexMapRenderer {
   // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
   // margin is three tiles.
   private waterMaskRegionBuilt: WaterMaskRegion | null = null;
+  /**
+   * Set whenever a rebuild wanted a bake but deferred it (see
+   * `maybeBakeWaterMask`), and cleared by the bake that services it.
+   *
+   * The bake is the single most expensive thing a rebuild does — hundreds of
+   * milliseconds over a zoomed-out world map — so it must not run on every
+   * threshold-crossing frame of a wheel zoom or a drag, which is exactly what
+   * it did: a wheel notch scales the viewport by ~10%, comfortably past the
+   * mask's own margin, so every notch busted coverage and paid for a fresh
+   * bake (`waterPerfStats.bakes` in the thousands for one session).
+   *
+   * Deliberately a flag serviced from `onTick` rather than extra work hung off
+   * each gesture's own settle path. There are three of those (a drag's
+   * pointerup, `noteZoomActivity`'s idle timer, `tickCameraAnim`'s completion)
+   * and they can overlap: a `forceRebuild` fired by one while another gesture
+   * is still running would skip the bake and then have nothing left to re-run
+   * it — e.g. a stationary press-and-hold spanning the wheel-idle timeout,
+   * which would leave `waterMaskRegionBuilt` null and the sea unmasked until
+   * the next real pan. One flag checked every frame has no such combinations.
+   */
+  private waterMaskDirty = false;
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
   // onTick's per-frame drawWaves call can skip redrawing wave strokes the
@@ -1343,6 +1364,10 @@ export class HexMapRenderer {
       this.world.alpha = Math.min(1, this.world.alpha + (1 - this.world.alpha) * k);
     }
     if (this.options.mode === 'world' && !this.deepFogOnly && waterDebugFlags.legacyWaveSquiggles) this.drawWaves();
+    // The settle path for a bake a gesture deferred (see waterMaskDirty). One
+    // check per frame, and it can only ever do work on the first frame after
+    // the gesture that owes it ends.
+    if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
     this.waterLayer.tick(performance.now());
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
@@ -1982,24 +2007,81 @@ export class HexMapRenderer {
     // the most expensive thing on screen.
     const waterSuppressed = deepFogOnly || !this.isFogActive();
     this.waterLayer.setSuppressed(waterSuppressed);
-    if (!waterSuppressed && (!this.waterMaskRegionBuilt || !waterMaskCovers(this.waterMaskRegionBuilt, rect))) {
-      const region = waterMaskRegion(rect, TILE_W);
-      // Timed rather than estimated: the bake is one isoPixelToAxial per texel
-      // plus three distance transforms, and it is the only CPU work this
-      // feature does — everything else it costs is on the GPU, where this
-      // codebase has no timer to read (see waterPerfStats).
-      const bakeStart = performance.now();
-      const mask = bakeWaterMask(region, TILE_W, TILE_H, this.options.worldModel);
-      waterPerfStats.bakeMs = performance.now() - bakeStart;
-      waterPerfStats.maskWidth = mask.width;
-      waterPerfStats.maskHeight = mask.height;
-      waterPerfStats.bakes += 1;
-      this.waterLayer.setMask(mask);
-      this.waterMaskRegionBuilt = region;
-    }
+    // A suppressed mesh has nothing to read the mask, so a bake owed from
+    // before it was suppressed is owed no longer — the next rebuild that
+    // un-suppresses it re-asks the coverage question from scratch.
+    if (waterSuppressed) this.waterMaskDirty = false;
+    else this.maybeBakeWaterMask();
 
     fogPerfStats.hexCount = coords.length;
     fogPerfStats.totalMs = performance.now() - rebuildStart;
+  }
+
+  /**
+   * Re-bakes the water mask if the viewport has left the region the current
+   * one covers — unless a pan/zoom gesture is in progress, in which case it
+   * only records that a bake is owed (see `waterMaskDirty`) and `onTick`
+   * services it once the gesture settles.
+   *
+   * Coverage is checked against the *bare* viewport rect, not `rebuildAll`'s
+   * `VISIBLE_RECT_MARGIN`-inflated one. The inflated rect was double-counting
+   * the margin: the mask reaches MASK_MARGIN_TILES (3) past whatever rect it
+   * is baked from, so asking it to cover a rect already 2 tiles oversized left
+   * a single tile of real pan slack out of the three the margin is there to
+   * give. The mask is still *baked* from the inflated rect, so the extra
+   * reach is kept — only the question "does what's on screen still fall
+   * inside it" is asked about what is actually on screen.
+   */
+  private maybeBakeWaterMask() {
+    const viewport = visibleWorldRect(this.camera, this.viewport);
+    if (this.waterMaskRegionBuilt && waterMaskCovers(this.waterMaskRegionBuilt, viewport)) return;
+    // A drag or a wheel/pinch zoom moves the camera on almost every frame, and
+    // each step that grows the viewport invalidates coverage again — baking
+    // per step means paying the most expensive work in the renderer several
+    // times over for masks that are superseded before they are looked at.
+    // Unlike the terrain rebuild this isn't throttled but deferred outright:
+    // at DRAG_REBUILD_THROTTLE_MS a single bake can overrun the throttle
+    // window several times, so throttling would still stall the gesture.
+    // A camera *animation* (the founding transition) is not a gesture in this
+    // sense — it is a fixed, short move, so deferring its bake would only
+    // withhold the water for the length of the ease.
+    if (this.dragging || this.wheeling) {
+      this.waterMaskDirty = true;
+      return;
+    }
+    this.waterMaskDirty = false;
+    const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
+    // Timed rather than estimated: the bake is one isoPixelToAxial per texel
+    // plus three distance transforms, and it is the only CPU work this
+    // feature does — everything else it costs is on the GPU, where this
+    // codebase has no timer to read (see waterPerfStats).
+    const bakeStart = performance.now();
+    const mask = bakeWaterMask(region, TILE_W, TILE_H, this.waterMaskTerrain());
+    waterPerfStats.bakeMs = performance.now() - bakeStart;
+    waterPerfStats.maskWidth = mask.width;
+    waterPerfStats.maskHeight = mask.height;
+    waterPerfStats.bakes += 1;
+    this.waterLayer.setMask(mask);
+    this.waterMaskRegionBuilt = region;
+  }
+
+  /**
+   * What the bake is allowed to ask about terrain.
+   *
+   * World mode deliberately hands over an `isLand`-only lookup rather than the
+   * WorldModel itself. `TerrainLookup.getTile` exists solely to spot the
+   * coastal-water prop tiles the A channel mutes (`hasWaterProp`), and
+   * `WaterLayer.tick` only ever sets `uPropMute` in settlement mode — world
+   * mode draws no sea tiles, so there is no painted boat or rock to protect.
+   * Omitting `getTile` is the documented way to say so: it zeroes the A
+   * channel, which is what the world-mode shader reads anyway, and drops both
+   * a second WorldModel lookup per texel and the extra distance transform the
+   * prop ramp would need.
+   */
+  private waterMaskTerrain(): TerrainLookup {
+    const { worldModel } = this.options;
+    if (this.options.mode === 'settlement') return worldModel;
+    return { isLand: (q, r) => worldModel.isLand(q, r) };
   }
 
   /**
