@@ -218,9 +218,24 @@ export interface FogPerfStats {
   waveDrawnCount: number;
   /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
   waveCulledCount: number;
+  /**
+   * The water mask bake, when this rebuild did one — 0 when it reused the
+   * mask it already had, or deferred the bake past a gesture.
+   *
+   * Broken out because for a long time it was the largest thing in `totalMs`
+   * by an order of magnitude and the breakdown said nothing about it: a
+   * zoomed-out world map read `terrain 20.6 / borders 4.3 / waves 9.5` under a
+   * total of 498, and the 460ms it did not mention was this.
+   */
+  waterMaskMs: number;
   /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
-  /** Hexes in the current viewport rect — the size the above times scale with. */
+  /**
+   * Hexes in the current viewport rect — the number the above times scale
+   * with, and the denominator the drawn/culled counts are shares of. Not
+   * itself a count of anything drawn: at world-map zoom nine in ten of these
+   * are open sea, which is the background rather than a hex.
+   */
   hexCount: number;
   /** The fog mask fetch's own wall-clock time (stores/world.ts's fetchFogMask), independent of any renderer rebuild. */
   maskFetchMs: number;
@@ -240,6 +255,7 @@ export const fogPerfStats: FogPerfStats = {
   wavesMs: 0,
   waveDrawnCount: 0,
   waveCulledCount: 0,
+  waterMaskMs: 0,
   totalMs: 0,
   hexCount: 0,
   maskFetchMs: 0,
@@ -2010,6 +2026,7 @@ export class HexMapRenderer {
     // A suppressed mesh has nothing to read the mask, so a bake owed from
     // before it was suppressed is owed no longer — the next rebuild that
     // un-suppresses it re-asks the coverage question from scratch.
+    fogPerfStats.waterMaskMs = 0;
     if (waterSuppressed) this.waterMaskDirty = false;
     else this.maybeBakeWaterMask();
 
@@ -2058,6 +2075,7 @@ export class HexMapRenderer {
     const bakeStart = performance.now();
     const mask = bakeWaterMask(region, TILE_W, TILE_H, this.waterMaskTerrain());
     waterPerfStats.bakeMs = performance.now() - bakeStart;
+    fogPerfStats.waterMaskMs = waterPerfStats.bakeMs;
     waterPerfStats.maskWidth = mask.width;
     waterPerfStats.maskHeight = mask.height;
     waterPerfStats.bakes += 1;

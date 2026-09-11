@@ -20,6 +20,7 @@ import TrainingModal from '../components/hud/TrainingModal.vue';
 import RingMenu, { type RingAction, type RingBuilding, type RingCategory } from '../components/hud/RingMenu.vue';
 import FogDebugPanel from '../components/hud/FogDebugPanel.vue';
 import FogPerfPanel from '../components/hud/FogPerfPanel.vue';
+import FpsMeter from '../components/hud/FpsMeter.vue';
 import WaterDebugPanel from '../components/hud/WaterDebugPanel.vue';
 import WaterPerfPanel from '../components/hud/WaterPerfPanel.vue';
 import ZoomDebugPanel from '../components/hud/ZoomDebugPanel.vue';
@@ -941,6 +942,10 @@ async function upgrade() {
       @zoom-mode-change="onZoomModeChange"
     />
     <div v-if="showFogDebug" class="fog-debug-stack">
+      <!-- First in the stack on purpose: it is the one panel that answers
+           "is the map smooth right now", which is the question every other
+           panel here exists to help explain. -->
+      <FpsMeter />
       <ZoomDebugPanel :renderer="canvasRef?.renderer" />
       <FogDebugPanel @change="onFogDebugChange" />
       <WaterDebugPanel @change="onFogDebugChange" />

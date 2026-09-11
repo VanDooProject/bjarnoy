@@ -322,5 +322,16 @@
   },
   "tradeReport": {
     "summary": "Gab {gaveAmount} {gave} für {gotAmount} {got}"
+  },
+  "fpsMeter": {
+    "title": "Bildrate",
+    "fps": "fps",
+    "msPerFrame": "{n} ms/Bild",
+    "worstFrame": "Schlechtestes Bild (letzte {seconds} s)",
+    "ms": "{n} ms",
+    "ago": "vor {n} s",
+    "stutters": "Bilder über {threshold} ms",
+    "sparkLabel": "Die letzten {n} Bildabstände",
+    "legend": "Mit requestAnimationFrame gemessen, zählt also die Bilder, die die Anzeige tatsächlich dargestellt hat — einschließlich derer, die der Renderer nie begonnen hat. Nicht dieselbe Zahl wie „Frame“ in der Wasser-Messung: das ist bewusst ein Median über sechzig Bilder (der Sweep braucht eine Basis, die ein einzelnes langes Bild nicht verschiebt) und kann ein Stocken deshalb gar nicht zeigen. Die Balken sind bei {ceiling} ms gedeckelt; auf einer Anzeige, die mithält, bedeutet ein voller Balken, dass die Karte ein Bild verpasst hat — nicht bloß, dass es das langsamste auf dem Schirm war."
   }
 }

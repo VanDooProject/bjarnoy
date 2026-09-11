@@ -86,6 +86,18 @@ const ROWS = computed<Row[]>(() => [
   },
   { key: 'markers', label: 'Markers', ms: stats.markersMs },
   {
+    key: 'water-mask',
+    label: 'Water mask bake',
+    ms: stats.waterMaskMs,
+    children: [
+      {
+        key: 'water-mask-note',
+        label: stats.waterMaskMs > 0 ? 'Baked this rebuild' : 'Reused (viewport still inside the baked region)',
+        ms: null,
+      },
+    ],
+  },
+  {
     key: 'waves',
     label: 'Waves',
     ms: stats.wavesMs,
@@ -117,6 +129,20 @@ function ms(v: number): string {
 function share(v: number, of: number): number {
   return of > 0 ? Math.round((v / of) * 100) : 0;
 }
+
+/**
+ * The rest of the scan: hexes the terrain pass walked and drew nothing for
+ * that the fog cull did not claim.
+ *
+ * Worth naming rather than leaving as the gap between three numbers, because
+ * it is nearly all of them. A zoomed-out world map scans ~58,000 hexes to draw
+ * ~270: about nine in ten of the rest are open sea, which is the background
+ * and not a hex anything is drawn for, and reading `58,065 hexes` alone gave
+ * no way to tell that from a cull that had quietly stopped working.
+ */
+const openSeaSkipped = computed(() =>
+  Math.max(0, stats.hexCount - stats.terrainDrawnCount - stats.terrainCulledCount),
+);
 </script>
 
 <template>
@@ -154,7 +180,14 @@ function share(v: number, of: number): number {
       <span class="bar-track" />
       <span class="value">{{ ms(stats.totalMs) }}</span>
     </div>
-    <div class="meta">{{ stats.hexCount }} hexes</div>
+    <div class="meta">
+      <span>{{ stats.hexCount.toLocaleString() }} hexes scanned</span>
+      <span class="meta-split">
+        <span class="drawn">{{ stats.terrainDrawnCount.toLocaleString() }} drawn</span>
+        <span class="culled">{{ stats.terrainCulledCount.toLocaleString() }} fog-culled</span>
+        <span class="skipped">{{ openSeaSkipped.toLocaleString() }} open sea</span>
+      </span>
+    </div>
     <div class="mask">
       <div class="mask-row">
         <span>Fog mask fetch</span>
@@ -242,6 +275,24 @@ function share(v: number, of: number): number {
 .meta {
   margin-top: 8px;
   font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.meta-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+}
+/* Coloured to match what each one means elsewhere in the map: what got drawn,
+   what the fog took, and what was never a hex to draw in the first place. */
+.meta-split .drawn {
+  color: var(--text);
+}
+.meta-split .culled {
+  color: #9ad0ff;
+}
+.meta-split .skipped {
   color: var(--muted);
 }
 .mask {
