@@ -9,6 +9,7 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
 import HudQueueSummary from '../components/hud/HudQueueSummary.vue';
+import QueuesSidebar from '../components/hud/QueuesSidebar.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
@@ -971,6 +972,7 @@ async function upgrade() {
       <TradePanel />
       <TrainingQueuePanel />
       <ArmyPanel />
+      <QueuesSidebar />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
       <RingMenu
         v-if="selectedTile && ringScreen"

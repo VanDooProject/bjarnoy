@@ -128,6 +128,12 @@
     "guests": "Guests",
     "unknownSettlement": "Unknown settlement"
   },
+  "queuesSidebar": {
+    "title": "Queues",
+    "open": "Open queues",
+    "close": "Close queues",
+    "chevron": "‹"
+  },
   "buildingModal": {
     "close": "✕",
     "hexCoord": "Hex {q}, {r}",

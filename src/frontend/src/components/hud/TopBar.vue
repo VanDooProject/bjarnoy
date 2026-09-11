@@ -54,7 +54,7 @@ const isBottom = computed(() => !props.docked && props.position === 'bottom');
 // it isn't expected to flip mid-session, so the drag direction is fixed at
 // mount rather than kept reactive to props.position.
 const { expanded, onPointerDown, onPointerMove, onPointerUp } = useDragSheet(false, {
-  expandDirection: isBottom.value ? 'up' : 'down',
+  invert: isBottom.value,
 });
 const settlementName = computed(() => props.title || world.hud.settlementName || null);
 

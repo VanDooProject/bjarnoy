@@ -2,9 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { useDragSheet } from './useDragSheet';
 
-function pointerEvent(clientY: number, currentTarget: EventTarget | null = null): PointerEvent {
+function pointerEvent(coord: number, axis: 'x' | 'y' = 'y', currentTarget: EventTarget | null = null): PointerEvent {
   const event = new Event('pointer') as unknown as PointerEvent;
-  Object.defineProperty(event, 'clientY', { value: clientY });
+  Object.defineProperty(event, axis === 'x' ? 'clientX' : 'clientY', { value: coord });
   Object.defineProperty(event, 'currentTarget', { value: currentTarget });
   Object.defineProperty(event, 'pointerId', { value: 1 });
   return event;
@@ -29,7 +29,7 @@ describe('useDragSheet', () => {
     expect(sheet.expanded.value).toBe(false);
   });
 
-  it('expands on a real drag past the threshold in the expand direction (default: down)', () => {
+  it('expands on a real drag past the threshold in the opening direction (default: increasing coordinate)', () => {
     const sheet = useDragSheet(false, { threshold: 40 });
     sheet.onPointerDown(pointerEvent(100));
     sheet.onPointerMove(pointerEvent(160));
@@ -55,13 +55,29 @@ describe('useDragSheet', () => {
     expect(sheet.expanded.value).toBe(false);
   });
 
-  it('inverts the expand direction to "up" for a bottom-pinned sheet', () => {
-    const sheet = useDragSheet(false, { expandDirection: 'up', threshold: 40 });
+  it('inverts the opening direction to "up" for a bottom-pinned bar', () => {
+    const sheet = useDragSheet(false, { invert: true, threshold: 40 });
     sheet.onPointerDown(pointerEvent(160));
     sheet.onPointerMove(pointerEvent(100));
     expect(sheet.dragOffset.value).toBe(60);
     sheet.onPointerUp();
     expect(sheet.expanded.value).toBe(true);
+  });
+
+  it('reads the horizontal coordinate for axis: "x" (a sidebar hinged on the right edge)', () => {
+    const sheet = useDragSheet(false, { axis: 'x', invert: true, threshold: 40 });
+    sheet.onPointerDown(pointerEvent(300, 'x'));
+    // Dragging left (decreasing clientX) opens a sidebar hinged on the right.
+    sheet.onPointerMove(pointerEvent(240, 'x'));
+    expect(sheet.dragOffset.value).toBe(60);
+    sheet.onPointerUp();
+    expect(sheet.expanded.value).toBe(true);
+
+    // Dragging back right past the threshold closes it again.
+    sheet.onPointerDown(pointerEvent(240, 'x'));
+    sheet.onPointerMove(pointerEvent(300, 'x'));
+    sheet.onPointerUp();
+    expect(sheet.expanded.value).toBe(false);
   });
 
   it('ignores pointermove/pointerup before any pointerdown', () => {
