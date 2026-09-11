@@ -30,6 +30,7 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useHudPosition } from '../composables/useHudPosition';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
@@ -86,6 +87,7 @@ function onZoomModeChange(next: RenderMode) {
 // rendering toggles, nothing about game state. See useFogDebug for why this
 // is a shared composable rather than a local computed().
 const showFogDebug = useFogDebug();
+const hudPosition = useHudPosition();
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
@@ -954,7 +956,7 @@ async function upgrade() {
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
     <div class="hud-scrim" />
-    <TopBar :hide-title="mode === 'settlement'">
+    <TopBar :hide-title="mode === 'settlement'" :position="hudPosition">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav />
     </TopBar>

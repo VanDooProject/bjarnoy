@@ -28,6 +28,13 @@ const props = defineProps<{
    * views leave this off and are unaffected.
    */
   docked?: boolean;
+  /**
+   * Which edge of the screen the bar sits on. Debug/UX-research flag only
+   * (see useHudPosition.ts) — not a user-facing setting yet. Ignored when
+   * `docked`, since a docs page header always belongs at the top of its
+   * document.
+   */
+  position?: 'top' | 'bottom';
 }>();
 
 const world = useWorldStore();
@@ -50,7 +57,7 @@ const caption = computed(() => {
 </script>
 
 <template>
-  <header class="hud-bar" :class="{ 'hud-bar--docked': docked }">
+  <header class="hud-bar" :class="{ 'hud-bar--docked': docked, 'hud-bar--bottom': !docked && position === 'bottom' }">
     <div class="brand">
       <span class="logo-hex" aria-hidden="true" title="Bjarnoy">
         <svg viewBox="0 0 100 100">
@@ -105,6 +112,17 @@ const caption = computed(() => {
 }
 .hud-bar--docked .brand {
   pointer-events: auto;
+}
+/* Debug/UX-research flag (useHudPosition.ts): pin the bar to the bottom
+   edge instead of the top, flipping the gradient/shadow/border to match so
+   it still reads as "anchored to this edge" rather than a top bar dropped
+   in the wrong place. */
+.hud-bar--bottom {
+  inset: auto 0 0 0;
+  background: linear-gradient(0deg, rgba(6, 12, 16, 0.94), rgba(6, 12, 16, 0.82));
+  border-bottom: none;
+  border-top: 1px solid var(--panel-border);
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.35);
 }
 .brand {
   display: flex;

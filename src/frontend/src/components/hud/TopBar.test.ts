@@ -67,4 +67,18 @@ describe('TopBar', () => {
     expect(docked.get('.hud-bar').classes()).toContain('hud-bar--docked');
     docked.unmount();
   });
+
+  it('pins to the bottom edge when position is "bottom", but never for a docked header', () => {
+    const top = mount(TopBar, { props: { position: 'top' } });
+    expect(top.get('.hud-bar').classes()).not.toContain('hud-bar--bottom');
+    top.unmount();
+
+    const bottom = mount(TopBar, { props: { position: 'bottom' } });
+    expect(bottom.get('.hud-bar').classes()).toContain('hud-bar--bottom');
+    bottom.unmount();
+
+    const dockedBottom = mount(TopBar, { props: { position: 'bottom', docked: true } });
+    expect(dockedBottom.get('.hud-bar').classes()).not.toContain('hud-bar--bottom');
+    dockedBottom.unmount();
+  });
 });
