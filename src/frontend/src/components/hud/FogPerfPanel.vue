@@ -27,14 +27,21 @@
 import { onMounted, onUnmounted, reactive, computed } from 'vue';
 import DebugPanel from './DebugPanel.vue';
 import { fogPerfStats, type FogPerfStats } from '../../lib/map/HexMapRenderer';
+// Read-only here: where the last bake ran, so the row above can explain its own
+// zero (see waterMaskNote). WaterPerfPanel owns presenting the rest of these.
+import { waterPerfStats, type WaterPerfStats } from '../../lib/map/water/waterDebug';
 
 const POLL_MS = 250;
 
 const stats = reactive<FogPerfStats>({ ...fogPerfStats });
+const water = reactive<WaterPerfStats>({ ...waterPerfStats });
 let timer: ReturnType<typeof setInterval> | undefined;
 
 onMounted(() => {
-  timer = setInterval(() => Object.assign(stats, fogPerfStats), POLL_MS);
+  timer = setInterval(() => {
+    Object.assign(stats, fogPerfStats);
+    Object.assign(water, waterPerfStats);
+  }, POLL_MS);
 });
 onUnmounted(() => clearInterval(timer));
 
@@ -87,12 +94,12 @@ const ROWS = computed<Row[]>(() => [
   { key: 'markers', label: 'Markers', ms: stats.markersMs },
   {
     key: 'water-mask',
-    label: 'Water mask bake',
+    label: 'Water mask bake (this thread)',
     ms: stats.waterMaskMs,
     children: [
       {
         key: 'water-mask-note',
-        label: stats.waterMaskMs > 0 ? 'Baked this rebuild' : 'Reused (viewport still inside the baked region)',
+        label: waterMaskNote.value,
         ms: null,
       },
     ],
@@ -152,6 +159,21 @@ function share(v: number, of: number): number {
  * and not a hex anything is drawn for, and reading `58,065 hexes` alone gave
  * no way to tell that from a cull that had quietly stopped working.
  */
+/**
+ * Where the last bake ran, and why the row above it can read 0.00 ms while the
+ * water panel reports hundreds.
+ *
+ * The rebuild breakdown is main-thread time, so a bake on the worker
+ * contributes nothing to it — which is the entire point of it being there, and
+ * also exactly the sort of zero that reads as a broken counter if the panel
+ * does not say so.
+ */
+const waterMaskNote = computed(() => {
+  if (stats.waterMaskMs > 0) return 'Baked on this thread';
+  if (water.bakedOnWorker) return `Baked on the worker (${water.bakeMs.toFixed(0)} ms there, off this frame)`;
+  return 'Reused (viewport still inside the baked region)';
+});
+
 const openSeaSkipped = computed(() =>
   Math.max(0, stats.hexCount - stats.terrainDrawnCount - stats.terrainCulledCount),
 );

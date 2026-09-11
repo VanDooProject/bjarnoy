@@ -300,12 +300,23 @@ watch(
 // zoom (`cameraMovedEnough`) — nothing tied a data refresh to a redraw, so
 // a building that finished (or one just queued, which should show its
 // level-0 foundation immediately) kept showing its old texture until the
-// player happened to pan far enough by coincidence. `world.hud.buildings`
-// is reassigned to a fresh array on every `refreshLiveSettlement` call
-// (whether or not anything actually changed), so watching it is a cheap,
-// reliable "the settlement snapshot moved" signal to force a redraw on.
+// player happened to pan far enough by coincidence.
+//
+// Watched by *content*, not by array identity. `refreshLiveSettlement`
+// reassigns `world.hud.buildings` to a fresh array every LIVE_POLL_MS
+// whether or not anything changed, so watching the array itself fired a
+// `forceRebuild()` every four seconds with the camera sitting perfectly
+// still — and `forceRebuild` deliberately drops the water mask (a forced
+// rebuild is the one place the "terrain never changes" assumption can be
+// wrong), so each of those also paid for a whole fresh mask bake. At a
+// zoomed-out settlement that is a ~300ms stall on a four-second timer,
+// which is exactly what a periodic lag spike is. A signature over what the
+// renderer actually draws from turns that into a rebuild per real change.
+const buildingSignature = computed(() =>
+  world.hud.buildings.map((b) => `${b.q},${b.r},${b.type},${b.level},${b.orientation ?? ''}`).join('|'),
+);
 watch(
-  [() => canvasRef.value?.renderer, () => world.hud.buildings],
+  [() => canvasRef.value?.renderer, buildingSignature],
   ([renderer]) => {
     renderer?.forceRebuild();
   },

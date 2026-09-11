@@ -319,6 +319,29 @@ export class WorldModel {
     return river?.shape === 'bend' ? 'sawmillbend' : 'sawmillriver';
   }
 
+  /**
+   * Every hex known to carry a building, packed with the terrain cache's own
+   * key — for the water mask's prop channel (`hasWaterProp`).
+   *
+   * A list rather than a lookup, because the consumer is the bake worker,
+   * which has the world seed but none of this model's live state. Whether a
+   * coastal-water hex shows a prop is otherwise pure (sea, coastal, variant),
+   * so the buildings are the only thing that has to cross, and there are a few
+   * dozen of them against the several hundred thousand texels that would
+   * otherwise each have to ask this thread.
+   *
+   * Walks `tiles`, which holds every hex materialised so far. That is a
+   * superset of the placed buildings and bounded by where the player has
+   * looked, and it is walked once per bake rather than once per texel.
+   */
+  buildingHexKeys(): number[] {
+    const keys: number[] = [];
+    for (const tile of this.tiles.values()) {
+      if (tile.buildingType) keys.push(terrainKey(tile.q, tile.r));
+    }
+    return keys;
+  }
+
   isLand(q: number, r: number): boolean {
     return this.terrainOf(q, r) !== 'sea';
   }

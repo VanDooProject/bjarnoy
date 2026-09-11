@@ -47,7 +47,7 @@ import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
-import type { TerrainLookup, WaterMask } from './water/waterMask';
+import { hasWaterProp, type TerrainLookup, type WaterMask } from './water/waterMask';
 import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
@@ -260,8 +260,11 @@ export interface FogPerfStats {
   /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
   waveCulledCount: number;
   /**
-   * The water mask bake, when this rebuild did one — 0 when it reused the
-   * mask it already had, or deferred the bake past a gesture.
+   * The water mask bake, when this rebuild ran one *on this thread* — 0 when
+   * it reused the mask it already had, deferred the bake past a gesture, or
+   * handed it to the worker (which is now the normal case; see
+   * `waterPerfStats.bakedOnWorker` for where the last one ran and what it
+   * took).
    *
    * Broken out because for a long time it was the largest thing in `totalMs`
    * by an order of magnitude and the breakdown said nothing about it: a
@@ -994,7 +997,7 @@ export class HexMapRenderer {
    */
   private maskBaker = new WaterMaskBaker((mask, region, bakeMs) => {
     if (this.destroyed) return;
-    this.applyWaterMask(mask, region, bakeMs);
+    this.applyWaterMask(mask, region, bakeMs, true);
   });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
@@ -2129,23 +2132,27 @@ export class HexMapRenderer {
     this.waterMaskDirty = false;
     const { worldModel } = this.options;
     const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
-    // Settlement mode has to bake here: the A channel it reads needs each
-    // hex's *building* to spot the coastal-water props, and buildings are live
-    // game state the worker has no copy of. Its masks are also the small ones
-    // (a few hundred thousand texels, ~25ms), so there is nothing to move.
-    const inline = this.options.mode === 'settlement';
     // Timed rather than estimated: the bake is one isoPixelToAxial per texel
     // plus three distance transforms, and it is the only CPU work this
     // feature does — everything else it costs is on the GPU, where this
     // codebase has no timer to read (see waterPerfStats).
     const bakeStart = performance.now();
     const mask = this.maskBaker.bake(
-      { region, tileWidth: TILE_W, tileHeight: TILE_H, seed: worldModel.seed, generation: worldModel.generation },
+      {
+        region,
+        tileWidth: TILE_W,
+        tileHeight: TILE_H,
+        seed: worldModel.seed,
+        generation: worldModel.generation,
+        // Only settlement mode reads the prop channel (WaterLayer sets
+        // uPropMute nowhere else), so only it pays for the list — and the
+        // list, not a lookup, is what lets that mode bake off-thread at all.
+        buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
+      },
       this.waterMaskTerrain(),
-      inline,
     );
     if (!mask) return; // off to the worker; applyWaterMask finishes it
-    this.applyWaterMask(mask, region, performance.now() - bakeStart);
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false);
   }
 
   /**
@@ -2156,9 +2163,15 @@ export class HexMapRenderer {
    * keeps the foam it had rather than losing it for the length of the bake,
    * and the coverage check keeps answering about a mask that actually exists.
    */
-  private applyWaterMask(mask: WaterMask, region: WaterMaskRegion, bakeMs: number) {
+  private applyWaterMask(mask: WaterMask, region: WaterMaskRegion, bakeMs: number, onWorker: boolean) {
     waterPerfStats.bakeMs = bakeMs;
-    fogPerfStats.waterMaskMs = bakeMs;
+    waterPerfStats.bakedOnWorker = onWorker;
+    // Only a bake this thread actually ran belongs in the rebuild breakdown.
+    // A worker bake costs the frame nothing but the texture upload, so folding
+    // its (larger) duration into `totalMs` would make the panel claim a stall
+    // that did not happen — the number is still reported, next to the mask
+    // size in the water panel, where it reads as what it is.
+    fogPerfStats.waterMaskMs = onWorker ? 0 : bakeMs;
     waterPerfStats.maskWidth = mask.width;
     waterPerfStats.maskHeight = mask.height;
     waterPerfStats.bakes += 1;
@@ -2167,22 +2180,31 @@ export class HexMapRenderer {
   }
 
   /**
-   * What the bake is allowed to ask about terrain.
+   * What the bake is allowed to ask about terrain — the *fallback* path's
+   * lookup, used only where there is no worker to bake on (jsdom, a browser
+   * that refuses a module worker).
    *
-   * World mode deliberately hands over an `isLand`-only lookup rather than the
-   * WorldModel itself. `TerrainLookup.getTile` exists solely to spot the
+   * World mode hands over an `isLand`-only lookup rather than the WorldModel
+   * itself. `TerrainLookup.getTile`/`hasProp` exist solely to spot the
    * coastal-water prop tiles the A channel mutes (`hasWaterProp`), and
    * `WaterLayer.tick` only ever sets `uPropMute` in settlement mode — world
    * mode draws no sea tiles, so there is no painted boat or rock to protect.
-   * Omitting `getTile` is the documented way to say so: it zeroes the A
-   * channel, which is what the world-mode shader reads anyway, and drops both
-   * a second WorldModel lookup per texel and the extra distance transform the
-   * prop ramp would need.
+   * Omitting both is the documented way to say so: it zeroes the A channel,
+   * which is what the world-mode shader reads anyway, and drops both a second
+   * WorldModel lookup per texel and the extra distance transform the prop ramp
+   * would need.
+   *
+   * Settlement mode answers through `hasProp` rather than `getTile` so the
+   * fallback asks the same question the worker does, terrain-only, instead of
+   * materialising a `Tile` per water texel.
    */
   private waterMaskTerrain(): TerrainLookup {
     const { worldModel } = this.options;
-    if (this.options.mode === 'settlement') return worldModel;
-    return { isLand: (q, r) => worldModel.isLand(q, r) };
+    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r) };
+    return {
+      isLand: (q, r) => worldModel.isLand(q, r),
+      hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
+    };
   }
 
   /**

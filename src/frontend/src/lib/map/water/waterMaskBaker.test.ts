@@ -28,7 +28,7 @@ function regionFor(halfWidth: number): WaterMaskRegion {
 /** A stand-in worker that records what was posted and lets the test answer by hand. */
 class FakeWorker {
   static last: FakeWorker | null = null;
-  posted: { id: number; region: WaterMaskRegion }[] = [];
+  posted: { id: number; region: WaterMaskRegion; buildingHexes?: number[] }[] = [];
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
   terminated = false;
@@ -36,7 +36,7 @@ class FakeWorker {
   constructor() {
     FakeWorker.last = this;
   }
-  postMessage(request: { id: number; region: WaterMaskRegion }) {
+  postMessage(request: { id: number; region: WaterMaskRegion; buildingHexes?: number[] }) {
     this.posted.push(request);
   }
   terminate() {
@@ -72,18 +72,19 @@ describe('WaterMaskBaker', () => {
     const applied: unknown[] = [];
     const baker = new WaterMaskBaker((mask) => applied.push(mask));
     const region = regionFor(400);
-    const mask = baker.bake(input(region), LAND_EVERYWHERE, false);
+    const mask = baker.bake(input(region), LAND_EVERYWHERE);
     expect(mask).not.toBeNull();
     expect(mask!.width).toBe(region.width);
     // Inline means the caller already has it; nothing arrives through the callback.
     expect(applied).toHaveLength(0);
   });
 
-  it('bakes inline when told to, even with a worker available', () => {
+  it('sends the building hexes along, so the worker can answer hasWaterProp itself', () => {
     installFakeWorker();
     const baker = new WaterMaskBaker(() => {});
-    expect(baker.bake(input(regionFor(400)), LAND_EVERYWHERE, true)).not.toBeNull();
-    expect(FakeWorker.last!.posted).toHaveLength(0);
+    const region = regionFor(400);
+    baker.bake({ ...input(region), buildingHexes: [11, 22] }, LAND_EVERYWHERE);
+    expect(FakeWorker.last!.posted[0].buildingHexes).toEqual([11, 22]);
   });
 
   it('hands the bake to the worker and applies the result when it arrives', () => {
@@ -92,7 +93,7 @@ describe('WaterMaskBaker', () => {
     const baker = new WaterMaskBaker((mask, region) => applied.push({ width: mask.width, region }));
     const region = regionFor(400);
 
-    expect(baker.bake(input(region), LAND_EVERYWHERE, false)).toBeNull();
+    expect(baker.bake(input(region), LAND_EVERYWHERE)).toBeNull();
     expect(baker.pendingRegion).toBe(region);
     expect(applied).toHaveLength(0);
 
@@ -108,8 +109,8 @@ describe('WaterMaskBaker', () => {
     const small = regionFor(400);
     const big = regionFor(4000);
 
-    baker.bake(input(small), LAND_EVERYWHERE, false);
-    baker.bake(input(big), LAND_EVERYWHERE, false);
+    baker.bake(input(small), LAND_EVERYWHERE);
+    baker.bake(input(big), LAND_EVERYWHERE);
     const [first, second] = FakeWorker.last!.posted;
     expect(baker.pendingRegion).toBe(big);
 
@@ -129,7 +130,7 @@ describe('WaterMaskBaker', () => {
     installFakeWorker();
     const applied: unknown[] = [];
     const baker = new WaterMaskBaker((mask) => applied.push(mask));
-    baker.bake(input(regionFor(400)), LAND_EVERYWHERE, false);
+    baker.bake(input(regionFor(400)), LAND_EVERYWHERE);
     const [request] = FakeWorker.last!.posted;
 
     baker.discardPending();
@@ -142,7 +143,7 @@ describe('WaterMaskBaker', () => {
     installFakeWorker();
     const applied: unknown[] = [];
     const baker = new WaterMaskBaker((mask) => applied.push(mask));
-    baker.bake(input(regionFor(400)), LAND_EVERYWHERE, false);
+    baker.bake(input(regionFor(400)), LAND_EVERYWHERE);
     const [request] = FakeWorker.last!.posted;
 
     baker.destroy();
@@ -155,7 +156,7 @@ describe('WaterMaskBaker', () => {
     installFakeWorker();
     const baker = new WaterMaskBaker(() => {});
     FakeWorker.last!.onerror?.();
-    const mask = baker.bake(input(regionFor(400)), LAND_EVERYWHERE, false);
+    const mask = baker.bake(input(regionFor(400)), LAND_EVERYWHERE);
     expect(mask).not.toBeNull();
   });
 });

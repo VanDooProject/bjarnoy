@@ -15,6 +15,8 @@ export interface AsyncBakeInput {
   tileHeight: number;
   seed: number;
   generation: WorldGenerationConstants;
+  /** Hexes carrying a building, for the prop channel — see BakeRequest. Omitted in world mode, which does not read that channel. */
+  buildingHexes?: number[];
 }
 
 export class WaterMaskBaker {
@@ -56,14 +58,15 @@ export class WaterMaskBaker {
   /**
    * Bakes `input.region`, on the worker when there is one.
    *
-   * Returns the mask when it baked inline (no worker, or `terrain` carries the
-   * building state only this thread has — see the worker's own header) and
-   * null when the result will arrive through the callback instead. A request
-   * posted while another is out supersedes it: the older result is dropped on
-   * arrival rather than applied late over a newer one.
+   * Returns the mask when it baked inline — which now happens only where there
+   * is no worker to bake on — and null when the result will arrive through the
+   * callback instead. `terrain` is therefore the fallback path's lookup, not
+   * the normal one. A request posted while another is out supersedes it: the
+   * older result is dropped on arrival rather than applied late over a newer
+   * one.
    */
-  bake(input: AsyncBakeInput, terrain: TerrainLookup, mustBakeInline: boolean): WaterMask | null {
-    if (mustBakeInline || !this.worker) return bakeWaterMask(input.region, input.tileWidth, input.tileHeight, terrain);
+  bake(input: AsyncBakeInput, terrain: TerrainLookup): WaterMask | null {
+    if (!this.worker) return bakeWaterMask(input.region, input.tileWidth, input.tileHeight, terrain);
     const id = this.nextId++;
     this.pending = { id, region: input.region };
     const request: BakeRequest = {
@@ -73,6 +76,7 @@ export class WaterMaskBaker {
       tileHeight: input.tileHeight,
       seed: input.seed,
       generation: input.generation,
+      buildingHexes: input.buildingHexes,
     };
     this.worker.postMessage(request);
     return null;

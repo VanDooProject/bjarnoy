@@ -22,10 +22,27 @@ export interface TerrainLookup {
   /**
    * The whole tile, when the caller has one — only used to spot the coastal
    * water variants that carry a prop (`hasWaterProp`). Optional so a test can
-   * still pass a bare `isLand`, and because a caller that omits it gets a mask
-   * whose A channel is simply all zero: no prop tiles, nothing muted.
+   * still pass a bare `isLand`, and because a caller that omits neither this
+   * nor `hasProp` gets a mask whose A channel is simply all zero: no prop
+   * tiles, nothing muted.
    */
   getTile?(q: number, r: number): Tile;
+  /**
+   * `hasWaterProp` for this hex, when the caller can answer it without
+   * materialising a `Tile`.
+   *
+   * Preferred over `getTile` where both are present, and it exists because of
+   * where the answer is needed. The bake asks this question once per *water
+   * texel* — well over half a million of them on a zoomed-out map — and
+   * `getTile` makes the caller build (and cache) a whole tile to answer it:
+   * measured, the settlement bake spent 2.3x what the world bake spent, purely
+   * on going through `WorldModel.getTile` rather than a terrain-only lookup.
+   * It also cannot be answered at all by a caller that has no `Tile` to hand,
+   * which is precisely the bake worker's situation — every input to
+   * `hasWaterProp` is derivable from the world seed except which hexes carry a
+   * building, and that is a short list easily sent across.
+   */
+  hasProp?(q: number, r: number): boolean;
 }
 
 /**
@@ -304,6 +321,14 @@ export function waterNoiseSeed(q: number, r: number): number {
 export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHeight: number, terrain: TerrainLookup): WaterMask {
   const { width, height, texelWorldSize, rect } = region;
   const count = width * height;
+  // `hasProp` where the caller has it, `getTile` where it only has that, and
+  // null where it has neither — which is the documented way to ask for an
+  // all-zero A channel.
+  const propAt: ((q: number, r: number) => boolean) | null = terrain.hasProp
+    ? (q, r) => terrain.hasProp!(q, r)
+    : terrain.getTile
+      ? (q, r) => hasWaterProp(terrain.getTile!(q, r))
+      : null;
   const water = new Uint8Array(count);
   const land = new Uint8Array(count);
   const seed = new Uint8Array(count);
@@ -332,7 +357,7 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       land[row + x] = isLand ? 1 : 0;
       water[row + x] = isLand ? 0 : 1;
       seed[row + x] = waterNoiseSeed(hex.q, hex.r);
-      if (!isLand && terrain.getTile && hasWaterProp(terrain.getTile(hex.q, hex.r))) {
+      if (!isLand && propAt !== null && propAt(hex.q, hex.r)) {
         prop[row + x] = 1;
         propTexels++;
       }
