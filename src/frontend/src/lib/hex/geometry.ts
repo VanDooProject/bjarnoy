@@ -6,7 +6,7 @@
 // an arbitrary tile width `w` via src/lib/map/textures.ts's fractions.
 
 import type { AxialCoord } from './coords';
-import { axialToOddQ, neighbors, oddQToAxial } from './coords';
+import { axialToOddQ } from './coords';
 
 export interface Point {
   x: number;
@@ -34,17 +34,6 @@ export function isoGridPosition(c: AxialCoord, w: number, h: number): Point {
   return { x, y };
 }
 
-function pointInPolygon(pt: Point, poly: Point[]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i];
-    const b = poly[j];
-    const crosses = a.y > pt.y !== b.y > pt.y;
-    if (crosses && pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
-
 /**
  * Inverse of isoGridPosition: which hex contains this world point.
  *
@@ -66,14 +55,72 @@ export function isoPixelToAxial(world: Point, w: number, h: number): AxialCoord 
   const colPitch = w * 0.75;
   const col = Math.round((world.x - w / 2) / colPitch);
   const row = Math.round((world.y - h / 2 - (col & 1 ? h / 2 : 0)) / h);
-  const estimate = oddQToAxial({ col, row });
+  const estQ = col;
+  const estR = row - (col - (col & 1)) / 2;
 
-  for (const c of [estimate, ...neighbors(estimate)]) {
-    const grid = isoGridPosition(c, w, h);
-    const poly = isoTopPoints(w, h).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-    if (pointInPolygon(world, poly)) return c;
+  // Hand-inlined rather than written with oddQToAxial/neighbors/isoTopPoints/
+  // pointInPolygon, which is what this used to be. Read as prose that version
+  // allocates about fifteen objects per call — a coord for the estimate, an
+  // array of six more for its neighbours, and a fresh six-point polygon per
+  // candidate — and this is not a call that happens once per click.
+  // `bakeWaterMask` runs it once per texel, 670k times for a single
+  // zoomed-out world map: at 0.55us that was ~370ms of a ~600ms bake, nearly
+  // all of it allocation and the GC behind it.
+  //
+  // The geometry is unchanged, deliberately: same candidate order (the
+  // estimate, then its six neighbours in NEIGHBOR_DIRS order), the same
+  // crossing test, the same fallback to the estimate. A point exactly on a
+  // shared edge still resolves to exactly the hex it resolved to before.
+  for (let i = -1; i < 6; i++) {
+    const q = i < 0 ? estQ : estQ + NEIGHBOR_DQ[i];
+    const r = i < 0 ? estR : estR + NEIGHBOR_DR[i];
+    // isoGridPosition, inlined.
+    const grow = r + (q - (q & 1)) / 2;
+    const ox = q * colPitch;
+    const oy = grow * h + (q & 1 ? h / 2 : 0);
+    if (inTopFace(world.x - ox, world.y - oy, w, h)) return { q, r };
   }
-  return estimate;
+  return { q: estQ, r: estR };
+}
+
+// NEIGHBOR_DIRS (coords.ts) as parallel arrays, so the candidate walk above
+// reads a direction without building a coord for it.
+const NEIGHBOR_DQ = [1, 1, 0, -1, -1, 0];
+const NEIGHBOR_DR = [0, -1, -1, 0, 1, 1];
+
+/**
+ * `pointInPolygon(pt, isoTopPoints(w, h))` for a point already expressed
+ * relative to the hex's grid origin, with the polygon written out.
+ *
+ * Two things make it exact rather than merely equivalent:
+ *
+ * - Only four of the six edges can toggle. `isoTopPoints`' edges P1->P2 and
+ *   P4->P5 are horizontal, and the crossing test's `a.y > pt.y !== b.y > pt.y`
+ *   is false whenever the two endpoints share a y — for every pt, so dropping
+ *   them cannot change the parity.
+ * - The bounding-box rejection is not a separate approximation of the
+ *   polygon. Outside `[0, w] x [0, h]` the remaining four edges always toggle
+ *   an even number of times (x below every edge's crossing, or above all of
+ *   them), so the walk would return false there anyway.
+ *
+ * What is left is the same `<` against the same interpolated edge x, in the
+ * same order, so boundary points land the same way they did.
+ */
+function inTopFace(x: number, y: number, w: number, h: number): boolean {
+  if (x < 0 || x > w || y < 0 || y > h) return false;
+  const x1 = w / 4;
+  const x3 = (3 * w) / 4;
+  const ym = h / 2;
+  let inside = false;
+  // P0(0, h/2) <- P5(w/4, h)
+  if (ym > y !== h > y && x < (x1 * (y - ym)) / ym) inside = !inside;
+  // P1(w/4, 0) <- P0(0, h/2)
+  if (0 > y !== ym > y && x < (-x1 * y) / ym + x1) inside = !inside;
+  // P3(w, h/2) <- P2(3w/4, 0)
+  if (ym > y !== 0 > y && x < ((x3 - w) * (y - ym)) / -ym + w) inside = !inside;
+  // P4(3w/4, h) <- P3(w, h/2)
+  if (h > y !== ym > y && x < ((w - x3) * (y - h)) / -ym + x3) inside = !inside;
+  return inside;
 }
 
 /**

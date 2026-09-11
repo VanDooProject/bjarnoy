@@ -7,7 +7,7 @@
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
-import { DEFAULT_GENERATION, generateTile, type WorldGenerationConstants } from './worldGenerator';
+import { DEFAULT_GENERATION, generateTile, terrainAt, type WorldGenerationConstants } from './worldGenerator';
 import {
   emptyResources,
   TILE_ORIENTATIONS,
@@ -16,6 +16,7 @@ import {
   type ResourceKind,
   type Resources,
   type RiverTile,
+  type Terrain,
   type Settlement,
   type Tile,
   type TileOrientation,
@@ -87,11 +88,53 @@ const DEMO_RIVAL_CART_OFFSET: AxialCoord = { q: 6, r: -4 };
 // unexplored starting immediately at the border.
 export const FOG_SCOUT_RING = 3;
 
+/**
+ * Packs a coord into one integer key for the terrain cache.
+ *
+ * Bit-packed rather than `q * K + r`, which collides across the sign boundary
+ * ((0, -1) and (-1, K - 1) both land on -1), and rather than a string, which
+ * is the allocation this cache exists to avoid. The `| 0` also folds the `-0`
+ * that odd-q/axial conversion can produce into 0, so a hex cannot end up with
+ * two keys.
+ *
+ * Good for |q|, |r| < 32768 — about 2000 times the radius of any world the
+ * generator places islands in, and far past what a player could pan to.
+ */
+function terrainKey(q: number, r: number): number {
+  return ((((q | 0) + 0x8000) << 16) | (((r | 0) + 0x8000) & 0xffff)) | 0;
+}
+
+
+
 export class WorldModel {
   readonly seed: number;
   /** The world's generation constants (issue #159 part B) — `DEFAULT_GENERATION` in demo mode, since there is no backend to ask. */
   readonly generation: WorldGenerationConstants;
   private tiles = new Map<string, Tile>();
+  /**
+   * Terrain alone, cached separately from `tiles`.
+   *
+   * Terrain is the one part of a tile that is pure: it depends only on (q, r)
+   * and the world seed, never on anything the game does to a hex afterwards
+   * (buildings, ownership and — for a fishing hut — orientation are all
+   * mutated on the `Tile` in place, terrain never is). That makes it safe to
+   * answer without materialising a `Tile`, which is what most of the map
+   * actually wants: the world map draws flat coloured hexes from `terrain`
+   * alone, the wave field only asks whether a hex is open water, and the water
+   * mask asks nothing else either. Going through `getTile` for those made them
+   * pay ~20us a hex for a 1.2us question, on tens of thousands of hexes per
+   * rebuild.
+   *
+   * It also pays for itself inside `getTile`: a tile needs its six neighbours'
+   * terrain, and neighbouring tiles share those, so this collapses seven
+   * samples per tile to roughly one.
+   *
+   * Numerically keyed, unlike `tiles`. This is the hottest lookup in the
+   * renderer and a `${q},${r}` key would make a string per call, which is the
+   * kind of garbage that shows up as frame stutter rather than as time in any
+   * one function.
+   */
+  private terrain = new Map<number, Terrain>();
   private settlements = new Map<string, Settlement>();
   /** Trade carts in transit — see `CartShipment`'s own doc comment. */
   private cartShipments = new Map<string, CartShipment>();
@@ -209,11 +252,25 @@ export class WorldModel {
     return tiles;
   }
 
+  /**
+   * This hex's terrain, without building (or caching) the whole `Tile` —
+   * see the `terrain` field for why that distinction is worth having.
+   */
+  terrainOf = (q: number, r: number): Terrain => {
+    const k = terrainKey(q, r);
+    let terrain = this.terrain.get(k);
+    if (terrain === undefined) {
+      terrain = terrainAt(q, r, { seed: this.seed, generation: this.generation });
+      this.terrain.set(k, terrain);
+    }
+    return terrain;
+  };
+
   getTile(q: number, r: number): Tile {
     const k = coordKey({ q, r });
     let tile = this.tiles.get(k);
     if (!tile) {
-      tile = generateTile(q, r, { seed: this.seed, generation: this.generation });
+      tile = generateTile(q, r, { seed: this.seed, generation: this.generation }, this.terrainOf);
       this.tiles.set(k, tile);
     }
     return tile;
@@ -263,7 +320,7 @@ export class WorldModel {
   }
 
   isLand(q: number, r: number): boolean {
-    return this.getTile(q, r).terrain !== 'sea';
+    return this.terrainOf(q, r) !== 'sea';
   }
 
   /**

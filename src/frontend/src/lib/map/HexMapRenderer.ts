@@ -2283,8 +2283,13 @@ export class HexMapRenderer {
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
 
     for (const c of coords) {
-      const tile = worldModel.getTile(c.q, c.r);
-      if (tile.terrain === 'sea') continue; // open sea is just the background
+      // Flat world-map hexes are coloured from terrain alone (WORLD_TERRAIN_FILL),
+      // so this asks for terrain alone. The distinction is the difference
+      // between 1.2us and ~20us a hex, over a coord list that reaches 58,000
+      // entries zoomed out — and nine hexes in ten are the open sea this
+      // skips, which would have been a full Tile built to say "background".
+      const terrain = worldModel.terrainOf(c.q, c.r);
+      if (terrain === 'sea') continue; // open sea is just the background
 
       // Same cull as the settlement view's rebuildTerrain: draw the island
       // under the thin part of the unexplored mist near the scouted ring
@@ -2303,7 +2308,7 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
+      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[terrain] });
       fogPerfStats.terrainDrawnCount++;
     }
   }
@@ -2359,10 +2364,11 @@ export class HexMapRenderer {
   /** True if the given coord or any of its neighbours is land — waves never sit this close to shore. */
   private isNearLand(coord: AxialCoord): boolean {
     const { worldModel } = this.options;
-    if (worldModel.getTile(coord.q, coord.r).terrain !== 'sea') return true;
-    return NEIGHBOR_DIRS.some(
-      (d) => worldModel.getTile(coord.q + d.q, coord.r + d.r).terrain !== 'sea',
-    );
+    // terrainOf, not getTile: this asks seven hexes a terrain-only question,
+    // once per surviving wave grid point, and getTile would build (and cache)
+    // a whole Tile — orientation, variant, coastal-ness — to answer it.
+    if (worldModel.terrainOf(coord.q, coord.r) !== 'sea') return true;
+    return NEIGHBOR_DIRS.some((d) => worldModel.terrainOf(coord.q + d.q, coord.r + d.r) !== 'sea');
   }
 
   // Recomputes which open-water grid points get a wave squiggle for the
