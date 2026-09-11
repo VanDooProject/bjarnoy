@@ -47,7 +47,8 @@ import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
-import { bakeWaterMask, type TerrainLookup } from './water/waterMask';
+import type { TerrainLookup, WaterMask } from './water/waterMask';
+import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import { riverPathFor } from './riverPath';
@@ -128,6 +129,34 @@ const WAVE_STROKE = 2 * WAVE_SCALE;
 const WAVE_JITTER_X = 16 * WAVE_SCALE;
 const WAVE_JITTER_Y = 12 * WAVE_SCALE;
 const WAVE_DENSITY = 0.62; // fraction of grid points that get a wave, per the prototype's `dens`
+/**
+ * How wide a wave's stroke has to land on screen, in device-independent
+ * pixels, for the squiggles to be drawn at all.
+ *
+ * The wave field is sized in *world* units, so the number of strokes on screen
+ * grows with the viewport's world area — i.e. with the square of how far out
+ * the camera is zoomed — while each stroke gets thinner at exactly the same
+ * rate. At the furthest world zoom that is 14,043 strokes re-recorded and
+ * re-tessellated every frame (measured: 3.57ms of every frame, forever) to
+ * draw lines about half a pixel wide. Half a pixel is not a wave; it is a
+ * faint uniform haze over the sea, which is the one thing the squiggles are
+ * not supposed to read as.
+ *
+ * So: below this they are not drawn. One device pixel, because that is the
+ * width at which a stroke stops being a line and starts being a tint — this
+ * is a statement about what is visible, not a budget.
+ */
+const WAVE_MIN_STROKE_PX = 1;
+/**
+ * The band above the cutoff the squiggles fade in over, as a multiple of it.
+ *
+ * A hard on/off at a single zoom would pop mid-gesture — a wheel zoom crosses
+ * the threshold in one notch — and a whole sea texture appearing at once is
+ * far more noticeable than the barely-visible strokes it is made of. Fading
+ * over a band costs nothing extra: the viewport covers less world the further
+ * in you are, so there are fewer strokes inside the band than below it.
+ */
+const WAVE_FADE_BAND = 1.5;
 
 function hash01(x: number, y: number, salt: number): number {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(salt | 0, 2654435761);
@@ -957,6 +986,16 @@ export class HexMapRenderer {
    * the next real pan. One flag checked every frame has no such combinations.
    */
   private waterMaskDirty = false;
+  /**
+   * Runs the bake, on a worker where it can (see WaterMaskBaker). Constructed
+   * eagerly rather than on first use so the worker's own module graph is
+   * fetched and compiled while the map is still loading, instead of on the
+   * first camera move that needs a mask.
+   */
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs) => {
+    if (this.destroyed) return;
+    this.applyWaterMask(mask, region, bakeMs);
+  });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
   // onTick's per-frame drawWaves call can skip redrawing wave strokes the
@@ -2068,6 +2107,11 @@ export class HexMapRenderer {
   private maybeBakeWaterMask() {
     const viewport = visibleWorldRect(this.camera, this.viewport);
     if (this.waterMaskRegionBuilt && waterMaskCovers(this.waterMaskRegionBuilt, viewport)) return;
+    // A bake already out with the worker that covers what is on screen is the
+    // bake this call wanted — asking again would only supersede it and start
+    // the wait over.
+    const outstanding = this.maskBaker.pendingRegion;
+    if (outstanding && waterMaskCovers(outstanding, viewport)) return;
     // A drag or a wheel/pinch zoom moves the camera on almost every frame, and
     // each step that grows the viewport invalidates coverage again — baking
     // per step means paying the most expensive work in the renderer several
@@ -2083,15 +2127,38 @@ export class HexMapRenderer {
       return;
     }
     this.waterMaskDirty = false;
+    const { worldModel } = this.options;
     const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
+    // Settlement mode has to bake here: the A channel it reads needs each
+    // hex's *building* to spot the coastal-water props, and buildings are live
+    // game state the worker has no copy of. Its masks are also the small ones
+    // (a few hundred thousand texels, ~25ms), so there is nothing to move.
+    const inline = this.options.mode === 'settlement';
     // Timed rather than estimated: the bake is one isoPixelToAxial per texel
     // plus three distance transforms, and it is the only CPU work this
     // feature does — everything else it costs is on the GPU, where this
     // codebase has no timer to read (see waterPerfStats).
     const bakeStart = performance.now();
-    const mask = bakeWaterMask(region, TILE_W, TILE_H, this.waterMaskTerrain());
-    waterPerfStats.bakeMs = performance.now() - bakeStart;
-    fogPerfStats.waterMaskMs = waterPerfStats.bakeMs;
+    const mask = this.maskBaker.bake(
+      { region, tileWidth: TILE_W, tileHeight: TILE_H, seed: worldModel.seed, generation: worldModel.generation },
+      this.waterMaskTerrain(),
+      inline,
+    );
+    if (!mask) return; // off to the worker; applyWaterMask finishes it
+    this.applyWaterMask(mask, region, performance.now() - bakeStart);
+  }
+
+  /**
+   * Installs a freshly baked mask, whichever thread baked it.
+   *
+   * `waterMaskRegionBuilt` is only set here, so a worker bake that is still in
+   * flight leaves the previous mask both displayed and recorded — the sea
+   * keeps the foam it had rather than losing it for the length of the bake,
+   * and the coverage check keeps answering about a mask that actually exists.
+   */
+  private applyWaterMask(mask: WaterMask, region: WaterMaskRegion, bakeMs: number) {
+    waterPerfStats.bakeMs = bakeMs;
+    fogPerfStats.waterMaskMs = bakeMs;
     waterPerfStats.maskWidth = mask.width;
     waterPerfStats.maskHeight = mask.height;
     waterPerfStats.bakes += 1;
@@ -2415,6 +2482,15 @@ export class HexMapRenderer {
   // the fog cull is a few subtractions over an already-pruned source list,
   // and isNearLand — 7 getTile lookups — runs only on what survives both.
   private rebuildWaves(coords: AxialCoord[], fogActive: boolean) {
+    // Sub-pixel strokes are not drawn at all (see WAVE_MIN_STROKE_PX), and the
+    // cheapest way not to draw them is to place none: this skips the grid walk
+    // as well as the per-frame stroking it feeds.
+    if (WAVE_STROKE * this.camera.zoom < WAVE_MIN_STROKE_PX) {
+      this.wavePoints = [];
+      fogPerfStats.waveDrawnCount = 0;
+      fogPerfStats.waveCulledCount = 0;
+      return;
+    }
     const margin = TILE_W;
     const rect = visibleWorldRect(this.camera, this.viewport, margin);
     const points: WavePoint[] = [];
@@ -2468,6 +2544,20 @@ export class HexMapRenderer {
       return;
     }
     const drawStart = performance.now();
+    // Live zoom rather than the one the points were placed at: a rebuild only
+    // happens every 0.4 tiles of camera movement, so a wheel zoom crosses the
+    // fade band over many frames that share one placement.
+    const strokePx = WAVE_STROKE * this.camera.zoom;
+    const fade = Math.min(
+      1,
+      Math.max(0, (strokePx - WAVE_MIN_STROKE_PX) / (WAVE_MIN_STROKE_PX * (WAVE_FADE_BAND - 1))),
+    );
+    if (fade <= 0) {
+      this.waveLayer.clear();
+      fogPerfStats.waveDrawMs = 0;
+      return;
+    }
+    const alpha = WAVE_ALPHA * fade;
     const now = Date.now();
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
@@ -2479,7 +2569,7 @@ export class HexMapRenderer {
         .moveTo(x, y)
         .quadraticCurveTo(x + WAVE_WIDTH / 4, y - bump, x + WAVE_WIDTH / 2, y)
         .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + bump, x + WAVE_WIDTH, y)
-        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
+        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha, cap: 'round' });
     }
     // Smoothed over roughly a second: this is a per-frame number and a raw
     // sample of it jitters too much to read off a panel that polls at 4Hz.
@@ -3010,8 +3100,11 @@ export class HexMapRenderer {
     // region it covers (rebuildAll), since terrain is deterministic from the
     // seed and a hex never stops being land. A *forced* rebuild is the one
     // place that assumption can be wrong — a debug flag flip, or the world
-    // model being reseeded under us — so drop it and bake fresh.
+    // model being reseeded under us — so drop it and bake fresh. A bake
+    // already out with the worker was started against the assumption that just
+    // turned out to be wrong, so it goes too.
     this.waterMaskRegionBuilt = null;
+    this.maskBaker.discardPending();
     this.rebuildAll();
   }
 
@@ -3488,14 +3581,17 @@ export class HexMapRenderer {
     this.world.addChild(...worldLayerOrder(mode).map((name) => this.layersByName()[name]));
     // Forces a full rebake (waterMaskRegionBuilt gates it on viewport
     // coverage, which hasn't changed) rather than leaving anything from the
-    // outgoing mode's last rebuild half-applied.
+    // outgoing mode's last rebuild half-applied — including a bake still out
+    // with the worker, which was baked for the mode being left.
     this.waterMaskRegionBuilt = null;
+    this.maskBaker.discardPending();
     this.rebuildAll();
     return true;
   }
 
   destroy() {
     this.destroyed = true;
+    this.maskBaker.destroy();
     const canvas = this.app?.canvas;
     canvas?.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);
