@@ -320,6 +320,38 @@ export class WorldModel {
   }
 
   /**
+   * A cheap signature of everything the fog mask is baked from.
+   *
+   * Demo mode has no backend to fetch a mask from, so it bakes one locally on
+   * the same four-second cadence live mode polls on — about 30ms of main
+   * thread each time, whether or not anything changed, which is one dropped
+   * frame every four seconds with the camera sitting still. Comparing this
+   * against the last baked value skips the bake when the fog cannot have
+   * moved, which is almost always: fog changes when territory is claimed or a
+   * settlement's vision grows, not on a timer.
+   *
+   * A signature over the inputs rather than a version counter bumped at each
+   * mutation site, deliberately. The bake reads the explored set and every
+   * settlement's vision discs (`demoFogMask`), and those are reachable from
+   * claiming, founding, levelling, and placing, upgrading or razing a tower —
+   * six call sites today and however many tomorrow. A counter has to be bumped
+   * at all of them and silently goes stale the first time one is missed, where
+   * this cannot: it is derived from the same state the bake reads.
+   *
+   * O(settlements + towers) — a handful of numbers, against the ~30k texels it
+   * saves baking.
+   */
+  fogSignature(): string {
+    // Nothing ever leaves `explored`, so its size alone tracks its contents.
+    let signature = `${this.explored.size}`;
+    for (const s of this.settlements.values()) {
+      signature += `|${s.id}:${s.level}:${s.q},${s.r}`;
+      for (const t of this.settlementTowers.get(s.id) ?? []) signature += `;${t.q},${t.r},${t.level}`;
+    }
+    return signature;
+  }
+
+  /**
    * Every hex known to carry a building, packed with the terrain cache's own
    * key — for the water mask's prop channel (`hasWaterProp`).
    *

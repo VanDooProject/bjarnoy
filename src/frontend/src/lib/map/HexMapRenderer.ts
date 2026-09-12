@@ -32,7 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexDistance, hexesInRadius, neighbors } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -118,6 +118,66 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
 // sized against its own hex, which is only WW=40px wide there. Our hex is
 // TILE_W=168px wide, so every wave measurement below is scaled up by the
 // same ratio (168/40 = 4.2) to read at the same size relative to the hex.
+/**
+ * One `TextStyle` per kind of map label, built once.
+ *
+ * `rebuildMarkers` runs every tick, and it used to set each label's style
+ * properties there — which reads as harmless, since most of Pixi's setters
+ * early-return when the value is unchanged. Two of them cannot:
+ * `dropShadow = { ... }` hands over a fresh object literal, and
+ * `dropShadow = false` is compared against the `null` the setter stored last
+ * time. Both fail the identity check, so both call `update()`, which bumps
+ * the style's `_tick` — and `styleKey` is `${uid}-${_tick}`.
+ *
+ * That key is what every text cache is keyed on. A new one every frame means
+ * `measureText` misses, the glyphs are re-rasterised through Canvas 2D with a
+ * shadow blur, and the result is re-uploaded to the GPU — for every label on
+ * screen, sixty times a second, with the camera sitting perfectly still.
+ *
+ * Shared instances assigned by reference (see `acquireLabel`) leave the tick
+ * alone, so the cache hits and a label is rasterised once.
+ */
+export const LABEL_STYLES = {
+  ownerMine: new TextStyle({
+    fill: GOLD,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: '600',
+    fontSize: 12.5,
+    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
+  }),
+  ownerRival: new TextStyle({
+    fill: RIVAL,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: '600',
+    fontSize: 12.5,
+    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
+  }),
+  // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels) sets
+  // island names in 'Alegreya Sans SC' — a display small-caps face, distinct
+  // from the 'sans-serif' the other labels use — loaded alongside 'Outfit' in
+  // index.html's Google Fonts link. The soft drop shadow is for legibility
+  // over the lighter sand-coloured tiles some names sit near.
+  islandMine: new TextStyle({
+    fill: GOLD,
+    fontFamily: "'Alegreya Sans SC', serif",
+    fontWeight: 'bold',
+    fontSize: 13,
+    letterSpacing: 1.5,
+    dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
+  }),
+  islandOther: new TextStyle({
+    fill: 0x8fa3af,
+    fontFamily: "'Alegreya Sans SC', serif",
+    fontWeight: '600',
+    fontSize: 13,
+    letterSpacing: 1.5,
+    dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
+  }),
+  cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
+  badgeName: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: 13 }),
+  badgeSuffix: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: '400', fontSize: 12 }),
+} as const;
+
 const WORLD_PROTOTYPE_HEX_W = 40;
 const WAVE_SCALE = 168 / WORLD_PROTOTYPE_HEX_W;
 const WAVE_COLOR = 0xffffff;
@@ -2793,14 +2853,8 @@ export class HexMapRenderer {
       // legibility over the water/terrain behind it — same treatment as the
       // island-name labels above, just without their uppercase/letter-spaced
       // small-caps look (owners read as plain names, not headings).
-      const ownerLabel = this.acquireLabel();
+      const ownerLabel = this.acquireLabel(mine ? LABEL_STYLES.ownerMine : LABEL_STYLES.ownerRival);
       ownerLabel.text = settlement.ownerName;
-      ownerLabel.style.fill = mine ? GOLD : RIVAL;
-      ownerLabel.style.fontFamily = "'Barlow', sans-serif";
-      ownerLabel.style.fontWeight = '600';
-      ownerLabel.style.fontSize = 12.5;
-      ownerLabel.style.letterSpacing = 0;
-      ownerLabel.style.dropShadow = { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 };
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
@@ -2817,23 +2871,11 @@ export class HexMapRenderer {
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const mineIsland = island.id === myIslandId;
-      const label = this.acquireLabel();
       // Reference styling: uppercase, letter-spaced small-caps label, muted
-      // gray for other islands, gold + bold for the player's own.
+      // gray for other islands, gold + bold for the player's own (see
+      // LABEL_STYLES.islandMine/islandOther).
+      const label = this.acquireLabel(mineIsland ? LABEL_STYLES.islandMine : LABEL_STYLES.islandOther);
       label.text = island.name.toUpperCase();
-      label.style.fill = mineIsland ? GOLD : 0x8fa3af;
-      // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels)
-      // sets island names in 'Alegreya Sans SC' — a display small-caps face,
-      // distinct from the 'sans-serif' every other pooled label here uses —
-      // loaded alongside 'Outfit' in index.html's Google Fonts link.
-      label.style.fontFamily = "'Alegreya Sans SC', serif";
-      label.style.fontWeight = mineIsland ? 'bold' : '600';
-      label.style.fontSize = 13;
-      label.style.letterSpacing = 1.5;
-      // Reference gives island names a soft drop shadow for legibility over
-      // the water/terrain behind them — a plain fill alone washes out badly
-      // over the lighter sand-colored tiles some island names sit near.
-      label.style.dropShadow = { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 };
       // Reference places the name below the island's shape entirely, not
       // over its tiles or clipping its bottom edge. Islands are generated at
       // varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS), so a fixed
@@ -2877,14 +2919,8 @@ export class HexMapRenderer {
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
       const remainingMs = Math.max(0, cart.etaAt - now);
-      const label = this.acquireLabel();
+      const label = this.acquireLabel(LABEL_STYLES.cart);
       label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
-      label.style.fill = CART_COLOR;
-      label.style.fontFamily = 'sans-serif';
-      label.style.fontWeight = 'normal';
-      label.style.fontSize = 11;
-      label.style.letterSpacing = 0;
-      label.style.dropShadow = false;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
@@ -2962,25 +2998,16 @@ export class HexMapRenderer {
       // one uniform run of text. Two pooled labels side by side, rather
       // than one, since Pixi's Text has no per-run rich styling.
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
-      const nameLabel = this.acquireLabel();
+      // Scaled rather than re-sized: a changing `fontSize` re-rasterises the
+      // glyphs (see LABEL_STYLES), while `scale` is a transform on the texture
+      // already in hand — and `width` below still reports the scaled size, so
+      // the pill measures the same either way.
+      const nameLabel = this.acquireLabel(LABEL_STYLES.badgeName, zoomScale);
       nameLabel.text = settlement.name;
-      nameLabel.style.fill = 0xe8f0f5;
-      nameLabel.style.fontFamily = 'sans-serif';
-      nameLabel.style.fontWeight = 'bold';
-      nameLabel.style.fontSize = 13 * zoomScale;
-      nameLabel.style.letterSpacing = 0;
-      nameLabel.style.dropShadow = false;
-      nameLabel.alpha = 1;
       nameLabel.anchor.set(0, 0.5);
 
-      const suffixLabel = this.acquireLabel();
+      const suffixLabel = this.acquireLabel(LABEL_STYLES.badgeSuffix, zoomScale);
       suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
-      suffixLabel.style.fill = 0xe8f0f5;
-      suffixLabel.style.fontFamily = 'sans-serif';
-      suffixLabel.style.fontWeight = '400';
-      suffixLabel.style.fontSize = 12 * zoomScale;
-      suffixLabel.style.letterSpacing = 0;
-      suffixLabel.style.dropShadow = false;
       suffixLabel.alpha = 0.6;
       suffixLabel.anchor.set(0, 0.5);
 
@@ -3068,13 +3095,26 @@ export class HexMapRenderer {
     return true;
   }
 
-  private acquireLabel(): Text {
+  /**
+   * A pooled label, set to one of the shared styles (see LABEL_STYLES for why
+   * the style is assigned by reference rather than written property by
+   * property).
+   *
+   * `scale` and `alpha` are reset here because the pool is shared across every
+   * kind of label and across both modes: a slot last used for a zoomed
+   * settlement badge would otherwise hand its scale to the next owner name to
+   * land on it.
+   */
+  private acquireLabel(style: TextStyle, scale = 1): Text {
     let label = this.labelPool[this.labelsUsed];
     if (!label) {
-      label = new Text({ text: '', style: { fill: 0xe8f0f5, fontSize: 11, fontFamily: 'sans-serif' } });
+      label = new Text({ text: '', style });
       this.labelPool.push(label);
       this.markerLayer.addChild(label);
     }
+    if (label.style !== style) label.style = style;
+    label.scale.set(scale);
+    label.alpha = 1;
     this.labelsUsed++;
     return label;
   }
