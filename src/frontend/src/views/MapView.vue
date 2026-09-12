@@ -33,6 +33,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { useHudPosition } from '../composables/useHudPosition';
+import { useMediaQuery } from '../composables/useMediaQuery';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
@@ -90,6 +91,14 @@ function onZoomModeChange(next: RenderMode) {
 // is a shared composable rather than a local computed().
 const showFogDebug = useFogDebug();
 const hudPosition = useHudPosition();
+// ResourceBar's own tap-to-cycle stages already kick in below this same
+// breakpoint (see ResourceBar.vue) because a narrow phone header has no room
+// for both the resource pills and HudNav's full link row — on that settlement
+// mobile HUD, move HudNav down into the draggable bar's expanded panel
+// instead of letting it squeeze ResourceBar. World map (not draggable) and
+// wide viewports keep the nav inline, matching the desktop/reference layout.
+const isWideHud = useMediaQuery('(min-width: 700px)');
+const navInlineInHeader = computed(() => isWideHud.value || mode.value !== 'settlement');
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
@@ -960,9 +969,10 @@ async function upgrade() {
     <div class="hud-scrim" />
     <TopBar :hide-title="mode === 'settlement'" :position="hudPosition" :draggable="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
-      <HudNav />
+      <HudNav v-if="navInlineInHeader" />
       <template #expanded>
         <HudQueueSummary />
+        <HudNav v-if="!navInlineInHeader" :inline="false" />
       </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
