@@ -4,7 +4,10 @@
     "notOpenTitle": "Noch nicht geöffnet.",
     "title": "Errichte irgendwo dein Langhaus.",
     "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
-    "makingLandfall": "Landung wird gemacht…"
+    "makingLandfall": "Landung wird gemacht…",
+    "plotsFreeOne": "Ein Grundstück frei auf dieser Insel",
+    "plotsFreeMany": "{count} Grundstücke frei auf dieser Insel",
+    "plotsFreeSuffix": "— jedes davon gehört dir"
   },
   "joinBlocked": {
     "opensAt": "Diese Welt öffnet {date}.",
@@ -19,17 +22,28 @@
   },
   "ring": {
     "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",
-    "needsTerrain": "Benötigt {terrain}-Gelände — versuche ein anderes Feld"
+    "needsTerrain": "Passt nur auf {terrain}",
+    "dimNoteTitle": "Warum es ausgegraut ist",
+    "dimNoteBody": "{otherBuilding} benötigt {otherTerrain}. Dieses Feld ist {hexTerrain}, daher passt hier {fitBuilding}.",
+    "neitherFitsBody": "Kein geführtes Gebäude passt auf {hexTerrain}. Versuche stattdessen ein Gras- oder Waldfeld."
+  },
+  "pointer": {
+    "clickThisPlot": "Klicke dieses Grundstück an",
+    "anyGlowingPlot": "Jedes leuchtende Grundstück",
+    "nowBuildHere": "Jetzt hier bauen",
+    "oneMore": "Noch eins — {terrain}",
+    "thisOneFits": "Das hier passt zu {terrain}"
   },
   "foundHere": {
     "namedRealm": "{nickname}s Reich",
     "unnamedRealm": "Unbenanntes Reich"
   },
   "tray": {
+    "title": "Deine ersten drei Schritte",
+    "stepOf": "Schritt {step} von {total}",
     "longhouseName": "Langhaus & Hof",
     "placed": "Platziert",
     "clickToPlace": "Klicke dein Grundstück an, um es zu platzieren",
-    "buildingName": "Gebäude {n}",
     "clickEmptyHex": "Klicke ein leeres Feld in deiner Grenze an",
     "foundFirst": "Gründe zuerst dein Langhaus"
   },
@@ -37,5 +51,12 @@
     "sea": "Kettil-See",
     "noAccount": "Kein Konto",
     "nothingToInstall": "Nichts zu installieren"
+  },
+  "banner": {
+    "landfallTitle": "Landung geglückt.",
+    "landfallBody": "Dein Langhaus steht. Noch zwei Gebäude.",
+    "completeTitle": "Alle drei stehen.",
+    "completeBody": "Das Getreide wird gezählt. Verschiebe die Karte oder klicke ein Feld an, um weiterzubauen.",
+    "continueCta": "Betritt deine Siedlung"
   }
 }

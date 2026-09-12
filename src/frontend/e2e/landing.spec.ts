@@ -12,10 +12,25 @@ test('landing page is the village view, not a marketing page in front of it', { 
   await expect(page.getByRole('heading', { name: /put your longhouse somewhere/i })).toBeVisible();
   await expect(page.getByText('Longhouse & yard')).toBeVisible();
 
-  // Founding, then the 2 guided onboarding buildings, then the nickname
-  // prompt, then the full game — all without ever visiting a world map.
+  // Founding, then the 2 guided onboarding buildings, then the completion
+  // banner's explicit hand-off, then the full game — all without ever
+  // visiting a world map.
   await SettlementPage.found(page);
   await expect(page).toHaveURL(/\/settlement$/);
+});
+
+// Design handoff "2a" frame 1/1b: before founding, the animated pointer and
+// the checklist are already on screen, aimed at the one thing to do.
+test('landing page shows the guided pointer and a step-1 checklist before founding', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+
+  await expect(settlement.guidancePointer).toBeVisible();
+  await expect(settlement.guidancePointer).toContainText('Click this plot');
+
+  await expect(settlement.checklist).toBeVisible();
+  await expect(settlement.checklist).toContainText('Step 1 of 3');
+  await expect(page.locator('.tray-item.current')).toContainText('Longhouse & yard');
 });
 
 test('onboarding build step offers a ring menu with the tile-appropriate guided building enabled and everything else disabled', { tag: '@g3' }, async ({ page }) => {
@@ -32,6 +47,13 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
+  // Frame 2: the landfall banner and a re-targeted pointer, right after
+  // founding and before the ring has ever opened.
+  await expect(settlement.banner).toBeVisible();
+  await expect(settlement.banner).toContainText('Landfall made.');
+  await expect(settlement.guidancePointer).toContainText('Now build here');
+  await expect(settlement.checklist).toContainText('Step 2 of 3');
+
   // A guessed pixel offset only happens to land on a real hex at one
   // particular zoom/camera framing — ask the model for a real empty *grass*
   // hex inside the just-founded realm (deterministically exercising Farm's
@@ -43,6 +65,10 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
 
   await settlement.clickHex(target);
 
+  // The landfall banner is gone the moment the ring opens (frame 3 has no
+  // such banner — the ring/note/pointer take over telling the story).
+  await expect(settlement.banner).toHaveCount(0);
+
   const farm = settlement.ring.action('Farm');
   const lumberjack = settlement.ring.action('Lumberjack');
   const quarry = settlement.ring.action('Quarry');
@@ -53,10 +79,67 @@ test('onboarding build step offers a ring menu with the tile-appropriate guided 
   await expect(lumberjack).toBeDisabled();
   await expect(quarry).toBeDisabled();
 
+  // Frame 3: a persistent "why it's dim" note explaining the hex, not the
+  // click, plus the pointer aimed at whichever bubble actually fits.
+  await expect(settlement.ringNote).toBeVisible();
+  await expect(settlement.ringNote).toContainText("Why it's dim");
+  await expect(settlement.ringNote).toContainText('Lumberjack needs');
+  await expect(settlement.guidancePointer).toContainText('This one fits');
+
   const before = await settlement.countBuildings();
   await farm.click();
   await expect.poll(() => settlement.countBuildings(), { timeout: 5_000 }).toBeGreaterThan(before);
   await expect(page.locator('.tray-item .sub').nth(1)).toHaveText('Placed');
+
+  // Frame 4: one guided building down, the pointer moves on to the other.
+  await expect(settlement.checklist).toContainText('Step 3 of 3');
+  await expect(settlement.guidancePointer).toContainText('One more');
+});
+
+// Design handoff "2a" frame 5: completion drops the checklist for a banner
+// with an explicit hand-off, and nudges the player toward naming their jarl
+// via the avatar mark instead of a forced popup.
+test('onboarding completion shows the completion banner and profile nudge, and hands off to /settlement', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
+
+  // Places both guided buildings directly against the model — the ring
+  // interaction itself (terrain gating, the dim note, the pointer) is
+  // covered by the test above; this one is about what happens once they're
+  // both actually down.
+  await page.evaluate(() => {
+    const world = (window as unknown as { __demoWorld: () => { model: any; selectedSettlementId: string; syncHud: () => void } }).__demoWorld();
+    const settlementModel = world.model.getSettlement(world.selectedSettlementId);
+    const dirs: Array<[number, number]> = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+    const guidedTypes = ['farm', 'lumberjack'];
+    let placed = 0;
+    for (let radius = 1; radius <= 2 && placed < guidedTypes.length; radius++) {
+      for (const [dq, dr] of dirs) {
+        if (placed >= guidedTypes.length) break;
+        const at = { q: settlementModel.q + dq * radius, r: settlementModel.r + dr * radius };
+        if (world.model.placeBuilding(world.selectedSettlementId, at, guidedTypes[placed])) placed++;
+      }
+    }
+    world.syncHud();
+  });
+
+  await expect(settlement.banner).toBeVisible();
+  await expect(settlement.banner).toContainText('All three placed.');
+  await expect(settlement.checklist).toHaveCount(0);
+
+  // The profile-mark nudge, avatar glow included, replaces the old forced
+  // nickname modal.
+  await expect(settlement.profileNudge).toBeVisible();
+  await expect(settlement.profileNudge).toContainText('Three buildings, no jarl.');
+  await expect(page.locator('.avatar.is-nudging')).toBeVisible();
+
+  await page.getByTestId('profile-nudge-later').click();
+  await expect(settlement.profileNudge).toHaveCount(0);
+  await expect(page.locator('.avatar.is-nudging')).toHaveCount(0);
+
+  await settlement.continueButton.click();
+  await page.waitForURL('**/settlement');
 });
 
 test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g3' }, async ({ page }) => {

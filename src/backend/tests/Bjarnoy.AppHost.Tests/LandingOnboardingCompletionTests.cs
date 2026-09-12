@@ -15,10 +15,13 @@ namespace Bjarnoy.AppHost.Tests;
 /// Issue #95's own test plan asked for the full happy path, not just one
 /// guided building's countdown (that's <see cref="LandingBuildQueueTests"/>):
 /// found the starting settlement, complete *both* guided buildings, and
-/// confirm the landing page actually hands off — the onboarding tray clears,
-/// the game routes to <c>/settlement</c>, and the nickname prompt is shown
-/// along the way. Regression coverage for a "stuck" onboarding where the
-/// tray's progress moves but the handoff itself never fires.
+/// confirm the landing page actually hands off — the onboarding tray clears
+/// and the completion banner's explicit "Enter your settlement" button
+/// routes to <c>/settlement</c> (design handoff "2a": this replaced the
+/// forced nickname modal that used to gate the same hand-off — see
+/// LandingView.vue/OnboardingBanner.vue). Regression coverage for a "stuck"
+/// onboarding where the tray's progress moves but the handoff itself never
+/// fires.
 /// </summary>
 /// <remarks>
 /// Same reasoning as <see cref="LandingBuildQueueTests"/> for not driving the
@@ -31,7 +34,7 @@ namespace Bjarnoy.AppHost.Tests;
 public class LandingOnboardingCompletionTests
 {
     [Fact]
-    public async Task CompletingBothGuidedBuildingsHandsOffToSettlementWithANicknamePrompt()
+    public async Task CompletingBothGuidedBuildingsHandsOffToSettlementViaTheCompletionBanner()
     {
         var cancellationToken = new CancellationTokenSource(TimeSpan.FromMinutes(6)).Token;
 
@@ -124,14 +127,21 @@ public class LandingOnboardingCompletionTests
         queuedLumberjack.EnsureSuccessStatusCode();
 
         // startHudSync()'s poll (already running since founding) picks both
-        // orders up with no reload/click; once they complete the onboarding
-        // tray's two guided-building rows both flip to "Placed" and the
-        // construction card clears.
+        // orders up with no reload/click. Farm and Lumberjack share the same
+        // BuildDuration at level 1 (BuildingCatalogue.cs's Producer factory),
+        // so queued back-to-back like this they resolve within the same poll
+        // tick rather than at two cleanly separate, assertable moments — and
+        // by design, the tick that finishes the second one also flips
+        // onboarding complete and swaps the checklist for the completion
+        // banner in that same reactive update
+        // (OnboardingChecklist.vue's `v-if="!guidance.complete"`). So there's
+        // no reliable frame to catch an individual tray row's "Placed" text
+        // in between; the construction card clearing (both orders resolved)
+        // plus the completion banner below are what actually confirm both
+        // are done.
         var statusCard = page.Locator(".status-card");
         await Assertions.Expect(statusCard).ToBeVisibleAsync(new() { Timeout = 10_000 });
         await Assertions.Expect(statusCard).ToBeHiddenAsync(new() { Timeout = 45_000 });
-        await Assertions.Expect(page.Locator(".tray-item .sub").Nth(1)).ToHaveTextAsync("Placed");
-        await Assertions.Expect(page.Locator(".tray-item .sub").Nth(2)).ToHaveTextAsync("Placed");
 
         var settlementAfterCompletion = await apiClient.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", cancellationToken);
@@ -139,14 +149,16 @@ public class LandingOnboardingCompletionTests
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "farm");
         Assert.Contains(settlementAfterCompletion.Buildings, b => b.Type == "lumberjack");
 
-        // Onboarding is complete (ONBOARDING_TARGET_BUILDINGS = longhouse +
-        // 2) the moment both rows flip — the nickname prompt is what asks
-        // for a username before the game hands off to /settlement.
-        var nicknamePrompt = page.Locator(".prompt");
-        await Assertions.Expect(nicknamePrompt).ToBeVisibleAsync(new() { Timeout = 10_000 });
-        await Assertions.Expect(nicknamePrompt.GetByPlaceholder("Your jarl's name")).ToBeVisibleAsync();
+        // Onboarding is complete (both guided buildings actually standing —
+        // onboardingGuidance.deriveOnboardingGuidance's `complete`) the
+        // moment both rows flip — the completion banner (OnboardingBanner.vue)
+        // replaces the checklist and its own explicit "Enter your
+        // settlement" button is what hands off to /settlement now.
+        var completionBanner = page.GetByTestId("onboarding-banner");
+        await Assertions.Expect(completionBanner).ToBeVisibleAsync(new() { Timeout = 10_000 });
+        await Assertions.Expect(completionBanner).ToContainTextAsync("All three placed.");
 
-        await nicknamePrompt.GetByRole(AriaRole.Button, new() { Name = "Skip for now" }).ClickAsync();
+        await page.GetByTestId("onboarding-continue").ClickAsync();
 
         await Assertions.Expect(page).ToHaveURLAsync(
             new Regex(@"/settlement$"), new PageAssertionsToHaveURLOptions { Timeout = 10_000 });

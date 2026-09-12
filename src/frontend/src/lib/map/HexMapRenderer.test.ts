@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { previewFitZoom, terrainTitleFor, worldLayerOrder } from './HexMapRenderer';
+import { landfallBurstFrames, plotRippleFrames, previewFitZoom, terrainTitleFor, worldLayerOrder } from './HexMapRenderer';
 import type { RiverTile, Tile } from './types';
 import type { AxialCoord } from '../hex/coords';
 
@@ -195,5 +195,71 @@ describe('previewFitZoom', () => {
       maxZoom: 1.5,
     });
     expect(huge).toBe(1.5);
+  });
+});
+
+// Design handoff "2a": the plot-pulse "look here" ripple (frames 1/1b) and
+// the one-shot landfall burst (frame 2) — extracted as pure functions of
+// wall-clock time so the animation's own maths is testable without a Pixi
+// app, same reasoning as previewFitZoom/terrainTitleFor above.
+describe('plotRippleFrames', () => {
+  it('scale grows and alpha fades monotonically over one ring\'s cycle', () => {
+    const start = plotRippleFrames(0)[0];
+    const mid = plotRippleFrames(450)[0]; // a quarter into the 1800ms cycle
+    const late = plotRippleFrames(1350)[0]; // three quarters in
+    expect(start.scale).toBeCloseTo(0.45);
+    expect(mid.scale).toBeGreaterThan(start.scale);
+    expect(late.scale).toBeGreaterThan(mid.scale);
+    expect(late.scale).toBeLessThanOrEqual(2.1);
+    expect(start.alpha).toBeGreaterThan(mid.alpha);
+    expect(mid.alpha).toBeGreaterThan(late.alpha);
+  });
+
+  it('loops back to the start of the cycle rather than growing forever', () => {
+    const cycleStart = plotRippleFrames(0)[0];
+    const oneCycleLater = plotRippleFrames(1800)[0];
+    expect(oneCycleLater.scale).toBeCloseTo(cycleStart.scale);
+    expect(oneCycleLater.alpha).toBeCloseTo(cycleStart.alpha);
+  });
+
+  it('offsets the second ring by half a cycle, so the two are never in phase', () => {
+    const [ring0, ring1] = plotRippleFrames(0);
+    expect(ring1.scale).not.toBeCloseTo(ring0.scale);
+  });
+
+  it('alpha never goes negative, even right at the end of a cycle', () => {
+    for (const t of [0, 300, 900, 1799]) {
+      for (const ring of plotRippleFrames(t)) {
+        expect(ring.alpha).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
+describe('landfallBurstFrames', () => {
+  it('is empty before the burst starts', () => {
+    expect(landfallBurstFrames(999, 1000)).toEqual([]);
+  });
+
+  it('is empty once the whole moment has played out', () => {
+    expect(landfallBurstFrames(1000 + 1900 + 550 + 1, 1000)).toEqual([]);
+  });
+
+  it('peaks partway through — scale up, alpha down — then is gone', () => {
+    const startedAt = 1000;
+    const atStart = landfallBurstFrames(startedAt, startedAt)[0];
+    const midway = landfallBurstFrames(startedAt + 950, startedAt)[0];
+    expect(atStart.scale).toBeCloseTo(0.25);
+    expect(midway.scale).toBeGreaterThan(atStart.scale);
+    expect(midway.scale).toBeLessThanOrEqual(3);
+    expect(midway.alpha).toBeLessThan(atStart.alpha);
+  });
+
+  it('the second ring trails the first by its own offset, both self-clearing on schedule', () => {
+    const startedAt = 1000;
+    // Just past the first ring's own 1900ms window, but still inside the
+    // second ring's (offset 550ms later) — exactly one frame should remain.
+    const frames = landfallBurstFrames(startedAt + 1901, startedAt);
+    expect(frames).toHaveLength(1);
   });
 });

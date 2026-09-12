@@ -4,7 +4,10 @@
     "notOpenTitle": "Not open yet.",
     "title": "Put your longhouse somewhere.",
     "lede": "That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting. Nobody asks your name until you have something worth naming.",
-    "makingLandfall": "Making landfall…"
+    "makingLandfall": "Making landfall…",
+    "plotsFreeOne": "One plot free on this island",
+    "plotsFreeMany": "{count} plots free on this island",
+    "plotsFreeSuffix": "— any of them is yours"
   },
   "joinBlocked": {
     "opensAt": "This world opens {date}.",
@@ -19,17 +22,28 @@
   },
   "ring": {
     "finishGuidedFirst": "Finish the guided buildings first",
-    "needsTerrain": "Needs {terrain} terrain — try a different hex"
+    "needsTerrain": "Only fits {terrain}",
+    "dimNoteTitle": "Why it's dim",
+    "dimNoteBody": "{otherBuilding} needs {otherTerrain}. This hex is {hexTerrain}, so {fitBuilding} is the fit here.",
+    "neitherFitsBody": "Neither guided building fits {hexTerrain}. Try a grass or forest hex instead."
+  },
+  "pointer": {
+    "clickThisPlot": "Click this plot",
+    "anyGlowingPlot": "Any glowing plot",
+    "nowBuildHere": "Now build here",
+    "oneMore": "One more — the {terrain}",
+    "thisOneFits": "This one fits {terrain}"
   },
   "foundHere": {
     "namedRealm": "{nickname}'s realm",
     "unnamedRealm": "Unnamed realm"
   },
   "tray": {
+    "title": "Your first three moves",
+    "stepOf": "Step {step} of {total}",
     "longhouseName": "Longhouse & yard",
     "placed": "Placed",
     "clickToPlace": "Click your plot to place it",
-    "buildingName": "Building {n}",
     "clickEmptyHex": "Click an empty hex in your border",
     "foundFirst": "Found your longhouse first"
   },
@@ -37,5 +51,12 @@
     "sea": "Kettil Sea",
     "noAccount": "No account",
     "nothingToInstall": "Nothing to install"
+  },
+  "banner": {
+    "landfallTitle": "Landfall made.",
+    "landfallBody": "Your longhouse stands. Two buildings to go.",
+    "completeTitle": "All three placed.",
+    "completeBody": "The grain is counting. Drag the map, or click any hex to keep building.",
+    "continueCta": "Enter your settlement"
   }
 }

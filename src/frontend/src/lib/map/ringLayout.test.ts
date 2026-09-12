@@ -7,6 +7,8 @@ import {
   DOT,
   HUB,
   layoutRing,
+  NOTE_H,
+  NOTE_W,
   placementMode,
   type Rect,
   type RingLayoutResult,
@@ -207,4 +209,68 @@ describe('ring layout behaviour', () => {
     expect(placementMode(330, 96, FRAME)).toBe('OPENS DOWN');
     expect(placementMode(330, 418, FRAME)).toBe('OPENS UP');
   });
+});
+
+// The onboarding ring is flat (lane2Count === 0, no category to drill into)
+// but still wants a persistent "why it's dim" note docked clear of the ring
+// — unlike the detail card above, which only ever appears once a lane2
+// building is hovered (lane2Count > 0).
+describe('ring layout note (flat onboarding ring)', () => {
+  const open = { x: 330, y: 240, area: FRAME, cardArea: FRAME_CARD };
+
+  it('shows no note unless the caller actually wants one', () => {
+    const layout = layoutRing({ ...open, lane1Count: 5, lane2Count: 0, parentIndex: -1, cardAnchor: null });
+    expect(layout.note).toBeNull();
+  });
+
+  it('shows no note for a drilled-in ring even if wantsNote is set — that ring has its own card instead', () => {
+    const layout = layoutRing({
+      ...open,
+      lane1Count: 5,
+      lane2Count: 2,
+      parentIndex: 1,
+      cardAnchor: 0,
+      wantsNote: true,
+    });
+    expect(layout.note).toBeNull();
+    expect(layout.card).not.toBeNull();
+  });
+
+  for (const frame of [
+    ...GALLERY.map((f) => ({ ...f, area: f.area ?? FRAME, cardArea: FRAME_CARD })),
+    ...REPORTED.map((f) => ({ ...f, area: HUD_BOUNDS, cardArea: HUD_CARD_BOUNDS })),
+  ]) {
+    it(`docks the note clear of the ring and inside cardArea: ${frame.name}`, () => {
+      const layout = layoutRing({
+        x: frame.x,
+        y: frame.y,
+        area: frame.area,
+        cardArea: frame.cardArea,
+        lane1Count: 5,
+        lane2Count: 0,
+        parentIndex: -1,
+        cardAnchor: null,
+        wantsNote: true,
+      });
+      expect(layout.note).not.toBeNull();
+      const note = layout.note!;
+      expect(note.x).toBeGreaterThanOrEqual(frame.cardArea.left);
+      expect(note.y).toBeGreaterThanOrEqual(frame.cardArea.top);
+      expect(note.x + NOTE_W).toBeLessThanOrEqual(frame.cardArea.right);
+      expect(note.y + NOTE_H).toBeLessThanOrEqual(frame.cardArea.bottom);
+
+      const circles = [
+        { x: frame.x, y: frame.y, r: HUB / 2 },
+        ...layout.lane1.map((s) => ({ x: s.x, y: s.y, r: (layout.collapsed ? DOT : BUB1) / 2 })),
+      ];
+      const gap = Math.min(
+        ...circles.map((o) => {
+          const dx = Math.max(Math.abs(o.x - (note.x + NOTE_W / 2)) - NOTE_W / 2, 0);
+          const dy = Math.max(Math.abs(o.y - (note.y + NOTE_H / 2)) - NOTE_H / 2, 0);
+          return Math.hypot(dx, dy) - o.r;
+        }),
+      );
+      expect(gap).toBeGreaterThanOrEqual(0);
+    });
+  }
 });

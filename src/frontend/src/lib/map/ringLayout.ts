@@ -54,6 +54,16 @@ export const DOT = 14;
 export const CARD_W = 200;
 /** Measured, not nominal — the rendered card is ~222px tall, and a 200 here made every clearance test 20px optimistic. */
 export const CARD_H = 222;
+/**
+ * The onboarding ring's "why it's dim" note (design handoff "2a", frame 3)
+ * — a short muted explanation, not the full building-detail card, so it
+ * gets its own (much smaller) footprint rather than reusing CARD_W/CARD_H:
+ * a 200x222 clearance box around a ~186x60 note would push it needlessly
+ * far from the ring, and on a cramped layout could fail to place at all
+ * where the real note would have fit easily.
+ */
+export const NOTE_W = 186;
+export const NOTE_H = 60;
 /** Distance from an edge below which the ring stops being a full circle. */
 export const NEED = LANE2 + BUB2 / 2 + 11;
 
@@ -259,12 +269,14 @@ export function lane1Spots(n: number, px: number, py: number, area: Rect): Spot[
 }
 
 /**
- * Docks the detail card clear of the ring, ordered by how close it is to the
- * direction the cursor is already travelling in.
+ * Docks a rect (the detail card, or the onboarding ring's smaller "why it's
+ * dim" note — see NOTE_W/NOTE_H) clear of the ring, ordered by how close it
+ * is to the direction the cursor is already travelling in.
  *
  * `obstacles` is the bubbles actually on screen, not a fixed box around the
  * hub: near an edge a lane can be displaced well outside that box, and a card
- * tested only against the box then lands on the menu.
+ * tested only against the box then lands on the menu. `w`/`h` default to the
+ * detail card's own size so every existing caller is unaffected.
  */
 export function cardSpot(
   px: number,
@@ -272,13 +284,15 @@ export function cardSpot(
   ang: number,
   area: Rect,
   obstacles: Circle[],
+  w = CARD_W,
+  h = CARD_H,
 ): { x: number; y: number } {
   const clear = LANE2 + 42;
   const box = { l: px - clear, t: py - clear, r: px + clear, b: py + clear };
-  const right = { x: px + clear, y: py - CARD_H / 2 };
-  const left = { x: px - clear - CARD_W, y: py - CARD_H / 2 };
-  const down = { x: px - CARD_W / 2, y: py + clear };
-  const up = { x: px - CARD_W / 2, y: py - clear - CARD_H };
+  const right = { x: px + clear, y: py - h / 2 };
+  const left = { x: px - clear - w, y: py - h / 2 };
+  const down = { x: px - w / 2, y: py + clear };
+  const up = { x: px - w / 2, y: py - clear - h };
   const a = ((ang % 360) + 360) % 360;
   const order =
     a < 45 || a >= 315
@@ -289,25 +303,25 @@ export function cardSpot(
           ? [left, up, down, right]
           : [up, right, left, down];
   // The side docks float vertically rather than aligning to the hub, which is
-  // what a 222px-tall card needs when the tile sits near the top or bottom.
-  const midY = Math.max(area.top + 8, Math.min(py - CARD_H / 2, area.bottom - CARD_H - 8));
+  // what a tall card needs when the tile sits near the top or bottom.
+  const midY = Math.max(area.top + 8, Math.min(py - h / 2, area.bottom - h - 8));
   const docks = [
     { x: area.left + 8, y: area.top + 8 },
-    { x: area.right - CARD_W - 8, y: area.top + 8 },
-    { x: area.left + 8, y: area.bottom - CARD_H - 8 },
-    { x: area.right - CARD_W - 8, y: area.bottom - CARD_H - 8 },
+    { x: area.right - w - 8, y: area.top + 8 },
+    { x: area.left + 8, y: area.bottom - h - 8 },
+    { x: area.right - w - 8, y: area.bottom - h - 8 },
     { x: area.left + 8, y: midY },
-    { x: area.right - CARD_W - 8, y: midY },
+    { x: area.right - w - 8, y: midY },
   ].sort(
     (p, q) =>
-      Math.hypot(q.x + CARD_W / 2 - px, q.y + CARD_H / 2 - py) - Math.hypot(p.x + CARD_W / 2 - px, p.y + CARD_H / 2 - py),
+      Math.hypot(q.x + w / 2 - px, q.y + h / 2 - py) - Math.hypot(p.x + w / 2 - px, p.y + h / 2 - py),
   );
   const inArea = (c: { x: number; y: number }) =>
-    c.x >= area.left && c.x + CARD_W <= area.right && c.y >= area.top && c.y + CARD_H <= area.bottom;
+    c.x >= area.left && c.x + w <= area.right && c.y >= area.top && c.y + h <= area.bottom;
   const boxClash = (c: { x: number; y: number }) =>
-    c.x < box.r && c.x + CARD_W > box.l && c.y < box.b && c.y + CARD_H > box.t;
+    c.x < box.r && c.x + w > box.l && c.y < box.b && c.y + h > box.t;
   const bubbleClash = (c: { x: number; y: number }) =>
-    obstacles.length > 0 && !rectClears(c.x + CARD_W / 2, c.y + CARD_H / 2, CARD_W, CARD_H, obstacles);
+    obstacles.length > 0 && !rectClears(c.x + w / 2, c.y + h / 2, w, h, obstacles);
 
   const candidates = [...order, ...docks];
   for (const c of candidates) if (inArea(c) && !boxClash(c) && !bubbleClash(c)) return c;
@@ -318,8 +332,8 @@ export function cardSpot(
     const score = (c: { x: number; y: number }) =>
       Math.min(
         ...obstacles.map((o) => {
-          const dx = Math.max(Math.abs(o.x - (c.x + CARD_W / 2)) - CARD_W / 2, 0);
-          const dy = Math.max(Math.abs(o.y - (c.y + CARD_H / 2)) - CARD_H / 2, 0);
+          const dx = Math.max(Math.abs(o.x - (c.x + w / 2)) - w / 2, 0);
+          const dy = Math.max(Math.abs(o.y - (c.y + h / 2)) - h / 2, 0);
           return Math.hypot(dx, dy) - o.r;
         }),
       );
@@ -327,8 +341,8 @@ export function cardSpot(
     if (usable.length) return usable.reduce((best, c) => (score(c) > score(best) ? c : best));
   }
   return {
-    x: clamp(order[0].x, area.left, area.right - CARD_W),
-    y: clamp(order[0].y, area.top, area.bottom - CARD_H),
+    x: clamp(order[0].x, area.left, area.right - w),
+    y: clamp(order[0].y, area.top, area.bottom - h),
   };
 }
 
@@ -348,6 +362,14 @@ export interface RingLayoutInput {
   parentIndex: number;
   /** Outer-lane index the card belongs to, or null when nothing is hovered. */
   cardAnchor: number | null;
+  /**
+   * The onboarding ring's flat case (lane2Count === 0) has no category to
+   * drill into and so never anchors the usual detail card — but it still
+   * wants a persistent explanation card (RingMenu.vue's `note` prop). Only
+   * meaningful when lane2Count is 0; ignored otherwise (a drilled-in ring
+   * always shows its own detail card instead once something is hovered).
+   */
+  wantsNote?: boolean;
 }
 
 export interface RingLayoutResult {
@@ -360,6 +382,8 @@ export interface RingLayoutResult {
   /** Dashed line from the hub to a lane displaced away from the tile. */
   leader: { x: number; y: number; len: number; deg: number } | null;
   card: { x: number; y: number } | null;
+  /** The flat-ring "why it's dim" note's position, or null when not requested/applicable. */
+  note: { x: number; y: number } | null;
   mode: string;
 }
 
@@ -375,7 +399,7 @@ function nearest(px: number, py: number, spots: { x: number; y: number }[]) {
 
 /** Lays out one open ring. Pure: same input, same positions, no DOM. */
 export function layoutRing(input: RingLayoutInput): RingLayoutResult {
-  const { x, y, area, cardArea, lane1Count, lane2Count, parentIndex, cardAnchor } = input;
+  const { x, y, area, cardArea, lane1Count, lane2Count, parentIndex, cardAnchor, wantsNote } = input;
   const base = baseAngle(x, y, area);
   const lane1 = lane1Spots(lane1Count, x, y, area);
 
@@ -400,6 +424,7 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
   let lane2: Spot[] = [];
   let collapsed = false;
   let card: { x: number; y: number } | null = null;
+  let note: { x: number; y: number } | null = null;
   let showLane2Track = false;
 
   if (lane2Count > 0 && lane1[parentIndex]) {
@@ -444,6 +469,13 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
       ];
       card = cardSpot(x, y, lane2[cardAnchor].ang, cardArea, obstacles);
     }
+  } else if (wantsNote) {
+    // The flat onboarding ring: no category, no drill-down, so there's
+    // never a lane2 bubble to anchor a hover card on — but the ring still
+    // wants its persistent "why it's dim" note docked clear of lane1.
+    const hub: Circle = { x, y, r: HUB / 2 };
+    const obstacles: Circle[] = [hub, ...lane1.map((s) => ({ x: s.x, y: s.y, r: BUB1 / 2 }))];
+    note = cardSpot(x, y, base, cardArea, obstacles, NOTE_W, NOTE_H);
   }
 
   return {
@@ -454,6 +486,7 @@ export function layoutRing(input: RingLayoutInput): RingLayoutResult {
     showLane2Track,
     leader,
     card,
+    note,
     mode: placementMode(x, y, area),
   };
 }

@@ -13,6 +13,7 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
+import ProfileNudge from '../onboarding/ProfileNudge.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
 const route = useRoute();
@@ -46,6 +47,22 @@ const initials = computed(() => {
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('');
 });
+
+// Design handoff "2a" frame 5: the profile-mark nudge that replaces the old
+// forced end-of-flow nickname modal — shown once onboarding is actually
+// done (player.onboardingComplete, set the moment guidance.complete fires
+// in LandingView.vue, not just while the completion banner happens to be on
+// screen), for as long as the player stays anonymous and hasn't dismissed
+// it. HudNav is mounted on both the landing page and the settlement view,
+// so this follows the player there too until they act on it.
+const showProfileNudge = computed(
+  () =>
+    player.hasFoundedSettlement &&
+    player.onboardingComplete &&
+    !auth.isAuthenticated &&
+    !player.nickname &&
+    !player.profileNudgeDismissed,
+);
 </script>
 
 <template>
@@ -111,15 +128,19 @@ const initials = computed(() => {
     >
       {{ initials }}
     </button>
-    <button
-      v-else
-      class="avatar avatar-button"
-      type="button"
-      :title="t('hud.nav.createAccountTitle', { nickname: player.nickname ?? 'Bjarnoy' })"
-      @click="router.push('/register')"
-    >
-      {{ initials }}
-    </button>
+    <span v-else class="avatar-wrap">
+      <button
+        class="avatar avatar-button"
+        type="button"
+        :class="{ 'is-nudging': showProfileNudge }"
+        :title="t('hud.nav.createAccountTitle', { nickname: player.nickname ?? 'Bjarnoy' })"
+        @click="router.push('/register')"
+      >
+        {{ initials }}
+        <span v-if="showProfileNudge" class="nudge-dot" aria-hidden="true" />
+      </button>
+      <ProfileNudge v-if="showProfileNudge" />
+    </span>
   </nav>
 </template>
 
@@ -181,6 +202,7 @@ const initials = computed(() => {
   font-family: inherit;
 }
 .avatar {
+  position: relative;
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -192,5 +214,40 @@ const initials = computed(() => {
   color: #20160a;
   font-size: 12px;
   font-weight: 700;
+}
+/* Design handoff "2a" frame 5: the profile-mark glow/badge pointing at the
+   nudge — same host BjarnoyTopBar.dc.html's own `glow`/`badge` states. */
+@keyframes avatar-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 197, 92, 0.18), 0 0 30px 10px rgba(255, 197, 92, 0.6);
+  }
+}
+.avatar.is-nudging {
+  animation: avatar-glow 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar.is-nudging {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
+  }
+}
+.nudge-dot {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--rival);
+  border: 2px solid var(--shell);
+}
+.avatar-wrap {
+  position: relative;
+  display: flex;
+  flex: none;
 }
 </style>

@@ -1,9 +1,9 @@
 {
-  "nicknamePrompt": {
-    "title": "Landung geglückt.",
-    "body": "Dein Langschiff hat Land erreicht. Benenne deinen Jarl, bevor die See davon Notiz nimmt — kein Konto, kein Passwort, nur ein Name.",
-    "placeholder": "Der Name deines Jarls",
-    "skip": "Später überspringen",
-    "confirm": "Namen festlegen"
+  "profileNudge": {
+    "eyebrow": "Dein Reich läuft",
+    "title": "Drei Gebäude, kein Jarl.",
+    "body": "Benenne deins über das Zeichen hier oben, und diese Insel folgt dir auf jedes Gerät. Dauert eine Minute — nur Benutzername und Passwort.",
+    "cta": "Jarl benennen",
+    "later": "Später"
   }
 }

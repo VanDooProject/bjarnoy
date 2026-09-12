@@ -13,7 +13,18 @@ import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
-import NicknamePrompt from '../components/onboarding/NicknamePrompt.vue';
+import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
+import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
+import ResourceTicker, { type ResourceTick } from '../components/onboarding/ResourceTicker.vue';
+import OnboardingBanner from '../components/onboarding/OnboardingBanner.vue';
+import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
+import {
+  deriveOnboardingGuidance,
+  findGuidedTarget,
+  nextGuidedType,
+  ringNoteReason,
+  GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
+} from '../lib/map/onboardingGuidance';
 import { useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
@@ -25,9 +36,6 @@ import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-
-// Longhouse (founding) + 2 guided buildings — see WorldModel.countBuildings.
-const ONBOARDING_TARGET_BUILDINGS = 3;
 
 // Issue: the onboarding build step used to pop BuildingModal — a single
 // "Build here" button with no type picker, hardcoded to 'farm' (live) or
@@ -60,7 +68,6 @@ const previewCoord = ref<AxialCoord | null>(null);
 // plot that's actually clickable, not just a single suggested one.
 const nearbyStartCoords = ref<AxialCoord[]>([]);
 const founding = ref(false);
-const showPrompt = ref(false);
 const invalidClickMessage = ref<string | null>(null);
 let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -165,14 +172,32 @@ const joinBlockedMessage = computed(() => {
   return t('landing.joinBlocked.notAcceptingPlayers');
 });
 
-const buildingsPlaced = computed(() => world.hud.buildingsPlaced);
-const onboardingComplete = computed(() => buildingsPlaced.value >= ONBOARDING_TARGET_BUILDINGS);
+// Guided checklist (design handoff "2a"): derived purely from what's
+// actually standing rather than a fixed step order — see
+// onboardingGuidance.ts's own doc comment. This is also now the single
+// source of truth for "is onboarding done" (previously a separate
+// count-of-any-building-type check, `buildingsPlaced >= 3`) — the checklist
+// already tells the player completion means both guided buildings, not any
+// three, so the actual gate matches what's on screen.
+const guidance = computed(() =>
+  deriveOnboardingGuidance(player.hasFoundedSettlement, world.hud.placedBuildingTypes),
+);
 
-// Covers both "just crossed the threshold" and "arrived here mid-onboarding,
-// already past it" (a reload right as the last build order completed).
-watch(onboardingComplete, (complete) => {
-  if (complete) showPrompt.value = true;
-}, { immediate: true });
+// Persists the moment it's genuinely true, independent of whether the
+// player has seen/dismissed the completion banner — covers both "just
+// crossed the threshold" and "arrived here mid-onboarding, already past it"
+// (a reload right as the last build order completed).
+watch(
+  () => guidance.value.complete,
+  (complete) => {
+    if (complete) player.completeOnboarding();
+  },
+  { immediate: true },
+);
+
+function onContinueToSettlement() {
+  router.push('/settlement');
+}
 
 // Ring menu state for the onboarding build step — mirrors SettlementView's
 // own ringScreen/selectedCoord, but flat (one ring, no build-categories /
@@ -181,9 +206,14 @@ watch(onboardingComplete, (complete) => {
 const ringScreen = ref<{ x: number; y: number } | null>(null);
 const ringCoord = ref<AxialCoord | null>(null);
 const ringTerrain = ref<Terrain | null>(null);
+// Design handoff "2a" frame 3: each lane1 bubble's screen spot, keyed by
+// action id — from RingMenu's own `layout` emit, so the pointer aims at
+// exactly where the bubble is actually drawn.
+const ringLaneSpots = ref<Record<string, { x: number; y: number }>>({});
 
 watch(ringScreen, (screen) => {
   canvasRef.value?.renderer?.setInteractionLocked(!!screen);
+  if (!screen) ringLaneSpots.value = {};
 });
 
 const ringActions = computed<RingAction[]>(() =>
@@ -208,6 +238,31 @@ const ringActions = computed<RingAction[]>(() =>
 // building on it yet, so it's the bare terrain plus the hex coordinate.
 const ringTerrainLabel = computed(() => (ringTerrain.value ? terrainName(ringTerrain.value) : ''));
 const ringCoordLabel = computed(() => (ringCoord.value ? `HEX ${ringCoord.value.q}, ${ringCoord.value.r}` : ''));
+
+// Design handoff "2a": a persistent "why it's dim" note instead of a
+// hover-only tooltip that reads as an error. ringNoteReason (pure, tested)
+// decides which guided type fits this hex's terrain; this just translates
+// that into copy.
+const ringNote = computed(() => {
+  const terrain = ringTerrain.value;
+  if (!terrain) return null;
+  const reason = ringNoteReason(terrain);
+  if (reason.kind === 'neitherFits') {
+    return {
+      title: t('landing.ring.dimNoteTitle'),
+      body: t('landing.ring.neitherFitsBody', { hexTerrain: terrainName(terrain) }),
+    };
+  }
+  return {
+    title: t('landing.ring.dimNoteTitle'),
+    body: t('landing.ring.dimNoteBody', {
+      otherBuilding: buildingName(reason.dim),
+      otherTerrain: terrainName(GUIDED_TERRAIN_FOR[reason.dim]),
+      hexTerrain: terrainName(terrain),
+      fitBuilding: buildingName(reason.fit),
+    }),
+  };
+});
 
 function closeRing() {
   ringScreen.value = null;
@@ -243,6 +298,87 @@ function withinBuildableRange(coord: AxialCoord): boolean {
   return hexDistance({ q: settlement.q, r: settlement.r }, coord) <= claimRadiusForLevel(settlement.level);
 }
 
+// Design handoff "2a": the nearest still-buildable hex for whichever guided
+// building isn't placed yet — what the map pointer (frames 2/4, "Now build
+// here" / "One more — the {terrain}") aims at. `findGuidedTarget` itself is
+// pure (onboardingGuidance.ts); this just supplies it with this settlement's
+// centre/claim radius and a terrain/buildability lookup against the real
+// WorldModel, mirroring onHexClick's own buildable-tile rule above.
+const nextGuidedTargetCoord = computed<AxialCoord | null>(() => {
+  if (!player.hasFoundedSettlement || !world.selectedSettlementId) return null;
+  const settlement = world.model.getSettlement(world.selectedSettlementId);
+  if (!settlement) return null;
+  const type = nextGuidedType(world.hud.placedBuildingTypes);
+  if (!type) return null;
+  return findGuidedTarget(
+    { q: settlement.q, r: settlement.r },
+    claimRadiusForLevel(settlement.level),
+    type,
+    (c) => world.model.getTile(c.q, c.r).terrain,
+    (c) => {
+      const tile = world.model.getTile(c.q, c.r);
+      return tile.ownerId === settlement.id && !tile.buildingType;
+    },
+  );
+});
+
+// Frame 2: the landfall banner is the moment right after founding, before
+// the player has even opened the ring for the first guided building — gone
+// the instant they do (the ring/note/pointer take over telling the story),
+// so it never overlaps the "why it's dim" note or the completion banner.
+const showLandfallBanner = computed(
+  () => player.hasFoundedSettlement && world.hud.placedBuildingTypes.length <= 1 && !ringScreen.value,
+);
+
+// The single animated pointer: which hex (or, with the ring open, which
+// screen spot) it aims at and what it says, across every pre-completion
+// screen. `mode: 'hex'` follows the camera via GuidancePointer's own
+// useMapAnchor; `mode: 'screen'` is the ring-open case, a fixed point since
+// opening the ring already locks camera drag.
+const pointerTarget = computed(() => {
+  if (joinBlocked.value) return null;
+  if (ringScreen.value) {
+    // Frame 3: "This one fits {terrain}" — aimed at whichever guided
+    // building's bubble is actually enabled for this hex's terrain. No
+    // pointer at all for the (rare) hex that fits neither (sand, mountain);
+    // there's nothing correct to point at.
+    if (!ringTerrain.value) return null;
+    const reason = ringNoteReason(ringTerrain.value);
+    if (reason.kind !== 'oneFits') return null;
+    const spot = ringLaneSpots.value[reason.fit];
+    if (!spot) return null;
+    return {
+      mode: 'screen' as const,
+      screen: spot,
+      label: t('landing.pointer.thisOneFits', { terrain: terrainName(GUIDED_TERRAIN_FOR[reason.fit]) }),
+      angle: 30,
+    };
+  }
+  if (!player.hasFoundedSettlement) {
+    if (!previewCoord.value) return null;
+    return {
+      mode: 'hex' as const,
+      coord: previewCoord.value,
+      label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
+      angle: 38,
+    };
+  }
+  if (!nextGuidedTargetCoord.value) return null;
+  // Right after founding (only the longhouse is down) vs. one guided
+  // building already placed — matches the mockup's frame 2 vs. frame 4
+  // copy/angle.
+  const oneDone = world.hud.placedBuildingTypes.length > 1;
+  const remainingType = nextGuidedType(world.hud.placedBuildingTypes);
+  return {
+    mode: 'hex' as const,
+    coord: nextGuidedTargetCoord.value,
+    label: oneDone && remainingType
+      ? t('landing.pointer.oneMore', { terrain: terrainName(GUIDED_TERRAIN_FOR[remainingType]) })
+      : t('landing.pointer.nowBuildHere'),
+    angle: oneDone ? 52 : 38,
+  };
+});
+
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   if (!player.hasFoundedSettlement) {
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
@@ -276,6 +412,30 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
   closeRing();
 }
 
+// Design handoff "2a" frames 2/4/5: a rising "+N {resource}/h" the moment a
+// guided building is actually placed, at its own real output
+// (buildingEconomy.ts — the same formula the hover tooltip/build card use),
+// not an invented number. Fires in both demo and live mode alike, since
+// it's derived from the building's own static definition rather than
+// world.hud.rates — which live mode's poll updates for real, but demo mode
+// fixes at founding and never changes (see WorldModel.foundSettlement), so
+// a rates-delta watch would never fire there at all.
+const resourceTicks = ref<ResourceTick[]>([]);
+let tickIdSeq = 0;
+function fireResourceTick(type: 'farm' | 'lumberjack', coord: AxialCoord) {
+  const boostTerrain = BOOST_TERRAIN[type];
+  const neighbours = boostTerrain
+    ? matchingNeighbourCount(coord, boostTerrain, (q, r) => world.model.getTile(q, r))
+    : 0;
+  const output = buildingStatsFor(type, 1, neighbours).output;
+  const screen = canvasRef.value?.renderer?.hexCenterScreen(coord);
+  if (!screen || output?.kind !== 'resourceRate') return;
+  resourceTicks.value.push({ id: ++tickIdSeq, resource: output.resource, amount: output.amount, ...screen });
+}
+function onResourceTickExpire(id: number) {
+  resourceTicks.value = resourceTicks.value.filter((tick) => tick.id !== id);
+}
+
 async function onRingSelect(type: string) {
   const coord = ringCoord.value;
   if (!world.selectedSettlementId || !coord) return;
@@ -284,6 +444,7 @@ async function onRingSelect(type: string) {
     canvasRef.value?.renderer?.forceRebuild();
     world.syncHud();
     closeRing();
+    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
     return;
   }
   // Always close, win or lose — matching SettlementView's own onRingSelect
@@ -293,6 +454,7 @@ async function onRingSelect(type: string) {
   closeRing();
   try {
     await world.queueBuildLive(type, coord);
+    if (type === 'farm' || type === 'lumberjack') fireResourceTick(type, coord);
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
     showInvalidClickMessage(t('landing.invalidClick.orderFailed'));
@@ -351,6 +513,9 @@ async function foundHere(coord: AxialCoord) {
       screenBiasX: 0,
       lockCamera: false,
     });
+    // Design handoff "2a" frame 2: the one-shot landfall burst, fired
+    // alongside the camera move/fog reveal above.
+    canvasRef.value?.renderer?.setLandfallBurst(coord);
   } catch (err) {
     // A 409 covers several distinct rejections (see FoundingRejection) —
     // only AlreadyFounded actually means "you already have a settlement,
@@ -369,12 +534,6 @@ async function foundHere(coord: AxialCoord) {
   } finally {
     founding.value = false;
   }
-}
-
-function closePrompt() {
-  showPrompt.value = false;
-  player.completeOnboarding();
-  router.push('/settlement');
 }
 
 // Fog v2 (map-fog-v2.md §3): same watcher as SettlementView.vue's — without
@@ -443,41 +602,45 @@ watch(
       <p class="lede">
         {{ t('landing.hero.lede') }}
       </p>
+      <!-- Live mode offers up to 6 plots (the suggestion plus its
+           alternatives — PlotReservationOptions.AlternativeCount); demo mode
+           has exactly one findLandfall hex and shows no count at all. -->
+      <p v-if="!DEMO_MODE && nearbyStartCoords.length > 0" class="plot-count">
+        <span class="plot-count-dot" />
+        <span class="plot-count-text">
+          {{
+            nearbyStartCoords.length === 1
+              ? t('landing.hero.plotsFreeOne')
+              : t('landing.hero.plotsFreeMany', { count: nearbyStartCoords.length })
+          }}
+        </span>
+        <span class="plot-count-suffix">{{ t('landing.hero.plotsFreeSuffix') }}</span>
+      </p>
       <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
 
-    <div v-if="!joinBlocked" class="tray panel">
-      <div class="tray-item" :class="{ done: player.hasFoundedSettlement }">
-        <div class="dot" />
-        <div>
-          <div class="name">{{ t('landing.tray.longhouseName') }}</div>
-          <div class="sub">
-            {{ player.hasFoundedSettlement ? t('landing.tray.placed') : t('landing.tray.clickToPlace') }}
-          </div>
-        </div>
-      </div>
-      <div
-        v-for="n in 2"
-        :key="n"
-        class="tray-item"
-        :class="{ done: buildingsPlaced >= n + 1, current: player.hasFoundedSettlement && buildingsPlaced === n }"
-      >
-        <div class="dot" />
-        <div>
-          <div class="name">{{ t('landing.tray.buildingName', { n: n + 1 }) }}</div>
-          <div class="sub">
-            {{
-              buildingsPlaced >= n + 1
-                ? t('landing.tray.placed')
-                : player.hasFoundedSettlement
-                  ? t('landing.tray.clickEmptyHex')
-                  : t('landing.tray.foundFirst')
-            }}
-          </div>
-        </div>
-      </div>
-    </div>
+    <GuidancePointer
+      v-if="pointerTarget"
+      :coord="pointerTarget.mode === 'hex' ? pointerTarget.coord : undefined"
+      :renderer="pointerTarget.mode === 'hex' ? canvasRef?.renderer : undefined"
+      :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
+      :label="pointerTarget.label"
+      :angle="pointerTarget.angle"
+    />
+    <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
+
+    <!-- Frame 2: the landfall banner floats near the top ALONGSIDE the
+         checklist (still at the bottom) — the mockup shows both at once,
+         unlike completion, where the banner replaces the checklist
+         entirely since there's nothing left to check off. -->
+    <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
+    <OnboardingBanner v-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
+    <OnboardingChecklist
+      v-if="!joinBlocked && !guidance.complete"
+      :guidance="guidance"
+      :has-founded="player.hasFoundedSettlement"
+    />
 
     <div class="footer">
       <span>{{ t('landing.footer.sea') }}</span>
@@ -495,11 +658,12 @@ watch(
       :actions="ringActions"
       :terrain-label="ringTerrainLabel"
       :coord-label="ringCoordLabel"
+      :note="ringNote"
       @select="onRingSelect"
       @close="closeRing"
       @outside-pointer-down="closeRing"
+      @layout="ringLaneSpots = $event"
     />
-    <NicknamePrompt v-if="showPrompt" @close="closePrompt" />
   </div>
 </template>
 
@@ -544,67 +708,26 @@ h1 {
   font-size: 14px;
   color: var(--gold);
 }
-.tray {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 96px;
-  z-index: 5;
+.plot-count {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px;
+  margin: 22px 0 0;
 }
-.tray-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 15px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-.tray-item.current {
-  background: var(--gold);
-  border-color: var(--gold);
-}
-.tray-item.current .name,
-.tray-item.current .sub {
-  color: #20160a;
-}
-.tray-item.done {
-  opacity: 0.55;
-}
-.dot {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+.plot-count-dot {
+  width: 12px;
+  height: 12px;
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Issue #95: a completed step used to only dim (`.tray-item.done`'s
-   opacity) — nothing on the row itself said "done" versus "not started
-   yet", so progress never visibly ticked off as buildings queued.  A
-   checkmark on the dot gives each row its own explicit done state. */
-.tray-item.done .dot {
   background: var(--gold);
-  color: #20160a;
-  font-size: 15px;
-  font-weight: 700;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
-.tray-item.done .dot::after {
-  content: '✓';
-}
-.name {
+.plot-count-text {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--gold);
 }
-.sub {
-  font-size: 12px;
+.plot-count-suffix {
+  font-size: 13px;
   color: var(--muted);
 }
 .footer {

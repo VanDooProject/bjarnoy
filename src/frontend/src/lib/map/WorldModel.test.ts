@@ -135,6 +135,39 @@ describe('WorldModel.registerSettlement / claimTerritory', () => {
   });
 });
 
+// Regression coverage for the guided onboarding checklist (zip 6a follow-up):
+// it needs to know *which* of the two guided buildings (farm, lumberjack) is
+// standing, not just a count, so either can be ticked off no matter which one
+// the player placed first.
+describe('WorldModel.listPlacedBuildings', () => {
+  it('lists the longhouse from founding, then each placed type once, in any build order', () => {
+    const model = new WorldModel(20260824);
+    const { settlement, at } = foundLandedSettlement(model);
+    expect(model.listPlacedBuildings(settlement.id)).toEqual(['longhouse']);
+
+    const radius = model.borderRadius(settlement);
+    const spots = hexesInRadius(at, radius).filter(
+      (c) => (c.q !== at.q || c.r !== at.r) && model.isLand(c.q, c.r) && !model.getTile(c.q, c.r).buildingType,
+    );
+    if (spots.length < 2) throw new Error('not enough empty land in claim radius — pick a different test seed');
+
+    // Lumberjack first, farm second — the reverse of the checklist's own
+    // visual order, proving the list reflects what's built, not a fixed step.
+    expect(model.placeBuilding(settlement.id, spots[0], 'lumberjack')).toBe(true);
+    expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(new Set(['longhouse', 'lumberjack']));
+
+    expect(model.placeBuilding(settlement.id, spots[1], 'farm')).toBe(true);
+    expect(new Set(model.listPlacedBuildings(settlement.id))).toEqual(
+      new Set(['longhouse', 'lumberjack', 'farm']),
+    );
+  });
+
+  it('an unknown settlement id lists nothing', () => {
+    const model = new WorldModel();
+    expect(model.listPlacedBuildings('does-not-exist')).toEqual([]);
+  });
+});
+
 describe('WorldModel border-anchoring (watchtower)', () => {
   it('a freshly placed (level-1) tower claims one extra ring of ground — Settlement.TowerClaimRadius(1) == 1', () => {
     const model = new WorldModel(20260825);

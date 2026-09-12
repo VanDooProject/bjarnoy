@@ -253,6 +253,60 @@ describe('RingMenu', () => {
     expect(wrapper.emitted('select')).toEqual([['farm']]);
   });
 
+  // Design handoff "2a": the flat onboarding ring's dimmed option gets a
+  // persistent, muted explanation instead of only a hover tooltip that reads
+  // as an error.
+  it('shows the note beside a flat ring when one is given, without waiting for a hover', () => {
+    const wrapper = ring({
+      categories: [],
+      actions: [{ id: 'farm', label: 'Farm' }, { id: 'lumberjack', label: 'Lumberjack', disabled: true }],
+      note: { title: "Why it's dim", body: 'Lumberjack needs forest. This hex is grass, so Farm is the fit here.' },
+    });
+    const note = wrapper.get('.ring-note');
+    expect(note.text()).toContain("Why it's dim");
+    expect(note.text()).toContain('Lumberjack needs forest');
+  });
+
+  it('shows no note when none is given', () => {
+    const wrapper = ring({ categories: [], actions: [{ id: 'farm', label: 'Farm' }] });
+    expect(wrapper.find('.ring-note').exists()).toBe(false);
+  });
+
+  it('shows no note for a drilled-in ring even when one is given — that ring has its own detail card', async () => {
+    const wrapper = ring({ note: { title: 'x', body: 'y' } });
+    await bubble(wrapper, 'Build').trigger('mouseenter');
+    await bubble(wrapper, 'Housing').trigger('mouseenter');
+    await bubble(wrapper, 'Hut').trigger('mouseenter');
+    expect(wrapper.find('.ring-note').exists()).toBe(false);
+    expect(wrapper.find('.ring-card').exists()).toBe(true);
+  });
+
+  // Design handoff "2a" frame 3: GuidancePointer.vue aims at the enabled
+  // guided building's spot, read from this emit rather than duplicating
+  // ringLayout's own placement maths in the caller.
+  it('emits each lane1 bubble\'s screen spot by action id, including on the very first render', () => {
+    const wrapper = ring({
+      categories: [],
+      actions: [{ id: 'farm', label: 'Farm' }, { id: 'lumberjack', label: 'Lumberjack', disabled: true }],
+    });
+    const events = wrapper.emitted('layout');
+    expect(events).toBeTruthy();
+    const spots = events![events!.length - 1][0] as Record<string, { x: number; y: number }>;
+    expect(Object.keys(spots).sort()).toEqual(['farm', 'lumberjack']);
+    const farmStyle = bubble(wrapper, 'Farm').attributes('style') ?? '';
+    const left = parseFloat(/left:\s*([\d.]+)px/.exec(farmStyle)?.[1] ?? 'NaN');
+    const top = parseFloat(/top:\s*([\d.]+)px/.exec(farmStyle)?.[1] ?? 'NaN');
+    expect(spots.farm.x).toBeCloseTo(left);
+    expect(spots.farm.y).toBeCloseTo(top);
+  });
+
+  it('re-emits layout when the menu is re-anchored on another tile', async () => {
+    const wrapper = ring({ categories: [], actions: [{ id: 'farm', label: 'Farm' }] });
+    const before = wrapper.emitted('layout')!.length;
+    await wrapper.setProps({ x: 600, y: 420 });
+    expect(wrapper.emitted('layout')!.length).toBeGreaterThan(before);
+  });
+
   it('resets to the root when the menu is re-anchored on another tile', async () => {
     const wrapper = ring();
     await bubble(wrapper, 'Build').trigger('mouseenter');

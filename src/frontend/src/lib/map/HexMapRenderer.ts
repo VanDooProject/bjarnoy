@@ -500,6 +500,60 @@ export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { ter
   return { terrain: tile.terrain, isRiver: river !== undefined };
 }
 
+export interface RippleFrame {
+  scale: number;
+  alpha: number;
+}
+
+const RIPPLE_DURATION_MS = 1800;
+const RIPPLE_RING_OFFSET_MS = 900;
+const RIPPLE_SCALE_FROM = 0.45;
+const RIPPLE_SCALE_TO = 2.1;
+const RIPPLE_ALPHA_FROM = 0.95;
+
+const BURST_DURATION_MS = 1900;
+const BURST_RING_OFFSET_MS = 550;
+const BURST_SCALE_FROM = 0.25;
+const BURST_SCALE_TO = 3;
+const BURST_ALPHA_FROM = 0.9;
+
+/**
+ * The expanding-ring "look here" pulse drawn around every currently
+ * highlighted/offered plot (design handoff "2a", frames 1/1b) — two rings
+ * half a cycle apart, looping for as long as the plot stays highlighted. A
+ * pure function of wall-clock time, same reasoning as `previewFitZoom`:
+ * unit-testable without a Pixi app, and every highlighted plot on screen
+ * shares the exact same phase because they all read the same `nowMs`.
+ */
+export function plotRippleFrames(nowMs: number, ringCount = 2): RippleFrame[] {
+  return Array.from({ length: ringCount }, (_, i) => {
+    const t = nowMs - i * RIPPLE_RING_OFFSET_MS;
+    const phase = (((t % RIPPLE_DURATION_MS) + RIPPLE_DURATION_MS) % RIPPLE_DURATION_MS) / RIPPLE_DURATION_MS;
+    return { scale: RIPPLE_SCALE_FROM + phase * (RIPPLE_SCALE_TO - RIPPLE_SCALE_FROM), alpha: RIPPLE_ALPHA_FROM * (1 - phase) };
+  });
+}
+
+/**
+ * The one-shot burst drawn on the just-founded hex (design handoff "2a"
+ * frame 2, "Landfall made.") — two rings, offset, self-clearing once the
+ * whole moment has played out (returns `[]`; the mockup's own CSS keyframe
+ * loops only because it's a static preview frame, not a real one-time
+ * event — a burst that repeated forever at every settlement would be
+ * exactly the kind of noise the "bold and game-like" motion brief wasn't
+ * asking for). `HexMapRenderer.setLandfallBurst` records `startedAtMs`;
+ * `drawHighlight` drops that stored start time once this returns empty.
+ */
+export function landfallBurstFrames(nowMs: number, startedAtMs: number, ringCount = 2): RippleFrame[] {
+  const frames: RippleFrame[] = [];
+  for (let i = 0; i < ringCount; i++) {
+    const t = nowMs - startedAtMs - i * BURST_RING_OFFSET_MS;
+    if (t < 0 || t >= BURST_DURATION_MS) continue;
+    const phase = t / BURST_DURATION_MS;
+    frames.push({ scale: BURST_SCALE_FROM + phase * (BURST_SCALE_TO - BURST_SCALE_FROM), alpha: BURST_ALPHA_FROM * (1 - phase) });
+  }
+  return frames;
+}
+
 // One tile-art size for both views — see the module comment above.
 const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
@@ -922,6 +976,11 @@ export class HexMapRenderer {
   // is time-based, unlike everything else here which only redraws on a
   // cull rebuild (camera pan/zoom).
   private highlightLayer = new Graphics();
+  // Design handoff "2a": the one-shot landfall burst, recorded by
+  // `setLandfallBurst` and drawn (then dropped) by `drawHighlight` — see
+  // `landfallBurstFrames`'s own doc comment for why this self-clears
+  // instead of looping.
+  private landfallBurst: { coord: AxialCoord; startedAt: number } | null = null;
   // Issue #159 part B: the composing-a-dispatch/field-order range tint —
   // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
   // an outline on the boundary edges (the edges whose neighbour isn't in the
@@ -1438,20 +1497,49 @@ export class HexMapRenderer {
 
   private drawHighlight() {
     this.highlightLayer.clear();
+    const now = performance.now();
     const coords = [
       ...(this.options.highlightCoord ? [this.options.highlightCoord] : []),
       ...(this.options.highlightCoords ?? []),
     ];
-    if (coords.length === 0) return;
-    const pulse = (Math.sin(performance.now() / 420) + 1) / 2; // 0..1
-    for (const at of coords) {
-      const grid = isoGridPosition(at, TILE_W, TILE_H);
-      const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
-      const flat = top.flatMap((p) => [p.x, p.y]);
-      this.highlightLayer
-        .poly(flat)
-        .fill({ color: GOLD, alpha: 0.1 + pulse * 0.1 })
-        .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.6 + pulse * 0.4 });
+    if (coords.length > 0) {
+      const pulse = (Math.sin(now / 420) + 1) / 2; // 0..1
+      const ripples = plotRippleFrames(now);
+      for (const at of coords) {
+        const grid = isoGridPosition(at, TILE_W, TILE_H);
+        const top = isoTopPoints(TILE_W, TILE_H).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+        const flat = top.flatMap((p) => [p.x, p.y]);
+        const cx = grid.x + TILE_W / 2;
+        const cy = grid.y + TILE_CENTER_Y_OFFSET;
+        // Chat1: "raise the plot-pulse floor so the glowing hexes never fade
+        // to near-invisible" — the fill/stroke alpha ranges below no longer
+        // touch 0 at the pulse's low point.
+        this.highlightLayer
+          .poly(flat)
+          .fill({ color: GOLD, alpha: 0.22 + pulse * 0.18 })
+          .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.7 + pulse * 0.3 });
+        for (const ring of ripples) {
+          this.highlightLayer
+            .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
+            .stroke({ width: 3, color: GOLD, alpha: ring.alpha });
+        }
+      }
+    }
+    if (this.landfallBurst) {
+      const { coord, startedAt } = this.landfallBurst;
+      const bursts = landfallBurstFrames(now, startedAt);
+      if (bursts.length === 0) {
+        this.landfallBurst = null;
+      } else {
+        const grid = isoGridPosition(coord, TILE_W, TILE_H);
+        const cx = grid.x + TILE_W / 2;
+        const cy = grid.y + TILE_CENTER_Y_OFFSET;
+        for (const ring of bursts) {
+          this.highlightLayer
+            .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
+            .stroke({ width: 4, color: 0xffffff, alpha: ring.alpha });
+        }
+      }
     }
   }
 
@@ -2898,6 +2986,16 @@ export class HexMapRenderer {
    */
   setHighlight(coord: AxialCoord | undefined) {
     this.options = { ...this.options, highlightCoord: coord };
+  }
+
+  /**
+   * Design handoff "2a" frame 2: fires the one-shot landfall burst on the
+   * just-founded hex, alongside the existing camera move/fog reveal — see
+   * `landfallBurstFrames`'s own doc comment for why this plays once and
+   * clears itself rather than looping like the ripple pulse does.
+   */
+  setLandfallBurst(coord: AxialCoord) {
+    this.landfallBurst = { coord, startedAt: performance.now() };
   }
 
   /**
