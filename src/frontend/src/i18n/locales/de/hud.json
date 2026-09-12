@@ -25,6 +25,11 @@
     "expand": "Warteschlangen-Übersicht ausklappen",
     "collapse": "Warteschlangen-Übersicht einklappen"
   },
+  "positionToggle": {
+    "label": "Position der HUD-Leiste",
+    "top": "Oben",
+    "bottom": "Unten"
+  },
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Reich beansprucht {count} Hexfelder",

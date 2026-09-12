@@ -3,7 +3,7 @@ import { defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { useHudPosition } from './useHudPosition';
+import { useHudPosition, useHudPositionPreference } from './useHudPosition';
 
 const HostComponent = defineComponent({
   setup() {
@@ -30,6 +30,8 @@ async function mountHud(router: Router) {
 
 beforeEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
+  useHudPositionPreference().setPreference('top');
 });
 
 afterEach(() => {
@@ -68,6 +70,25 @@ describe('useHudPosition', () => {
     const wrapper = await mountHud(router);
 
     await router.push('/?hudPosition=sideways');
+
+    expect(wrapper.text()).toBe('top');
+  });
+
+  it('falls back to the persistent preference when there is no session override', async () => {
+    useHudPositionPreference().setPreference('bottom');
+
+    const wrapper = await mountHud(testRouter());
+
+    expect(wrapper.text()).toBe('bottom');
+    expect(localStorage.getItem('fjordhold:hudPositionPref')).toBe('bottom');
+  });
+
+  it('lets a session override win over the persistent preference', async () => {
+    useHudPositionPreference().setPreference('bottom');
+    const router = testRouter();
+    const wrapper = await mountHud(router);
+
+    await router.push('/?hudPosition=top');
 
     expect(wrapper.text()).toBe('top');
   });

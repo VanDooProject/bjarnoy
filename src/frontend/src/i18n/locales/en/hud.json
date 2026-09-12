@@ -25,6 +25,11 @@
     "expand": "Expand queue summary",
     "collapse": "Collapse queue summary"
   },
+  "positionToggle": {
+    "label": "HUD bar position",
+    "top": "Top",
+    "bottom": "Bottom"
+  },
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Realm claims {count} hexes",

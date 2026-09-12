@@ -13,6 +13,7 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
+import HudPositionToggle from '../HudPositionToggle.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
@@ -112,6 +113,7 @@ const initials = computed(() => {
       {{ t('hud.nav.landing') }}
     </button>
     <LocaleSwitcher />
+    <HudPositionToggle />
     <!-- Logged in, the avatar opens the player's own profile (issue #42).
          Anonymous, it opens registration (issue #108) — the only entry
          point in the HUD for turning a local player id into a real
