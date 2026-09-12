@@ -111,23 +111,30 @@ describe('ResourceBar', () => {
     const wrapper = mountResourceBar();
     const toggles = wrapper.findAll('.stage-toggle');
 
-    expect(toggles[0].get('.stage-label').text()).toBe('Current');
+    // "current" stage: the value is the headline, with the rate as a small
+    // second line underneath (no uppercase stage caption — see mockup).
     expect(toggles[0].get('.value').text()).toBe('400');
-    expect(toggles[1].get('.stage-label').text()).toBe('Current');
+    expect(toggles[0].get('.rate-sub').text()).toBe('+60/h');
+    expect(toggles[0].attributes('aria-label')).toContain('Current');
+    expect(toggles[1].attributes('aria-label')).toContain('Current');
 
     await toggles[0].trigger('click');
 
-    expect(toggles[0].get('.stage-label').text()).toBe('Rate');
-    expect(toggles[0].get('.value').text()).toBe('+60/h');
+    // "rate" stage: value and delta collapse onto one line, and the icon
+    // swaps from the resource-colored hex to a plain triangle.
+    expect(toggles[0].attributes('aria-label')).toContain('Rate');
+    expect(toggles[0].get('.value').text()).toBe('400+60/h');
+    expect(wrapper.findAll('.resource')[0].get('.hex-icon').classes()).toContain('hex-icon--rate');
     // The other pill's stage is untouched by the first one's tap.
-    expect(toggles[1].get('.stage-label').text()).toBe('Current');
+    expect(toggles[1].attributes('aria-label')).toContain('Current');
 
     await toggles[0].trigger('click');
-    expect(toggles[0].get('.stage-label').text()).toBe('Max');
+    expect(toggles[0].attributes('aria-label')).toContain('Max');
     expect(toggles[0].get('.value').text()).toBe('Max 1,000');
+    expect(wrapper.findAll('.resource')[0].get('.hex-icon').classes()).not.toContain('hex-icon--rate');
 
     await toggles[0].trigger('click');
-    expect(toggles[0].get('.stage-label').text()).toBe('Current');
+    expect(toggles[0].attributes('aria-label')).toContain('Current');
     wrapper.unmount();
   });
 

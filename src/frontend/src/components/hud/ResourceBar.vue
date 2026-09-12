@@ -101,7 +101,11 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
 <template>
   <div class="resource-bar" :class="{ disabled: props.ringOpen }">
     <div v-for="pill in pills" :key="pill.key" class="resource">
-      <span class="hex-icon" :style="{ background: pill.color }" />
+      <span
+        class="hex-icon"
+        :class="{ 'hex-icon--rate': !isWide && stageOf(pill.key) === 'rate' }"
+        :style="{ background: !isWide && stageOf(pill.key) === 'rate' ? 'var(--muted)' : pill.color }"
+      />
       <div class="numbers">
         <template v-if="isWide">
           <span class="value">
@@ -113,13 +117,24 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
             <span class="cap">{{ t('hud.resourceBar.max', { n: fmt(pill.cap) }) }}</span>
           </span>
         </template>
+        <!-- Narrow phones cycle through the three stages on tap: rather than
+             an uppercase caption naming the stage (which the mockup doesn't
+             show at all), the stage reads from layout alone — "current"
+             keeps the value as the headline with its rate underneath,
+             "rate" collapses onto one line next to the value, and the icon
+             itself swaps to a triangle for that stage, matching the
+             mockup's own icon-shape cue. -->
         <button v-else type="button" class="stage-toggle" @click="cycleStage(pill.key)" :aria-label="stageAriaLabel(pill.key)">
-          <span class="stage-label">{{ stageLabel(stageOf(pill.key)) }}</span>
-          <span v-if="stageOf(pill.key) === 'current'" class="value">
-            {{ fmt(pill.value) }}
-            <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
+          <template v-if="stageOf(pill.key) === 'current'">
+            <span class="value">
+              {{ fmt(pill.value) }}
+              <span v-if="pill.reserved > 0" class="reserved-hint">{{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}</span>
+            </span>
+            <span class="rate-sub">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
+          </template>
+          <span v-else-if="stageOf(pill.key) === 'rate'" class="value rate-inline">
+            {{ fmt(pill.value) }}<span class="rate-delta">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
           </span>
-          <span v-else-if="stageOf(pill.key) === 'rate'" class="value rate">{{ t('hud.resourceBar.rate', { n: Math.round(pill.rate) }) }}</span>
           <span v-else class="value cap">{{ t('hud.resourceBar.max', { n: fmt(pill.cap) }) }}</span>
         </button>
         <span class="fill-track">
@@ -173,6 +188,11 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
   flex: none;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
+/* "rate" stage swaps the hex for a small triangle — the mockup's own cue
+   that this pill is showing a rate rather than a stock. */
+.hex-icon--rate {
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
 .numbers {
   display: flex;
   flex-direction: column;
@@ -206,16 +226,29 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
   padding: 0;
   cursor: pointer;
 }
-.stage-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.value.rate,
 .value.cap {
   color: var(--text);
+}
+/* "current" stage: the rate sits as a small second line under the value,
+   matching the mockup's "400 / +60/h" stack. */
+.rate-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--food);
+}
+/* "rate" stage: value and delta collapse onto one line instead, since the
+   triangle icon already signals "this is a rate" and there's nothing left
+   to put on a second line. */
+.rate-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.rate-delta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--food);
 }
 /* Wide-viewport variant: current stock stays the headline number, rate and
    max storage sit together underneath it since there's room to just show
