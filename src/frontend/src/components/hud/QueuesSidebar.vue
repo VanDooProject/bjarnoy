@@ -183,19 +183,24 @@ const activeOrderCount = computed(() => constructionOrders.value.length + traini
 /* The tab peeking off the left edge — always present so there's something
    to both tap and drag from a fully closed state, not just a target that
    only appears once the drawer is already open. */
+/* Plain var(--panel-bg) reads as near-invisible against the map's own dark
+   fog/water tones at this size — a gold left edge plus a lifting shadow
+   gives it enough contrast to actually be noticed at a glance, not just
+   found by someone who already knows it's there. */
 .queues-tab {
   position: fixed;
   top: 50%;
   left: 0;
   transform: translateY(-50%);
   z-index: 45;
-  width: 28px;
-  height: 56px;
+  width: 32px;
+  height: 64px;
   border: 1px solid var(--panel-border);
-  border-left: none;
-  border-radius: 0 6px 6px 0;
+  border-left: 3px solid var(--gold);
+  border-radius: 0 8px 8px 0;
   background: var(--panel-bg);
-  color: var(--muted);
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.4);
+  color: var(--gold);
   font-size: 16px;
   cursor: grab;
   touch-action: none;
