@@ -174,6 +174,18 @@ const waterMaskNote = computed(() => {
   return 'Reused (viewport still inside the baked region)';
 });
 
+/**
+ * Hexes in the viewport the scan never walked, because no settlement's fog
+ * reaches them and nothing there could draw.
+ *
+ * This is where most of the cull lives now: it is applied by bounding the
+ * scan rather than by testing each hex, so `fog-culled` below counts only
+ * what the per-hex test still rejects. Reporting the clip alongside it is
+ * what keeps the cull legible — otherwise the panel would show it working
+ * best exactly when its own number reads zero.
+ */
+const clippedAway = computed(() => Math.max(0, stats.viewportHexCount - stats.hexCount));
+
 const openSeaSkipped = computed(() =>
   Math.max(0, stats.hexCount - stats.terrainDrawnCount - stats.terrainCulledCount),
 );
@@ -220,8 +232,12 @@ const openSeaSkipped = computed(() =>
       <span class="value">{{ ms(waveDrawMs) }}</span>
     </div>
     <div class="meta">
-      <span>{{ stats.hexCount.toLocaleString() }} hexes scanned</span>
+      <span>
+        {{ stats.viewportHexCount.toLocaleString() }} hexes in view →
+        {{ stats.hexCount.toLocaleString() }} scanned
+      </span>
       <span class="meta-split">
+        <span class="clipped">{{ clippedAway.toLocaleString() }} out of fog reach</span>
         <span class="drawn">{{ stats.terrainDrawnCount.toLocaleString() }} drawn</span>
         <span class="culled">{{ stats.terrainCulledCount.toLocaleString() }} fog-culled</span>
         <span class="skipped">{{ openSeaSkipped.toLocaleString() }} open sea</span>
@@ -335,6 +351,9 @@ const openSeaSkipped = computed(() =>
    what the fog took, and what was never a hex to draw in the first place. */
 .meta-split .drawn {
   color: var(--text);
+}
+.meta-split .clipped {
+  color: #9ad0ff;
 }
 .meta-split .culled {
   color: #9ad0ff;

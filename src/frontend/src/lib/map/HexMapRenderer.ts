@@ -335,12 +335,23 @@ export interface FogPerfStats {
   /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
   /**
-   * Hexes in the current viewport rect — the number the above times scale
-   * with, and the denominator the drawn/culled counts are shares of. Not
-   * itself a count of anything drawn: at world-map zoom nine in ten of these
-   * are open sea, which is the background rather than a hex.
+   * Hexes the rebuild actually walked — the number the above times scale with,
+   * and the denominator the drawn/culled counts are shares of. Not itself a
+   * count of anything drawn: some of these are the open sea that is the
+   * background rather than a hex.
    */
   hexCount: number;
+  /**
+   * Hexes the viewport rect covers, before the scan is clipped to where
+   * terrain can draw (`scanClipSources`).
+   *
+   * The gap between this and `hexCount` is the cull that now happens by
+   * construction rather than per hex — at full zoom-out it is the difference
+   * between walking 58,000 hexes and walking 1,000 — and without it reported
+   * the panel would show that cull as a `terrainCulledCount` of zero, which
+   * reads exactly like a cull that has stopped working.
+   */
+  viewportHexCount: number;
   /** The fog mask fetch's own wall-clock time (stores/world.ts's fetchFogMask), independent of any renderer rebuild. */
   maskFetchMs: number;
   /** Whether a fog-mask fetch is currently in flight. */
@@ -363,6 +374,7 @@ export const fogPerfStats: FogPerfStats = {
   waterMaskMs: 0,
   totalMs: 0,
   hexCount: 0,
+  viewportHexCount: 0,
   maskFetchMs: 0,
   maskFetchInFlight: false,
   maskVersion: null,
@@ -823,20 +835,57 @@ interface FogSource {
   radius: number;
 }
 
-function axialBounds(coords: AxialCoord[]): AxialBounds | null {
-  if (coords.length === 0) return null;
-  let qMin = Infinity;
-  let qMax = -Infinity;
-  let rMin = Infinity;
-  let rMax = -Infinity;
-  for (const c of coords) {
-    if (c.q < qMin) qMin = c.q;
-    if (c.q > qMax) qMax = c.q;
-    if (c.r < rMin) rMin = c.r;
-    if (c.r > rMax) rMax = c.r;
+/**
+ * The r-intervals at axial column `q` covered by any of `sources` — merged,
+ * ascending, written into `out` as `[lo, hi, lo, hi, ...]`; returns the number
+ * of intervals.
+ *
+ * This is how the viewport scan stops being O(viewport) (see
+ * `coordsInRect`). A hex disc of radius R around (sq, sr) covers, at column q,
+ * the rows `sr + max(-R, -dq - R) .. sr + min(R, -dq + R)` where `dq = q - sq`
+ * — the standard axial range — and nothing outside `|dq| <= R`. Merging the
+ * per-source intervals keeps the union exact rather than bridging the gap
+ * between two distant settlements, which a simple min/max would.
+ *
+ * `out` is a caller-owned scratch array, reused across columns, because this
+ * runs once per column of every rebuild.
+ */
+export function coveredRowSpans(q: number, sources: FogSource[], out: number[]): number {
+  let count = 0;
+  for (const s of sources) {
+    const dq = q - s.q;
+    if (dq < -s.radius || dq > s.radius) continue;
+    const lo = s.r + Math.max(-s.radius, -dq - s.radius);
+    const hi = s.r + Math.min(s.radius, -dq + s.radius);
+    // Insertion sort by `lo` — `sources` is a handful of settlements, so this
+    // beats allocating and sorting an array per column.
+    let i = count;
+    while (i > 0 && out[(i - 1) * 2] > lo) {
+      out[i * 2] = out[(i - 1) * 2];
+      out[i * 2 + 1] = out[(i - 1) * 2 + 1];
+      i--;
+    }
+    out[i * 2] = lo;
+    out[i * 2 + 1] = hi;
+    count++;
   }
-  return { qMin, qMax, rMin, rMax };
+  if (count < 2) return count;
+  // Merge overlapping/adjacent intervals in place.
+  let write = 0;
+  for (let read = 1; read < count; read++) {
+    const lo = out[read * 2];
+    const hi = out[read * 2 + 1];
+    if (lo <= out[write * 2 + 1] + 1) {
+      if (hi > out[write * 2 + 1]) out[write * 2 + 1] = hi;
+    } else {
+      write++;
+      out[write * 2] = lo;
+      out[write * 2 + 1] = hi;
+    }
+  }
+  return write + 1;
 }
+
 
 function axisGap(v: number, lo: number, hi: number): number {
   if (v < lo) return lo - v;
@@ -1048,6 +1097,11 @@ export class HexMapRenderer {
    * which would leave `waterMaskRegionBuilt` null and the sea unmasked until
    * the next real pan. One flag checked every frame has no such combinations.
    */
+  /**
+   * The axial box of the viewport this rebuild is drawing — the *whole*
+   * viewport, not the clipped scan. See `scanBoundsOfRect`.
+   */
+  private rebuildBounds: AxialBounds = { qMin: 0, qMax: 0, rMin: 0, rMax: 0 };
   private waterMaskDirty = false;
   /**
    * Runs the bake, on a worker where it can (see WaterMaskBaker). Constructed
@@ -2064,21 +2118,94 @@ export class HexMapRenderer {
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
-  private coordsInRect(rect: { minX: number; minY: number; maxX: number; maxY: number }): AxialCoord[] {
+  private coordsInRect(
+    rect: { minX: number; minY: number; maxX: number; maxY: number },
+    clipSources: FogSource[] | null,
+  ): AxialCoord[] {
     const colPitch = TILE_W * 0.75;
     const colMin = Math.floor(rect.minX / colPitch) - 1;
     const colMax = Math.ceil(rect.maxX / colPitch) + 1;
     const rowMin = Math.floor(rect.minY / TILE_H) - 1;
     const rowMax = Math.ceil(rect.maxY / TILE_H) + 1;
+    // What the scan would have been without the clip — counted, not walked.
+    fogPerfStats.viewportHexCount = (colMax - colMin + 1) * (rowMax - rowMin + 1);
     const out: AxialCoord[] = [];
+    // `axialToOddQ`'s col *is* the axial q, so the column loop below is
+    // already a loop over q and the spans can be applied to it directly.
+    const spans: number[] = [];
     for (let col = colMin; col <= colMax; col++) {
-      for (let row = rowMin; row <= rowMax; row++) {
-        const q = col;
-        const r = row - (col - (col & 1)) / 2;
-        out.push({ q, r });
+      // r = row - offset, so the viewport's row range becomes this column's
+      // own r range.
+      const offset = (col - (col & 1)) / 2;
+      const rMin = rowMin - offset;
+      const rMax = rowMax - offset;
+      if (!clipSources) {
+        for (let r = rMin; r <= rMax; r++) out.push({ q: col, r });
+        continue;
+      }
+      const count = coveredRowSpans(col, clipSources, spans);
+      for (let i = 0; i < count; i++) {
+        const lo = Math.max(rMin, spans[i * 2]);
+        const hi = Math.min(rMax, spans[i * 2 + 1]);
+        for (let r = lo; r <= hi; r++) out.push({ q: col, r });
       }
     }
     return out;
+  }
+
+  /**
+   * The discs outside which a rebuild provably draws nothing, or null when
+   * everything in the viewport has to be walked.
+   *
+   * The scan used to cover the whole viewport, which is how a zoomed-out map
+   * came to walk ~92,000 hexes to draw ~1,000 — the cost scaled with how far
+   * out the camera was, while the work it found scaled with how much had been
+   * explored. This is the same predicate the per-hex cull already applies,
+   * hoisted to bound the loop instead of being asked inside it.
+   *
+   * Sound because a hex survives the cull only if it is explored, or within
+   * `exploredRadius + FOG_TERRAIN_CULL_HEXES` of some settlement — and every
+   * explored hex is itself within `exploredRadius` of the settlement that
+   * explored it: `exploredHexesFor` walks each vision disc out to
+   * `disc.radius + FOG_SCOUT_RING`, and `exploredRadius` is the max over those
+   * same discs of `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
+   * which bounds it by the triangle inequality. Settlements are never removed
+   * from the model, so no explored hex can outlive the source that covers it.
+   *
+   * Null whenever the cull is not in force — no fog, or the debug flag off —
+   * since then any hex in the viewport can draw.
+   */
+  private scanClipSources(fogActive: boolean): FogSource[] | null {
+    if (!fogActive || !fogDebugFlags.terrainCull) return null;
+    const { worldModel } = this.options;
+    return worldModel
+      .listSettlements()
+      .map((s) => ({ q: s.q, r: s.r, radius: worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES }));
+  }
+
+  /**
+   * The axial box of the *whole* viewport, regardless of what the scan was
+   * clipped to.
+   *
+   * The fog-source prune (`unexploredFogSources`) has to be asked about the
+   * viewport, not about the clipped scan: the wave grid covers the full
+   * viewport and is culled against the same sources, so pruning them against
+   * a smaller box could drop a settlement that still reaches a wave.
+   */
+  private scanBoundsOfRect(rect: { minX: number; minY: number; maxX: number; maxY: number }): AxialBounds {
+    const colPitch = TILE_W * 0.75;
+    const colMin = Math.floor(rect.minX / colPitch) - 1;
+    const colMax = Math.ceil(rect.maxX / colPitch) + 1;
+    const rowMin = Math.floor(rect.minY / TILE_H) - 1;
+    const rowMax = Math.ceil(rect.maxY / TILE_H) + 1;
+    // r = row - (col - (col & 1)) / 2, so r is extremal at the extremal
+    // columns: the largest r at the smallest column, and vice versa.
+    return {
+      qMin: colMin,
+      qMax: colMax,
+      rMin: rowMin - (colMax - (colMax & 1)) / 2,
+      rMax: rowMax - (colMin - (colMin & 1)) / 2,
+    };
   }
 
   private rebuildAll() {
@@ -2089,7 +2216,8 @@ export class HexMapRenderer {
     this.lastRebuildAtMs = rebuildStart;
     const fogActive = this.isFogActive();
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
-    const coords = this.coordsInRect(rect);
+    this.rebuildBounds = this.scanBoundsOfRect(rect);
+    const coords = this.coordsInRect(rect, this.scanClipSources(fogActive));
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;
@@ -2127,7 +2255,7 @@ export class HexMapRenderer {
       // the same opaque backdrop, so there's nothing to gain by refreshing
       // wavePoints for hexes that are entirely hidden.
       phaseStart = performance.now();
-      this.rebuildWaves(coords, fogActive);
+      this.rebuildWaves(fogActive);
       fogPerfStats.wavesMs = performance.now() - phaseStart;
     } else {
       fogPerfStats.wavesMs = 0;
@@ -2357,7 +2485,7 @@ export class HexMapRenderer {
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
     const fogSources =
-      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
       // zip 6a: before a settlement exists, this is the landing page's
@@ -2463,7 +2591,7 @@ export class HexMapRenderer {
       return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
     });
     const fogSources =
-      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
       // Flat world-map hexes are coloured from terrain alone (WORLD_TERRAIN_FILL),
@@ -2506,7 +2634,7 @@ export class HexMapRenderer {
     const { worldModel } = this.options;
     this.riverLayer.clear();
     const fogSources =
-      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
       const river = worldModel.getRiverTile(c.q, c.r);
@@ -2563,7 +2691,7 @@ export class HexMapRenderer {
   // zoomed: the density hash rejects ~38% for the cost of three multiplies,
   // the fog cull is a few subtractions over an already-pruned source list,
   // and isNearLand — 7 getTile lookups — runs only on what survives both.
-  private rebuildWaves(coords: AxialCoord[], fogActive: boolean) {
+  private rebuildWaves(fogActive: boolean) {
     // Sub-pixel strokes are not drawn at all (see WAVE_MIN_STROKE_PX), and the
     // cheapest way not to draw them is to place none: this skips the grid walk
     // as well as the per-frame stroking it feeds.
@@ -2584,11 +2712,12 @@ export class HexMapRenderer {
     // cannot reach the screen. Unlike terrain this is not only a build-time
     // saving — drawWaves re-strokes every surviving point *every frame*, so
     // a wave kept here costs two quadratic curves per frame forever.
-    // rebuildAll's rect uses VISIBLE_RECT_MARGIN (2 * TILE_W) against this
-    // one's TILE_W, so coords strictly contains the wave grid and its
-    // bounds cannot prune a source that reaches a wave.
+    // The source prune is asked about the whole viewport (rebuildBounds, see
+    // scanBoundsOfRect) rather than about the terrain scan, which is clipped
+    // to where terrain can draw — this grid is not, so a prune against the
+    // clipped box could drop a settlement that still reaches a wave.
     const fogSources =
-      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(this.rebuildBounds) : [];
     const culling = fogSources.length > 0;
 
     const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
