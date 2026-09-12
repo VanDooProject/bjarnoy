@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures';
 import { distanceFrom, rectsOf } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { SettlementPage } from './pages';
+import { SettlementPage, type ScreenPoint } from './pages';
 
 /**
  * Issue #16 "ring menu": covers bugs reported after the initial pass —
@@ -351,12 +351,26 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
   // so that ghost click hit the hub instead of the canvas and triggered its
   // own click handler (goUp -> close), all within the same gesture that
   // opened it.
-  test('a real touch tap opens the ring menu and it stays open', async ({ page }) => {
+  //
+  // Same risk applies one level deeper: tapping "Build" (or a category)
+  // moves *that* bubble to a new position too (the inner lane swaps to
+  // categories, then buildings fan out beside it), so a ghost click from
+  // drilling in could just as easily land on whatever the tap's own
+  // coordinates now cover and pop back out. This test walks the tap all the
+  // way from root -> categories -> a category's buildings, asserting the
+  // ring survives every hop instead of only the first one.
+  test('a real touch tap opens the ring menu and drills into categories and buildings without closing', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     const settlement = await SettlementPage.found(page);
-    const { x: cx, y: cy } = await settlement.canvasCentre();
 
-    await page.touchscreen.tap(cx, cy);
+    // Root actions only surface "Build" on an own, empty, non-water tile —
+    // the longhouse itself (canvasCentre) offers Upgrade/Train instead, so
+    // this needs a real buildable hex the way the drill-down spec finds one.
+    const target = await settlement.findHex({ terrain: 'grass' });
+    const box = await settlement.canvasBox();
+    const tap = (p: ScreenPoint) => page.touchscreen.tap(box.x + p.x, box.y + p.y);
+
+    await tap(target.screen);
     await settlement.ring.waitForOpen();
 
     // Give the ghost click every chance to land before declaring it safe —
@@ -364,6 +378,31 @@ test.describe('ring menu touch build', { tag: '@g1' }, () => {
     // inside this window.
     await page.waitForTimeout(300);
     await expect(settlement.ring.bubbles.first()).toBeVisible();
+
+    const buildBubble = settlement.ring.action('Build').first();
+    await expect(buildBubble).toBeVisible();
+    const buildBox = (await buildBubble.boundingBox())!;
+    await page.touchscreen.tap(buildBox.x + buildBox.width / 2, buildBox.y + buildBox.height / 2);
+
+    // Drilling into categories swapped the inner lane to a new set of
+    // bubbles at the same tap point — the ghost click from *this* tap could
+    // just as easily have landed on one of those and popped back out.
+    const categoryBubbles = settlement.ring.categoryBubbles;
+    await expect(categoryBubbles.first()).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(categoryBubbles.first()).toBeVisible();
+    await expect(settlement.ring.backBubble).toHaveCount(1);
+
+    const categoryBox = (await categoryBubbles.first().boundingBox())!;
+    await page.touchscreen.tap(categoryBox.x + categoryBox.width / 2, categoryBox.y + categoryBox.height / 2);
+
+    // Same again, one level deeper: a category's buildings fan out beside
+    // it, so this tap's ghost click has yet another fresh set of bubbles to
+    // land on instead of the canvas.
+    const buildingBubbles = settlement.ring.childBubbles;
+    await expect(buildingBubbles.first()).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(buildingBubbles.first()).toBeVisible();
   });
 
   test('a touch tap previews a building, and only the second tap builds it', async ({ page }) => {
