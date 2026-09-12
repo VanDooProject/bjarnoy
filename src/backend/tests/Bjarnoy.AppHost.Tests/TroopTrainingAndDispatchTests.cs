@@ -214,7 +214,11 @@ public class TroopTrainingAndDispatchTests
         // reloading the page (a reload would be a second, unrelated proof of
         // persistence — FoundingSettlementPersistenceTests already covers
         // that pattern for settlements).
-        var garrisonRow = page.Locator(".garrison-row").Filter(new LocatorFilterOptions { HasText = "Thrall" });
+        // Scoped to the always-visible corner panel: QueuesSidebar.vue renders
+        // the same .garrison-row/.garrison-count markup inside its own
+        // (off-screen-until-opened, but still present in the DOM) <aside>, so
+        // an unscoped locator here resolves to two elements in strict mode.
+        var garrisonRow = trainingQueuePanel.Locator(".garrison-row").Filter(new LocatorFilterOptions { HasText = "Thrall" });
         await Assertions.Expect(garrisonRow.Locator(".garrison-count"))
             .ToHaveTextAsync("1", new() { Timeout = 20_000 });
 

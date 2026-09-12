@@ -13,7 +13,22 @@ import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
+import HudPositionToggle from '../HudPositionToggle.vue';
 import type { MessageSchema } from '../../i18n/schema';
+
+const props = defineProps<{
+  /**
+   * false when the nav is shown on its own rather than inline after
+   * ResourceBar in the same header row (the mobile settlement HUD moves it
+   * into the draggable bar's expanded panel below ResourceBar instead, to
+   * stop it squeezing the resource pills off a narrow phone width — see
+   * MapView.vue's `navInlineInHeader`). Drops the left divider/padding that
+   * only makes sense butted up against a preceding sibling, and lets the
+   * links wrap onto multiple lines instead of scrolling off a fixed row.
+   */
+  inline?: boolean;
+}>();
+const isInline = computed(() => props.inline ?? true);
 
 const route = useRoute();
 const router = useRouter();
@@ -49,7 +64,7 @@ const initials = computed(() => {
 </script>
 
 <template>
-  <nav class="hud-nav">
+  <nav class="hud-nav" :class="{ 'hud-nav--standalone': !isInline }">
     <button
       v-if="player.hasFoundedSettlement"
       class="link"
@@ -98,6 +113,7 @@ const initials = computed(() => {
       {{ t('hud.nav.landing') }}
     </button>
     <LocaleSwitcher />
+    <HudPositionToggle />
     <!-- Logged in, the avatar opens the player's own profile (issue #42).
          Anonymous, it opens registration (issue #108) — the only entry
          point in the HUD for turning a local player id into a real
@@ -131,6 +147,12 @@ const initials = computed(() => {
   flex: none;
   padding-left: 22px;
   border-left: 1px solid var(--panel-border);
+}
+.hud-nav--standalone {
+  padding: 4px 20px 14px;
+  border-left: none;
+  flex-wrap: wrap;
+  row-gap: 10px;
 }
 .link {
   background: transparent;

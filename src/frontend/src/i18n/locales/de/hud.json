@@ -14,7 +14,21 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserviert)",
-    "rate": "+{n}/h"
+    "rate": "+{n}/h",
+    "max": "Max {n}",
+    "stageCurrent": "Aktuell",
+    "stageRate": "Rate",
+    "stageMax": "Max",
+    "cycleAriaLabel": "{resource}, zeigt {stage}. Tippen zum Wechseln."
+  },
+  "dragHandle": {
+    "expand": "Warteschlangen-Übersicht ausklappen",
+    "collapse": "Warteschlangen-Übersicht einklappen"
+  },
+  "positionToggle": {
+    "label": "Position der HUD-Leiste",
+    "top": "Oben",
+    "bottom": "Unten"
   },
   "realmPanel": {
     "level": "Lv {level}",
@@ -118,6 +132,13 @@
     "garrisonEmpty": "Hier stehen noch keine Einheiten.",
     "guests": "Gäste",
     "unknownSettlement": "Unbekannte Siedlung"
+  },
+  "queuesSidebar": {
+    "title": "Warteschlangen",
+    "open": "Warteschlangen öffnen",
+    "close": "Warteschlangen schließen",
+    "chevron": "‹",
+    "freeSlot": "frei"
   },
   "buildingModal": {
     "close": "✕",

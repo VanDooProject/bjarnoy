@@ -14,7 +14,21 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserved)",
-    "rate": "+{n}/h"
+    "rate": "+{n}/h",
+    "max": "Max {n}",
+    "stageCurrent": "Current",
+    "stageRate": "Rate",
+    "stageMax": "Max",
+    "cycleAriaLabel": "{resource}, showing {stage}. Tap to cycle."
+  },
+  "dragHandle": {
+    "expand": "Expand queue summary",
+    "collapse": "Collapse queue summary"
+  },
+  "positionToggle": {
+    "label": "HUD bar position",
+    "top": "Top",
+    "bottom": "Bottom"
   },
   "realmPanel": {
     "level": "Lv {level}",
@@ -118,6 +132,13 @@
     "garrisonEmpty": "No units standing here yet.",
     "guests": "Guests",
     "unknownSettlement": "Unknown settlement"
+  },
+  "queuesSidebar": {
+    "title": "Queues",
+    "open": "Open queues",
+    "close": "Close queues",
+    "chevron": "‹",
+    "freeSlot": "free"
   },
   "buildingModal": {
     "close": "✕",
