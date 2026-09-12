@@ -74,15 +74,31 @@ describe('QueuesSidebar', () => {
     expect(wrapper.get('.queues-sidebar').classes()).not.toContain('queues-sidebar--open');
   });
 
-  it('opens on a real leftward drag past the threshold, hinged on the right edge', async () => {
+  it('opens on a real rightward drag past the threshold, hinged on the left edge', async () => {
     const wrapper = mountSidebar();
     const tab = wrapper.get('.queues-tab');
 
-    await firePointer(wrapper, tab.element, 'pointerdown', 400);
-    await firePointer(wrapper, tab.element, 'pointermove', 340); // dragging left, i.e. into the screen
-    await firePointer(wrapper, tab.element, 'pointerup', 340);
+    await firePointer(wrapper, tab.element, 'pointerdown', 20);
+    await firePointer(wrapper, tab.element, 'pointermove', 80); // dragging right, i.e. into the screen
+    await firePointer(wrapper, tab.element, 'pointerup', 80);
 
     expect(wrapper.get('.queues-sidebar').classes()).toContain('queues-sidebar--open');
+  });
+
+  it('shows a preview badge with the active order count while closed, and hides it once open', async () => {
+    const world = useWorldStore();
+    world.hud.queueFetchedAt = Date.now();
+    world.hud.queue = [buildOrder(), buildOrder({ id: 'order-2' })];
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountSidebar();
+    const tab = wrapper.get('.queues-tab');
+    expect(tab.get('.queues-tab-badge').text()).toBe('3');
+
+    await firePointer(wrapper, tab.element, 'pointerdown', 20);
+    await firePointer(wrapper, tab.element, 'pointerup', 20);
+    expect(tab.find('.queues-tab-badge').exists()).toBe(false);
   });
 
   it('shows construction orders with the used/total slot count and per-order progress', () => {

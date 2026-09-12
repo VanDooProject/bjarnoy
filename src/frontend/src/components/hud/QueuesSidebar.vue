@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The full "Queues" detail drawer — Construction/Training/Garrison, in one
-// place, sliding in from the right edge on a drag or a tap of its own edge
+// place, sliding in from the left edge on a drag or a tap of its own edge
 // tab (see useDragSheet.ts). BuildQueuePanel.vue/TrainingQueuePanel.vue
 // already show this same data as floating corner cards; this doesn't
 // replace them (they stay useful as an always-visible glance), it's the
@@ -22,8 +22,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const MAX_TRAINING_QUEUE_LENGTH = 5;
 
 const { expanded, dragging, onPointerDown, onPointerMove, onPointerUp } = useDragSheet(false, {
-  axis: 'x',
-  invert: true, // hinged on the right edge: dragging left opens it
+  axis: 'x', // hinged on the left edge: dragging right (the natural, un-inverted direction) opens it
 });
 
 function close() {
@@ -101,6 +100,12 @@ const trainingOrders = computed(() => {
 const garrison = computed(() =>
   world.hud.garrison.filter((g) => g.count > 0).map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
 );
+
+// A closed drawer used to show nothing but a bare arrow — this gives the
+// edge tab a preview even before it's opened: a badge with how many orders
+// are actually in flight, so there's something to glance at (and a reason
+// to open it) without dragging/tapping first.
+const activeOrderCount = computed(() => constructionOrders.value.length + trainingOrders.value.length);
 </script>
 
 <template>
@@ -115,7 +120,8 @@ const garrison = computed(() =>
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
   >
-    <span aria-hidden="true">{{ t('hud.queuesSidebar.chevron') }}</span>
+    <span class="queues-tab-chevron" aria-hidden="true">{{ t('hud.queuesSidebar.chevron') }}</span>
+    <span v-if="!expanded && activeOrderCount > 0" class="queues-tab-badge" aria-hidden="true">{{ activeOrderCount }}</span>
   </button>
   <aside class="queues-sidebar" :class="{ 'queues-sidebar--open': expanded, 'queues-sidebar--dragging': dragging }">
     <div class="queues-sidebar-header">
@@ -174,20 +180,20 @@ const garrison = computed(() =>
 </template>
 
 <style scoped>
-/* The tab peeking off the right edge — always present so there's something
+/* The tab peeking off the left edge — always present so there's something
    to both tap and drag from a fully closed state, not just a target that
    only appears once the drawer is already open. */
 .queues-tab {
   position: fixed;
   top: 50%;
-  right: 0;
+  left: 0;
   transform: translateY(-50%);
   z-index: 45;
   width: 28px;
   height: 56px;
   border: 1px solid var(--panel-border);
-  border-right: none;
-  border-radius: 6px 0 0 6px;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
   background: var(--panel-bg);
   color: var(--muted);
   font-size: 16px;
@@ -197,17 +203,43 @@ const garrison = computed(() =>
 .queues-tab--open {
   color: var(--text);
 }
+/* The arrow points into the screen (away from the edge it's hinged on) to
+   invite the open gesture; once open it flips to point back at the edge,
+   matching the direction that actually closes it. */
+.queues-tab-chevron {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+.queues-tab--open .queues-tab-chevron {
+  transform: none;
+}
+.queues-tab-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #20160a;
+  font-size: 10px;
+  font-weight: 800;
+}
 .queues-sidebar {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   bottom: 0;
   z-index: 44;
   width: min(320px, 85vw);
   background: var(--panel-bg);
-  border-left: 1px solid var(--panel-border);
-  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.35);
-  transform: translateX(100%);
+  border-right: 1px solid var(--panel-border);
+  box-shadow: 12px 0 30px rgba(0, 0, 0, 0.35);
+  transform: translateX(-100%);
   transition: transform 0.2s ease;
   display: flex;
   flex-direction: column;
