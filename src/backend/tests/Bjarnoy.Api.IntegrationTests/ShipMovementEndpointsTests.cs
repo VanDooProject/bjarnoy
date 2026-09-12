@@ -54,10 +54,21 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
     {
         Seed = 1,
         Radius = 500,
-        IslandCellSize = 2,
+        // Kept in step with FieldBattleServiceTests.LandOptions: the island-
+        // shape retune (#210) made the reach-budget check in
+        // WorldGenerationOptions.Validate scale with IslandMaxElongation/
+        // IslandLobeMaxScale/IslandCoastWarp, so those are pinned to their
+        // floor and IslandCellSize raised to cover the 1000-hex radius —
+        // otherwise Validate throws inside every TerrainSampler the
+        // settlement/army reads below build, and the reads 500.
+        IslandCellSize = 250,
         IslandChance = 1.0,
         IslandMinRadius = 1000,
         IslandMaxRadius = 1000,
+        IslandMaxElongation = 0.0,
+        IslandLobeMinScale = 0.3,
+        IslandLobeMaxScale = 0.3,
+        IslandCoastWarp = 0.0,
         BeachThreshold = 1.0,
         MountainThreshold = 0.0,
         MountainRockiness = 2.0,
