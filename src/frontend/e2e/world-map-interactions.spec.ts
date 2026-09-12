@@ -114,7 +114,7 @@ test.describe('world map interactions', () => {
     await expect.poll(async () => Buffer.compare(before, await world.screenshot()), { timeout: 5_000 }).not.toBe(0);
   });
 
-  test('zooming with the wheel does not error', async ({ page }) => {
+  test('zooming with the wheel does not error', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const world = await WorldMapPage.open(page);
 
