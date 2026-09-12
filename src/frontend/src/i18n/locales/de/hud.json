@@ -132,7 +132,8 @@
     "title": "Warteschlangen",
     "open": "Warteschlangen öffnen",
     "close": "Warteschlangen schließen",
-    "chevron": "‹"
+    "chevron": "‹",
+    "freeSlot": "frei"
   },
   "buildingModal": {
     "close": "✕",

@@ -101,18 +101,23 @@ const garrison = computed(() =>
   world.hud.garrison.filter((g) => g.count > 0).map((g) => ({ key: g.unit, label: unitName(g.unit), count: g.count })),
 );
 
-// A closed drawer used to show nothing but a bare arrow — this gives the
-// edge tab a preview even before it's opened: a badge with how many orders
-// are actually in flight, so there's something to glance at (and a reason
-// to open it) without dragging/tapping first.
-const activeOrderCount = computed(() => constructionOrders.value.length + trainingOrders.value.length);
+// A closed drawer used to show nothing but a bare arrow+badge — the mockup's
+// closed state is a real always-visible mini-panel with actual queue content
+// (the first couple of orders, a countdown and progress for each, and a
+// dimmed placeholder for any free slot), not just a hint that something is
+// queued. Capped to a couple of rows per section so the peek panel stays
+// short enough to sit docked mid-screen without dominating the map.
+const PEEK_ROWS = 2;
+const peekConstruction = computed(() => constructionOrders.value.slice(0, PEEK_ROWS));
+const peekFreeSlots = computed(() => Math.max(0, Math.min(PEEK_ROWS - peekConstruction.value.length, world.hud.construction.slots - world.hud.construction.slotsUsed)));
+const peekTraining = computed(() => trainingOrders.value.slice(0, 1));
 </script>
 
 <template>
   <button
     type="button"
-    class="queues-tab"
-    :class="{ 'queues-tab--open': expanded }"
+    class="queues-peek"
+    :class="{ 'queues-peek--open': expanded }"
     :aria-expanded="expanded"
     :aria-label="expanded ? t('hud.queuesSidebar.close') : t('hud.queuesSidebar.open')"
     @pointerdown="onPointerDown"
@@ -120,8 +125,33 @@ const activeOrderCount = computed(() => constructionOrders.value.length + traini
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
   >
-    <span class="queues-tab-chevron" aria-hidden="true">{{ t('hud.queuesSidebar.chevron') }}</span>
-    <span v-if="!expanded && activeOrderCount > 0" class="queues-tab-badge" aria-hidden="true">{{ activeOrderCount }}</span>
+    <div class="queues-peek-section">
+      <div class="queues-peek-header">
+        <span class="queues-peek-label">{{ t('hud.buildQueue.title') }}</span>
+        <span class="queues-peek-count">{{ world.hud.construction.slotsUsed }}/{{ world.hud.construction.slots }}</span>
+      </div>
+      <div v-for="o in peekConstruction" :key="o.key" class="queues-peek-row" :class="{ 'is-waiting': o.waiting }">
+        <span class="queues-peek-icon" aria-hidden="true" />
+        <span class="queues-peek-time">{{ o.remaining }}</span>
+        <span class="queues-peek-fill-track"><span class="queues-peek-fill" :style="{ height: `${Math.round(o.progress * 100)}%` }" /></span>
+      </div>
+      <div v-for="n in peekFreeSlots" :key="`free-${n}`" class="queues-peek-row is-free">
+        <span class="queues-peek-icon" aria-hidden="true" />
+        <span class="queues-peek-time">{{ t('hud.queuesSidebar.freeSlot') }}</span>
+      </div>
+    </div>
+    <div class="queues-peek-section">
+      <div class="queues-peek-header">
+        <span class="queues-peek-label">{{ t('hud.trainingQueue.title') }}</span>
+        <span class="queues-peek-count">{{ trainingOrders.length }}/{{ MAX_TRAINING_QUEUE_LENGTH }}</span>
+      </div>
+      <div v-for="o in peekTraining" :key="o.key" class="queues-peek-row">
+        <span class="queues-peek-icon" aria-hidden="true" />
+        <span class="queues-peek-time">{{ o.remaining }}</span>
+        <span class="queues-peek-fill-track"><span class="queues-peek-fill" :style="{ height: `${Math.round(o.progress * 100)}%` }" /></span>
+      </div>
+    </div>
+    <span class="queues-peek-arrow" aria-hidden="true">{{ t('hud.queuesSidebar.chevron') }}</span>
   </button>
   <aside class="queues-sidebar" :class="{ 'queues-sidebar--open': expanded, 'queues-sidebar--dragging': dragging }">
     <div class="queues-sidebar-header">
@@ -180,59 +210,119 @@ const activeOrderCount = computed(() => constructionOrders.value.length + traini
 </template>
 
 <style scoped>
-/* The tab peeking off the left edge — always present so there's something
-   to both tap and drag from a fully closed state, not just a target that
-   only appears once the drawer is already open. */
-/* Plain var(--panel-bg) reads as near-invisible against the map's own dark
-   fog/water tones at this size — a gold left edge plus a lifting shadow
-   gives it enough contrast to actually be noticed at a glance, not just
-   found by someone who already knows it's there. */
-.queues-tab {
+/* The peek panel docked to the left edge — always present, and showing the
+   drawer's actual content (the first couple of orders in each queue, a
+   countdown + progress for each, dimmed placeholders for free slots) rather
+   than a bare arrow or a count badge, so there's something worth glancing at
+   without opening it first. A gold left edge plus a lifting shadow keeps it
+   visible against the map's own dark fog/water tones. */
+.queues-peek {
   position: fixed;
   top: 50%;
   left: 0;
   transform: translateY(-50%);
   z-index: 45;
-  width: 32px;
-  height: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 104px;
+  padding: 10px 8px 20px;
   border: 1px solid var(--panel-border);
   border-left: 3px solid var(--gold);
   border-radius: 0 8px 8px 0;
   background: var(--panel-bg);
   box-shadow: 4px 0 12px rgba(0, 0, 0, 0.4);
-  color: var(--gold);
-  font-size: 16px;
+  color: var(--text);
+  text-align: left;
   cursor: grab;
   touch-action: none;
 }
-.queues-tab--open {
-  color: var(--text);
+.queues-peek-section + .queues-peek-section {
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+}
+.queues-peek-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.queues-peek-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.queues-peek-count {
+  font-size: 9px;
+  color: var(--muted);
+}
+.queues-peek-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+.queues-peek-row.is-waiting,
+.queues-peek-row.is-free {
+  opacity: 0.5;
+}
+.queues-peek-icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  background: var(--gold);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+.queues-peek-row.is-free .queues-peek-icon {
+  background: var(--muted);
+}
+.queues-peek-time {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.queues-peek-row.is-free .queues-peek-time {
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.queues-peek-fill-track {
+  position: relative;
+  flex: none;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.queues-peek-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--gold);
 }
 /* The arrow points into the screen (away from the edge it's hinged on) to
    invite the open gesture; once open it flips to point back at the edge,
    matching the direction that actually closes it. */
-.queues-tab-chevron {
+.queues-peek-arrow {
+  align-self: center;
   display: inline-block;
+  color: var(--muted);
+  font-size: 16px;
   transform: scaleX(-1);
 }
-.queues-tab--open .queues-tab-chevron {
+.queues-peek--open .queues-peek-arrow {
+  color: var(--text);
   transform: none;
-}
-.queues-tab-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--gold);
-  color: #20160a;
-  font-size: 10px;
-  font-weight: 800;
 }
 .queues-sidebar {
   position: fixed;

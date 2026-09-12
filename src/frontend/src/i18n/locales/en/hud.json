@@ -132,7 +132,8 @@
     "title": "Queues",
     "open": "Open queues",
     "close": "Close queues",
-    "chevron": "‹"
+    "chevron": "‹",
+    "freeSlot": "free"
   },
   "buildingModal": {
     "close": "✕",

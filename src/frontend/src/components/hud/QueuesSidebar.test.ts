@@ -59,10 +59,10 @@ describe('QueuesSidebar', () => {
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   });
 
-  it('starts closed, and a tap on the edge tab opens then closes it', async () => {
+  it('starts closed, and a tap on the edge peek panel opens then closes it', async () => {
     const wrapper = mountSidebar();
 
-    const tab = wrapper.get('.queues-tab');
+    const tab = wrapper.get('.queues-peek');
     expect(tab.attributes('aria-expanded')).toBe('false');
     expect(wrapper.get('.queues-sidebar').classes()).not.toContain('queues-sidebar--open');
 
@@ -76,7 +76,7 @@ describe('QueuesSidebar', () => {
 
   it('opens on a real rightward drag past the threshold, hinged on the left edge', async () => {
     const wrapper = mountSidebar();
-    const tab = wrapper.get('.queues-tab');
+    const tab = wrapper.get('.queues-peek');
 
     await firePointer(wrapper, tab.element, 'pointerdown', 20);
     await firePointer(wrapper, tab.element, 'pointermove', 80); // dragging right, i.e. into the screen
@@ -85,20 +85,30 @@ describe('QueuesSidebar', () => {
     expect(wrapper.get('.queues-sidebar').classes()).toContain('queues-sidebar--open');
   });
 
-  it('shows a preview badge with the active order count while closed, and hides it once open', async () => {
+  it('shows real queue content (orders, countdowns and a free-slot placeholder) in the closed peek panel', () => {
     const world = useWorldStore();
+    world.hud.construction = { slots: 3, slotsUsed: 1, maxWaitingOrders: 0, waitingOrders: 0, maxOrdersPerHex: 1 };
     world.hud.queueFetchedAt = Date.now();
-    world.hud.queue = [buildOrder(), buildOrder({ id: 'order-2' })];
+    world.hud.queue = [buildOrder({ completesInSeconds: 40, totalSeconds: 100 })];
     world.hud.trainingQueueFetchedAt = Date.now();
-    world.hud.trainingQueue = [trainingOrder()];
+    world.hud.trainingQueue = [trainingOrder({ completesInSeconds: 50, totalSeconds: 200 })];
 
     const wrapper = mountSidebar();
-    const tab = wrapper.get('.queues-tab');
-    expect(tab.get('.queues-tab-badge').text()).toBe('3');
+    const peek = wrapper.get('.queues-peek');
+    const [constructionSection, trainingSection] = wrapper.findAll('.queues-peek-section');
 
-    await firePointer(wrapper, tab.element, 'pointerdown', 20);
-    await firePointer(wrapper, tab.element, 'pointerup', 20);
-    expect(tab.find('.queues-tab-badge').exists()).toBe(false);
+    expect(constructionSection.get('.queues-peek-count').text()).toBe('1/3');
+    const rows = constructionSection.findAll('.queues-peek-row');
+    expect(rows).toHaveLength(2); // one real order + one dimmed free-slot placeholder
+    expect(rows[0].get('.queues-peek-time').text()).toBe('0:40');
+    expect(rows[0].classes()).not.toContain('is-free');
+    expect(rows[1].classes()).toContain('is-free');
+    expect(rows[1].get('.queues-peek-time').text()).toBe('free');
+
+    expect(trainingSection.get('.queues-peek-count').text()).toBe('1/5');
+    expect(trainingSection.get('.queues-peek-row .queues-peek-time').text()).toBe('0:50');
+
+    expect(peek.attributes('aria-expanded')).toBe('false');
   });
 
   it('shows construction orders with the used/total slot count and per-order progress', () => {
