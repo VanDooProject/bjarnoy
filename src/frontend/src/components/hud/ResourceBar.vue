@@ -238,6 +238,20 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
   border-radius: 2px;
   overflow: hidden;
 }
+/* A phone-width bar has no room to spare — tighten pill spacing so the four
+   resources actually fit (or come close to fitting) before HudNav has to be
+   swiped to, instead of ResourceBar alone already eating the whole row. */
+@media (max-width: 699px) {
+  .resource-bar {
+    gap: 12px;
+  }
+  .resource + .resource {
+    padding-left: 12px;
+  }
+  .fill-track {
+    min-width: 46px;
+  }
+}
 .fill {
   display: block;
   height: 100%;

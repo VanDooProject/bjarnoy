@@ -200,13 +200,35 @@ const caption = computed(() => {
   letter-spacing: 0.06em;
   color: var(--muted);
 }
+/* ResourceBar + HudNav together are wider than a phone screen (HudNav alone
+   carries 7+ text links plus the locale switcher and avatar) — `flex-end`
+   with no shrink or wrap used to just push ResourceBar off the left edge of
+   the bar entirely, past the viewport, so on mobile the header showed only
+   the tail end of the nav links and no resource pills at all. Scrolling
+   this row instead keeps ResourceBar (the primary content per the mobile
+   HUD's own design) anchored at its natural left position and lets the
+   nav overflow into a swipe, rather than silently disappearing. */
 .hud-bar-right {
   display: flex;
   align-items: center;
   gap: 24px;
   flex: 1 1 auto;
   min-width: 0;
-  justify-content: flex-end;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+.hud-bar-right::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 700px) {
+  /* Wide enough for both in full — pin the nav to the bar's right edge like
+     before instead of leaving a scrollable gap nothing needs to scroll. */
+  .hud-bar-right {
+    justify-content: flex-end;
+  }
 }
 /* Drag handle: a small pill hanging off the bar's free edge (below it for a
    top-pinned bar, above it for a bottom-pinned one) so it reads as
