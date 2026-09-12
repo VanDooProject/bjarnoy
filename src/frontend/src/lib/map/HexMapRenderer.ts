@@ -32,7 +32,7 @@
 // instead of slicing across their canopy. Fog-of-war dimming sits above
 // everything, since a scouted-but-not-currently-visible hex needs to dim
 // its whole tile, props included.
-import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
 import { coordKey, hexDistance, hexesInRadius, neighbors } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
@@ -47,7 +47,8 @@ import { FogMaskLayer, FOG_MIST_OPAQUE_AT_RAMP } from './fog/FogMaskLayer';
 import { LEGACY_TALL_KEYS, splitLegacyTexture } from './water/legacyTileSplit';
 import { WaterLayer } from './water/WaterLayer';
 import { waterDebugFlags, waterPerfStats } from './water/waterDebug';
-import { bakeWaterMask } from './water/waterMask';
+import { hasWaterProp, type TerrainLookup, type WaterMask } from './water/waterMask';
+import { WaterMaskBaker } from './water/waterMaskBaker';
 import { waterMaskCovers, waterMaskRegion, type WaterMaskRegion } from './water/waterMaskLayout';
 import { fogMaskPlacement } from './fog/fogMaskLayout';
 import { riverPathFor } from './riverPath';
@@ -117,6 +118,66 @@ const WORLD_TERRAIN_FILL: Record<Terrain, number> = {
 // sized against its own hex, which is only WW=40px wide there. Our hex is
 // TILE_W=168px wide, so every wave measurement below is scaled up by the
 // same ratio (168/40 = 4.2) to read at the same size relative to the hex.
+/**
+ * One `TextStyle` per kind of map label, built once.
+ *
+ * `rebuildMarkers` runs every tick, and it used to set each label's style
+ * properties there — which reads as harmless, since most of Pixi's setters
+ * early-return when the value is unchanged. Two of them cannot:
+ * `dropShadow = { ... }` hands over a fresh object literal, and
+ * `dropShadow = false` is compared against the `null` the setter stored last
+ * time. Both fail the identity check, so both call `update()`, which bumps
+ * the style's `_tick` — and `styleKey` is `${uid}-${_tick}`.
+ *
+ * That key is what every text cache is keyed on. A new one every frame means
+ * `measureText` misses, the glyphs are re-rasterised through Canvas 2D with a
+ * shadow blur, and the result is re-uploaded to the GPU — for every label on
+ * screen, sixty times a second, with the camera sitting perfectly still.
+ *
+ * Shared instances assigned by reference (see `acquireLabel`) leave the tick
+ * alone, so the cache hits and a label is rasterised once.
+ */
+export const LABEL_STYLES = {
+  ownerMine: new TextStyle({
+    fill: GOLD,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: '600',
+    fontSize: 12.5,
+    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
+  }),
+  ownerRival: new TextStyle({
+    fill: RIVAL,
+    fontFamily: "'Barlow', sans-serif",
+    fontWeight: '600',
+    fontSize: 12.5,
+    dropShadow: { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 },
+  }),
+  // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels) sets
+  // island names in 'Alegreya Sans SC' — a display small-caps face, distinct
+  // from the 'sans-serif' the other labels use — loaded alongside 'Outfit' in
+  // index.html's Google Fonts link. The soft drop shadow is for legibility
+  // over the lighter sand-coloured tiles some names sit near.
+  islandMine: new TextStyle({
+    fill: GOLD,
+    fontFamily: "'Alegreya Sans SC', serif",
+    fontWeight: 'bold',
+    fontSize: 13,
+    letterSpacing: 1.5,
+    dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
+  }),
+  islandOther: new TextStyle({
+    fill: 0x8fa3af,
+    fontFamily: "'Alegreya Sans SC', serif",
+    fontWeight: '600',
+    fontSize: 13,
+    letterSpacing: 1.5,
+    dropShadow: { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 },
+  }),
+  cart: new TextStyle({ fill: CART_COLOR, fontFamily: 'sans-serif', fontWeight: 'normal', fontSize: 11 }),
+  badgeName: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: 'bold', fontSize: 13 }),
+  badgeSuffix: new TextStyle({ fill: 0xe8f0f5, fontFamily: 'sans-serif', fontWeight: '400', fontSize: 12 }),
+} as const;
+
 const WORLD_PROTOTYPE_HEX_W = 40;
 const WAVE_SCALE = 168 / WORLD_PROTOTYPE_HEX_W;
 const WAVE_COLOR = 0xffffff;
@@ -128,6 +189,34 @@ const WAVE_STROKE = 2 * WAVE_SCALE;
 const WAVE_JITTER_X = 16 * WAVE_SCALE;
 const WAVE_JITTER_Y = 12 * WAVE_SCALE;
 const WAVE_DENSITY = 0.62; // fraction of grid points that get a wave, per the prototype's `dens`
+/**
+ * How wide a wave's stroke has to land on screen, in device-independent
+ * pixels, for the squiggles to be drawn at all.
+ *
+ * The wave field is sized in *world* units, so the number of strokes on screen
+ * grows with the viewport's world area — i.e. with the square of how far out
+ * the camera is zoomed — while each stroke gets thinner at exactly the same
+ * rate. At the furthest world zoom that is 14,043 strokes re-recorded and
+ * re-tessellated every frame (measured: 3.57ms of every frame, forever) to
+ * draw lines about half a pixel wide. Half a pixel is not a wave; it is a
+ * faint uniform haze over the sea, which is the one thing the squiggles are
+ * not supposed to read as.
+ *
+ * So: below this they are not drawn. One device pixel, because that is the
+ * width at which a stroke stops being a line and starts being a tint — this
+ * is a statement about what is visible, not a budget.
+ */
+const WAVE_MIN_STROKE_PX = 1;
+/**
+ * The band above the cutoff the squiggles fade in over, as a multiple of it.
+ *
+ * A hard on/off at a single zoom would pop mid-gesture — a wheel zoom crosses
+ * the threshold in one notch — and a whole sea texture appearing at once is
+ * far more noticeable than the barely-visible strokes it is made of. Fading
+ * over a band costs nothing extra: the viewport covers less world the further
+ * in you are, so there are fewer strokes inside the band than below it.
+ */
+const WAVE_FADE_BAND = 1.5;
 
 function hash01(x: number, y: number, salt: number): number {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(salt | 0, 2654435761);
@@ -216,12 +305,53 @@ export interface FogPerfStats {
   wavesMs: number;
   /** Wave squiggles kept by rebuildWaves — the ones drawWaves re-strokes every frame. */
   waveDrawnCount: number;
+  /**
+   * `drawWaves` itself — the per-*frame* cost of re-stroking those squiggles,
+   * as a mean over the last second.
+   *
+   * Separate from `wavesMs`, which times only their *placement* and so runs
+   * once per rebuild. This is the one that runs every tick: the layer is
+   * cleared and every surviving point re-recorded as two quadratic curves,
+   * which PixiJS then re-flattens and re-tessellates on the CPU. It is also
+   * the one number here that is not part of `totalMs` — it is not part of a
+   * rebuild at all.
+   */
+  waveDrawMs: number;
   /** Wave squiggles rebuildWaves dropped because opaque mist covers them (0 when waveCull is off). */
   waveCulledCount: number;
+  /**
+   * The water mask bake, when this rebuild ran one *on this thread* — 0 when
+   * it reused the mask it already had, deferred the bake past a gesture, or
+   * handed it to the worker (which is now the normal case; see
+   * `waterPerfStats.bakedOnWorker` for where the last one ran and what it
+   * took).
+   *
+   * Broken out because for a long time it was the largest thing in `totalMs`
+   * by an order of magnitude and the breakdown said nothing about it: a
+   * zoomed-out world map read `terrain 20.6 / borders 4.3 / waves 9.5` under a
+   * total of 498, and the 460ms it did not mention was this.
+   */
+  waterMaskMs: number;
   /** Sum of the above plus the small remainder not broken out on its own. */
   totalMs: number;
-  /** Hexes in the current viewport rect — the size the above times scale with. */
+  /**
+   * Hexes the rebuild actually walked — the number the above times scale with,
+   * and the denominator the drawn/culled counts are shares of. Not itself a
+   * count of anything drawn: some of these are the open sea that is the
+   * background rather than a hex.
+   */
   hexCount: number;
+  /**
+   * Hexes the viewport rect covers, before the scan is clipped to where
+   * terrain can draw (`scanClipSources`).
+   *
+   * The gap between this and `hexCount` is the cull that now happens by
+   * construction rather than per hex — at full zoom-out it is the difference
+   * between walking 58,000 hexes and walking 1,000 — and without it reported
+   * the panel would show that cull as a `terrainCulledCount` of zero, which
+   * reads exactly like a cull that has stopped working.
+   */
+  viewportHexCount: number;
   /** The fog mask fetch's own wall-clock time (stores/world.ts's fetchFogMask), independent of any renderer rebuild. */
   maskFetchMs: number;
   /** Whether a fog-mask fetch is currently in flight. */
@@ -240,8 +370,11 @@ export const fogPerfStats: FogPerfStats = {
   wavesMs: 0,
   waveDrawnCount: 0,
   waveCulledCount: 0,
+  waveDrawMs: 0,
+  waterMaskMs: 0,
   totalMs: 0,
   hexCount: 0,
+  viewportHexCount: 0,
   maskFetchMs: 0,
   maskFetchInFlight: false,
   maskVersion: null,
@@ -756,20 +889,57 @@ interface FogSource {
   radius: number;
 }
 
-function axialBounds(coords: AxialCoord[]): AxialBounds | null {
-  if (coords.length === 0) return null;
-  let qMin = Infinity;
-  let qMax = -Infinity;
-  let rMin = Infinity;
-  let rMax = -Infinity;
-  for (const c of coords) {
-    if (c.q < qMin) qMin = c.q;
-    if (c.q > qMax) qMax = c.q;
-    if (c.r < rMin) rMin = c.r;
-    if (c.r > rMax) rMax = c.r;
+/**
+ * The r-intervals at axial column `q` covered by any of `sources` — merged,
+ * ascending, written into `out` as `[lo, hi, lo, hi, ...]`; returns the number
+ * of intervals.
+ *
+ * This is how the viewport scan stops being O(viewport) (see
+ * `coordsInRect`). A hex disc of radius R around (sq, sr) covers, at column q,
+ * the rows `sr + max(-R, -dq - R) .. sr + min(R, -dq + R)` where `dq = q - sq`
+ * — the standard axial range — and nothing outside `|dq| <= R`. Merging the
+ * per-source intervals keeps the union exact rather than bridging the gap
+ * between two distant settlements, which a simple min/max would.
+ *
+ * `out` is a caller-owned scratch array, reused across columns, because this
+ * runs once per column of every rebuild.
+ */
+export function coveredRowSpans(q: number, sources: FogSource[], out: number[]): number {
+  let count = 0;
+  for (const s of sources) {
+    const dq = q - s.q;
+    if (dq < -s.radius || dq > s.radius) continue;
+    const lo = s.r + Math.max(-s.radius, -dq - s.radius);
+    const hi = s.r + Math.min(s.radius, -dq + s.radius);
+    // Insertion sort by `lo` — `sources` is a handful of settlements, so this
+    // beats allocating and sorting an array per column.
+    let i = count;
+    while (i > 0 && out[(i - 1) * 2] > lo) {
+      out[i * 2] = out[(i - 1) * 2];
+      out[i * 2 + 1] = out[(i - 1) * 2 + 1];
+      i--;
+    }
+    out[i * 2] = lo;
+    out[i * 2 + 1] = hi;
+    count++;
   }
-  return { qMin, qMax, rMin, rMax };
+  if (count < 2) return count;
+  // Merge overlapping/adjacent intervals in place.
+  let write = 0;
+  for (let read = 1; read < count; read++) {
+    const lo = out[read * 2];
+    const hi = out[read * 2 + 1];
+    if (lo <= out[write * 2 + 1] + 1) {
+      if (hi > out[write * 2 + 1]) out[write * 2 + 1] = hi;
+    } else {
+      write++;
+      out[write * 2] = lo;
+      out[write * 2 + 1] = hi;
+    }
+  }
+  return write + 1;
 }
+
 
 function axisGap(v: number, lo: number, hi: number): number {
   if (v < lo) return lo - v;
@@ -961,6 +1131,42 @@ export class HexMapRenderer {
   // rebuild: a rebuild happens on every 0.4-tile camera move, the mask's own
   // margin is three tiles.
   private waterMaskRegionBuilt: WaterMaskRegion | null = null;
+  /**
+   * Set whenever a rebuild wanted a bake but deferred it (see
+   * `maybeBakeWaterMask`), and cleared by the bake that services it.
+   *
+   * The bake is the single most expensive thing a rebuild does — hundreds of
+   * milliseconds over a zoomed-out world map — so it must not run on every
+   * threshold-crossing frame of a wheel zoom or a drag, which is exactly what
+   * it did: a wheel notch scales the viewport by ~10%, comfortably past the
+   * mask's own margin, so every notch busted coverage and paid for a fresh
+   * bake (`waterPerfStats.bakes` in the thousands for one session).
+   *
+   * Deliberately a flag serviced from `onTick` rather than extra work hung off
+   * each gesture's own settle path. There are three of those (a drag's
+   * pointerup, `noteZoomActivity`'s idle timer, `tickCameraAnim`'s completion)
+   * and they can overlap: a `forceRebuild` fired by one while another gesture
+   * is still running would skip the bake and then have nothing left to re-run
+   * it — e.g. a stationary press-and-hold spanning the wheel-idle timeout,
+   * which would leave `waterMaskRegionBuilt` null and the sea unmasked until
+   * the next real pan. One flag checked every frame has no such combinations.
+   */
+  /**
+   * The axial box of the viewport this rebuild is drawing — the *whole*
+   * viewport, not the clipped scan. See `scanBoundsOfRect`.
+   */
+  private rebuildBounds: AxialBounds = { qMin: 0, qMax: 0, rMin: 0, rMax: 0 };
+  private waterMaskDirty = false;
+  /**
+   * Runs the bake, on a worker where it can (see WaterMaskBaker). Constructed
+   * eagerly rather than on first use so the worker's own module graph is
+   * fetched and compiled while the map is still loading, instead of on the
+   * first camera move that needs a mask.
+   */
+  private maskBaker = new WaterMaskBaker((mask, region, bakeMs) => {
+    if (this.destroyed) return;
+    this.applyWaterMask(mask, region, bakeMs, true);
+  });
   private wavePoints: WavePoint[] = [];
   // Mirrors rebuildAll's local `deepFogOnly` (see isEntirelyDeepFog) so
   // onTick's per-frame drawWaves call can skip redrawing wave strokes the
@@ -1402,6 +1608,13 @@ export class HexMapRenderer {
       this.world.alpha = Math.min(1, this.world.alpha + (1 - this.world.alpha) * k);
     }
     if (this.options.mode === 'world' && !this.deepFogOnly && waterDebugFlags.legacyWaveSquiggles) this.drawWaves();
+    // Not drawing them this frame costs nothing, and a stale reading of what
+    // they used to cost would be worse than no reading.
+    else fogPerfStats.waveDrawMs = 0;
+    // The settle path for a bake a gesture deferred (see waterMaskDirty). One
+    // check per frame, and it can only ever do work on the first frame after
+    // the gesture that owes it ends.
+    if (this.waterMaskDirty && !this.dragging && !this.wheeling) this.maybeBakeWaterMask();
     this.waterLayer.tick(performance.now());
     if (this.idleDrift) {
       this.camera = { ...this.camera, x: this.camera.x + 0.18, y: this.camera.y + 0.05 };
@@ -1993,21 +2206,94 @@ export class HexMapRenderer {
   }
 
   /** Every hex axial coord whose grid position falls within `rect` (world-space). */
-  private coordsInRect(rect: { minX: number; minY: number; maxX: number; maxY: number }): AxialCoord[] {
+  private coordsInRect(
+    rect: { minX: number; minY: number; maxX: number; maxY: number },
+    clipSources: FogSource[] | null,
+  ): AxialCoord[] {
     const colPitch = TILE_W * 0.75;
     const colMin = Math.floor(rect.minX / colPitch) - 1;
     const colMax = Math.ceil(rect.maxX / colPitch) + 1;
     const rowMin = Math.floor(rect.minY / TILE_H) - 1;
     const rowMax = Math.ceil(rect.maxY / TILE_H) + 1;
+    // What the scan would have been without the clip — counted, not walked.
+    fogPerfStats.viewportHexCount = (colMax - colMin + 1) * (rowMax - rowMin + 1);
     const out: AxialCoord[] = [];
+    // `axialToOddQ`'s col *is* the axial q, so the column loop below is
+    // already a loop over q and the spans can be applied to it directly.
+    const spans: number[] = [];
     for (let col = colMin; col <= colMax; col++) {
-      for (let row = rowMin; row <= rowMax; row++) {
-        const q = col;
-        const r = row - (col - (col & 1)) / 2;
-        out.push({ q, r });
+      // r = row - offset, so the viewport's row range becomes this column's
+      // own r range.
+      const offset = (col - (col & 1)) / 2;
+      const rMin = rowMin - offset;
+      const rMax = rowMax - offset;
+      if (!clipSources) {
+        for (let r = rMin; r <= rMax; r++) out.push({ q: col, r });
+        continue;
+      }
+      const count = coveredRowSpans(col, clipSources, spans);
+      for (let i = 0; i < count; i++) {
+        const lo = Math.max(rMin, spans[i * 2]);
+        const hi = Math.min(rMax, spans[i * 2 + 1]);
+        for (let r = lo; r <= hi; r++) out.push({ q: col, r });
       }
     }
     return out;
+  }
+
+  /**
+   * The discs outside which a rebuild provably draws nothing, or null when
+   * everything in the viewport has to be walked.
+   *
+   * The scan used to cover the whole viewport, which is how a zoomed-out map
+   * came to walk ~92,000 hexes to draw ~1,000 — the cost scaled with how far
+   * out the camera was, while the work it found scaled with how much had been
+   * explored. This is the same predicate the per-hex cull already applies,
+   * hoisted to bound the loop instead of being asked inside it.
+   *
+   * Sound because a hex survives the cull only if it is explored, or within
+   * `exploredRadius + FOG_TERRAIN_CULL_HEXES` of some settlement — and every
+   * explored hex is itself within `exploredRadius` of the settlement that
+   * explored it: `exploredHexesFor` walks each vision disc out to
+   * `disc.radius + FOG_SCOUT_RING`, and `exploredRadius` is the max over those
+   * same discs of `distance(settlement, disc) + disc.radius + FOG_SCOUT_RING`,
+   * which bounds it by the triangle inequality. Settlements are never removed
+   * from the model, so no explored hex can outlive the source that covers it.
+   *
+   * Null whenever the cull is not in force — no fog, or the debug flag off —
+   * since then any hex in the viewport can draw.
+   */
+  private scanClipSources(fogActive: boolean): FogSource[] | null {
+    if (!fogActive || !fogDebugFlags.terrainCull) return null;
+    const { worldModel } = this.options;
+    return worldModel
+      .listSettlements()
+      .map((s) => ({ q: s.q, r: s.r, radius: worldModel.exploredRadius(s) + FOG_TERRAIN_CULL_HEXES }));
+  }
+
+  /**
+   * The axial box of the *whole* viewport, regardless of what the scan was
+   * clipped to.
+   *
+   * The fog-source prune (`unexploredFogSources`) has to be asked about the
+   * viewport, not about the clipped scan: the wave grid covers the full
+   * viewport and is culled against the same sources, so pruning them against
+   * a smaller box could drop a settlement that still reaches a wave.
+   */
+  private scanBoundsOfRect(rect: { minX: number; minY: number; maxX: number; maxY: number }): AxialBounds {
+    const colPitch = TILE_W * 0.75;
+    const colMin = Math.floor(rect.minX / colPitch) - 1;
+    const colMax = Math.ceil(rect.maxX / colPitch) + 1;
+    const rowMin = Math.floor(rect.minY / TILE_H) - 1;
+    const rowMax = Math.ceil(rect.maxY / TILE_H) + 1;
+    // r = row - (col - (col & 1)) / 2, so r is extremal at the extremal
+    // columns: the largest r at the smallest column, and vice versa.
+    return {
+      qMin: colMin,
+      qMax: colMax,
+      rMin: rowMin - (colMax - (colMax & 1)) / 2,
+      rMax: rowMax - (colMin - (colMin & 1)) / 2,
+    };
   }
 
   private rebuildAll() {
@@ -2018,7 +2304,8 @@ export class HexMapRenderer {
     this.lastRebuildAtMs = rebuildStart;
     const fogActive = this.isFogActive();
     const rect = visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN);
-    const coords = this.coordsInRect(rect);
+    this.rebuildBounds = this.scanBoundsOfRect(rect);
+    const coords = this.coordsInRect(rect, this.scanClipSources(fogActive));
     const deepFogOnly =
       this.options.mode === 'world' && fogActive && fogDebugFlags.terrainCull && this.isEntirelyDeepFog(rect);
     this.deepFogOnly = deepFogOnly;
@@ -2056,7 +2343,7 @@ export class HexMapRenderer {
       // the same opaque backdrop, so there's nothing to gain by refreshing
       // wavePoints for hexes that are entirely hidden.
       phaseStart = performance.now();
-      this.rebuildWaves(coords, fogActive);
+      this.rebuildWaves(fogActive);
       fogPerfStats.wavesMs = performance.now() - phaseStart;
     } else {
       fogPerfStats.wavesMs = 0;
@@ -2070,24 +2357,130 @@ export class HexMapRenderer {
     // the most expensive thing on screen.
     const waterSuppressed = deepFogOnly || !this.isFogActive();
     this.waterLayer.setSuppressed(waterSuppressed);
-    if (!waterSuppressed && (!this.waterMaskRegionBuilt || !waterMaskCovers(this.waterMaskRegionBuilt, rect))) {
-      const region = waterMaskRegion(rect, TILE_W);
-      // Timed rather than estimated: the bake is one isoPixelToAxial per texel
-      // plus three distance transforms, and it is the only CPU work this
-      // feature does — everything else it costs is on the GPU, where this
-      // codebase has no timer to read (see waterPerfStats).
-      const bakeStart = performance.now();
-      const mask = bakeWaterMask(region, TILE_W, TILE_H, this.options.worldModel);
-      waterPerfStats.bakeMs = performance.now() - bakeStart;
-      waterPerfStats.maskWidth = mask.width;
-      waterPerfStats.maskHeight = mask.height;
-      waterPerfStats.bakes += 1;
-      this.waterLayer.setMask(mask);
-      this.waterMaskRegionBuilt = region;
-    }
+    // A suppressed mesh has nothing to read the mask, so a bake owed from
+    // before it was suppressed is owed no longer — the next rebuild that
+    // un-suppresses it re-asks the coverage question from scratch.
+    fogPerfStats.waterMaskMs = 0;
+    if (waterSuppressed) this.waterMaskDirty = false;
+    else this.maybeBakeWaterMask();
 
     fogPerfStats.hexCount = coords.length;
     fogPerfStats.totalMs = performance.now() - rebuildStart;
+  }
+
+  /**
+   * Re-bakes the water mask if the viewport has left the region the current
+   * one covers — unless a pan/zoom gesture is in progress, in which case it
+   * only records that a bake is owed (see `waterMaskDirty`) and `onTick`
+   * services it once the gesture settles.
+   *
+   * Coverage is checked against the *bare* viewport rect, not `rebuildAll`'s
+   * `VISIBLE_RECT_MARGIN`-inflated one. The inflated rect was double-counting
+   * the margin: the mask reaches MASK_MARGIN_TILES (3) past whatever rect it
+   * is baked from, so asking it to cover a rect already 2 tiles oversized left
+   * a single tile of real pan slack out of the three the margin is there to
+   * give. The mask is still *baked* from the inflated rect, so the extra
+   * reach is kept — only the question "does what's on screen still fall
+   * inside it" is asked about what is actually on screen.
+   */
+  private maybeBakeWaterMask() {
+    const viewport = visibleWorldRect(this.camera, this.viewport);
+    if (this.waterMaskRegionBuilt && waterMaskCovers(this.waterMaskRegionBuilt, viewport)) return;
+    // A bake already out with the worker that covers what is on screen is the
+    // bake this call wanted — asking again would only supersede it and start
+    // the wait over.
+    const outstanding = this.maskBaker.pendingRegion;
+    if (outstanding && waterMaskCovers(outstanding, viewport)) return;
+    // A drag or a wheel/pinch zoom moves the camera on almost every frame, and
+    // each step that grows the viewport invalidates coverage again — baking
+    // per step means paying the most expensive work in the renderer several
+    // times over for masks that are superseded before they are looked at.
+    // Unlike the terrain rebuild this isn't throttled but deferred outright:
+    // at DRAG_REBUILD_THROTTLE_MS a single bake can overrun the throttle
+    // window several times, so throttling would still stall the gesture.
+    // A camera *animation* (the founding transition) is not a gesture in this
+    // sense — it is a fixed, short move, so deferring its bake would only
+    // withhold the water for the length of the ease.
+    if (this.dragging || this.wheeling) {
+      this.waterMaskDirty = true;
+      return;
+    }
+    this.waterMaskDirty = false;
+    const { worldModel } = this.options;
+    const region = waterMaskRegion(visibleWorldRect(this.camera, this.viewport, VISIBLE_RECT_MARGIN), TILE_W);
+    // Timed rather than estimated: the bake is one isoPixelToAxial per texel
+    // plus three distance transforms, and it is the only CPU work this
+    // feature does — everything else it costs is on the GPU, where this
+    // codebase has no timer to read (see waterPerfStats).
+    const bakeStart = performance.now();
+    const mask = this.maskBaker.bake(
+      {
+        region,
+        tileWidth: TILE_W,
+        tileHeight: TILE_H,
+        seed: worldModel.seed,
+        generation: worldModel.generation,
+        // Only settlement mode reads the prop channel (WaterLayer sets
+        // uPropMute nowhere else), so only it pays for the list — and the
+        // list, not a lookup, is what lets that mode bake off-thread at all.
+        buildingHexes: this.options.mode === 'settlement' ? worldModel.buildingHexKeys() : undefined,
+      },
+      this.waterMaskTerrain(),
+    );
+    if (!mask) return; // off to the worker; applyWaterMask finishes it
+    this.applyWaterMask(mask, region, performance.now() - bakeStart, false);
+  }
+
+  /**
+   * Installs a freshly baked mask, whichever thread baked it.
+   *
+   * `waterMaskRegionBuilt` is only set here, so a worker bake that is still in
+   * flight leaves the previous mask both displayed and recorded — the sea
+   * keeps the foam it had rather than losing it for the length of the bake,
+   * and the coverage check keeps answering about a mask that actually exists.
+   */
+  private applyWaterMask(mask: WaterMask, region: WaterMaskRegion, bakeMs: number, onWorker: boolean) {
+    waterPerfStats.bakeMs = bakeMs;
+    waterPerfStats.bakedOnWorker = onWorker;
+    // Only a bake this thread actually ran belongs in the rebuild breakdown.
+    // A worker bake costs the frame nothing but the texture upload, so folding
+    // its (larger) duration into `totalMs` would make the panel claim a stall
+    // that did not happen — the number is still reported, next to the mask
+    // size in the water panel, where it reads as what it is.
+    fogPerfStats.waterMaskMs = onWorker ? 0 : bakeMs;
+    waterPerfStats.maskWidth = mask.width;
+    waterPerfStats.maskHeight = mask.height;
+    waterPerfStats.bakes += 1;
+    this.waterLayer.setMask(mask);
+    this.waterMaskRegionBuilt = region;
+  }
+
+  /**
+   * What the bake is allowed to ask about terrain — the *fallback* path's
+   * lookup, used only where there is no worker to bake on (jsdom, a browser
+   * that refuses a module worker).
+   *
+   * World mode hands over an `isLand`-only lookup rather than the WorldModel
+   * itself. `TerrainLookup.getTile`/`hasProp` exist solely to spot the
+   * coastal-water prop tiles the A channel mutes (`hasWaterProp`), and
+   * `WaterLayer.tick` only ever sets `uPropMute` in settlement mode — world
+   * mode draws no sea tiles, so there is no painted boat or rock to protect.
+   * Omitting both is the documented way to say so: it zeroes the A channel,
+   * which is what the world-mode shader reads anyway, and drops both a second
+   * WorldModel lookup per texel and the extra distance transform the prop ramp
+   * would need.
+   *
+   * Settlement mode answers through `hasProp` rather than `getTile` so the
+   * fallback asks the same question the worker does, terrain-only, instead of
+   * materialising a `Tile` per water texel.
+   */
+  private waterMaskTerrain(): TerrainLookup {
+    const { worldModel } = this.options;
+    if (this.options.mode !== 'settlement') return { isLand: (q, r) => worldModel.isLand(q, r) };
+    return {
+      isLand: (q, r) => worldModel.isLand(q, r),
+      hasProp: (q, r) => hasWaterProp(worldModel.getTile(q, r)),
+    };
   }
 
   /**
@@ -2180,7 +2573,7 @@ export class HexMapRenderer {
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
     const fogSources =
-      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
       // zip 6a: before a settlement exists, this is the landing page's
@@ -2286,11 +2679,16 @@ export class HexMapRenderer {
       return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
     });
     const fogSources =
-      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
-      const tile = worldModel.getTile(c.q, c.r);
-      if (tile.terrain === 'sea') continue; // open sea is just the background
+      // Flat world-map hexes are coloured from terrain alone (WORLD_TERRAIN_FILL),
+      // so this asks for terrain alone. The distinction is the difference
+      // between 1.2us and ~20us a hex, over a coord list that reaches 58,000
+      // entries zoomed out — and nine hexes in ten are the open sea this
+      // skips, which would have been a full Tile built to say "background".
+      const terrain = worldModel.terrainOf(c.q, c.r);
+      if (terrain === 'sea') continue; // open sea is just the background
 
       // Same cull as the settlement view's rebuildTerrain: draw the island
       // under the thin part of the unexplored mist near the scouted ring
@@ -2309,7 +2707,7 @@ export class HexMapRenderer {
 
       const grid = isoGridPosition(c, TILE_W, TILE_H);
       const flat = inflated.flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[tile.terrain] });
+      this.terrainFlat.poly(flat).fill({ color: WORLD_TERRAIN_FILL[terrain] });
       fogPerfStats.terrainDrawnCount++;
     }
   }
@@ -2324,7 +2722,7 @@ export class HexMapRenderer {
     const { worldModel } = this.options;
     this.riverLayer.clear();
     const fogSources =
-      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
       const river = worldModel.getRiverTile(c.q, c.r);
@@ -2365,10 +2763,11 @@ export class HexMapRenderer {
   /** True if the given coord or any of its neighbours is land — waves never sit this close to shore. */
   private isNearLand(coord: AxialCoord): boolean {
     const { worldModel } = this.options;
-    if (worldModel.getTile(coord.q, coord.r).terrain !== 'sea') return true;
-    return NEIGHBOR_DIRS.some(
-      (d) => worldModel.getTile(coord.q + d.q, coord.r + d.r).terrain !== 'sea',
-    );
+    // terrainOf, not getTile: this asks seven hexes a terrain-only question,
+    // once per surviving wave grid point, and getTile would build (and cache)
+    // a whole Tile — orientation, variant, coastal-ness — to answer it.
+    if (worldModel.terrainOf(coord.q, coord.r) !== 'sea') return true;
+    return NEIGHBOR_DIRS.some((d) => worldModel.terrainOf(coord.q + d.q, coord.r + d.r) !== 'sea');
   }
 
   // Recomputes which open-water grid points get a wave squiggle for the
@@ -2380,7 +2779,16 @@ export class HexMapRenderer {
   // zoomed: the density hash rejects ~38% for the cost of three multiplies,
   // the fog cull is a few subtractions over an already-pruned source list,
   // and isNearLand — 7 getTile lookups — runs only on what survives both.
-  private rebuildWaves(coords: AxialCoord[], fogActive: boolean) {
+  private rebuildWaves(fogActive: boolean) {
+    // Sub-pixel strokes are not drawn at all (see WAVE_MIN_STROKE_PX), and the
+    // cheapest way not to draw them is to place none: this skips the grid walk
+    // as well as the per-frame stroking it feeds.
+    if (WAVE_STROKE * this.camera.zoom < WAVE_MIN_STROKE_PX) {
+      this.wavePoints = [];
+      fogPerfStats.waveDrawnCount = 0;
+      fogPerfStats.waveCulledCount = 0;
+      return;
+    }
     const margin = TILE_W;
     const rect = visibleWorldRect(this.camera, this.viewport, margin);
     const points: WavePoint[] = [];
@@ -2392,11 +2800,12 @@ export class HexMapRenderer {
     // cannot reach the screen. Unlike terrain this is not only a build-time
     // saving — drawWaves re-strokes every surviving point *every frame*, so
     // a wave kept here costs two quadratic curves per frame forever.
-    // rebuildAll's rect uses VISIBLE_RECT_MARGIN (2 * TILE_W) against this
-    // one's TILE_W, so coords strictly contains the wave grid and its
-    // bounds cannot prune a source that reaches a wave.
+    // The source prune is asked about the whole viewport (rebuildBounds, see
+    // scanBoundsOfRect) rather than about the terrain scan, which is clipped
+    // to where terrain can draw — this grid is not, so a prune against the
+    // clipped box could drop a settlement that still reaches a wave.
     const fogSources =
-      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(axialBounds(coords)) : [];
+      fogActive && fogDebugFlags.waveCull ? this.unexploredFogSources(this.rebuildBounds) : [];
     const culling = fogSources.length > 0;
 
     const yStart = Math.floor(rect.minY / WAVE_STEP_Y) * WAVE_STEP_Y;
@@ -2430,8 +2839,24 @@ export class HexMapRenderer {
   private drawWaves() {
     if (this.wavePoints.length === 0) {
       this.waveLayer.clear();
+      fogPerfStats.waveDrawMs = 0;
       return;
     }
+    const drawStart = performance.now();
+    // Live zoom rather than the one the points were placed at: a rebuild only
+    // happens every 0.4 tiles of camera movement, so a wheel zoom crosses the
+    // fade band over many frames that share one placement.
+    const strokePx = WAVE_STROKE * this.camera.zoom;
+    const fade = Math.min(
+      1,
+      Math.max(0, (strokePx - WAVE_MIN_STROKE_PX) / (WAVE_MIN_STROKE_PX * (WAVE_FADE_BAND - 1))),
+    );
+    if (fade <= 0) {
+      this.waveLayer.clear();
+      fogPerfStats.waveDrawMs = 0;
+      return;
+    }
+    const alpha = WAVE_ALPHA * fade;
     const now = Date.now();
     this.waveLayer.clear();
     for (const p of this.wavePoints) {
@@ -2443,8 +2868,12 @@ export class HexMapRenderer {
         .moveTo(x, y)
         .quadraticCurveTo(x + WAVE_WIDTH / 4, y - bump, x + WAVE_WIDTH / 2, y)
         .quadraticCurveTo(x + (WAVE_WIDTH * 3) / 4, y + bump, x + WAVE_WIDTH, y)
-        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha: WAVE_ALPHA, cap: 'round' });
+        .stroke({ width: WAVE_STROKE, color: WAVE_COLOR, alpha, cap: 'round' });
     }
+    // Smoothed over roughly a second: this is a per-frame number and a raw
+    // sample of it jitters too much to read off a panel that polls at 4Hz.
+    const elapsed = performance.now() - drawStart;
+    fogPerfStats.waveDrawMs += (elapsed - fogPerfStats.waveDrawMs) * 0.05;
   }
 
   private syncSpriteLayer(
@@ -2641,14 +3070,8 @@ export class HexMapRenderer {
       // legibility over the water/terrain behind it — same treatment as the
       // island-name labels above, just without their uppercase/letter-spaced
       // small-caps look (owners read as plain names, not headings).
-      const ownerLabel = this.acquireLabel();
+      const ownerLabel = this.acquireLabel(mine ? LABEL_STYLES.ownerMine : LABEL_STYLES.ownerRival);
       ownerLabel.text = settlement.ownerName;
-      ownerLabel.style.fill = mine ? GOLD : RIVAL;
-      ownerLabel.style.fontFamily = "'Barlow', sans-serif";
-      ownerLabel.style.fontWeight = '600';
-      ownerLabel.style.fontSize = 12.5;
-      ownerLabel.style.letterSpacing = 0;
-      ownerLabel.style.dropShadow = { color: 0x000000, alpha: 0.85, blur: 6, distance: 2, angle: Math.PI / 2 };
       ownerLabel.anchor.set(0.5, 0);
       ownerLabel.position.set(center.x, center.y + 8 * this.camera.zoom + 4);
       ownerLabel.visible = true;
@@ -2665,23 +3088,11 @@ export class HexMapRenderer {
       const grid = isoGridPosition({ q: island.q, r: island.r }, TILE_W, TILE_H);
       const center = this.toScreen({ x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 });
       const mineIsland = island.id === myIslandId;
-      const label = this.acquireLabel();
       // Reference styling: uppercase, letter-spaced small-caps label, muted
-      // gray for other islands, gold + bold for the player's own.
+      // gray for other islands, gold + bold for the player's own (see
+      // LABEL_STYLES.islandMine/islandOther).
+      const label = this.acquireLabel(mineIsland ? LABEL_STYLES.islandMine : LABEL_STYLES.islandOther);
       label.text = island.name.toUpperCase();
-      label.style.fill = mineIsland ? GOLD : 0x8fa3af;
-      // Reference (prototypes/worldmap/Viking Realm.dc.html's island labels)
-      // sets island names in 'Alegreya Sans SC' — a display small-caps face,
-      // distinct from the 'sans-serif' every other pooled label here uses —
-      // loaded alongside 'Outfit' in index.html's Google Fonts link.
-      label.style.fontFamily = "'Alegreya Sans SC', serif";
-      label.style.fontWeight = mineIsland ? 'bold' : '600';
-      label.style.fontSize = 13;
-      label.style.letterSpacing = 1.5;
-      // Reference gives island names a soft drop shadow for legibility over
-      // the water/terrain behind them — a plain fill alone washes out badly
-      // over the lighter sand-colored tiles some island names sit near.
-      label.style.dropShadow = { color: 0x000000, alpha: 0.6, blur: 3, distance: 1, angle: Math.PI / 2 };
       // Reference places the name below the island's shape entirely, not
       // over its tiles or clipping its bottom edge. Islands are generated at
       // varying sizes (worldGenerator's ISLAND_MIN/MAX_RADIUS), so a fixed
@@ -2725,14 +3136,8 @@ export class HexMapRenderer {
         .stroke({ width: 1.5, color: 0x0b1116, alpha: 0.8 });
 
       const remainingMs = Math.max(0, cart.etaAt - now);
-      const label = this.acquireLabel();
+      const label = this.acquireLabel(LABEL_STYLES.cart);
       label.text = `${Math.round(cart.cargoAmount)} ${cart.cargoResource} · ${formatEta(remainingMs)}`;
-      label.style.fill = CART_COLOR;
-      label.style.fontFamily = 'sans-serif';
-      label.style.fontWeight = 'normal';
-      label.style.fontSize = 11;
-      label.style.letterSpacing = 0;
-      label.style.dropShadow = false;
       label.anchor.set(0, 0);
       label.position.set(screen.x + 8, screen.y - 8);
       label.visible = true;
@@ -2810,25 +3215,16 @@ export class HexMapRenderer {
       // one uniform run of text. Two pooled labels side by side, rather
       // than one, since Pixi's Text has no per-run rich styling.
       const zoomScale = Math.max(1, this.camera.zoom / SETTLEMENT_DEFAULT_ZOOM);
-      const nameLabel = this.acquireLabel();
+      // Scaled rather than re-sized: a changing `fontSize` re-rasterises the
+      // glyphs (see LABEL_STYLES), while `scale` is a transform on the texture
+      // already in hand — and `width` below still reports the scaled size, so
+      // the pill measures the same either way.
+      const nameLabel = this.acquireLabel(LABEL_STYLES.badgeName, zoomScale);
       nameLabel.text = settlement.name;
-      nameLabel.style.fill = 0xe8f0f5;
-      nameLabel.style.fontFamily = 'sans-serif';
-      nameLabel.style.fontWeight = 'bold';
-      nameLabel.style.fontSize = 13 * zoomScale;
-      nameLabel.style.letterSpacing = 0;
-      nameLabel.style.dropShadow = false;
-      nameLabel.alpha = 1;
       nameLabel.anchor.set(0, 0.5);
 
-      const suffixLabel = this.acquireLabel();
+      const suffixLabel = this.acquireLabel(LABEL_STYLES.badgeSuffix, zoomScale);
       suffixLabel.text = mine ? `you · Lv ${settlement.level}` : `Lv ${settlement.level}`;
-      suffixLabel.style.fill = 0xe8f0f5;
-      suffixLabel.style.fontFamily = 'sans-serif';
-      suffixLabel.style.fontWeight = '400';
-      suffixLabel.style.fontSize = 12 * zoomScale;
-      suffixLabel.style.letterSpacing = 0;
-      suffixLabel.style.dropShadow = false;
       suffixLabel.alpha = 0.6;
       suffixLabel.anchor.set(0, 0.5);
 
@@ -2916,13 +3312,26 @@ export class HexMapRenderer {
     return true;
   }
 
-  private acquireLabel(): Text {
+  /**
+   * A pooled label, set to one of the shared styles (see LABEL_STYLES for why
+   * the style is assigned by reference rather than written property by
+   * property).
+   *
+   * `scale` and `alpha` are reset here because the pool is shared across every
+   * kind of label and across both modes: a slot last used for a zoomed
+   * settlement badge would otherwise hand its scale to the next owner name to
+   * land on it.
+   */
+  private acquireLabel(style: TextStyle, scale = 1): Text {
     let label = this.labelPool[this.labelsUsed];
     if (!label) {
-      label = new Text({ text: '', style: { fill: 0xe8f0f5, fontSize: 11, fontFamily: 'sans-serif' } });
+      label = new Text({ text: '', style });
       this.labelPool.push(label);
       this.markerLayer.addChild(label);
     }
+    if (label.style !== style) label.style = style;
+    label.scale.set(scale);
+    label.alpha = 1;
     this.labelsUsed++;
     return label;
   }
@@ -2970,8 +3379,11 @@ export class HexMapRenderer {
     // region it covers (rebuildAll), since terrain is deterministic from the
     // seed and a hex never stops being land. A *forced* rebuild is the one
     // place that assumption can be wrong — a debug flag flip, or the world
-    // model being reseeded under us — so drop it and bake fresh.
+    // model being reseeded under us — so drop it and bake fresh. A bake
+    // already out with the worker was started against the assumption that just
+    // turned out to be wrong, so it goes too.
     this.waterMaskRegionBuilt = null;
+    this.maskBaker.discardPending();
     this.rebuildAll();
   }
 
@@ -3458,14 +3870,17 @@ export class HexMapRenderer {
     this.world.addChild(...worldLayerOrder(mode).map((name) => this.layersByName()[name]));
     // Forces a full rebake (waterMaskRegionBuilt gates it on viewport
     // coverage, which hasn't changed) rather than leaving anything from the
-    // outgoing mode's last rebuild half-applied.
+    // outgoing mode's last rebuild half-applied — including a bake still out
+    // with the worker, which was baked for the mode being left.
     this.waterMaskRegionBuilt = null;
+    this.maskBaker.discardPending();
     this.rebuildAll();
     return true;
   }
 
   destroy() {
     this.destroyed = true;
+    this.maskBaker.destroy();
     const canvas = this.app?.canvas;
     canvas?.removeEventListener('pointerdown', this.onPointerDown);
     window.removeEventListener('pointermove', this.onPointerMove);

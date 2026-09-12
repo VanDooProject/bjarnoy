@@ -27,14 +27,21 @@
 import { onMounted, onUnmounted, reactive, computed } from 'vue';
 import DebugPanel from './DebugPanel.vue';
 import { fogPerfStats, type FogPerfStats } from '../../lib/map/HexMapRenderer';
+// Read-only here: where the last bake ran, so the row above can explain its own
+// zero (see waterMaskNote). WaterPerfPanel owns presenting the rest of these.
+import { waterPerfStats, type WaterPerfStats } from '../../lib/map/water/waterDebug';
 
 const POLL_MS = 250;
 
 const stats = reactive<FogPerfStats>({ ...fogPerfStats });
+const water = reactive<WaterPerfStats>({ ...waterPerfStats });
 let timer: ReturnType<typeof setInterval> | undefined;
 
 onMounted(() => {
-  timer = setInterval(() => Object.assign(stats, fogPerfStats), POLL_MS);
+  timer = setInterval(() => {
+    Object.assign(stats, fogPerfStats);
+    Object.assign(water, waterPerfStats);
+  }, POLL_MS);
 });
 onUnmounted(() => clearInterval(timer));
 
@@ -86,6 +93,18 @@ const ROWS = computed<Row[]>(() => [
   },
   { key: 'markers', label: 'Markers', ms: stats.markersMs },
   {
+    key: 'water-mask',
+    label: 'Water mask bake (this thread)',
+    ms: stats.waterMaskMs,
+    children: [
+      {
+        key: 'water-mask-note',
+        label: waterMaskNote.value,
+        ms: null,
+      },
+    ],
+  },
+  {
     key: 'waves',
     label: 'Waves',
     ms: stats.wavesMs,
@@ -110,6 +129,18 @@ const ROWS = computed<Row[]>(() => [
   },
 ]);
 
+/**
+ * Not a row above, because it is not part of the rebuild the rest of this
+ * panel breaks down — it is paid every frame, and the total would be lying if
+ * it included something that never ran during it.
+ *
+ * Worth having in front of the rebuild numbers anyway: everything above
+ * happens once per camera move, this happens sixty times a second, and the
+ * two are easy to confuse when the only wave row on the panel is the
+ * placement pass.
+ */
+const waveDrawMs = computed(() => stats.waveDrawMs);
+
 function ms(v: number): string {
   return `${v.toFixed(2)} ms`;
 }
@@ -117,6 +148,47 @@ function ms(v: number): string {
 function share(v: number, of: number): number {
   return of > 0 ? Math.round((v / of) * 100) : 0;
 }
+
+/**
+ * The rest of the scan: hexes the terrain pass walked and drew nothing for
+ * that the fog cull did not claim.
+ *
+ * Worth naming rather than leaving as the gap between three numbers, because
+ * it is nearly all of them. A zoomed-out world map scans ~58,000 hexes to draw
+ * ~270: about nine in ten of the rest are open sea, which is the background
+ * and not a hex anything is drawn for, and reading `58,065 hexes` alone gave
+ * no way to tell that from a cull that had quietly stopped working.
+ */
+/**
+ * Where the last bake ran, and why the row above it can read 0.00 ms while the
+ * water panel reports hundreds.
+ *
+ * The rebuild breakdown is main-thread time, so a bake on the worker
+ * contributes nothing to it — which is the entire point of it being there, and
+ * also exactly the sort of zero that reads as a broken counter if the panel
+ * does not say so.
+ */
+const waterMaskNote = computed(() => {
+  if (stats.waterMaskMs > 0) return 'Baked on this thread';
+  if (water.bakedOnWorker) return `Baked on the worker (${water.bakeMs.toFixed(0)} ms there, off this frame)`;
+  return 'Reused (viewport still inside the baked region)';
+});
+
+/**
+ * Hexes in the viewport the scan never walked, because no settlement's fog
+ * reaches them and nothing there could draw.
+ *
+ * This is where most of the cull lives now: it is applied by bounding the
+ * scan rather than by testing each hex, so `fog-culled` below counts only
+ * what the per-hex test still rejects. Reporting the clip alongside it is
+ * what keeps the cull legible — otherwise the panel would show it working
+ * best exactly when its own number reads zero.
+ */
+const clippedAway = computed(() => Math.max(0, stats.viewportHexCount - stats.hexCount));
+
+const openSeaSkipped = computed(() =>
+  Math.max(0, stats.hexCount - stats.terrainDrawnCount - stats.terrainCulledCount),
+);
 </script>
 
 <template>
@@ -154,7 +226,23 @@ function share(v: number, of: number): number {
       <span class="bar-track" />
       <span class="value">{{ ms(stats.totalMs) }}</span>
     </div>
-    <div class="meta">{{ stats.hexCount }} hexes</div>
+    <div class="row per-frame">
+      <span class="label">Wave strokes, per frame</span>
+      <span class="bar-track" />
+      <span class="value">{{ ms(waveDrawMs) }}</span>
+    </div>
+    <div class="meta">
+      <span>
+        {{ stats.viewportHexCount.toLocaleString() }} hexes in view →
+        {{ stats.hexCount.toLocaleString() }} scanned
+      </span>
+      <span class="meta-split">
+        <span class="clipped">{{ clippedAway.toLocaleString() }} out of fog reach</span>
+        <span class="drawn">{{ stats.terrainDrawnCount.toLocaleString() }} drawn</span>
+        <span class="culled">{{ stats.terrainCulledCount.toLocaleString() }} fog-culled</span>
+        <span class="skipped">{{ openSeaSkipped.toLocaleString() }} open sea</span>
+      </span>
+    </div>
     <div class="mask">
       <div class="mask-row">
         <span>Fog mask fetch</span>
@@ -239,9 +327,38 @@ function share(v: number, of: number): number {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Outside the total on purpose — see waveDrawMs. */
+.row.per-frame {
+  font-size: 11px;
+  color: var(--muted);
+}
+.row.per-frame .value {
+  color: var(--text);
+}
 .meta {
   margin-top: 8px;
   font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.meta-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+}
+/* Coloured to match what each one means elsewhere in the map: what got drawn,
+   what the fog took, and what was never a hex to draw in the first place. */
+.meta-split .drawn {
+  color: var(--text);
+}
+.meta-split .clipped {
+  color: #9ad0ff;
+}
+.meta-split .culled {
+  color: #9ad0ff;
+}
+.meta-split .skipped {
   color: var(--muted);
 }
 .mask {

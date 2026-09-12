@@ -218,6 +218,15 @@ export interface WaterPerfStats {
   bakes: number;
   /** Median frame interval over the last second, in ms, sampled by the panel itself. */
   frameMs: number;
+  /**
+   * Whether the last bake ran on the worker rather than this thread.
+   *
+   * Worth stating rather than leaving to be inferred from `bakeMs`: the two
+   * cost the frame completely different things (a worker bake costs it only
+   * the texture upload), and "bake 380ms" next to a smooth frame rate looks
+   * like a broken counter unless the panel says where it ran.
+   */
+  bakedOnWorker: boolean;
 }
 
 export const waterPerfStats: WaterPerfStats = {
@@ -226,4 +235,5 @@ export const waterPerfStats: WaterPerfStats = {
   maskHeight: 0,
   bakes: 0,
   frameMs: 0,
+  bakedOnWorker: false,
 };

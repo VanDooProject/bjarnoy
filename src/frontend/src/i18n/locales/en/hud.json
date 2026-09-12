@@ -322,5 +322,16 @@
   },
   "tradeReport": {
     "summary": "Gave {gaveAmount} {gave} for {gotAmount} {got}"
+  },
+  "fpsMeter": {
+    "title": "Frame rate",
+    "fps": "fps",
+    "msPerFrame": "{n} ms/frame",
+    "worstFrame": "Worst frame (last {seconds} s)",
+    "ms": "{n} ms",
+    "ago": "{n} s ago",
+    "stutters": "Frames over {threshold} ms",
+    "sparkLabel": "Last {n} frame intervals",
+    "legend": "Measured with requestAnimationFrame, so it counts the frames the display actually presented — including the ones the renderer never got to start. Not the same number as Water perf's Frame, which is a median over sixty frames on purpose (the sweep needs a baseline a single long frame can't move) and so cannot show a stall at all. Bars are capped at {ceiling} ms; on a display that is keeping up, a full-height bar means the map missed, not that it was merely the slowest frame on screen."
   }
 }

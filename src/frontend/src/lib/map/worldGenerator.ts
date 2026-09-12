@@ -339,6 +339,23 @@ function coastalOrientation(q: number, r: number, world: WorldSeed): TileOrienta
   return TILE_ORIENTATIONS[index];
 }
 
+// `neighbors()`'s own direction list, used directly rather than through it so
+// the per-tile neighbour walk allocates neither the array nor the six coords.
+const NEIGHBOR_DIRS = [
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+];
+// The unit vector at each neighbour direction's angle (60 degrees apart, in
+// NEIGHBOR_DIRS order), hoisted out of `coastalOrientationFrom`'s inner loop.
+// Exactly the expressions `coastalOrientation` evaluates inline, so the sums
+// they feed are bit-identical.
+const NEIGHBOR_COS = [0, 1, 2, 3, 4, 5].map((i) => Math.cos(i * (Math.PI / 3)));
+const NEIGHBOR_SIN = [0, 1, 2, 3, 4, 5].map((i) => Math.sin(i * (Math.PI / 3)));
+
 /** Seed-stable cosmetic rotation for tiles that don't face anything in particular. */
 function defaultOrientation(q: number, r: number, world: WorldSeed): TileOrientation {
   const h = hash2(q, r, world.seed + 29);
@@ -422,13 +439,100 @@ export function springMountainShapeAt(q: number, r: number, world: WorldSeed): n
   return h < 0.5 ? 2 : 3;
 }
 
-export function generateTile(q: number, r: number, world: WorldSeed): Tile {
+/**
+ * A terrain sampler `generateTile` may reuse — `WorldModel.terrainOf` in
+ * practice, which caches. Defaults to calling `terrainAt` directly, so a
+ * caller that has no cache (a test, `enumerateIslands`' neighbours) still gets
+ * the same tile.
+ */
+export type TerrainSampler = (q: number, r: number) => Terrain;
+
+/**
+ * The six neighbours' land/sea as a bitmask, bit `i` set when
+ * `NEIGHBOR_DIRS[i]` is land.
+ *
+ * A bitmask rather than an array because this runs once per generated tile and
+ * a zoomed-out world map generates tens of thousands of them in one rebuild —
+ * a six-element array each would be pure garbage. Bit order *is*
+ * `NEIGHBOR_DIRS` order, and `coastalOrientation` turns index into angle, so
+ * the two must not drift apart.
+ */
+function landNeighbourMask(q: number, r: number, sample: TerrainSampler): number {
+  let mask = 0;
+  for (let i = 0; i < NEIGHBOR_DIRS.length; i++) {
+    if (sample(q + NEIGHBOR_DIRS[i].q, r + NEIGHBOR_DIRS[i].r) !== 'sea') mask |= 1 << i;
+  }
+  return mask;
+}
+
+/**
+ * `coastalOrientation` over an already-sampled neighbour mask. Same summed
+ * unit vectors in the same index order — and therefore the same floating-point
+ * accumulation, which matters because the zero-vector epsilon below exists
+ * precisely for the cases where that sum lands near zero.
+ */
+function coastalOrientationFrom(landMask: number): TileOrientation {
+  let sumX = 0;
+  let sumY = 0;
+  let firstLandIndex = -1;
+  for (let i = 0; i < 6; i++) {
+    if (!(landMask & (1 << i))) continue;
+    if (firstLandIndex < 0) firstLandIndex = i;
+    sumX += NEIGHBOR_COS[i];
+    sumY += NEIGHBOR_SIN[i];
+  }
+  // Opposite land neighbours (e.g. a one-hex-wide strait) can cancel the
+  // vector to (near) zero — see `coastalOrientation` for why this is an
+  // epsilon rather than an exact `=== 0` check, and why the fallback is the
+  // first land direction found.
+  const ZERO_EPSILON = 1e-9;
+  if (Math.abs(sumX) < ZERO_EPSILON && Math.abs(sumY) < ZERO_EPSILON) return TILE_ORIENTATIONS[firstLandIndex];
+
+  let angle = Math.atan2(sumY, sumX);
+  if (angle < 0) angle += 2 * Math.PI;
+  const index = Math.round(angle / (Math.PI / 3)) % 6;
+  return TILE_ORIENTATIONS[index];
+}
+
+/**
+ * Builds one hex's `Tile`.
+ *
+ * The shape of this — sample the seven terrains once, then answer every
+ * question from them — is the whole point, and it is worth stating why the
+ * obvious version was not kept. Written as four independent calls
+ * (`terrainAt`, `isCoastalWater`, `orientationAt`, `variantAt`) it looked
+ * cheap, but three of the four re-derive coastal-ness, and each of those is
+ * seven `terrainAt` calls: measured at 19us a tile against `terrainAt`'s own
+ * 1.2us, i.e. sixteen times the necessary work. That is what made zooming the
+ * world map out into unvisited water stall for over a second — 58,000 hexes
+ * come into view at once and every one of them was paying it.
+ *
+ * `sample` is what makes the seven collapse to roughly one: `WorldModel`
+ * passes a cached lookup, so a neighbour's terrain is computed by whichever
+ * of the seven tiles that share it asks first.
+ */
+export function generateTile(q: number, r: number, world: WorldSeed, sample?: TerrainSampler): Tile {
+  const terrainOf = sample ?? ((sq: number, sr: number) => terrainAt(sq, sr, world));
+  const terrain = terrainOf(q, r);
+  // Only sea can be coastal, so land hexes never pay for the neighbour walk.
+  const landMask = terrain === 'sea' ? landNeighbourMask(q, r, terrainOf) : 0;
+  const coastal = landMask !== 0;
+
+  const h = hash2(q, r, world.seed + 31);
+  let variant: number;
+  if (coastal) {
+    variant = weightedIndex(h, COASTAL_WATER_VARIANT_WEIGHTS);
+  } else {
+    const count = VARIANT_COUNTS[terrain] ?? 1;
+    variant = count <= 1 ? 0 : Math.min(count - 1, Math.floor(h * count));
+  }
+
   return {
     q,
     r,
-    terrain: terrainAt(q, r, world),
-    isCoastalWater: isCoastalWater(q, r, world),
-    orientation: orientationAt(q, r, world),
-    variant: variantAt(q, r, world),
+    terrain,
+    isCoastalWater: coastal,
+    orientation: coastal ? coastalOrientationFrom(landMask) : defaultOrientation(q, r, world),
+    variant,
   };
 }
