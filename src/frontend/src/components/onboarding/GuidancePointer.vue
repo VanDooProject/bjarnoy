@@ -17,9 +17,21 @@
 // useMapAnchor — frames 1/1b/2/4) or a fixed screen point (`screen`, the
 // ring menu's own bubble spot for frame 3's "this one fits {terrain}" —
 // static while the ring is open, since opening it locks camera drag).
-import { ref, watchEffect } from 'vue';
+//
+// landing-page-defects.md L2: `--anchor-x/-y` (written by useMapAnchor, or
+// by the `screen` watchEffect below) is the TARGET's screen point, and
+// `.anchor` centres its own box there — which centres the SVG's *bounding
+// box*, not the arrowhead's tip, on the target. `arrowTipOffset` computes,
+// from the angle alone, the shift that puts the tip back on the target
+// (minus a small standoff) instead of hardcoding a translate per angle —
+// see that module's own doc comment for the full derivation. This applies
+// to BOTH anchor modes identically: the centre-vs-tip mismatch is a
+// property of the arrow's own geometry, not of what supplies the anchor
+// point, so the hex-anchored and screen-anchored cases need the same fix.
+import { computed, ref, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
+import { arrowTipOffset } from '../../lib/map/guidanceArrowGeometry';
 
 const props = withDefaults(
   defineProps<{
@@ -48,19 +60,38 @@ watchEffect(() => {
   el.style.setProperty('--anchor-x', `${screen.x}px`);
   el.style.setProperty('--anchor-y', `${screen.y}px`);
 });
+
+// `angle` is a static prop per pointer target (it changes only when the
+// guidance step changes, not every frame the way the anchor position does),
+// so a plain computed — recalculated on prop change, not per animation
+// frame — is the right cost here.
+const tipOffset = computed(() => arrowTipOffset(props.angle));
 </script>
 
 <template>
-  <div ref="anchorEl" class="anchor" data-testid="guidance-pointer" :style="{ '--rotate': `${angle}deg` }">
-    <div class="rotate">
-      <div class="bob">
-        <svg width="110" height="110" viewBox="0 0 150 150" class="arrow-svg">
-          <rect x="60" y="14" width="30" height="66" rx="9" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
-          <polygon points="75,136 32,72 118,72" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
-        </svg>
+  <div
+    ref="anchorEl"
+    class="anchor"
+    data-testid="guidance-pointer"
+    :style="{ '--rotate': `${angle}deg`, '--tip-dx': `${tipOffset.x}px`, '--tip-dy': `${tipOffset.y}px` }"
+  >
+    <!-- `.shift` carries the tip-offset translate for BOTH the arrow and the
+         chip, so the chip stays visually attached to the (now correctly
+         placed) arrow instead of staying pinned to the old, unshifted
+         anchor point — see guidanceArrowGeometry.ts. `.rotate` keeps only
+         the rotation, so the bob keyframe nested inside it still reads as
+         "along the shaft" (see the header comment above). -->
+    <div class="shift">
+      <div class="rotate">
+        <div class="bob">
+          <svg width="110" height="110" viewBox="0 0 150 150" class="arrow-svg">
+            <rect x="60" y="14" width="30" height="66" rx="9" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
+            <polygon points="75,136 32,72 118,72" fill="#ffc55c" stroke="#20160a" stroke-width="4" />
+          </svg>
+        </div>
       </div>
+      <div class="chip" :class="chipSide">{{ label }}</div>
     </div>
-    <div class="chip" :class="chipSide">{{ label }}</div>
   </div>
 </template>
 
@@ -84,6 +115,18 @@ watchEffect(() => {
      for both. */
   z-index: 36;
   pointer-events: none;
+}
+/* `.shift` (outer) translates in plain screen space; `.rotate` (its child)
+   then rotates about the ALREADY-SHIFTED centre. So the net effect on the
+   tip is: start at the anchor, move by (--tip-dx, --tip-dy), then rotate
+   about that moved point by --rotate — matching arrowTipOffset's own
+   derivation (`anchor + offset`, then `+ rotatedTipVector(angle)`). Putting
+   the translate on the OUTER element and the rotation on the INNER one is
+   what makes this a screen-space shift rather than a shift along the arrow's
+   pre-rotation local axis — swapping which element gets which transform
+   would rotate the offset itself and send the tip off at the wrong angle. */
+.shift {
+  transform: translate(var(--tip-dx, 0px), var(--tip-dy, 0px));
 }
 .rotate {
   transform: rotate(var(--rotate));
