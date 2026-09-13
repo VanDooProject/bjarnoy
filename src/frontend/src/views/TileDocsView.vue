@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../i18n/schema';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
+import { useWorldStore } from '../stores/world';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
@@ -10,6 +11,7 @@ import { coastalWaterArt, riverArt, terrainArt, type ArtRef } from '../lib/map/b
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
 const catalogue = useBuildingCatalogueStore();
+const world = useWorldStore();
 const { t, te, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => catalogue.load());
@@ -88,6 +90,29 @@ const buildingsByTile = computed(() => {
   }
   return result;
 });
+
+// Coastal water is structurally a Sea hex (tile.terrain is null, only
+// tile.coastal is set — see the TileEntry field comments above), so it
+// shares Sea's movement cost even though it isn't Sea's own catalogue row.
+function movementTerrain(tile: TileEntry): string | null {
+  return tile.coastal ? 'sea' : tile.terrain;
+}
+
+// HexPathfinder's cost tables (world.movementRules, WorldMovementResponse)
+// are a >=1.0 multiplier on travel time — invert to a %-of-baseline speed
+// so a docs reader sees "how much slower", not a raw multiplier. Land and
+// sea are disjoint cost tables (a land terrain has no sea entry and vice
+// versa), so at most one of these two returns non-null per non-river tile.
+function landSpeedPercent(tile: TileEntry): number | null {
+  const terrain = movementTerrain(tile);
+  const cost = terrain ? world.movementRules.land[terrain] : undefined;
+  return cost ? Math.round(100 / cost) : null;
+}
+function seaSpeedPercent(tile: TileEntry): number | null {
+  const terrain = movementTerrain(tile);
+  const cost = terrain ? world.movementRules.sea[terrain] : undefined;
+  return cost ? Math.round(100 / cost) : null;
+}
 </script>
 
 <template>
@@ -134,6 +159,18 @@ const buildingsByTile = computed(() => {
               {{ $t('docs.tiles.buildings') }}
               <span v-if="buildingsByTile[tile.id]?.length">{{ buildingsByTile[tile.id]!.join(', ') }}</span>
               <span v-else>{{ $t('docs.tiles.none') }}</span>
+            </p>
+            <p v-if="tile.river" class="movement">
+              {{ $t('docs.tiles.movementRiverNote', { cost: world.movementRules.riverCrossingCost }) }}
+            </p>
+            <p v-else class="movement">
+              {{ $t('docs.tiles.movement') }}
+              <span v-if="landSpeedPercent(tile) !== null">{{
+                $t('docs.tiles.movementLand', { percent: landSpeedPercent(tile) })
+              }}</span>
+              <span v-else-if="seaSpeedPercent(tile) !== null">{{
+                $t('docs.tiles.movementSea', { percent: seaSpeedPercent(tile) })
+              }}</span>
             </p>
           </div>
         </div>
@@ -234,14 +271,15 @@ const buildingsByTile = computed(() => {
 }
 .lore,
 .generation,
-.buildings {
+.buildings,
+.movement {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
   margin: 0 0 4px;
   max-width: 60ch;
 }
-.buildings {
+.movement {
   margin-bottom: 0;
 }
 .variants {
