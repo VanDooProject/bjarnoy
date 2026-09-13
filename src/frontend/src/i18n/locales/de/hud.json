@@ -14,8 +14,7 @@
   "returningPlayer": {
     "trigger": "Ich habe schon ein Reich",
     "triggerSub": "oder möchte einer anderen Welt beitreten",
-    "logIn": "Anmelden",
-    "joinAnotherWorld": "Einer anderen Welt beitreten"
+    "logIn": "Anmelden"
   },
   "resourceBar": {
     "capSuffix": "/{n}",

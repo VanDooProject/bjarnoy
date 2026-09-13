@@ -1,3 +1,4 @@
+import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
@@ -178,11 +179,43 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
 // "I already have a realm" pre-founding.
 //
 // Returning-player nav work replaced that bare link with
-// ReturningPlayerMenu.vue — a dropdown offering both "log in" and "join
-// another world" (PR that added ReturningPlayerMenu.vue/WorldPickerView.vue)
-// — so this now drives the trigger/panel instead of a single link.
+// ReturningPlayerMenu.vue — so this now drives the trigger/panel instead of
+// a single link.
+//
+// docs/plans/returning-player-world-switching.md's click-count decision:
+// the dropdown used to be a 2-row menu (Log in / Join another world) behind
+// which the actual world list sat on a separate /worlds page — three clicks
+// to switch worlds. It now opens straight to the world list itself
+// (WorldList.vue, shared with WorldPickerView.vue's full-page use at
+// /worlds) — two clicks — with "Log in" still reachable in the same single
+// click that opened the dropdown. Mocked the same way world-picker.spec.ts
+// mocks WorldList's own two calls, since they go out over real HTTP
+// regardless of DEMO_MODE (see that file's own scope note).
 test('the pre-founding header has no dead in-game nav, only the returning-player menu', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+
+  await page.route('**/api/v1/worlds/joinable', (route: Route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'world-1',
+          name: 'Midgard',
+          playerCount: 10,
+          maxPlayers: 500,
+          joinable: true,
+          joinableReason: 'none',
+          startsAt: null,
+          speedFactor: 1,
+          createdAt: '2026-01-01T00:00:00Z',
+          status: 'active',
+        },
+      ],
+    }),
+  );
+  await page.route(/\/api\/v1\/worlds\/([^/]+)\/membership/, (route: Route) =>
+    route.fulfill({ json: { worldId: 'world-1', settlementId: null, settlementName: null } }),
+  );
+
   await SettlementPage.openLanding(page);
 
   await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
@@ -195,10 +228,14 @@ test('the pre-founding header has no dead in-game nav, only the returning-player
 
   await trigger.click();
   await expect(page.getByTestId('returning-player-menu')).toBeVisible();
+
   const login = page.getByTestId('returning-player-login');
-  const joinAnotherWorld = page.getByTestId('returning-player-join-world');
   await expect(login).toBeVisible();
-  await expect(joinAnotherWorld).toBeVisible();
+
+  const worldRow = page.getByTestId('world-picker-row');
+  await expect(worldRow).toHaveCount(1);
+  await expect(worldRow).toContainText('Midgard');
+  await expect(worldRow.getByTestId('world-picker-join')).toBeVisible();
 
   await login.click();
   await expect(page).toHaveURL(/\/login$/);

@@ -116,19 +116,20 @@ const BLOCKED = world({
 });
 
 test.describe('world picker', { tag: '@g2' }, () => {
-  test('is reachable from the returning-player menu and marks the current world "You\'re here" alongside a joinable one', async ({
+  test('the /worlds page marks the current world "You\'re here" alongside a joinable one', async ({
     page,
   }) => {
     await mockWorldsApi(page, [CURRENT, JOINABLE], { [JOINABLE.id]: null });
     await seedCurrentWorld(page, CURRENT.id);
 
-    // Real navigation through the actual entry point (ReturningPlayerMenu on
-    // the pre-founding landing header), not a direct `page.goto('/worlds')`
-    // — see LandingView.vue's pre-founding TopBar.
-    await page.goto('/');
-    await page.getByTestId('returning-player-trigger').click();
-    await page.getByTestId('returning-player-join-world').click();
-    await page.waitForURL('**/worlds');
+    // Returning-player nav work: ReturningPlayerMenu's dropdown no longer
+    // routes here at all — it now renders the same WorldList component
+    // directly inside its own panel (see landing.spec.ts's "pre-founding
+    // header" test for that entry point). /worlds stays a real, directly
+    // reachable full page around that same component though (bookmarkable,
+    // linkable) — see docs/plans/returning-player-world-switching.md — so
+    // this spec drives it straight, the same as any other route.
+    await page.goto('/worlds');
 
     await expect(page.getByRole('heading', { name: 'Choose a world' })).toBeVisible();
 

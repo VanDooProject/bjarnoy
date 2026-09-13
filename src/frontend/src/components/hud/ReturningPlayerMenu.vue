@@ -1,16 +1,26 @@
 <script setup lang="ts">
 // "I already have a realm" / "or want to join another world" — the entry
 // point for a returning/anonymous visitor to either log in or pick a
-// different world to join (WorldPickerView.vue). Replaces two previous,
-// separate things: LandingView's pre-founding `.have-realm-link` and
-// HudNav's anonymous-state avatar (which only ever routed to /register) —
-// this is now also where the account-creation nudge (ProfileNudge.vue,
-// design handoff "2a" frame 5) anchors, via the `nudge` slot, since the
-// avatar circle it used to glow around no longer exists in the anonymous
-// state.
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+// different world to join. Replaces two previous, separate things:
+// LandingView's pre-founding `.have-realm-link` and HudNav's anonymous-state
+// avatar (which only ever routed to /register) — this is now also where the
+// account-creation nudge (ProfileNudge.vue, design handoff "2a" frame 5)
+// anchors, via the `nudge` slot, since the avatar circle it used to glow
+// around no longer exists in the anonymous state.
+//
+// docs/plans/returning-player-world-switching.md's click-count decision:
+// the dropdown used to be a 2-row menu (Log in / Join another world) that
+// routed to a separate /worlds page (WorldPickerView.vue) for the actual
+// world list — three clicks to switch worlds, the common case this control
+// exists for. It now opens straight to the world list itself
+// (WorldList.vue, `compact`, shared with WorldPickerView.vue's full-page
+// use) — two clicks. "Log in" stays reachable in the same single click that
+// opened the dropdown, just not the first thing the panel shows.
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import WorldList from './WorldList.vue';
+import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
 
 withDefaults(defineProps<{ nudging?: boolean }>(), { nudging: false });
@@ -18,9 +28,25 @@ withDefaults(defineProps<{ nudging?: boolean }>(), { nudging: false });
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 const route = useRoute();
 const router = useRouter();
+const world = useWorldStore();
 
 const open = ref(false);
 const rootEl = ref<HTMLDivElement | null>(null);
+
+// "Log in" carries the currently-joined world along as context (login↔world
+// linkage in the plan doc above): logging in from within a specific world's
+// context lets LoginView.vue offer to found/return to that world right
+// after authenticating, instead of logging in generically and having to
+// navigate back afterward. `worldStore.worldId` is null pre-founding (no
+// world bootstrapped client-side yet) — that case just links to plain
+// `/login` with no query params. `worldName` rides along too so LoginView
+// can show it without a second API round-trip.
+const loginTarget = computed<RouteLocationRaw>(() => {
+  if (!world.worldId) return '/login';
+  const query: Record<string, string> = { worldId: world.worldId };
+  if (world.worldName) query.worldName = world.worldName;
+  return { path: '/login', query };
+});
 
 function toggle() {
   open.value = !open.value;
@@ -30,9 +56,9 @@ function close() {
   open.value = false;
 }
 
-function go(path: string) {
+function go(to: RouteLocationRaw) {
   close();
-  router.push(path);
+  router.push(to);
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
@@ -80,18 +106,17 @@ watch(() => route.fullPath, close);
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
       <div class="notch" />
-      <button type="button" role="menuitem" class="row" data-testid="returning-player-login" @click="go('/login')">
-        {{ t('hud.returningPlayer.logIn') }}
-      </button>
       <button
         type="button"
         role="menuitem"
-        class="row"
-        data-testid="returning-player-join-world"
-        @click="go('/worlds')"
+        class="row login-row"
+        data-testid="returning-player-login"
+        @click="go(loginTarget)"
       >
-        {{ t('hud.returningPlayer.joinAnotherWorld') }}
+        {{ t('hud.returningPlayer.logIn') }}
       </button>
+      <div class="divider" role="separator" />
+      <WorldList compact />
     </div>
     <slot name="nudge" />
   </div>
@@ -198,7 +223,10 @@ watch(() => route.fullPath, close);
   top: calc(100% + 10px);
   right: 0;
   z-index: 50;
-  min-width: 220px;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  max-height: 70vh;
+  overflow-y: auto;
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -230,5 +258,11 @@ watch(() => route.fullPath, close);
 .row:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--gold);
+}
+.divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--panel-border);
+  flex: none;
 }
 </style>
