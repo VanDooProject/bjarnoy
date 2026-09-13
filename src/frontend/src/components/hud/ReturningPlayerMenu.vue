@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// "I already have a realm (or want to join another world)" — the entry
+// "I already have a realm" / "or want to join another world" — the entry
 // point for a returning/anonymous visitor to either log in or pick a
 // different world to join (WorldPickerView.vue). Replaces two previous,
 // separate things: LandingView's pre-founding `.have-realm-link` and
@@ -71,7 +71,11 @@ watch(() => route.fullPath, close);
       data-testid="returning-player-trigger"
       @click="toggle"
     >
-      {{ t('hud.returningPlayer.trigger') }}
+      <span class="trigger-text">
+        <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
+        <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
+      </span>
+      <span class="caret" aria-hidden="true">▾</span>
       <span v-if="nudging" class="nudge-dot" aria-hidden="true" />
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
@@ -94,37 +98,67 @@ watch(() => route.fullPath, close);
 </template>
 
 <style scoped>
-/* Own responsibility, not the caller's: TopBar's root is `pointer-events:
-   none` (the map behind it must stay draggable everywhere the header has
-   no content of its own), re-enabling clicks only for `:deep(button)` in
-   its slot — which covers this component's own buttons already, but a bare
-   `TopBar` slot (landing's pre-founding header) has nothing else opting
-   this whole subtree back in, so the root does it once here instead of
-   every caller having to remember. */
+/* TopBar's own `.hud-bar-right :deep(button)` rule already re-enables
+   pointer-events for every `<button>` rendered in its slot, in both
+   places this component is used (HudNav's slot and LandingView's bare
+   `TopBar` slot alike — `:deep()` reaches into slotted content regardless
+   of which component rendered it), so `.trigger` and the `.row` buttons
+   below already work without this root opting in. Deliberately NOT also
+   setting `pointer-events: auto` on the root itself: that would inherit
+   onto every descendant, including the non-button parts of a slotted
+   `ProfileNudge` (its `.eyebrow`/`.title`/`.body` text) — which then sat
+   over whatever the map/page had underneath it and silently ate clicks
+   meant for that (caught by trade.spec.ts in CI: the profile nudge's
+   eyebrow line was intercepting a `.trade-toggle` click). */
 .returning-player-menu {
   position: relative;
   display: flex;
   flex: none;
-  pointer-events: auto;
 }
 .trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: transparent;
-  border: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
   color: var(--muted);
-  padding: 4px 2px;
+  padding: 6px 10px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-align: right;
-  max-width: 240px;
+  max-width: 260px;
 }
 .trigger:hover {
   color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 .trigger[aria-expanded='true'] {
   color: var(--gold);
+  border-color: rgba(255, 197, 92, 0.4);
+}
+.trigger-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+.trigger-main {
+  font-size: 13px;
+  font-weight: 600;
+}
+.trigger-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-2);
+}
+.caret {
+  flex: none;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+.trigger[aria-expanded='true'] .caret {
+  transform: rotate(180deg);
 }
 /* Design handoff "2a" frame 5: the profile-mark glow/badge pointing at the
    nudge — moved here from HudNav.vue's own `.avatar.is-nudging` now that

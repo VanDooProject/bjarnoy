@@ -12,7 +12,8 @@
     "createAccountTitle": "{nickname} — Konto erstellen"
   },
   "returningPlayer": {
-    "trigger": "Ich habe schon ein Reich (oder möchte einer anderen Welt beitreten)",
+    "trigger": "Ich habe schon ein Reich",
+    "triggerSub": "oder möchte einer anderen Welt beitreten",
     "logIn": "Anmelden",
     "joinAnotherWorld": "Einer anderen Welt beitreten"
   },
