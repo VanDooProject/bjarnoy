@@ -49,9 +49,9 @@ Coolify rewrite same-host HTTPS URLs to carry an installation token, which is
 what lets the submodule clone authenticate — a public source injects nothing to
 rewrite, whatever the App can see.
 
-`.gitmodules` also registers the same assets repository a second time under
-`legacy/`, and `--recurse-submodules` fetches both. It works, it just clones
-~220 MB twice per deployment.
+`src/frontend/vendor/bg_assets_hextile` is now the only submodule, so
+`--recurse-submodules` clones those ~220 MB once. `legacy/` used to register the
+same repository a second time; it was dropped for exactly that reason.
 
 Then set a domain on the **`app`** service — in Coolify's compose UI each
 service gets its own domain field, and `app` is the only one that serves
