@@ -107,6 +107,21 @@ EXPOSE 8080
 
 COPY --from=backend --chown=$APP_UID:$APP_UID /app .
 
+# Which build this is, served by GET /api/v1/info so a deployment can be
+# identified without guessing — the question several branch deployments running
+# side by side make a real one. Last in the file on purpose: these change on
+# every commit, and anything after them would be rebuilt every time. They are
+# plain configuration (Build:*, see BuildInfoOptions), so `docker run -e
+# Build__Commit=...` can correct a build that was stamped without them.
+ARG GIT_COMMIT=unknown
+ARG GIT_BRANCH=unknown
+ARG BUILD_VERSION=unknown
+ARG BUILT_AT=unknown
+ENV Build__Commit=${GIT_COMMIT} \
+    Build__Branch=${GIT_BRANCH} \
+    Build__Version=${BUILD_VERSION} \
+    Build__BuiltAt=${BUILT_AT}
+
 # Non-root: nothing in here needs to write outside the data volume.
 USER $APP_UID
 

@@ -294,6 +294,7 @@ development.
 | `POST /api/v1/messages/{id}/report` | report a message to moderation |
 | `GET /api/v1/admin/reports` | the moderation queue (Admin only) |
 | `POST /api/v1/admin/reports/{id}/resolve` | resolve or dismiss a report (Admin only) |
+| `GET /api/v1/info` | version, commit and branch this deployment was built from |
 | `GET /health`, `GET /alive` | readiness and liveness |
 
 Versions are literal path segments rather than a `{version:apiVersion}` route
@@ -320,6 +321,16 @@ policy as the codegen above — nothing regenerates it automatically.
 The health endpoints are only mapped outside development when
 `ExposeHealthChecks` is set; the container image sets it, since an orchestrator
 needs to probe them.
+
+`GET /api/v1/info` answers with what the build stamped into the image —
+`deploy/Dockerfile`'s `GIT_COMMIT`/`GIT_BRANCH`/`BUILD_VERSION`/`BUILT_AT` build
+args, surfaced as `Build:*` configuration (`BuildInfoOptions`) so a `docker run
+-e Build__Commit=…` can still correct them. Fields read `"unknown"` when nothing
+stamped them, which is what a plain `dotnet run` reports. It exists because
+several branch deployments running side by side make "which commit is this one?"
+a real question. It is **unauthenticated for now**, deliberately: a deployment
+has to be identifiable before there is an account to log into it with. Closing
+that is listed below.
 
 ## User activity tracking
 
@@ -483,6 +494,10 @@ enforce real ownership — see `SettlementOwnershipEndpointFilter`/
 legacy design: email verification, password reset, and a `logout-all` that
 revokes every refresh token (e.g. on ban/lock) rather than just the current
 session's.
+
+`GET /api/v1/info` is open to anyone, which hands out a version and commit of
+this repository for free. Requiring the Admin policy is the intended end state;
+it stays open while deployments are still being brought up by hand.
 
 World creation (`POST /api/v1/worlds`) and most read endpoints (a settlement's
 full resources/garrison/queue, its battle reports) are still unauthenticated —

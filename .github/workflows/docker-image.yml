@@ -78,6 +78,15 @@ jobs:
           load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Stamped into the image and served by GET /api/v1/info. On a pull
+          # request github.ref_name is "<n>/merge", so name the head branch
+          # itself; version comes from the tag when this is a tagged build and
+          # is otherwise left as the image's own "unknown" default.
+          build-args: |
+            GIT_COMMIT=${{ github.event.pull_request.head.sha || github.sha }}
+            GIT_BRANCH=${{ github.head_ref || github.ref_name }}
+            BUILD_VERSION=${{ steps.meta.outputs.version }}
+            BUILT_AT=${{ github.event.repository.updated_at }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -147,6 +156,23 @@ jobs:
             fi
           done
           test "$live" = 1
+          echo "::endgroup::"
+
+          echo "::group::the running image says what it was built from"
+          # An image that cannot say which commit it is defeats the point of
+          # having the endpoint at all, so prove the build args reached it
+          # rather than leaving every field at "unknown".
+          curl -fsS http://localhost:8080/api/v1/info -o /tmp/info.json
+          cat /tmp/info.json
+          echo
+          python3 - <<'PY'
+          import json
+          info = json.load(open('/tmp/info.json'))
+          expected = "${{ github.event.pull_request.head.sha || github.sha }}"
+          assert info["commit"] == expected, f'commit {info["commit"]!r} != {expected!r}'
+          assert info["shortCommit"] == expected[:7], info["shortCommit"]
+          assert info["branch"] != "unknown", info
+          PY
           echo "::endgroup::"
 
           echo "::group::the API works against the migrated database"

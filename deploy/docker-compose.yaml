@@ -82,6 +82,14 @@ services:
         # otherwise defaults to the in-memory demo simulation and the
         # deployment would never call its own backend.
         VITE_DEMO_MODE: 'false'
+        # Stamped into the image and served by GET /api/v1/info, so "which
+        # commit is this deployment on?" has an answer. Coolify passes
+        # SOURCE_COMMIT and COOLIFY_BRANCH into the build itself (SOURCE_COMMIT
+        # needs "Include SOURCE_COMMIT in build" enabled in the app's settings;
+        # without it the field simply reads "unknown" rather than lying).
+        GIT_COMMIT: ${SOURCE_COMMIT:-unknown}
+        GIT_BRANCH: ${COOLIFY_BRANCH:-unknown}
+        BUILD_VERSION: ${BUILD_VERSION:-unknown}
     # Left to itself Coolify fills in `unless-stopped`, which would restart a
     # migrator that has already done its job. It reads this and leaves it be.
     restart: 'no'

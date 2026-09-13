@@ -1,4 +1,5 @@
 using Bjarnoy.Api.Auth;
+using Bjarnoy.Api.Hosting;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -32,6 +33,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     private readonly string _connectionString;
     private readonly DatabaseProvider _provider;
     private readonly string? _databaseFile;
+
+    /// <summary>Set by <see cref="WithBuild"/>; null means an unstamped build.</summary>
+    private BuildInfoOptions? _build;
 
     private BjarnoyApiFactory(DatabaseProvider provider, string connectionString, string? databaseFile)
     {
@@ -89,6 +93,24 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             .MigrateAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Stamps this host with the build information <c>deploy/Dockerfile</c>'s
+    /// build args would supply, for the <c>/api/v1/info</c> tests.
+    /// </summary>
+    public BjarnoyApiFactory WithBuild(
+        string version, string commit, string branch, string builtAt)
+    {
+        _build = new BuildInfoOptions
+        {
+            Version = version,
+            Commit = commit,
+            Branch = branch,
+            BuiltAt = builtAt,
+        };
+
+        return this;
+    }
+
     /// <summary>The worlds the database holds, in creation order.</summary>
     public async Task<IReadOnlyList<WorldEntity>> GetWorldsAsync(
         CancellationToken cancellationToken = default)
@@ -123,6 +145,16 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
         // Health endpoints are opt-in outside development; the tests assert on them.
         builder.UseSetting("ExposeHealthChecks", "true");
+
+        // Unset unless a test asked for it, so /api/v1/info's "unstamped build"
+        // case is the default here exactly as it is for a plain `dotnet run`.
+        if (_build is not null)
+        {
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:Version", _build.Version);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:Commit", _build.Commit);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:Branch", _build.Branch);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:BuiltAt", _build.BuiltAt);
+        }
 
         // Stand in for the built frontend the Docker image bakes into wwwroot,
         // so the SPA-fallback tests do not depend on whether anyone has run a

@@ -67,6 +67,12 @@ builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
 builder.Services.AddScoped<UserActivityQueryService>();
 builder.Services.AddScoped<UserActivityRetentionService>();
 
+// What this build is, for GET /api/v1/info. Bound unconditionally: the
+// migrator never serves the endpoint, but binding costs nothing and keeps the
+// two startup paths from diverging.
+builder.Services.AddOptions<BuildInfoOptions>()
+    .Bind(builder.Configuration.GetSection(BuildInfoOptions.SectionName));
+
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -242,6 +248,7 @@ var versionSet = app.NewApiVersionSet()
     .Build();
 
 app.MapDefaultEndpoints();
+app.MapInfoEndpoints(versionSet);
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);
