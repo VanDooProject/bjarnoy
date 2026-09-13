@@ -47,11 +47,21 @@ services:
       # a `:-default` would end up as part of the generated variable's name.
       POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
     volumes:
-      - gamedb-data:/var/lib/postgresql/data
+      # /var/lib/postgresql, not the /var/lib/postgresql/data of 17 and older.
+      # 18 moved its data one level down into a major-version subdirectory
+      # (PGDATA=/var/lib/postgresql/18/docker) so that pg_upgrade --link works
+      # across a single mount, and its entrypoint *refuses to start* when it
+      # finds a mount at the old path — "there appears to be PostgreSQL data
+      # in: /var/lib/postgresql/data (unused mount/volume)", exit 1, which
+      # reaches the deployment as `dependency failed to start: container
+      # postgres is unhealthy`.
+      - gamedb-data:/var/lib/postgresql
     healthcheck:
-      # What `migrator` waits for. `pg_isready` alone would answer during
-      # initdb's own short-lived bootstrap server, hence the database and user.
-      test: ['CMD-SHELL', 'pg_isready -U bjarnoy -d gamedb']
+      # What `migrator` waits for. -h forces a TCP check: during initdb the
+      # entrypoint runs a temporary server on the unix socket only, and a
+      # socket-only pg_isready would call that ready and let the migrator
+      # connect to a database that is still being built.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U bjarnoy -d gamedb']
       interval: 5s
       timeout: 5s
       retries: 30
