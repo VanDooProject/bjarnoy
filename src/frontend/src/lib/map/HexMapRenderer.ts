@@ -621,12 +621,16 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 // this) so FOG_ZOOM_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // zip 6a: the landing page's pre-founding preview is a bit wider than the
-// settlement view's own default, so the single starter island reads as a
-// place, not a crop. Which hexes it shows at all is `WorldModel.previewIslandTiles`'s
-// job (landing-page-defects.md L5: culled by landmass membership, not a
-// radius, so a second island generated nearby never bleeds into the crop
-// and the real island isn't cropped either if it's bigger than the old
-// fixed radius was).
+// settlement view's own default, so the starter plot reads as a small place
+// of its own, not a crop with visible seams. Which hexes it shows at all is
+// `WorldModel.previewCropTiles`'s job — a deliberately small radius crop
+// around the plot (matching the mockup's own scale,
+// docs/design/img/but_building_on_map.png — an island can run to dozens of
+// hexes, far too big to read at any usable zoom beside the hero column)
+// intersected with landmass membership, so a foreign island generated
+// nearby never bleeds into the crop (landing-page-defects.md L5) without
+// widening the crop into "the whole island" (L4's own regression: see
+// `WorldModel.PREVIEW_ISLAND_RADIUS`'s doc comment for why that's wrong).
 const PREVIEW_ZOOM = 0.6;
 // previewFitZoom measures to hex *centres* (`isoGridPosition` + half a
 // tile), but a tile's own drawn sprite is wider/taller than that — see
@@ -650,7 +654,7 @@ const PREVIEW_FIT_MARGIN = 24;
 /**
  * World-space bounding box (tile centres, via `isoGridPosition`) of a
  * preview island's actually-drawn tiles — the same tile list
- * `WorldModel.previewIslandTiles` hands `rebuildTerrain`'s preview cull, so
+ * `WorldModel.previewCropTiles` hands `rebuildTerrain`'s preview cull, so
  * whatever this measures is exactly what's on screen
  * (landing-page-defects.md L4/L5's own "must land together" reasoning).
  * Used to centre the locked preview camera on the island itself rather than
@@ -687,10 +691,11 @@ export function previewIslandBounds(tiles: AxialCoord[]): {
 }
 
 /**
- * Zoom that fits `tiles` (the preview island's actual drawn hexes — see
- * `previewIslandBounds`) inside the viewport, for the landing page's locked
- * static preview (`HexMapRendererOptions.lockCamera`). Replaces the fixed
- * `PREVIEW_ZOOM` constant when locked, so the whole island stays on screen
+ * Zoom that fits `tiles` (the preview crop's actual drawn hexes — see
+ * `previewIslandBounds`, and `WorldModel.previewCropTiles` for what's in
+ * `tiles`) inside the viewport, for the landing page's locked static
+ * preview (`HexMapRendererOptions.lockCamera`). Replaces the fixed
+ * `PREVIEW_ZOOM` constant when locked, so the whole crop stays on screen
  * regardless of viewport size/aspect instead of only fitting at one assumed
  * size.
  *
@@ -1221,15 +1226,18 @@ export class HexMapRenderer {
         // choice, not a fog-margin one, so
         // FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM don't apply here.
         //
-        // landing-page-defects.md L4/L5: `previewIslandTiles` is the exact
-        // same tile set `rebuildTerrain`'s preview branch draws, and the
-        // camera centres on *that* box's own centre rather than on `at`
-        // (the suggested plot) — the plot is a scored interior grass hex,
-        // not the landmass's centroid, so centring on it left a gap on the
-        // short side of an asymmetric island while pushing the long side
-        // out of frame. `at` still decides *which* island (it's the flood
-        // fill's seed hex); it stops being the camera target.
-        const tiles = this.options.worldModel.previewIslandTiles(at);
+        // landing-page-defects.md L4/L5: `previewCropTiles` is the exact
+        // same tile set `rebuildTerrain`'s preview branch draws (the small
+        // radius crop around `at`, intersected with `at`'s own landmass —
+        // see that method's own doc comment for why it's an intersection,
+        // not just membership or just a radius), and the camera centres on
+        // *that* box's own centre rather than on `at` (the suggested plot)
+        // — the plot is a scored interior grass hex, not the crop's
+        // centroid, so centring on it left a gap on the short side of an
+        // asymmetric crop while pushing the long side out of frame. `at`
+        // still decides *which* island and *where* the crop is taken from;
+        // it stops being the camera target.
+        const tiles = this.options.worldModel.previewCropTiles(at);
         const bounds = previewIslandBounds(tiles);
         const zoom = previewFitZoom({
           tiles,
@@ -2287,29 +2295,32 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
-    // landing-page-defects.md L5: culled by landmass membership (computed
-    // once per rebuild here, then checked per-hex via a Set — not
-    // re-flooded per hex), not the old hexDistance disc, which drew
-    // whatever land fell inside it, including any other island a world seed
-    // happened to place nearby. `previewIslandTiles` itself is cached per
-    // centre inside WorldModel, so this is cheap even though rebuildTerrain
-    // runs on every camera change. This is also exactly the tile set
+    // landing-page-defects.md L5: culled by `previewCropTiles` — a small
+    // radius crop around `previewCenter` (deliberate framing, matching the
+    // mockup's own scale, not itself a bug) intersected with landmass
+    // membership, so a *foreign* island a world seed happened to place
+    // nearby within that same radius no longer bleeds in (computed once per
+    // rebuild here, then checked per-hex via a Set — not re-flooded per
+    // hex; `previewCropTiles`/`previewIslandTiles` are cached per centre
+    // inside WorldModel, so this is cheap even though rebuildTerrain runs
+    // on every camera change). This is also exactly the tile set
     // `settlementCameraOrigin`'s locked-preview branch (L4) fits the camera
     // to — the two must agree, or the framing goes wrong again (see that
     // method's own comment).
     const previewTileKeys = preview
-      ? new Set(worldModel.previewIslandTiles(previewCenter).map((c) => coordKey(c)))
+      ? new Set(worldModel.previewCropTiles(previewCenter).map((c) => coordKey(c)))
       : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
 
     for (const c of coords) {
       // zip 6a: before a settlement exists, this is the landing page's
-      // preview — one island, not a slice of the whole (unfogged) world.
-      // Water isn't drawn at all (matching how world mode treats sea — see
-      // rebuildTerrainFlat) and membership in `previewTileKeys` already
-      // excludes it (the flood fill only ever visits land), so this one
-      // check replaces both the old sea check and the old radius check.
+      // preview — a small crop of one island, not a slice of the whole
+      // (unfogged) world. Water isn't drawn at all (matching how world mode
+      // treats sea — see rebuildTerrainFlat) and membership in
+      // `previewTileKeys` already excludes it (`previewCropTiles` only ever
+      // returns land), so this one check replaces the old sea check and the
+      // old (membership-blind) radius check both.
       if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the

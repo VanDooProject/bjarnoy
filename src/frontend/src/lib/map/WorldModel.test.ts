@@ -7,7 +7,7 @@
 // perfect hexagon every other settlement in the demo produces.
 import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
-import { floodFillLandmass, PREVIEW_ISLAND_FALLBACK_RADIUS, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, WorldModel } from './WorldModel';
+import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -482,27 +482,29 @@ function key(c: AxialCoord): string {
 
 // landing-page-defects.md L5: the pre-founding preview's old cull was a
 // hexDistance disc, which draws whatever land falls inside it — including a
-// second, unrelated island. `floodFillLandmass` is the fix (landmass
-// membership instead of distance), tested here against a synthetic `isLand`
-// predicate rather than a real world seed — same "pure logic, tested
-// directly" reasoning HexMapRenderer.test.ts already applies to
-// previewFitZoom/worldLayerOrder, and it sidesteps having to go hunting for
-// a seed that happens to produce two islands in exactly the right places.
+// second, unrelated island. `floodFillLandmass` is the membership half of
+// the fix, tested here against a synthetic `isLand` predicate rather than a
+// real world seed — same "pure logic, tested directly" reasoning
+// HexMapRenderer.test.ts already applies to previewFitZoom/worldLayerOrder,
+// and it sidesteps having to go hunting for a seed that happens to produce
+// two islands in exactly the right places.
 describe('floodFillLandmass', () => {
-  it('returns only the previewed island — a second island within the old fallback radius is excluded', () => {
+  it('returns only the previewed island — a second island within PREVIEW_ISLAND_RADIUS is excluded', () => {
     const center: AxialCoord = { q: 0, r: 0 };
     const previewedIsland = hexesInRadius(center, 2);
-    // Centred 6 hexes away — within PREVIEW_ISLAND_FALLBACK_RADIUS (7) of
-    // `center`, so the old disc rule would have drawn it too.
+    // Centred 6 hexes away — within PREVIEW_ISLAND_RADIUS (7) of `center`,
+    // so the old (pre-L5) disc rule would have drawn it too.
     const otherIslandCenter: AxialCoord = { q: 6, r: 0 };
-    expect(hexDistance(center, otherIslandCenter)).toBeLessThanOrEqual(PREVIEW_ISLAND_FALLBACK_RADIUS);
+    expect(hexDistance(center, otherIslandCenter)).toBeLessThanOrEqual(PREVIEW_ISLAND_RADIUS);
     const otherIsland = hexesInRadius(otherIslandCenter, 2);
     const land = new Set([...previewedIsland, ...otherIsland].map(key));
 
     // Confirms the bug this guards against: the old radius-disc rule (still
-    // `previewIslandFallback`'s own safety-bound fallback) really does pull
-    // in the other island for this layout.
-    const oldRuleTiles = hexesInRadius(center, PREVIEW_ISLAND_FALLBACK_RADIUS).filter((c) => land.has(key(c)));
+    // `previewIslandFallback`'s own safety-bound fallback, and still half
+    // of `previewCropTiles`'s own intersection today) really does pull in
+    // the other island for this layout when used alone, with no membership
+    // check.
+    const oldRuleTiles = hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => land.has(key(c)));
     expect(oldRuleTiles.some((c) => otherIsland.some((o) => o.q === c.q && o.r === c.r))).toBe(true);
 
     const tiles = floodFillLandmass(center, (c) => land.has(key(c)), PREVIEW_ISLAND_FLOOD_MAX_RADIUS)!;
@@ -540,7 +542,7 @@ describe('WorldModel.previewIslandTiles', () => {
     // fast and deterministic.
     model.isLand = () => true;
     const tiles = model.previewIslandTiles({ q: 0, r: 0 });
-    const expected = hexesInRadius({ q: 0, r: 0 }, PREVIEW_ISLAND_FALLBACK_RADIUS);
+    const expected = hexesInRadius({ q: 0, r: 0 }, PREVIEW_ISLAND_RADIUS);
     expect(tiles).toHaveLength(expected.length);
   });
 
@@ -559,5 +561,86 @@ describe('WorldModel.previewIslandTiles', () => {
     const second = model.previewIslandTiles(center);
     expect(second).toBe(first); // same cached array, not just equal content
     expect(calls).toBe(callsAfterFirst);
+  });
+});
+
+// landing-page-defects.md L4/L5's own corrected fix: `previewCropTiles` is
+// what `rebuildTerrain`'s preview cull and `settlementCameraOrigin`'s L4
+// camera fit actually use, and it is an INTERSECTION of two things that
+// each get one part of the picture right on their own and wrong on their
+// own:
+//   - `previewIslandTiles` (landmass membership alone) correctly excludes a
+//     foreign island, but places no bound on how big the previewed
+//     island's own crop can be — an island can run to dozens of hexes,
+//     which (an earlier draft of this fix found out the hard way, by
+//     regressing it) is too big to read at any usable zoom beside the hero
+//     column: previewFitZoom's own minZoom clamp (see its call site in
+//     settlementCameraOrigin) then rescues an under-sized zoom back up
+//     to minZoom, which re-introduces overflow past the viewport edge —
+//     the exact bleed the coordinator's screenshot review caught.
+//   - The old pre-L5 radius disc alone correctly bounds the crop's size,
+//     but draws a foreign island's land within the same radius too.
+// Both properties are asserted together below, and in the same test where
+// it's meaningful (an island that is both foreign *and* oversized), since
+// either bug alone can hide the other if only one is checked.
+describe('WorldModel.previewCropTiles', () => {
+  it('excludes a foreign island within PREVIEW_ISLAND_RADIUS — the L5 property', () => {
+    const model = new WorldModel(1);
+    const center: AxialCoord = { q: 0, r: 0 };
+    const otherIslandCenter: AxialCoord = { q: 6, r: 0 };
+    expect(hexDistance(center, otherIslandCenter)).toBeLessThanOrEqual(PREVIEW_ISLAND_RADIUS);
+    const previewedIsland = new Set(hexesInRadius(center, 2).map(key));
+    const otherIsland = hexesInRadius(otherIslandCenter, 2);
+    const land = new Set([...previewedIsland, ...otherIsland.map(key)]);
+    model.isLand = (q: number, r: number) => land.has(key({ q, r }));
+
+    const tiles = model.previewCropTiles(center);
+    const tileKeys = new Set(tiles.map(key));
+    for (const c of otherIsland) expect(tileKeys.has(key(c))).toBe(false);
+    for (const k of previewedIsland) expect(tileKeys.has(k)).toBe(true);
+  });
+
+  it('never returns a tile beyond PREVIEW_ISLAND_RADIUS, even for an island that is actually much bigger — the L4 property', () => {
+    const model = new WorldModel(1);
+    // An unbroken landmass everywhere, same trick `previewIslandTiles`'s own
+    // safety-bound test uses — stands in for a real island bigger than the
+    // crop radius (WorldGenerationOptions allows islands well past 7 hexes
+    // across) without needing to hunt for a specific seed.
+    model.isLand = () => true;
+    const center: AxialCoord = { q: 0, r: 0 };
+
+    const tiles = model.previewCropTiles(center);
+    for (const c of tiles) {
+      expect(hexDistance(center, c)).toBeLessThanOrEqual(PREVIEW_ISLAND_RADIUS);
+    }
+    // The crop is capped, not merely "usually small" — it's exactly the
+    // full disc when every tile in range is land, matching the mockup's
+    // deliberately small framing (docs/design/img/but_building_on_map.png)
+    // rather than "however big the connected landmass actually is".
+    expect(tiles).toHaveLength(hexesInRadius(center, PREVIEW_ISLAND_RADIUS).length);
+  });
+
+  it('both at once: a foreign, also-oversized island neither leaks in nor gets the crop drawn past its own radius', () => {
+    const model = new WorldModel(1);
+    const center: AxialCoord = { q: 0, r: 0 };
+    // The previewed "island" and the foreign one are both unbroken
+    // landmasses, separated only by one ring of sea at exactly
+    // PREVIEW_ISLAND_RADIUS + 3 from `center` (comfortably past the crop
+    // radius, so it can't leak in by radius alone either) — this is the
+    // single scenario that would fail if either half of the intersection
+    // were dropped.
+    const seaRingDistance = PREVIEW_ISLAND_RADIUS + 3;
+    model.isLand = (q: number, r: number) => hexDistance(center, { q, r }) !== seaRingDistance;
+
+    const tiles = model.previewCropTiles(center);
+    for (const c of tiles) {
+      expect(hexDistance(center, c)).toBeLessThanOrEqual(PREVIEW_ISLAND_RADIUS);
+    }
+    // Nothing from beyond the sea ring (the "foreign" side) is included —
+    // it's cut off by radius alone here, but see the first test in this
+    // block for the case where radius alone would not have caught it.
+    for (const c of tiles) {
+      expect(hexDistance(center, c)).toBeLessThan(seaRingDistance);
+    }
   });
 });

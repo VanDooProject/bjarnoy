@@ -87,14 +87,26 @@ let previewPollHandle: ReturnType<typeof setInterval> | undefined;
 // `screenBiasX` is already a *fraction of viewport width*, not a pixel
 // count (see HexMapRenderer's `biasedCenterX`/`previewFitZoom`), so its
 // value alone can't be read off the hero's pixel geometry directly without
-// picking some reference viewport width to divide by — 1920 (a common
-// desktop width) is used here, and re-deriving 0.16 this way lands within
-// half a percentage point of the original hand-tuned value, which is what
-// you'd expect if that value actually was tuned by eye against a
-// similarly-sized screen. The win isn't a different number, it's that this
-// one now has a formula a hero-column resize keeps in step with, instead of
-// a second magic number silently drifting out of sync with the first.
-const HERO_REFERENCE_VIEWPORT_WIDTH_PX = 1920;
+// picking some reference viewport width to divide by.
+//
+// A first attempt at this used 1920 (a common desktop width) as that
+// reference and landed within half a point of the original hand-tuned 0.16
+// — but that was the wrong choice, caught by a direct pixel comparison of
+// before/after screenshots at 1440x900 (scripts/screenshot-helpers/
+// flow.mjs's own capture size): since clearance in *pixels* past the hero
+// column scales with the actual viewport width for a fixed bias fraction,
+// picking a reference wider than the viewport actually being framed
+// under-shoots the real clearance needed — 0.16 left only ~515px clear at
+// 1440px wide, short of the ~600px the hero column's own box (576px) plus a
+// gutter needs. 1440 is used as the reference instead: the narrowest
+// viewport this framing is actually verified against, so the guarantee it
+// buys (the preview island's own worst-case crop, a full
+// WorldModel.PREVIEW_ISLAND_RADIUS disc, clearing the hero column and not
+// touching the right edge — see HexMapRenderer.test.ts's own regression
+// test for the exact numbers) holds at 1440 and only gets more comfortable
+// at any wider viewport, rather than being a hand-tuned constant re-derived
+// from an untested guess at "big enough".
+const HERO_REFERENCE_VIEWPORT_WIDTH_PX = 1440;
 const HERO_RIGHT_EDGE_PX = 56 + 520; // `.hero`'s own left + max-width, below
 const HERO_MIN_GUTTER_PX = 40; // breathing room past the hero's own edge before the island may start
 const LANDING_PREVIEW_SCREEN_BIAS_X =

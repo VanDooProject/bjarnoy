@@ -87,33 +87,53 @@ const DEMO_RIVAL_CART_OFFSET: AxialCoord = { q: 6, r: -4 };
 // unexplored starting immediately at the border.
 export const FOG_SCOUT_RING = 3;
 
-// landing-page-defects.md L5: the pre-founding preview used to cull by a
-// hexDistance disc around the suggested plot, which draws whatever land
-// happens to fall inside that disc — including a second, unrelated island,
-// if a world seed happened to place one within range. `previewIslandTiles`
-// below fixes that by culling on landmass membership instead, which is what
-// "one island" actually means. It mirrors the backend's own island
-// partition (`WorldGenerator.FloodFill`, WorldGenerator.cs ~L106) exactly:
-// both flood-fill outward from a seed hex through the same six neighbours
+// landing-page-defects.md L5/L4 (see the correction in that doc's own
+// history — an earlier draft of this fix wrongly removed the radius crop
+// entirely; read on for why that was itself a regression):
+//
+// The pre-founding preview used to cull by a hexDistance disc around the
+// suggested plot, which draws whatever land happens to fall inside that
+// disc — including a second, unrelated island, if a world seed happened to
+// place one within range. The disc itself is *not* the bug: the mockup
+// (docs/design/img/but_building_on_map.png) shows a deliberately small crop
+// of terrain, maybe 5-6 hexes across, framed beside the hero column — a
+// real island can run to dozens of hexes, far too big to read at any usable
+// zoom next to the hero copy, so cropping to a small radius around the plot
+// is the correct framing choice, not a wrong abstraction to remove. The
+// actual bug is narrower: that radius disc doesn't check landmass
+// membership, so a *foreign* island's land within the same radius shows up
+// too.
+//
+// The fix is therefore an intersection, not a replacement: a tile is drawn
+// only if it is land, is part of `previewCenter`'s own connected landmass
+// (`previewIslandTiles`'s flood fill, below), AND is within
+// `PREVIEW_ISLAND_RADIUS` hexes of `previewCenter` (`previewCropTiles`,
+// further below, is that intersection — it's what `rebuildTerrain`'s
+// preview cull and `settlementCameraOrigin`'s L4 camera fit actually use).
+export const PREVIEW_ISLAND_RADIUS = 7;
+// The flood fill itself mirrors the backend's own island partition
+// (`WorldGenerator.FloodFill`, WorldGenerator.cs ~L106) exactly: both
+// flood-fill outward from a seed hex through the same six neighbours
 // (`HexCoord.Neighbours()` there, `neighbors()` here — same direction-vector
 // order), and `worldGenerator.ts`'s terrain sampling is already a bit-exact
 // port (see that module's own header comment), so both sides agree on which
 // hexes are land in the first place.
 //
 // `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` is a generous safety backstop, not the
-// expected case — an ordinary starter island the generator actually
-// produces is far smaller than this. It exists because `rebuildTerrain`
-// calls `previewIslandTiles` on every camera rebuild (see the cache below),
-// and a malformed/pathological seed producing an unbroken landmass must not
-// be allowed to hang that on an unbounded flood fill. Hitting the bound
-// falls back to `PREVIEW_ISLAND_FALLBACK_RADIUS`'s pre-L5 hexDistance-disc
-// rule instead of drawing a silently-truncated island.
+// expected case — deliberately much larger than `PREVIEW_ISLAND_RADIUS`
+// itself so the flood fill can correctly answer "is this the same landmass"
+// for tiles right at the crop's own edge, rather than being capped exactly
+// at the crop radius (which would wrongly call a landmass "foreign" the
+// instant it briefly narrows to less than one hex wide inside the crop
+// before widening again). It matters less than it used to now that
+// `previewCropTiles` caps the *drawn* set to `PREVIEW_ISLAND_RADIUS`
+// regardless, but a malformed/pathological seed producing an unbroken
+// landmass must still not be allowed to hang `rebuildTerrain` (which calls
+// this on every camera rebuild — see the cache below) on an unbounded flood
+// fill. Hitting the bound falls back to the pre-L5 hexDistance-disc rule
+// (still `PREVIEW_ISLAND_RADIUS`) instead of drawing a silently-truncated
+// island.
 export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
-// The pre-L5 behaviour, kept only as `previewIslandTiles`'s safety-bound
-// fallback (see above) — matches the old `PREVIEW_ISLAND_RADIUS` constant
-// that used to live in HexMapRenderer.ts before this fix. Exported so a
-// test can assert the fallback rule directly rather than re-deriving 7.
-export const PREVIEW_ISLAND_FALLBACK_RADIUS = 7;
 
 /**
  * Iterative flood fill (an explicit queue, not recursion — the same "one
@@ -283,19 +303,17 @@ export class WorldModel {
   }
 
   /**
-   * The preview island's drawn tiles for a given `previewCenter` —
-   * `landing-page-defects.md` L5's landmass-membership cull, replacing the
-   * old hexDistance disc (see the module-level comment on
-   * `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` above for why a disc was wrong and
-   * what this matches instead). Every call for a given coordinate is the
-   * same pure answer (terrain never changes after generation), so results
-   * are cached by coordinate key: `HexMapRenderer.rebuildTerrain` calls this
-   * on every camera rebuild (pan/zoom/resize), not just once when the
-   * preview first mounts, and flood-filling from scratch every frame would
-   * be real, avoidable work — the same reasoning `islandFootprint` above
-   * already applies to the world-map island-label case. `settlementCameraOrigin`
-   * calls this too (L4), so the camera fit measures exactly the set of
-   * hexes the cull draws, per this pair's own shared design note.
+   * `previewCenter`'s whole connected landmass — the *membership* half of
+   * `previewCropTiles`'s intersection (see that method and the module-level
+   * comment on `PREVIEW_ISLAND_RADIUS` above for why membership alone isn't
+   * the crop). Every call for a given coordinate is the same pure answer
+   * (terrain never changes after generation), so results are cached by
+   * coordinate key: `previewCropTiles` (and so `rebuildTerrain`/
+   * `settlementCameraOrigin`) calls this on every camera rebuild (pan/zoom/
+   * resize), not just once when the preview first mounts, and
+   * flood-filling from scratch every frame would be real, avoidable work —
+   * the same reasoning `islandFootprint` above already applies to the
+   * world-map island-label case.
    */
   previewIslandTiles(center: AxialCoord): AxialCoord[] {
     const key = coordKey(center);
@@ -311,7 +329,32 @@ export class WorldModel {
 
   /** The pre-L5 rule, kept only as `previewIslandTiles`'s safety-bound fallback (see there). */
   private previewIslandFallback(center: AxialCoord): AxialCoord[] {
-    return hexesInRadius(center, PREVIEW_ISLAND_FALLBACK_RADIUS).filter((c) => this.isLand(c.q, c.r));
+    return hexesInRadius(center, PREVIEW_ISLAND_RADIUS).filter((c) => this.isLand(c.q, c.r));
+  }
+
+  /**
+   * The landing page's pre-founding preview crop — the tiles
+   * `HexMapRenderer.rebuildTerrain`'s preview branch actually draws and
+   * `settlementCameraOrigin`'s locked camera (L4) actually fits/centres on,
+   * so the two always measure the same set (their own "must land together"
+   * note — landing-page-defects.md L4/L5).
+   *
+   * This is deliberately an *intersection*, not `previewIslandTiles` alone:
+   * `PREVIEW_ISLAND_RADIUS` is a real framing choice (the mockup,
+   * docs/design/img/but_building_on_map.png, shows a small ~5-6 hex plot of
+   * terrain beside the hero column, not a whole island — an island can run
+   * to dozens of hexes, far too big to read at any usable zoom there), so
+   * it stays even though `previewIslandTiles` alone would already exclude a
+   * foreign landmass. Dropping the radius and drawing the *whole* island
+   * (an earlier draft of this fix's mistake) regresses the framing this
+   * crop was already getting right: too large to fit beside the hero at a
+   * readable zoom, spilling under both the hero copy and the onboarding
+   * tray. Radius-only (the pre-L5 rule) has the opposite problem: it
+   * doesn't check membership, so a foreign island within the same radius
+   * shows up too. Only the intersection gets both right.
+   */
+  previewCropTiles(center: AxialCoord): AxialCoord[] {
+    return this.previewIslandTiles(center).filter((c) => hexDistance(center, c) <= PREVIEW_ISLAND_RADIUS);
   }
 
   getTile(q: number, r: number): Tile {

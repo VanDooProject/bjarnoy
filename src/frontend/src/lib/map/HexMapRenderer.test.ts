@@ -8,6 +8,7 @@ import {
   terrainTitleFor,
   worldLayerOrder,
 } from './HexMapRenderer';
+import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
 import { hexesInRadius, type AxialCoord } from '../hex/coords';
 
@@ -302,6 +303,57 @@ describe('previewFitZoom', () => {
       return viewport.width / 2 + (p.centerX - plotPx.centerX) * oldZoom + screenBiasX * viewport.width;
     });
     expect(oldScreenXs.some((x) => x <= 0 || x >= viewport.width)).toBe(true);
+  });
+
+  // Regression test for the coordinator-caught follow-up: an earlier draft
+  // of the L4/L5 fix dropped PREVIEW_ISLAND_RADIUS entirely and culled
+  // purely by landmass membership, so a real (larger-than-7-hex) island
+  // rendered whole. previewFitZoom's own `minZoom` clamp then rescued an
+  // under-sized natural zoom back up to `minZoom` — which is *bigger* than
+  // the zoom the fit says is safe, reintroducing overflow past the
+  // viewport, under the hero column, and under the onboarding tray (see
+  // WorldModel.PREVIEW_ISLAND_RADIUS's doc comment for the full story).
+  // `WorldModel.previewCropTiles` fixes this by intersecting membership
+  // with a `PREVIEW_ISLAND_RADIUS`-hex disc, so a full disc of that radius
+  // (the largest crop it can ever produce — any real island's crop is a
+  // subset of this, never a superset) is the actual worst case to check
+  // the fit against, at the exact viewport/bias LandingView really uses.
+  it('the largest possible crop (PREVIEW_ISLAND_RADIUS, all land) fits at the real viewport/bias without needing the minZoom clamp', () => {
+    const worstCaseCrop = hexesInRadius({ q: 0, r: 0 }, PREVIEW_ISLAND_RADIUS);
+    // Mirrors LandingView.vue's own LANDING_PREVIEW_SCREEN_BIAS_X formula —
+    // (HERO_RIGHT_EDGE_PX + HERO_MIN_GUTTER_PX) / (2 * HERO_REFERENCE_VIEWPORT_WIDTH_PX),
+    // with that reference now 1440 (this exact test viewport) rather than a
+    // wider guess — see that constant's own doc comment for why a reference
+    // wider than the viewport being framed under-shoots real pixel
+    // clearance. Duplicated here rather than imported: a <script setup>
+    // const isn't an importable export of a .vue SFC.
+    const screenBiasX = (56 + 520 + 40) / (2 * 1440);
+    // scripts/screenshot-helpers/flow.mjs's own capture size — the same
+    // viewport the coordinator's screenshot review measured against.
+    const viewport = { width: 1440, height: 900 };
+    const minZoom = 0.05;
+    const maxZoom = 4;
+
+    const zoom = previewFitZoom({ tiles: worstCaseCrop, screenBiasX, viewport, fallbackZoom: 0.6, minZoom, maxZoom });
+    // The fit must be natural, not rescued by the minZoom clamp — a
+    // clamped zoom is bigger than the fit says is safe, which is exactly
+    // how the island ended up bleeding off the right edge in the reported
+    // regression (Math.max(minZoom, zoom) only ever *enlarges* an
+    // undersized zoom, it never shrinks an oversized one).
+    expect(zoom).toBeGreaterThan(minZoom);
+
+    const bounds = previewIslandBounds(worstCaseCrop)!;
+    const pixelCenterOf = (c: AxialCoord) => previewIslandBounds([c])!;
+    for (const c of worstCaseCrop) {
+      const p = pixelCenterOf(c);
+      const screenX = viewport.width / 2 + (p.centerX - bounds.centerX) * zoom + screenBiasX * viewport.width;
+      // No island pixel past either viewport edge...
+      expect(screenX).toBeGreaterThan(0);
+      expect(screenX).toBeLessThan(viewport.width);
+      // ...and, specifically, none left of x=600 — the coordinator's own
+      // acceptance bound for "the hero column must be completely clear".
+      expect(screenX).toBeGreaterThan(600);
+    }
   });
 });
 
