@@ -3,7 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import { DEMO_MODE } from './config';
 import { i18n, initLocale } from './i18n';
-import { waterDebugFlags, waterDebugTuning } from './lib/map/water/waterDebug';
+import { waterDebugFlags, waterDebugTuning, waterPerfStats } from './lib/map/water/waterDebug';
 import { fogDebugFlags, fogDebugTuning, fogPerfStats } from './lib/map/HexMapRenderer';
 import { zoomTransitionTuning } from './lib/map/zoomTransition';
 import { router } from './router';
@@ -47,6 +47,9 @@ if (DEMO_MODE) {
   // polls this object, so anything measuring a cull's effect (wave/terrain
   // drawn vs culled) can sample it directly instead of scraping the DOM.
   (window as unknown as { __fogPerf: typeof fogPerfStats }).__fogPerf = fogPerfStats;
+  // Same, for the water layer's counters (bake ms/size/count) — WaterPerfPanel
+  // polls this object; a script measuring the bake needs the same read.
+  (window as unknown as { __waterPerf: typeof waterPerfStats }).__waterPerf = waterPerfStats;
   // Zoom-driven world<->settlement transition's tuning — the console-side
   // twin of ZoomDebugPanel (see zoomTransition.ts), exposed on the same
   // terms as __waterTuning/__fogTuning above.

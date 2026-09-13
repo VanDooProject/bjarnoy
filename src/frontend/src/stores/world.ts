@@ -279,6 +279,12 @@ export const useWorldStore = defineStore('world', {
     // `ImageBitmap` is a plain, non-reactive resource, not app state Vue
     // needs to proxy.
     fogMaskBitmap: null as ImageBitmap | null,
+    /**
+     * `WorldModel.fogSignature()` as of the last demo fog bake, so the poll
+     * can skip a bake that would reproduce the mask already on screen. Null
+     * until the first one lands.
+     */
+    demoFogSignature: null as string | null,
     // The world's hex radius (WorldResponse.radius), set once bootstrapLiveWorld
     // resolves — fetchFogMask's caller needs it to place the mask texture
     // (HexMapRenderer.setFogMask's own worldMaskBounds computation).
@@ -1183,12 +1189,23 @@ export const useWorldStore = defineStore('world', {
       // next overlap worse. That runaway pile-up, not any single bake, is
       // what could stall the page for tens of seconds under load.
       if (fogPerfStats.maskFetchInFlight) return;
+      // Nothing the mask is baked from has moved since the last bake, so the
+      // bake would produce the same bitmap. Fog changes when territory is
+      // claimed or a settlement's vision grows — not on a timer — so on this
+      // four-second poll the answer is almost always "skip", and what used to
+      // be ~30ms of main thread every four seconds with the camera still is
+      // now a string compare. See WorldModel.fogSignature.
+      const signature = this.model.fogSignature();
+      if (signature === this.demoFogSignature) return;
 
       fogPerfStats.maskFetchInFlight = true;
       const startedAt = performance.now();
       try {
         const bitmap = await buildDemoFogMask(this.model);
         if (!bitmap) return;
+        // Recorded only once a bake actually produced a mask, so a bail-out
+        // (no settlement yet) doesn't suppress the first real bake.
+        this.demoFogSignature = signature;
         this.fogMaskBitmap?.close();
         this.fogMaskBitmap = markRaw(bitmap);
         this.worldRadius = DEMO_MASK_RADIUS;

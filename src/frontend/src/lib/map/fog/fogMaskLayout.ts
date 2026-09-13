@@ -71,8 +71,22 @@ export function diagonalNeighboursForInterpolation(texel: MaskTexel): MaskTexel[
  * side so every even-parity (real-hex) texel's odd-parity interpolation
  * neighbours are included too.
  */
+/**
+ * `worldMaskBounds` results by radius.
+ *
+ * The function is pure but walks `hexesInRadius`, which is ~25k coords at the
+ * live world's radius of 90 and allocates one object each — measured at a few
+ * milliseconds. It is called at least twice per fog-mask cycle (once inside
+ * the bake, once again via `fogMaskPlacement`) for a radius that changes
+ * approximately never, so the whole thing is answered from here after the
+ * first call. A handful of entries at most, one per distinct world radius.
+ */
+const boundsByRadius = new Map<number, MaskBounds>();
+
 export function worldMaskBounds(radius: number): MaskBounds {
   if (radius < 0) throw new RangeError('radius must not be negative');
+  const cached = boundsByRadius.get(radius);
+  if (cached) return cached;
 
   let minU = Infinity;
   let minV = Infinity;
@@ -92,14 +106,18 @@ export function worldMaskBounds(radius: number): MaskBounds {
   const boundsMaxU = maxU + 2;
   const boundsMaxV = maxV + 2;
 
-  return {
+  // Frozen: it is handed out to every caller from the cache above, and a
+  // mutation by one of them would silently follow the rest.
+  const bounds = Object.freeze({
     minU: boundsMinU,
     minV: boundsMinV,
     maxU: boundsMaxU,
     maxV: boundsMaxV,
     width: boundsMaxU - boundsMinU,
     height: boundsMaxV - boundsMinV,
-  };
+  });
+  boundsByRadius.set(radius, bounds);
+  return bounds;
 }
 
 /**

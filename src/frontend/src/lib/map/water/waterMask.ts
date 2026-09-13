@@ -7,7 +7,7 @@
 // texture — the same shape of thing `demoFogMask` bakes, over a different
 // grid (waterMaskLayout.ts) and with a different transform.
 import { hexesInRadius } from '../../hex/coords';
-import { isoGridPosition, isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
+import { isoPixelToAxial, isoTopPoints } from '../../hex/geometry';
 import type { Tile } from '../types';
 import type { WaterMaskRegion } from './waterMaskLayout';
 
@@ -22,10 +22,27 @@ export interface TerrainLookup {
   /**
    * The whole tile, when the caller has one — only used to spot the coastal
    * water variants that carry a prop (`hasWaterProp`). Optional so a test can
-   * still pass a bare `isLand`, and because a caller that omits it gets a mask
-   * whose A channel is simply all zero: no prop tiles, nothing muted.
+   * still pass a bare `isLand`, and because a caller that omits neither this
+   * nor `hasProp` gets a mask whose A channel is simply all zero: no prop
+   * tiles, nothing muted.
    */
   getTile?(q: number, r: number): Tile;
+  /**
+   * `hasWaterProp` for this hex, when the caller can answer it without
+   * materialising a `Tile`.
+   *
+   * Preferred over `getTile` where both are present, and it exists because of
+   * where the answer is needed. The bake asks this question once per *water
+   * texel* — well over half a million of them on a zoomed-out map — and
+   * `getTile` makes the caller build (and cache) a whole tile to answer it:
+   * measured, the settlement bake spent 2.3x what the world bake spent, purely
+   * on going through `WorldModel.getTile` rather than a terrain-only lookup.
+   * It also cannot be answered at all by a caller that has no `Tile` to hand,
+   * which is precisely the bake worker's situation — every input to
+   * `hasWaterProp` is derivable from the world seed except which hexes carry a
+   * building, and that is a short list easily sent across.
+   */
+  hasProp?(q: number, r: number): boolean;
 }
 
 /**
@@ -304,15 +321,30 @@ export function waterNoiseSeed(q: number, r: number): number {
 export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHeight: number, terrain: TerrainLookup): WaterMask {
   const { width, height, texelWorldSize, rect } = region;
   const count = width * height;
+  // `hasProp` where the caller has it, `getTile` where it only has that, and
+  // null where it has neither — which is the documented way to ask for an
+  // all-zero A channel.
+  const propAt: ((q: number, r: number) => boolean) | null = terrain.hasProp
+    ? (q, r) => terrain.hasProp!(q, r)
+    : terrain.getTile
+      ? (q, r) => hasWaterProp(terrain.getTile!(q, r))
+      : null;
   const water = new Uint8Array(count);
   const land = new Uint8Array(count);
   const seed = new Uint8Array(count);
   const prop = new Uint8Array(count);
+  // Which hex each texel fell in, kept for the refine pass below rather than
+  // recomputed there. `isoPixelToAxial` is cheap now but not free, and the
+  // refine pass would otherwise ask it the exact same question a second time
+  // for every texel near a coast — which is most of the texels that matter.
+  const hexQ = new Int32Array(count);
+  const hexR = new Int32Array(count);
   let propTexels = 0;
 
-  // One `isoPixelToAxial` per texel is the bake's whole cost. It is a rounded
-  // estimate plus at most seven point-in-hexagon tests, and at 1024^2 in the
-  // clamped worst case that is the number `waterMaskBakeMs` reports.
+  // One `isoPixelToAxial` per texel: a rounded estimate plus at most seven
+  // point-in-hexagon tests. At 1024^2 in the clamped worst case that, plus the
+  // terrain lookup beside it, is about a sixth of what `waterMaskBakeMs`
+  // reports; the distance transforms below are most of the rest.
   for (let y = 0; y < height; y++) {
     const wy = rect.minY + (y + 0.5) * texelWorldSize;
     const row = y * width;
@@ -320,10 +352,12 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       const wx = rect.minX + (x + 0.5) * texelWorldSize;
       const hex = isoPixelToAxial({ x: wx, y: wy }, tileWidth, tileHeight);
       const isLand = terrain.isLand(hex.q, hex.r);
+      hexQ[row + x] = hex.q;
+      hexR[row + x] = hex.r;
       land[row + x] = isLand ? 1 : 0;
       water[row + x] = isLand ? 0 : 1;
       seed[row + x] = waterNoiseSeed(hex.q, hex.r);
-      if (!isLand && terrain.getTile && hasWaterProp(terrain.getTile(hex.q, hex.r))) {
+      if (!isLand && propAt !== null && propAt(hex.q, hex.r)) {
         prop[row + x] = 1;
         propTexels++;
       }
@@ -354,6 +388,8 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
 
   const reachWorld = FOAM_REACH_TILES * tileWidth;
   const nearSpanWorld = NEAR_SPAN_TILES * tileWidth;
+  // isoGridPosition's own column pitch, hoisted for the inlined copy below.
+  const colPitch = tileWidth * 0.75;
 
   // Distance out of the prop hexes, for the A channel's mute ramp. The same
   // transform the distance field itself uses, so this is one extra O(n) pass —
@@ -362,6 +398,26 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
   // are a thin set to begin with).
   const distanceFromProp = propTexels > 0 ? euclideanDistanceTransform(prop, width, height, yCurvature) : null;
   const propFadeWorld = PROP_MUTE_FADE_TILES * tileWidth;
+
+  // The refine pass's candidate list for one hex, reused across the run of
+  // texels that fall in it.
+  //
+  // A texel is 21 world units against a 168-wide tile, so a hex spans roughly
+  // eight of them across and the pass walks them in row-major order: the hex
+  // under the cursor changes about one texel in eight, while the 37 `isLand`
+  // lookups that decide which neighbours are of the opposite kind are the
+  // pass's dominant cost. Keeping the last hex's answer turns those 37 lookups
+  // per texel into 37 per *hex*. The candidate set and the order it is visited
+  // in are exactly what the uncached loop produced, so the minimum taken over
+  // it is the same number.
+  const candX = new Float64Array(disc.length);
+  const candY = new Float64Array(disc.length);
+  let candCount = 0;
+  // -0x7fffffff rather than 0: (0, 0) is a real hex, and starting on it would
+  // reuse an empty candidate list for whichever texel genuinely lands there.
+  let candQ = -0x7fffffff;
+  let candR = -0x7fffffff;
+  let candWater = false;
 
   const data = new Uint8Array(count * 4);
   for (let y = 0; y < height; y++) {
@@ -379,19 +435,32 @@ export function bakeWaterMask(region: WaterMaskRegion, tileWidth: number, tileHe
       let near = isWater ? rasterOutward : -rasterInward;
       if (Math.abs(near) < refineWithin) {
         const wx = rect.minX + (x + 0.5) * texelWorldSize;
-        const hex = isoPixelToAxial({ x: wx, y: wy }, tileWidth, tileHeight);
-        let best = Infinity;
-        for (const offset of disc) {
-          const q = hex.q + offset.q;
-          const r = hex.r + offset.r;
-          if (terrain.isLand(q, r) === isWater) {
-            const origin = isoGridPosition({ q, r }, tileWidth, tileHeight);
-            // Both the sample point and the hex are lifted into ground space,
-            // so the resulting band is a constant width *on the ground* and
-            // therefore reads as lying on it.
-            const d = hexMitreDistance(wx, wy / squash, origin.x, origin.y / squash, planes);
-            if (d < best) best = d;
+        const hq = hexQ[i];
+        const hr = hexR[i];
+        if (hq !== candQ || hr !== candR || isWater !== candWater) {
+          candQ = hq;
+          candR = hr;
+          candWater = isWater;
+          candCount = 0;
+          for (let d = 0; d < disc.length; d++) {
+            const q = hq + disc[d].q;
+            const r = hr + disc[d].r;
+            if (terrain.isLand(q, r) !== isWater) continue;
+            // isoGridPosition, inlined: a Point object per candidate hex was
+            // the largest source of garbage left in the bake.
+            const grow = r + (q - (q & 1)) / 2;
+            candX[candCount] = q * colPitch;
+            candY[candCount] = (grow * tileHeight + (q & 1 ? tileHeight / 2 : 0)) / squash;
+            candCount++;
           }
+        }
+        let best = Infinity;
+        for (let d = 0; d < candCount; d++) {
+          // Both the sample point and the hex are lifted into ground space, so
+          // the resulting band is a constant width *on the ground* and
+          // therefore reads as lying on it.
+          const dist = hexMitreDistance(wx, wy / squash, candX[d], candY[d], planes);
+          if (dist < best) best = dist;
         }
         // Distance to the nearest hex of the opposite kind is the distance to
         // the coastline from either side, and it goes to zero on the shared

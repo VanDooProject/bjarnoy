@@ -586,9 +586,60 @@ describe('useWorldStore refreshDemoFogMask', () => {
     await Promise.all([firstRefresh, secondRefresh]);
     expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
 
+    // Once the in-flight bake has settled, a later poll must still go through
+    // — this isn't a one-shot latch. The fog has to actually move for that,
+    // since an unchanged fog is now skipped (see the test below); founding a
+    // settlement claims territory, which is exactly what moves it.
+    buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
+    store.model.foundSettlement('player-1', 'You', 'Second', { q: 20, r: 20 });
+    await store.refreshDemoFogMask();
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
+  });
+
+  // The bake is ~30ms of main thread over a ~30k-texel grid, and it was polled
+  // on the same four-second interval as live mode's mask *fetch* — so with the
+  // camera sitting perfectly still, demo mode dropped a frame every four
+  // seconds re-deriving a bitmap identical to the one already on screen. Fog
+  // moves when territory is claimed or a settlement's vision grows, not on a
+  // timer, so the poll now compares WorldModel.fogSignature() first.
+  it('skips the bake when nothing the fog is drawn from has changed', async () => {
+    buildDemoFogMask.mockReset();
+    buildDemoFogMask.mockResolvedValue({ close: vi.fn() });
+    const store = await loadStoreModule(true);
+
+    await store.refreshDemoFogMask();
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
+
+    // Several more poll ticks with nothing happening in between.
+    await store.refreshDemoFogMask();
+    await store.refreshDemoFogMask();
+    await store.refreshDemoFogMask();
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
+
+    // ...and it is not a latch: claiming territory moves the fog, so the next
+    // tick bakes again.
+    store.model.foundSettlement('player-1', 'You', 'Outpost', { q: 30, r: 30 });
+    await store.refreshDemoFogMask();
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
+  });
+
+  // A bake that produced nothing (no settlement founded yet, so there is no
+  // fog to draw) must not record its signature — otherwise the very first
+  // real bake, once a settlement exists, would be skipped and the map would
+  // render with no fog at all until something else happened to change it.
+  it('does not let a bail-out suppress the first real bake', async () => {
+    buildDemoFogMask.mockReset();
+    buildDemoFogMask.mockResolvedValueOnce(null);
+    const store = await loadStoreModule(true);
+
+    await store.refreshDemoFogMask();
+    expect(buildDemoFogMask).toHaveBeenCalledTimes(1);
+    expect(store.fogMaskBitmap).toBeNull();
+
     buildDemoFogMask.mockResolvedValueOnce({ close: vi.fn() });
     await store.refreshDemoFogMask();
     expect(buildDemoFogMask).toHaveBeenCalledTimes(2);
+    expect(store.fogMaskBitmap).not.toBeNull();
   });
 });
 
