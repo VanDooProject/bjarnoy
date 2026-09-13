@@ -1,0 +1,46 @@
+# Prunes old ghcr.io/VanDooProject/bjarnoy image versions (see
+# scripts/cleanup-ghcr-packages.mjs for the retention policy) so the org's
+# Actions+Packages storage quota doesn't silently fill up again.
+#
+# Scheduled runs stay in dry-run mode - logging what they would delete,
+# deleting nothing - until the repository variable PACKAGE_CLEANUP_LIVE is
+# set to "true" (Settings > Secrets and variables > Actions > Variables).
+# Flip it once a few dry runs look right. A manual run can always override
+# this with the dry_run input below.
+name: Package cleanup
+
+on:
+  schedule:
+    - cron: "30 3 * * 1" # weekly, Monday 03:30 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview deletions without actually deleting
+        type: boolean
+        default: true
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine dry-run mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=${{ vars.PACKAGE_CLEANUP_LIVE != 'true' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prune old ghcr.io package versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: ${{ github.event.repository.name }}
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+        run: node scripts/cleanup-ghcr-packages.mjs
