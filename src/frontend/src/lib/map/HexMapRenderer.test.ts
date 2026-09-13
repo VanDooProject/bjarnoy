@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { landfallBurstFrames, plotRippleFrames, previewFitZoom, terrainTitleFor, worldLayerOrder } from './HexMapRenderer';
+import {
+  attentionPulseFrame,
+  landfallBurstFrames,
+  plotRippleFrames,
+  previewFitZoom,
+  previewIslandBounds,
+  terrainTitleFor,
+  worldLayerOrder,
+} from './HexMapRenderer';
+import { PREVIEW_ISLAND_RADIUS } from './WorldModel';
 import type { RiverTile, Tile } from './types';
-import type { AxialCoord } from '../hex/coords';
+import { hexesInRadius, type AxialCoord } from '../hex/coords';
 
 // Regression coverage for a reported bug: a river mouth's hover tooltip
 // read "Shore" (its underlying sand terrain) instead of naming the river
@@ -101,24 +110,65 @@ describe('worldLayerOrder', () => {
   });
 });
 
+// Regression coverage for landing-page-defects.md L4: the preview camera
+// must centre on the drawn island's own bounding box, not on `previewCenter`
+// (the suggested plot) — a scored interior grass hex, not the landmass's
+// centroid. Asserted on the pure function (no worldModel/canvas needed) for
+// the same reason as terrainTitleFor/worldLayerOrder above.
+describe('previewIslandBounds', () => {
+  it('is null for an empty tile list (nothing to frame)', () => {
+    expect(previewIslandBounds([])).toBeNull();
+  });
+
+  it('is exactly that one tile\'s own centre for a single-tile list', () => {
+    const bounds = previewIslandBounds([{ q: 3, r: -2 }])!;
+    expect(bounds.minX).toBeCloseTo(bounds.maxX);
+    expect(bounds.minY).toBeCloseTo(bounds.maxY);
+    expect(bounds.centerX).toBeCloseTo(bounds.minX);
+    expect(bounds.centerY).toBeCloseTo(bounds.minY);
+  });
+
+  it('centres on its own bounding box\'s midpoint, not on any single tile inside it', () => {
+    // A lopsided run of tiles — nothing here is at the box's own midpoint.
+    const tiles: AxialCoord[] = [];
+    for (let q = -1; q <= 9; q++) tiles.push({ q, r: 0 });
+    const bounds = previewIslandBounds(tiles)!;
+    // Symmetric about its own centre by construction — this is exactly the
+    // property that fixes L4: fitting around *this* box (rather than around
+    // an arbitrary point inside it, like the suggested plot) can't help but
+    // give equal margins on both sides.
+    expect(bounds.maxX - bounds.centerX).toBeCloseTo(bounds.centerX - bounds.minX);
+    expect(bounds.maxY - bounds.centerY).toBeCloseTo(bounds.centerY - bounds.minY);
+  });
+});
+
 // Regression coverage for the landing page's locked static preview
-// (docs/design/zoom-transition.md §6): the whole island must fit on screen
-// at any viewport size/aspect, biased or not. Asserted on the pure function
-// (no worldModel/canvas needed) for the same reason as terrainTitleFor/
-// worldLayerOrder above.
+// (docs/design/zoom-transition.md §6, landing-page-defects.md L4): the whole
+// island must fit on screen at any viewport size/aspect, biased or not.
+// Asserted on the pure function (no worldModel/canvas needed) for the same
+// reason as terrainTitleFor/worldLayerOrder above.
+//
+// Signature note: this used to take `center` + `radius` + an `isSea`
+// predicate and fit a symmetric box around `center` (see git history) —
+// L4's own root cause was exactly that shape, fitting symmetrically around
+// a point that is rarely a landmass's own centroid. It now takes the tile
+// list directly (the same one `WorldModel.previewIslandTiles`/L5 hands
+// `rebuildTerrain`) and fits against `previewIslandBounds` of *that*, so the
+// contract change here is the fix, not incidental — the tests below were
+// updated to match rather than left calling a signature that no longer
+// exists.
 describe('previewFitZoom', () => {
-  const center: AxialCoord = { q: 0, r: 0 };
-  const noSea = () => false;
-  const allSea = () => true;
+  // A regular hexagonal blob of tile centres, all land — stands in for "some
+  // symmetric island of the given radius" wherever a test only cares about
+  // that, not any particular shape.
+  const symmetricIsland = (radius: number) => hexesInRadius({ q: 0, r: 0 }, radius);
 
   it('falls back before the viewport is known', () => {
     expect(
       previewFitZoom({
-        center,
-        radius: 7,
+        tiles: symmetricIsland(7),
         screenBiasX: 0,
         viewport: { width: 0, height: 0 },
-        isSea: noSea,
         fallbackZoom: 0.6,
         minZoom: 0.05,
         maxZoom: 4,
@@ -126,14 +176,12 @@ describe('previewFitZoom', () => {
     ).toBe(0.6);
   });
 
-  it('falls back when every hex in range is sea', () => {
+  it('falls back when there are no tiles to fit (e.g. the whole radius was sea)', () => {
     expect(
       previewFitZoom({
-        center,
-        radius: 7,
+        tiles: [],
         screenBiasX: 0,
         viewport: { width: 1200, height: 800 },
-        isSea: allSea,
         fallbackZoom: 0.6,
         minZoom: 0.05,
         maxZoom: 4,
@@ -141,14 +189,12 @@ describe('previewFitZoom', () => {
     ).toBe(0.6);
   });
 
-  it('zooms out further for a wider radius of land, all else equal', () => {
+  it('zooms out further for a wider spread of land, all else equal', () => {
     const zoomFor = (radius: number) =>
       previewFitZoom({
-        center,
-        radius,
+        tiles: symmetricIsland(radius),
         screenBiasX: 0,
         viewport: { width: 1200, height: 800 },
-        isSea: noSea,
         fallbackZoom: 0.6,
         minZoom: 0.05,
         maxZoom: 4,
@@ -159,11 +205,9 @@ describe('previewFitZoom', () => {
   it('zooms out further when a screen bias narrows the usable half-width', () => {
     const zoomFor = (screenBiasX: number) =>
       previewFitZoom({
-        center,
-        radius: 7,
+        tiles: symmetricIsland(7),
         screenBiasX,
         viewport: { width: 1200, height: 800 },
-        isSea: noSea,
         fallbackZoom: 0.6,
         minZoom: 0.05,
         maxZoom: 4,
@@ -173,11 +217,9 @@ describe('previewFitZoom', () => {
 
   it('clamps to the given min/max bounds', () => {
     const tiny = previewFitZoom({
-      center,
-      radius: 7,
+      tiles: symmetricIsland(7),
       screenBiasX: 0,
       viewport: { width: 20, height: 20 },
-      isSea: noSea,
       fallbackZoom: 0.6,
       minZoom: 0.3,
       maxZoom: 4,
@@ -185,16 +227,133 @@ describe('previewFitZoom', () => {
     expect(tiny).toBe(0.3);
 
     const huge = previewFitZoom({
-      center,
-      radius: 1,
+      tiles: symmetricIsland(1),
       screenBiasX: 0,
       viewport: { width: 20000, height: 20000 },
-      isSea: noSea,
       fallbackZoom: 0.6,
       minZoom: 0.05,
       maxZoom: 1.5,
     });
     expect(huge).toBe(1.5);
+  });
+
+  // landing-page-defects.md L4's own regression test: an island whose land
+  // is asymmetric about the suggested plot must still frame with equal
+  // margins on both sides, with nothing past the viewport edge — because
+  // the camera now fits (and centres) on the island's own bounding box
+  // rather than on the plot. The final assertion recreates the *old*
+  // plot-centred fit inline (not by calling the exported function, whose
+  // contract L4 legitimately changed — see the describe block's own note)
+  // to show this case genuinely used to bleed past the frame, so this is a
+  // real regression check rather than only a description of the new code.
+  it('frames an island asymmetric about the plot with equal margins and nothing past the viewport edge', () => {
+    const plot: AxialCoord = { q: 0, r: 0 };
+    // The island runs q = -1..9 along r = 0 — the plot sits one column from
+    // one end and ten from the other, exactly the "scored interior grass
+    // hex, not a centroid" case L4 describes.
+    const islandTiles: AxialCoord[] = [];
+    for (let q = -1; q <= 9; q++) islandTiles.push({ q, r: 0 });
+    const viewport = { width: 1200, height: 800 };
+    const screenBiasX = 0;
+    // previewIslandBounds of a single tile is exactly that tile's own pixel
+    // centre — reused here instead of duplicating isoGridPosition/TILE_W in
+    // this test file.
+    const pixelCenterOf = (c: AxialCoord) => previewIslandBounds([c])!;
+
+    const bounds = previewIslandBounds(islandTiles)!;
+    const plotPx = pixelCenterOf(plot);
+    // The premise the L4 bug depended on: the plot is nowhere near this
+    // island's own bounding-box centre, so a fit centred on the plot cannot
+    // also be one centred on (and thus symmetric around) this box.
+    expect(Math.abs(plotPx.centerX - bounds.centerX)).toBeGreaterThan(1);
+
+    const zoom = previewFitZoom({
+      tiles: islandTiles,
+      screenBiasX,
+      viewport,
+      fallbackZoom: 0.6,
+      minZoom: 0.05,
+      maxZoom: 4,
+    });
+
+    // New (L4) behaviour: every tile's own screen projection, once the
+    // camera sits at `bounds`'s centre and `zoom` (the same
+    // biasedCenterX/applyCameraTransform maths HexMapRenderer itself uses
+    // to place `this.world`), lands inside the viewport.
+    for (const c of islandTiles) {
+      const p = pixelCenterOf(c);
+      const screenX = viewport.width / 2 + (p.centerX - bounds.centerX) * zoom + screenBiasX * viewport.width;
+      expect(screenX).toBeGreaterThan(0);
+      expect(screenX).toBeLessThan(viewport.width);
+    }
+
+    // Old (pre-L4) behaviour: fit + centre symmetrically around the *plot*
+    // instead of the box (previewFitZoom's own removed `center`/`radius`
+    // parameters, before this fix — see git history). With the plot this
+    // far off the box's own centre, that leaves at least one tile's screen
+    // projection outside the viewport: the very bleed L4 reports.
+    let oldMaxDx = 0;
+    for (const c of islandTiles) {
+      oldMaxDx = Math.max(oldMaxDx, Math.abs(pixelCenterOf(c).centerX - plotPx.centerX));
+    }
+    const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
+    const oldZoom = Math.min(4, Math.max(0.05, usableHalfWidth / oldMaxDx));
+    const oldScreenXs = islandTiles.map((c) => {
+      const p = pixelCenterOf(c);
+      return viewport.width / 2 + (p.centerX - plotPx.centerX) * oldZoom + screenBiasX * viewport.width;
+    });
+    expect(oldScreenXs.some((x) => x <= 0 || x >= viewport.width)).toBe(true);
+  });
+
+  // Regression test for the coordinator-caught follow-up: an earlier draft
+  // of the L4/L5 fix dropped PREVIEW_ISLAND_RADIUS entirely and culled
+  // purely by landmass membership, so a real (larger-than-7-hex) island
+  // rendered whole. previewFitZoom's own `minZoom` clamp then rescued an
+  // under-sized natural zoom back up to `minZoom` — which is *bigger* than
+  // the zoom the fit says is safe, reintroducing overflow past the
+  // viewport, under the hero column, and under the onboarding tray (see
+  // WorldModel.PREVIEW_ISLAND_RADIUS's doc comment for the full story).
+  // `WorldModel.previewCropTiles` fixes this by intersecting membership
+  // with a `PREVIEW_ISLAND_RADIUS`-hex disc, so a full disc of that radius
+  // (the largest crop it can ever produce — any real island's crop is a
+  // subset of this, never a superset) is the actual worst case to check
+  // the fit against, at the exact viewport/bias LandingView really uses.
+  it('the largest possible crop (PREVIEW_ISLAND_RADIUS, all land) fits at the real viewport/bias without needing the minZoom clamp', () => {
+    const worstCaseCrop = hexesInRadius({ q: 0, r: 0 }, PREVIEW_ISLAND_RADIUS);
+    // Mirrors LandingView.vue's own LANDING_PREVIEW_SCREEN_BIAS_X formula —
+    // (HERO_RIGHT_EDGE_PX + HERO_MIN_GUTTER_PX) / (2 * HERO_REFERENCE_VIEWPORT_WIDTH_PX),
+    // with that reference now 1440 (this exact test viewport) rather than a
+    // wider guess — see that constant's own doc comment for why a reference
+    // wider than the viewport being framed under-shoots real pixel
+    // clearance. Duplicated here rather than imported: a <script setup>
+    // const isn't an importable export of a .vue SFC.
+    const screenBiasX = (56 + 520 + 40) / (2 * 1440);
+    // scripts/screenshot-helpers/flow.mjs's own capture size — the same
+    // viewport the coordinator's screenshot review measured against.
+    const viewport = { width: 1440, height: 900 };
+    const minZoom = 0.05;
+    const maxZoom = 4;
+
+    const zoom = previewFitZoom({ tiles: worstCaseCrop, screenBiasX, viewport, fallbackZoom: 0.6, minZoom, maxZoom });
+    // The fit must be natural, not rescued by the minZoom clamp — a
+    // clamped zoom is bigger than the fit says is safe, which is exactly
+    // how the island ended up bleeding off the right edge in the reported
+    // regression (Math.max(minZoom, zoom) only ever *enlarges* an
+    // undersized zoom, it never shrinks an oversized one).
+    expect(zoom).toBeGreaterThan(minZoom);
+
+    const bounds = previewIslandBounds(worstCaseCrop)!;
+    const pixelCenterOf = (c: AxialCoord) => previewIslandBounds([c])!;
+    for (const c of worstCaseCrop) {
+      const p = pixelCenterOf(c);
+      const screenX = viewport.width / 2 + (p.centerX - bounds.centerX) * zoom + screenBiasX * viewport.width;
+      // No island pixel past either viewport edge...
+      expect(screenX).toBeGreaterThan(0);
+      expect(screenX).toBeLessThan(viewport.width);
+      // ...and, specifically, none left of x=600 — the coordinator's own
+      // acceptance bound for "the hero column must be completely clear".
+      expect(screenX).toBeGreaterThan(600);
+    }
   });
 });
 
@@ -261,5 +420,32 @@ describe('landfallBurstFrames', () => {
     // second ring's (offset 550ms later) — exactly one frame should remain.
     const frames = landfallBurstFrames(startedAt + 1901, startedAt);
     expect(frames).toHaveLength(1);
+  });
+});
+
+// L6a (docs/plans/landing-page-defects.md): the miss-click flash layered on
+// top of the plots' own looping pulse — see `attentionPulseFrame`'s own
+// comment for why this is a separate one-shot rather than a tweak to
+// plotRippleFrames' constants.
+describe('attentionPulseFrame', () => {
+  it('is 0 before the pulse starts', () => {
+    expect(attentionPulseFrame(999, 1000)).toBe(0);
+  });
+
+  it('is 0 once the flash has fully played out', () => {
+    expect(attentionPulseFrame(1000 + 700, 1000)).toBe(0);
+  });
+
+  it('rises then falls — a flash, not a fade-in — peaking mid-way', () => {
+    const startedAt = 1000;
+    const start = attentionPulseFrame(startedAt, startedAt);
+    const quarter = attentionPulseFrame(startedAt + 175, startedAt);
+    const mid = attentionPulseFrame(startedAt + 350, startedAt);
+    const threeQuarters = attentionPulseFrame(startedAt + 525, startedAt);
+    expect(start).toBeCloseTo(0);
+    expect(quarter).toBeGreaterThan(start);
+    expect(mid).toBeGreaterThan(quarter);
+    expect(mid).toBeCloseTo(1);
+    expect(threeQuarters).toBeLessThan(mid);
   });
 });

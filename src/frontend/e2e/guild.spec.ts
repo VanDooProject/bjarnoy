@@ -1,7 +1,14 @@
 import { expect, test } from './fixtures';
+import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { SettlementPage } from './pages';
 
 test('the Alliance nav link opens the guild view', { tag: '@g2' }, async ({ page }) => {
-  await page.goto('/');
+  // landing-page-defects.md L1: Alliance is a multiplayer surface with
+  // nothing in it for a visitor who hasn't founded anything, so it's no
+  // longer offered on the pre-founding landing header — found first, the
+  // same way the in-game nav actually becomes reachable for a real player.
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  await SettlementPage.found(page);
   await page.getByRole('button', { name: 'Alliance' }).click();
   await expect(page).toHaveURL(/\/guild$/);
   await expect(page.getByRole('heading', { name: 'Guild', exact: true })).toBeVisible();

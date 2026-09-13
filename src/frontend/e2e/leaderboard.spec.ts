@@ -1,7 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
-import { AdminTablePage } from './pages';
+import { AdminTablePage, SettlementPage } from './pages';
 
 /**
  * Demo mode (what `npm run test:e2e` runs against — see playwright.config.ts
@@ -101,11 +101,12 @@ async function gotoLeaderboards(page: Page) {
 test.describe('leaderboards', { tag: '@g2' }, () => {
   test('is reachable via the HUD nav link from the world map', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    // foundSettlement/gotoWorldMap would also work, but the nav link itself
-    // is rendered by HudNav regardless of a founded settlement — landing is
-    // the lightest view that mounts it (see HudNav.vue's `v-if` guarding
-    // only the Settlement link, not Leaderboards).
-    await page.goto('/');
+    // Leaderboards is rendered by HudNav regardless of a founded settlement
+    // (see HudNav.vue's `v-if` guarding only the Settlement/World map/Landing
+    // links, not this one) — but landing-page-defects.md L1 means HudNav
+    // itself is no longer mounted pre-founding at all, so founding first is
+    // the lightest way to reach any HudNav link now.
+    await SettlementPage.found(page);
     await page.getByRole('button', { name: 'Leaderboards' }).click();
     await page.waitForURL('**/leaderboards');
     await expect(page.getByRole('heading', { name: 'Leaderboards' })).toBeVisible();
