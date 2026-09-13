@@ -1,5 +1,7 @@
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Bjarnoy.Api.Hosting;
 
@@ -11,6 +13,12 @@ public enum MigrationCommandKind
 
     /// <summary>Apply pending migrations, then exit.</summary>
     Apply,
+
+    /// <summary>
+    /// Apply pending migrations, seed the default world if the database has
+    /// none, then exit.
+    /// </summary>
+    ApplySeed,
 
     /// <summary>Report applied and pending migrations, then exit.</summary>
     Status,
@@ -44,26 +52,52 @@ public static class MigrationCommand
     /// <summary>Exit code for a migration that failed to apply.</summary>
     public const int FailureExitCode = 1;
 
+    /// <summary>
+    /// The world <c>--seed</c> creates. Shared with the self-migrating startup
+    /// path in <c>Program.cs</c> so the two cannot name it differently.
+    /// </summary>
+    public const string DefaultWorldName = "Kettil Sea";
+
     public static MigrationCommandKind Parse(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+
+        // The first migration flag still wins, so an existing `--migrate` keeps
+        // meaning exactly what it did. `--seed` is a modifier rather than a mode
+        // of its own: seeding needs a schema, and applying is idempotent, so
+        // `--seed` on its own means the same as `--migrate --seed`.
+        var kind = MigrationCommandKind.None;
+        var seed = false;
 
         foreach (var arg in args)
         {
             switch (arg)
             {
+                case "--seed" or "seed":
+                    seed = true;
+                    break;
                 case "--migrate" or "migrate":
-                    return MigrationCommandKind.Apply;
+                    kind = kind is MigrationCommandKind.None ? MigrationCommandKind.Apply : kind;
+                    break;
                 case "--migrate-status" or "migrate-status":
-                    return MigrationCommandKind.Status;
+                    kind = kind is MigrationCommandKind.None ? MigrationCommandKind.Status : kind;
+                    break;
                 case "--migrate-script" or "migrate-script":
-                    return MigrationCommandKind.Script;
+                    kind = kind is MigrationCommandKind.None ? MigrationCommandKind.Script : kind;
+                    break;
                 default:
                     continue;
             }
         }
 
-        return MigrationCommandKind.None;
+        // --migrate-status/--migrate-script report rather than change anything,
+        // so seeding alongside them would contradict what they are for.
+        if (seed && kind is MigrationCommandKind.None or MigrationCommandKind.Apply)
+        {
+            return MigrationCommandKind.ApplySeed;
+        }
+
+        return kind;
     }
 
     /// <summary>
@@ -88,6 +122,17 @@ public static class MigrationCommand
             {
                 case MigrationCommandKind.Apply:
                     return await ApplyAsync(migrator, output, cancellationToken).ConfigureAwait(false);
+
+                case MigrationCommandKind.ApplySeed:
+                    var applyExitCode = await ApplyAsync(migrator, output, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (applyExitCode != 0)
+                    {
+                        return applyExitCode;
+                    }
+
+                    return await SeedAsync(scope.ServiceProvider, output, cancellationToken)
+                        .ConfigureAwait(false);
 
                 case MigrationCommandKind.Status:
                     return await ReportStatusAsync(migrator, output, cancellationToken).ConfigureAwait(false);
@@ -126,6 +171,49 @@ public static class MigrationCommand
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Gives a freshly migrated database the one world a deployment needs to be
+    /// playable. The app itself only seeds when it migrates in-process
+    /// (<c>Database:MigrateOnStartup</c>), which a deployment using this
+    /// migrator deliberately does not do — leaving it with an empty world list
+    /// nothing would ever fill, since a client no longer creates worlds itself.
+    /// </summary>
+    private static async Task<int> SeedAsync(
+        IServiceProvider scopedServices,
+        TextWriter output,
+        CancellationToken cancellationToken)
+    {
+        var worldService = scopedServices.GetRequiredService<WorldService>();
+        var logger = scopedServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(MigrationCommand).FullName!);
+
+        var existing = await worldService.GetWorldsAsync(cancellationToken).ConfigureAwait(false);
+        if (existing.Count > 0)
+        {
+            await output
+                .WriteLineAsync($"{existing.Count} world(s) already exist; seeded nothing.")
+                .ConfigureAwait(false);
+            return 0;
+        }
+
+        await worldService
+            .SeedDefaultWorldIfNoneAsync(DefaultWorldName, logger, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Not assumed: SeedDefaultWorldIfNoneAsync swallows the race it can lose
+        // to another migrator running at the same time, so ask the database.
+        var seeded = await worldService.GetWorldsAsync(cancellationToken).ConfigureAwait(false);
+        await output
+            .WriteLineAsync(
+                seeded.Count > 0
+                    ? $"Seeded the default world \"{DefaultWorldName}\"."
+                    : "No world was seeded.")
+            .ConfigureAwait(false);
+
+        return seeded.Count > 0 ? 0 : FailureExitCode;
     }
 
     private static async Task<int> ReportStatusAsync(

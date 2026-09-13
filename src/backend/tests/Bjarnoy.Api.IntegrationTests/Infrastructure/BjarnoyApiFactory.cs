@@ -1,5 +1,7 @@
 using Bjarnoy.Api.Auth;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -85,6 +87,15 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         await using var scope = Services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<DatabaseMigrator>()
             .MigrateAsync(cancellationToken);
+    }
+
+    /// <summary>The worlds the database holds, in creation order.</summary>
+    public async Task<IReadOnlyList<WorldEntity>> GetWorldsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<WorldService>()
+            .GetWorldsAsync(cancellationToken);
     }
 
     public async Task<MigrationStatus> GetMigrationStatusAsync(CancellationToken cancellationToken = default)

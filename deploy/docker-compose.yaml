@@ -85,7 +85,12 @@ services:
     # Left to itself Coolify fills in `unless-stopped`, which would restart a
     # migrator that has already done its job. It reads this and leaves it be.
     restart: 'no'
-    command: ['--migrate']
+    # --seed gives a fresh database the one world a deployment needs to be
+    # playable. The app seeds that itself only when it migrates in-process,
+    # which this deployment deliberately does not do, and no client creates a
+    # world any more — so without this the server comes up with an empty world
+    # list and the landing page has nothing to join.
+    command: ['--migrate', '--seed']
     # The image's HEALTHCHECK probes the HTTP endpoint the migrator never
     # serves; without this it would spend its short life reported unhealthy.
     healthcheck:

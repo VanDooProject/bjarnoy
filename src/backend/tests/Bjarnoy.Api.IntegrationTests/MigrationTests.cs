@@ -70,6 +70,32 @@ public sealed class MigrationTests
     }
 
     [Theory]
+    [InlineData("--seed", MigrationCommandKind.ApplySeed)]
+    [InlineData("seed", MigrationCommandKind.ApplySeed)]
+    public void Seeding_implies_migrating_since_a_seed_needs_a_schema(
+        string arg, MigrationCommandKind expected)
+    {
+        Assert.Equal(expected, MigrationCommand.Parse([arg]));
+    }
+
+    [Fact]
+    public void Migrate_and_seed_together_are_one_command()
+    {
+        Assert.Equal(MigrationCommandKind.ApplySeed, MigrationCommand.Parse(["--migrate", "--seed"]));
+        Assert.Equal(MigrationCommandKind.ApplySeed, MigrationCommand.Parse(["--seed", "--migrate"]));
+    }
+
+    [Theory]
+    [InlineData("--migrate-status")]
+    [InlineData("--migrate-script")]
+    public void The_reporting_commands_are_not_turned_into_a_seed(string reportingArg)
+    {
+        // They exist to say what *would* happen; writing a world while
+        // answering that would contradict it.
+        Assert.NotEqual(MigrationCommandKind.ApplySeed, MigrationCommand.Parse([reportingArg, "--seed"]));
+    }
+
+    [Theory]
     [InlineData()]
     [InlineData("--urls", "http://localhost:5000")]
     [InlineData("--environment", "Production")]
@@ -97,6 +123,45 @@ public sealed class MigrationTests
 
         Assert.Equal(0, exitCode);
         Assert.Contains("Applied", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_seed_command_leaves_a_fresh_database_with_a_world_to_join()
+    {
+        // The deployment case: the app migrates in a separate container and so
+        // never runs Program.cs's own seeding, which would otherwise leave the
+        // server with an empty world list and nothing able to fill it.
+        await using var factory = BjarnoyApiFactory.Sqlite();
+        await using var output = new StringWriter();
+
+        var exitCode = await MigrationCommand.RunAsync(
+            factory.Services, MigrationCommandKind.ApplySeed, output, Ct);
+
+        Assert.Equal(0, exitCode);
+        var worlds = await factory.GetWorldsAsync(Ct);
+        var world = Assert.Single(worlds);
+        Assert.Equal(MigrationCommand.DefaultWorldName, world.Name);
+    }
+
+    [Fact]
+    public async Task Seeding_a_database_that_already_has_a_world_adds_nothing()
+    {
+        // A redeploy runs the migrator again against a database that is already
+        // being played in; a second world (or a replaced one) would be a
+        // catastrophe rather than a nuisance.
+        await using var factory = BjarnoyApiFactory.Sqlite();
+        await using var first = new StringWriter();
+        await MigrationCommand.RunAsync(factory.Services, MigrationCommandKind.ApplySeed, first, Ct);
+        var seeded = Assert.Single(await factory.GetWorldsAsync(Ct));
+
+        await using var second = new StringWriter();
+        var exitCode = await MigrationCommand.RunAsync(
+            factory.Services, MigrationCommandKind.ApplySeed, second, Ct);
+
+        Assert.Equal(0, exitCode);
+        var after = Assert.Single(await factory.GetWorldsAsync(Ct));
+        Assert.Equal(seeded.Id, after.Id);
+        Assert.Contains("seeded nothing", second.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

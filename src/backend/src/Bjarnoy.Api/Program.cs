@@ -190,10 +190,12 @@ if (databaseOptions.MigrateOnStartup)
     // Unconditional otherwise, unlike the admin bootstrap below: a client no
     // longer creates a world itself (see
     // WorldService.SeedDefaultWorldIfNoneAsync), so an empty server with
-    // nothing to join is never a state anyone wants.
+    // nothing to join is never a state anyone wants. A deployment that runs
+    // the separate migrator instead gets the same seed from `--migrate
+    // --seed` (MigrationCommand.SeedAsync), for exactly that reason.
     var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
     var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await worldService.SeedDefaultWorldIfNoneAsync("Kettil Sea", worldSeedLogger);
+    await worldService.SeedDefaultWorldIfNoneAsync(MigrationCommand.DefaultWorldName, worldSeedLogger);
 }
 
 // Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD
