@@ -97,7 +97,16 @@ public class FoundingSettlementPersistenceTests
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         Assert.Equal(2, settlementsAfterSecondPlayer!.Length);
 
-        Assert.Empty(consoleErrors);
+        // Same condition as a bare Assert.Empty, but it prints what actually
+        // arrived. Assert.Empty truncates the collection in its message
+        // ("Collection: [\"Failed to load resource: the server responded
+        // with\"···]"), which for a console error is the half that carries no
+        // information at all — the status code and the failing URL are in the
+        // part it cuts off, so a CI-only failure here could not be diagnosed
+        // without a round trip.
+        Assert.True(
+            consoleErrors.Count == 0,
+            $"Unexpected console errors: [{string.Join(" | ", consoleErrors)}]");
         Assert.Empty(secondPageConsoleErrors);
     }
 }
