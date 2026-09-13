@@ -372,6 +372,89 @@ describe('useWorldStore founding a settlement (live mode)', () => {
   });
 });
 
+// landing-page-defects.md L6b: `foundStartingSettlementLive` used to POST
+// the founding, then mirror the response into the local `WorldModel`, claim
+// territory, sync the HUD and warm the trade cache, and only once ALL of
+// that returned did `LandingView.foundHere` call `player.foundSettlement` —
+// the write that actually matters, since it's what puts
+// `bjarnoy.settlementId` into localStorage (what the router guard, and L7's
+// whole recovery path, both check). A throw anywhere in that local
+// reconciliation left the backend holding a settlement the browser had no
+// record of: unrecoverable without clearing site data, and exactly the
+// state that produces L7's permanent 409 loop on the next reload. This is a
+// regression test for moving `player.foundSettlement` to fire the instant
+// the POST resolves: run against the old ordering, `player.hasFoundedSettlement`
+// stays false here because the simulated reconciliation failure throws
+// before `LandingView.foundHere` ever gets to call it.
+describe('useWorldStore founding a settlement (L6b: persist before reconciling)', () => {
+  const ISLAND = { islandId: 'island-1', at: { q: 0, r: 0 } };
+
+  it('marks the player founded with the settlement id even when reconciliation after the POST throws', async () => {
+    listSettlements.mockReset().mockResolvedValue([]);
+    getPlotSuggestion.mockReset().mockResolvedValue({
+      islandId: ISLAND.islandId,
+      plot: ISLAND.at,
+      alternatives: [],
+      reserved: true,
+      reservedUntil: null,
+    });
+    foundSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-1',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: ISLAND.at.q,
+      r: ISLAND.at.r,
+      longhouseLevel: 1,
+      resources: { stock: {}, ratePerHour: {} },
+      islandId: ISLAND.islandId,
+    });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    store.islands = [
+      {
+        id: ISLAND.islandId,
+        index: 0,
+        name: 'Island',
+        q: 0,
+        r: 0,
+        tileCount: 10,
+        startPositions: [ISLAND.at],
+        riverTiles: [],
+      },
+    ];
+    // Simulates a failure in the local reconciliation that follows a
+    // successful founding POST — the backend already has the settlement at
+    // this point, only the browser's own bookkeeping fails.
+    vi.spyOn(store.model, 'registerSettlement').mockImplementation(() => {
+      throw new Error('boom — simulated reconciliation failure');
+    });
+
+    const { AlreadyFoundedError } = await import('./world');
+    let caught: unknown;
+    try {
+      await store.foundStartingSettlementLive('player-1', 'Astrid', "Astrid's realm", ISLAND.at);
+    } catch (err) {
+      caught = err;
+    }
+
+    // The failure surfaces as "your realm exists" (recover into it, same as
+    // an AlreadyFounded 409), not a bare error `LandingView.foundHere` would
+    // otherwise show as "that plot was just taken" — see
+    // `foundStartingSettlementLive`'s own doc comment.
+    expect(caught).toBeInstanceOf(AlreadyFoundedError);
+    expect((caught as InstanceType<typeof AlreadyFoundedError>).settlementId).toBe('settlement-1');
+
+    // The actual regression check: the player is marked founded with the
+    // right id regardless of the reconciliation failure above — this is
+    // what stops the settlement from being unrecorded on the client.
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+    expect(player.hasFoundedSettlement).toBe(true);
+    expect(player.settlementId).toBe('settlement-1');
+  });
+});
+
 // landing-page-defects.md L7: a 409 from `GET /worlds/{id}/plot-suggestion`
 // used to escape `refreshPlotSuggestion` as an uncaught `ApiError`, aborting
 // `LandingView.onMounted`/`refreshPreview` partway through and leaving the

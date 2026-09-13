@@ -18,6 +18,7 @@ import type {
 } from '../api/types';
 import { DEMO_MODE } from '../config';
 import { useAuthStore } from './auth';
+import { usePlayerStore } from './player';
 import type { AxialCoord } from '../lib/hex/coords';
 import {
   buildAttackDispatchRequest,
@@ -460,6 +461,20 @@ export const useWorldStore = defineStore('world', {
      * comment for why it's a distinct type, not a bare `ApiError`), or a
      * plain `ApiError` (409) for any other founding rejection
      * (PlotTaken/TooCloseToNeighbour/PlotReserved/WorldFull/...).
+     *
+     * landing-page-defects.md L6b: the founding `POST` and everything after
+     * it used to be one uninterrupted chain, and only once the whole chain
+     * returned did `LandingView.foundHere` call `player.foundSettlement`,
+     * which is the write that actually matters (it puts
+     * `bjarnoy.settlementId` into localStorage — the one thing the router
+     * guard and this store's own `AlreadyFounded` recovery both check). Any
+     * throw between the `POST` resolving and that write left the backend
+     * holding a settlement the browser had no record of: unrecoverable
+     * without clearing site data, and exactly the state that produces L7's
+     * permanent 409 loop on the next reload. `player.foundSettlement` is now
+     * called the instant the `POST` resolves, before any of the local
+     * `WorldModel` reconciliation that follows it, so that write can never
+     * be skipped by a failure further down.
      */
     async foundStartingSettlementLive(ownerId: string, ownerName: string, realmName: string, near: AxialCoord) {
       if (!this.worldId) throw new Error('bootstrapLiveWorld() must run before founding a settlement');
@@ -497,25 +512,53 @@ export const useWorldStore = defineStore('world', {
         ownerId,
       });
 
-      const settlement = this.model.registerSettlement({
-        id: response.id,
-        ownerId,
-        ownerName: response.ownerName,
-        name: response.name,
-        q: response.q,
-        r: response.r,
-        level: response.longhouseLevel,
-        resources: { ...response.resources.stock },
-        rates: { ...response.resources.ratePerHour },
-        foundedAt: Date.now(),
-        islandId: response.islandId,
-      });
-      this.model.claimTerritory(settlement.id);
-      this.selectedSettlementId = settlement.id;
-      this.plotSuggestion = null;
-      this.syncHud();
-      void this.refreshTradeAsync();
-      return settlement;
+      // See this method's own doc comment: this write must happen before
+      // anything below that can throw. `foundSettlement` is a no-op on
+      // localStorage in demo mode (see `stores/player.ts`), so this changes
+      // nothing about demo mode's behaviour — `foundStartingSettlementLive`
+      // is only ever called in live mode anyway.
+      usePlayerStore().foundSettlement(response.id);
+
+      try {
+        const settlement = this.model.registerSettlement({
+          id: response.id,
+          ownerId,
+          ownerName: response.ownerName,
+          name: response.name,
+          q: response.q,
+          r: response.r,
+          level: response.longhouseLevel,
+          resources: { ...response.resources.stock },
+          rates: { ...response.resources.ratePerHour },
+          foundedAt: Date.now(),
+          islandId: response.islandId,
+        });
+        this.model.claimTerritory(settlement.id);
+        this.selectedSettlementId = settlement.id;
+        this.plotSuggestion = null;
+        this.syncHud();
+        void this.refreshTradeAsync();
+        return settlement;
+      } catch (err) {
+        // The settlement id is already persisted above and the backend
+        // already considers this owner founded, so a failure reconciling it
+        // into the local `WorldModel` must not read as "founding failed" —
+        // `LandingView.foundHere`'s catch would otherwise show
+        // `landing.invalidClick.plotTaken` ("that plot was just taken"),
+        // which is actively misleading here: the plot wasn't taken by
+        // someone else, it was founded, by this very player. Surface it the
+        // same way a `PlotSuggestionRejection.AlreadyFounded` 409 does —
+        // `foundHere` already has a handler for `AlreadyFoundedError`
+        // (`recoverAlreadyFounded`), which re-fetches the settlement fresh
+        // via `restoreLiveSettlement` and finishes whatever reconciliation
+        // failed here. Reset `selectedSettlementId` first (only relevant if
+        // it was this call, above, that set it) so that recovery's own
+        // `restoreLiveSettlement` doesn't see it already matching and skip
+        // the resync it exists to do.
+        if (this.selectedSettlementId === response.id) this.selectedSettlementId = null;
+        console.error('Founding succeeded server-side but local reconciliation failed', err);
+        throw new AlreadyFoundedError(response.id);
+      }
     },
     /**
      * Live mode: queues a building against the backend rather than placing
