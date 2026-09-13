@@ -14,6 +14,7 @@
 - think of a solution
 - ask me if plan is fine if its more complex AND use the `TaskCreate`/`TaskUpdate`/`TaskList` task tools to list things u have to do
 - any new task/request I give mid-session (not just the initial one) also needs to be put onto the task list via `TaskCreate`, not just done ad hoc off to the side
+- any bug, flake, or test issue you discover mid-session (not something I asked for — something you stumbled into while doing something else) also needs its own `TaskCreate` entry so it doesn't get silently forgotten, even if you're not fixing it right away. Prefix its subject with `[BUG]`, `[FLAKE]`, or `[TEST]` as fits, e.g. `[FLAKE] WorldEndpointsTests.Foo fails intermittently`
 - implement (if multiple tasks push each task as a separate commit and open PR after first push)
 - evaluate with requirements (if there are reference screenshots compare them)
 - run build and tests
