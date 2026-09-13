@@ -161,16 +161,43 @@ function redrawAll() {
   for (const variant of variants) draw(variant);
 }
 
-/** Draws `variant`, then mirrors its viewport onto every other one when sync is on. */
+const dirtyVariantIds = new Set<number>();
+let pendingFrame: number | null = null;
+
+function flushDirtyVariants() {
+  pendingFrame = null;
+  for (const id of dirtyVariantIds) {
+    const variant = variants.find((v) => v.id === id);
+    if (variant) draw(variant);
+  }
+  dirtyVariantIds.clear();
+}
+
+/**
+ * Marks `variant` dirty and schedules one rAF to draw every dirty variant,
+ * instead of drawing right away. onPointerMove fires many times per
+ * rendered frame during a drag (same for onWheel during a scroll, and a
+ * fast typist across the 17 generation inputs), and draw()'s cost is
+ * dominated by terrainAt sampling — without this, every one of those events
+ * paid that cost inline in the handler. Coalescing into a single rAF draws
+ * each dirty variant at most once per frame no matter how many events land
+ * in it, without changing what ends up on screen.
+ */
+function scheduleDraw(variant: Variant) {
+  dirtyVariantIds.add(variant.id);
+  if (pendingFrame === null) pendingFrame = requestAnimationFrame(flushDirtyVariants);
+}
+
+/** Schedules a draw of `variant`, then mirrors its viewport onto every other one when sync is on. */
 function applyViewport(variant: Variant) {
-  draw(variant);
+  scheduleDraw(variant);
   if (!syncViewports.value) return;
   for (const other of variants) {
     if (other.id === variant.id) continue;
     other.viewport.centerCol = variant.viewport.centerCol;
     other.viewport.centerRow = variant.viewport.centerRow;
     other.viewport.zoom = variant.viewport.zoom;
-    draw(other);
+    scheduleDraw(other);
   }
 }
 
@@ -200,6 +227,11 @@ function removeVariant(id: number) {
   if (index >= 0) variants.splice(index, 1);
   canvasRefs.delete(id);
   pointerDrags.delete(id);
+  dirtyVariantIds.delete(id);
+  if (dirtyVariantIds.size === 0 && pendingFrame !== null) {
+    cancelAnimationFrame(pendingFrame);
+    pendingFrame = null;
+  }
   if (presetTarget.value === id && variants.length > 0) presetTarget.value = variants[0].id;
 }
 
@@ -420,7 +452,7 @@ void nextTick(redrawAll);
               :max="field.max"
               :step="field.step"
               :data-testid="`lab-gen-${variant.id}-${field.key}`"
-              @input="draw(variant)"
+              @input="scheduleDraw(variant)"
             />
           </div>
         </div>
