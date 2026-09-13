@@ -35,6 +35,7 @@ import type {
   GuildResponse,
   GuildTreatyResponse,
   IslandResponse,
+  JoinableWorldResponse,
   LeaderboardBoardResponse,
   PagedAdminActivityUsersResponse,
   LeaderboardCategory,
@@ -90,6 +91,7 @@ import type {
   UpdateLocaleRequest,
   UpdateWorldSettingsRequest,
   UserResponse,
+  WorldMembershipResponse,
   WorldResponse,
 } from './types';
 
@@ -191,6 +193,14 @@ export const api = {
   createWorld: (body: CreateWorldRequest) =>
     request<WorldResponse>('/worlds', { method: 'POST', body: JSON.stringify(body) }),
   getWorld: (worldId: string) => request<WorldResponse>(`/worlds/${worldId}`),
+  // "Join another world": the public world picker — no auth/owner header
+  // required, unlike getWorldMembership just below.
+  listJoinableWorlds: () => request<JoinableWorldResponse[]>('/worlds/joinable'),
+  // Whether `ownerId` already has a realm in `worldId` — same X-Owner-Id
+  // anonymous-play ownership proof as the rest of this file's `ownerHeader`
+  // calls (e.g. getFogMask/getPlotSuggestion below). 400s without it.
+  getWorldMembership: (worldId: string, ownerId: string) =>
+    request<WorldMembershipResponse>(`/worlds/${worldId}/membership`, { headers: ownerHeader(ownerId) }),
   getIslands: (worldId: string) => request<IslandResponse[]>(`/worlds/${worldId}/islands`),
   foundSettlement: (worldId: string, body: FoundSettlementRequest) =>
     request<SettlementResponse>(`/worlds/${worldId}/settlements`, {

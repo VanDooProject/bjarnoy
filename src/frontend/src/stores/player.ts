@@ -32,6 +32,24 @@ function stablePlayerId(): string {
 // exists anywhere.
 const persistedSettlementId = DEMO_MODE ? null : localStorage.getItem('bjarnoy.settlementId');
 
+// "Join another world": worldId -> settlementId for every world this player
+// has already founded a realm in, so `enterWorld` can restore the right
+// settlement without a backend round trip once the membership check has
+// already told it a realm exists. Same demo-mode guard as
+// `persistedSettlementId` above — demo mode has only the one local world and
+// nothing here would ever be read back anyway.
+function stableSettlementsByWorld(): Record<string, string> {
+  const raw = localStorage.getItem('bjarnoy.settlementsByWorld');
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+const persistedSettlementsByWorld = DEMO_MODE ? {} : stableSettlementsByWorld();
+
 // zip 6a: has this player already finished the guided landing-page
 // onboarding (longhouse + 2 more buildings)? Only a router-guard latch — the
 // live "how many buildings so far" count itself always comes straight from
@@ -61,6 +79,7 @@ export const usePlayerStore = defineStore('player', {
     settlementId: persistedSettlementId,
     onboardingComplete: persistedOnboardingComplete,
     profileNudgeDismissed: persistedProfileNudgeDismissed,
+    settlementsByWorld: persistedSettlementsByWorld,
   }),
   getters: {
     // Live mode needs an owner name (2-100 chars) at the moment a settlement
@@ -81,10 +100,20 @@ export const usePlayerStore = defineStore('player', {
     // otherwise the founding gate (`hasFoundedSettlement`) would reset and
     // a live-mode player could try to found a second one, only to be
     // rejected by the backend (`FoundingRejection.AlreadyFounded`).
-    foundSettlement(settlementId: string) {
+    // `worldId` is optional (and, before "join another world", every call
+    // site omits it) so this keeps working exactly as before wherever it's
+    // not passed — only when it is does founding also record the realm
+    // under `settlementsByWorld`, for `enterWorld` to find later.
+    foundSettlement(settlementId: string, worldId?: string) {
       this.hasFoundedSettlement = true;
       this.settlementId = settlementId;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.settlementId', settlementId);
+      if (worldId) {
+        this.settlementsByWorld[worldId] = settlementId;
+        if (!DEMO_MODE) {
+          localStorage.setItem('bjarnoy.settlementsByWorld', JSON.stringify(this.settlementsByWorld));
+        }
+      }
     },
     // Settlement switcher (issue #55): a player who founded a second
     // settlement via a settler convoy points the persisted "current
@@ -95,6 +124,35 @@ export const usePlayerStore = defineStore('player', {
     switchSettlement(settlementId: string) {
       this.settlementId = settlementId;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.settlementId', settlementId);
+    },
+    // "Join another world" (store half — UI comes later): called once
+    // `world.joinWorld`'s membership check has come back, so this is the one
+    // place `hasFoundedSettlement`/`onboardingComplete` switch to match
+    // whichever world was just entered rather than the one left behind. A
+    // world where this owner already has a realm (`settlementId` non-null)
+    // skips straight past onboarding, same as a reload restoring an existing
+    // settlement does today; a brand-new world (`settlementId: null`)
+    // re-runs the founding/onboarding flow from scratch. Does not touch
+    // `profileNudgeDismissed` — that's a one-time account-level nudge, not
+    // per-world state.
+    enterWorld(worldId: string, settlementId: string | null) {
+      this.settlementId = settlementId;
+      this.hasFoundedSettlement = settlementId !== null;
+      this.onboardingComplete = settlementId !== null;
+      if (!DEMO_MODE) {
+        if (settlementId !== null) {
+          localStorage.setItem('bjarnoy.settlementId', settlementId);
+        } else {
+          localStorage.removeItem('bjarnoy.settlementId');
+        }
+        localStorage.setItem('bjarnoy.onboardingComplete', this.onboardingComplete ? '1' : '0');
+      }
+      if (settlementId !== null) {
+        this.settlementsByWorld[worldId] = settlementId;
+        if (!DEMO_MODE) {
+          localStorage.setItem('bjarnoy.settlementsByWorld', JSON.stringify(this.settlementsByWorld));
+        }
+      }
     },
     completeOnboarding() {
       this.onboardingComplete = true;

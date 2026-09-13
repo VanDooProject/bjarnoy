@@ -772,6 +772,65 @@ export const useWorldStore = defineStore('world', {
       void this.refreshTradeAsync();
     },
     /**
+     * "Join another world" (store half — UI comes later): switches this
+     * session from whatever world it's currently in to `worldId`. First
+     * discards every per-world/per-settlement cache so nothing from the old
+     * world leaks into the new one (a stale `plotSuggestion`, army list, or
+     * fog mask would otherwise render against the wrong world for a moment,
+     * or worse, be sent back to the backend as if it belonged to the new
+     * one) — deliberately conservative: only state that's clearly scoped to
+     * a world or a settlement within it is reset here, not app-global state
+     * like auth or catalogue data. Then re-bootstraps against `worldId`
+     * (`liveReady` was just reset, so this runs for real) and, via
+     * `GET /worlds/{worldId}/membership`, either restores this owner's
+     * existing realm there immediately or leaves them free to found a new
+     * one. A no-op in demo mode — there is only ever the one local world.
+     */
+    async joinWorld(worldId: string) {
+      if (DEMO_MODE) return;
+      const player = usePlayerStore();
+
+      // Per-world/per-settlement caches from whichever world this session
+      // was previously in.
+      this.liveReady = false;
+      this.selectedSettlementId = null;
+      this.plotSuggestion = null;
+      this.islands = [];
+      this.armies = [];
+      this.armiesFetchedAt = 0;
+      this.guestArmies = [];
+      this.guestArmiesFetchedAt = 0;
+      this.selectedArmyId = null;
+      this.dispatchDraft = null;
+      this.fieldOrderDraft = null;
+      this.dispatchTargetBuildings = null;
+      this.dispatchTargetBuildingsFor = null;
+      this.dispatchTargetBuildingsError = false;
+      this.hud.buildings = [];
+      this.hud.queue = [];
+      this.hud.garrison = [];
+      this.hud.trainingQueue = [];
+      this.hud.runes = [];
+      this.hud.tradeBoard = [];
+      this.hud.myTradeOffers = [];
+      this.hud.shipments = [];
+      this.fogMaskBitmap?.close();
+      this.fogMaskBitmap = null;
+
+      this.ownerId = player.id;
+      this.worldId = worldId;
+      localStorage.setItem('bjarnoy.worldId', worldId);
+
+      const membership = await api.getWorldMembership(worldId, player.id);
+      player.enterWorld(worldId, membership.settlementId);
+
+      await this.bootstrapLiveWorld();
+
+      if (membership.settlementId !== null) {
+        await this.restoreLiveSettlement(player.id, membership.settlementId);
+      }
+    },
+    /**
      * Live mode: pulls every settlement in the world (not just this
      * player's) into the model, data-only — no tile is painted here.
      * Registered with the settlement's own id as its `ownerId`, which can
