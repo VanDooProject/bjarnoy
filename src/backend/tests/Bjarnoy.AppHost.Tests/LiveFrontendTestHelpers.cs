@@ -14,16 +14,30 @@ namespace Bjarnoy.AppHost.Tests;
 public static class LiveFrontendTestHelpers
 {
     /// <summary>
+    /// Whether the page is ready to hand over a founding click point:
+    /// <c>window.__settlementRenderer()</c> (installed at the end of
+    /// LandingView's <c>onMounted</c>) resolves to a renderer that is still
+    /// previewing a plot. The canvas becoming visible is NOT the same signal —
+    /// the hook is installed a few statements later, and in live mode that is
+    /// behind <c>bootstrapLiveWorld</c>/<c>refreshPlotSuggestion</c>, so on a
+    /// cold Vite dev server the two can be seconds apart.
+    /// </summary>
+    private const string ClickPointReadyScript = """
+        () => {
+          const renderer = window.__settlementRenderer?.();
+          return !!(renderer && renderer.previewCenter);
+        }
+        """;
+
+    /// <summary>
     /// Reads the live plot's exact screen point from the page's own renderer,
     /// the same way <c>e2e/helpers.ts</c>'s <c>claimLandfall</c> does:
     /// <c>window.__settlementRenderer().previewCenter</c> is LandingView's
     /// <c>previewCoord</c> (live mode: <c>world.plotSuggestion.plot</c>), and
     /// <c>hexCenterScreen</c> is the renderer's own camera math converting
-    /// that coordinate to a screen point. Returns <c>null</c> — rather than
-    /// throwing — while the hook or the plot isn't there yet (a cold Vite
-    /// dev server mid mount, or the plot-suggestion request still in
-    /// flight), which is the only thing <see cref="FoundStartingSettlementAsync"/>'s
-    /// retry loop is now covering for.
+    /// that coordinate to a screen point. Only ever called once
+    /// <see cref="ClickPointReadyScript"/> has reported ready, so a null here
+    /// means the preview went away again mid-flight rather than "not yet".
     /// </summary>
     private const string ClickPointScript = """
         () => {
@@ -31,6 +45,25 @@ public static class LiveFrontendTestHelpers
           if (!renderer?.previewCenter) return null;
           const p = renderer.hexCenterScreen(renderer.previewCenter);
           return [p.x, p.y];
+        }
+        """;
+
+    /// <summary>
+    /// What the page can actually tell us about why a click point was not
+    /// available, for the exception message. The original failure this exists
+    /// for reported only "never founded" with an empty console, which cannot
+    /// distinguish "the hook was never installed" from "the hook was there but
+    /// the preview had already been torn down" — two completely different
+    /// bugs, neither diagnosable from CI without this.
+    /// </summary>
+    private const string ClickPointDiagnosticsScript = """
+        () => {
+          const hook = window.__settlementRenderer;
+          if (typeof hook !== 'function') return 'hook not installed';
+          const renderer = hook();
+          if (!renderer) return 'hook installed, but it resolved to no renderer (canvas unmounted?)';
+          if (!renderer.previewCenter) return 'renderer present, but previewCenter is unset (already founded, or preview torn down)';
+          return 'ready';
         }
         """;
 
@@ -69,25 +102,68 @@ public static class LiveFrontendTestHelpers
         void OnConsole(object? _, IConsoleMessage msg) => consoleMessages.Add($"[{msg.Type}] {msg.Text}");
         page.Console += OnConsole;
 
+        // docs/plans/landing-page-defects.md's "Test debt this work must pay
+        // off": this used to click a hardcoded `0.66 × width` pixel and lean
+        // on the retry loop below to paper over the fact that the target
+        // wasn't actually known — which silently broke the moment the
+        // pre-founding camera framing changed (L4/L5). The click point now
+        // comes from the renderer's own camera math instead.
+        //
+        // Waiting for the hook explicitly, rather than folding "not ready yet"
+        // into the click retry: the canvas turning visible does NOT imply the
+        // hook is installed (see ClickPointReadyScript), so a hook that was
+        // merely slow used to burn all ten attempts silently and fail as
+        // "never founded" with an empty console — indistinguishable from a
+        // click that landed on the wrong hex. A dedicated wait with its own
+        // generous timeout separates "the page never offered a plot" from
+        // "the plot was offered and clicking it didn't found", and the
+        // diagnostic below says which.
+        try
+        {
+            await page.WaitForFunctionAsync(ClickPointReadyScript, null, new() { Timeout = 60_000 });
+        }
+        catch (PlaywrightException ex)
+        {
+            page.Console -= OnConsole;
+            var state = await page.EvaluateAsync<string>(ClickPointDiagnosticsScript);
+            throw new InvalidOperationException(
+                $"The landing page never offered a founding plot ({state}). "
+                + $"URL: {page.Url}. "
+                + $"Recent console messages: [{string.Join(" | ", consoleMessages.TakeLast(20))}]",
+                ex);
+        }
+
         var founded = false;
         for (var attempt = 0; attempt < 10 && !founded; attempt++)
         {
             var box = await canvas.BoundingBoxAsync()
                 ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
 
-            // docs/plans/landing-page-defects.md's "Test debt this work must
-            // pay off": this used to click a hardcoded `0.66 × width` pixel
-            // and lean on the 10-attempt retry to paper over the fact that
-            // the target wasn't actually known — which silently broke
-            // whenever the pre-founding camera framing changed (L4/L5). Ask
-            // the renderer where the plot actually is instead; the retry
-            // below is now only for genuine cold-start raciness (the hook or
-            // the plot not existing *yet*), not an unknown click target.
+            // Re-read every attempt rather than once before the loop: a failed
+            // founding re-requests the suggestion (LandingView's `foundHere`
+            // catch -> `refreshPreview`), which can legitimately move the plot
+            // to a different hex between attempts.
             var point = await page.EvaluateAsync<double[]?>(ClickPointScript);
             if (point is null)
             {
-                await page.WaitForTimeoutAsync(1_000);
-                continue;
+                // Ready a moment ago but not now: the preview was torn down
+                // mid-flight, which most likely means a previous attempt's
+                // click DID found and the view has already flipped into
+                // settlement mode. There is no plot left to click, so settle
+                // it on the tray rather than burning the remaining attempts
+                // clicking into a view that can no longer found.
+                try
+                {
+                    await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 10_000 });
+                    founded = true;
+                }
+                catch (PlaywrightException)
+                {
+                    // Genuinely gone without founding — fall through to the
+                    // diagnostic throw below.
+                }
+
+                break;
             }
 
             await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
