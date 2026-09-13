@@ -53,10 +53,25 @@ rewrite, whatever the App can see.
 `--recurse-submodules` clones those ~220 MB once. `legacy/` used to register the
 same repository a second time; it was dropped for exactly that reason.
 
-Then set a domain on the **`app`** service — in Coolify's compose UI each
-service gets its own domain field, and `app` is the only one that serves
-anything. Include the port: `https://bjarnoy.example.com:8080`. Nothing else
-needs configuring; the environment variables below generate themselves.
+Then set a domain **on the `app` service**. This is the part that is easy to
+get wrong: a Docker Compose application has one domain field *per compose
+service*, and only a domain sitting in `app`'s field produces the Traefik
+labels that route to it. The URL Coolify shows for the resource itself is not
+one of those — leave the domain there and the proxy answers every request with
+
+```
+404 page not found
+```
+
+which is Traefik saying no router matched the host, not the app returning a
+404. The same bare 404 appears whenever the `app` container is not running, so
+check the deployment succeeded before chasing the domain.
+
+`https://bjarnoy.example.com` is enough — Coolify reads the target port from
+the service's `expose:`. A `:8080` suffix is allowed and does the same thing.
+
+Nothing else needs configuring; the environment variables below generate
+themselves.
 
 ### What Coolify generates
 
