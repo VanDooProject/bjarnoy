@@ -28,12 +28,30 @@ Create an **Application** (not a Service) from this repository:
 file is relative to that. Point it at `/deploy` and the build looks for the
 sources one directory too deep.
 
-**Git Submodules has to be on.** The tile art
-(`src/frontend/vendor/bg_assets_hextile`) is a submodule in a separate private
-repository; the Dockerfile fails the build outright when it is missing rather
-than shipping an app with no textures. Coolify authenticates submodule clones
-with the same GitHub App as the main repository, so that app needs access to
-`VanDooProject/bg_assets_hextile` too.
+**Git Submodules has to be on, and the source has to be the GitHub App.**
+The tile art (`src/frontend/vendor/bg_assets_hextile`) is a submodule in a
+separate *private* repository, and the Dockerfile fails the build outright when
+it is missing rather than shipping an app with no textures.
+
+`VanDooProject/bjarnoy` itself is public, so it is tempting to add it to Coolify
+as a **Public Repository** — don't. That source clones with no credentials at
+all, which is fine for this repository and impossible for its private
+submodule; the deployment dies during import with
+
+```
+fatal: could not read Username for 'https://github.com': No such device or address
+fatal: clone of 'https://github.com/VanDooProject/bg_assets_hextile' into submodule path … failed
+```
+
+Add it as a **private repository through a GitHub App** instead, and install
+that App on `VanDooProject/bg_assets_hextile` as well. Only that path makes
+Coolify rewrite same-host HTTPS URLs to carry an installation token, which is
+what lets the submodule clone authenticate — a public source injects nothing to
+rewrite, whatever the App can see.
+
+`.gitmodules` also registers the same assets repository a second time under
+`legacy/`, and `--recurse-submodules` fetches both. It works, it just clones
+~220 MB twice per deployment.
 
 Then set a domain on the **`app`** service — in Coolify's compose UI each
 service gets its own domain field, and `app` is the only one that serves
