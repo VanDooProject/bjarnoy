@@ -17,9 +17,10 @@
     "noPlotAvailable": "Gerade ist jedes Grundstück in dieser Welt vergeben oder reserviert — schau in ein paar Minuten wieder vorbei."
   },
   "invalidClick": {
-    "pickGlowingPlot": "Dort kannst du nicht siedeln — wähle eines der leuchtenden Grundstücke.",
+    "pickGlowingPlot": "Fast — eines der leuchtenden Grundstücke gehört dir.",
     "beyondClaim": "Dieses Feld liegt außerhalb des Anspruchs deines Langhauses — baue näher an deiner Heimat.",
-    "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld."
+    "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld.",
+    "plotTaken": "Dieses Grundstück wurde gerade vergeben — hier ist ein anderes."
   },
   "ring": {
     "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",

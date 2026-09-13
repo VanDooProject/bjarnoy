@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { landfallBurstFrames, plotRippleFrames, previewFitZoom, terrainTitleFor, worldLayerOrder } from './HexMapRenderer';
+import {
+  attentionPulseFrame,
+  landfallBurstFrames,
+  plotRippleFrames,
+  previewFitZoom,
+  terrainTitleFor,
+  worldLayerOrder,
+} from './HexMapRenderer';
 import type { RiverTile, Tile } from './types';
 import type { AxialCoord } from '../hex/coords';
 
@@ -261,5 +268,32 @@ describe('landfallBurstFrames', () => {
     // second ring's (offset 550ms later) — exactly one frame should remain.
     const frames = landfallBurstFrames(startedAt + 1901, startedAt);
     expect(frames).toHaveLength(1);
+  });
+});
+
+// L6a (docs/plans/landing-page-defects.md): the miss-click flash layered on
+// top of the plots' own looping pulse — see `attentionPulseFrame`'s own
+// comment for why this is a separate one-shot rather than a tweak to
+// plotRippleFrames' constants.
+describe('attentionPulseFrame', () => {
+  it('is 0 before the pulse starts', () => {
+    expect(attentionPulseFrame(999, 1000)).toBe(0);
+  });
+
+  it('is 0 once the flash has fully played out', () => {
+    expect(attentionPulseFrame(1000 + 700, 1000)).toBe(0);
+  });
+
+  it('rises then falls — a flash, not a fade-in — peaking mid-way', () => {
+    const startedAt = 1000;
+    const start = attentionPulseFrame(startedAt, startedAt);
+    const quarter = attentionPulseFrame(startedAt + 175, startedAt);
+    const mid = attentionPulseFrame(startedAt + 350, startedAt);
+    const threeQuarters = attentionPulseFrame(startedAt + 525, startedAt);
+    expect(start).toBeCloseTo(0);
+    expect(quarter).toBeGreaterThan(start);
+    expect(mid).toBeGreaterThan(quarter);
+    expect(mid).toBeCloseTo(1);
+    expect(threeQuarters).toBeLessThan(mid);
   });
 });

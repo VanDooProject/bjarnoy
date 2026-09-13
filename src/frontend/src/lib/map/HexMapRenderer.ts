@@ -554,6 +554,28 @@ export function landfallBurstFrames(nowMs: number, startedAtMs: number, ringCoun
   return frames;
 }
 
+const ATTENTION_PULSE_DURATION_MS = 700;
+
+/**
+ * landing-page-defects.md L6a: fired once on a miss-click that didn't land
+ * on (or snap to — see `onboardingGuidance.ts`'s `snapToOfferedPlot`) an
+ * offered plot, so the highlighted plots visibly flash rather than the
+ * player only being told to "pick a glowing plot" in a toast. Deliberately
+ * a *separate* one-shot layered on top of the existing looping
+ * `plotRippleFrames` pulse (`drawHighlight` adds this on top of that pulse's
+ * own alpha/stroke, it doesn't replace it) rather than retuning that pulse's
+ * constants, which would change how every highlighted plot looks all the
+ * time, not just for the ~0.7s after a miss. Self-clearing like
+ * `landfallBurstFrames`: 0 before it starts and once it's finished, a single
+ * rise-then-fall in between (a `sin` half-cycle reads as a flash rather than
+ * a fade-in).
+ */
+export function attentionPulseFrame(nowMs: number, startedAtMs: number): number {
+  const t = nowMs - startedAtMs;
+  if (t < 0 || t >= ATTENTION_PULSE_DURATION_MS) return 0;
+  return Math.sin((t / ATTENTION_PULSE_DURATION_MS) * Math.PI);
+}
+
 // One tile-art size for both views — see the module comment above.
 const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
@@ -981,6 +1003,12 @@ export class HexMapRenderer {
   // `landfallBurstFrames`'s own doc comment for why this self-clears
   // instead of looping.
   private landfallBurst: { coord: AxialCoord; startedAt: number } | null = null;
+  // L6a (docs/plans/landing-page-defects.md): the one-shot "look over here"
+  // flash fired on a miss-click — see `pulseAttention`/`attentionPulseFrame`.
+  // Just a start time, unlike `landfallBurst`: it boosts every currently
+  // highlighted coord (`options.highlightCoord`/`highlightCoords`) at once
+  // rather than drawing at one coord of its own.
+  private attentionPulse: number | null = null;
   // Issue #159 part B: the composing-a-dispatch/field-order range tint —
   // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
   // an outline on the boundary edges (the edges whose neighbour isn't in the
@@ -1502,6 +1530,15 @@ export class HexMapRenderer {
       ...(this.options.highlightCoord ? [this.options.highlightCoord] : []),
       ...(this.options.highlightCoords ?? []),
     ];
+    // L6a: self-clears exactly like `landfallBurst` below once the flash has
+    // run its full duration, so a stale pulse never lingers as dead state.
+    // (Checked against the duration directly, not against `attention === 0`
+    // — that's also true at t=0, the instant `pulseAttention()` fires, which
+    // would otherwise clear the flash before it ever got drawn.)
+    const attention = this.attentionPulse !== null ? attentionPulseFrame(now, this.attentionPulse) : 0;
+    if (this.attentionPulse !== null && now - this.attentionPulse >= ATTENTION_PULSE_DURATION_MS) {
+      this.attentionPulse = null;
+    }
     if (coords.length > 0) {
       const pulse = (Math.sin(now / 420) + 1) / 2; // 0..1
       const ripples = plotRippleFrames(now);
@@ -1513,11 +1550,13 @@ export class HexMapRenderer {
         const cy = grid.y + TILE_CENTER_Y_OFFSET;
         // Chat1: "raise the plot-pulse floor so the glowing hexes never fade
         // to near-invisible" — the fill/stroke alpha ranges below no longer
-        // touch 0 at the pulse's low point.
+        // touch 0 at the pulse's low point. `attention` layers L6a's
+        // miss-click flash on top of that same floor rather than replacing
+        // it — see `attentionPulseFrame`'s own comment.
         this.highlightLayer
           .poly(flat)
-          .fill({ color: GOLD, alpha: 0.22 + pulse * 0.18 })
-          .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.7 + pulse * 0.3 });
+          .fill({ color: GOLD, alpha: Math.min(1, 0.22 + pulse * 0.18 + attention * 0.4) })
+          .stroke({ width: 3 + pulse * 1.5 + attention * 3, color: GOLD, alpha: Math.min(1, 0.7 + pulse * 0.3 + attention * 0.3) });
         for (const ring of ripples) {
           this.highlightLayer
             .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
@@ -2996,6 +3035,18 @@ export class HexMapRenderer {
    */
   setLandfallBurst(coord: AxialCoord) {
     this.landfallBurst = { coord, startedAt: performance.now() };
+  }
+
+  /**
+   * L6a (docs/plans/landing-page-defects.md): flashes every currently
+   * offered plot once — fired from `LandingView.onHexClick` on a miss-click
+   * that didn't land on (or snap to) an offered plot, so the player is shown
+   * where to go rather than only told. See `attentionPulseFrame`'s own
+   * comment for why this is a separate one-shot layered on the existing
+   * looping pulse rather than a tweak to that pulse's own constants.
+   */
+  pulseAttention() {
+    this.attentionPulse = performance.now();
   }
 
   /**

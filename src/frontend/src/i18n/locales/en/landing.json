@@ -17,9 +17,10 @@
     "noPlotAvailable": "Every plot in this world is taken or held right now — check back in a few minutes."
   },
   "invalidClick": {
-    "pickGlowingPlot": "You can't found there — pick one of the glowing plots.",
+    "pickGlowingPlot": "Not quite — one of the glowing plots is yours to take.",
     "beyondClaim": "That hex is beyond your longhouse's claim — build closer to home.",
-    "orderFailed": "That order didn't go through — try a different hex."
+    "orderFailed": "That order didn't go through — try a different hex.",
+    "plotTaken": "That plot was just taken — here's another one."
   },
   "ring": {
     "finishGuidedFirst": "Finish the guided buildings first",

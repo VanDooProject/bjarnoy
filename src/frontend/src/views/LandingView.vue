@@ -23,6 +23,7 @@ import {
   findGuidedTarget,
   nextGuidedType,
   ringNoteReason,
+  snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
@@ -442,10 +443,24 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
-    // found on the nearest one instead; now it just tells the player to
-    // pick one of the highlighted plots.
+    // found on the nearest one instead; that's gone (issue #96 covers why),
+    // but landing-page-defects.md L6a found the resulting hard refusal was
+    // itself the bigger problem: six offered plots among ~150 drawn tiles
+    // (L3) makes a miss the common case, not the exception. So a near-miss
+    // — exactly one hex off a single offered plot, unambiguously — founds
+    // there instead of refusing (`snapToOfferedPlot`; see its own comment
+    // for why it stays conservative rather than snapping to "nearest
+    // offered plot" at any distance). A genuine miss gets a nudge, not a
+    // refusal, plus a flash on the highlighted plots so the player is shown
+    // where to go rather than only told.
     if (!DEMO_MODE && !world.startPositionAt(coord)) {
+      const snapped = snapToOfferedPlot(coord, nearbyStartCoords.value);
+      if (snapped) {
+        void foundHere(snapped);
+        return;
+      }
       showInvalidClickMessage(t('landing.invalidClick.pickGlowingPlot'));
+      canvasRef.value?.renderer?.pulseAttention();
       return;
     }
     void foundHere(coord);
@@ -608,7 +623,7 @@ async function foundHere(coord: AxialCoord) {
     // preview shows a plot that's actually still available, then let the
     // player just click again.
     console.error('Failed to found settlement against the backend', err);
-    showInvalidClickMessage("That plot was just taken — here's another one.");
+    showInvalidClickMessage(t('landing.invalidClick.plotTaken'));
     await refreshPreview();
   } finally {
     founding.value = false;

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { AxialCoord } from '../hex/coords';
 import type { Terrain } from './types';
-import { deriveOnboardingGuidance, findGuidedTarget, nextGuidedType, ringNoteReason } from './onboardingGuidance';
+import {
+  deriveOnboardingGuidance,
+  findGuidedTarget,
+  nextGuidedType,
+  ringNoteReason,
+  snapToOfferedPlot,
+} from './onboardingGuidance';
 
 describe('deriveOnboardingGuidance', () => {
   it('before founding: longhouse is current, both guided rows upcoming, step 1 of 3', () => {
@@ -114,5 +120,33 @@ describe('ringNoteReason', () => {
   it('neither guided building fits sand or mountain', () => {
     expect(ringNoteReason('sand')).toEqual({ kind: 'neitherFits' });
     expect(ringNoteReason('mountain')).toEqual({ kind: 'neitherFits' });
+  });
+});
+
+// landing-page-defects.md L6a: near-miss founding, so a click one hex off an
+// offered plot succeeds instead of refusing the click outright.
+describe('snapToOfferedPlot', () => {
+  const offered: AxialCoord[] = [{ q: 0, r: 0 }, { q: 5, r: 5 }];
+
+  it('snaps to the single offered plot at distance 1', () => {
+    expect(snapToOfferedPlot({ q: 1, r: 0 }, offered)).toEqual({ q: 0, r: 0 });
+  });
+
+  it('refuses (returns null) when two offered plots are equidistant at distance 1', () => {
+    // (1,0) is distance 1 from both (0,0) and (1,-1) — genuinely ambiguous.
+    const twoNearby: AxialCoord[] = [{ q: 0, r: 0 }, { q: 1, r: -1 }];
+    expect(snapToOfferedPlot({ q: 1, r: 0 }, twoNearby)).toBeNull();
+  });
+
+  it('refuses at distance 2 — only an unambiguous distance-1 near-miss snaps', () => {
+    expect(snapToOfferedPlot({ q: 2, r: 0 }, offered)).toBeNull();
+  });
+
+  it('refuses when the click matches an offered plot exactly (distance 0 is not a near-miss)', () => {
+    expect(snapToOfferedPlot({ q: 0, r: 0 }, offered)).toBeNull();
+  });
+
+  it('refuses when nothing is offered', () => {
+    expect(snapToOfferedPlot({ q: 1, r: 0 }, [])).toBeNull();
   });
 });

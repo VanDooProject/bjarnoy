@@ -140,3 +140,24 @@ export function ringNoteReason(hexTerrain: Terrain): RingNoteReason {
   const dim = GUIDED_BUILD_TYPES.find((type) => type !== fit)!;
   return { kind: 'oneFits', fit, dim };
 }
+
+/**
+ * landing-page-defects.md L6a: a live-mode click that misses every offered
+ * plot (`world.startPositionAt` returned null) but lands within one hex of
+ * exactly one of them founds there instead of refusing the click outright.
+ * Six offered plots among ~150 drawn tiles (L3) is a small target, and a
+ * near-miss reads as "the player clearly meant this one" far more often than
+ * "the player meant open sea" — but only for an unambiguous near-miss:
+ * deliberately conservative, distance 1 only (not "nearest offered plot at
+ * any distance", which would silently redirect clicks a long way from where
+ * they landed — the same reasoning issue #96 already established for the
+ * exact-match rule this sits next to, see `startPositionAt`'s own comment),
+ * and only when a single offered plot is that close. Two plots equidistant
+ * at distance 1 means genuine ambiguity — this returns `null` rather than
+ * guessing, and the caller falls back to the ordinary miss handling (nudge
+ * copy + `pulseAttention()`).
+ */
+export function snapToOfferedPlot(clicked: AxialCoord, offered: readonly AxialCoord[]): AxialCoord | null {
+  const adjacent = offered.filter((plot) => hexDistance(clicked, plot) === 1);
+  return adjacent.length === 1 ? adjacent[0] : null;
+}
