@@ -11,17 +11,17 @@ namespace Bjarnoy.Api.Endpoints;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Deliberately unauthenticated for now, so a deployment can be identified
-/// while it is still being brought up — before there is an admin account to log
-/// in with, and while the thing being debugged may be login itself. It answers
-/// only with what the build stamped into the image, never with configuration,
-/// connection strings or anything a request could influence.
+/// Unauthenticated on a branch deployment, so it can be identified while it is
+/// still being brought up — before there is an admin account to log in with,
+/// and while the thing being debugged may be login itself. Admin-only on main
+/// and on releases, where naming a version and a commit to anyone who asks is a
+/// small thing to hand an attacker for free. <c>DiagnosticsOptions</c> decides,
+/// and can be overridden per deployment.
 /// </para>
 /// <para>
-/// It still names a version and a commit of a public repository to anyone who
-/// asks, which is a small thing to hand an attacker for free; requiring the
-/// Admin policy is the intended end state, listed with the rest of that pass in
-/// <c>docs/tech/backend.md</c>'s "Not in here yet".
+/// It answers only with what the build stamped into the image, never with
+/// configuration, connection strings, or anything a request could influence —
+/// so the open case leaks nothing beyond the identity of the build.
 /// </para>
 /// </remarks>
 public static class InfoEndpoints
@@ -29,17 +29,27 @@ public static class InfoEndpoints
     /// <summary>How much of the commit SHA <c>ShortCommit</c> carries.</summary>
     public const int ShortCommitLength = 7;
 
+    /// <param name="publicAccess">
+    /// Whether anyone may read it. False puts it behind the Admin policy, which
+    /// is what a production build does — see <c>DiagnosticsOptions</c>.
+    /// </param>
     public static IEndpointRouteBuilder MapInfoEndpoints(
         this IEndpointRouteBuilder app,
-        ApiVersionSet versionSet)
+        ApiVersionSet versionSet,
+        bool publicAccess)
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        app.MapGet("/api/v1/info", GetBuildInfo)
+        var info = app.MapGet("/api/v1/info", GetBuildInfo)
             .WithApiVersionSet(versionSet)
             .WithTags("Info")
             .WithName("GetBuildInfo")
             .WithSummary("The version, commit and branch this deployment was built from.");
+
+        if (!publicAccess)
+        {
+            info.RequireAuthorization("Admin");
+        }
 
         return app;
     }

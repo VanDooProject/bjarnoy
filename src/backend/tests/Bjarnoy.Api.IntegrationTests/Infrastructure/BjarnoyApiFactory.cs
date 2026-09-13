@@ -37,6 +37,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// <summary>Set by <see cref="WithBuild"/>; null means an unstamped build.</summary>
     private BuildInfoOptions? _build;
 
+    /// <summary>Set by <see cref="WithDiagnostics"/>; null leaves it to the build.</summary>
+    private DiagnosticsOptions? _diagnostics;
+
     private BjarnoyApiFactory(DatabaseProvider provider, string connectionString, string? databaseFile)
     {
         _provider = provider;
@@ -111,6 +114,23 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         return this;
     }
 
+    /// <summary>
+    /// Overrides what the build's branch would otherwise decide about the
+    /// diagnostic surfaces — the per-deployment escape hatch, as an env var
+    /// would supply it.
+    /// </summary>
+    public BjarnoyApiFactory WithDiagnostics(
+        bool? publicBuildInfo = null, bool? exposeApiReference = null)
+    {
+        _diagnostics = new DiagnosticsOptions
+        {
+            PublicBuildInfo = publicBuildInfo,
+            ExposeApiReference = exposeApiReference,
+        };
+
+        return this;
+    }
+
     /// <summary>The worlds the database holds, in creation order.</summary>
     public async Task<IReadOnlyList<WorldEntity>> GetWorldsAsync(
         CancellationToken cancellationToken = default)
@@ -154,6 +174,20 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             builder.UseSetting($"{BuildInfoOptions.SectionName}:Commit", _build.Commit);
             builder.UseSetting($"{BuildInfoOptions.SectionName}:Branch", _build.Branch);
             builder.UseSetting($"{BuildInfoOptions.SectionName}:BuiltAt", _build.BuiltAt);
+        }
+
+        if (_diagnostics?.PublicBuildInfo is { } publicBuildInfo)
+        {
+            builder.UseSetting(
+                $"{DiagnosticsOptions.SectionName}:PublicBuildInfo",
+                publicBuildInfo.ToString());
+        }
+
+        if (_diagnostics?.ExposeApiReference is { } exposeApiReference)
+        {
+            builder.UseSetting(
+                $"{DiagnosticsOptions.SectionName}:ExposeApiReference",
+                exposeApiReference.ToString());
         }
 
         // Stand in for the built frontend the Docker image bakes into wwwroot,

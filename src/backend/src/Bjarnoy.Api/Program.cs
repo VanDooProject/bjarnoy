@@ -73,6 +73,20 @@ builder.Services.AddScoped<UserActivityRetentionService>();
 builder.Services.AddOptions<BuildInfoOptions>()
     .Bind(builder.Configuration.GetSection(BuildInfoOptions.SectionName));
 
+builder.Services.AddOptions<DiagnosticsOptions>()
+    .Bind(builder.Configuration.GetSection(DiagnosticsOptions.SectionName));
+
+// Which debugging surfaces this deployment opens. Read here rather than from
+// IOptions later because both decisions are made while routes are being
+// mapped, before there is a request to resolve anything against.
+var buildInfo = builder.Configuration.GetSection(BuildInfoOptions.SectionName).Get<BuildInfoOptions>()
+    ?? new BuildInfoOptions();
+var diagnostics = builder.Configuration.GetSection(DiagnosticsOptions.SectionName).Get<DiagnosticsOptions>()
+    ?? new DiagnosticsOptions();
+var isProductionBuild = buildInfo.IsProductionBuild;
+var publicBuildInfo = diagnostics.PublicBuildInfo ?? !isProductionBuild;
+var exposeApiReference = diagnostics.ExposeApiReference ?? !isProductionBuild;
+
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -236,7 +250,10 @@ app.UseForwardedHeaders(forwardedHeadersOptions);
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
+// Development always; otherwise whatever DiagnosticsOptions decided — which
+// leaves a branch deployment's API reference reachable (the point: a PR build
+// deployed to Coolify is something to poke at) and a production one's closed.
+if (app.Environment.IsDevelopment() || exposeApiReference)
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
@@ -248,7 +265,7 @@ var versionSet = app.NewApiVersionSet()
     .Build();
 
 app.MapDefaultEndpoints();
-app.MapInfoEndpoints(versionSet);
+app.MapInfoEndpoints(versionSet, publicBuildInfo);
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);

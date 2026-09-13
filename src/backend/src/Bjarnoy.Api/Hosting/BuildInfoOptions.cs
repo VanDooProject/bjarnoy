@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Bjarnoy.Api.Hosting;
 
 /// <summary>
@@ -11,7 +13,7 @@ namespace Bjarnoy.Api.Hosting;
 /// <c>dotnet run</c> that sets nothing simply reports <see cref="Unknown"/>
 /// instead of failing to start.
 /// </remarks>
-public sealed class BuildInfoOptions
+public sealed partial class BuildInfoOptions
 {
     public const string SectionName = "Build";
 
@@ -29,4 +31,33 @@ public sealed class BuildInfoOptions
 
     /// <summary>When the image was built, ISO-8601, or <see cref="Unknown"/>.</summary>
     public string BuiltAt { get; set; } = Unknown;
+
+    /// <summary>The branch a production deployment is cut from.</summary>
+    public const string ProductionBranch = "main";
+
+    /// <summary>
+    /// Whether this build is one that faces players, which is what decides
+    /// whether the diagnostic surfaces (<c>/api/v1/info</c>, the Scalar API
+    /// reference) are open — see <see cref="DiagnosticsOptions"/>.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately answered the safe way round: a build is production unless
+    /// it can prove it is a branch deployment. An image built without the build
+    /// args, or a release cut from a tag rather than a branch, reports
+    /// <see cref="Unknown"/> or <c>v1.2.3</c> here — neither is a feature
+    /// branch, and guessing "not production" for either would open a debugging
+    /// surface on exactly the deployment that must not have one.
+    /// </remarks>
+    public bool IsProductionBuild => IsProduction(Branch);
+
+    /// <inheritdoc cref="IsProductionBuild"/>
+    public static bool IsProduction(string? branch) =>
+        string.IsNullOrWhiteSpace(branch)
+        || string.Equals(branch, Unknown, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(branch, ProductionBranch, StringComparison.OrdinalIgnoreCase)
+        || ReleaseTag().IsMatch(branch);
+
+    /// <summary>A tag release-please cut, e.g. <c>v0.2.1</c> — not a branch.</summary>
+    [GeneratedRegex(@"^v\d", RegexOptions.CultureInvariant)]
+    private static partial Regex ReleaseTag();
 }

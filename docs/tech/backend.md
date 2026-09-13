@@ -328,9 +328,24 @@ args, surfaced as `Build:*` configuration (`BuildInfoOptions`) so a `docker run
 -e Build__Commit=…` can still correct them. Fields read `"unknown"` when nothing
 stamped them, which is what a plain `dotnet run` reports. It exists because
 several branch deployments running side by side make "which commit is this one?"
-a real question. It is **unauthenticated for now**, deliberately: a deployment
-has to be identifiable before there is an account to log into it with. Closing
-that is listed below.
+a real question. Who may read it, and whether the Scalar API reference is
+served at all, follow the same rule (`DiagnosticsOptions`): **open on a branch
+build, closed on a production one.** A build is production unless it can prove
+otherwise — `main`, a `v*` release tag, and a build that never got stamped all
+count as production, since guessing "not production" would open a debugging
+surface on exactly the deployment that must not have one. A branch deployment is
+therefore debuggable the moment it comes up, with nothing to configure.
+
+Override per deployment when needed:
+
+```bash
+Diagnostics__PublicBuildInfo=true      # serve /api/v1/info to anyone
+Diagnostics__ExposeApiReference=false  # keep /scalar closed on a branch build
+```
+
+Runtime configuration rather than a build-time switch on purpose: baking it in
+would mean two images differing by a boolean, and no way to close a surface on a
+running deployment without waiting for a rebuild.
 
 ## User activity tracking
 
@@ -494,10 +509,6 @@ enforce real ownership — see `SettlementOwnershipEndpointFilter`/
 legacy design: email verification, password reset, and a `logout-all` that
 revokes every refresh token (e.g. on ban/lock) rather than just the current
 session's.
-
-`GET /api/v1/info` is open to anyone, which hands out a version and commit of
-this repository for free. Requiring the Admin policy is the intended end state;
-it stays open while deployments are still being brought up by hand.
 
 World creation (`POST /api/v1/worlds`) and most read endpoints (a settlement's
 full resources/garrison/queue, its battle reports) are still unauthenticated —
