@@ -87,6 +87,77 @@ const DEMO_RIVAL_CART_OFFSET: AxialCoord = { q: 6, r: -4 };
 // unexplored starting immediately at the border.
 export const FOG_SCOUT_RING = 3;
 
+// landing-page-defects.md L5: the pre-founding preview used to cull by a
+// hexDistance disc around the suggested plot, which draws whatever land
+// happens to fall inside that disc — including a second, unrelated island,
+// if a world seed happened to place one within range. `previewIslandTiles`
+// below fixes that by culling on landmass membership instead, which is what
+// "one island" actually means. It mirrors the backend's own island
+// partition (`WorldGenerator.FloodFill`, WorldGenerator.cs ~L106) exactly:
+// both flood-fill outward from a seed hex through the same six neighbours
+// (`HexCoord.Neighbours()` there, `neighbors()` here — same direction-vector
+// order), and `worldGenerator.ts`'s terrain sampling is already a bit-exact
+// port (see that module's own header comment), so both sides agree on which
+// hexes are land in the first place.
+//
+// `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` is a generous safety backstop, not the
+// expected case — an ordinary starter island the generator actually
+// produces is far smaller than this. It exists because `rebuildTerrain`
+// calls `previewIslandTiles` on every camera rebuild (see the cache below),
+// and a malformed/pathological seed producing an unbroken landmass must not
+// be allowed to hang that on an unbounded flood fill. Hitting the bound
+// falls back to `PREVIEW_ISLAND_FALLBACK_RADIUS`'s pre-L5 hexDistance-disc
+// rule instead of drawing a silently-truncated island.
+export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
+// The pre-L5 behaviour, kept only as `previewIslandTiles`'s safety-bound
+// fallback (see above) — matches the old `PREVIEW_ISLAND_RADIUS` constant
+// that used to live in HexMapRenderer.ts before this fix. Exported so a
+// test can assert the fallback rule directly rather than re-deriving 7.
+export const PREVIEW_ISLAND_FALLBACK_RADIUS = 7;
+
+/**
+ * Iterative flood fill (an explicit queue, not recursion — the same "one
+ * stack frame per land hex overflows on any island worth playing on" reason
+ * `WorldGenerator.FloodFill`'s own doc comment gives) from `start`, walking
+ * only tiles `isLand` accepts, through `neighbors()` — matching the
+ * backend's adjacency exactly (see `previewIslandTiles`'s own doc comment).
+ * Returns null the moment a candidate tile would sit further than
+ * `maxRadius` hexes from `start`, so the caller can fall back to a disc rule
+ * rather than accepting a landmass silently cut short mid-flood.
+ *
+ * A pure, exported function (rather than folded directly into
+ * `previewIslandTiles`) so it's unit-testable against a synthetic `isLand`
+ * predicate — two islands close enough to leak into each other under the
+ * old radius rule, or a landmass built specifically to hit `maxRadius` —
+ * without needing to find a real world seed that happens to produce the
+ * same shape. Same reasoning as HexMapRenderer's own
+ * `previewFitZoom`/`worldLayerOrder`: pull the pure logic out where it can
+ * be tested directly, rather than only through a mounted renderer.
+ */
+export function floodFillLandmass(
+  start: AxialCoord,
+  isLand: (c: AxialCoord) => boolean,
+  maxRadius: number,
+): AxialCoord[] | null {
+  if (!isLand(start)) return [];
+  const seen = new Set<string>([coordKey(start)]);
+  const tiles: AxialCoord[] = [start];
+  const queue: AxialCoord[] = [start];
+  while (queue.length) {
+    const c = queue.shift()!;
+    for (const n of neighbors(c)) {
+      const k = coordKey(n);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (!isLand(n)) continue;
+      if (hexDistance(start, n) > maxRadius) return null;
+      tiles.push(n);
+      queue.push(n);
+    }
+  }
+  return tiles;
+}
+
 export class WorldModel {
   readonly seed: number;
   /** The world's generation constants (issue #159 part B) — `DEFAULT_GENERATION` in demo mode, since there is no backend to ask. */
@@ -101,6 +172,8 @@ export class WorldModel {
   private islands: IslandLabel[] = [];
   /** islandFootprint()'s cache — see there for why this needs to exist at all. */
   private islandFootprintCache = new Map<string, AxialCoord[]>();
+  /** previewIslandTiles()'s cache, keyed by `previewCenter` — see there for why this needs to exist at all. */
+  private previewIslandTilesCache = new Map<string, AxialCoord[]>();
   /** River tiles known from the backend (live mode only), keyed by coordinate — see `setRiverTiles`. */
   private riverTiles = new Map<string, RiverTile>();
   /** Demo mode's client-only trade offers — see `postTradeOffer` and friends. */
@@ -207,6 +280,38 @@ export class WorldModel {
     }
     this.islandFootprintCache.set(island.id, tiles);
     return tiles;
+  }
+
+  /**
+   * The preview island's drawn tiles for a given `previewCenter` —
+   * `landing-page-defects.md` L5's landmass-membership cull, replacing the
+   * old hexDistance disc (see the module-level comment on
+   * `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` above for why a disc was wrong and
+   * what this matches instead). Every call for a given coordinate is the
+   * same pure answer (terrain never changes after generation), so results
+   * are cached by coordinate key: `HexMapRenderer.rebuildTerrain` calls this
+   * on every camera rebuild (pan/zoom/resize), not just once when the
+   * preview first mounts, and flood-filling from scratch every frame would
+   * be real, avoidable work — the same reasoning `islandFootprint` above
+   * already applies to the world-map island-label case. `settlementCameraOrigin`
+   * calls this too (L4), so the camera fit measures exactly the set of
+   * hexes the cull draws, per this pair's own shared design note.
+   */
+  previewIslandTiles(center: AxialCoord): AxialCoord[] {
+    const key = coordKey(center);
+    const cached = this.previewIslandTilesCache.get(key);
+    if (cached) return cached;
+
+    const tiles =
+      floodFillLandmass(center, (c) => this.isLand(c.q, c.r), PREVIEW_ISLAND_FLOOD_MAX_RADIUS) ??
+      this.previewIslandFallback(center);
+    this.previewIslandTilesCache.set(key, tiles);
+    return tiles;
+  }
+
+  /** The pre-L5 rule, kept only as `previewIslandTiles`'s safety-bound fallback (see there). */
+  private previewIslandFallback(center: AxialCoord): AxialCoord[] {
+    return hexesInRadius(center, PREVIEW_ISLAND_FALLBACK_RADIUS).filter((c) => this.isLand(c.q, c.r));
   }
 
   getTile(q: number, r: number): Tile {

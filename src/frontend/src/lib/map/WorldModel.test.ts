@@ -7,7 +7,7 @@
 // perfect hexagon every other settlement in the demo produces.
 import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
-import { WorldModel } from './WorldModel';
+import { floodFillLandmass, PREVIEW_ISLAND_FALLBACK_RADIUS, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, WorldModel } from './WorldModel';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -473,5 +473,91 @@ describe('WorldModel.seaFacingDirectionOf', () => {
     // land.
     const model = new WorldModel(783131215);
     expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
+  });
+});
+
+function key(c: AxialCoord): string {
+  return `${c.q},${c.r}`;
+}
+
+// landing-page-defects.md L5: the pre-founding preview's old cull was a
+// hexDistance disc, which draws whatever land falls inside it — including a
+// second, unrelated island. `floodFillLandmass` is the fix (landmass
+// membership instead of distance), tested here against a synthetic `isLand`
+// predicate rather than a real world seed — same "pure logic, tested
+// directly" reasoning HexMapRenderer.test.ts already applies to
+// previewFitZoom/worldLayerOrder, and it sidesteps having to go hunting for
+// a seed that happens to produce two islands in exactly the right places.
+describe('floodFillLandmass', () => {
+  it('returns only the previewed island — a second island within the old fallback radius is excluded', () => {
+    const center: AxialCoord = { q: 0, r: 0 };
+    const previewedIsland = hexesInRadius(center, 2);
+    // Centred 6 hexes away — within PREVIEW_ISLAND_FALLBACK_RADIUS (7) of
+    // `center`, so the old disc rule would have drawn it too.
+    const otherIslandCenter: AxialCoord = { q: 6, r: 0 };
+    expect(hexDistance(center, otherIslandCenter)).toBeLessThanOrEqual(PREVIEW_ISLAND_FALLBACK_RADIUS);
+    const otherIsland = hexesInRadius(otherIslandCenter, 2);
+    const land = new Set([...previewedIsland, ...otherIsland].map(key));
+
+    // Confirms the bug this guards against: the old radius-disc rule (still
+    // `previewIslandFallback`'s own safety-bound fallback) really does pull
+    // in the other island for this layout.
+    const oldRuleTiles = hexesInRadius(center, PREVIEW_ISLAND_FALLBACK_RADIUS).filter((c) => land.has(key(c)));
+    expect(oldRuleTiles.some((c) => otherIsland.some((o) => o.q === c.q && o.r === c.r))).toBe(true);
+
+    const tiles = floodFillLandmass(center, (c) => land.has(key(c)), PREVIEW_ISLAND_FLOOD_MAX_RADIUS)!;
+    const tileKeys = new Set(tiles.map(key));
+    for (const c of previewedIsland) expect(tileKeys.has(key(c))).toBe(true);
+    for (const c of otherIsland) expect(tileKeys.has(key(c))).toBe(false);
+  });
+
+  it('is empty when the centre itself is not land', () => {
+    expect(floodFillLandmass({ q: 0, r: 0 }, () => false, PREVIEW_ISLAND_FLOOD_MAX_RADIUS)).toEqual([]);
+  });
+
+  it('finds the whole landmass when it stays within the safety bound', () => {
+    const center: AxialCoord = { q: 0, r: 0 };
+    const island = new Set(hexesInRadius(center, 5).map(key));
+    const tiles = floodFillLandmass(center, (c) => island.has(key(c)), PREVIEW_ISLAND_FLOOD_MAX_RADIUS)!;
+    expect(tiles).toHaveLength(island.size);
+  });
+
+  it('returns null (rather than a silently truncated island) once a reachable tile would sit past the safety bound', () => {
+    // An unbroken landmass everywhere is exactly the pathological case
+    // PREVIEW_ISLAND_FLOOD_MAX_RADIUS exists to catch — see that constant's
+    // own doc comment on WorldModel.ts.
+    expect(floodFillLandmass({ q: 0, r: 0 }, () => true, PREVIEW_ISLAND_FLOOD_MAX_RADIUS)).toBeNull();
+  });
+});
+
+describe('WorldModel.previewIslandTiles', () => {
+  it('falls back to the old radius-disc rule when the flood fill hits its safety bound, instead of hanging or truncating silently', () => {
+    const model = new WorldModel(1);
+    // An unbroken landmass everywhere — the pathological case the safety
+    // bound (PREVIEW_ISLAND_FLOOD_MAX_RADIUS) exists to catch. Overriding
+    // the public `isLand` on this one instance (rather than hunting for a
+    // real seed that happens to produce a 24+ hex landmass) keeps this test
+    // fast and deterministic.
+    model.isLand = () => true;
+    const tiles = model.previewIslandTiles({ q: 0, r: 0 });
+    const expected = hexesInRadius({ q: 0, r: 0 }, PREVIEW_ISLAND_FALLBACK_RADIUS);
+    expect(tiles).toHaveLength(expected.length);
+  });
+
+  it('caches its result per centre — a second call for the same centre does no further flood-filling', () => {
+    const model = new WorldModel(1);
+    let calls = 0;
+    const realIsLand = model.isLand.bind(model);
+    model.isLand = (q: number, r: number) => {
+      calls++;
+      return realIsLand(q, r);
+    };
+    const center = { q: 0, r: 0 };
+    const first = model.previewIslandTiles(center);
+    const callsAfterFirst = calls;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+    const second = model.previewIslandTiles(center);
+    expect(second).toBe(first); // same cached array, not just equal content
+    expect(calls).toBe(callsAfterFirst);
   });
 });
