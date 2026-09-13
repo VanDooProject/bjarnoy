@@ -14,6 +14,27 @@ namespace Bjarnoy.AppHost.Tests;
 public static class LiveFrontendTestHelpers
 {
     /// <summary>
+    /// Reads the live plot's exact screen point from the page's own renderer,
+    /// the same way <c>e2e/helpers.ts</c>'s <c>claimLandfall</c> does:
+    /// <c>window.__settlementRenderer().previewCenter</c> is LandingView's
+    /// <c>previewCoord</c> (live mode: <c>world.plotSuggestion.plot</c>), and
+    /// <c>hexCenterScreen</c> is the renderer's own camera math converting
+    /// that coordinate to a screen point. Returns <c>null</c> — rather than
+    /// throwing — while the hook or the plot isn't there yet (a cold Vite
+    /// dev server mid mount, or the plot-suggestion request still in
+    /// flight), which is the only thing <see cref="FoundStartingSettlementAsync"/>'s
+    /// retry loop is now covering for.
+    /// </summary>
+    private const string ClickPointScript = """
+        () => {
+          const renderer = window.__settlementRenderer?.();
+          if (!renderer?.previewCenter) return null;
+          const p = renderer.hexCenterScreen(renderer.previewCenter);
+          return [p.x, p.y];
+        }
+        """;
+
+    /// <summary>
     /// Navigates <paramref name="page"/> to <paramref name="frontendUrl"/> and
     /// founds the starting settlement through the real UI, the same way a
     /// brand-new player does. Returns once the tray confirms
@@ -53,13 +74,23 @@ public static class LiveFrontendTestHelpers
         {
             var box = await canvas.BoundingBoxAsync()
                 ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
-            // Matches e2e/helpers.ts's foundSettlement click point (0.66 of
-            // the viewport width, vertical centre) — the real world's own
-            // starter plot, via WorldModel.findLandfall against this run's
-            // seed (see bootstrapLiveWorld), shifted by screenBiasX. Retried
-            // rather than trusted first-try: a cold Vite dev server can still
-            // be mid camera-transition the instant the canvas first appears.
-            await page.Mouse.ClickAsync(box.X + box.Width * 0.66f, box.Y + box.Height / 2);
+
+            // docs/plans/landing-page-defects.md's "Test debt this work must
+            // pay off": this used to click a hardcoded `0.66 × width` pixel
+            // and lean on the 10-attempt retry to paper over the fact that
+            // the target wasn't actually known — which silently broke
+            // whenever the pre-founding camera framing changed (L4/L5). Ask
+            // the renderer where the plot actually is instead; the retry
+            // below is now only for genuine cold-start raciness (the hook or
+            // the plot not existing *yet*), not an unknown click target.
+            var point = await page.EvaluateAsync<double[]?>(ClickPointScript);
+            if (point is null)
+            {
+                await page.WaitForTimeoutAsync(1_000);
+                continue;
+            }
+
+            await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
             try
             {
                 await Assertions.Expect(trayStatus).ToHaveTextAsync("Placed", new() { Timeout = 2_000 });

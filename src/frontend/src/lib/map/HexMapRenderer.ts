@@ -3062,6 +3062,23 @@ export class HexMapRenderer {
   }
 
   /**
+   * The plot this renderer was mounted to preview, if any — LandingView's
+   * `previewCoord` (demo: `findLandfall`; live: `plotSuggestion.plot`),
+   * captured once at mount (see useHexMapRenderer's own remarks on options
+   * being non-reactive). Exposed so e2e founding helpers can ask the
+   * renderer for the plot's *coordinate* and then its screen position
+   * (`hexCenterScreen`), instead of hard-coding a fraction of the canvas
+   * that only happens to line up with wherever the preview camera framing
+   * currently centres itself — that's what broke when the pre-founding
+   * camera moved from "centred on the plot" to "centred on the island"
+   * (docs/plans/landing-page-defects.md L4/L5). `options` itself stays
+   * private; this is a read-only, single-field accessor.
+   */
+  get previewCenter(): AxialCoord | undefined {
+    return this.options.previewCenter;
+  }
+
+  /**
    * Re-homes the camera onto the current settlement's own canonical framing
    * (settlementCameraOrigin — the same fog-margin-fitted view a fresh
    * settlement-mode mount always started at). For *externally*-driven entry

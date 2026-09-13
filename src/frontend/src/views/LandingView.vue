@@ -219,16 +219,20 @@ onMounted(async () => {
   // lets an e2e test convert a real hex coordinate to an exact click point
   // via the renderer's own camera math, instead of guessing pixel offsets
   // that only happen to land right at one particular zoom/camera framing.
-  if (DEMO_MODE) {
-    (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
-      canvasRef.value?.renderer;
-  }
+  // Installed in *both* modes (not just DEMO_MODE) — it's a read-only
+  // camera-math accessor that exposes nothing a player couldn't already
+  // compute from the visible canvas, and the live Aspire e2e suite
+  // (LiveFrontendTestHelpers.cs) is its only consumer in live mode, needing
+  // it for the same reason: deriving the real founding click point instead
+  // of a hardcoded fraction of the viewport (see that file's own remarks).
+  (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
+    canvasRef.value?.renderer;
 });
 onUnmounted(() => {
   world.stopHudSync();
   stopPreviewPoll();
   clearTimeout(invalidClickTimer);
-  if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
+  delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
 
 // L7 (landing-page-defects.md): `PlotSuggestionRejection.NoPlotAvailable` —
