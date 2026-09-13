@@ -1,4 +1,7 @@
 {
+  "header": {
+    "haveRealm": "Ich habe schon ein Reich"
+  },
   "hero": {
     "eyebrow": "Leeres Grundstück · Bjarnøy",
     "notOpenTitle": "Noch nicht geöffnet.",

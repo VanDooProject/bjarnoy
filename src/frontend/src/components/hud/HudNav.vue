@@ -75,7 +75,18 @@ const showProfileNudge = computed(
     >
       {{ t('hud.nav.settlement') }}
     </button>
-    <button class="link" :class="{ active: route.name === 'world' }" @click="router.push('/world')">
+    <!-- landing-page-defects.md L1: the router guard (router/index.ts) bounces
+         `/world` straight back to `/` while `player.hasFoundedSettlement` is
+         false, so this link is a dead click on every pre-founding route this
+         nav gets mounted on (the landing page's post-founding half included,
+         for the brief window before founding flips it true) — hide it rather
+         than offer a click that silently does nothing. -->
+    <button
+      v-if="player.hasFoundedSettlement"
+      class="link"
+      :class="{ active: route.name === 'world' }"
+      @click="router.push('/world')"
+    >
       {{ t('hud.nav.worldMap') }}
     </button>
     <button
@@ -111,7 +122,11 @@ const showProfileNudge = computed(
     >
       {{ t('hud.nav.docs') }}
     </button>
-    <button class="link" :class="{ active: route.name === 'landing' }" @click="router.push('/')">
+    <!-- landing-page-defects.md L1: a self-link on the page you're already
+         on when route.name is 'landing' — HudNav is mounted there too, for
+         the post-founding half of LandingView (see that component's own
+         header split). Hide it there rather than offer a click to nowhere. -->
+    <button v-if="route.name !== 'landing'" class="link" @click="router.push('/')">
       {{ t('hud.nav.landing') }}
     </button>
     <LocaleSwitcher />
