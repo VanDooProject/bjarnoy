@@ -299,6 +299,16 @@ export const useWorldStore = defineStore('world', {
     // the start positions a settlement may be founded on. Unused in demo
     // mode, where `WorldModel` is the entire source of truth.
     worldId: localStorage.getItem('bjarnoy.worldId'),
+    // The current world's own display name (`WorldResponse.name`), cached
+    // client-side once `bootstrapLiveWorld` fetches it — so a caller that
+    // just wants a human-readable label for "the world you're in right now"
+    // (ReturningPlayerMenu.vue's login link, see
+    // docs/plans/returning-player-world-switching.md's login↔world linkage)
+    // doesn't need a second round-trip just to show it. Not persisted to
+    // localStorage like `worldId` — it's a display nicety, not something a
+    // reload needs synchronously, and it's re-fetched the moment
+    // `bootstrapLiveWorld` runs again anyway.
+    worldName: null as string | null,
     // The founding/restoring browser's stable local id (`usePlayerStore().id`),
     // remembered here once known so `queueBuildLive`/`trainUnitsLive` can send
     // it as the `X-Owner-Id` header the backend's ownership check reads for an
@@ -388,6 +398,7 @@ export const useWorldStore = defineStore('world', {
       }
 
       this.worldId = world.id;
+      this.worldName = world.name;
       this.worldRadius = world.radius;
       this.worldSpeedFactor = world.speedFactor;
       this.movementRules = world.movement;

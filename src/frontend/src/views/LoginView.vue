@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { ApiError } from '../api/client';
 import { useAuthStore } from '../stores/auth';
+import { useWorldStore } from '../stores/world';
 import type { MessageSchema } from '../i18n/schema';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 
 const auth = useAuthStore();
+const world = useWorldStore();
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -17,6 +19,16 @@ const password = ref('');
 const submitting = ref(false);
 const error = ref<string | null>(null);
 
+// Login↔world linkage (docs/plans/returning-player-world-switching.md):
+// arriving here from ReturningPlayerMenu.vue's "Log in" link, in the
+// context of a specific world, carries that world along so this page can
+// found/return to it immediately after authenticating instead of dropping
+// back to a generic landing page. `worldName` rides along in the query too
+// (see that component's own comment) purely for display here — no second
+// API round-trip needed just to show a name.
+const linkedWorldId = computed(() => (typeof route.query.worldId === 'string' ? route.query.worldId : null));
+const linkedWorldName = computed(() => (typeof route.query.worldName === 'string' ? route.query.worldName : null));
+
 async function onSubmit() {
   if (submitting.value) return;
   submitting.value = true;
@@ -24,8 +36,16 @@ async function onSubmit() {
 
   try {
     await auth.login(userName.value, password.value);
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
-    await router.push(redirect);
+    if (linkedWorldId.value) {
+      // Same mechanism WorldPickerView.vue's own `joinOrReturn` uses: joins
+      // (or returns to) the linked world, then lands in the
+      // founding/settlement flow for it.
+      await world.joinWorld(linkedWorldId.value);
+      await router.push('/');
+    } else {
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+      await router.push(redirect);
+    }
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
       error.value = t('login.errors.banned');
@@ -62,6 +82,13 @@ onMounted(() => {
     </header>
     <main class="body">
       <h1>{{ t('login.title') }}</h1>
+      <p v-if="linkedWorldId" class="world-linked">
+        {{
+          linkedWorldName
+            ? t('login.continueInWorld', { worldName: linkedWorldName })
+            : t('login.continueInWorldGeneric')
+        }}
+      </p>
       <form class="form" @submit.prevent="onSubmit">
         <label for="userName">{{ t('login.usernameLabel') }}</label>
         <input id="userName" v-model="userName" type="text" autocomplete="username" required />
@@ -106,6 +133,12 @@ onMounted(() => {
   margin: 0 auto;
   padding: 24px 28px 60px;
   color: var(--text);
+}
+.world-linked {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
 }
 .form {
   display: flex;
