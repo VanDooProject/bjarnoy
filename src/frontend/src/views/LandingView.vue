@@ -80,6 +80,26 @@ let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 const PREVIEW_POLL_MS = 20000;
 let previewPollHandle: ReturnType<typeof setInterval> | undefined;
 
+// landing-page-defects.md L4 point 3: the pre-founding preview camera used
+// to bias right by a bare `0.16` template literal, with no traceable
+// relationship to the thing it was working around — the `.hero` copy block
+// (see this file's own <style> block below: `left: 56px; max-width: 520px`).
+// `screenBiasX` is already a *fraction of viewport width*, not a pixel
+// count (see HexMapRenderer's `biasedCenterX`/`previewFitZoom`), so its
+// value alone can't be read off the hero's pixel geometry directly without
+// picking some reference viewport width to divide by — 1920 (a common
+// desktop width) is used here, and re-deriving 0.16 this way lands within
+// half a percentage point of the original hand-tuned value, which is what
+// you'd expect if that value actually was tuned by eye against a
+// similarly-sized screen. The win isn't a different number, it's that this
+// one now has a formula a hero-column resize keeps in step with, instead of
+// a second magic number silently drifting out of sync with the first.
+const HERO_REFERENCE_VIEWPORT_WIDTH_PX = 1920;
+const HERO_RIGHT_EDGE_PX = 56 + 520; // `.hero`'s own left + max-width, below
+const HERO_MIN_GUTTER_PX = 40; // breathing room past the hero's own edge before the island may start
+const LANDING_PREVIEW_SCREEN_BIAS_X =
+  (HERO_RIGHT_EDGE_PX + HERO_MIN_GUTTER_PX) / (2 * HERO_REFERENCE_VIEWPORT_WIDTH_PX);
+
 // L7 (landing-page-defects.md): the backend already has a settlement for
 // this owner that the browser doesn't know about — most often L6b (founding
 // succeeded server-side on an earlier visit, but the client never got to
@@ -670,7 +690,7 @@ watch(
         player.hasFoundedSettlement || !DEMO_MODE ? undefined : (previewCoord ?? undefined)
       "
       :highlight-coords="player.hasFoundedSettlement || DEMO_MODE ? undefined : nearbyStartCoords"
-      :screen-bias-x="0.16"
+      :screen-bias-x="LANDING_PREVIEW_SCREEN_BIAS_X"
       :lock-camera="!player.hasFoundedSettlement"
       hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"

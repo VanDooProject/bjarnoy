@@ -34,7 +34,7 @@
 // its whole tile, props included.
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexDistance, hexesInRadius, neighbors } from '../hex/coords';
+import { coordKey, hexesInRadius, neighbors } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -622,20 +622,77 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // zip 6a: the landing page's pre-founding preview is a bit wider than the
 // settlement view's own default, so the single starter island reads as a
-// place, not a crop — and how many hexes around `previewCenter` it shows at
-// all (the world isn't fogged yet in preview, so without a hard cutoff any
-// other island generated nearby would show too — zip 6a is one island, not
-// a slice of the world map).
+// place, not a crop. Which hexes it shows at all is `WorldModel.previewIslandTiles`'s
+// job (landing-page-defects.md L5: culled by landmass membership, not a
+// radius, so a second island generated nearby never bleeds into the crop
+// and the real island isn't cropped either if it's bigger than the old
+// fixed radius was).
 const PREVIEW_ZOOM = 0.6;
-const PREVIEW_ISLAND_RADIUS = 7;
+// previewFitZoom measures to hex *centres* (`isoGridPosition` + half a
+// tile), but a tile's own drawn sprite is wider/taller than that — see
+// `syncSpriteLayer`'s placement math below, which is exactly what these two
+// margins undo. `PREVIEW_FIT_HALF_TILE_W`: a sprite is TILE_W wide,
+// positioned at `grid.x` (i.e. spanning TILE_W/2 either side of the tile's
+// own centre `grid.x + TILE_W/2`), so a rightmost/leftmost column's sprite
+// always bled past a fit that only measured tile centres
+// (landing-page-defects.md L4). `PREVIEW_FIT_VERTICAL_OVERHANG`: tall art
+// (a tree, a longhouse) is positioned at `grid.y - TILE_TOPFACE_Y_OFFSET`,
+// i.e. up to `TILE_TOPFACE_Y_OFFSET + TILE_H / 2` world units *above* the
+// tile's own vertical centre — applied to both the top and bottom edge of
+// the fit (rather than only the top) since it's already the larger of the
+// two real overhangs, so it only ever over-, never under-, pads the fit.
+const PREVIEW_FIT_HALF_TILE_W = TILE_W / 2;
+const PREVIEW_FIT_VERTICAL_OVERHANG = TILE_TOPFACE_Y_OFFSET + TILE_H / 2;
+// A further small fixed cushion (world units) so the island reads as
+// sitting inside the frame rather than exactly touching its edge.
+const PREVIEW_FIT_MARGIN = 24;
 
 /**
- * Zoom that fits the preview island's actual drawn hexes (non-sea, within
- * `radius` of `center` — see rebuildTerrain's `preview` branch, which this
- * mirrors) inside the viewport, for the landing page's locked static preview
- * (`HexMapRendererOptions.lockCamera`). Replaces the fixed `PREVIEW_ZOOM`
- * constant when locked, so the whole island stays on screen regardless of
- * viewport size/aspect instead of only fitting at one assumed size.
+ * World-space bounding box (tile centres, via `isoGridPosition`) of a
+ * preview island's actually-drawn tiles — the same tile list
+ * `WorldModel.previewIslandTiles` hands `rebuildTerrain`'s preview cull, so
+ * whatever this measures is exactly what's on screen
+ * (landing-page-defects.md L4/L5's own "must land together" reasoning).
+ * Used to centre the locked preview camera on the island itself rather than
+ * on `previewCenter` (the suggested plot): the plot is a scored interior
+ * grass hex, not the landmass's centroid, so a symmetric fit around it left
+ * a gap on the short side while pushing the long side out of frame — this
+ * box is symmetric around its own centre by construction, so fitting around
+ * *it* instead can't do that. Pure, like `previewFitZoom` itself, and
+ * exported so both it and `settlementCameraOrigin` share one measurement.
+ */
+export function previewIslandBounds(tiles: AxialCoord[]): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  centerX: number;
+  centerY: number;
+} | null {
+  if (tiles.length === 0) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const c of tiles) {
+    const g = isoGridPosition(c, TILE_W, TILE_H);
+    const cx = g.x + TILE_W / 2;
+    const cy = g.y + TILE_H / 2;
+    if (cx < minX) minX = cx;
+    if (cx > maxX) maxX = cx;
+    if (cy < minY) minY = cy;
+    if (cy > maxY) maxY = cy;
+  }
+  return { minX, maxX, minY, maxY, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+}
+
+/**
+ * Zoom that fits `tiles` (the preview island's actual drawn hexes — see
+ * `previewIslandBounds`) inside the viewport, for the landing page's locked
+ * static preview (`HexMapRendererOptions.lockCamera`). Replaces the fixed
+ * `PREVIEW_ZOOM` constant when locked, so the whole island stays on screen
+ * regardless of viewport size/aspect instead of only fitting at one assumed
+ * size.
  *
  * A pure, exported function (rather than a private method) so it's
  * unit-testable without a canvas/Pixi app, matching `worldLayerOrder`'s own
@@ -643,34 +700,31 @@ const PREVIEW_ISLAND_RADIUS = 7;
  * left of the biased centre is narrower than half the viewport (see
  * `biasedCenterX` for the corresponding camera shift) — ignoring it would
  * push the island's far edge off screen whenever a bias is in play.
+ *
+ * Takes the tile list directly (rather than a centre + radius + `isSea`
+ * predicate, as it did before landing-page-defects.md L4/L5) so it fits
+ * against the island's own real, possibly-asymmetric bounding box instead
+ * of a symmetric disc around a point that is rarely that box's centre.
  */
 export function previewFitZoom(params: {
-  center: AxialCoord;
-  radius: number;
+  tiles: AxialCoord[];
   screenBiasX: number;
   viewport: { width: number; height: number };
-  isSea: (c: AxialCoord) => boolean;
   fallbackZoom: number;
   minZoom: number;
   maxZoom: number;
 }): number {
-  const { center, radius, screenBiasX, viewport, isSea, fallbackZoom, minZoom, maxZoom } = params;
+  const { tiles, screenBiasX, viewport, fallbackZoom, minZoom, maxZoom } = params;
   if (viewport.width === 0 || viewport.height === 0) return fallbackZoom;
 
-  const grid = isoGridPosition(center, TILE_W, TILE_H);
-  const centerPx = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
-  let maxDx = 0;
-  let maxDy = 0;
-  for (const c of hexesInRadius(center, radius)) {
-    if (isSea(c)) continue;
-    const g = isoGridPosition(c, TILE_W, TILE_H);
-    maxDx = Math.max(maxDx, Math.abs(g.x + TILE_W / 2 - centerPx.x));
-    maxDy = Math.max(maxDy, Math.abs(g.y + TILE_H / 2 - centerPx.y));
-  }
-  if (maxDx === 0 || maxDy === 0) return fallbackZoom;
+  const bounds = previewIslandBounds(tiles);
+  if (!bounds) return fallbackZoom;
+
+  const halfExtentX = (bounds.maxX - bounds.minX) / 2 + PREVIEW_FIT_HALF_TILE_W + PREVIEW_FIT_MARGIN;
+  const halfExtentY = (bounds.maxY - bounds.minY) / 2 + PREVIEW_FIT_VERTICAL_OVERHANG + PREVIEW_FIT_MARGIN;
 
   const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
-  const zoom = Math.min(usableHalfWidth / maxDx, viewport.height / 2 / maxDy);
+  const zoom = Math.min(usableHalfWidth / halfExtentX, viewport.height / 2 / halfExtentY);
   return Math.min(maxZoom, Math.max(minZoom, zoom));
 }
 // How long the camera takes to ease from one position/zoom to another (see
@@ -1159,28 +1213,43 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     if (!settlement) {
       const at = this.options.previewCenter ?? { q: 0, r: 0 };
+      if (this.lockCamera) {
+        // Locked static preview (landing page): fit the whole island to the
+        // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
+        // fully framed regardless of viewport size/aspect. Bounds match
+        // zoomBy's own wheel-zoom clamp (0.05..4) — this is a framing
+        // choice, not a fog-margin one, so
+        // FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM don't apply here.
+        //
+        // landing-page-defects.md L4/L5: `previewIslandTiles` is the exact
+        // same tile set `rebuildTerrain`'s preview branch draws, and the
+        // camera centres on *that* box's own centre rather than on `at`
+        // (the suggested plot) — the plot is a scored interior grass hex,
+        // not the landmass's centroid, so centring on it left a gap on the
+        // short side of an asymmetric island while pushing the long side
+        // out of frame. `at` still decides *which* island (it's the flood
+        // fill's seed hex); it stops being the camera target.
+        const tiles = this.options.worldModel.previewIslandTiles(at);
+        const bounds = previewIslandBounds(tiles);
+        const zoom = previewFitZoom({
+          tiles,
+          screenBiasX: this.options.screenBiasX ?? 0,
+          viewport: this.viewport,
+          fallbackZoom: PREVIEW_ZOOM,
+          minZoom: 0.05,
+          maxZoom: 4,
+        });
+        // `bounds` is only null if `at` itself has no reachable land (a
+        // malformed/empty seed) — fall back to centring on the plot itself
+        // rather than propagating a NaN camera.
+        const centerX = bounds ? bounds.centerX : isoGridPosition(at, TILE_W, TILE_H).x + TILE_W / 2;
+        const centerY = bounds ? bounds.centerY : isoGridPosition(at, TILE_W, TILE_H).y + TILE_H / 2;
+        return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
+      }
       const grid = isoGridPosition(at, TILE_W, TILE_H);
       const centerX = grid.x + TILE_W / 2;
       const centerY = grid.y + TILE_H / 2;
-      // Locked static preview (landing page): fit the whole island to the
-      // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
-      // fully framed regardless of viewport size/aspect. Bounds match
-      // zoomBy's own wheel-zoom clamp (0.05..4) — this is a framing choice,
-      // not a fog-margin one, so FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM
-      // don't apply here.
-      const zoom = this.lockCamera
-        ? previewFitZoom({
-            center: at,
-            radius: PREVIEW_ISLAND_RADIUS,
-            screenBiasX: this.options.screenBiasX ?? 0,
-            viewport: this.viewport,
-            isSea: (c) => this.options.worldModel.getTile(c.q, c.r).terrain === 'sea',
-            fallbackZoom: PREVIEW_ZOOM,
-            minZoom: 0.05,
-            maxZoom: 4,
-          })
-        : PREVIEW_ZOOM;
-      return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
+      return { x: this.biasedCenterX(centerX, PREVIEW_ZOOM), y: centerY, zoom: PREVIEW_ZOOM };
     }
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
     const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
@@ -2218,6 +2287,19 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
+    // landing-page-defects.md L5: culled by landmass membership (computed
+    // once per rebuild here, then checked per-hex via a Set — not
+    // re-flooded per hex), not the old hexDistance disc, which drew
+    // whatever land fell inside it, including any other island a world seed
+    // happened to place nearby. `previewIslandTiles` itself is cached per
+    // centre inside WorldModel, so this is cheap even though rebuildTerrain
+    // runs on every camera change. This is also exactly the tile set
+    // `settlementCameraOrigin`'s locked-preview branch (L4) fits the camera
+    // to — the two must agree, or the framing goes wrong again (see that
+    // method's own comment).
+    const previewTileKeys = preview
+      ? new Set(worldModel.previewIslandTiles(previewCenter).map((c) => coordKey(c)))
+      : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(axialBounds(coords)) : [];
 
@@ -2225,13 +2307,10 @@ export class HexMapRenderer {
       // zip 6a: before a settlement exists, this is the landing page's
       // preview — one island, not a slice of the whole (unfogged) world.
       // Water isn't drawn at all (matching how world mode treats sea — see
-      // rebuildTerrainFlat), and anything past a plausible single-island
-      // radius is cut off so a neighbouring generated island can't show up
-      // uninvited in the background.
-      if (preview) {
-        if (worldModel.getTile(c.q, c.r).terrain === 'sea') continue;
-        if (hexDistance(c, previewCenter) > PREVIEW_ISLAND_RADIUS) continue;
-      }
+      // rebuildTerrainFlat) and membership in `previewTileKeys` already
+      // excludes it (the flood fill only ever visits land), so this one
+      // check replaces both the old sea check and the old radius check.
+      if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
