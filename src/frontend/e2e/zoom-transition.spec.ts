@@ -29,7 +29,7 @@ async function clickNav(page: Page, label: string): Promise<void> {
   await page.locator('.hud-nav button', { hasText: label }).click();
 }
 
-test.describe('zoom-driven world/settlement transition', () => {
+test.describe('zoom-driven world/settlement transition', { tag: '@g3' }, () => {
   test('zooming in on the world map crosses the enter threshold into settlement view, and back out again', async ({
     page,
   }) => {
