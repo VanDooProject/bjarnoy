@@ -187,6 +187,21 @@ jobs:
           curl -fsS 'http://localhost:8080/api/v1/worlds' | grep -q 'smoke-test-world'
           echo "::endgroup::"
 
+          echo "::group::the fog mask renders (SkiaSharp's native library loads)"
+          # This is the one endpoint that reaches native code, and it only
+          # breaks in a container: libSkiaSharp.so links against
+          # libfontconfig.so.1, which the aspnet base image does not carry, so
+          # every request 500'd with "/app/liblibSkiaSharp: cannot open shared
+          # object file" while every test on a normal machine passed.
+          world_id=$(python3 -c 'import json; print(json.load(open("/tmp/world.json"))["id"])')
+          curl -fsS -o /tmp/fog.png \
+            -H 'X-Owner-Id: player_smoke-test' \
+            "http://localhost:8080/api/v1/worlds/$world_id/fog-mask"
+          # A PNG, not an error page that happens to be 200.
+          python3 -c 'import sys; sys.exit(0 if open("/tmp/fog.png","rb").read(8) == b"\x89PNG\r\n\x1a\n" else 1)'
+          echo "fog mask: $(wc -c < /tmp/fog.png) bytes of PNG"
+          echo "::endgroup::"
+
   # Tagging v* is what "cutting a release" means for this repo: the build job
   # above already published the image to GHCR under that tag, so all that's
   # left is to turn the tag into a GitHub Release pointing at it.

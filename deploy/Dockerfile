@@ -89,11 +89,21 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /data
 VOLUME /data
 
-# The aspnet image ships no HTTP client at all, and an orchestrator needs one:
-# the HEALTHCHECK below runs inside the container, so `docker compose
+# curl: the aspnet image ships no HTTP client at all, and an orchestrator needs
+# one — the HEALTHCHECK below runs inside the container, so `docker compose
 # depends_on: service_healthy` and Coolify's own status both hang on it.
+#
+# libfontconfig1: SkiaSharp's native libSkiaSharp.so links against
+# libfontconfig.so.1, which this image does not have, so dlopen fails and every
+# fog-mask request 500s with "/app/liblibSkiaSharp: cannot open shared object
+# file" — a message that reads like a missing native asset but is really a
+# missing dependency *of* one (the asset publishes fine, see
+# runtimes/linux-x64/native/). Nothing here renders text, so
+# SkiaSharp.NativeAssets.Linux.NoDependencies would also do; the stock build
+# plus this package keeps the container running the same native binary the
+# tests and CI do.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
 
 # /health rather than /alive: it is the readiness signal (every registered

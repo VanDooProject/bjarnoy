@@ -471,10 +471,14 @@ Two things in the build are easy to miss:
   demo-only image is still one flag away). Its default is *on*, since
   `npm run dev` has no backend behind it — and an image built that way would
   serve a self-contained simulation that never calls the API next to it.
-- The runtime stage installs `curl`, purely so the image's `HEALTHCHECK` has
-  something to probe `/health` with (the aspnet base image ships no HTTP
-  client). That is what `depends_on: service_healthy` and an orchestrator's
-  status both read.
+- The runtime stage installs two things the aspnet base image lacks. `curl`,
+  so the image's `HEALTHCHECK` has something to probe `/health` with — that is
+  what `depends_on: service_healthy` and an orchestrator's status both read.
+  And `libfontconfig1`, which SkiaSharp's `libSkiaSharp.so` links against:
+  without it the fog-mask endpoint is the one thing that 500s in a container
+  and nowhere else, reporting `/app/liblibSkiaSharp: cannot open shared object
+  file` — a missing *dependency of* a native asset, not a missing asset. The
+  image smoke test fetches a fog mask for that reason.
 
 ## The compose stack
 
