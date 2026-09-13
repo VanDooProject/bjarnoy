@@ -139,6 +139,28 @@
   retry or try to route around it. So those Docker-dependent test suites
   still can't be run/reproduced locally in this sandbox; say so rather than
   claiming to have verified them, and rely on CI for that coverage.
+- `npx playwright test` (the real `e2e/*.spec.ts` suite, not just a
+  throwaway screenshot script) **does work in this sandbox**, including
+  actually launching a browser — don't conclude otherwise just because
+  `npx playwright install` fails (it tries to hit
+  `cdn.playwright.dev`/`playwright.download.prss.microsoft.com`, blocked by
+  the egress proxy the same way the .NET CDN is) or because there's no
+  `chromium-browser` binary via apt/snap. A working Chromium is
+  pre-installed at `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH` is
+  already set to it) — the catch is that its bundled revision
+  (`chromium-1194`) often doesn't match the exact browser revision the
+  project's pinned `@playwright/test` version expects, so the default
+  project config's `chrome-headless-shell` launch fails with "Executable
+  doesn't exist at .../chromium_headless_shell-<other number>". Point the
+  launch at the real, present binary instead of the mismatched shell one:
+  add `launchOptions: { executablePath:
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' }` (check the exact
+  folder name under `/opt/pw-browsers` first, it can differ) to the
+  `chromium` project's `use` block in `playwright.config.ts` **locally,
+  uncommitted, for the duration of your own verification run only** —
+  revert it before committing, it's a sandbox-path hack, not a real repo
+  fix (CI has its own correctly-versioned browser install and doesn't need
+  this). Do this before claiming e2e changes are unverified.
 
 # screenshot helpers
 - `scripts/screenshot-helpers/flow.mjs` drives the demo-mode onboarding path
