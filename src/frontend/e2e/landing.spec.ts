@@ -175,7 +175,12 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
 // LANDING) plus a locale switcher and an avatar — the mockup
 // (docs/design/img/but_building_on_map.png) has only a wordmark and
 // "I already have a realm" pre-founding.
-test('the pre-founding header has no dead in-game nav, only "I already have a realm"', { tag: '@g3' }, async ({ page }) => {
+//
+// Returning-player nav work replaced that bare link with
+// ReturningPlayerMenu.vue — a dropdown offering both "log in" and "join
+// another world" (PR that added ReturningPlayerMenu.vue/WorldPickerView.vue)
+// — so this now drives the trigger/panel instead of a single link.
+test('the pre-founding header has no dead in-game nav, only the returning-player menu', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   await SettlementPage.openLanding(page);
 
@@ -183,21 +188,38 @@ test('the pre-founding header has no dead in-game nav, only "I already have a re
   await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toHaveCount(0);
 
-  const haveRealm = page.getByRole('link', { name: 'I already have a realm' });
-  await expect(haveRealm).toBeVisible();
-  await haveRealm.click();
+  const trigger = page.getByTestId('returning-player-trigger');
+  await expect(trigger).toBeVisible();
+  await expect(page.getByTestId('returning-player-menu')).toHaveCount(0);
+
+  await trigger.click();
+  await expect(page.getByTestId('returning-player-menu')).toBeVisible();
+  const login = page.getByTestId('returning-player-login');
+  const joinAnotherWorld = page.getByTestId('returning-player-join-world');
+  await expect(login).toBeVisible();
+  await expect(joinAnotherWorld).toBeVisible();
+
+  await login.click();
   await expect(page).toHaveURL(/\/login$/);
 });
 
-test('founding a settlement swaps the pre-founding header for the real in-game nav', { tag: '@g3' }, async ({ page }) => {
+// Returning-player nav work: World map and Leaderboards now additionally
+// require `auth.isAuthenticated` (previously World map only needed a founded
+// settlement, and Leaderboards had no condition at all — see HudNav.vue), so
+// an anonymous founder still doesn't get them; Reports/Alliance stay
+// unconditioned, and the returning-player menu doesn't disappear once
+// founded — it just moves from being the pre-founding header's only content
+// into HudNav's own anonymous-state slot (HudNav.vue's `v-else`).
+test('founding a settlement swaps the pre-founding header for the real in-game nav, but world map and leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  await expect(page.getByRole('button', { name: 'World map', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'I already have a realm' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Leaderboards', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
 });
 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {
