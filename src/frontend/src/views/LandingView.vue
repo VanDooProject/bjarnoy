@@ -12,6 +12,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
+import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
@@ -753,7 +754,7 @@ watch(
     </TopBar>
     <TopBar v-else title="Bjarnoy">
       <LocaleSwitcher />
-      <router-link class="have-realm-link" to="/login">{{ t('landing.header.haveRealm') }}</router-link>
+      <ReturningPlayerMenu />
     </TopBar>
 
     <!-- Once a settlement exists, fog is on screen and the camera is
@@ -929,22 +930,5 @@ h1 {
 }
 .footer-reservation {
   margin-left: auto;
-}
-/* TopBar's own root is `pointer-events: none` (the map behind it must stay
-   draggable everywhere the header itself has no content), and it only
-   re-enables clicks for `:deep(button)` in its right-hand slot —
-   LocaleSwitcher's toggle is already buttons, but this is a `router-link`
-   (an `<a>`), so it needs its own opt back in or the click falls through to
-   the map underneath it. */
-.have-realm-link {
-  pointer-events: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.have-realm-link:hover {
-  color: var(--text);
 }
 </style>

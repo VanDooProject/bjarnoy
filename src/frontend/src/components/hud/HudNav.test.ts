@@ -57,14 +57,14 @@ describe('HudNav profile nudge', () => {
     const player = usePlayerStore();
     foundAndOnboarded(player);
     const wrapper = await mountHudNav();
-    expect(wrapper.find('.avatar').classes()).toContain('is-nudging');
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).toContain('is-nudging');
     expect(wrapper.find('.nudge-dot').exists()).toBe(true);
     expect(wrapper.text()).toContain('Three buildings, no jarl.');
   });
 
   it('does not show before founding', async () => {
     const wrapper = await mountHudNav();
-    expect(wrapper.find('.avatar').classes()).not.toContain('is-nudging');
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
     expect(wrapper.text()).not.toContain('Three buildings, no jarl.');
   });
 
@@ -72,7 +72,7 @@ describe('HudNav profile nudge', () => {
     const player = usePlayerStore();
     player.hasFoundedSettlement = true;
     const wrapper = await mountHudNav();
-    expect(wrapper.find('.avatar').classes()).not.toContain('is-nudging');
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
   });
 
   it('does not show once dismissed', async () => {
@@ -80,7 +80,7 @@ describe('HudNav profile nudge', () => {
     foundAndOnboarded(player);
     player.dismissProfileNudge();
     const wrapper = await mountHudNav();
-    expect(wrapper.find('.avatar').classes()).not.toContain('is-nudging');
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
   });
 
   it('does not show once a nickname is already set', async () => {
@@ -88,7 +88,7 @@ describe('HudNav profile nudge', () => {
     foundAndOnboarded(player);
     player.nickname = 'Ragnar';
     const wrapper = await mountHudNav();
-    expect(wrapper.find('.avatar').classes()).not.toContain('is-nudging');
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').classes()).not.toContain('is-nudging');
   });
 
   it('does not show for an authenticated player, even if otherwise eligible', async () => {
@@ -106,9 +106,74 @@ describe('HudNav profile nudge', () => {
     };
     const wrapper = await mountHudNav();
     // The authenticated branch renders a different avatar entirely (opens
-    // /profile, not /register) — no nudge, no is-nudging class anywhere.
+    // /profile, not ReturningPlayerMenu) — no nudge, no is-nudging class
+    // anywhere, and no returning-player trigger at all.
+    expect(wrapper.find('[data-testid="returning-player-trigger"]').exists()).toBe(false);
     expect(wrapper.find('.nudge-dot').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('Three buildings, no jarl.');
+  });
+});
+
+function authenticate(auth: ReturnType<typeof useAuthStore>) {
+  auth.user = {
+    id: 'user-1',
+    userName: 'ragnar',
+    role: 'player',
+    status: 'active',
+    displayName: null,
+    isPremium: false,
+    preferredLocale: null,
+  };
+}
+
+// Returning-player nav work: Leaderboards and World Map used to be reachable
+// (or, for World Map, a dead click — see the `HudNav link visibility`
+// describe block below) for an anonymous visitor too; both are now gated on
+// being logged in, World Map on top of the pre-existing founded-settlement
+// gate.
+describe('HudNav auth gating', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it('hides Leaderboards when logged out', async () => {
+    const wrapper = await mountHudNav();
+    expect(wrapper.text()).not.toContain('Leaderboards');
+  });
+
+  it('shows Leaderboards once authenticated', async () => {
+    const auth = useAuthStore();
+    authenticate(auth);
+    const wrapper = await mountHudNav();
+    expect(wrapper.text()).toContain('Leaderboards');
+  });
+
+  it('hides World map when neither authenticated nor founded', async () => {
+    const wrapper = await mountHudNav('/settlement');
+    expect(wrapper.text()).not.toContain('World map');
+  });
+
+  it('hides World map when authenticated but not founded', async () => {
+    const auth = useAuthStore();
+    authenticate(auth);
+    const wrapper = await mountHudNav('/settlement');
+    expect(wrapper.text()).not.toContain('World map');
+  });
+
+  it('hides World map when founded but not authenticated', async () => {
+    const player = usePlayerStore();
+    player.hasFoundedSettlement = true;
+    const wrapper = await mountHudNav('/settlement');
+    expect(wrapper.text()).not.toContain('World map');
+  });
+
+  it('shows World map only once both authenticated and founded', async () => {
+    const player = usePlayerStore();
+    player.hasFoundedSettlement = true;
+    const auth = useAuthStore();
+    authenticate(auth);
+    const wrapper = await mountHudNav('/settlement');
+    expect(wrapper.text()).toContain('World map');
   });
 });
 
@@ -129,9 +194,11 @@ describe('HudNav link visibility', () => {
     expect(wrapper.text()).not.toContain('World map');
   });
 
-  it('shows World map once founded', async () => {
+  it('shows World map once founded and authenticated', async () => {
     const player = usePlayerStore();
     player.hasFoundedSettlement = true;
+    const auth = useAuthStore();
+    authenticate(auth);
     const wrapper = await mountHudNav('/settlement');
     expect(wrapper.text()).toContain('World map');
   });
