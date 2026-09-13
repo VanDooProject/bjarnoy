@@ -58,6 +58,55 @@ public sealed record WorldResponse(
 }
 
 /// <summary>
+/// A world as offered to a player choosing where to join (the "join another
+/// world" flow) — deliberately narrower than <see cref="WorldResponse"/>: no
+/// seed, generation parameters, or radius, since none of that is map-reproducing
+/// data a player picking a world from a list needs, and handing it out would
+/// let a client precompute the whole map before ever landing on it.
+/// </summary>
+public sealed record JoinableWorldResponse(
+    Guid Id,
+    string Name,
+    int PlayerCount,
+    int MaxPlayers,
+    bool Joinable,
+    string JoinableReason,
+    DateTimeOffset? StartsAt,
+    double SpeedFactor,
+    DateTimeOffset CreatedAt,
+    string Status)
+{
+    public static JoinableWorldResponse From(WorldEntity world, int playerCount, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+
+        var joinability = world.DetermineJoinability(playerCount, now);
+
+        return new JoinableWorldResponse(
+            world.Id,
+            world.Name,
+            playerCount,
+            world.MaxPlayers,
+            joinability.Joinable,
+            joinability.Reason.ToString().ToLowerInvariant(),
+            world.StartsAt,
+            world.SpeedFactor,
+            world.CreatedAt,
+            world.Status.ToString().ToLowerInvariant());
+    }
+}
+
+/// <summary>
+/// Whether the requesting owner already has a settlement in a given world —
+/// the "join another world" flow's per-world check before offering a plot.
+/// </summary>
+/// <param name="SettlementId">
+/// Null when this owner has no settlement in this world; a non-null value
+/// (with <see cref="SettlementName"/> also set) means they do.
+/// </param>
+public sealed record WorldMembershipResponse(Guid WorldId, string? SettlementId, string? SettlementName);
+
+/// <summary>
 /// The generation constants a world was created with (issue #159 part B) — a
 /// world's <see cref="Bjarnoy.Domain.World.WorldGenerationOptions"/>, projected
 /// so the client can mirror the exact terrain the server paths over instead of

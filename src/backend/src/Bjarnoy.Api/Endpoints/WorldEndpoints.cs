@@ -28,6 +28,13 @@ public static class WorldEndpoints
             .WithName("ListWorlds")
             .WithSummary("Lists every world on this server.");
 
+        // Registered ahead of "/{worldId:guid}" for readability, though the
+        // ":guid" constraint on that route already keeps "joinable" from
+        // ever matching it.
+        worlds.MapGet("/joinable", ListJoinableWorlds)
+            .WithName("ListJoinableWorlds")
+            .WithSummary("Lists every world with the player-facing fields needed to pick one to join.");
+
         worlds.MapPost("/", CreateWorld)
             .WithName("CreateWorld")
             .WithSummary("Generates and stores a new world.");
@@ -35,6 +42,10 @@ public static class WorldEndpoints
         worlds.MapGet("/{worldId:guid}", GetWorld)
             .WithName("GetWorld")
             .WithSummary("Fetches a single world.");
+
+        worlds.MapGet("/{worldId:guid}/membership", GetMembership)
+            .WithName("GetWorldMembership")
+            .WithSummary("Whether the requesting owner already has a settlement in this world.");
 
         worlds.MapGet("/{worldId:guid}/islands", GetIslands)
             .WithName("GetWorldIslands")
@@ -73,6 +84,29 @@ public static class WorldEndpoints
         [
             .. entities.Select(w => WorldResponse.From(
                 w, islandCounts.GetValueOrDefault(w.Id), playerCounts.GetValueOrDefault(w.Id), now)),
+        ];
+
+        return TypedResults.Ok(response);
+    }
+
+    /// <summary>
+    /// The player-facing listing for the "join another world" flow: anonymous
+    /// (a player browsing worlds to join has no settlement, and so no owner
+    /// id, yet), and deliberately narrower than <see cref="ListWorlds"/> —
+    /// see <see cref="JoinableWorldResponse"/>.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<JoinableWorldResponse>>> ListJoinableWorlds(
+        WorldService worlds,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var entities = await worlds.GetWorldsAsync(cancellationToken);
+        var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
+        var now = timeProvider.GetUtcNow();
+
+        IReadOnlyList<JoinableWorldResponse> response =
+        [
+            .. entities.Select(w => JoinableWorldResponse.From(w, playerCounts.GetValueOrDefault(w.Id), now)),
         ];
 
         return TypedResults.Ok(response);
@@ -139,6 +173,39 @@ public static class WorldEndpoints
         var islandCount = await worlds.GetIslandCountAsync(worldId, cancellationToken);
         var playerCount = await worlds.GetPlayerCountAsync(worldId, cancellationToken);
         return TypedResults.Ok(WorldResponse.From(world, islandCount, playerCount, timeProvider.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// Purely a read: the "join another world" flow's per-world check before
+    /// offering a plot, so it must never take a plot reservation or otherwise
+    /// touch <see cref="PlotReservationService"/> the way
+    /// <see cref="GetPlotSuggestion"/> does. Same anonymous-play ownership
+    /// header as that endpoint.
+    /// </summary>
+    private static async Task<Results<Ok<WorldMembershipResponse>, NotFound, BadRequest<ProblemDetails>>>
+        GetMembership(
+            Guid worldId,
+            HttpContext httpContext,
+            WorldService worlds,
+            SettlementService settlements,
+            CancellationToken cancellationToken)
+    {
+        var ownerIdOrProblem = RequireOwnerId(httpContext);
+        if (ownerIdOrProblem.Problem is not null)
+        {
+            return TypedResults.BadRequest(ownerIdOrProblem.Problem);
+        }
+
+        if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var settlement = await settlements.FindByOwnerAsync(
+            worldId, ownerIdOrProblem.OwnerId!, cancellationToken);
+
+        return TypedResults.Ok(new WorldMembershipResponse(
+            worldId, settlement?.Id.ToString(), settlement?.Name));
     }
 
     private static async Task<Results<Ok<IReadOnlyList<IslandResponse>>, NotFound>> GetIslands(
