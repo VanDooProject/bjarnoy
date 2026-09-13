@@ -13,7 +13,8 @@
     "opensAt": "This world opens {date}.",
     "joinsClosed": "This world is no longer accepting new players.",
     "noWorldYet": "No world has been created yet — check back soon.",
-    "notAcceptingPlayers": "This world is not accepting new players right now."
+    "notAcceptingPlayers": "This world is not accepting new players right now.",
+    "noPlotAvailable": "Every plot in this world is taken or held right now — check back in a few minutes."
   },
   "invalidClick": {
     "pickGlowingPlot": "You can't found there — pick one of the glowing plots.",

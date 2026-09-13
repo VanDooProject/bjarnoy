@@ -25,7 +25,7 @@ import {
   ringNoteReason,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
-import { useWorldStore } from '../stores/world';
+import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
@@ -79,12 +79,42 @@ let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 const PREVIEW_POLL_MS = 20000;
 let previewPollHandle: ReturnType<typeof setInterval> | undefined;
 
+// L7 (landing-page-defects.md): the backend already has a settlement for
+// this owner that the browser doesn't know about — most often L6b (founding
+// succeeded server-side on an earlier visit, but the client never got to
+// persist `bjarnoy.settlementId`). Shared by every place that can discover
+// this (`onMounted`, the preview poll, and a race caught inside
+// `foundHere`'s catch below) so the recovery order is only written once.
+// Order matters: `player.foundSettlement` writes `bjarnoy.settlementId` to
+// localStorage FIRST — that's exactly what the router guard
+// (`router/index.ts`) checks before it lets `/settlement` load. Pushing
+// there before this would just bounce straight back to `/` (L7's bug #2:
+// the one existing `AlreadyFounded` handler used to do exactly that).
+async function recoverAlreadyFounded(settlementId: string) {
+  player.foundSettlement(settlementId);
+  await world.restoreLiveSettlement(player.id, settlementId);
+  router.push('/settlement');
+}
+
 async function refreshPreview() {
-  const changed = await world.refreshPlotSuggestion(player.id);
+  const result = await world.refreshPlotSuggestion(player.id);
+  if (result.kind === 'alreadyFounded') {
+    // Terminal for this poll — nothing left to preview, and repeating this
+    // request would just 409 forever (this is what used to happen: the
+    // unhandled rejection fired again every PREVIEW_POLL_MS).
+    stopPreviewPoll();
+    await recoverAlreadyFounded(result.settlementId);
+    return;
+  }
+  if (result.kind === 'noPlotAvailable') {
+    stopPreviewPoll();
+    noPlotAvailable.value = true;
+    return;
+  }
   await world.refreshWorldSettlements();
   const suggestion = world.plotSuggestion;
   if (!suggestion) return;
-  if (changed) {
+  if (result.changed) {
     previewCoord.value = suggestion.plot;
     nearbyStartCoords.value = [suggestion.plot, ...suggestion.alternatives];
     canvasRef.value?.renderer?.updateOptions({
@@ -128,7 +158,23 @@ onMounted(async () => {
   if (DEMO_MODE) {
     previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
   } else {
-    await world.refreshPlotSuggestion(player.id);
+    const result = await world.refreshPlotSuggestion(player.id);
+    if (result.kind === 'alreadyFounded') {
+      // L7: a reload with a stale/missing localStorage settlement id — the
+      // backend still knows about this owner's settlement, so recover
+      // straight into it instead of leaving `previewCoord` (and thus the
+      // canvas, `v-if` below) empty forever, which is what an uncaught 409
+      // used to do here.
+      await recoverAlreadyFounded(result.settlementId);
+      return;
+    }
+    if (result.kind === 'noPlotAvailable') {
+      // L7: every start position in the world is taken or held. There's
+      // nothing to preview or click — fall back to the `joinBlocked` hero
+      // (below) instead of a blank canvas.
+      noPlotAvailable.value = true;
+      return;
+    }
     await world.refreshWorldSettlements();
     const suggestion = world.plotSuggestion;
     previewCoord.value = suggestion?.plot ?? world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
@@ -151,14 +197,26 @@ onUnmounted(() => {
   if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
 
+// L7 (landing-page-defects.md): `PlotSuggestionRejection.NoPlotAvailable` —
+// every start position across every island is currently taken or held.
+// Distinct from the admin-set gates below (this is organic exhaustion, not a
+// world setting), but reads the same to a visitor: nothing to click, so it
+// folds into the same `joinBlocked` hero instead of leaving the canvas blank
+// (`onMounted`/`refreshPreview` set this rather than a plain reload fixing
+// it, since a stale world can genuinely run out).
+const noPlotAvailable = ref(false);
+
 // Admin-set gates (issue #27): a world that hasn't started yet, or has had
 // joins closed, still renders (existing players restore fine) but refuses a
 // *new* founding — so tell the player why instead of letting them click a
 // hex that will just come back 409.
 const joinBlocked = computed(
-  () => !DEMO_MODE && !player.hasFoundedSettlement && !world.worldJoinable,
+  () => (!DEMO_MODE && !player.hasFoundedSettlement && !world.worldJoinable) || noPlotAvailable.value,
 );
 const joinBlockedMessage = computed(() => {
+  if (noPlotAvailable.value) {
+    return t('landing.joinBlocked.noPlotAvailable');
+  }
   if (world.worldJoinableReason === 'NotStartedYet' && world.worldStartsAt) {
     const startsAt = new Date(world.worldStartsAt);
     return t('landing.joinBlocked.opensAt', { date: d(startsAt, 'long') });
@@ -517,20 +575,41 @@ async function foundHere(coord: AxialCoord) {
     // alongside the camera move/fog reveal above.
     canvasRef.value?.renderer?.setLandfallBurst(coord);
   } catch (err) {
-    // A 409 covers several distinct rejections (see FoundingRejection) —
-    // only AlreadyFounded actually means "you already have a settlement,
-    // go there". The others (PlotReserved, PlotTaken, TooCloseToNeighbour,
-    // ...) mean someone else claimed or reserved a start position between
-    // the last refresh and this click — re-request the suggestion so the
+    // L7: `AlreadyFoundedError` is what `foundStartingSettlementLive`'s own
+    // preflight (its re-request of the plot suggestion, right before
+    // founding) throws when it discovers this owner already has a
+    // settlement — the common case, and it already carries the id. This
+    // used to be a bare `router.push('/settlement')`, which the router
+    // guard (router/index.ts) silently bounced back to `/` because
+    // `player.hasFoundedSettlement` was still false at that point — see
+    // `recoverAlreadyFounded`'s own comment for why the order below matters.
+    if (err instanceof AlreadyFoundedError) {
+      await recoverAlreadyFounded(err.settlementId);
+      return;
+    }
+    // Rare race: the founding POST itself (`api.foundSettlement`), not the
+    // preflight above, hit `FoundingRejection.AlreadyFounded` — state
+    // changed in the gap between the two. `SettlementEndpoints.Problem`
+    // doesn't attach an `existingSettlementId` to this rejection (unlike the
+    // plot-suggestion endpoint's), so ask plot-suggestion once more: the
+    // owner is now unambiguously already-founded, so it 409s the same way,
+    // this time with the id.
+    if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
+      const recheck = await world.refreshPlotSuggestion(player.id);
+      if (recheck.kind === 'alreadyFounded') {
+        await recoverAlreadyFounded(recheck.settlementId);
+        return;
+      }
+    }
+    // A 409 covers several distinct rejections (see FoundingRejection) — the
+    // remaining ones (PlotReserved, PlotTaken, TooCloseToNeighbour, ...)
+    // mean someone else claimed or reserved a start position between the
+    // last refresh and this click — re-request the suggestion so the
     // preview shows a plot that's actually still available, then let the
     // player just click again.
-    if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
-      router.push('/settlement');
-    } else {
-      console.error('Failed to found settlement against the backend', err);
-      showInvalidClickMessage("That plot was just taken — here's another one.");
-      await refreshPreview();
-    }
+    console.error('Failed to found settlement against the backend', err);
+    showInvalidClickMessage("That plot was just taken — here's another one.");
+    await refreshPreview();
   } finally {
     founding.value = false;
   }

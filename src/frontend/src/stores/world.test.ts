@@ -50,7 +50,19 @@ async function loadStoreModule(demoMode: boolean) {
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
     },
-    ApiError: class ApiError extends Error {},
+    // Mirrors the real `ApiError` shape (status + problem) — see
+    // stores/leaderboard.test.ts's own copy of the same mock. Needed by the
+    // `refreshPlotSuggestion` tests below, which construct one with a 409
+    // status and an `AlreadyFounded`/`NoPlotAvailable` `problem.rejection`.
+    ApiError: class ApiError extends Error {
+      status: number;
+      problem: { rejection?: string; existingSettlementId?: string } | undefined;
+      constructor(status: number, problem?: { rejection?: string; existingSettlementId?: string }) {
+        super(`Request failed with status ${status}`);
+        this.status = status;
+        this.problem = problem;
+      }
+    },
     // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
     // (`authHooks.getAccessToken = ...`) — world.ts now imports that store
     // for the field-order premium check below, so the mock needs a plain
@@ -358,6 +370,89 @@ describe('useWorldStore founding a settlement (live mode)', () => {
     ).rejects.toThrow();
     expect(foundSettlement).not.toHaveBeenCalled();
   });
+});
+
+// landing-page-defects.md L7: a 409 from `GET /worlds/{id}/plot-suggestion`
+// used to escape `refreshPlotSuggestion` as an uncaught `ApiError`, aborting
+// `LandingView.onMounted`/`refreshPreview` partway through and leaving the
+// landing page with no map and no redirect, forever (every reload re-hit the
+// same 409). The one existing recovery — `LandingView.foundHere`'s catch —
+// called `router.push('/settlement')` straight away, which the router guard
+// (`router/index.ts`) silently bounced back to `/` because
+// `player.hasFoundedSettlement` was still false: the exact state a 409 like
+// this leaves the player in. These cover the store-side half of the fix.
+describe('useWorldStore refreshPlotSuggestion (L7: 409 recovery)', () => {
+  it('returns alreadyFounded with the settlement id instead of throwing', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    const { ApiError: MockedApiError } = await import('../api/client');
+    getPlotSuggestion.mockReset().mockRejectedValue(
+      new MockedApiError(409, { rejection: 'AlreadyFounded', existingSettlementId: 'settlement-99' }),
+    );
+
+    const result = await store.refreshPlotSuggestion('player-1');
+
+    expect(result).toEqual({ kind: 'alreadyFounded', settlementId: 'settlement-99' });
+  });
+
+  it('returns noPlotAvailable instead of throwing', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    const { ApiError: MockedApiError } = await import('../api/client');
+    getPlotSuggestion.mockReset().mockRejectedValue(
+      new MockedApiError(409, { rejection: 'NoPlotAvailable' }),
+    );
+
+    const result = await store.refreshPlotSuggestion('player-1');
+
+    expect(result).toEqual({ kind: 'noPlotAvailable' });
+  });
+
+  it('rethrows a 500 — an unrecognised failure must stay loud, not get swallowed like the 409 used to', async () => {
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+    const { ApiError: MockedApiError } = await import('../api/client');
+    getPlotSuggestion.mockReset().mockRejectedValue(new MockedApiError(500, { title: 'Internal Server Error' }));
+
+    await expect(store.refreshPlotSuggestion('player-1')).rejects.toThrow();
+  });
+
+  it(
+    "foundStartingSettlementLive's preflight throws AlreadyFoundedError, and applying its settlement id marks " +
+      'the player founded — the exact state the router guard checks — rather than only asserting router.push ' +
+      'was called, which is what let the original bug (a no-op push) through undetected',
+    async () => {
+      const store = await loadStoreModule(false);
+      store.worldId = 'world-1';
+      const { ApiError: MockedApiError } = await import('../api/client');
+      getPlotSuggestion.mockReset().mockRejectedValue(
+        new MockedApiError(409, { rejection: 'AlreadyFounded', existingSettlementId: 'settlement-99' }),
+      );
+      const { AlreadyFoundedError } = await import('./world');
+
+      let caught: unknown;
+      try {
+        await store.foundStartingSettlementLive('player-1', 'Astrid', "Astrid's realm", { q: 0, r: 0 });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(AlreadyFoundedError);
+      const settlementId = (caught as InstanceType<typeof AlreadyFoundedError>).settlementId;
+      expect(settlementId).toBe('settlement-99');
+
+      // Mirrors LandingView's `recoverAlreadyFounded`: mark the player
+      // founded FIRST — that write (`hasFoundedSettlement`/
+      // `bjarnoy.settlementId`) is what `router/index.ts`'s guard actually
+      // reads before it lets `/settlement` load.
+      const { usePlayerStore } = await import('./player');
+      const player = usePlayerStore();
+      player.foundSettlement(settlementId);
+
+      expect(player.hasFoundedSettlement).toBe(true);
+      expect(player.settlementId).toBe('settlement-99');
+    },
+  );
 });
 
 // Issue #98: the header's storage cap must reflect the backend's real

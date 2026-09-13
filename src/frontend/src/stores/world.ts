@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { apiErrorMessage } from '../i18n/apiErrors';
 import { i18n } from '../i18n';
 import type {
@@ -48,6 +48,45 @@ const ARMY_POLL_MS = 2000;
 // Demo mode's seed — kept as its own constant since both the initial
 // `WorldModel` below and its island labels have to agree on it.
 const DEMO_SEED = 20260824;
+
+/**
+ * Discriminated result of `refreshPlotSuggestion`, replacing the bare
+ * `boolean` it used to return. `GET /worlds/{id}/plot-suggestion` can 409
+ * with two distinct rejections (`PlotSuggestionRejection.AlreadyFounded`/
+ * `NoPlotAvailable` — see `WorldEndpoints.GetPlotSuggestion`), and letting
+ * either escape as an uncaught `ApiError` is exactly landing-page-defects.md
+ * L7's root cause #1: it aborted `LandingView.onMounted`/`refreshPreview`
+ * partway through, leaving `previewCoord` (and thus the canvas) empty
+ * forever with no way to recover. `'ok'.changed` keeps the original
+ * boolean's meaning — whether the pinned plot moved since the last call, so
+ * a poll loop only needs to re-centre the camera when it actually did.
+ */
+export type PlotSuggestionOutcome =
+  | { kind: 'ok'; changed: boolean }
+  | { kind: 'alreadyFounded'; settlementId: string }
+  | { kind: 'noPlotAvailable' };
+
+/**
+ * Thrown by `foundStartingSettlementLive` when its own pre-flight
+ * `refreshPlotSuggestion` call (re-requested right before founding — see
+ * that method's own comment) discovers the backend already has a
+ * settlement for this owner. This is the common path for L7's "AlreadyFounded"
+ * case: it happens before the founding POST is even sent. The founding POST
+ * itself can *also* 409 with `FoundingRejection.AlreadyFounded` in a narrow
+ * race (state changed between the preflight and the POST) — but unlike the
+ * plot-suggestion endpoint, `SettlementEndpoints.Problem` doesn't attach an
+ * `existingSettlementId` to that one, so that race still surfaces as a plain
+ * `ApiError` rather than this type. Carrying the id here lets
+ * `LandingView.foundHere`'s catch recover (mark founded, restore the
+ * settlement, navigate) without a second round trip.
+ */
+export class AlreadyFoundedError extends Error {
+  readonly settlementId: string;
+  constructor(settlementId: string) {
+    super('AlreadyFounded');
+    this.settlementId = settlementId;
+  }
+}
 
 /**
  * Demo mode's `WorldModel`, pre-labelled with dummy island names (issue: the
@@ -416,8 +455,11 @@ export const useWorldStore = defineStore('world', {
      * `ownerId` is the stable local player id (see `stores/player.ts`), sent
      * to the backend so it can refuse a second settlement for the same
      * player in this world (one realm per player until ships/carts exist —
-     * see `SettlementService.FoundAsync`). Throws `ApiError` (409) if this
-     * player already has a settlement here.
+     * see `SettlementService.FoundAsync`). Throws `AlreadyFoundedError` if
+     * this player already has a settlement here (see that class's own
+     * comment for why it's a distinct type, not a bare `ApiError`), or a
+     * plain `ApiError` (409) for any other founding rejection
+     * (PlotTaken/TooCloseToNeighbour/PlotReserved/WorldFull/...).
      */
     async foundStartingSettlementLive(ownerId: string, ownerName: string, realmName: string, near: AxialCoord) {
       if (!this.worldId) throw new Error('bootstrapLiveWorld() must run before founding a settlement');
@@ -428,8 +470,16 @@ export const useWorldStore = defineStore('world', {
       // or reserved near it) in the meantime. The backend re-validates
       // again at founding time regardless (PlotReserved/PlotTaken/
       // TooCloseToNeighbour) — this is just to fail fast with a clear
-      // message before spending a round trip on a doomed request.
-      await this.refreshPlotSuggestion(ownerId);
+      // message before spending a round trip on a doomed request. It also
+      // doubles as this player's own "have I already founded?" check —
+      // see `AlreadyFoundedError`.
+      const preflight = await this.refreshPlotSuggestion(ownerId);
+      if (preflight.kind === 'alreadyFounded') {
+        throw new AlreadyFoundedError(preflight.settlementId);
+      }
+      if (preflight.kind === 'noPlotAvailable') {
+        throw new Error('No plot is currently available in this world — every start position is taken or held');
+      }
       // Exact match only: `near` is the hex the player actually clicked, and
       // founding must land there, not on whichever start position happens to
       // be nearest to it (see issue #96). The landing page only lets the
@@ -724,14 +774,38 @@ export const useWorldStore = defineStore('world', {
      * (see `PlotReservationService`) and stores it in `plotSuggestion`.
      * Pinned across reloads/repeated calls server-side — this is what backs
      * the landing page's preview camera and clickable plots now that
-     * plot-finding is no longer computed client-side. Returns whether the
-     * pinned plot actually changed since the last call, so a poll loop only
-     * needs to re-centre the camera when it did. No-op (returns `false`) in
-     * demo mode, which has no backend to ask.
+     * plot-finding is no longer computed client-side. Returns a
+     * `PlotSuggestionOutcome` rather than a bare boolean (see that type's own
+     * comment — this used to let the endpoint's 409 escape as an uncaught
+     * `ApiError`, landing-page-defects.md L7's root cause #1): `'ok'.changed`
+     * carries the original boolean's meaning, `'alreadyFounded'`/
+     * `'noPlotAvailable'` surface the two rejections `GetOrRefreshAsync` can
+     * produce so callers (`LandingView.onMounted`/`refreshPreview`, and this
+     * store's own `foundStartingSettlementLive`) can recover instead of
+     * dead-ending. Anything else — a 500, a network failure, or a 409 whose
+     * `rejection`/`existingSettlementId` doesn't match either known shape —
+     * is rethrown; it must stay loud. No-op (`{ kind: 'ok', changed: false }`)
+     * in demo mode, which has no backend to ask.
      */
-    async refreshPlotSuggestion(ownerId: string): Promise<boolean> {
-      if (DEMO_MODE || !this.worldId) return false;
-      const response = await api.getPlotSuggestion(this.worldId, ownerId);
+    async refreshPlotSuggestion(ownerId: string): Promise<PlotSuggestionOutcome> {
+      if (DEMO_MODE || !this.worldId) return { kind: 'ok', changed: false };
+      let response;
+      try {
+        response = await api.getPlotSuggestion(this.worldId, ownerId);
+      } catch (err) {
+        if (
+          err instanceof ApiError &&
+          err.status === 409 &&
+          err.problem?.rejection === 'AlreadyFounded' &&
+          err.problem.existingSettlementId
+        ) {
+          return { kind: 'alreadyFounded', settlementId: err.problem.existingSettlementId };
+        }
+        if (err instanceof ApiError && err.status === 409 && err.problem?.rejection === 'NoPlotAvailable') {
+          return { kind: 'noPlotAvailable' };
+        }
+        throw err;
+      }
       const previous = this.plotSuggestion;
       this.plotSuggestion = {
         islandId: response.islandId,
@@ -740,7 +814,7 @@ export const useWorldStore = defineStore('world', {
         reserved: response.reserved,
         reservedUntil: response.reservedUntil,
       };
-      return previous?.plot.q !== response.plot.q || previous?.plot.r !== response.plot.r;
+      return { kind: 'ok', changed: previous?.plot.q !== response.plot.q || previous?.plot.r !== response.plot.r };
     },
     /**
      * Live mode: releases `ownerId`'s held plot suggestion (e.g. the visitor

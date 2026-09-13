@@ -13,7 +13,8 @@
     "opensAt": "Diese Welt öffnet {date}.",
     "joinsClosed": "Diese Welt nimmt keine neuen Spieler mehr auf.",
     "noWorldYet": "Es wurde noch keine Welt erstellt — schau bald wieder vorbei.",
-    "notAcceptingPlayers": "Diese Welt nimmt momentan keine neuen Spieler auf."
+    "notAcceptingPlayers": "Diese Welt nimmt momentan keine neuen Spieler auf.",
+    "noPlotAvailable": "Gerade ist jedes Grundstück in dieser Welt vergeben oder reserviert — schau in ein paar Minuten wieder vorbei."
   },
   "invalidClick": {
     "pickGlowingPlot": "Dort kannst du nicht siedeln — wähle eines der leuchtenden Grundstücke.",
