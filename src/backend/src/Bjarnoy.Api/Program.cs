@@ -67,6 +67,26 @@ builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
 builder.Services.AddScoped<UserActivityQueryService>();
 builder.Services.AddScoped<UserActivityRetentionService>();
 
+// What this build is, for GET /api/v1/info. Bound unconditionally: the
+// migrator never serves the endpoint, but binding costs nothing and keeps the
+// two startup paths from diverging.
+builder.Services.AddOptions<BuildInfoOptions>()
+    .Bind(builder.Configuration.GetSection(BuildInfoOptions.SectionName));
+
+builder.Services.AddOptions<DiagnosticsOptions>()
+    .Bind(builder.Configuration.GetSection(DiagnosticsOptions.SectionName));
+
+// Which debugging surfaces this deployment opens. Read here rather than from
+// IOptions later because both decisions are made while routes are being
+// mapped, before there is a request to resolve anything against.
+var buildInfo = builder.Configuration.GetSection(BuildInfoOptions.SectionName).Get<BuildInfoOptions>()
+    ?? new BuildInfoOptions();
+var diagnostics = builder.Configuration.GetSection(DiagnosticsOptions.SectionName).Get<DiagnosticsOptions>()
+    ?? new DiagnosticsOptions();
+var isProductionBuild = buildInfo.IsProductionBuild;
+var publicBuildInfo = diagnostics.PublicBuildInfo ?? !isProductionBuild;
+var exposeApiReference = diagnostics.ExposeApiReference ?? !isProductionBuild;
+
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
@@ -190,10 +210,12 @@ if (databaseOptions.MigrateOnStartup)
     // Unconditional otherwise, unlike the admin bootstrap below: a client no
     // longer creates a world itself (see
     // WorldService.SeedDefaultWorldIfNoneAsync), so an empty server with
-    // nothing to join is never a state anyone wants.
+    // nothing to join is never a state anyone wants. A deployment that runs
+    // the separate migrator instead gets the same world from `--migrate
+    // --ensure-world` (MigrationCommand.EnsureWorldAsync), for that reason.
     var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
     var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    await worldService.SeedDefaultWorldIfNoneAsync("Kettil Sea", worldSeedLogger);
+    await worldService.SeedDefaultWorldIfNoneAsync(MigrationCommand.DefaultWorldName, worldSeedLogger);
 }
 
 // Seeds the first Admin from ADMIN_BOOTSTRAP_USERNAME/ADMIN_BOOTSTRAP_PASSWORD
@@ -228,7 +250,10 @@ app.UseForwardedHeaders(forwardedHeadersOptions);
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
+// Development always; otherwise whatever DiagnosticsOptions decided — which
+// leaves a branch deployment's API reference reachable (the point: a PR build
+// deployed to Coolify is something to poke at) and a production one's closed.
+if (app.Environment.IsDevelopment() || exposeApiReference)
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
@@ -240,6 +265,7 @@ var versionSet = app.NewApiVersionSet()
     .Build();
 
 app.MapDefaultEndpoints();
+app.MapInfoEndpoints(versionSet, publicBuildInfo);
 app.MapAuthEndpoints(versionSet);
 app.MapWorldEndpoints(versionSet);
 app.MapSettlementEndpoints(versionSet);

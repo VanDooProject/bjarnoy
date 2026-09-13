@@ -1,5 +1,8 @@
 using Bjarnoy.Api.Auth;
+using Bjarnoy.Api.Hosting;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +33,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     private readonly string _connectionString;
     private readonly DatabaseProvider _provider;
     private readonly string? _databaseFile;
+
+    /// <summary>Set by <see cref="WithBuild"/>; null means an unstamped build.</summary>
+    private BuildInfoOptions? _build;
+
+    /// <summary>Set by <see cref="WithDiagnostics"/>; null leaves it to the build.</summary>
+    private DiagnosticsOptions? _diagnostics;
 
     private BjarnoyApiFactory(DatabaseProvider provider, string connectionString, string? databaseFile)
     {
@@ -87,6 +96,52 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             .MigrateAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Stamps this host with the build information <c>deploy/Dockerfile</c>'s
+    /// build args would supply, for the <c>/api/v1/info</c> tests.
+    /// </summary>
+    public BjarnoyApiFactory WithBuild(
+        string version, string commit, string branch, string builtAt,
+        string runtimeCommit = BuildInfoOptions.Unknown)
+    {
+        _build = new BuildInfoOptions
+        {
+            Version = version,
+            Commit = commit,
+            Branch = branch,
+            BuiltAt = builtAt,
+            RuntimeCommit = runtimeCommit,
+        };
+
+        return this;
+    }
+
+    /// <summary>
+    /// Overrides what the build's branch would otherwise decide about the
+    /// diagnostic surfaces — the per-deployment escape hatch, as an env var
+    /// would supply it.
+    /// </summary>
+    public BjarnoyApiFactory WithDiagnostics(
+        bool? publicBuildInfo = null, bool? exposeApiReference = null)
+    {
+        _diagnostics = new DiagnosticsOptions
+        {
+            PublicBuildInfo = publicBuildInfo,
+            ExposeApiReference = exposeApiReference,
+        };
+
+        return this;
+    }
+
+    /// <summary>The worlds the database holds, in creation order.</summary>
+    public async Task<IReadOnlyList<WorldEntity>> GetWorldsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<WorldService>()
+            .GetWorldsAsync(cancellationToken);
+    }
+
     public async Task<MigrationStatus> GetMigrationStatusAsync(CancellationToken cancellationToken = default)
     {
         await using var scope = Services.CreateAsyncScope();
@@ -112,6 +167,31 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
         // Health endpoints are opt-in outside development; the tests assert on them.
         builder.UseSetting("ExposeHealthChecks", "true");
+
+        // Unset unless a test asked for it, so /api/v1/info's "unstamped build"
+        // case is the default here exactly as it is for a plain `dotnet run`.
+        if (_build is not null)
+        {
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:Version", _build.Version);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:Commit", _build.Commit);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:Branch", _build.Branch);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:BuiltAt", _build.BuiltAt);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:RuntimeCommit", _build.RuntimeCommit);
+        }
+
+        if (_diagnostics?.PublicBuildInfo is { } publicBuildInfo)
+        {
+            builder.UseSetting(
+                $"{DiagnosticsOptions.SectionName}:PublicBuildInfo",
+                publicBuildInfo.ToString());
+        }
+
+        if (_diagnostics?.ExposeApiReference is { } exposeApiReference)
+        {
+            builder.UseSetting(
+                $"{DiagnosticsOptions.SectionName}:ExposeApiReference",
+                exposeApiReference.ToString());
+        }
 
         // Stand in for the built frontend the Docker image bakes into wwwroot,
         // so the SPA-fallback tests do not depend on whether anyone has run a

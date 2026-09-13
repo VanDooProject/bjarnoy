@@ -110,9 +110,17 @@ containers:
 
 ```bash
 docker run --rm <image> --migrate          # apply; exits 0 when done
+docker run --rm <image> --migrate --ensure-world  # apply, then create a world if there is none
 docker run --rm <image> --migrate-status   # report; exit 2 = migrations pending
 docker run --rm <image> --migrate-script   # print the SQL, apply nothing
 ```
+
+`--ensure-world` exists because the in-process path seeds the default world and
+this one otherwise would not: `Program.cs` only seeds under `Database:MigrateOnStartup`,
+where the schema is known to exist. A deployment that migrates here instead
+would come up with no world at all, and nothing would ever create one — clients
+do not. It is idempotent (a database that already has a world is left alone) and
+implies `--migrate`, since seeding needs a schema.
 
 `--migrate-status` exits `2` rather than `1` when there is work to do, so a
 deploy script can branch on the code instead of parsing the output:
@@ -286,6 +294,7 @@ development.
 | `POST /api/v1/messages/{id}/report` | report a message to moderation |
 | `GET /api/v1/admin/reports` | the moderation queue (Admin only) |
 | `POST /api/v1/admin/reports/{id}/resolve` | resolve or dismiss a report (Admin only) |
+| `GET /api/v1/info` | version, commit and branch this deployment was built from |
 | `GET /health`, `GET /alive` | readiness and liveness |
 
 Versions are literal path segments rather than a `{version:apiVersion}` route
@@ -312,6 +321,40 @@ policy as the codegen above — nothing regenerates it automatically.
 The health endpoints are only mapped outside development when
 `ExposeHealthChecks` is set; the container image sets it, since an orchestrator
 needs to probe them.
+
+`GET /api/v1/info` answers with what the build stamped into the image —
+`deploy/Dockerfile`'s `GIT_COMMIT`/`GIT_BRANCH`/`BUILD_VERSION`/`BUILT_AT` build
+args, surfaced as `Build:*` configuration (`BuildInfoOptions`) so a `docker run
+-e Build__Commit=…` can still correct them.
+
+The commit has a second source, `Build:RuntimeCommit`, and the compose stack
+uses that one rather than the build arg. Coolify writes `SOURCE_COMMIT` into
+every deployment's runtime environment but keeps it out of the build unless
+asked, because a build arg that changes on every push invalidates the Docker
+cache — reading it at runtime costs nothing and needs no setting turned on. A
+commit baked into the image still wins where there is one: it describes the bits
+that are running, while the runtime value only describes what the platform
+believes it started. Fields read `"unknown"` when nothing
+stamped them, which is what a plain `dotnet run` reports. It exists because
+several branch deployments running side by side make "which commit is this one?"
+a real question. Who may read it, and whether the Scalar API reference is
+served at all, follow the same rule (`DiagnosticsOptions`): **open on a branch
+build, closed on a production one.** A build is production unless it can prove
+otherwise — `main`, a `v*` release tag, and a build that never got stamped all
+count as production, since guessing "not production" would open a debugging
+surface on exactly the deployment that must not have one. A branch deployment is
+therefore debuggable the moment it comes up, with nothing to configure.
+
+Override per deployment when needed:
+
+```bash
+Diagnostics__PublicBuildInfo=true      # serve /api/v1/info to anyone
+Diagnostics__ExposeApiReference=false  # keep /scalar closed on a branch build
+```
+
+Runtime configuration rather than a build-time switch on purpose: baking it in
+would mean two images differing by a boolean, and no way to close a surface on a
+running deployment without waiting for a rebuild.
 
 ## User activity tracking
 
@@ -430,6 +473,39 @@ The image defaults to SQLite at `/data/bjarnoy.db`. Point it at PostgreSQL with
 -e Database__Provider=PostgreSql \
 -e Database__ConnectionString='Host=…;Database=…;Username=…;Password=…'
 ```
+
+Two things in the build are easy to miss:
+
+- The frontend is built with `VITE_DEMO_MODE=false` (a `--build-arg`, so a
+  demo-only image is still one flag away). Its default is *on*, since
+  `npm run dev` has no backend behind it — and an image built that way would
+  serve a self-contained simulation that never calls the API next to it.
+- The runtime stage installs two things the aspnet base image lacks. `curl`,
+  so the image's `HEALTHCHECK` has something to probe `/health` with — that is
+  what `depends_on: service_healthy` and an orchestrator's status both read.
+  And `libfontconfig1`, which SkiaSharp's `libSkiaSharp.so` links against:
+  without it the fog-mask endpoint is the one thing that 500s in a container
+  and nowhere else, reporting `/app/liblibSkiaSharp: cannot open shared object
+  file` — a missing *dependency of* a native asset, not a missing asset. The
+  image smoke test fetches a fog mask for that reason.
+
+## The compose stack
+
+`deploy/docker-compose.yaml` is the hosted deployment: PostgreSQL, the migrator
+above as a run-once container, then the app waiting on its clean exit — the
+same shape `Bjarnoy.AppHost` runs locally, minus the separate frontend
+container production does not have. It is written for Coolify (which deploys
+each branch as its own compose project, so several branches run side by side),
+but it is an ordinary compose file:
+
+```bash
+cp deploy/.env.example deploy/.env
+docker compose -f deploy/docker-compose.yaml --project-directory . \
+  --env-file deploy/.env up --build
+```
+
+`deploy/README.md` covers the Coolify settings, the generated secrets, and what
+must stay unnamed in that file for parallel branch deployments to keep working.
 
 Known rough edge: assets are served with `cache-control: no-cache`, so a browser
 revalidates and gets a 304 rather than skipping the request entirely.

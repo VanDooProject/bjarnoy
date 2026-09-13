@@ -21,6 +21,14 @@ RUN npm ci
 
 COPY src/frontend/ ./
 
+# config.ts defaults DEMO_MODE on, because `npm run dev` has no backend behind
+# it. This image does — it serves the SPA and the API from one origin — so the
+# bundle it bakes in has to be built with the demo simulation off, or the
+# deployment never calls its own API. An arg rather than a fixed ENV so a
+# demo-only build (a preview with no database behind it) is still one flag away.
+ARG VITE_DEMO_MODE=false
+ENV VITE_DEMO_MODE=${VITE_DEMO_MODE}
+
 # The tile art is a git submodule. The build fails without it rather than
 # quietly shipping an app with no textures, so say so plainly.
 RUN test -d vendor/bg_assets_hextile/hextiles \
@@ -81,9 +89,48 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /data
 VOLUME /data
 
+# curl: the aspnet image ships no HTTP client at all, and an orchestrator needs
+# one — the HEALTHCHECK below runs inside the container, so `docker compose
+# depends_on: service_healthy` and Coolify's own status both hang on it.
+#
+# libfontconfig1: SkiaSharp's native libSkiaSharp.so links against
+# libfontconfig.so.1, which this image does not have, so dlopen fails and every
+# fog-mask request 500s with "/app/liblibSkiaSharp: cannot open shared object
+# file" — a message that reads like a missing native asset but is really a
+# missing dependency *of* one (the asset publishes fine, see
+# runtimes/linux-x64/native/). Nothing here renders text, so
+# SkiaSharp.NativeAssets.Linux.NoDependencies would also do; the stock build
+# plus this package keeps the container running the same native binary the
+# tests and CI do.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# /health rather than /alive: it is the readiness signal (every registered
+# check), and ExposeHealthChecks above is what maps it outside development.
+# The port is the one ASPNETCORE_HTTP_PORTS above pins, spelled out because a
+# deployment that moves it has to move this with it.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
 EXPOSE 8080
 
 COPY --from=backend --chown=$APP_UID:$APP_UID /app .
+
+# Which build this is, served by GET /api/v1/info so a deployment can be
+# identified without guessing — the question several branch deployments running
+# side by side make a real one. Last in the file on purpose: these change on
+# every commit, and anything after them would be rebuilt every time. They are
+# plain configuration (Build:*, see BuildInfoOptions), so `docker run -e
+# Build__Commit=...` can correct a build that was stamped without them.
+ARG GIT_COMMIT=unknown
+ARG GIT_BRANCH=unknown
+ARG BUILD_VERSION=unknown
+ARG BUILT_AT=unknown
+ENV Build__Commit=${GIT_COMMIT} \
+    Build__Branch=${GIT_BRANCH} \
+    Build__Version=${BUILD_VERSION} \
+    Build__BuiltAt=${BUILT_AT}
 
 # Non-root: nothing in here needs to write outside the data volume.
 USER $APP_UID
