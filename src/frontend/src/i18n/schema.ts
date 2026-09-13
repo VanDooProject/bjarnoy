@@ -1,6 +1,7 @@
 import common from './locales/en/common.json';
 import catalogue from './locales/en/catalogue.json';
 import landing from './locales/en/landing.json';
+import worlds from './locales/en/worlds.json';
 import onboarding from './locales/en/onboarding.json';
 import demoModeBadge from './locales/en/demoModeBadge.json';
 import login from './locales/en/login.json';
@@ -36,6 +37,7 @@ export interface MessageSchema {
   common: typeof common;
   catalogue: typeof catalogue;
   landing: typeof landing;
+  worlds: typeof worlds;
   onboarding: typeof onboarding;
   demoModeBadge: typeof demoModeBadge;
   login: typeof login;
