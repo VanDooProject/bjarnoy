@@ -33,6 +33,10 @@ import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { claimRadiusForLevel } from '../lib/map/shoreline';
+import {
+  HEX_TARGET_RADIUS_PX,
+  RING_BUBBLE_TARGET_RADIUS_PX,
+} from '../lib/map/guidanceArrowGeometry';
 import type { Terrain, Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
@@ -469,6 +473,11 @@ const pointerTarget = computed(() => {
       screen: spot,
       label: t('landing.pointer.thisOneFits', { terrain: terrainName(GUIDED_TERRAIN_FOR[reason.fit]) }),
       angle: 30,
+      // A ring bubble is a real, fixed-size target (BUB1, 52px across), not
+      // a point: without its radius the tip stops 9px from the bubble's
+      // *centre*, i.e. 17px inside it, and the shaft covers the bubble
+      // whose label it is supposed to be singling out.
+      targetRadius: RING_BUBBLE_TARGET_RADIUS_PX,
     };
   }
   if (!player.hasFoundedSettlement) {
@@ -478,6 +487,7 @@ const pointerTarget = computed(() => {
       coord: previewCoord.value,
       label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
+      targetRadius: HEX_TARGET_RADIUS_PX,
     };
   }
   if (!nextGuidedTargetCoord.value) return null;
@@ -493,6 +503,7 @@ const pointerTarget = computed(() => {
       ? t('landing.pointer.oneMore', { terrain: terrainName(GUIDED_TERRAIN_FOR[remainingType]) })
       : t('landing.pointer.nowBuildHere'),
     angle: oneDone ? 52 : 38,
+    targetRadius: HEX_TARGET_RADIUS_PX,
   };
 });
 
@@ -824,6 +835,7 @@ watch(
       :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
+      :target-radius="pointerTarget.targetRadius"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
