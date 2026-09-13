@@ -62,13 +62,30 @@ public sealed class WorldService(
     private readonly ILogger<WorldService> _logger = logger;
 
     /// <summary>
+    /// Worlds where nobody picked the seed (<see cref="CreateWorldAsync"/>'s
+    /// <c>autoSeed</c> true) get this many draws before a run of bad luck
+    /// surfaces as a failure — see <see cref="GenerateWithRetryAsync"/>.
+    /// </summary>
+    private const int MaxAutoSeedAttempts = 10;
+
+    /// <summary>
     /// Generates a world and persists it: the seed and its parameters, plus the
     /// islands the flood fill found and the plots players can be founded on.
     /// </summary>
+    /// <param name="autoSeed">
+    /// True when nobody chose <paramref name="options"/>'s seed on purpose
+    /// (it was drawn at random for them): a seed that happens to produce no
+    /// islands is then this method's problem to route around, not a
+    /// creation failure to report back. False for an admin's explicit seed
+    /// (including a reseed's candidate), where a no-islands result is
+    /// meaningful feedback about the seed they picked and must surface as
+    /// one — see <see cref="ReseedAsync"/> and <see cref="PreviewAsync"/>.
+    /// </param>
     public async Task<WorldEntity> CreateWorldAsync(
         string name,
         WorldGenerationOptions options,
         int maxPlayers,
+        bool autoSeed = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -82,20 +99,13 @@ public sealed class WorldService(
             throw new WorldCreationException($"A world named '{name}' already exists.");
         }
 
-        _logger.LogInformation(
-            "Generating world {World} from seed {Seed} at radius {Radius}.",
-            name, options.Seed, options.Radius);
-
-        // Generation is CPU-bound and can take a while for a large radius, so it
-        // runs off the request thread.
-        var generated = await Task.Run(
-            () => new WorldGenerator(options).Generate(cancellationToken),
-            cancellationToken).ConfigureAwait(false);
+        var (generated, usedOptions) = await GenerateWithRetryAsync(options, autoSeed, cancellationToken)
+            .ConfigureAwait(false);
 
         if (generated.Islands.Count == 0)
         {
             throw new WorldCreationException(
-                $"Seed {options.Seed} at radius {options.Radius} produced no islands. " +
+                $"Seed {usedOptions.Seed} at radius {usedOptions.Radius} produced no islands. " +
                 "Try another seed or a larger radius.");
         }
 
@@ -105,7 +115,7 @@ public sealed class WorldService(
             MaxPlayers = maxPlayers,
             CreatedAt = _timeProvider.GetUtcNow(),
         };
-        world.ApplyGenerationOptions(options);
+        world.ApplyGenerationOptions(usedOptions);
 
         foreach (var island in generated.Islands)
         {
@@ -136,6 +146,46 @@ public sealed class WorldService(
             name, world.Id, generated.Islands.Count, generated.LandTileCount);
 
         return world;
+    }
+
+    /// <summary>
+    /// Runs the generator, redrawing the seed and trying again when
+    /// <paramref name="autoSeed"/> is set and the draw produces no islands —
+    /// roughly 1 in 10 random seeds do at the radii this game uses, and
+    /// nobody chose this one on purpose, so it is this method's problem to
+    /// route around rather than a failure to hand back to whoever asked for
+    /// "just create me a world". Gives up after <see cref="MaxAutoSeedAttempts"/>
+    /// draws (or immediately, when <paramref name="autoSeed"/> is false) and
+    /// returns whatever the last attempt produced, islands or none, leaving
+    /// the caller to report it.
+    /// </summary>
+    private async Task<(GeneratedWorld Generated, WorldGenerationOptions Options)> GenerateWithRetryAsync(
+        WorldGenerationOptions options,
+        bool autoSeed,
+        CancellationToken cancellationToken)
+    {
+        var candidate = options;
+        for (var attempt = 1; ; attempt++)
+        {
+            _logger.LogInformation(
+                "Generating world from seed {Seed} at radius {Radius}.", candidate.Seed, candidate.Radius);
+
+            // Generation is CPU-bound and can take a while for a large
+            // radius, so it runs off the request thread.
+            var generated = await Task.Run(
+                () => new WorldGenerator(candidate).Generate(cancellationToken),
+                cancellationToken).ConfigureAwait(false);
+
+            if (generated.Islands.Count > 0 || !autoSeed || attempt >= MaxAutoSeedAttempts)
+            {
+                return (generated, candidate);
+            }
+
+            _logger.LogInformation(
+                "Auto-drawn seed {Seed} at radius {Radius} produced no islands; drawing another (attempt {Attempt}).",
+                candidate.Seed, candidate.Radius, attempt);
+            candidate = candidate with { Seed = Random.Shared.Next() };
+        }
     }
 
     /// <summary>
@@ -392,7 +442,11 @@ public sealed class WorldService(
         try
         {
             await CreateWorldAsync(
-                name, WorldGenerationOptions.ForSeed(Random.Shared.Next()), maxPlayers: 500, cancellationToken)
+                name,
+                WorldGenerationOptions.ForSeed(Random.Shared.Next()),
+                maxPlayers: 500,
+                autoSeed: true,
+                cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (WorldCreationException ex)

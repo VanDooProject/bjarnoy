@@ -107,7 +107,7 @@ public static class WorldEndpoints
         try
         {
             var world = await worlds.CreateWorldAsync(
-                request.Name, options, request.MaxPlayers, cancellationToken);
+                request.Name, options, request.MaxPlayers, autoSeed: request.Seed is null, cancellationToken);
 
             return TypedResults.Created(
                 $"/api/v1/worlds/{world.Id}",

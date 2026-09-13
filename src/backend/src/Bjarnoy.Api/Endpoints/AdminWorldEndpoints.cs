@@ -115,7 +115,7 @@ public static class AdminWorldEndpoints
         try
         {
             var world = await worlds.CreateWorldAsync(
-                request.Name.Trim(), options, request.MaxPlayers, cancellationToken);
+                request.Name.Trim(), options, request.MaxPlayers, autoSeed: request.Seed is null, cancellationToken);
 
             return TypedResults.Created(
                 $"/api/v1/admin/worlds/{world.Id}", AdminWorldResponse.From(world, playerCount: 0));
