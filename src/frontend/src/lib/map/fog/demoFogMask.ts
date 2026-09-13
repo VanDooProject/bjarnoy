@@ -172,18 +172,14 @@ export async function buildDemoFogMask(model: WorldModel): Promise<ImageBitmap |
   const bounds = worldMaskBounds(DEMO_MASK_RADIUS);
   const cells = generateCells(model, bounds);
 
-  const canvas = new OffscreenCanvas(bounds.width, bounds.height);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  const image = ctx.createImageData(bounds.width, bounds.height);
+  const data = new Uint8ClampedArray(bounds.width * bounds.height * 4);
   for (let i = 0; i < cells.length; i++) {
     const cell = cells[i];
-    image.data[i * 4 + 0] = cell.unknown;
-    image.data[i * 4 + 1] = cell.outOfSight;
-    image.data[i * 4 + 2] = cell.noise;
-    image.data[i * 4 + 3] = 255;
+    data[i * 4 + 0] = cell.unknown;
+    data[i * 4 + 1] = cell.outOfSight;
+    data[i * 4 + 2] = cell.noise;
+    data[i * 4 + 3] = 255;
   }
-  ctx.putImageData(image, 0, 0);
-  const blob = await canvas.convertToBlob({ type: 'image/png' });
-  return createImageBitmap(blob);
+  const image = new ImageData(data, bounds.width, bounds.height);
+  return createImageBitmap(image);
 }

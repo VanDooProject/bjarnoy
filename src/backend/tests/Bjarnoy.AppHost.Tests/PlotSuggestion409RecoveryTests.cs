@@ -124,6 +124,18 @@ public class PlotSuggestion409RecoveryTests
         }
         Assert.True(ringOpened, "Clicking the Longhouse after recovery never opened its ring menu.");
 
-        Assert.Empty(consoleErrors);
+        // The 409 this test exists to exercise is a *deliberate* response, and
+        // Chromium logs every non-2xx fetch to the console as "Failed to load
+        // resource: the server responded with a status of 409" — so a bare
+        // Assert.Empty here fails on the very thing being tested (it did, on
+        // this test's first CI run). Everything else must still be clean: the
+        // point of the L7 fix is that the page recovers *without* the uncaught
+        // ApiError the old code left behind, and that would show up here.
+        var unexpected = consoleErrors
+            .Where(e => !e.Contains("status of 409", StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            unexpected.Count == 0,
+            $"Unexpected console errors during 409 recovery: [{string.Join(" | ", unexpected)}]");
     }
 }

@@ -613,6 +613,18 @@ function onQueueSelect(coord: { q: number; r: number }) {
 
 async function foundHere(coord: AxialCoord) {
   founding.value = true;
+  // Stopped *before* the founding request, not after it returns. The window
+  // between the two is not instant — it is a network round trip, and L6b now
+  // marks the player founded the moment that POST resolves — so a poll tick
+  // landing anywhere in there asks for a plot suggestion this owner is about
+  // to stop being entitled to, and the backend answers 409
+  // (PlotSuggestionRejection.AlreadyFounded). Harmless to the flow (L7
+  // recovers from it) but not harmless in general: the browser logs every
+  // non-2xx as a console error, which is what `PageConsoleErrors`-based e2e
+  // assertions read, and a request whose only possible answers are "the plot
+  // you already have" or "you already founded" is not worth sending at all.
+  // A failed founding restarts it below.
+  stopPreviewPoll();
   try {
     const realmName = player.nickname
       ? t('landing.foundHere.namedRealm', { nickname: player.nickname })
@@ -622,13 +634,11 @@ async function foundHere(coord: AxialCoord) {
       : await world.foundStartingSettlementLive(player.id, player.ownerName, realmName, coord);
     player.foundSettlement(settlement.id);
     world.startHudSync();
-    // The view stays mounted after founding (flipped into settlement mode
-    // in place, see below) rather than unmounting, so onUnmounted's own
-    // stopPreviewPoll() won't run for a while yet — without stopping it
-    // here too, the pre-founding poll keeps asking the backend for a plot
-    // suggestion this owner no longer needs, which now 409s
-    // (PlotSuggestionRejection.AlreadyFounded) on every tick.
-    stopPreviewPoll();
+    // (The preview poll is already stopped — see the top of this function.
+    // It matters that it stays stopped: this view stays mounted after
+    // founding, flipped into settlement mode in place rather than
+    // unmounting, so onUnmounted's own stopPreviewPoll() won't run for a
+    // long while yet.)
     // The canvas was mounted in preview mode (no settlementId yet) — flip it
     // into a real settlement view in place, same camera, no remount. Also
     // drops screenBiasX back to 0: the hero text (the only reason to bias
@@ -684,6 +694,14 @@ async function foundHere(coord: AxialCoord) {
     console.error('Failed to found settlement against the backend', err);
     showInvalidClickMessage(t('landing.invalidClick.plotTaken'));
     await refreshPreview();
+    // Founding did not happen, so this visitor is still a pre-founding
+    // visitor: restart the poll stopped at the top of this function, or the
+    // preview would silently stop tracking other visitors claiming plots
+    // nearby for the rest of the session. Only reached when the recovery
+    // paths above did not return. Live mode only, matching the one place
+    // that starts it in the first place (onMounted's live branch) — demo
+    // mode has no backend to poll.
+    if (!DEMO_MODE) startPreviewPoll();
   } finally {
     founding.value = false;
   }
