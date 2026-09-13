@@ -5,9 +5,9 @@
     "title": "Put your longhouse somewhere.",
     "lede": "That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting. Nobody asks your name until you have something worth naming.",
     "makingLandfall": "Making landfall…",
-    "plotsFreeOne": "One plot free on this island",
-    "plotsFreeMany": "{count} plots free on this island",
-    "plotsFreeSuffix": "— any of them is yours"
+    "noAccount": "No account",
+    "nothingToInstall": "Nothing to install",
+    "leavesInOneClick": "Leaves in one click"
   },
   "joinBlocked": {
     "opensAt": "This world opens {date}.",
@@ -51,8 +51,7 @@
   },
   "footer": {
     "sea": "Kettil Sea",
-    "noAccount": "No account",
-    "nothingToInstall": "Nothing to install"
+    "reservedFor": "Your plot is held for {count} minute | Your plot is held for {count} minutes"
   },
   "banner": {
     "landfallTitle": "Landfall made.",

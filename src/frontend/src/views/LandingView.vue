@@ -263,6 +263,27 @@ const joinBlockedMessage = computed(() => {
   return t('landing.joinBlocked.notAcceptingPlayers');
 });
 
+// landing-page-defects.md L3: the footer's reservation countdown — mirrors
+// the mockup's "Your plot is held for N minutes" (docs/design/img/
+// but_building_on_map.png), sourced from `plotSuggestion.reservedUntil`
+// (PlotReservationService.GetOrRefreshAsync), which `world.ts` already
+// fetches/stores but nothing read until now. Deliberately NOT the mockup's
+// hardcoded "20 minutes" — this codebase's real
+// `PlotReservationOptions.ReservationTtl` is 3 minutes. Rounds up so a
+// reservation with, say, 61 seconds left still reads "2 minutes" instead of
+// under-selling it as "1", and returns null once the TTL has actually
+// lapsed rather than showing a zero/negative count — the next preview poll
+// (`refreshPreview`, every `PREVIEW_POLL_MS`) either renews `reservedUntil`
+// or drops `reserved` server-side, at which point this just goes back to
+// null on its own.
+const reservedMinutesRemaining = computed<number | null>(() => {
+  const suggestion = world.plotSuggestion;
+  if (!suggestion?.reserved || !suggestion.reservedUntil) return null;
+  const msRemaining = new Date(suggestion.reservedUntil).getTime() - Date.now();
+  const minutes = Math.ceil(msRemaining / 60_000);
+  return minutes > 0 ? minutes : null;
+});
+
 // Guided checklist (design handoff "2a"): derived purely from what's
 // actually standing rather than a fixed step order — see
 // onboardingGuidance.ts's own doc comment. This is also now the single
@@ -728,19 +749,28 @@ watch(
       <p class="lede">
         {{ t('landing.hero.lede') }}
       </p>
-      <!-- Live mode offers up to 6 plots (the suggestion plus its
-           alternatives — PlotReservationOptions.AlternativeCount); demo mode
-           has exactly one findLandfall hex and shows no count at all. -->
-      <p v-if="!DEMO_MODE && nearbyStartCoords.length > 0" class="plot-count">
+      <!-- landing-page-defects.md L3: this used to render
+           `nearbyStartCoords.length` as "N plots free on this island" — a
+           number that was really `min(actually free, AlternativeCount + 1)`
+           (PlotReservationService.GetOrRefreshAsync capped `alternatives` at
+           `AlternativeCount`), and mostly pointed at hexes the locked
+           pre-founding preview crop never draws (its alternatives weren't
+           distance-ordered — now fixed in that same service). Dropped the
+           count entirely per the plan's preferred fix and restored the
+           mockup's own sub-line instead (docs/design/img/
+           but_building_on_map.png: "No account · Nothing to install ·
+           Leaves in one click"), moved out of `.footer` below, which now
+           carries the mockup's own footer content instead. -->
+      <p class="signup-facts">
         <span class="plot-count-dot" />
-        <span class="plot-count-text">
-          {{
-            nearbyStartCoords.length === 1
-              ? t('landing.hero.plotsFreeOne')
-              : t('landing.hero.plotsFreeMany', { count: nearbyStartCoords.length })
-          }}
-        </span>
-        <span class="plot-count-suffix">{{ t('landing.hero.plotsFreeSuffix') }}</span>
+        <span>{{ t('landing.hero.noAccount') }}</span>
+        <!-- Decorative divider, not copy — a CSS-generated glyph (below)
+             rather than raw template text, so @intlify/vue-i18n/no-raw-text
+             (every visible string must come from i18n) doesn't flag it. -->
+        <span class="signup-facts-sep" aria-hidden="true"></span>
+        <span>{{ t('landing.hero.nothingToInstall') }}</span>
+        <span class="signup-facts-sep" aria-hidden="true"></span>
+        <span>{{ t('landing.hero.leavesInOneClick') }}</span>
       </p>
       <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
@@ -770,8 +800,13 @@ watch(
 
     <div class="footer">
       <span>{{ t('landing.footer.sea') }}</span>
-      <span>{{ t('landing.footer.noAccount') }}</span>
-      <span>{{ t('landing.footer.nothingToInstall') }}</span>
+      <!-- L3: "No account"/"Nothing to install" moved up into the hero
+           sub-line above (see that block's own comment) — this side now
+           carries the mockup's reservation countdown instead, pushed to
+           the far right the same way the mockup's footer does. -->
+      <span v-if="reservedMinutesRemaining !== null" class="footer-reservation">
+        {{ t('landing.footer.reservedFor', { count: reservedMinutesRemaining }) }}
+      </span>
     </div>
 
     <BuildQueuePanel v-if="player.hasFoundedSettlement" @select="onQueueSelect" />
@@ -834,11 +869,14 @@ h1 {
   font-size: 14px;
   color: var(--gold);
 }
-.plot-count {
+.signup-facts {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 22px 0 0;
+  font-size: 14px;
+  color: var(--muted);
 }
 .plot-count-dot {
   width: 12px;
@@ -847,14 +885,9 @@ h1 {
   background: var(--gold);
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
-.plot-count-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--gold);
-}
-.plot-count-suffix {
-  font-size: 13px;
-  color: var(--muted);
+.signup-facts-sep::before {
+  content: '|';
+  color: var(--muted-2);
 }
 .footer {
   position: absolute;
@@ -870,5 +903,8 @@ h1 {
   font-size: 13px;
   color: var(--muted-2);
   pointer-events: none;
+}
+.footer-reservation {
+  margin-left: auto;
 }
 </style>

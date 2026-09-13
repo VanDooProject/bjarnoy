@@ -5,9 +5,9 @@
     "title": "Errichte irgendwo dein Langhaus.",
     "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
     "makingLandfall": "Landung wird gemacht…",
-    "plotsFreeOne": "Ein Grundstück frei auf dieser Insel",
-    "plotsFreeMany": "{count} Grundstücke frei auf dieser Insel",
-    "plotsFreeSuffix": "— jedes davon gehört dir"
+    "noAccount": "Kein Konto",
+    "nothingToInstall": "Nichts zu installieren",
+    "leavesInOneClick": "Mit einem Klick wieder weg"
   },
   "joinBlocked": {
     "opensAt": "Diese Welt öffnet {date}.",
@@ -51,8 +51,7 @@
   },
   "footer": {
     "sea": "Kettil-See",
-    "noAccount": "Kein Konto",
-    "nothingToInstall": "Nichts zu installieren"
+    "reservedFor": "Dein Grundstück ist noch {count} Minute reserviert | Dein Grundstück ist noch {count} Minuten reserviert"
   },
   "banner": {
     "landfallTitle": "Landung geglückt.",
