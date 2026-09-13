@@ -15,10 +15,10 @@ public enum MigrationCommandKind
     Apply,
 
     /// <summary>
-    /// Apply pending migrations, seed the default world if the database has
+    /// Apply pending migrations, create the default world if the database has
     /// none, then exit.
     /// </summary>
-    ApplySeed,
+    ApplyAndEnsureWorld,
 
     /// <summary>Report applied and pending migrations, then exit.</summary>
     Status,
@@ -53,7 +53,7 @@ public static class MigrationCommand
     public const int FailureExitCode = 1;
 
     /// <summary>
-    /// The world <c>--seed</c> creates. Shared with the self-migrating startup
+    /// The world <c>--ensure-world</c> creates. Shared with the self-migrating startup
     /// path in <c>Program.cs</c> so the two cannot name it differently.
     /// </summary>
     public const string DefaultWorldName = "Kettil Sea";
@@ -63,18 +63,18 @@ public static class MigrationCommand
         ArgumentNullException.ThrowIfNull(args);
 
         // The first migration flag still wins, so an existing `--migrate` keeps
-        // meaning exactly what it did. `--seed` is a modifier rather than a mode
-        // of its own: seeding needs a schema, and applying is idempotent, so
-        // `--seed` on its own means the same as `--migrate --seed`.
+        // meaning exactly what it did. `--ensure-world` is a modifier rather than
+        // a mode of its own: creating a world needs a schema, and applying is
+        // idempotent, so `--ensure-world` alone means `--migrate --ensure-world`.
         var kind = MigrationCommandKind.None;
-        var seed = false;
+        var ensureWorld = false;
 
         foreach (var arg in args)
         {
             switch (arg)
             {
-                case "--seed" or "seed":
-                    seed = true;
+                case "--ensure-world" or "ensure-world":
+                    ensureWorld = true;
                     break;
                 case "--migrate" or "migrate":
                     kind = kind is MigrationCommandKind.None ? MigrationCommandKind.Apply : kind;
@@ -91,10 +91,10 @@ public static class MigrationCommand
         }
 
         // --migrate-status/--migrate-script report rather than change anything,
-        // so seeding alongside them would contradict what they are for.
-        if (seed && kind is MigrationCommandKind.None or MigrationCommandKind.Apply)
+        // so writing a world alongside them would contradict what they are for.
+        if (ensureWorld && kind is MigrationCommandKind.None or MigrationCommandKind.Apply)
         {
-            return MigrationCommandKind.ApplySeed;
+            return MigrationCommandKind.ApplyAndEnsureWorld;
         }
 
         return kind;
@@ -123,7 +123,7 @@ public static class MigrationCommand
                 case MigrationCommandKind.Apply:
                     return await ApplyAsync(migrator, output, cancellationToken).ConfigureAwait(false);
 
-                case MigrationCommandKind.ApplySeed:
+                case MigrationCommandKind.ApplyAndEnsureWorld:
                     var applyExitCode = await ApplyAsync(migrator, output, cancellationToken)
                         .ConfigureAwait(false);
                     if (applyExitCode != 0)
@@ -131,7 +131,7 @@ public static class MigrationCommand
                         return applyExitCode;
                     }
 
-                    return await SeedAsync(scope.ServiceProvider, output, cancellationToken)
+                    return await EnsureWorldAsync(scope.ServiceProvider, output, cancellationToken)
                         .ConfigureAwait(false);
 
                 case MigrationCommandKind.Status:
@@ -180,7 +180,7 @@ public static class MigrationCommand
     /// migrator deliberately does not do — leaving it with an empty world list
     /// nothing would ever fill, since a client no longer creates worlds itself.
     /// </summary>
-    private static async Task<int> SeedAsync(
+    private static async Task<int> EnsureWorldAsync(
         IServiceProvider scopedServices,
         TextWriter output,
         CancellationToken cancellationToken)
@@ -194,7 +194,7 @@ public static class MigrationCommand
         if (existing.Count > 0)
         {
             await output
-                .WriteLineAsync($"{existing.Count} world(s) already exist; seeded nothing.")
+                .WriteLineAsync($"{existing.Count} world(s) already exist; created nothing.")
                 .ConfigureAwait(false);
             return 0;
         }
@@ -209,8 +209,8 @@ public static class MigrationCommand
         await output
             .WriteLineAsync(
                 seeded.Count > 0
-                    ? $"Seeded the default world \"{DefaultWorldName}\"."
-                    : "No world was seeded.")
+                    ? $"Created the default world \"{DefaultWorldName}\"."
+                    : "No world was created.")
             .ConfigureAwait(false);
 
         return seeded.Count > 0 ? 0 : FailureExitCode;

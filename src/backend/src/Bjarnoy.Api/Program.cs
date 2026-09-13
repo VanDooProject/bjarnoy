@@ -191,8 +191,8 @@ if (databaseOptions.MigrateOnStartup)
     // longer creates a world itself (see
     // WorldService.SeedDefaultWorldIfNoneAsync), so an empty server with
     // nothing to join is never a state anyone wants. A deployment that runs
-    // the separate migrator instead gets the same seed from `--migrate
-    // --seed` (MigrationCommand.SeedAsync), for exactly that reason.
+    // the separate migrator instead gets the same world from `--migrate
+    // --ensure-world` (MigrationCommand.EnsureWorldAsync), for that reason.
     var worldService = scope.ServiceProvider.GetRequiredService<WorldService>();
     var worldSeedLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     await worldService.SeedDefaultWorldIfNoneAsync(MigrationCommand.DefaultWorldName, worldSeedLogger);

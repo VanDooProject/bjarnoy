@@ -70,29 +70,35 @@ public sealed class MigrationTests
     }
 
     [Theory]
-    [InlineData("--seed", MigrationCommandKind.ApplySeed)]
-    [InlineData("seed", MigrationCommandKind.ApplySeed)]
-    public void Seeding_implies_migrating_since_a_seed_needs_a_schema(
+    [InlineData("--ensure-world", MigrationCommandKind.ApplyAndEnsureWorld)]
+    [InlineData("ensure-world", MigrationCommandKind.ApplyAndEnsureWorld)]
+    public void Ensuring_a_world_implies_migrating_since_it_needs_a_schema(
         string arg, MigrationCommandKind expected)
     {
         Assert.Equal(expected, MigrationCommand.Parse([arg]));
     }
 
     [Fact]
-    public void Migrate_and_seed_together_are_one_command()
+    public void Migrate_and_ensure_world_together_are_one_command()
     {
-        Assert.Equal(MigrationCommandKind.ApplySeed, MigrationCommand.Parse(["--migrate", "--seed"]));
-        Assert.Equal(MigrationCommandKind.ApplySeed, MigrationCommand.Parse(["--seed", "--migrate"]));
+        Assert.Equal(
+            MigrationCommandKind.ApplyAndEnsureWorld,
+            MigrationCommand.Parse(["--migrate", "--ensure-world"]));
+        Assert.Equal(
+            MigrationCommandKind.ApplyAndEnsureWorld,
+            MigrationCommand.Parse(["--ensure-world", "--migrate"]));
     }
 
     [Theory]
     [InlineData("--migrate-status")]
     [InlineData("--migrate-script")]
-    public void The_reporting_commands_are_not_turned_into_a_seed(string reportingArg)
+    public void The_reporting_commands_never_write_a_world(string reportingArg)
     {
         // They exist to say what *would* happen; writing a world while
         // answering that would contradict it.
-        Assert.NotEqual(MigrationCommandKind.ApplySeed, MigrationCommand.Parse([reportingArg, "--seed"]));
+        Assert.NotEqual(
+            MigrationCommandKind.ApplyAndEnsureWorld,
+            MigrationCommand.Parse([reportingArg, "--ensure-world"]));
     }
 
     [Theory]
@@ -126,7 +132,7 @@ public sealed class MigrationTests
     }
 
     [Fact]
-    public async Task The_seed_command_leaves_a_fresh_database_with_a_world_to_join()
+    public async Task Ensuring_a_world_leaves_a_fresh_database_with_one_to_join()
     {
         // The deployment case: the app migrates in a separate container and so
         // never runs Program.cs's own seeding, which would otherwise leave the
@@ -135,7 +141,7 @@ public sealed class MigrationTests
         await using var output = new StringWriter();
 
         var exitCode = await MigrationCommand.RunAsync(
-            factory.Services, MigrationCommandKind.ApplySeed, output, Ct);
+            factory.Services, MigrationCommandKind.ApplyAndEnsureWorld, output, Ct);
 
         Assert.Equal(0, exitCode);
         var worlds = await factory.GetWorldsAsync(Ct);
@@ -144,24 +150,25 @@ public sealed class MigrationTests
     }
 
     [Fact]
-    public async Task Seeding_a_database_that_already_has_a_world_adds_nothing()
+    public async Task Ensuring_a_world_on_a_database_that_has_one_adds_nothing()
     {
         // A redeploy runs the migrator again against a database that is already
         // being played in; a second world (or a replaced one) would be a
         // catastrophe rather than a nuisance.
         await using var factory = BjarnoyApiFactory.Sqlite();
         await using var first = new StringWriter();
-        await MigrationCommand.RunAsync(factory.Services, MigrationCommandKind.ApplySeed, first, Ct);
+        await MigrationCommand.RunAsync(
+            factory.Services, MigrationCommandKind.ApplyAndEnsureWorld, first, Ct);
         var seeded = Assert.Single(await factory.GetWorldsAsync(Ct));
 
         await using var second = new StringWriter();
         var exitCode = await MigrationCommand.RunAsync(
-            factory.Services, MigrationCommandKind.ApplySeed, second, Ct);
+            factory.Services, MigrationCommandKind.ApplyAndEnsureWorld, second, Ct);
 
         Assert.Equal(0, exitCode);
         var after = Assert.Single(await factory.GetWorldsAsync(Ct));
         Assert.Equal(seeded.Id, after.Id);
-        Assert.Contains("seeded nothing", second.ToString(), StringComparison.Ordinal);
+        Assert.Contains("created nothing", second.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

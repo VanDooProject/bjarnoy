@@ -110,13 +110,13 @@ containers:
 
 ```bash
 docker run --rm <image> --migrate          # apply; exits 0 when done
-docker run --rm <image> --migrate --seed   # apply, then seed a world if there is none
+docker run --rm <image> --migrate --ensure-world  # apply, then create a world if there is none
 docker run --rm <image> --migrate-status   # report; exit 2 = migrations pending
 docker run --rm <image> --migrate-script   # print the SQL, apply nothing
 ```
 
-`--seed` exists because the in-process path seeds the default world and this one
-otherwise would not: `Program.cs` only seeds under `Database:MigrateOnStartup`,
+`--ensure-world` exists because the in-process path seeds the default world and
+this one otherwise would not: `Program.cs` only seeds under `Database:MigrateOnStartup`,
 where the schema is known to exist. A deployment that migrates here instead
 would come up with no world at all, and nothing would ever create one — clients
 do not. It is idempotent (a database that already has a world is left alone) and
