@@ -4,7 +4,7 @@
 // worldGenerator.ts is a pure TS mirror of the backend's TerrainSampler, so
 // every variant card below renders straight from a seed + parameter set with
 // no API call — this is what makes a live, multi-variant compare possible.
-import { nextTick, reactive, ref } from 'vue';
+import { nextTick, reactive, ref, toRaw } from 'vue';
 import { DEFAULT_GENERATION, terrainAt, type WorldGenerationConstants, type WorldSeed } from '../../lib/map/worldGenerator';
 import { oddQToAxial } from '../../lib/hex/coords';
 import type { Terrain } from '../../lib/map/types';
@@ -75,9 +75,12 @@ const GENERATION_FIELDS: {
   { key: 'forestRockiness', labelKey: 'forestRockinessLabel', min: 0, max: 1, step: 0.01 },
 ];
 
-// Odd-q columns/rows from -GRID_RADIUS..GRID_RADIUS, one square dot per hex —
-// same dot-minimap style as the OLD/NEW comparison screenshots, just driven
-// live instead of pre-rendered.
+// One square dot per hex, same dot-minimap style as the OLD/NEW comparison
+// screenshots, just driven live instead of pre-rendered. GRID_RADIUS only
+// sizes the canvas itself (CANVAS_SIZE below); the columns/rows actually
+// sampled each draw come from CANVAS_SIZE / dotSize centred on the
+// viewport (see draw()), so that range is zoom-driven and unbounded —
+// zooming out samples well past +/-GRID_RADIUS, not clamped to it.
 const GRID_RADIUS = 40;
 const DOT_SIZE = 4;
 const CANVAS_SIZE = (GRID_RADIUS * 2 + 1) * DOT_SIZE;
@@ -121,13 +124,56 @@ function setCanvasRef(id: number, el: Element | null) {
   else canvasRefs.delete(id);
 }
 
+interface TerrainCache {
+  /** Seed + generation signature the cached samples were taken under. */
+  signature: string;
+  samples: Map<string, Terrain>;
+}
+const terrainCaches = new Map<number, TerrainCache>();
+// One zoomed-out (MIN_ZOOM) frame already samples ~107k distinct hexes; cap
+// well above that so a long pan at low zoom, which keeps exposing hexes this
+// cache has never seen, can't grow it without bound — clearing it wholesale
+// on overflow is simpler than evicting individual entries and just as
+// correct, since overflow only means "sampled a lot of new ground".
+const MAX_TERRAIN_CACHE_ENTRIES = 300_000;
+
+/**
+ * Panning by a pixel re-exposes almost entirely the same hexes as the frame
+ * before, so caching terrainAt's result per (col, row) turns steady-state
+ * pan/zoom into "sample only what's newly visible" — this is what actually
+ * fixes the 1/zoom^2 blow-up at low zoom (the first zoomed-out frame still
+ * has to sample every one of those ~107k hexes; only the frames after it get
+ * cheaper). Keyed on a signature of the seed + generation constants, so a
+ * preset, reset, field edit or randomize — anything that can change what a
+ * given hex resolves to — invalidates the whole cache automatically, without
+ * needing a manual invalidation call at each of those sites.
+ */
+function terrainCacheFor(variantId: number, seed: number, gen: WorldGenerationConstants): Map<string, Terrain> {
+  const signature = `${seed}|${JSON.stringify(gen)}`;
+  const existing = terrainCaches.get(variantId);
+  if (existing && existing.signature === signature) return existing.samples;
+  const samples = new Map<string, Terrain>();
+  terrainCaches.set(variantId, { signature, samples });
+  return samples;
+}
+
 function draw(variant: Variant) {
   const canvas = canvasRefs.get(variant.id);
   const ctx = canvas?.getContext('2d');
   if (!canvas || !ctx) return;
 
   const seedValue = Number(variant.seedInput);
-  const world: WorldSeed = { seed: Number.isInteger(seedValue) ? seedValue : 0, generation: variant.generation };
+  // variants is reactive(), so variant.generation is a Vue Proxy. terrainAt
+  // -> closestIsland -> islandCellDepth reads ~20 gen.* properties per island
+  // cell, for 9 cells, per dot — each of those a proxy `get` trap plus
+  // dependency tracking. Measured at 7.5x the cost of sampling the same grid
+  // against a plain object, so unwrap once here rather than letting a future
+  // refactor pass the proxy back into the sampler. draw() only reads this
+  // synchronously and never retains it, so toRaw (no allocation) beats a
+  // `{ ...variant.generation }` snapshot.
+  const gen = toRaw(variant.generation);
+  const seed = Number.isInteger(seedValue) ? seedValue : 0;
+  const world: WorldSeed = { seed, generation: gen };
   const { centerCol, centerRow, zoom } = variant.viewport;
   const dotSize = DOT_SIZE * zoom;
   const half = CANVAS_SIZE / dotSize / 2;
@@ -136,13 +182,22 @@ function draw(variant: Variant) {
   const minRow = Math.floor(centerRow - half) - 1;
   const maxRow = Math.ceil(centerRow + half) + 1;
 
+  const samples = terrainCacheFor(variant.id, seed, gen);
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (let col = minCol; col <= maxCol; col++) {
     for (let row = minRow; row <= maxRow; row++) {
-      const { q, r } = oddQToAxial({ col, row });
+      const cacheKey = `${col},${row}`;
+      let terrain = samples.get(cacheKey);
+      if (terrain === undefined) {
+        const { q, r } = oddQToAxial({ col, row });
+        terrain = terrainAt(q, r, world);
+        if (samples.size >= MAX_TERRAIN_CACHE_ENTRIES) samples.clear();
+        samples.set(cacheKey, terrain);
+      }
       const px = (col - (centerCol - half)) * dotSize;
       const py = (row - (centerRow - half)) * dotSize;
-      ctx.fillStyle = TERRAIN_COLORS[terrainAt(q, r, world)];
+      ctx.fillStyle = TERRAIN_COLORS[terrain];
       ctx.fillRect(px, py, dotSize, dotSize);
     }
   }
@@ -152,16 +207,43 @@ function redrawAll() {
   for (const variant of variants) draw(variant);
 }
 
-/** Draws `variant`, then mirrors its viewport onto every other one when sync is on. */
+const dirtyVariantIds = new Set<number>();
+let pendingFrame: number | null = null;
+
+function flushDirtyVariants() {
+  pendingFrame = null;
+  for (const id of dirtyVariantIds) {
+    const variant = variants.find((v) => v.id === id);
+    if (variant) draw(variant);
+  }
+  dirtyVariantIds.clear();
+}
+
+/**
+ * Marks `variant` dirty and schedules one rAF to draw every dirty variant,
+ * instead of drawing right away. onPointerMove fires many times per
+ * rendered frame during a drag (same for onWheel during a scroll, and a
+ * fast typist across the 17 generation inputs), and draw()'s cost is
+ * dominated by terrainAt sampling — without this, every one of those events
+ * paid that cost inline in the handler. Coalescing into a single rAF draws
+ * each dirty variant at most once per frame no matter how many events land
+ * in it, without changing what ends up on screen.
+ */
+function scheduleDraw(variant: Variant) {
+  dirtyVariantIds.add(variant.id);
+  if (pendingFrame === null) pendingFrame = requestAnimationFrame(flushDirtyVariants);
+}
+
+/** Schedules a draw of `variant`, then mirrors its viewport onto every other one when sync is on. */
 function applyViewport(variant: Variant) {
-  draw(variant);
+  scheduleDraw(variant);
   if (!syncViewports.value) return;
   for (const other of variants) {
     if (other.id === variant.id) continue;
     other.viewport.centerCol = variant.viewport.centerCol;
     other.viewport.centerRow = variant.viewport.centerRow;
     other.viewport.zoom = variant.viewport.zoom;
-    draw(other);
+    scheduleDraw(other);
   }
 }
 
@@ -191,6 +273,12 @@ function removeVariant(id: number) {
   if (index >= 0) variants.splice(index, 1);
   canvasRefs.delete(id);
   pointerDrags.delete(id);
+  terrainCaches.delete(id);
+  dirtyVariantIds.delete(id);
+  if (dirtyVariantIds.size === 0 && pendingFrame !== null) {
+    cancelAnimationFrame(pendingFrame);
+    pendingFrame = null;
+  }
   if (presetTarget.value === id && variants.length > 0) presetTarget.value = variants[0].id;
 }
 
@@ -411,7 +499,7 @@ void nextTick(redrawAll);
               :max="field.max"
               :step="field.step"
               :data-testid="`lab-gen-${variant.id}-${field.key}`"
-              @input="draw(variant)"
+              @input="scheduleDraw(variant)"
             />
           </div>
         </div>

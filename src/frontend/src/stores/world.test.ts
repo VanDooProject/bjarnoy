@@ -69,10 +69,11 @@ async function loadStoreModule(demoMode: boolean) {
     // object here for that assignment to land on, same as the real module.
     authHooks: {},
   }));
-  // demoFogMask.ts's own bake needs OffscreenCanvas, which this test
-  // environment (node, not jsdom — see the localStorage stub above) has no
-  // stand-in for — stub the module the same way api/client is stubbed above,
-  // rather than the real bake.
+  // demoFogMask.ts's own bake needs ImageData/createImageBitmap, which this
+  // test environment (node, not jsdom — see the localStorage stub above) has
+  // no stand-in for — stub the module the same way api/client is stubbed
+  // above, rather than the real bake. (See demoFogMask.test.ts for coverage
+  // of the real bake body, with just those two globals stubbed.)
   vi.doMock('../lib/map/fog/demoFogMask', () => ({
     buildDemoFogMask: (...args: unknown[]) => buildDemoFogMask(...args),
     DEMO_MASK_RADIUS: 60,
@@ -743,9 +744,9 @@ describe('useWorldStore refreshDemoFogMask', () => {
   // Same regression as fetchFogMask's own "does not start a second fetch"
   // test above, but for the poll that actually caused the observed hang:
   // demoFogMask.ts's bake is real synchronous CPU work (a texel loop over
-  // DEMO_MASK_RADIUS, plus a PNG encode/decode round trip), not a network
-  // wait, so it is the more likely of the two to run long enough to overlap
-  // its own next poll tick under load.
+  // DEMO_MASK_RADIUS) plus an async `createImageBitmap`, not a network wait,
+  // so it is the more likely of the two to run long enough to overlap its
+  // own next poll tick under load.
   it('does not start a second bake while one is still in flight', async () => {
     buildDemoFogMask.mockReset();
     let resolveFirst: (bitmap: unknown) => void;

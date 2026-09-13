@@ -24,6 +24,15 @@ function mountLab() {
   return mount(AdminIslandLabView, { global: { plugins: [createTestI18n({ adminIslandLab })] } });
 }
 
+// The component coalesces pointer/wheel/generation-input-driven redraws into
+// a single requestAnimationFrame instead of drawing inline (perf: a drag or
+// a fast typist fires far more events than rendered frames), so a test that
+// wants to see the resulting draw has to wait a frame past flushPromises
+// (which only flushes microtasks) before it lands.
+function flushFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
 });
@@ -96,6 +105,7 @@ describe('AdminIslandLabView', () => {
 
     const cellSizeInput = wrapper.find('[data-testid^="lab-gen-"][data-testid$="-islandCellSize"]');
     await cellSizeInput.setValue(30);
+    await flushFrame();
 
     expect(clearRect.mock.calls.length).toBeGreaterThan(callsBefore);
   });
@@ -186,6 +196,40 @@ describe('AdminIslandLabView', () => {
     expect(wrapper.find('[data-testid="reset-view"]').exists()).toBe(true);
   });
 
+  it('dragging the canvas coalesces multiple pointermove events into one draw per frame', async () => {
+    const { clearRect } = stubCanvasContext();
+    const wrapper = mountLab();
+    await flushPromises();
+
+    const canvas = wrapper.find('[data-testid="island-lab-canvas"]').element as HTMLCanvasElement;
+    // jsdom implements PointerEvent but not pointer-capture — stub it to a
+    // no-op like onPointerDown/onPointerUp expect a real browser to provide.
+    canvas.setPointerCapture = vi.fn();
+    canvas.hasPointerCapture = vi.fn(() => false);
+    canvas.releasePointerCapture = vi.fn();
+    // jsdom never lays canvases out, so getBoundingClientRect defaults to an
+    // all-zero rect; onPointerMove divides by its width to convert CSS
+    // pixels to canvas pixels, so a zero-width rect turns every drag delta
+    // into +/-Infinity. Give it the canvas's actual size instead.
+    canvas.getBoundingClientRect = () =>
+      ({ width: 324, height: 324, left: 0, top: 0, right: 324, bottom: 324, x: 0, y: 0, toJSON: () => '' }) as DOMRect;
+
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    const callsBeforeMove = clearRect.mock.calls.length;
+    for (let i = 1; i <= 5; i++) {
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: i, clientY: 0, pointerId: 1 }));
+    }
+    // Nothing drawn synchronously yet — each pointermove only marks the
+    // variant dirty, the draw itself waits for the next animation frame.
+    expect(clearRect.mock.calls.length).toBe(callsBeforeMove);
+
+    await flushFrame();
+
+    // One flush draws the dirty variant exactly once, no matter how many
+    // pointermove events landed in that frame.
+    expect(clearRect.mock.calls.length).toBe(callsBeforeMove + 1);
+  });
+
   it('syncing viewports mirrors pan/zoom from one variant onto the others', async () => {
     const { clearRect } = stubCanvasContext();
     const wrapper = mountLab();
@@ -197,6 +241,7 @@ describe('AdminIslandLabView', () => {
     const canvases = wrapper.findAll('[data-testid="island-lab-canvas"]');
     canvases[0].element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 10, clientY: 10 }));
     await flushPromises();
+    await flushFrame();
 
     // Zooming the first variant should also redraw the second (mocked
     // getBoundingClientRect on jsdom returns all zeros, so this only checks
