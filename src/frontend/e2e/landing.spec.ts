@@ -128,15 +128,16 @@ test('onboarding completion shows the completion banner and profile nudge, and h
   await expect(settlement.banner).toContainText('All three placed.');
   await expect(settlement.checklist).toHaveCount(0);
 
-  // The profile-mark nudge, avatar glow included, replaces the old forced
-  // nickname modal.
+  // The profile-mark nudge, glow included, replaces the old forced nickname
+  // modal — anchored to the returning-player trigger (ReturningPlayerMenu.vue),
+  // not an avatar circle (retired along with the anonymous avatar itself).
   await expect(settlement.profileNudge).toBeVisible();
   await expect(settlement.profileNudge).toContainText('Three buildings, no jarl.');
-  await expect(page.locator('.avatar.is-nudging')).toBeVisible();
+  await expect(page.getByTestId('returning-player-trigger')).toHaveClass(/is-nudging/);
 
   await page.getByTestId('profile-nudge-later').click();
   await expect(settlement.profileNudge).toHaveCount(0);
-  await expect(page.locator('.avatar.is-nudging')).toHaveCount(0);
+  await expect(page.getByTestId('returning-player-trigger')).not.toHaveClass(/is-nudging/);
 
   await settlement.continueButton.click();
   await page.waitForURL('**/settlement');
