@@ -101,7 +101,11 @@ watch(() => route.fullPath, close);
         <span class="trigger-main">{{ t('hud.returningPlayer.trigger') }}</span>
         <span class="trigger-sub">{{ t('hud.returningPlayer.triggerSub') }}</span>
       </span>
-      <span class="caret" aria-hidden="true">▾</span>
+      <!-- Decorative, not copy — a CSS-generated glyph (below) rather than
+           raw template text, so @intlify/vue-i18n/no-raw-text (every visible
+           string must come from i18n) doesn't flag it. Same pattern as
+           LandingView.vue's `.signup-facts-sep`. -->
+      <span class="caret" aria-hidden="true"></span>
       <span v-if="nudging" class="nudge-dot" aria-hidden="true" />
     </button>
     <div v-if="open" class="panel menu" role="menu" data-testid="returning-player-menu">
@@ -181,6 +185,9 @@ watch(() => route.fullPath, close);
   flex: none;
   font-size: 10px;
   transition: transform 0.15s ease;
+}
+.caret::before {
+  content: '▾';
 }
 .trigger[aria-expanded='true'] .caret {
   transform: rotate(180deg);
