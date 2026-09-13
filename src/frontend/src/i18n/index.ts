@@ -5,6 +5,8 @@ import enCatalogue from './locales/en/catalogue.json';
 import deCatalogue from './locales/de/catalogue.json';
 import enLanding from './locales/en/landing.json';
 import deLanding from './locales/de/landing.json';
+import enWorlds from './locales/en/worlds.json';
+import deWorlds from './locales/de/worlds.json';
 import enOnboarding from './locales/en/onboarding.json';
 import deOnboarding from './locales/de/onboarding.json';
 import enDemoModeBadge from './locales/en/demoModeBadge.json';
@@ -88,6 +90,7 @@ export const i18n = createI18n({
       common: enCommon,
       catalogue: enCatalogue,
       landing: enLanding,
+      worlds: enWorlds,
       onboarding: enOnboarding,
       demoModeBadge: enDemoModeBadge,
       login: enLogin,
@@ -123,6 +126,7 @@ export const i18n = createI18n({
       common: deCommon,
       catalogue: deCatalogue,
       landing: deLanding,
+      worlds: deWorlds,
       onboarding: deOnboarding,
       demoModeBadge: deDemoModeBadge,
       login: deLogin,

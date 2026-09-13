@@ -1421,4 +1421,21 @@ public sealed class SettlementService(
         _dbContext.Settlements.AnyAsync(
             s => s.WorldId == worldId && s.OwnerId == ownerId,
             cancellationToken);
+
+    /// <summary>
+    /// The settlement (if any) this owner holds in this world — the "join
+    /// another world" flow's membership check (<c>GET .../membership</c>).
+    /// Same <c>(worldId, ownerId)</c> scoping as <see cref="AlreadyFoundedAsync"/>,
+    /// but for the id/name a client needs rather than a plain bool. Read-only:
+    /// callers must not use this to decide whether founding is allowed —
+    /// <see cref="FoundAsync"/>'s own checks are the authority for that.
+    /// </summary>
+    public Task<SettlementEntity?> FindByOwnerAsync(
+        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
+
+        return _dbContext.Settlements
+            .FirstOrDefaultAsync(s => s.WorldId == worldId && s.OwnerId == ownerId, cancellationToken);
+    }
 }

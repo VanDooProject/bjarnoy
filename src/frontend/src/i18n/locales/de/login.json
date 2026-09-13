@@ -1,6 +1,8 @@
 {
   "brand": "Fjørdhold",
   "title": "Anmelden",
+  "continueInWorld": "Du machst in {worldName} weiter, sobald du angemeldet bist.",
+  "continueInWorldGeneric": "Du machst in deiner Welt weiter, sobald du angemeldet bist.",
   "usernameLabel": "Benutzername",
   "passwordLabel": "Passwort",
   "submit": "Anmelden",

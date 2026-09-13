@@ -1,0 +1,16 @@
+{
+  "title": "Choose a world",
+  "lede": "Join a world that's still taking new jarls, or return to a realm you've already founded elsewhere.",
+  "loading": "Loading worlds…",
+  "error": "Couldn't load the list of worlds — try again in a moment.",
+  "empty": "No worlds are open to join right now.",
+  "players": "{count} / {max} players",
+  "speed": "{factor}x speed",
+  "youAreHere": "You're here",
+  "yourRealm": "Your realm",
+  "join": "Join",
+  "return": "Return",
+  "joining": "Joining…",
+  "joinError": "Couldn't join that world — try again in a moment.",
+  "loginNudge": "Log in to keep your realms across devices."
+}

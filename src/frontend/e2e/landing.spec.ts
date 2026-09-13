@@ -1,3 +1,4 @@
+import type { Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage } from './pages';
@@ -128,15 +129,16 @@ test('onboarding completion shows the completion banner and profile nudge, and h
   await expect(settlement.banner).toContainText('All three placed.');
   await expect(settlement.checklist).toHaveCount(0);
 
-  // The profile-mark nudge, avatar glow included, replaces the old forced
-  // nickname modal.
+  // The profile-mark nudge, glow included, replaces the old forced nickname
+  // modal — anchored to the returning-player trigger (ReturningPlayerMenu.vue),
+  // not an avatar circle (retired along with the anonymous avatar itself).
   await expect(settlement.profileNudge).toBeVisible();
   await expect(settlement.profileNudge).toContainText('Three buildings, no jarl.');
-  await expect(page.locator('.avatar.is-nudging')).toBeVisible();
+  await expect(page.getByTestId('returning-player-trigger')).toHaveClass(/is-nudging/);
 
   await page.getByTestId('profile-nudge-later').click();
   await expect(settlement.profileNudge).toHaveCount(0);
-  await expect(page.locator('.avatar.is-nudging')).toHaveCount(0);
+  await expect(page.getByTestId('returning-player-trigger')).not.toHaveClass(/is-nudging/);
 
   await settlement.continueButton.click();
   await page.waitForURL('**/settlement');
@@ -175,29 +177,87 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
 // LANDING) plus a locale switcher and an avatar — the mockup
 // (docs/design/img/but_building_on_map.png) has only a wordmark and
 // "I already have a realm" pre-founding.
-test('the pre-founding header has no dead in-game nav, only "I already have a realm"', { tag: '@g3' }, async ({ page }) => {
+//
+// Returning-player nav work replaced that bare link with
+// ReturningPlayerMenu.vue — so this now drives the trigger/panel instead of
+// a single link.
+//
+// docs/plans/returning-player-world-switching.md's click-count decision:
+// the dropdown used to be a 2-row menu (Log in / Join another world) behind
+// which the actual world list sat on a separate /worlds page — three clicks
+// to switch worlds. It now opens straight to the world list itself
+// (WorldList.vue, shared with WorldPickerView.vue's full-page use at
+// /worlds) — two clicks — with "Log in" still reachable in the same single
+// click that opened the dropdown. Mocked the same way world-picker.spec.ts
+// mocks WorldList's own two calls, since they go out over real HTTP
+// regardless of DEMO_MODE (see that file's own scope note).
+test('the pre-founding header has no dead in-game nav, only the returning-player menu', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+
+  await page.route('**/api/v1/worlds/joinable', (route: Route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'world-1',
+          name: 'Midgard',
+          playerCount: 10,
+          maxPlayers: 500,
+          joinable: true,
+          joinableReason: 'none',
+          startsAt: null,
+          speedFactor: 1,
+          createdAt: '2026-01-01T00:00:00Z',
+          status: 'active',
+        },
+      ],
+    }),
+  );
+  await page.route(/\/api\/v1\/worlds\/([^/]+)\/membership/, (route: Route) =>
+    route.fulfill({ json: { worldId: 'world-1', settlementId: null, settlementName: null } }),
+  );
+
   await SettlementPage.openLanding(page);
 
   await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toHaveCount(0);
 
-  const haveRealm = page.getByRole('link', { name: 'I already have a realm' });
-  await expect(haveRealm).toBeVisible();
-  await haveRealm.click();
+  const trigger = page.getByTestId('returning-player-trigger');
+  await expect(trigger).toBeVisible();
+  await expect(page.getByTestId('returning-player-menu')).toHaveCount(0);
+
+  await trigger.click();
+  await expect(page.getByTestId('returning-player-menu')).toBeVisible();
+
+  const login = page.getByTestId('returning-player-login');
+  await expect(login).toBeVisible();
+
+  const worldRow = page.getByTestId('world-picker-row');
+  await expect(worldRow).toHaveCount(1);
+  await expect(worldRow).toContainText('Midgard');
+  await expect(worldRow.getByTestId('world-picker-join')).toBeVisible();
+
+  await login.click();
   await expect(page).toHaveURL(/\/login$/);
 });
 
-test('founding a settlement swaps the pre-founding header for the real in-game nav', { tag: '@g3' }, async ({ page }) => {
+// Returning-player nav work: World map and Leaderboards now additionally
+// require `auth.isAuthenticated` (previously World map only needed a founded
+// settlement, and Leaderboards had no condition at all — see HudNav.vue), so
+// an anonymous founder still doesn't get them; Reports/Alliance stay
+// unconditioned, and the returning-player menu doesn't disappear once
+// founded — it just moves from being the pre-founding header's only content
+// into HudNav's own anonymous-state slot (HudNav.vue's `v-else`).
+test('founding a settlement swaps the pre-founding header for the real in-game nav, but world map and leaderboards stay hidden until login', { tag: '@g3' }, async ({ page }) => {
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
   const settlement = await SettlementPage.openLanding(page);
   await settlement.claimLandfall();
 
-  await expect(page.getByRole('button', { name: 'World map', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'I already have a realm' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Leaderboards', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('returning-player-trigger')).toBeVisible();
 });
 
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {

@@ -83,6 +83,27 @@ export interface PlotSuggestionResponse {
   reservedUntil: string | null;
 }
 
+/** Mirrors `JoinableWorldResponse` — one row of `GET /worlds/joinable`, the "join another world" picker. Public: no `X-Owner-Id` needed. */
+export interface JoinableWorldResponse {
+  id: string;
+  name: string;
+  playerCount: number;
+  maxPlayers: number;
+  joinable: boolean;
+  joinableReason: string;
+  startsAt: string | null;
+  speedFactor: number;
+  createdAt: string;
+  status: string;
+}
+
+/** Mirrors `WorldMembershipResponse` — whether `X-Owner-Id` already has a realm in this world (`GET /worlds/{worldId}/membership`). */
+export interface WorldMembershipResponse {
+  worldId: string;
+  settlementId: string | null;
+  settlementName: string | null;
+}
+
 export interface ResourceLine {
   wood: number;
   stone: number;
