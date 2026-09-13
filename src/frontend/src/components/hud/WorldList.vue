@@ -143,7 +143,7 @@ async function joinOrReturn(w: JoinableWorldResponse) {
             {{ joiningWorldId === w.id ? t('worlds.joining') : t('worlds.join') }}
           </button>
         </template>
-        <span v-else class="tag blocked">{{ blockedLabel(w) }}</span>
+        <span v-else class="tag blocked" :title="blockedLabel(w)">{{ blockedLabel(w) }}</span>
       </div>
     </li>
   </ul>
@@ -178,7 +178,13 @@ async function joinOrReturn(w: JoinableWorldResponse) {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 12px;
-  flex-wrap: wrap;
+  /* Was `wrap`: with a long blocked-reason string, that let the whole
+     `.state` block drop to a second line under the name/meta instead of
+     truncating in place — the reason should read inline with its world,
+     never on a row of its own. `.info` and `.tag.blocked` below shrink
+     with an ellipsis (full text still in a `title` tooltip) so this stays
+     one line even in the narrow compact popover. */
+  flex-wrap: nowrap;
 }
 .row + .row {
   border-top: 1px solid var(--panel-border);
@@ -188,21 +194,30 @@ async function joinOrReturn(w: JoinableWorldResponse) {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 .name {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .meta {
   font-size: 12px;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .state {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: none;
+  min-width: 0;
 }
 .tag {
   font-size: 12px;
@@ -213,7 +228,8 @@ async function joinOrReturn(w: JoinableWorldResponse) {
 .tag.blocked {
   color: var(--rival);
   max-width: 220px;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: right;
 }
 .action {
