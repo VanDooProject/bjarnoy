@@ -59,11 +59,12 @@ public static class InfoEndpoints
         IHostEnvironment environment)
     {
         var build = options.Value;
+        var commit = build.ResolvedCommit;
 
         return TypedResults.Ok(new BuildInfoResponse(
             Version: build.Version,
-            Commit: build.Commit,
-            ShortCommit: Shorten(build.Commit),
+            Commit: commit,
+            ShortCommit: Shorten(commit),
             Branch: build.Branch,
             BuiltAt: build.BuiltAt,
             Environment: environment.EnvironmentName));

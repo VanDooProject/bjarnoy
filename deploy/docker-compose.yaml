@@ -83,10 +83,14 @@ services:
         # deployment would never call its own backend.
         VITE_DEMO_MODE: 'false'
         # Stamped into the image and served by GET /api/v1/info, so "which
-        # commit is this deployment on?" has an answer. Coolify passes
-        # SOURCE_COMMIT and COOLIFY_BRANCH into the build itself (SOURCE_COMMIT
-        # needs "Include SOURCE_COMMIT in build" enabled in the app's settings;
-        # without it the field simply reads "unknown" rather than lying).
+        # commit is this deployment on?" has an answer. COOLIFY_BRANCH is
+        # always available and constant per deployment, so it costs nothing.
+        # SOURCE_COMMIT usually is not: Coolify passes it to the build only
+        # when "Include SOURCE_COMMIT in build" is enabled, precisely because a
+        # build arg that changes every commit invalidates the Docker cache.
+        # Leave it off — the app takes the commit from the runtime environment
+        # instead (see Build__RuntimeCommit below); this stays wired for CI,
+        # which passes the SHA explicitly.
         GIT_COMMIT: ${SOURCE_COMMIT:-unknown}
         GIT_BRANCH: ${COOLIFY_BRANCH:-unknown}
         BUILD_VERSION: ${BUILD_VERSION:-unknown}
@@ -127,6 +131,12 @@ services:
       # generated password is readable in Coolify's environment variables.
       ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
       ADMIN_BOOTSTRAP_PASSWORD: ${SERVICE_PASSWORD_ADMIN}
+      # The commit, without a build arg that would change on every push and
+      # cost a rebuild: Coolify writes SOURCE_COMMIT into every deployment's
+      # runtime environment unconditionally, gating only the build-time copy.
+      # /api/v1/info prefers a commit baked into the image (that one describes
+      # the bits actually running) and falls back to this.
+      Build__RuntimeCommit: ${SOURCE_COMMIT:-unknown}
     # Not `ports:` — publishing a fixed host port is exactly what stops a
     # second branch from starting. Coolify's proxy routes to this port over
     # the compose network, from the domain configured on this service.

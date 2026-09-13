@@ -32,6 +32,35 @@ public sealed partial class BuildInfoOptions
     /// <summary>When the image was built, ISO-8601, or <see cref="Unknown"/>.</summary>
     public string BuiltAt { get; set; } = Unknown;
 
+    /// <summary>
+    /// The commit the *platform* says it deployed, when the image itself was
+    /// not stamped with one.
+    /// </summary>
+    /// <remarks>
+    /// Coolify writes <c>SOURCE_COMMIT</c> into every deployment's runtime
+    /// environment, but only passes it to the build when "Include SOURCE_COMMIT
+    /// in build" is enabled — off by default, because a build arg that changes
+    /// with every commit invalidates the Docker cache. Reading it at runtime
+    /// gets the SHA with neither the setting nor the cost.
+    /// </remarks>
+    public string RuntimeCommit { get; set; } = Unknown;
+
+    /// <summary>
+    /// The commit to report. The baked one wins where it exists: it describes
+    /// the bits actually running, whereas the runtime value describes what the
+    /// platform believes it deployed — the same thing for an image the platform
+    /// just built, but not for a prebuilt one it merely started.
+    /// </summary>
+    public string ResolvedCommit =>
+        IsStamped(Commit) ? Commit
+        : IsStamped(RuntimeCommit) ? RuntimeCommit
+        : Unknown;
+
+    /// <summary>Whether a field carries a real value rather than a placeholder.</summary>
+    private static bool IsStamped(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && !string.Equals(value, Unknown, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The branch a production deployment is cut from.</summary>
     public const string ProductionBranch = "main";
 

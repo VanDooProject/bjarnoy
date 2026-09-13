@@ -325,7 +325,16 @@ needs to probe them.
 `GET /api/v1/info` answers with what the build stamped into the image —
 `deploy/Dockerfile`'s `GIT_COMMIT`/`GIT_BRANCH`/`BUILD_VERSION`/`BUILT_AT` build
 args, surfaced as `Build:*` configuration (`BuildInfoOptions`) so a `docker run
--e Build__Commit=…` can still correct them. Fields read `"unknown"` when nothing
+-e Build__Commit=…` can still correct them.
+
+The commit has a second source, `Build:RuntimeCommit`, and the compose stack
+uses that one rather than the build arg. Coolify writes `SOURCE_COMMIT` into
+every deployment's runtime environment but keeps it out of the build unless
+asked, because a build arg that changes on every push invalidates the Docker
+cache — reading it at runtime costs nothing and needs no setting turned on. A
+commit baked into the image still wins where there is one: it describes the bits
+that are running, while the runtime value only describes what the platform
+believes it started. Fields read `"unknown"` when nothing
 stamped them, which is what a plain `dotnet run` reports. It exists because
 several branch deployments running side by side make "which commit is this one?"
 a real question. Who may read it, and whether the Scalar API reference is

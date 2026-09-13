@@ -101,7 +101,8 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// build args would supply, for the <c>/api/v1/info</c> tests.
     /// </summary>
     public BjarnoyApiFactory WithBuild(
-        string version, string commit, string branch, string builtAt)
+        string version, string commit, string branch, string builtAt,
+        string runtimeCommit = BuildInfoOptions.Unknown)
     {
         _build = new BuildInfoOptions
         {
@@ -109,6 +110,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             Commit = commit,
             Branch = branch,
             BuiltAt = builtAt,
+            RuntimeCommit = runtimeCommit,
         };
 
         return this;
@@ -174,6 +176,7 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             builder.UseSetting($"{BuildInfoOptions.SectionName}:Commit", _build.Commit);
             builder.UseSetting($"{BuildInfoOptions.SectionName}:Branch", _build.Branch);
             builder.UseSetting($"{BuildInfoOptions.SectionName}:BuiltAt", _build.BuiltAt);
+            builder.UseSetting($"{BuildInfoOptions.SectionName}:RuntimeCommit", _build.RuntimeCommit);
         }
 
         if (_diagnostics?.PublicBuildInfo is { } publicBuildInfo)

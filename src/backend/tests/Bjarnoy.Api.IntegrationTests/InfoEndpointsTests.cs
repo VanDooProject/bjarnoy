@@ -141,6 +141,46 @@ public sealed class InfoEndpointsTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task An_unstamped_image_reports_the_commit_the_platform_deployed()
+    {
+        // Coolify writes SOURCE_COMMIT into the runtime environment on every
+        // deployment but keeps it out of the build unless asked, so this is
+        // the path a Coolify-built image actually takes.
+        await using var factory = BjarnoyApiFactory.Sqlite().WithBuild(
+            version: BuildInfoOptions.Unknown,
+            commit: BuildInfoOptions.Unknown,
+            branch: "claude/some-branch",
+            builtAt: BuildInfoOptions.Unknown,
+            runtimeCommit: Commit);
+        using var client = factory.CreateClient();
+
+        var info = await client.GetFromJsonAsync<BuildInfoResponse>("/api/v1/info", Ct);
+
+        Assert.Equal(Commit, info!.Commit);
+        Assert.Equal(Commit[..InfoEndpoints.ShortCommitLength], info.ShortCommit);
+    }
+
+    [Fact]
+    public async Task A_stamped_image_keeps_its_own_commit()
+    {
+        // The baked value describes the bits that are running; the runtime one
+        // only describes what the platform believes it started. They agree for
+        // an image the platform just built, and the baked one is right when
+        // they do not.
+        await using var factory = BjarnoyApiFactory.Sqlite().WithBuild(
+            version: "1.0.0",
+            commit: Commit,
+            branch: "claude/some-branch",
+            builtAt: "now",
+            runtimeCommit: "0000000000000000000000000000000000000000");
+        using var client = factory.CreateClient();
+
+        var info = await client.GetFromJsonAsync<BuildInfoResponse>("/api/v1/info", Ct);
+
+        Assert.Equal(Commit, info!.Commit);
+    }
+
     /// <summary>Registers a player, promotes it to Admin, and logs in for a token carrying the role.</summary>
     private static async Task<string> CreateAdminTokenAsync(BjarnoyApiFactory factory, HttpClient client)
     {
