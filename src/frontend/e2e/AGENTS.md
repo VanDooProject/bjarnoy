@@ -14,7 +14,10 @@ production build via `vite preview`, no backend — specs mock the API themselve
 - `pages/` — the page objects (below). Check here first: most setup a spec
   needs already has an intent method.
 - `helpers.ts` — `waitForMapReady(page)`, `gotoWorldMap(page)`,
-  `claimLandfall(page)`, `foundSettlement(page)`, `rectsOf(locator)` /
+  `loginTestUser(page, userName?)` (a mocked authenticated session, before
+  the page's first navigation — needed by anything that clicks HudNav's
+  "World map" or "Leaderboards" links, both of which now require
+  `auth.isAuthenticated`), `claimLandfall(page)`, `foundSettlement(page)`, `rectsOf(locator)` /
   `distanceFrom(rect, x, y)`, `captureCanvas(page, box)` — the last one is how
   a spec takes a comparable frame of the map: `locator.screenshot()` waits out
   animation frames, which costs *seconds* per frame on a software-rendered

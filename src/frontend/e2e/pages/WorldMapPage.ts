@@ -1,6 +1,6 @@
 // See RingMenuComponent.ts for why `expect` is not imported from `../fixtures`.
 import { type Locator, type Page } from '@playwright/test';
-import { captureCanvas, foundSettlement, gotoWorldMap } from '../helpers';
+import { captureCanvas, foundSettlement, gotoWorldMap, loginTestUser } from '../helpers';
 import type { ScreenPoint } from './SettlementPage';
 
 /**
@@ -26,10 +26,16 @@ export class WorldMapPage {
   }
 
   /**
-   * Founds a settlement (the `/world` route's own guard requires one — see
-   * router/index.ts) and then opens the world map, waiting for its renderer.
+   * Logs in (returning-player nav work: HudNav's "World map" link now
+   * requires `auth.isAuthenticated`, not just a founded settlement — see
+   * `loginTestUser`'s own comment), founds a settlement (the `/world`
+   * route's own guard requires one — see router/index.ts), and then opens
+   * the world map, waiting for its renderer. Every current caller needs all
+   * three, so this bundles them the same way it already bundled founding +
+   * navigating, rather than making each spec repeat the login call.
    */
   static async open(page: Page): Promise<WorldMapPage> {
+    await loginTestUser(page);
     await foundSettlement(page);
     await gotoWorldMap(page);
     return new WorldMapPage(page);
