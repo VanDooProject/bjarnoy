@@ -1,0 +1,99 @@
+# Deploying Bjarnoy
+
+Two files live here, and they are two halves of the same thing:
+
+- **`Dockerfile`** builds the one image the deployment runs — the Vue app baked
+  into the API's `wwwroot`, plus the migrator, which is the same executable
+  under a different argument. See `docs/tech/backend.md` ("The image", "The
+  migrator") for why it is shaped that way.
+- **`docker-compose.yaml`** is the stack around that image: PostgreSQL, a
+  migrator that runs to completion, then the app. It mirrors what
+  `Bjarnoy.AppHost` wires up for local development, minus the separate frontend
+  container that production does not have.
+
+## Coolify
+
+Create an **Application** (not a Service) from this repository:
+
+| Setting | Value |
+|---|---|
+| Build Pack | Docker Compose |
+| Base Directory | `/` |
+| Docker Compose Location | `/deploy/docker-compose.yaml` |
+| Branch | whichever branch this deployment is for |
+| Settings → Git Submodules | enabled |
+
+**Base Directory has to stay `/`.** Coolify deploys with `docker compose
+--project-directory <base directory>`, and the build context in the compose
+file is relative to that. Point it at `/deploy` and the build looks for the
+sources one directory too deep.
+
+**Git Submodules has to be on.** The tile art
+(`src/frontend/vendor/bg_assets_hextile`) is a submodule in a separate private
+repository; the Dockerfile fails the build outright when it is missing rather
+than shipping an app with no textures. Coolify authenticates submodule clones
+with the same GitHub App as the main repository, so that app needs access to
+`VanDooProject/bg_assets_hextile` too.
+
+Then set a domain on the **`app`** service — in Coolify's compose UI each
+service gets its own domain field, and `app` is the only one that serves
+anything. Include the port: `https://bjarnoy.example.com:8080`. Nothing else
+needs configuring; the environment variables below generate themselves.
+
+### What Coolify generates
+
+| Variable | What it is |
+|---|---|
+| `SERVICE_PASSWORD_POSTGRES` | The database password, shared by `postgres`, `migrator` and `app`. |
+| `SERVICE_BASE64_64_JWT` | `Jwt__SigningKey`. Generated once and kept, so access tokens issued before a redeploy stay valid after it. |
+| `SERVICE_PASSWORD_ADMIN` | The bootstrap Admin's password. Read it from Coolify's environment variables to log in. |
+| `ADMIN_BOOTSTRAP_USERNAME` | Defaults to `admin`; editable in Coolify. |
+
+Each of these is generated on first deployment and stored with the resource, so
+they are stable across redeploys and different per deployment. The Admin seed
+only fires when the database has no Admin yet (see
+`AuthService.SeedAdminIfConfiguredAsync`) — it is a way into a fresh database,
+not a password reset.
+
+### Deploying several branches at once
+
+Every branch is its own Coolify Application pointed at the same repository with
+a different branch and a different domain. They do not collide, because Coolify
+runs each Application as its own compose project (`--project-name <resource
+uuid>`), prefixes named volumes with that uuid, gives it its own network, and
+assigns container names itself.
+
+That only holds as long as this compose file names nothing globally, so when
+editing it:
+
+- no `container_name:` — Coolify sets it,
+- no `image:` on the services that are built — compose derives
+  `<project>-<service>`, which is unique per Application; a fixed tag would
+  mean the last branch to build owns it, and the next redeploy of *another*
+  branch would silently start that branch's image,
+- no `name:` under `volumes:` — that would opt out of the uuid prefixing and
+  hand two branches the same database directory,
+- no `ports:` — a published host port is a single global resource, and the
+  second branch to start would fail to bind it. `expose:` plus a domain lets
+  Coolify's proxy route both branches on :443 by hostname.
+
+Each deployment gets its own empty database, so a branch deployment starts from
+a fresh world and its own bootstrap Admin.
+
+## Without Coolify
+
+From the repository root:
+
+```bash
+git submodule update --init                  # the tile art
+cp deploy/.env.example deploy/.env           # then edit it
+docker compose -f deploy/docker-compose.yaml --project-directory . \
+  --env-file deploy/.env up --build
+```
+
+`--project-directory .` is not optional: without it compose resolves the build
+context against `deploy/` instead of the repository root. It is what Coolify
+passes too.
+
+For the single-container SQLite deployment — no compose, no PostgreSQL — see
+`docs/tech/backend.md`, "The image".

@@ -130,6 +130,25 @@ jobs:
           echo "served $asset"
           echo "::endgroup::"
 
+          echo "::group::the SPA is built to talk to the API, not the demo simulation"
+          # VITE_DEMO_MODE defaults to on (src/frontend/src/config.ts), because
+          # `npm run dev` has no backend behind it. This image does, so
+          # deploy/Dockerfile builds with it off — otherwise a deployment would
+          # serve a self-contained demo that never calls the API next to it.
+          # The live-only persistence key in stores/player.ts is what tells the
+          # two builds apart: under demo mode that branch is a constant `false`
+          # and Rollup drops it, so the string never reaches the bundle.
+          live=0
+          for asset in $(curl -fsS http://localhost:8080/ | grep -o '/assets/[^"]*\.js' | sort -u); do
+            if curl -fsS "http://localhost:8080$asset" | grep -q 'bjarnoy.settlementId'; then
+              live=1
+              echo "live-mode bundle: $asset"
+              break
+            fi
+          done
+          test "$live" = 1
+          echo "::endgroup::"
+
           echo "::group::the API works against the migrated database"
           curl -fsS -X POST http://localhost:8080/api/v1/worlds \
             -H 'content-type: application/json' \

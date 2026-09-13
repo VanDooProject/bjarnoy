@@ -21,6 +21,14 @@ RUN npm ci
 
 COPY src/frontend/ ./
 
+# config.ts defaults DEMO_MODE on, because `npm run dev` has no backend behind
+# it. This image does — it serves the SPA and the API from one origin — so the
+# bundle it bakes in has to be built with the demo simulation off, or the
+# deployment never calls its own API. An arg rather than a fixed ENV so a
+# demo-only build (a preview with no database behind it) is still one flag away.
+ARG VITE_DEMO_MODE=false
+ENV VITE_DEMO_MODE=${VITE_DEMO_MODE}
+
 # The tile art is a git submodule. The build fails without it rather than
 # quietly shipping an app with no textures, so say so plainly.
 RUN test -d vendor/bg_assets_hextile/hextiles \
@@ -80,6 +88,20 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 # declaration, or SQLite cannot create its file at runtime.
 RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /data
 VOLUME /data
+
+# The aspnet image ships no HTTP client at all, and an orchestrator needs one:
+# the HEALTHCHECK below runs inside the container, so `docker compose
+# depends_on: service_healthy` and Coolify's own status both hang on it.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# /health rather than /alive: it is the readiness signal (every registered
+# check), and ExposeHealthChecks above is what maps it outside development.
+# The port is the one ASPNETCORE_HTTP_PORTS above pins, spelled out because a
+# deployment that moves it has to move this with it.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:8080/health || exit 1
 
 EXPOSE 8080
 

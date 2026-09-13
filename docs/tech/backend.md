@@ -431,6 +431,35 @@ The image defaults to SQLite at `/data/bjarnoy.db`. Point it at PostgreSQL with
 -e Database__ConnectionString='Host=…;Database=…;Username=…;Password=…'
 ```
 
+Two things in the build are easy to miss:
+
+- The frontend is built with `VITE_DEMO_MODE=false` (a `--build-arg`, so a
+  demo-only image is still one flag away). Its default is *on*, since
+  `npm run dev` has no backend behind it — and an image built that way would
+  serve a self-contained simulation that never calls the API next to it.
+- The runtime stage installs `curl`, purely so the image's `HEALTHCHECK` has
+  something to probe `/health` with (the aspnet base image ships no HTTP
+  client). That is what `depends_on: service_healthy` and an orchestrator's
+  status both read.
+
+## The compose stack
+
+`deploy/docker-compose.yaml` is the hosted deployment: PostgreSQL, the migrator
+above as a run-once container, then the app waiting on its clean exit — the
+same shape `Bjarnoy.AppHost` runs locally, minus the separate frontend
+container production does not have. It is written for Coolify (which deploys
+each branch as its own compose project, so several branches run side by side),
+but it is an ordinary compose file:
+
+```bash
+cp deploy/.env.example deploy/.env
+docker compose -f deploy/docker-compose.yaml --project-directory . \
+  --env-file deploy/.env up --build
+```
+
+`deploy/README.md` covers the Coolify settings, the generated secrets, and what
+must stay unnamed in that file for parallel branch deployments to keep working.
+
 Known rough edge: assets are served with `cache-control: no-cache`, so a browser
 revalidates and gets a 304 rather than skipping the request entirely.
 `MapStaticAssets` only marks a file immutable when it recognises the fingerprint

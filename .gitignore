@@ -3,3 +3,7 @@
 .thumbnail
 .claude/worktrees/
 node_modules/
+
+# Local secrets for deploy/docker-compose.yaml (deploy/.env.example is the
+# committed template).
+deploy/.env

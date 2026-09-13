@@ -1,0 +1,124 @@
+# Coolify deploys this stack. It mirrors the topology Bjarnoy.AppHost sets up
+# locally — PostgreSQL, a migrator that runs to completion, then the app — with
+# the production difference the AppHost's own header calls out: there is no
+# separate frontend container here, because deploy/Dockerfile bakes the built
+# Vue app into the API's wwwroot and one origin serves both.
+#
+# In Coolify: create an Application from this repository, build pack "Docker
+# Compose", and set
+#
+#   Base Directory:          /
+#   Docker Compose Location: /deploy/docker-compose.yaml
+#   Settings -> Git Submodules: enabled
+#
+# Base Directory matters: Coolify runs `docker compose --project-directory
+# <base directory>`, and relative paths in this file (the build context below)
+# resolve against that, not against deploy/. Submodules matter because the tile
+# art the frontend imports is one (see deploy/Dockerfile, which fails the build
+# rather than shipping an app with no textures).
+#
+# Deploying several branches side by side is the normal case, not a special
+# mode: each branch is its own Coolify Application, and Coolify runs every
+# Application as its own compose project (`--project-name <resource uuid>`),
+# prefixes named volumes with that uuid, gives it its own network, and names
+# the containers itself. Nothing here may pin a name that would then be shared
+# between two of them, so this file deliberately has no `container_name:`, no
+# `image:` on the built services (compose derives `<project>-<service>`), no
+# `name:` under volumes, and no host `ports:` — the app is reached through
+# Coolify's proxy by the domain set on the `app` service, so two branches can
+# both answer on :443 under different hostnames. See deploy/README.md.
+#
+# Outside Coolify, from the repository root:
+#   cp deploy/.env.example deploy/.env && $EDITOR deploy/.env
+#   docker compose -f deploy/docker-compose.yaml --project-directory . \
+#     --env-file deploy/.env up --build
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gamedb
+      POSTGRES_USER: bjarnoy
+      # Coolify generates this on the first deployment and keeps it with the
+      # resource, so it survives redeploys the way the data volume does — the
+      # same reason AppHost.cs pins its dev password rather than regenerating
+      # one every run. Magic variables like this must be referenced bare:
+      # a `:-default` would end up as part of the generated variable's name.
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - gamedb-data:/var/lib/postgresql/data
+    healthcheck:
+      # What `migrator` waits for. `pg_isready` alone would answer during
+      # initdb's own short-lived bootstrap server, hence the database and user.
+      test: ['CMD-SHELL', 'pg_isready -U bjarnoy -d gamedb']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # The API executable is also the migrator (docs/tech/backend.md, "The
+  # migrator"): it applies pending migrations with the exact image about to be
+  # rolled out and exits, so a failed migration fails the deployment instead of
+  # half the containers. `app` waits for its clean exit rather than migrating
+  # itself, which is why Database__MigrateOnStartup stays off there.
+  migrator:
+    build: &build
+      context: .
+      dockerfile: deploy/Dockerfile
+      args:
+        # The image serves the SPA and the API from one origin, so the bundle
+        # must be built to talk to that API — src/frontend/src/config.ts
+        # otherwise defaults to the in-memory demo simulation and the
+        # deployment would never call its own backend.
+        VITE_DEMO_MODE: 'false'
+    # Left to itself Coolify fills in `unless-stopped`, which would restart a
+    # migrator that has already done its job. It reads this and leaves it be.
+    restart: 'no'
+    command: ['--migrate']
+    # The image's HEALTHCHECK probes the HTTP endpoint the migrator never
+    # serves; without this it would spend its short life reported unhealthy.
+    healthcheck:
+      disable: true
+    environment: &database
+      Database__Provider: PostgreSql
+      Database__ConnectionString: Host=postgres;Port=5432;Database=gamedb;Username=bjarnoy;Password=${SERVICE_PASSWORD_POSTGRES}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build: *build
+    restart: unless-stopped
+    environment:
+      <<: *database
+      # Access-token signing key. No fallback exists in code on purpose (see
+      # JwtOptions), so every deployment needs its own; Coolify generates a
+      # 64-character value once and keeps it, which is what makes already
+      # issued tokens survive a redeploy.
+      Jwt__SigningKey: ${SERVICE_BASE64_64_JWT}
+      # Seeds the first Admin into an otherwise empty database — a fresh
+      # branch deployment has no other way in. Both are no-ops once an Admin
+      # (or that username) exists, so this is not a password reset. The
+      # generated password is readable in Coolify's environment variables.
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BOOTSTRAP_PASSWORD: ${SERVICE_PASSWORD_ADMIN}
+    # Not `ports:` — publishing a fixed host port is exactly what stops a
+    # second branch from starting. Coolify's proxy routes to this port over
+    # the compose network, from the domain configured on this service.
+    expose:
+      - '8080'
+    volumes:
+      # Unused under the PostgreSql provider, but the image declares
+      # `VOLUME /data` for its SQLite mode; naming it here keeps redeploys
+      # from leaving an anonymous volume behind every time.
+      - app-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+volumes:
+  gamedb-data:
+  app-data:
