@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n';
 import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
+import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
@@ -23,9 +24,10 @@ import {
   findGuidedTarget,
   nextGuidedType,
   ringNoteReason,
+  snapToOfferedPlot,
   GUIDED_BUILD_TERRAIN as GUIDED_TERRAIN_FOR,
 } from '../lib/map/onboardingGuidance';
-import { useWorldStore } from '../stores/world';
+import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
@@ -79,12 +81,74 @@ let invalidClickTimer: ReturnType<typeof setTimeout> | undefined;
 const PREVIEW_POLL_MS = 20000;
 let previewPollHandle: ReturnType<typeof setInterval> | undefined;
 
+// landing-page-defects.md L4 point 3: the pre-founding preview camera used
+// to bias right by a bare `0.16` template literal, with no traceable
+// relationship to the thing it was working around — the `.hero` copy block
+// (see this file's own <style> block below: `left: 56px; max-width: 520px`).
+// `screenBiasX` is already a *fraction of viewport width*, not a pixel
+// count (see HexMapRenderer's `biasedCenterX`/`previewFitZoom`), so its
+// value alone can't be read off the hero's pixel geometry directly without
+// picking some reference viewport width to divide by.
+//
+// A first attempt at this used 1920 (a common desktop width) as that
+// reference and landed within half a point of the original hand-tuned 0.16
+// — but that was the wrong choice, caught by a direct pixel comparison of
+// before/after screenshots at 1440x900 (scripts/screenshot-helpers/
+// flow.mjs's own capture size): since clearance in *pixels* past the hero
+// column scales with the actual viewport width for a fixed bias fraction,
+// picking a reference wider than the viewport actually being framed
+// under-shoots the real clearance needed — 0.16 left only ~515px clear at
+// 1440px wide, short of the ~600px the hero column's own box (576px) plus a
+// gutter needs. 1440 is used as the reference instead: the narrowest
+// viewport this framing is actually verified against, so the guarantee it
+// buys (the preview island's own worst-case crop, a full
+// WorldModel.PREVIEW_ISLAND_RADIUS disc, clearing the hero column and not
+// touching the right edge — see HexMapRenderer.test.ts's own regression
+// test for the exact numbers) holds at 1440 and only gets more comfortable
+// at any wider viewport, rather than being a hand-tuned constant re-derived
+// from an untested guess at "big enough".
+const HERO_REFERENCE_VIEWPORT_WIDTH_PX = 1440;
+const HERO_RIGHT_EDGE_PX = 56 + 520; // `.hero`'s own left + max-width, below
+const HERO_MIN_GUTTER_PX = 40; // breathing room past the hero's own edge before the island may start
+const LANDING_PREVIEW_SCREEN_BIAS_X =
+  (HERO_RIGHT_EDGE_PX + HERO_MIN_GUTTER_PX) / (2 * HERO_REFERENCE_VIEWPORT_WIDTH_PX);
+
+// L7 (landing-page-defects.md): the backend already has a settlement for
+// this owner that the browser doesn't know about — most often L6b (founding
+// succeeded server-side on an earlier visit, but the client never got to
+// persist `bjarnoy.settlementId`). Shared by every place that can discover
+// this (`onMounted`, the preview poll, and a race caught inside
+// `foundHere`'s catch below) so the recovery order is only written once.
+// Order matters: `player.foundSettlement` writes `bjarnoy.settlementId` to
+// localStorage FIRST — that's exactly what the router guard
+// (`router/index.ts`) checks before it lets `/settlement` load. Pushing
+// there before this would just bounce straight back to `/` (L7's bug #2:
+// the one existing `AlreadyFounded` handler used to do exactly that).
+async function recoverAlreadyFounded(settlementId: string) {
+  player.foundSettlement(settlementId);
+  await world.restoreLiveSettlement(player.id, settlementId);
+  router.push('/settlement');
+}
+
 async function refreshPreview() {
-  const changed = await world.refreshPlotSuggestion(player.id);
+  const result = await world.refreshPlotSuggestion(player.id);
+  if (result.kind === 'alreadyFounded') {
+    // Terminal for this poll — nothing left to preview, and repeating this
+    // request would just 409 forever (this is what used to happen: the
+    // unhandled rejection fired again every PREVIEW_POLL_MS).
+    stopPreviewPoll();
+    await recoverAlreadyFounded(result.settlementId);
+    return;
+  }
+  if (result.kind === 'noPlotAvailable') {
+    stopPreviewPoll();
+    noPlotAvailable.value = true;
+    return;
+  }
   await world.refreshWorldSettlements();
   const suggestion = world.plotSuggestion;
   if (!suggestion) return;
-  if (changed) {
+  if (result.changed) {
     previewCoord.value = suggestion.plot;
     nearbyStartCoords.value = [suggestion.plot, ...suggestion.alternatives];
     canvasRef.value?.renderer?.updateOptions({
@@ -128,7 +192,23 @@ onMounted(async () => {
   if (DEMO_MODE) {
     previewCoord.value = world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
   } else {
-    await world.refreshPlotSuggestion(player.id);
+    const result = await world.refreshPlotSuggestion(player.id);
+    if (result.kind === 'alreadyFounded') {
+      // L7: a reload with a stale/missing localStorage settlement id — the
+      // backend still knows about this owner's settlement, so recover
+      // straight into it instead of leaving `previewCoord` (and thus the
+      // canvas, `v-if` below) empty forever, which is what an uncaught 409
+      // used to do here.
+      await recoverAlreadyFounded(result.settlementId);
+      return;
+    }
+    if (result.kind === 'noPlotAvailable') {
+      // L7: every start position in the world is taken or held. There's
+      // nothing to preview or click — fall back to the `joinBlocked` hero
+      // (below) instead of a blank canvas.
+      noPlotAvailable.value = true;
+      return;
+    }
     await world.refreshWorldSettlements();
     const suggestion = world.plotSuggestion;
     previewCoord.value = suggestion?.plot ?? world.model.findLandfall({ q: 0, r: 0 }) ?? { q: 0, r: 0 };
@@ -139,26 +219,42 @@ onMounted(async () => {
   // lets an e2e test convert a real hex coordinate to an exact click point
   // via the renderer's own camera math, instead of guessing pixel offsets
   // that only happen to land right at one particular zoom/camera framing.
-  if (DEMO_MODE) {
-    (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
-      canvasRef.value?.renderer;
-  }
+  // Installed in *both* modes (not just DEMO_MODE) — it's a read-only
+  // camera-math accessor that exposes nothing a player couldn't already
+  // compute from the visible canvas, and the live Aspire e2e suite
+  // (LiveFrontendTestHelpers.cs) is its only consumer in live mode, needing
+  // it for the same reason: deriving the real founding click point instead
+  // of a hardcoded fraction of the viewport (see that file's own remarks).
+  (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer = () =>
+    canvasRef.value?.renderer;
 });
 onUnmounted(() => {
   world.stopHudSync();
   stopPreviewPoll();
   clearTimeout(invalidClickTimer);
-  if (DEMO_MODE) delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
+  delete (window as unknown as { __settlementRenderer?: () => unknown }).__settlementRenderer;
 });
+
+// L7 (landing-page-defects.md): `PlotSuggestionRejection.NoPlotAvailable` —
+// every start position across every island is currently taken or held.
+// Distinct from the admin-set gates below (this is organic exhaustion, not a
+// world setting), but reads the same to a visitor: nothing to click, so it
+// folds into the same `joinBlocked` hero instead of leaving the canvas blank
+// (`onMounted`/`refreshPreview` set this rather than a plain reload fixing
+// it, since a stale world can genuinely run out).
+const noPlotAvailable = ref(false);
 
 // Admin-set gates (issue #27): a world that hasn't started yet, or has had
 // joins closed, still renders (existing players restore fine) but refuses a
 // *new* founding — so tell the player why instead of letting them click a
 // hex that will just come back 409.
 const joinBlocked = computed(
-  () => !DEMO_MODE && !player.hasFoundedSettlement && !world.worldJoinable,
+  () => (!DEMO_MODE && !player.hasFoundedSettlement && !world.worldJoinable) || noPlotAvailable.value,
 );
 const joinBlockedMessage = computed(() => {
+  if (noPlotAvailable.value) {
+    return t('landing.joinBlocked.noPlotAvailable');
+  }
   if (world.worldJoinableReason === 'NotStartedYet' && world.worldStartsAt) {
     const startsAt = new Date(world.worldStartsAt);
     return t('landing.joinBlocked.opensAt', { date: d(startsAt, 'long') });
@@ -170,6 +266,27 @@ const joinBlockedMessage = computed(() => {
     return t('landing.joinBlocked.noWorldYet');
   }
   return t('landing.joinBlocked.notAcceptingPlayers');
+});
+
+// landing-page-defects.md L3: the footer's reservation countdown — mirrors
+// the mockup's "Your plot is held for N minutes" (docs/design/img/
+// but_building_on_map.png), sourced from `plotSuggestion.reservedUntil`
+// (PlotReservationService.GetOrRefreshAsync), which `world.ts` already
+// fetches/stores but nothing read until now. Deliberately NOT the mockup's
+// hardcoded "20 minutes" — this codebase's real
+// `PlotReservationOptions.ReservationTtl` is 3 minutes. Rounds up so a
+// reservation with, say, 61 seconds left still reads "2 minutes" instead of
+// under-selling it as "1", and returns null once the TTL has actually
+// lapsed rather than showing a zero/negative count — the next preview poll
+// (`refreshPreview`, every `PREVIEW_POLL_MS`) either renews `reservedUntil`
+// or drops `reserved` server-side, at which point this just goes back to
+// null on its own.
+const reservedMinutesRemaining = computed<number | null>(() => {
+  const suggestion = world.plotSuggestion;
+  if (!suggestion?.reserved || !suggestion.reservedUntil) return null;
+  const msRemaining = new Date(suggestion.reservedUntil).getTime() - Date.now();
+  const minutes = Math.ceil(msRemaining / 60_000);
+  return minutes > 0 ? minutes : null;
 });
 
 // Guided checklist (design handoff "2a"): derived purely from what's
@@ -384,10 +501,24 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
-    // found on the nearest one instead; now it just tells the player to
-    // pick one of the highlighted plots.
+    // found on the nearest one instead; that's gone (issue #96 covers why),
+    // but landing-page-defects.md L6a found the resulting hard refusal was
+    // itself the bigger problem: six offered plots among ~150 drawn tiles
+    // (L3) makes a miss the common case, not the exception. So a near-miss
+    // — exactly one hex off a single offered plot, unambiguously — founds
+    // there instead of refusing (`snapToOfferedPlot`; see its own comment
+    // for why it stays conservative rather than snapping to "nearest
+    // offered plot" at any distance). A genuine miss gets a nudge, not a
+    // refusal, plus a flash on the highlighted plots so the player is shown
+    // where to go rather than only told.
     if (!DEMO_MODE && !world.startPositionAt(coord)) {
+      const snapped = snapToOfferedPlot(coord, nearbyStartCoords.value);
+      if (snapped) {
+        void foundHere(snapped);
+        return;
+      }
       showInvalidClickMessage(t('landing.invalidClick.pickGlowingPlot'));
+      canvasRef.value?.renderer?.pulseAttention();
       return;
     }
     void foundHere(coord);
@@ -517,20 +648,41 @@ async function foundHere(coord: AxialCoord) {
     // alongside the camera move/fog reveal above.
     canvasRef.value?.renderer?.setLandfallBurst(coord);
   } catch (err) {
-    // A 409 covers several distinct rejections (see FoundingRejection) —
-    // only AlreadyFounded actually means "you already have a settlement,
-    // go there". The others (PlotReserved, PlotTaken, TooCloseToNeighbour,
-    // ...) mean someone else claimed or reserved a start position between
-    // the last refresh and this click — re-request the suggestion so the
+    // L7: `AlreadyFoundedError` is what `foundStartingSettlementLive`'s own
+    // preflight (its re-request of the plot suggestion, right before
+    // founding) throws when it discovers this owner already has a
+    // settlement — the common case, and it already carries the id. This
+    // used to be a bare `router.push('/settlement')`, which the router
+    // guard (router/index.ts) silently bounced back to `/` because
+    // `player.hasFoundedSettlement` was still false at that point — see
+    // `recoverAlreadyFounded`'s own comment for why the order below matters.
+    if (err instanceof AlreadyFoundedError) {
+      await recoverAlreadyFounded(err.settlementId);
+      return;
+    }
+    // Rare race: the founding POST itself (`api.foundSettlement`), not the
+    // preflight above, hit `FoundingRejection.AlreadyFounded` — state
+    // changed in the gap between the two. `SettlementEndpoints.Problem`
+    // doesn't attach an `existingSettlementId` to this rejection (unlike the
+    // plot-suggestion endpoint's), so ask plot-suggestion once more: the
+    // owner is now unambiguously already-founded, so it 409s the same way,
+    // this time with the id.
+    if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
+      const recheck = await world.refreshPlotSuggestion(player.id);
+      if (recheck.kind === 'alreadyFounded') {
+        await recoverAlreadyFounded(recheck.settlementId);
+        return;
+      }
+    }
+    // A 409 covers several distinct rejections (see FoundingRejection) — the
+    // remaining ones (PlotReserved, PlotTaken, TooCloseToNeighbour, ...)
+    // mean someone else claimed or reserved a start position between the
+    // last refresh and this click — re-request the suggestion so the
     // preview shows a plot that's actually still available, then let the
     // player just click again.
-    if (err instanceof ApiError && err.problem?.rejection === 'AlreadyFounded') {
-      router.push('/settlement');
-    } else {
-      console.error('Failed to found settlement against the backend', err);
-      showInvalidClickMessage("That plot was just taken — here's another one.");
-      await refreshPreview();
-    }
+    console.error('Failed to found settlement against the backend', err);
+    showInvalidClickMessage(t('landing.invalidClick.plotTaken'));
+    await refreshPreview();
   } finally {
     founding.value = false;
   }
@@ -576,14 +728,32 @@ watch(
         player.hasFoundedSettlement || !DEMO_MODE ? undefined : (previewCoord ?? undefined)
       "
       :highlight-coords="player.hasFoundedSettlement || DEMO_MODE ? undefined : nearbyStartCoords"
-      :screen-bias-x="0.16"
+      :screen-bias-x="LANDING_PREVIEW_SCREEN_BIAS_X"
       :lock-camera="!player.hasFoundedSettlement"
       hide-settlement-badge
       background="radial-gradient(120% 100% at 68% 42%, #16414f 0%, #0d2530 55%, #0b1116 100%)"
       @hex-click="onHexClick"
     />
-    <TopBar>
+    <!-- landing-page-defects.md L1: a visitor with no settlement yet gets a
+         village view (not a marketing page), but the header around it must
+         not pretend they're already in-game. The full HudNav is
+         `WORLD MAP · LEADERBOARDS · REPORTS · ALLIANCE · DOCS · LANDING` —
+         two of those are dead clicks pre-founding (`/world` bounces straight
+         back to `/` per the router guard above; `LANDING` is a self-link),
+         and `REPORTS`/`ALLIANCE` are multiplayer surfaces with nothing in
+         them for someone who hasn't founded anything (the account-creation
+         deferral rule in docs/design/zip-brainstorms.md:44). The mockup
+         (docs/design/img/but_building_on_map.png) has exactly one thing on
+         the right pre-founding: "I already have a realm". Once founded, the
+         view flips into settlement mode in place (see foundHere below, no
+         route change) and the in-game nav becomes correct again — hence the
+         switch on the same flag that gates everything else in this view. -->
+    <TopBar v-if="player.hasFoundedSettlement">
       <HudNav />
+    </TopBar>
+    <TopBar v-else title="Bjarnoy">
+      <LocaleSwitcher />
+      <router-link class="have-realm-link" to="/login">{{ t('landing.header.haveRealm') }}</router-link>
     </TopBar>
 
     <!-- Once a settlement exists, fog is on screen and the camera is
@@ -602,19 +772,28 @@ watch(
       <p class="lede">
         {{ t('landing.hero.lede') }}
       </p>
-      <!-- Live mode offers up to 6 plots (the suggestion plus its
-           alternatives — PlotReservationOptions.AlternativeCount); demo mode
-           has exactly one findLandfall hex and shows no count at all. -->
-      <p v-if="!DEMO_MODE && nearbyStartCoords.length > 0" class="plot-count">
+      <!-- landing-page-defects.md L3: this used to render
+           `nearbyStartCoords.length` as "N plots free on this island" — a
+           number that was really `min(actually free, AlternativeCount + 1)`
+           (PlotReservationService.GetOrRefreshAsync capped `alternatives` at
+           `AlternativeCount`), and mostly pointed at hexes the locked
+           pre-founding preview crop never draws (its alternatives weren't
+           distance-ordered — now fixed in that same service). Dropped the
+           count entirely per the plan's preferred fix and restored the
+           mockup's own sub-line instead (docs/design/img/
+           but_building_on_map.png: "No account · Nothing to install ·
+           Leaves in one click"), moved out of `.footer` below, which now
+           carries the mockup's own footer content instead. -->
+      <p class="signup-facts">
         <span class="plot-count-dot" />
-        <span class="plot-count-text">
-          {{
-            nearbyStartCoords.length === 1
-              ? t('landing.hero.plotsFreeOne')
-              : t('landing.hero.plotsFreeMany', { count: nearbyStartCoords.length })
-          }}
-        </span>
-        <span class="plot-count-suffix">{{ t('landing.hero.plotsFreeSuffix') }}</span>
+        <span>{{ t('landing.hero.noAccount') }}</span>
+        <!-- Decorative divider, not copy — a CSS-generated glyph (below)
+             rather than raw template text, so @intlify/vue-i18n/no-raw-text
+             (every visible string must come from i18n) doesn't flag it. -->
+        <span class="signup-facts-sep" aria-hidden="true"></span>
+        <span>{{ t('landing.hero.nothingToInstall') }}</span>
+        <span class="signup-facts-sep" aria-hidden="true"></span>
+        <span>{{ t('landing.hero.leavesInOneClick') }}</span>
       </p>
       <p v-if="founding" class="status">{{ t('landing.hero.makingLandfall') }}</p>
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
@@ -644,8 +823,13 @@ watch(
 
     <div class="footer">
       <span>{{ t('landing.footer.sea') }}</span>
-      <span>{{ t('landing.footer.noAccount') }}</span>
-      <span>{{ t('landing.footer.nothingToInstall') }}</span>
+      <!-- L3: "No account"/"Nothing to install" moved up into the hero
+           sub-line above (see that block's own comment) — this side now
+           carries the mockup's reservation countdown instead, pushed to
+           the far right the same way the mockup's footer does. -->
+      <span v-if="reservedMinutesRemaining !== null" class="footer-reservation">
+        {{ t('landing.footer.reservedFor', { count: reservedMinutesRemaining }) }}
+      </span>
     </div>
 
     <BuildQueuePanel v-if="player.hasFoundedSettlement" @select="onQueueSelect" />
@@ -708,11 +892,14 @@ h1 {
   font-size: 14px;
   color: var(--gold);
 }
-.plot-count {
+.signup-facts {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 22px 0 0;
+  font-size: 14px;
+  color: var(--muted);
 }
 .plot-count-dot {
   width: 12px;
@@ -721,14 +908,9 @@ h1 {
   background: var(--gold);
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
-.plot-count-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--gold);
-}
-.plot-count-suffix {
-  font-size: 13px;
-  color: var(--muted);
+.signup-facts-sep::before {
+  content: '|';
+  color: var(--muted-2);
 }
 .footer {
   position: absolute;
@@ -744,5 +926,25 @@ h1 {
   font-size: 13px;
   color: var(--muted-2);
   pointer-events: none;
+}
+.footer-reservation {
+  margin-left: auto;
+}
+/* TopBar's own root is `pointer-events: none` (the map behind it must stay
+   draggable everywhere the header itself has no content), and it only
+   re-enables clicks for `:deep(button)` in its right-hand slot —
+   LocaleSwitcher's toggle is already buttons, but this is a `router-link`
+   (an `<a>`), so it needs its own opt back in or the click falls through to
+   the map underneath it. */
+.have-realm-link {
+  pointer-events: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.have-realm-link:hover {
+  color: var(--text);
 }
 </style>

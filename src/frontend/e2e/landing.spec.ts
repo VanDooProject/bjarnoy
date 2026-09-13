@@ -170,6 +170,36 @@ test('onboarding ring menu closes on an outside click and on Escape', { tag: '@g
   await expect(settlement.ring.bubbles).toHaveCount(0);
 });
 
+// landing-page-defects.md L1: a visitor with no settlement used to see the
+// full in-game HudNav (WORLD MAP · LEADERBOARDS · REPORTS · ALLIANCE · DOCS ·
+// LANDING) plus a locale switcher and an avatar — the mockup
+// (docs/design/img/but_building_on_map.png) has only a wordmark and
+// "I already have a realm" pre-founding.
+test('the pre-founding header has no dead in-game nav, only "I already have a realm"', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  await SettlementPage.openLanding(page);
+
+  await expect(page.getByRole('button', { name: 'World map', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toHaveCount(0);
+
+  const haveRealm = page.getByRole('link', { name: 'I already have a realm' });
+  await expect(haveRealm).toBeVisible();
+  await haveRealm.click();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test('founding a settlement swaps the pre-founding header for the real in-game nav', { tag: '@g3' }, async ({ page }) => {
+  test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+  const settlement = await SettlementPage.openLanding(page);
+  await settlement.claimLandfall();
+
+  await expect(page.getByRole('button', { name: 'World map', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reports', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Alliance', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'I already have a realm' })).toHaveCount(0);
+});
+
 test('impressum page is reachable and links back', { tag: '@g3' }, async ({ page }) => {
   await page.goto('/impressum');
   await expect(page.getByRole('heading', { name: 'Impressum' })).toBeVisible();

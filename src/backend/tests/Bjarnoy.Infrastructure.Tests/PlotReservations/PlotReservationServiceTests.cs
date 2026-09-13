@@ -164,6 +164,35 @@ public class PlotReservationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Alternatives_are_ordered_by_distance_from_the_pin_not_by_generator_score()
+    {
+        // docs/plans/landing-page-defects.md L3: `alternatives` used to keep
+        // WorldGenerator.FindStartPositions' own score order (best first).
+        // The pre-founding preview only draws a small radius around the
+        // pinned plot with the camera locked (PREVIEW_ISLAND_RADIUS /
+        // WorldModel.previewCropTiles), so a score-ordered alternative can
+        // land anywhere on the island and never actually be on screen.
+        // StartPositions below are listed worst-score-first (i.e. NOT in
+        // distance order) so a fix that just kept list order would still
+        // fail this test — (1,0), one hex from the pin, is score-worst but
+        // the only one guaranteed inside any reasonable preview crop.
+        var worldId = AddWorld();
+        var pin = new HexCoord(0, 0);
+        AddIsland(worldId, 0, 0, 0, (0, 0), (20, 0), (10, 0), (5, 0), (1, 0));
+        await _dbContext.SaveChangesAsync(Ct);
+        _options.AlternativeCount = 2;
+        var service = CreateService();
+
+        var result = await service.GetOrRefreshAsync(worldId, "owner-1", "ip-1", "fp-1", Ct);
+
+        Assert.True(result.Accepted);
+        Assert.Equal(pin, result.Suggestion!.Plot);
+        Assert.Equal(
+            [new HexCoord(1, 0), new HexCoord(5, 0)],
+            result.Suggestion.Alternatives);
+    }
+
+    [Fact]
     public async Task No_islands_yields_NoPlotAvailable()
     {
         var worldId = AddWorld();

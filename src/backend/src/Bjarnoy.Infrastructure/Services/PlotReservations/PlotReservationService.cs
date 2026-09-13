@@ -163,9 +163,20 @@ public sealed class PlotReservationService(
 
         var (islandId, plot) = pin.Value;
         var island = islands.First(i => i.Id == islandId);
+        // Docs/plans/landing-page-defects.md L3: these alternatives are only
+        // ever advisory (the client's `nearbyStartCoords` highlights) and the
+        // pre-founding preview crops to a small radius around the pinned
+        // `plot` (WorldModel.previewCropTiles / HexMapRenderer's
+        // PREVIEW_ISLAND_RADIUS), with the camera locked so a visitor can't
+        // pan to find the rest. Ordering by the generator's score (the
+        // StartPositions' own order) routinely picked alternatives scattered
+        // across the whole island — highlighted hexes the locked preview
+        // never draws. Order by hex distance from `plot` instead, so the
+        // `.Take` below keeps the ones actually inside that crop.
         var alternatives = island.StartPositions
             .Select(p => new HexCoord(p.Q, p.R))
             .Where(c => c != plot && IsValid(islandId, c))
+            .OrderBy(c => c.DistanceTo(plot))
             .Take(_options.AlternativeCount)
             .ToList();
 

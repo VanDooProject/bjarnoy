@@ -34,7 +34,7 @@
 // its whole tile, props included.
 import { Application, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { AxialCoord } from '../hex/coords';
-import { coordKey, hexDistance, hexesInRadius, neighbors } from '../hex/coords';
+import { coordKey, hexesInRadius, neighbors } from '../hex/coords';
 import { isoDepthKey, isoGridPosition, isoPixelToAxial, isoTopPoints } from '../hex/geometry';
 import type { Camera } from './camera';
 import { screenToWorld, visibleWorldRect, worldToScreen } from './camera';
@@ -687,6 +687,28 @@ export function landfallBurstFrames(nowMs: number, startedAtMs: number, ringCoun
   return frames;
 }
 
+const ATTENTION_PULSE_DURATION_MS = 700;
+
+/**
+ * landing-page-defects.md L6a: fired once on a miss-click that didn't land
+ * on (or snap to — see `onboardingGuidance.ts`'s `snapToOfferedPlot`) an
+ * offered plot, so the highlighted plots visibly flash rather than the
+ * player only being told to "pick a glowing plot" in a toast. Deliberately
+ * a *separate* one-shot layered on top of the existing looping
+ * `plotRippleFrames` pulse (`drawHighlight` adds this on top of that pulse's
+ * own alpha/stroke, it doesn't replace it) rather than retuning that pulse's
+ * constants, which would change how every highlighted plot looks all the
+ * time, not just for the ~0.7s after a miss. Self-clearing like
+ * `landfallBurstFrames`: 0 before it starts and once it's finished, a single
+ * rise-then-fall in between (a `sin` half-cycle reads as a flash rather than
+ * a fade-in).
+ */
+export function attentionPulseFrame(nowMs: number, startedAtMs: number): number {
+  const t = nowMs - startedAtMs;
+  if (t < 0 || t >= ATTENTION_PULSE_DURATION_MS) return 0;
+  return Math.sin((t / ATTENTION_PULSE_DURATION_MS) * Math.PI);
+}
+
 // One tile-art size for both views — see the module comment above.
 const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
@@ -732,21 +754,83 @@ const WORLD_DEFAULT_ZOOM = 0.22;
 // this) so FOG_ZOOM_MARGIN_HEXES of fog is guaranteed visible from frame one.
 const SETTLEMENT_DEFAULT_ZOOM = 0.85;
 // zip 6a: the landing page's pre-founding preview is a bit wider than the
-// settlement view's own default, so the single starter island reads as a
-// place, not a crop — and how many hexes around `previewCenter` it shows at
-// all (the world isn't fogged yet in preview, so without a hard cutoff any
-// other island generated nearby would show too — zip 6a is one island, not
-// a slice of the world map).
+// settlement view's own default, so the starter plot reads as a small place
+// of its own, not a crop with visible seams. Which hexes it shows at all is
+// `WorldModel.previewCropTiles`'s job — a deliberately small radius crop
+// around the plot (matching the mockup's own scale,
+// docs/design/img/but_building_on_map.png — an island can run to dozens of
+// hexes, far too big to read at any usable zoom beside the hero column)
+// intersected with landmass membership, so a foreign island generated
+// nearby never bleeds into the crop (landing-page-defects.md L5) without
+// widening the crop into "the whole island" (L4's own regression: see
+// `WorldModel.PREVIEW_ISLAND_RADIUS`'s doc comment for why that's wrong).
 const PREVIEW_ZOOM = 0.6;
-const PREVIEW_ISLAND_RADIUS = 7;
+// previewFitZoom measures to hex *centres* (`isoGridPosition` + half a
+// tile), but a tile's own drawn sprite is wider/taller than that — see
+// `syncSpriteLayer`'s placement math below, which is exactly what these two
+// margins undo. `PREVIEW_FIT_HALF_TILE_W`: a sprite is TILE_W wide,
+// positioned at `grid.x` (i.e. spanning TILE_W/2 either side of the tile's
+// own centre `grid.x + TILE_W/2`), so a rightmost/leftmost column's sprite
+// always bled past a fit that only measured tile centres
+// (landing-page-defects.md L4). `PREVIEW_FIT_VERTICAL_OVERHANG`: tall art
+// (a tree, a longhouse) is positioned at `grid.y - TILE_TOPFACE_Y_OFFSET`,
+// i.e. up to `TILE_TOPFACE_Y_OFFSET + TILE_H / 2` world units *above* the
+// tile's own vertical centre — applied to both the top and bottom edge of
+// the fit (rather than only the top) since it's already the larger of the
+// two real overhangs, so it only ever over-, never under-, pads the fit.
+const PREVIEW_FIT_HALF_TILE_W = TILE_W / 2;
+const PREVIEW_FIT_VERTICAL_OVERHANG = TILE_TOPFACE_Y_OFFSET + TILE_H / 2;
+// A further small fixed cushion (world units) so the island reads as
+// sitting inside the frame rather than exactly touching its edge.
+const PREVIEW_FIT_MARGIN = 24;
 
 /**
- * Zoom that fits the preview island's actual drawn hexes (non-sea, within
- * `radius` of `center` — see rebuildTerrain's `preview` branch, which this
- * mirrors) inside the viewport, for the landing page's locked static preview
- * (`HexMapRendererOptions.lockCamera`). Replaces the fixed `PREVIEW_ZOOM`
- * constant when locked, so the whole island stays on screen regardless of
- * viewport size/aspect instead of only fitting at one assumed size.
+ * World-space bounding box (tile centres, via `isoGridPosition`) of a
+ * preview island's actually-drawn tiles — the same tile list
+ * `WorldModel.previewCropTiles` hands `rebuildTerrain`'s preview cull, so
+ * whatever this measures is exactly what's on screen
+ * (landing-page-defects.md L4/L5's own "must land together" reasoning).
+ * Used to centre the locked preview camera on the island itself rather than
+ * on `previewCenter` (the suggested plot): the plot is a scored interior
+ * grass hex, not the landmass's centroid, so a symmetric fit around it left
+ * a gap on the short side while pushing the long side out of frame — this
+ * box is symmetric around its own centre by construction, so fitting around
+ * *it* instead can't do that. Pure, like `previewFitZoom` itself, and
+ * exported so both it and `settlementCameraOrigin` share one measurement.
+ */
+export function previewIslandBounds(tiles: AxialCoord[]): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  centerX: number;
+  centerY: number;
+} | null {
+  if (tiles.length === 0) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const c of tiles) {
+    const g = isoGridPosition(c, TILE_W, TILE_H);
+    const cx = g.x + TILE_W / 2;
+    const cy = g.y + TILE_H / 2;
+    if (cx < minX) minX = cx;
+    if (cx > maxX) maxX = cx;
+    if (cy < minY) minY = cy;
+    if (cy > maxY) maxY = cy;
+  }
+  return { minX, maxX, minY, maxY, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+}
+
+/**
+ * Zoom that fits `tiles` (the preview crop's actual drawn hexes — see
+ * `previewIslandBounds`, and `WorldModel.previewCropTiles` for what's in
+ * `tiles`) inside the viewport, for the landing page's locked static
+ * preview (`HexMapRendererOptions.lockCamera`). Replaces the fixed
+ * `PREVIEW_ZOOM` constant when locked, so the whole crop stays on screen
+ * regardless of viewport size/aspect instead of only fitting at one assumed
+ * size.
  *
  * A pure, exported function (rather than a private method) so it's
  * unit-testable without a canvas/Pixi app, matching `worldLayerOrder`'s own
@@ -754,34 +838,31 @@ const PREVIEW_ISLAND_RADIUS = 7;
  * left of the biased centre is narrower than half the viewport (see
  * `biasedCenterX` for the corresponding camera shift) — ignoring it would
  * push the island's far edge off screen whenever a bias is in play.
+ *
+ * Takes the tile list directly (rather than a centre + radius + `isSea`
+ * predicate, as it did before landing-page-defects.md L4/L5) so it fits
+ * against the island's own real, possibly-asymmetric bounding box instead
+ * of a symmetric disc around a point that is rarely that box's centre.
  */
 export function previewFitZoom(params: {
-  center: AxialCoord;
-  radius: number;
+  tiles: AxialCoord[];
   screenBiasX: number;
   viewport: { width: number; height: number };
-  isSea: (c: AxialCoord) => boolean;
   fallbackZoom: number;
   minZoom: number;
   maxZoom: number;
 }): number {
-  const { center, radius, screenBiasX, viewport, isSea, fallbackZoom, minZoom, maxZoom } = params;
+  const { tiles, screenBiasX, viewport, fallbackZoom, minZoom, maxZoom } = params;
   if (viewport.width === 0 || viewport.height === 0) return fallbackZoom;
 
-  const grid = isoGridPosition(center, TILE_W, TILE_H);
-  const centerPx = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
-  let maxDx = 0;
-  let maxDy = 0;
-  for (const c of hexesInRadius(center, radius)) {
-    if (isSea(c)) continue;
-    const g = isoGridPosition(c, TILE_W, TILE_H);
-    maxDx = Math.max(maxDx, Math.abs(g.x + TILE_W / 2 - centerPx.x));
-    maxDy = Math.max(maxDy, Math.abs(g.y + TILE_H / 2 - centerPx.y));
-  }
-  if (maxDx === 0 || maxDy === 0) return fallbackZoom;
+  const bounds = previewIslandBounds(tiles);
+  if (!bounds) return fallbackZoom;
+
+  const halfExtentX = (bounds.maxX - bounds.minX) / 2 + PREVIEW_FIT_HALF_TILE_W + PREVIEW_FIT_MARGIN;
+  const halfExtentY = (bounds.maxY - bounds.minY) / 2 + PREVIEW_FIT_VERTICAL_OVERHANG + PREVIEW_FIT_MARGIN;
 
   const usableHalfWidth = (0.5 - Math.abs(screenBiasX)) * viewport.width;
-  const zoom = Math.min(usableHalfWidth / maxDx, viewport.height / 2 / maxDy);
+  const zoom = Math.min(usableHalfWidth / halfExtentX, viewport.height / 2 / halfExtentY);
   return Math.min(maxZoom, Math.max(minZoom, zoom));
 }
 // How long the camera takes to ease from one position/zoom to another (see
@@ -1187,6 +1268,12 @@ export class HexMapRenderer {
   // `landfallBurstFrames`'s own doc comment for why this self-clears
   // instead of looping.
   private landfallBurst: { coord: AxialCoord; startedAt: number } | null = null;
+  // L6a (docs/plans/landing-page-defects.md): the one-shot "look over here"
+  // flash fired on a miss-click — see `pulseAttention`/`attentionPulseFrame`.
+  // Just a start time, unlike `landfallBurst`: it boosts every currently
+  // highlighted coord (`options.highlightCoord`/`highlightCoords`) at once
+  // rather than drawing at one coord of its own.
+  private attentionPulse: number | null = null;
   // Issue #159 part B: the composing-a-dispatch/field-order range tint —
   // every hex `setRangeOverlay` hands in, drawn as a translucent fill plus
   // an outline on the boundary edges (the edges whose neighbour isn't in the
@@ -1337,28 +1424,46 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     if (!settlement) {
       const at = this.options.previewCenter ?? { q: 0, r: 0 };
+      if (this.lockCamera) {
+        // Locked static preview (landing page): fit the whole island to the
+        // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
+        // fully framed regardless of viewport size/aspect. Bounds match
+        // zoomBy's own wheel-zoom clamp (0.05..4) — this is a framing
+        // choice, not a fog-margin one, so
+        // FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM don't apply here.
+        //
+        // landing-page-defects.md L4/L5: `previewCropTiles` is the exact
+        // same tile set `rebuildTerrain`'s preview branch draws (the small
+        // radius crop around `at`, intersected with `at`'s own landmass —
+        // see that method's own doc comment for why it's an intersection,
+        // not just membership or just a radius), and the camera centres on
+        // *that* box's own centre rather than on `at` (the suggested plot)
+        // — the plot is a scored interior grass hex, not the crop's
+        // centroid, so centring on it left a gap on the short side of an
+        // asymmetric crop while pushing the long side out of frame. `at`
+        // still decides *which* island and *where* the crop is taken from;
+        // it stops being the camera target.
+        const tiles = this.options.worldModel.previewCropTiles(at);
+        const bounds = previewIslandBounds(tiles);
+        const zoom = previewFitZoom({
+          tiles,
+          screenBiasX: this.options.screenBiasX ?? 0,
+          viewport: this.viewport,
+          fallbackZoom: PREVIEW_ZOOM,
+          minZoom: 0.05,
+          maxZoom: 4,
+        });
+        // `bounds` is only null if `at` itself has no reachable land (a
+        // malformed/empty seed) — fall back to centring on the plot itself
+        // rather than propagating a NaN camera.
+        const centerX = bounds ? bounds.centerX : isoGridPosition(at, TILE_W, TILE_H).x + TILE_W / 2;
+        const centerY = bounds ? bounds.centerY : isoGridPosition(at, TILE_W, TILE_H).y + TILE_H / 2;
+        return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
+      }
       const grid = isoGridPosition(at, TILE_W, TILE_H);
       const centerX = grid.x + TILE_W / 2;
       const centerY = grid.y + TILE_H / 2;
-      // Locked static preview (landing page): fit the whole island to the
-      // current viewport instead of the fixed PREVIEW_ZOOM, so it stays
-      // fully framed regardless of viewport size/aspect. Bounds match
-      // zoomBy's own wheel-zoom clamp (0.05..4) — this is a framing choice,
-      // not a fog-margin one, so FOG_MARGIN_MIN_ZOOM/SETTLEMENT_DEFAULT_ZOOM
-      // don't apply here.
-      const zoom = this.lockCamera
-        ? previewFitZoom({
-            center: at,
-            radius: PREVIEW_ISLAND_RADIUS,
-            screenBiasX: this.options.screenBiasX ?? 0,
-            viewport: this.viewport,
-            isSea: (c) => this.options.worldModel.getTile(c.q, c.r).terrain === 'sea',
-            fallbackZoom: PREVIEW_ZOOM,
-            minZoom: 0.05,
-            maxZoom: 4,
-          })
-        : PREVIEW_ZOOM;
-      return { x: this.biasedCenterX(centerX, zoom), y: centerY, zoom };
+      return { x: this.biasedCenterX(centerX, PREVIEW_ZOOM), y: centerY, zoom: PREVIEW_ZOOM };
     }
     const grid = isoGridPosition({ q: settlement.q, r: settlement.r }, TILE_W, TILE_H);
     const center = { x: grid.x + TILE_W / 2, y: grid.y + TILE_H / 2 };
@@ -1729,6 +1834,15 @@ export class HexMapRenderer {
       ...(this.options.highlightCoord ? [this.options.highlightCoord] : []),
       ...(this.options.highlightCoords ?? []),
     ];
+    // L6a: self-clears exactly like `landfallBurst` below once the flash has
+    // run its full duration, so a stale pulse never lingers as dead state.
+    // (Checked against the duration directly, not against `attention === 0`
+    // — that's also true at t=0, the instant `pulseAttention()` fires, which
+    // would otherwise clear the flash before it ever got drawn.)
+    const attention = this.attentionPulse !== null ? attentionPulseFrame(now, this.attentionPulse) : 0;
+    if (this.attentionPulse !== null && now - this.attentionPulse >= ATTENTION_PULSE_DURATION_MS) {
+      this.attentionPulse = null;
+    }
     if (coords.length > 0) {
       const pulse = (Math.sin(now / 420) + 1) / 2; // 0..1
       const ripples = plotRippleFrames(now);
@@ -1740,11 +1854,13 @@ export class HexMapRenderer {
         const cy = grid.y + TILE_CENTER_Y_OFFSET;
         // Chat1: "raise the plot-pulse floor so the glowing hexes never fade
         // to near-invisible" — the fill/stroke alpha ranges below no longer
-        // touch 0 at the pulse's low point.
+        // touch 0 at the pulse's low point. `attention` layers L6a's
+        // miss-click flash on top of that same floor rather than replacing
+        // it — see `attentionPulseFrame`'s own comment.
         this.highlightLayer
           .poly(flat)
-          .fill({ color: GOLD, alpha: 0.22 + pulse * 0.18 })
-          .stroke({ width: 3 + pulse * 1.5, color: GOLD, alpha: 0.7 + pulse * 0.3 });
+          .fill({ color: GOLD, alpha: Math.min(1, 0.22 + pulse * 0.18 + attention * 0.4) })
+          .stroke({ width: 3 + pulse * 1.5 + attention * 3, color: GOLD, alpha: Math.min(1, 0.7 + pulse * 0.3 + attention * 0.3) });
         for (const ring of ripples) {
           this.highlightLayer
             .ellipse(cx, cy, (TILE_W / 2) * ring.scale, (TILE_H / 2) * ring.scale)
@@ -2590,20 +2706,33 @@ export class HexMapRenderer {
     const settlement = this.settlement();
     const preview = !settlement;
     const previewCenter = this.options.previewCenter ?? { q: 0, r: 0 };
+    // landing-page-defects.md L5: culled by `previewCropTiles` — a small
+    // radius crop around `previewCenter` (deliberate framing, matching the
+    // mockup's own scale, not itself a bug) intersected with landmass
+    // membership, so a *foreign* island a world seed happened to place
+    // nearby within that same radius no longer bleeds in (computed once per
+    // rebuild here, then checked per-hex via a Set — not re-flooded per
+    // hex; `previewCropTiles`/`previewIslandTiles` are cached per centre
+    // inside WorldModel, so this is cheap even though rebuildTerrain runs
+    // on every camera change). This is also exactly the tile set
+    // `settlementCameraOrigin`'s locked-preview branch (L4) fits the camera
+    // to — the two must agree, or the framing goes wrong again (see that
+    // method's own comment).
+    const previewTileKeys = preview
+      ? new Set(worldModel.previewCropTiles(previewCenter).map((c) => coordKey(c)))
+      : null;
     const fogSources =
       fogActive && fogDebugFlags.terrainCull ? this.unexploredFogSources(this.rebuildBounds) : [];
 
     for (const c of coords) {
       // zip 6a: before a settlement exists, this is the landing page's
-      // preview — one island, not a slice of the whole (unfogged) world.
-      // Water isn't drawn at all (matching how world mode treats sea — see
-      // rebuildTerrainFlat), and anything past a plausible single-island
-      // radius is cut off so a neighbouring generated island can't show up
-      // uninvited in the background.
-      if (preview) {
-        if (worldModel.getTile(c.q, c.r).terrain === 'sea') continue;
-        if (hexDistance(c, previewCenter) > PREVIEW_ISLAND_RADIUS) continue;
-      }
+      // preview — a small crop of one island, not a slice of the whole
+      // (unfogged) world. Water isn't drawn at all (matching how world mode
+      // treats sea — see rebuildTerrainFlat) and membership in
+      // `previewTileKeys` already excludes it (`previewCropTiles` only ever
+      // returns land), so this one check replaces the old sea check and the
+      // old (membership-blind) radius check both.
+      if (preview && !previewTileKeys!.has(coordKey(c))) continue;
       // Terrain is drawn under the fog (not just on explored ground) so it
       // can show through the thin part of the unexplored mist near the
       // scouted ring, instead of the tile popping into existence only once
@@ -3360,6 +3489,23 @@ export class HexMapRenderer {
   }
 
   /**
+   * The plot this renderer was mounted to preview, if any — LandingView's
+   * `previewCoord` (demo: `findLandfall`; live: `plotSuggestion.plot`),
+   * captured once at mount (see useHexMapRenderer's own remarks on options
+   * being non-reactive). Exposed so e2e founding helpers can ask the
+   * renderer for the plot's *coordinate* and then its screen position
+   * (`hexCenterScreen`), instead of hard-coding a fraction of the canvas
+   * that only happens to line up with wherever the preview camera framing
+   * currently centres itself — that's what broke when the pre-founding
+   * camera moved from "centred on the plot" to "centred on the island"
+   * (docs/plans/landing-page-defects.md L4/L5). `options` itself stays
+   * private; this is a read-only, single-field accessor.
+   */
+  get previewCenter(): AxialCoord | undefined {
+    return this.options.previewCenter;
+  }
+
+  /**
    * Re-homes the camera onto the current settlement's own canonical framing
    * (settlementCameraOrigin — the same fog-margin-fitted view a fresh
    * settlement-mode mount always started at). For *externally*-driven entry
@@ -3426,6 +3572,18 @@ export class HexMapRenderer {
    */
   setLandfallBurst(coord: AxialCoord) {
     this.landfallBurst = { coord, startedAt: performance.now() };
+  }
+
+  /**
+   * L6a (docs/plans/landing-page-defects.md): flashes every currently
+   * offered plot once — fired from `LandingView.onHexClick` on a miss-click
+   * that didn't land on (or snap to) an offered plot, so the player is shown
+   * where to go rather than only told. See `attentionPulseFrame`'s own
+   * comment for why this is a separate one-shot layered on the existing
+   * looping pulse rather than a tweak to that pulse's own constants.
+   */
+  pulseAttention() {
+    this.attentionPulse = performance.now();
   }
 
   /**

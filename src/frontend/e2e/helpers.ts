@@ -49,13 +49,35 @@ export async function gotoWorldMap(page: Page): Promise<void> {
 export async function claimLandfall(page: Page): Promise<void> {
   const canvas = page.locator('canvas');
   const box = (await canvas.boundingBox())!;
-  // The starter plot is deterministic and camera-centred (HexMapRenderer's
-  // previewCenter), but shifted right of true screen centre by
-  // LandingView's `screenBiasX` (0.16 of the viewport width) so the island
-  // composes next to the hero text rather than behind it — see
-  // HexMapRenderer's biasedCenterX.
-  const cx = box.x + box.width * (0.5 + 0.16);
-  const cy = box.y + box.height / 2;
+  // Ask the renderer where the preview plot actually is, rather than
+  // hard-coding a fraction of the canvas: docs/plans/landing-page-defects.md
+  // L4/L5 moved the pre-founding camera from "centred on the plot" to
+  // "centred on the drawn island's bounding box", which silently broke the
+  // old `(0.5 + 0.16) × width` "screenBiasX" click point — it no longer
+  // lands on the same hex, and demo mode founds wherever it happens to
+  // land instead. `__settlementRenderer().previewCenter` is the exact
+  // coordinate LandingView is previewing (demo: `findLandfall`; live:
+  // `plotSuggestion.plot`), and `hexCenterScreen` is the renderer's own
+  // camera math converting that coordinate to a screen point — the same
+  // technique `SettlementPage.findHex`/`landing.spec.ts`'s ring-menu test
+  // already use. This is robust to *any* future reframing of the preview
+  // camera, since it never assumes where on screen the plot ends up.
+  const { x: hx, y: hy } = await page.evaluate(() => {
+    const renderer = (
+      window as unknown as {
+        __settlementRenderer: () => {
+          previewCenter?: { q: number; r: number };
+          hexCenterScreen: (c: { q: number; r: number }) => { x: number; y: number };
+        };
+      }
+    ).__settlementRenderer();
+    if (!renderer.previewCenter) {
+      throw new Error('__settlementRenderer().previewCenter is unset — is the landing page preview mounted yet?');
+    }
+    return renderer.hexCenterScreen(renderer.previewCenter);
+  });
+  const cx = box.x + hx;
+  const cy = box.y + hy;
   await page.mouse.click(cx, cy);
 
   // Founding is async (even in demo mode, it's a Vue reactive update away) —

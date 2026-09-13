@@ -1,24 +1,29 @@
 {
+  "header": {
+    "haveRealm": "I already have a realm"
+  },
   "hero": {
     "eyebrow": "Empty plot · Bjarnøy",
     "notOpenTitle": "Not open yet.",
     "title": "Put your longhouse somewhere.",
     "lede": "That's the whole tutorial. Pick a hex, drop the building, and the grain starts counting. Nobody asks your name until you have something worth naming.",
     "makingLandfall": "Making landfall…",
-    "plotsFreeOne": "One plot free on this island",
-    "plotsFreeMany": "{count} plots free on this island",
-    "plotsFreeSuffix": "— any of them is yours"
+    "noAccount": "No account",
+    "nothingToInstall": "Nothing to install",
+    "leavesInOneClick": "Leaves in one click"
   },
   "joinBlocked": {
     "opensAt": "This world opens {date}.",
     "joinsClosed": "This world is no longer accepting new players.",
     "noWorldYet": "No world has been created yet — check back soon.",
-    "notAcceptingPlayers": "This world is not accepting new players right now."
+    "notAcceptingPlayers": "This world is not accepting new players right now.",
+    "noPlotAvailable": "Every plot in this world is taken or held right now — check back in a few minutes."
   },
   "invalidClick": {
-    "pickGlowingPlot": "You can't found there — pick one of the glowing plots.",
+    "pickGlowingPlot": "Not quite — one of the glowing plots is yours to take.",
     "beyondClaim": "That hex is beyond your longhouse's claim — build closer to home.",
-    "orderFailed": "That order didn't go through — try a different hex."
+    "orderFailed": "That order didn't go through — try a different hex.",
+    "plotTaken": "That plot was just taken — here's another one."
   },
   "ring": {
     "finishGuidedFirst": "Finish the guided buildings first",
@@ -49,8 +54,7 @@
   },
   "footer": {
     "sea": "Kettil Sea",
-    "noAccount": "No account",
-    "nothingToInstall": "Nothing to install"
+    "reservedFor": "Your plot is held for {count} minute | Your plot is held for {count} minutes"
   },
   "banner": {
     "landfallTitle": "Landfall made.",

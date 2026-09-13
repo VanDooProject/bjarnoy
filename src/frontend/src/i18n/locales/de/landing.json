@@ -1,24 +1,29 @@
 {
+  "header": {
+    "haveRealm": "Ich habe schon ein Reich"
+  },
   "hero": {
     "eyebrow": "Leeres Grundstück · Bjarnøy",
     "notOpenTitle": "Noch nicht geöffnet.",
     "title": "Errichte irgendwo dein Langhaus.",
     "lede": "Das ist das ganze Tutorial. Wähle ein Feld, platziere das Gebäude, und die Kornzählung beginnt. Niemand fragt nach deinem Namen, bevor du etwas hast, das einen Namen verdient.",
     "makingLandfall": "Landung wird gemacht…",
-    "plotsFreeOne": "Ein Grundstück frei auf dieser Insel",
-    "plotsFreeMany": "{count} Grundstücke frei auf dieser Insel",
-    "plotsFreeSuffix": "— jedes davon gehört dir"
+    "noAccount": "Kein Konto",
+    "nothingToInstall": "Nichts zu installieren",
+    "leavesInOneClick": "Mit einem Klick wieder weg"
   },
   "joinBlocked": {
     "opensAt": "Diese Welt öffnet {date}.",
     "joinsClosed": "Diese Welt nimmt keine neuen Spieler mehr auf.",
     "noWorldYet": "Es wurde noch keine Welt erstellt — schau bald wieder vorbei.",
-    "notAcceptingPlayers": "Diese Welt nimmt momentan keine neuen Spieler auf."
+    "notAcceptingPlayers": "Diese Welt nimmt momentan keine neuen Spieler auf.",
+    "noPlotAvailable": "Gerade ist jedes Grundstück in dieser Welt vergeben oder reserviert — schau in ein paar Minuten wieder vorbei."
   },
   "invalidClick": {
-    "pickGlowingPlot": "Dort kannst du nicht siedeln — wähle eines der leuchtenden Grundstücke.",
+    "pickGlowingPlot": "Fast — eines der leuchtenden Grundstücke gehört dir.",
     "beyondClaim": "Dieses Feld liegt außerhalb des Anspruchs deines Langhauses — baue näher an deiner Heimat.",
-    "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld."
+    "orderFailed": "Der Auftrag wurde nicht übermittelt — versuche ein anderes Feld.",
+    "plotTaken": "Dieses Grundstück wurde gerade vergeben — hier ist ein anderes."
   },
   "ring": {
     "finishGuidedFirst": "Schließe zuerst die geführten Gebäude ab",
@@ -49,8 +54,7 @@
   },
   "footer": {
     "sea": "Kettil-See",
-    "noAccount": "Kein Konto",
-    "nothingToInstall": "Nichts zu installieren"
+    "reservedFor": "Dein Grundstück ist noch {count} Minute reserviert | Dein Grundstück ist noch {count} Minuten reserviert"
   },
   "banner": {
     "landfallTitle": "Landung geglückt.",
