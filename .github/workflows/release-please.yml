@@ -1,0 +1,24 @@
+# Automates semantic versioning + changelog generation from Conventional
+# Commits on main. Merging the release PR it opens tags a vX.Y.Z release,
+# which is what docker-image.yml's `tags: ['v*']` trigger builds and pushes
+# to ghcr.io as a permanent, semver-tagged image (see package-cleanup.yml
+# for how those and the main-branch builds get pruned).
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

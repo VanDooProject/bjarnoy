@@ -175,12 +175,18 @@ const share = (deltaMs: number, baselineMs: number) =>
 <template>
   <DebugPanel class="water-perf" title="Water perf" storage-key="waterPerf">
     <div class="row">
-      <span class="label">Frame</span>
+      <span class="label">Frame (median)</span>
       <span class="value">{{ ms(stats.frameMs) }}</span>
     </div>
     <div class="row sub">
       <span class="label">…which is</span>
       <span class="value">{{ fps }} fps</span>
+    </div>
+    <!-- This number is a sweep baseline, not a frame rate, and it was being
+         read as one: a median over sixty frames says 60 fps on a map that
+         stutters, because a stutter is exactly the outlier it discards. -->
+    <div class="row sub note">
+      <span class="label">Median, so it cannot show a stall — see Frame rate</span>
     </div>
     <div class="row">
       <span class="label">Mask bake</span>
@@ -275,6 +281,11 @@ const share = (deltaMs: number, baselineMs: number) =>
   padding: 2px 0;
   font-size: 13px;
   color: var(--text);
+}
+.row.sub.note {
+  color: var(--muted);
+  font-style: italic;
+  padding-bottom: 4px;
 }
 .row.sub {
   font-size: 12px;

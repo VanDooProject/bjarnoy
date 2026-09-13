@@ -50,10 +50,22 @@ production build via `vite preview`, no backend — specs mock the API themselve
    `budgets.ts` constant (`test.setTimeout(MAP_SPEC_TIMEOUT_MS)`), never an
    ad-hoc number; `budgets.ts`'s header documents the measured evidence any new
    budget change is expected to match.
-6. **Tag new specs for CI sharding.** Give the file's `test`/`test.describe` a
-   `{ tag: '@g1' | '@g2' | '@g3' }` (untagged files fall into the `--grep-invert`
-   catch-all group). Pick the group by expected duration — see
-   `docs/ci/e2e-sharding.md`.
+6. **Tag new specs for CI sharding — every time, not just for new files.**
+   A brand-new spec file needs a `{ tag: '@g1' | '@g2' | '@g3' }` on its
+   `test`/`test.describe` (an untagged file falls into the `--grep-invert`
+   catch-all group, called `rest` in CI). But **new tests added to an
+   existing, already-tagged file need the same treatment** — a
+   `test.describe(..., { tag: '@gN' })` wrapper does *not* automatically
+   cover a `test(...)` you add elsewhere in the file outside that
+   `describe`, and a file with per-test tags (see `ring-menu.spec.ts`,
+   `world-map-interactions.spec.ts`) has no file-level default at all: an
+   untagged test you add there silently lands in `rest`, not in whatever
+   group its neighbours are in. Pick the group by expected duration — see
+   `docs/ci/e2e-sharding.md` — and re-run that doc's partition check
+   (`npx playwright test --list` counts, split by `--grep`/`--grep-invert`)
+   if you're unsure a new test landed where you meant it to. `rest`
+   quietly growing into the straggler (untagged new tests piling up there
+   between rebalances) is exactly how it got out of balance before.
 
 ## Page objects (issue #189)
 

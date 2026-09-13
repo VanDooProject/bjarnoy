@@ -97,6 +97,63 @@ bin) into 4 groups lands within ~35 seconds of each other:
 | `@g3` | `army-overlay`, `landing`, `fog-drift` | 344.9s |
 | `rest` | `world-map-interactions`, `trade`, `shrine-build`, `found-settlement` | 348.3s |
 
+## 2026-09-12 rebalance: `rest` had grown into the straggler
+
+The table above was a snapshot from when the groups were first introduced.
+New specs (`dockyard-build`, `sawmill-build`, `i18n`, `zoom-transition`, more
+`world-map-interactions` tests) landed untagged in the `rest` catch-all since,
+and by run [34684032834](https://github.com/VanDooProject/bjarnoy/actions/runs/34684032834)
+that had pushed `rest` to **14m**, well past `@g1`/`@g2`/`@g3` (~5-8m each) —
+`rest` had become the new straggler `--shard` was replaced to avoid.
+
+Per-file totals pulled from that run's job logs:
+
+| file | total duration | group |
+|---|---|---|
+| `ring-menu.spec.ts` | 433.9s (9 tests, split across `@g1`/`@g2`/`@g3` — see the de-clustering note below) | mixed |
+| `world-map-interactions.spec.ts` | 240.1s (4 tests) | mixed (see below) |
+| `zoom-transition.spec.ts` | 210.0s (3 tests) | was `rest` |
+| `settlement-interactions.spec.ts` | 320.0s (6 tests) | `@g2` |
+| `trade.spec.ts` | 128.3s (2 tests) | `rest` |
+| `army-overlay.spec.ts` | 119.4s (5 tests) | `@g3` |
+| `dockyard-build.spec.ts` | 72.0s | `rest` |
+| `landing.spec.ts` | 71.6s (6 tests) | `@g3` |
+| `water-shader.spec.ts` | 89.3s (2 tests) | `@g1` |
+| `sawmill-build.spec.ts` | 66.0s | `rest` |
+| `shrine-build.spec.ts` | 66.0s | `rest` |
+| `found-settlement.spec.ts` | 44.2s | `rest` |
+| `world-map-fleet-orders.spec.ts` | 41.3s | `@g3` |
+| `tower-border-expansion.spec.ts` | 38.2s | `@g2` |
+| `fog-drift.spec.ts` | 29.8s | `@g3` |
+| `settlement-expansion.spec.ts` | 20.4s | `@g2` |
+| everything else (10 files) | ~14.5s combined | `@g2`/`rest` |
+
+`rest`'s two heaviest files were `world-map-interactions` (240.1s) and
+`zoom-transition` (210.0s), together nearly matching `rest`'s entire
+14-minute total. Moving both out whole would have overshot `@g1`/`@g3`'s
+targets, so:
+
+- `zoom-transition.spec.ts` (three tests, all similar map-transition cost)
+  moved to `@g3` whole, via a `{ tag: '@g3' }` on its `describe`.
+- `world-map-interactions.spec.ts` kept 3 of its 4 tests untagged (`rest`)
+  and moved only its heaviest test ("zooming with the wheel does not
+  error", 96s) to `@g1`, tagged individually rather than at the
+  `describe` — the same per-test pattern the original `ring-menu` split
+  below uses, since moving the whole file would have overshot `@g1`.
+
+Resulting totals (from the same run's per-test durations):
+
+| group | total |
+|---|---|
+| `@g1` | 504.4s |
+| `@g2` | 487.9s |
+| `@g3` | 490.9s |
+| `rest` | 520.0s |
+
+All four groups land within ~32s of each other (~8.1-8.7 min), down from
+`rest`'s 14-minute outlier. Re-verified with the partition check below:
+70 tests total, split 10/31/18/11 across `@g1`/`@g2`/`@g3`/`rest`.
+
 Implementation, in `frontend-ci.yml`'s `e2e` job matrix:
 
 ```yaml
