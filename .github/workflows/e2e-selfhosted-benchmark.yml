@@ -1,15 +1,20 @@
 name: E2E Self-Hosted Runner Benchmark
 
-# One-off, manually-triggered timing of the frontend e2e suite's heaviest
-# shard (@g3, the group frontend-ci.yml's own docs/ci/e2e-sharding.md
-# consistently measures as the straggler) on the org's self-hosted runner,
-# to compare against ubuntu-latest's already-measured @g3 baseline
-# (13m00s-14m05s across recent frontend-ci.yml runs on main) and decide
-# whether self-hosting is worth adopting for frontend-ci.yml's e2e job.
-# Not wired into push/pull_request — dispatch it by hand when a comparison
-# is needed.
+# One-off timing of the frontend e2e suite's heaviest shard (@g3, the group
+# frontend-ci.yml's own docs/ci/e2e-sharding.md consistently measures as the
+# straggler) on the org's self-hosted runner, to compare against
+# ubuntu-latest's already-measured @g3 baseline (13m00s-14m05s across recent
+# frontend-ci.yml runs on main) and decide whether self-hosting is worth
+# adopting for frontend-ci.yml's e2e job.
+#
+# Triggers only on a pull_request that touches this file, so it runs once
+# on the PR that adds/edits it rather than becoming a standing job on every
+# PR — this is a same-repo branch, not a fork, so a self-hosted runner here
+# carries none of the fork-PR privilege-escalation risk.
 on:
-  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/e2e-selfhosted-benchmark.yml'
 
 defaults:
   run:
