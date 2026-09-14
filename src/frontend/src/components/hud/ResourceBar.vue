@@ -11,10 +11,10 @@ import { useWorldStore } from '../../stores/world';
 import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
-  // Issue #16 "ring menu": dims the resource pills while a ring is open, to
-  // match RealmPanel's own disabled look — these aren't interactive, but
-  // reads as one consistent "HUD chrome recedes while the ring has focus"
-  // rule rather than only RealmPanel changing.
+  // Issue #16 "ring menu": dims the resource pills while a ring is open —
+  // these aren't interactive, but reads as one consistent "HUD chrome
+  // recedes while the ring has focus" rule rather than only one panel
+  // changing.
   ringOpen?: boolean;
 }>();
 

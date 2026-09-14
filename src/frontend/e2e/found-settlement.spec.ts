@@ -10,20 +10,16 @@ test('clicking an island founds a settlement and opens the village view', async 
   // its own assertions run. See settlement-interactions.spec.ts's matching
   // comments for the other tests that share this same root cause.
   test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-  const settlement = await SettlementPage.found(page);
+  await SettlementPage.found(page);
   await expect(page).toHaveURL(/\/settlement$/);
 
-  // realm panel: the settlement is real state, not a placeholder screen.
-  // Scoped to .realm-panel — TopBar's header also shows the settlement name,
-  // so an unscoped text locator matches both and violates Playwright's
-  // strict mode.
-  const realmPanel = settlement.realmPanel;
-  await expect(realmPanel.getByText('Unnamed realm')).toBeVisible();
-  await expect(realmPanel.getByText('Lv 1')).toBeVisible();
-  await expect(realmPanel.getByText(/Realm claims \d+ hexes/)).toBeVisible();
-
-  // resource bar: four resources plus the population pill, each a
-  // positive, growing number
+  // resource bar: the settlement is real state, not a placeholder screen —
+  // four resources plus the population pill, each a positive, growing
+  // number. RealmPanel (a bottom-left level/hexes readout + a manual
+  // "← World map" button) used to also assert this, but it's gone now that
+  // zoom drives settlement<->world switching and the manual override was
+  // redundant (see docs/design/zoom-transition.md) — this check alone
+  // already covers "real state, not a placeholder".
   const values = page.locator('.resource-bar .resource .value');
   await expect(values).toHaveCount(5);
   for (const text of await values.allTextContents()) {
@@ -33,9 +29,4 @@ test('clicking an island founds a settlement and opens the village view', async 
   for (const text of await rates.allTextContents()) {
     expect(text).toMatch(/^\+\d+\/h$/);
   }
-
-  // the realm panel's own back button, not HudNav's identically-labelled
-  // debug pill — both go to /world, but this is the in-context control
-  await page.getByRole('button', { name: '← World map' }).click();
-  await expect(page).toHaveURL(/\/world$/);
 });

@@ -63,7 +63,6 @@ export class SettlementPage {
   readonly tooltip: Locator;
   /** ArmyPanel's card, which floats above the canvas in the bottom-right. */
   readonly statusCard: Locator;
-  readonly realmPanel: Locator;
   readonly ring: RingMenuComponent;
   /** Design handoff "2a": the animated next-step arrow (GuidancePointer.vue). */
   readonly guidancePointer: Locator;
@@ -87,7 +86,6 @@ export class SettlementPage {
     this.canvas = page.locator('canvas');
     this.tooltip = page.locator('.hex-tooltip');
     this.statusCard = page.locator('.status-card');
-    this.realmPanel = page.locator('.realm-panel');
     this.ring = new RingMenuComponent(page);
     this.guidancePointer = page.getByTestId('guidance-pointer');
     this.checklist = page.getByTestId('onboarding-checklist');

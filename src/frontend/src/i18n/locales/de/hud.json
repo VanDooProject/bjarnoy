@@ -21,11 +21,6 @@
     "reserved": "({n} reserviert)",
     "rate": "+{n}/h"
   },
-  "realmPanel": {
-    "level": "Lv {level}",
-    "claims": "Reich beansprucht {count} Hexfelder",
-    "backToWorldMap": "← Weltkarte"
-  },
   "hoverTooltip": {
     "level": "STUFE {level}",
     "clickToOpen": "KLICKEN ZUM ÖFFNEN",
@@ -79,7 +74,7 @@
       "sendSettlers": "Siedler entsenden",
       "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
       "upgrade": "Ausbauen",
-      "notEnough": "Nicht genug {resources}",
+      "notEnough": "Benötigt {resources}",
       "details": "Details",
       "raze": "Abreißen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",
