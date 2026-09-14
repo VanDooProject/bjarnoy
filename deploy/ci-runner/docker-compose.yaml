@@ -41,12 +41,16 @@ x-runner-gpu: &runner-gpu
     # than just renderD128 also carries card0, which some Mesa/EGL init
     # paths probe even for headless rendering.
     - /dev/dri:/dev/dri
-  group_add:
-    # /dev/dri's render node is typically group-owned by "render" on modern
-    # distros and "video" on older ones — check `ls -l /dev/dri` on the host
-    # if the container can't open it, and adjust.
-    - video
-    - render
+  # No group_add: Docker requires the named group to exist inside the
+  # container's own /etc/group, not just on the host, and
+  # myoung34/github-runner's image defines neither "video" nor "render"
+  # (confirmed: deploying with both listed failed with "unable to find
+  # group render: no matching entries in group file"). These runner
+  # containers run as root by default, and root bypasses device group
+  # permissions entirely, so no supplementary group is needed to open
+  # /dev/dri. If a future non-root RUNNER_UID setup changes that, add the
+  # group by numeric GID (`ls -l /dev/dri` on the host) rather than by
+  # name, since the name won't resolve inside the container either way.
   environment: &runner-gpu-env
     RUNNER_NAME_SUFFIX: 'false'
     RUNNER_WORKDIR: /runner/work
