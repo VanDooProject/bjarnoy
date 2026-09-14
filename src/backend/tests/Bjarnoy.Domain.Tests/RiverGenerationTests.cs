@@ -61,27 +61,42 @@ public class RiverGenerationTests
     [Fact]
     public void Mouth_tiles_have_no_outflow_and_touch_the_sea()
     {
-        var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(2024) with { Radius = 40 });
-        var world = Generate(2024);
+        // Seed 1727259606 at the default radius reproduces a river that used
+        // to dead-end mid-island (TracePath's non-decreasing-depth walk had
+        // no forward route left and just stopped, yet the last tile still
+        // got classified as a Mouth). TracePath now backtracks to a
+        // lower-depth fallback step instead of stopping short, so every
+        // Mouth tile should be coastal again.
+        var seedsAndRadii = new (int Seed, int Radius)[]
+        {
+            (2024, 40),
+            (1727259606, WorldGenerationOptions.ForSeed(1727259606).Radius),
+        };
 
         var checkedAny = false;
-        foreach (var island in world.Islands)
+        foreach (var (seed, radius) in seedsAndRadii)
         {
-            foreach (var tile in island.RiverTiles)
-            {
-                if (tile.Shape != RiverTileShape.Mouth)
-                {
-                    continue;
-                }
+            var sampler = new TerrainSampler(WorldGenerationOptions.ForSeed(seed) with { Radius = radius });
+            var world = Generate(seed, radius);
 
-                checkedAny = true;
-                Assert.Null(tile.OutDirection);
-                Assert.Single(tile.InDirections);
-                Assert.Contains(tile.Coord.Neighbours(), n => !sampler.IsLand(n));
+            foreach (var island in world.Islands)
+            {
+                foreach (var tile in island.RiverTiles)
+                {
+                    if (tile.Shape != RiverTileShape.Mouth)
+                    {
+                        continue;
+                    }
+
+                    checkedAny = true;
+                    Assert.Null(tile.OutDirection);
+                    Assert.Single(tile.InDirections);
+                    Assert.Contains(tile.Coord.Neighbours(), n => !sampler.IsLand(n));
+                }
             }
         }
 
-        Assert.True(checkedAny, "expected at least one river mouth in this world");
+        Assert.True(checkedAny, "expected at least one river mouth across these seeds");
     }
 
     [Fact]
