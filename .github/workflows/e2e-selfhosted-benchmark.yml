@@ -1,11 +1,13 @@
 name: E2E Self-Hosted Runner Benchmark
 
-# One-off, manually-triggered comparison of the frontend e2e suite's
-# heaviest shard (@g3, the group frontend-ci.yml's own docs/ci/e2e-sharding.md
-# consistently measures as the straggler) on GitHub's hosted ubuntu-latest
-# vs. the org's self-hosted runner, to see whether self-hosting is worth
-# adopting for frontend-ci.yml's e2e job. Not wired into push/pull_request —
-# dispatch it by hand when a comparison is needed.
+# One-off, manually-triggered timing of the frontend e2e suite's heaviest
+# shard (@g3, the group frontend-ci.yml's own docs/ci/e2e-sharding.md
+# consistently measures as the straggler) on the org's self-hosted runner,
+# to compare against ubuntu-latest's already-measured @g3 baseline
+# (13m00s-14m05s across recent frontend-ci.yml runs on main) and decide
+# whether self-hosting is worth adopting for frontend-ci.yml's e2e job.
+# Not wired into push/pull_request — dispatch it by hand when a comparison
+# is needed.
 on:
   workflow_dispatch:
 
@@ -15,11 +17,7 @@ defaults:
 
 jobs:
   e2e-benchmark:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-latest, self-hosted]
-    runs-on: ${{ matrix.runner }}
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +49,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report-benchmark-${{ matrix.runner }}
+          name: playwright-report-benchmark-self-hosted
           path: |
             src/frontend/playwright-report/
             src/frontend/test-results/
