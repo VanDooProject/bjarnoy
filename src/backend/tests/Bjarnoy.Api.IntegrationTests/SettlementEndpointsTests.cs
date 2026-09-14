@@ -808,6 +808,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         var response = await client.GetAsync($"/api/v1/settlements/{Guid.CreateVersion7()}", Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("settlement_not_found", await response.ErrorCodeAsync(Ct));
     }
 
     [Fact]
