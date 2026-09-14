@@ -814,16 +814,19 @@ function closeRing() {
 async function onRingSelect(id: string) {
   const tile = selectedTile.value;
   if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
-    await buildType(id as BuildableType);
+    const placed = await buildType(id as BuildableType);
     // Unlike 'upgrade' below, a rejection here must NOT fall through to
     // BuildingModal: that modal's empty-tile view always defaults to a hut
     // (see its own upgradeType computed) regardless of which building was
     // actually attempted, so it used to show a mismatched cost/afford
     // message for whatever the ring tried to build, with a "Build here"
     // button that would then build a hut instead of retrying the real
-    // pick — confusing at best. A rejected ring build now just closes
-    // cleanly, same as clicking a locked bubble the ring already refuses.
-    closeRing();
+    // pick. Closing the ring on a rejection is its own wrong signal too —
+    // it reads as "something happened" — so a rejected build now just
+    // leaves the ring exactly as it was, the same as a click the ring
+    // already refuses (a locked or terrain-inappropriate bubble).
+    if (placed) closeRing();
+    else actionError.value = null;
     return;
   }
   switch (id) {
@@ -882,24 +885,27 @@ function describeActionError(err: unknown, fallback: string): string {
 // backend has no matching catalogue entry) and is expected to be rejected
 // server-side if ever picked in live mode, same as any other invalid
 // placement (wrong terrain, insufficient longhouse level, ...).
-async function buildType(type: BuildableType) {
-  if (!world.selectedSettlementId || !selectedCoord.value) return;
+/** Whether the placement/queue attempt actually went through. */
+async function buildType(type: BuildableType): Promise<boolean> {
+  if (!world.selectedSettlementId || !selectedCoord.value) return false;
   actionError.value = null;
   if (DEMO_MODE) {
-    world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
-    canvasRef.value?.renderer?.forceRebuild();
-    return;
+    const placed = world.model.placeBuilding(world.selectedSettlementId, selectedCoord.value, type);
+    if (placed) canvasRef.value?.renderer?.forceRebuild();
+    return placed;
   }
   modalBusy.value = true;
   actionError.value = null;
   try {
     await world.queueBuildLive(type, selectedCoord.value);
+    return true;
   } catch (err) {
     console.error('Failed to queue building against the backend', err);
     // Surface the rejection's detail — NoFreeSlot's premium hint included
     // (issue #158) — rather than leaving the player to guess why nothing
     // happened.
     actionError.value = describeActionError(err, t('hud.ringMenu.errors.couldNotQueueBuild'));
+    return false;
   } finally {
     modalBusy.value = false;
   }
