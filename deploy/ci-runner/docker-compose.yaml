@@ -7,11 +7,15 @@
 # In Coolify: create a Service (not an Application — nothing here serves
 # HTTP) from this repository, build pack "Docker Compose", and set
 #
-#   Base Directory:          /
-#   Docker Compose Location: /deploy/ci-runner/docker-compose.yaml
+#   Base Directory:          /deploy/ci-runner
+#   Docker Compose Location: /docker-compose.yaml
 #
-# Base Directory has to stay `/`, same reason as deploy/docker-compose.yaml:
-# the build context below is relative to it, not to deploy/ci-runner/.
+# Unlike deploy/docker-compose.yaml (the app deployment), Base Directory
+# here does NOT need to be the repo root: deploy/ci-runner/Dockerfile only
+# adds packages to the base runner image — it doesn't COPY anything out of
+# the rest of the repo — so there's nothing it needs from outside this
+# directory. Base Directory sets Coolify's `--project-directory`, which the
+# build context below (`.`) and `dockerfile:` path are both relative to.
 # Git submodules are irrelevant here — the runner doesn't need bjarnoy's own
 # source checked out at deploy time, only at job time (which each workflow
 # run does itself via actions/checkout).
@@ -31,7 +35,7 @@
 x-runner-gpu: &runner-gpu
   build:
     context: .
-    dockerfile: deploy/ci-runner/Dockerfile
+    dockerfile: Dockerfile
   devices:
     # The iGPU's render node. Passing the whole /dev/dri directory rather
     # than just renderD128 also carries card0, which some Mesa/EGL init
