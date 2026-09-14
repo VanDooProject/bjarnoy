@@ -9,7 +9,7 @@ import { MAX_ARMY_VISION_SOURCES } from './fogShader';
 const COLORS = { scoutedColor: 0x102030, unexploredColor: 0xe9f0f4, scoutedAlpha: 0.5 };
 
 function fogUniformsOf(layer: FogMaskLayer): UniformGroup {
-  return layer.mesh.shader.resources.fogUniforms as UniformGroup;
+  return layer.mesh.shader!.resources.fogUniforms as UniformGroup;
 }
 
 describe('FogMaskLayer army vision sources', () => {
