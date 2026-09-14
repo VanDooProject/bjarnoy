@@ -12,17 +12,17 @@ directly with `curl`.
 
 ## Auth
 
-Two environment variables must be present in the session:
-
-- `COOLIFY_URL` — base URL of the Coolify instance (e.g. `https://coolify.example.com`)
-- `COOLIFY_API_TOKEN` — bearer token
+`COOLIFY_URL` must be present in the session (base URL of the Coolify instance,
+e.g. `https://coolify.example.com`). Authentication is handled transparently by
+the sandbox's egress proxy for requests to that host — do **not** set an
+`Authorization` header yourself, and there is no `COOLIFY_API_TOKEN` to read.
 
 ```bash
-curl -s -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" "${COOLIFY_URL}/api/v1/<path>"
+curl -s "${COOLIFY_URL}/api/v1/<path>"
 ```
 
-If either variable is missing, say so rather than guessing a URL/token — do not
-hardcode credentials.
+If `COOLIFY_URL` is missing, or a call comes back unauthorized, say so rather
+than guessing a URL or fabricating a token.
 
 ## Useful read endpoints
 
