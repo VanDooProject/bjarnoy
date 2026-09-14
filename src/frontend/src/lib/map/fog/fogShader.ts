@@ -135,6 +135,11 @@ uniform vec2 uWind;
 // inspecting the fetched mask texture itself (chunk-stitching seams, once
 // §3's chunking lands).
 uniform float uShowRaw;
+// uShowEffective is uShowRaw's complement: it dumps the mask channels right
+// after the army-vision reveal below has been multiplied in, so it's the
+// one debug view that can show a troop's live contribution to fog (uShowRaw
+// returns before that reveal ever runs, so it never can).
+uniform float uShowEffective;
 // §1c's live army vision — see this file's header comment. Only the first
 // uArmyVisionCount entries of uArmyVisionSources are read; uArmyVisionRadius
 // is in world units (the same space the world position below is computed
@@ -347,6 +352,15 @@ void main() {
   float reveal = 1.0 - armyVisionReveal(world);
   m.r *= reveal;
   m.g *= reveal;
+
+  // uShowEffective dumps right here — after the reveal above has landed but
+  // before tier/band selection reshapes it into an edge — so it's a direct
+  // read on what troops are actually doing to the mask, which uShowRaw
+  // (returning above, before this multiply) structurally can't show.
+  if (uShowEffective > 0.5) {
+    finalColor = vec4(m.r, m.g, m.b, 1.0);
+    return;
+  }
 
   // This quad draws one tier, so it reads one channel and one set of edge
   // parameters. uTier is a uniform, so these select without divergence —
