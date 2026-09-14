@@ -131,7 +131,7 @@ public class TroopTrainingAndDispatchTests
         // training timer resolves in seconds instead (see class remarks) ---
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 20.0),
+            new UpdateWorldSettingsRequest { SpeedFactor = 20.0 },
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 
