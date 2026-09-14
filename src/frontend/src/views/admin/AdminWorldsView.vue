@@ -214,6 +214,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <th>{{ $t('adminWorlds.columns.players') }}</th>
           <th>{{ $t('adminWorlds.columns.joinable') }}</th>
           <th>{{ $t('adminWorlds.columns.endboss') }}</th>
+          <th>{{ $t('adminWorlds.columns.seed') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -224,6 +225,7 @@ async function setRunState(world: AdminWorldResponse, action: string) {
           <td>{{ world.playerCount }} / {{ world.maxPlayers }}</td>
           <td>{{ world.joinsClosed ? $t('adminWorlds.joins.closed') : $t('adminWorlds.joins.open') }}</td>
           <td>{{ world.endbossTriggeredAt ? $t('adminWorlds.endbossStatus.triggered') : world.endbossAt ? $t('adminWorlds.endbossStatus.scheduled') : $t('adminWorlds.endbossStatus.none') }}</td>
+          <td>{{ world.seed }}</td>
         </tr>
       </tbody>
     </table>

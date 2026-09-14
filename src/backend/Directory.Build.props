@@ -14,6 +14,25 @@
     <RootNamespace>$(MSBuildProjectName)</RootNamespace>
   </PropertyGroup>
 
+  <!--
+    The version release-please owns, read from its manifest so the assembly (and
+    so GET /api/v1/info) reports the same number the tags and CHANGELOG do,
+    without anyone passing it in. Two candidate paths because the Docker build
+    flattens the tree: there this props file sits at /src with the manifest
+    beside it, while in the repository it is two levels down from the root.
+    A missing manifest is not an error — the SDK's own 1.0.0 stands in, and the
+    endpoint reports "unknown" rather than a wrong number.
+  -->
+  <PropertyGroup>
+    <ReleaseManifestPath Condition="Exists('$(MSBuildThisFileDirectory)../../.release-please-manifest.json')">$(MSBuildThisFileDirectory)../../.release-please-manifest.json</ReleaseManifestPath>
+    <ReleaseManifestPath Condition="'$(ReleaseManifestPath)' == '' AND Exists('$(MSBuildThisFileDirectory).release-please-manifest.json')">$(MSBuildThisFileDirectory).release-please-manifest.json</ReleaseManifestPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ReleaseManifestPath)' != ''">
+    <ReleaseManifestVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(ReleaseManifestPath)')), '"\."\s*:\s*"([^"]+)"').Groups[1].Value)</ReleaseManifestVersion>
+    <Version Condition="'$(ReleaseManifestVersion)' != ''">$(ReleaseManifestVersion)</Version>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(MSBuildProjectName)' != ''">
     <!-- Test projects opt out of packing and into the xunit.v3 conventions. -->
     <IsTestProject Condition="$(MSBuildProjectName.EndsWith('Tests'))">true</IsTestProject>

@@ -80,6 +80,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runState: 'running',
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
+    seed: 1234,
     generation: DEFAULT_GENERATION,
     ...overrides,
   };
@@ -108,8 +109,8 @@ function preview(overrides: Partial<WorldSeedPreviewResponse> = {}): WorldSeedPr
 }
 
 /** Mounts the view with its world already loaded. */
-async function mountView() {
-  adminListWorlds.mockResolvedValue([world()]);
+async function mountView(loadedWorld: AdminWorldResponse = world()) {
+  adminListWorlds.mockResolvedValue([loadedWorld]);
   const wrapper = mount(AdminWorldReseedView, { global });
   await flushPromises();
   return wrapper;
@@ -130,6 +131,26 @@ beforeEach(() => {
 });
 
 describe('AdminWorldReseedView', () => {
+  it("shows the world's currently active seed, and updates it once a reseed commits", async () => {
+    const wrapper = await mountView(world({ seed: 555 }));
+
+    expect(wrapper.find('[data-testid="current-seed"]').text()).toContain('555');
+
+    await previewSeed(wrapper, 9001);
+    adminReseedWorld.mockResolvedValue({
+      world: world({ playerCount: 0, seed: 9001 }),
+      seed: 9001,
+      islandCount: 7,
+      deletedSettlements: 2,
+    });
+
+    await wrapper.find('#confirm-name').setValue('Midgard');
+    await wrapper.findAll('button').find((b) => b.text().includes('Reseed world'))!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="current-seed"]').text()).toContain('9001');
+  });
+
   it('previews a candidate seed without offering to commit anything yet', async () => {
     const wrapper = await mountView();
 

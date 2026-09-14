@@ -36,8 +36,8 @@ internal static class RiverGenerator
         var paths = new List<List<HexCoord>>();
         foreach (var spring in springs)
         {
-            var path = TracePath(spring, islandLand, sampler, options, seed);
-            if (path.Count >= options.MinRiverLength)
+            var path = TracePath(spring, islandLand, sampler, options, seed, out var reachedSea);
+            if (reachedSea && path.Count >= options.MinRiverLength)
             {
                 paths.Add(path);
             }
@@ -116,111 +116,173 @@ internal static class RiverGenerator
     }
 
     /// <summary>
-    /// Walks from a spring toward the coast: never steps to a lower-depth
-    /// neighbour (so it can't loop or backtrack), scores the rest by depth
-    /// plus a meander noise term, and stops the step *before* it would leave
-    /// land, so the last tile in the path is always the river's mouth. Once
-    /// the walk already has an inflow direction, a step that would turn 120°
-    /// off straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) is a
-    /// legal candidate, just scored down by
+    /// Walks from a spring toward the coast: prefers stepping to a
+    /// non-decreasing-depth neighbour, scored by depth plus a meander noise
+    /// term, and stops the step *before* it would leave land, so the last
+    /// tile in the path is always the river's mouth. Once the walk already
+    /// has an inflow direction, a step that would turn 120° off
+    /// straight-ahead (a <see cref="RiverTileShape.Bend60"/> tile) is a legal
+    /// candidate, just scored down by
     /// <see cref="WorldGenerationOptions.SharpBendPenalty"/> so it stays
     /// rarer than a straight continuation or the gentler 60°-off
     /// <see cref="RiverTileShape.Bend"/> curve (see
     /// <c>docs/design/river-generation.md</c>).
     /// </summary>
+    /// <remarks>
+    /// The non-decreasing-depth rule is a preference, not a hard constraint:
+    /// when every non-decreasing-depth neighbour is a dead end (already
+    /// visited by this walk, or itself only leads to dead ends), the walk
+    /// backtracks and falls back to a lower-depth neighbour instead of
+    /// stopping short of the coast. Without this, a local dip in the depth
+    /// field strands the river mid-island with no route out, and it still
+    /// gets classified as a <see cref="RiverTileShape.Mouth"/> tile even
+    /// though it never touches the sea. <paramref name="reachedSea"/> is
+    /// <see langword="false"/> only when no route to the coast exists at
+    /// all (or the backtracking budget below is exhausted), in which case
+    /// the caller discards the path.
+    /// </remarks>
     private static List<HexCoord> TracePath(
         HexCoord spring,
         HashSet<HexCoord> islandLand,
         TerrainSampler sampler,
         WorldGenerationOptions options,
-        int seed)
+        int seed,
+        out bool reachedSea)
     {
         var path = new List<HexCoord> { spring };
         var visited = new HashSet<HexCoord> { spring };
-        var current = spring;
+        var frames = new Stack<TraceFrame>();
+        frames.Push(new TraceFrame(BuildCandidates(spring, path, islandLand, visited, sampler, options, seed)));
 
-        // islandLand.Count is a hard upper bound on path length (visited
-        // tiles are never revisited), so this can't loop forever.
-        for (var step = 0; step < islandLand.Count; step++)
+        // Each tile's candidate list is built once, when it's pushed, and
+        // every candidate in it is consumed at most once before the frame is
+        // popped — so total work is bounded by edges in the island's tile
+        // graph, not exponential. This cap is a defensive backstop against
+        // any pathological island shape, not the normal exit path.
+        var budget = islandLand.Count * 8;
+
+        while (frames.Count > 0 && budget-- > 0)
         {
-            var neighbours = current.Neighbours();
-
-            var touchesSea = false;
-            foreach (var neighbour in neighbours)
+            var current = path[^1];
+            if (TouchesSea(current, sampler))
             {
-                if (!sampler.IsLand(neighbour))
-                {
-                    touchesSea = true;
-                    break;
-                }
+                reachedSea = true;
+                return path;
             }
 
-            if (touchesSea)
+            var frame = frames.Peek();
+            if (frame.NextIndex >= frame.Candidates.Count)
             {
-                break;
+                // Dead end: no candidate from here leads anywhere new.
+                // Backtrack — unvisit this tile so a different branch from
+                // its parent can still route through it.
+                frames.Pop();
+                visited.Remove(current);
+                path.RemoveAt(path.Count - 1);
+                continue;
             }
 
-            // The two candidate directions a 120°-off-straight-ahead turn
-            // would take, once there's a previous tile to measure "straight
-            // ahead" from — scored down below rather than excluded, so a
-            // Bend60 tile stays possible but rarer. The direction straight
-            // back to that previous tile is excluded anyway by the `visited`
-            // check below.
-            int? sharpTurnA = null;
-            int? sharpTurnB = null;
-            if (path.Count >= 2)
+            var next = frame.Candidates[frame.NextIndex++];
+            if (!visited.Add(next))
             {
-                var inIndex = DirectionIndex(current, path[^2]);
-                var straightAhead = (inIndex + 3) % 6;
-                sharpTurnA = (straightAhead + 2) % 6;
-                sharpTurnB = (straightAhead + 4) % 6;
-            }
-
-            var currentDepth = sampler.IslandDepthAt(current) ?? 0.0;
-            HexCoord? bestCandidate = null;
-            var bestScore = double.NegativeInfinity;
-
-            for (var i = 0; i < neighbours.Length; i++)
-            {
-                var neighbour = neighbours[i];
-                if (!islandLand.Contains(neighbour) || visited.Contains(neighbour))
-                {
-                    continue;
-                }
-
-                var depth = sampler.IslandDepthAt(neighbour);
-                if (depth is null || depth < currentDepth)
-                {
-                    continue;
-                }
-
-                var noise = ValueNoise.Hash2(neighbour.Q, neighbour.R, seed + 43);
-                var score = depth.Value + (options.RiverMeanderWeight * noise);
-                if (i == sharpTurnA || i == sharpTurnB)
-                {
-                    score -= options.SharpBendPenalty;
-                }
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestCandidate = neighbour;
-                }
-            }
-
-            if (bestCandidate is not { } next)
-            {
-                // Dead end: no non-decreasing-depth land neighbour left to
-                // take, and not coastal yet either. Stop with what we have.
-                break;
+                continue;
             }
 
             path.Add(next);
-            visited.Add(next);
-            current = next;
+            frames.Push(new TraceFrame(BuildCandidates(next, path, islandLand, visited, sampler, options, seed)));
         }
 
+        reachedSea = false;
         return path;
+    }
+
+    private static bool TouchesSea(HexCoord tile, TerrainSampler sampler)
+    {
+        foreach (var neighbour in tile.Neighbours())
+        {
+            if (!sampler.IsLand(neighbour))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private sealed class TraceFrame(List<HexCoord> candidates)
+    {
+        public List<HexCoord> Candidates { get; } = candidates;
+        public int NextIndex { get; set; }
+    }
+
+    /// <summary>
+    /// Unvisited land neighbours of <paramref name="tile"/>, non-decreasing-depth
+    /// candidates first (ordered best score to worst), then lower-depth
+    /// fallback candidates (also best score to worst) — so the walk only
+    /// ever reaches for a downhill step once every uphill/flat option is
+    /// exhausted or has backtracked out as a dead end.
+    /// </summary>
+    private static List<HexCoord> BuildCandidates(
+        HexCoord tile,
+        List<HexCoord> path,
+        HashSet<HexCoord> islandLand,
+        HashSet<HexCoord> visited,
+        TerrainSampler sampler,
+        WorldGenerationOptions options,
+        int seed)
+    {
+        var neighbours = tile.Neighbours();
+
+        // The two candidate directions a 120°-off-straight-ahead turn would
+        // take, once there's a previous tile to measure "straight ahead"
+        // from — scored down below rather than excluded, so a Bend60 tile
+        // stays possible but rarer. The direction straight back to that
+        // previous tile is excluded anyway by the `visited` check below.
+        int? sharpTurnA = null;
+        int? sharpTurnB = null;
+        if (path.Count >= 2)
+        {
+            var inIndex = DirectionIndex(tile, path[^2]);
+            var straightAhead = (inIndex + 3) % 6;
+            sharpTurnA = (straightAhead + 2) % 6;
+            sharpTurnB = (straightAhead + 4) % 6;
+        }
+
+        var currentDepth = sampler.IslandDepthAt(tile) ?? 0.0;
+        var forward = new List<(HexCoord Coord, double Score)>();
+        var fallback = new List<(HexCoord Coord, double Score)>();
+
+        for (var i = 0; i < neighbours.Length; i++)
+        {
+            var neighbour = neighbours[i];
+            if (!islandLand.Contains(neighbour) || visited.Contains(neighbour))
+            {
+                continue;
+            }
+
+            var depth = sampler.IslandDepthAt(neighbour);
+            if (depth is null)
+            {
+                continue;
+            }
+
+            var noise = ValueNoise.Hash2(neighbour.Q, neighbour.R, seed + 43);
+            var score = depth.Value + (options.RiverMeanderWeight * noise);
+            if (i == sharpTurnA || i == sharpTurnB)
+            {
+                score -= options.SharpBendPenalty;
+            }
+
+            (depth.Value >= currentDepth ? forward : fallback).Add((neighbour, score));
+        }
+
+        forward.Sort((a, b) => b.Score.CompareTo(a.Score));
+        fallback.Sort((a, b) => b.Score.CompareTo(a.Score));
+
+        var candidates = new List<HexCoord>(forward.Count + fallback.Count);
+        candidates.AddRange(forward.Select(c => c.Coord));
+        candidates.AddRange(fallback.Select(c => c.Coord));
+        return candidates;
     }
 
     /// <summary>

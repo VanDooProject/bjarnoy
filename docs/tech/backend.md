@@ -327,14 +327,28 @@ needs to probe them.
 args, surfaced as `Build:*` configuration (`BuildInfoOptions`) so a `docker run
 -e Build__Commit=…` can still correct them.
 
-The commit has a second source, `Build:RuntimeCommit`, and the compose stack
-uses that one rather than the build arg. Coolify writes `SOURCE_COMMIT` into
-every deployment's runtime environment but keeps it out of the build unless
-asked, because a build arg that changes on every push invalidates the Docker
-cache — reading it at runtime costs nothing and needs no setting turned on. A
-commit baked into the image still wins where there is one: it describes the bits
-that are running, while the runtime value only describes what the platform
-believes it started. Fields read `"unknown"` when nothing
+Every field has fallbacks, so a deployment that passes nothing still identifies
+itself (`BuildInfo` resolves them, most authoritative first):
+
+| field | build arg | then | then |
+|---|---|---|---|
+| `commit` | `GIT_COMMIT` | `Build:RuntimeCommit` — Coolify's `SOURCE_COMMIT`, from the runtime environment | the SDK's `+sha` on `AssemblyInformationalVersion`, present only when built from a checkout |
+| `version` | `BUILD_VERSION` | the assembly's version, which `Directory.Build.props` reads out of `.release-please-manifest.json` | |
+| `builtAt` | `BUILT_AT` | the published assembly file's timestamp | |
+| `branch` | `GIT_BRANCH` | | |
+
+Two of those exist because the obvious source is unavailable where it matters.
+Coolify keeps `SOURCE_COMMIT` out of the build unless asked — a build arg that
+changes on every push invalidates the Docker cache — but writes it into the
+runtime environment unconditionally, so the compose stack reads it there and
+needs no setting turned on. And nothing can produce a build timestamp or a
+version in a compose file at all, so both come from the artifact itself.
+
+A commit baked into the image still wins where there is one: it describes the
+bits that are running, while the runtime value only describes what the platform
+believes it started. Anything no source can answer reads `"unknown"` rather than
+a guess — a wrong commit is worse than an absent one when the question is
+"is this the build I just pushed?". Fields read `"unknown"` when nothing
 stamped them, which is what a plain `dotnet run` reports. It exists because
 several branch deployments running side by side make "which commit is this one?"
 a real question. Who may read it, and whether the Scalar API reference is
@@ -488,6 +502,34 @@ Two things in the build are easy to miss:
   and nowhere else, reporting `/app/liblibSkiaSharp: cannot open shared object
   file` — a missing *dependency of* a native asset, not a missing asset. The
   image smoke test fetches a fog mask for that reason.
+
+## Behind a proxy
+
+Every deployment has at least one in front (Coolify's Traefik, often Cloudflare
+in front of that), so the app trusts two forwarded headers — `UseForwardedHeaders`
+in `Program.cs`:
+
+- **`X-Forwarded-For`** becomes `Connection.RemoteIpAddress`. Only one thing
+  reads it, `PlotReservationService`'s cap on concurrent plot reservations per
+  IP; without it every visitor arrives as the proxy's own address and that cap
+  becomes one budget shared by the whole internet.
+- **`X-Forwarded-Proto`** becomes `Request.Scheme`. The proxy terminates TLS and
+  speaks plain HTTP to the container, so otherwise the app believes every request
+  is `http://` and anything building an absolute URL from it builds a wrong one —
+  concretely the OpenAPI document's `servers` entry, which Scalar then fetches
+  and an `https://` page blocks as mixed content.
+
+`KnownProxies`/`KnownNetworks` are cleared, so both are trusted from wherever
+they arrive. That is deliberate — the proxy topology is not fixed — and it is
+only safe because nothing grants access, redirects, or sets a Secure-only cookie
+on the strength of either. Anything security-sensitive would need the proxy
+addresses pinned first.
+
+One caveat worth knowing before relying on the IP: `ForwardLimit` defaults to
+one hop, so with two proxies in the chain (Cloudflare, then Traefik) the address
+the app ends up with is Cloudflare's edge, not the visitor's. That degrades the
+reservation cap rather than breaking it, and fixing it properly means reading
+`CF-Connecting-IP` or pinning the chain length.
 
 ## The compose stack
 

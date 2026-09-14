@@ -113,6 +113,36 @@ editing it:
 Each deployment gets its own empty database, so a branch deployment starts from
 a fresh world and its own bootstrap Admin.
 
+## Behind Cloudflare
+
+Two settings that are not optional once the zone is proxied, both of which fail
+in ways that look like the app is broken when it never sees the request at all.
+
+**SSL/TLS mode must be Full (strict)**, not Flexible. On Flexible, Cloudflare
+terminates TLS and talks to the origin over plain HTTP; Coolify's proxy answers
+"redirect to https", Cloudflare hands that back to the browser, and the browser
+asks again — `ERR_TOO_MANY_REDIRECTS`, with a `Location` byte-identical to the
+request URL. Nothing in this app issues a redirect (there is no
+`UseHttpsRedirection`), so a redirect loop is always the proxy pair.
+
+**Preview hostnames must stay one label** under the zone. Coolify's default
+preview URL template is `{{pr_id}}.{{domain}}`, which for a domain of
+`bjarnoy.example.com` produces `239.bjarnoy.example.com` — two labels below the
+apex. Cloudflare's free Universal SSL covers `example.com` and `*.example.com`
+and no deeper, and a wildcard never matches across a dot, so the edge has no
+certificate to present and the browser reports
+`ERR_SSL_VERSION_OR_CIPHER_MISMATCH` before any HTTP happens. Join with a dash
+instead:
+
+```
+pr{{pr_id}}-{{domain}}     →  pr239-bjarnoy.example.com
+```
+
+One label, covered by the existing wildcard, no new certificate. (The paid
+Advanced Certificate Manager issues multi-level wildcards if the dotted form is
+worth $10/month; so does taking previews off the proxy and letting Coolify's
+Let's Encrypt serve them directly.)
+
 ## Without Coolify
 
 From the repository root:
