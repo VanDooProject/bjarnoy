@@ -5,14 +5,18 @@
 # for why the e2e suite is CPU-bound today: it assumes "no GPU on the
 # runner", which is true for GitHub-hosted VMs but not for this box.
 #
-# myoung34/github-runner is Ubuntu 22.04 (jammy)-based; if it moves to a
-# different base, re-check these package names.
+# myoung34/github-runner:latest is Ubuntu 20.04 (focal)-based (confirmed:
+# the project's other tags are focal/jammy/noble/debian variants, and
+# untagged "latest" is focal specifically) — pre-dating the Mesa
+# multiarch-split package rename that only landed in Ubuntu 24.04 (noble).
+# libglx-mesa0/libegl1-mesa0 don't exist on focal; these are focal's actual
+# names. Re-check if this ever moves to a different base image/tag.
 FROM myoung34/github-runner:latest
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dri \
-    libglx-mesa0 \
-    libegl1-mesa0 \
+    libgl1-mesa-glx \
+    libegl1-mesa \
     libgbm1 \
     mesa-va-drivers \
     mesa-utils \
