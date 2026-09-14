@@ -37,6 +37,7 @@
   keep it on the planning model until it's actually pinned down (and
   prefer reading the code over stacking up subagent theories — an
   unverified theory that sounds plausible is worse than no theory)
+- if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
 
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
