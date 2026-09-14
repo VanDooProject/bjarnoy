@@ -21,7 +21,8 @@
     "runState": "Run state",
     "players": "Players",
     "joinable": "Joinable",
-    "endboss": "Endboss"
+    "endboss": "Endboss",
+    "seed": "Seed"
   },
   "joins": {
     "closed": "Closed",

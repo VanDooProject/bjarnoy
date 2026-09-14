@@ -7,6 +7,7 @@
   "reseedError": "Could not reseed the world.",
   "heading": "Reseed “{name}”",
   "backToWorlds": "Back to worlds",
+  "currentSeed": "Currently active seed: {seed}",
   "warning": "Regenerating this map replaces its islands, so every settlement in the world is deleted with them ({playerCount} today). Worlds holding another player's settlement are refused outright.",
   "seedLabel": "Seed",
   "randomize": "Randomize",

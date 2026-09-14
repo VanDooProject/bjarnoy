@@ -39,6 +39,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runState: 'running',
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
+    seed: 1234,
     generation: {
       islandCellSize: 20,
       islandChance: 0.45,
@@ -78,12 +79,19 @@ beforeEach(() => {
 
 describe('AdminWorldsView', () => {
   it('lists every world with its admin-only fields', async () => {
-    const wrapper = await mountView([world(), world({ id: 'world-2', name: 'Utgard', runState: 'paused' })]);
+    const wrapper = await mountView([
+      world(),
+      world({ id: 'world-2', name: 'Utgard', runState: 'paused', seed: 5678 }),
+    ]);
 
     expect(wrapper.text()).toContain('Midgard');
     expect(wrapper.text()).toContain('Utgard');
     expect(wrapper.text()).toContain('2 / 500');
     expect(wrapper.text()).toContain('paused');
+    // The world's active generation seed, surfaced so an admin can tell what
+    // seed produced the current map without having to regenerate it first.
+    expect(wrapper.text()).toContain('1234');
+    expect(wrapper.text()).toContain('5678');
   });
 
   it('confirms before changing a world run state', async () => {
