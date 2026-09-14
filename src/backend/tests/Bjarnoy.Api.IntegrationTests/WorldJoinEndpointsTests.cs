@@ -115,7 +115,7 @@ public sealed class WorldJoinEndpointsTests(SqliteApiFixture fixture) : IClassFi
 
         var patched = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: null, JoinsClosed: true),
+            new UpdateWorldSettingsRequest { JoinsClosed = true },
             Ct);
         Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
 
