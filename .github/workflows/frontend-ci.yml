@@ -72,37 +72,30 @@ jobs:
   # hand against real per-file CI durations (see the doc) to land within
   # ~35s of each other; re-measure and re-tag if the suite's shape changes
   # significantly (e.g. a new consistently-slow spec file).
-  # @g3 runs on the org's self-hosted runner (4c8t) instead of ubuntu-latest,
-  # but only for already-merged `push` commits: measured at 6m53s there vs.
-  # 13-14min on ubuntu-latest (see the runner benchmark in PR #256) — it was
-  # consistently this job's slowest shard, so moving just it keeps all 4
-  # shards running in parallel (3 on GitHub-hosted VMs, 1 on our own runner)
-  # instead of serializing everything onto the one self-hosted machine,
-  # which would be slower overall than today despite each shard
-  # individually running faster there.
-  #
-  # `pull_request` still uses ubuntu-latest for every shard: this workflow
-  # doesn't restrict PRs to same-repo branches, so an external contributor's
-  # fork PR would otherwise get its workflow code executed on our own
-  # machine — only code that's already landed on `main` runs there.
+  # TEMPORARY: all 4 shards routed to self-hosted to benchmark real 4-way
+  # parallelism now that more runners have been registered — see PR #256.
+  # Still guarded against fork PRs (a `push` event has no `pull_request`
+  # context at all, so the head-repo check only matters for pull_request
+  # runs, and evaluates true here since this is a same-repo branch, not a
+  # fork) — a fork PR still falls back to ubuntu-latest for every shard.
   e2e:
-    runs-on: ${{ github.event_name == 'push' && matrix.runner || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && matrix.runner || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: g1
             args: --grep @g1
-            runner: ubuntu-latest
+            runner: self-hosted
           - name: g2
             args: --grep @g2
-            runner: ubuntu-latest
+            runner: self-hosted
           - name: g3
             args: --grep @g3
             runner: self-hosted
           - name: rest
             args: --grep-invert "@g1|@g2|@g3"
-            runner: ubuntu-latest
+            runner: self-hosted
     steps:
       - uses: actions/checkout@v4
 
