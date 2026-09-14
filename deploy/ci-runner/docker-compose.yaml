@@ -1,0 +1,133 @@
+# Self-hosted GitHub Actions runners for VanDooProject's org, with the org's
+# iGPU (an i7-6700's Intel HD 530) passed through so Chromium gets real
+# hardware-accelerated WebGL for the e2e suite instead of CPU-bound software
+# rendering — see deploy/ci-runner/Dockerfile for why, and the "gpu" label
+# below for how frontend-ci.yml targets these runners specifically.
+#
+# In Coolify: create a Service (not an Application — nothing here serves
+# HTTP) from this repository, build pack "Docker Compose", and set
+#
+#   Base Directory:          /
+#   Docker Compose Location: /deploy/ci-runner/docker-compose.yaml
+#
+# Base Directory has to stay `/`, same reason as deploy/docker-compose.yaml:
+# the build context below is relative to it, not to deploy/ci-runner/.
+# Git submodules are irrelevant here — the runner doesn't need bjarnoy's own
+# source checked out at deploy time, only at job time (which each workflow
+# run does itself via actions/checkout).
+#
+# Required environment variables (set these in Coolify, not a committed
+# .env — ACCESS_TOKEN is a secret): RUNNER_SCOPE, ORG_NAME, ACCESS_TOKEN.
+# See deploy/ci-runner/.env.example for what each is and their defaults.
+#
+# Four replicas because that matches frontend-ci.yml's e2e job's 4-way
+# shard matrix (@g1/@g2/@g3/rest) — one concurrent Chromium instance per
+# physical core on this 4c8t box. Each needs its own service block rather
+# than a scaled single service: myoung34/github-runner's /runner volume
+# holds that instance's own registration state and work directory, and a
+# scaled service would have every replica mount (and clobber) the same
+# volume. RUNNER_NAME_SUFFIX stays off since each replica's
+# RUNNER_NAME_PREFIX is already unique.
+x-runner-gpu: &runner-gpu
+  build:
+    context: .
+    dockerfile: deploy/ci-runner/Dockerfile
+  devices:
+    # The iGPU's render node. Passing the whole /dev/dri directory rather
+    # than just renderD128 also carries card0, which some Mesa/EGL init
+    # paths probe even for headless rendering.
+    - /dev/dri:/dev/dri
+  group_add:
+    # /dev/dri's render node is typically group-owned by "render" on modern
+    # distros and "video" on older ones — check `ls -l /dev/dri` on the host
+    # if the container can't open it, and adjust.
+    - video
+    - render
+  environment: &runner-gpu-env
+    RUNNER_NAME_SUFFIX: 'false'
+    RUNNER_WORKDIR: /runner/work
+    RUNNER_SCOPE: '${RUNNER_SCOPE:-org}'
+    # Distinct from the org's other (CPU-only) runners, if any: lets
+    # frontend-ci.yml's e2e job target `runs-on: [self-hosted, gpu]`
+    # specifically instead of landing on whichever self-hosted runner is
+    # free.
+    LABELS: '${LABELS:-self-hosted,gpu}'
+    ORG_NAME: '${ORG_NAME}'
+    REPO_URL: '${REPO_URL}'
+    ACCESS_TOKEN: '${ACCESS_TOKEN}'
+    DOCKER_HOST: tcp://dind:2376
+    DOCKER_TLS_VERIFY: '1'
+    DOCKER_CERT_PATH: /certs/client
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - "ps aux | grep '[R]unner' > /dev/null || exit 1"
+    interval: 5s
+    timeout: 10s
+    retries: 15
+  depends_on:
+    - dind
+
+services:
+  runner-gpu-1:
+    <<: *runner-gpu
+    environment:
+      <<: *runner-gpu-env
+      RUNNER_NAME_PREFIX: '${RUNNER_NAME_PREFIX:-coolify-runner}-gpu-1'
+    volumes:
+      - runner-gpu-1-data:/runner
+      - docker-certs-client:/certs/client
+
+  runner-gpu-2:
+    <<: *runner-gpu
+    environment:
+      <<: *runner-gpu-env
+      RUNNER_NAME_PREFIX: '${RUNNER_NAME_PREFIX:-coolify-runner}-gpu-2'
+    volumes:
+      - runner-gpu-2-data:/runner
+      - docker-certs-client:/certs/client
+
+  runner-gpu-3:
+    <<: *runner-gpu
+    environment:
+      <<: *runner-gpu-env
+      RUNNER_NAME_PREFIX: '${RUNNER_NAME_PREFIX:-coolify-runner}-gpu-3'
+    volumes:
+      - runner-gpu-3-data:/runner
+      - docker-certs-client:/certs/client
+
+  runner-gpu-4:
+    <<: *runner-gpu
+    environment:
+      <<: *runner-gpu-env
+      RUNNER_NAME_PREFIX: '${RUNNER_NAME_PREFIX:-coolify-runner}-gpu-4'
+    volumes:
+      - runner-gpu-4-data:/runner
+      - docker-certs-client:/certs/client
+
+  dind:
+    image: 'docker:dind'
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - 'docker-certs-ca:/certs/ca'
+      - 'docker-certs-client:/certs/client'
+      - 'dind-storage:/var/lib/docker'
+    healthcheck:
+      test:
+        - CMD
+        - docker
+        - info
+      interval: 5s
+      timeout: 10s
+      retries: 15
+
+volumes:
+  runner-gpu-1-data:
+  runner-gpu-2-data:
+  runner-gpu-3-data:
+  runner-gpu-4-data:
+  docker-certs-ca:
+  docker-certs-client:
+  dind-storage:

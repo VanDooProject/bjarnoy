@@ -243,6 +243,17 @@ refused before it is attempted.
 Scope the token to `read`. `read:sensitive` returns environment variable
 *values* for every resource, which is every deployment secret on the instance.
 
+## Self-hosted CI runner (`deploy/ci-runner`)
+
+A separate concern from the app deployment above: `deploy/ci-runner/docker-compose.yaml`
+deploys GPU-capable, org-scoped self-hosted GitHub Actions runners (for
+`frontend-ci.yml`'s e2e job) as a Coolify **Service**, not an Application —
+nothing here serves HTTP. See that compose file's own header comment for the
+Coolify settings and required environment variables, and
+`deploy/ci-runner/Dockerfile` for why it exists (real hardware-accelerated
+WebGL instead of CPU-bound software rendering — this repo's e2e suite mounts
+real WebGL/PixiJS canvases, see `docs/ci/e2e-sharding.md`).
+
 ## Without Coolify
 
 From the repository root:
