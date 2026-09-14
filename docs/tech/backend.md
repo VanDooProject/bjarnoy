@@ -359,6 +359,11 @@ count as production, since guessing "not production" would open a debugging
 surface on exactly the deployment that must not have one. A branch deployment is
 therefore debuggable the moment it comes up, with nothing to configure.
 
+A Coolify **preview** deployment counts as production by that rule, because
+Coolify reports the application's branch (`main`) rather than the PR's — the
+override below is how a preview gets its API reference back. See
+`deploy/README.md`.
+
 Override per deployment when needed:
 
 ```bash

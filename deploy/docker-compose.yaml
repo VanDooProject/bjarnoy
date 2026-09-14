@@ -46,6 +46,19 @@ services:
       # one every run. Magic variables like this must be referenced bare:
       # a `:-default` would end up as part of the generated variable's name.
       POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+    networks:
+      # `postgres` has to keep resolving under a name this file cannot predict.
+      # A preview deployment renames every service — Coolify appends `-pr-<id>`
+      # (addPreviewDeploymentSuffix), so `postgres` becomes `postgres-pr-239` —
+      # and a service's name is its DNS name, while nothing rewrites the
+      # hostname inside Database__ConnectionString below. Without this alias the
+      # migrator cannot reach the database, exits 1, and `app` never starts at
+      # all: every preview answers 404 while the dashboard reports a healthy
+      # postgres. The network is compose-project-scoped, so each deployment's
+      # alias is its own.
+      stack:
+        aliases:
+          - postgres
     volumes:
       # /var/lib/postgresql, not the /var/lib/postgresql/data of 17 and older.
       # 18 moved its data one level down into a major-version subdirectory
@@ -110,7 +123,11 @@ services:
       disable: true
     environment: &database
       Database__Provider: PostgreSql
+      # Host=postgres is the alias declared on the postgres service, not its
+      # service name — see the note there.
       Database__ConnectionString: Host=postgres;Port=5432;Database=gamedb;Username=bjarnoy;Password=${SERVICE_PASSWORD_POSTGRES}
+    networks:
+      - stack
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,6 +159,8 @@ services:
     # the compose network, from the domain configured on this service.
     expose:
       - '8080'
+    networks:
+      - stack
     volumes:
       # Unused under the PostgreSql provider, but the image declares
       # `VOLUME /data` for its SQLite mode; naming it here keeps redeploys
@@ -156,3 +175,10 @@ services:
 volumes:
   gamedb-data:
   app-data:
+
+networks:
+  # Declared rather than relying on compose's implicit `default`: Coolify
+  # rewrites each service's `networks:` list and would otherwise leave the
+  # services with only its own per-resource network, where the alias above has
+  # nothing to attach to.
+  stack:

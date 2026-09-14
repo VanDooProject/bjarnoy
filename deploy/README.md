@@ -113,6 +113,32 @@ editing it:
 Each deployment gets its own empty database, so a branch deployment starts from
 a fresh world and its own bootstrap Admin.
 
+### Preview deployments
+
+Coolify can deploy a PR as its own stack. Two things about that differ from a
+branch deployment, and both are invisible until something 404s:
+
+**Every service is renamed.** `postgres` becomes `postgres-pr-239`
+(`addPreviewDeploymentSuffix`), and a compose service's name is its DNS name —
+but nothing rewrites a hostname written inside an environment variable, so
+`Database__ConnectionString`'s `Host=postgres` would stop resolving. That is why
+the `postgres` service declares an alias on a shared `stack` network: keep both
+when editing, or the migrator exits 1, `app` never starts behind
+`service_completed_successfully`, and every path answers 404 while the dashboard
+happily reports postgres healthy.
+
+**`COOLIFY_BRANCH` is the application's branch, not the PR's** — it reads `main`
+on a preview of a PR into `main`. So `/api/v1/info` reports `branch: main`
+there, and, since the diagnostics gate treats `main` as production, a preview
+would hide the very API reference it exists to expose. Set these in the app's
+**Preview Deployments** environment variables, where they apply to previews
+only:
+
+```bash
+Diagnostics__ExposeApiReference=true
+Diagnostics__PublicBuildInfo=true
+```
+
 ## Behind Cloudflare
 
 Two settings that are not optional once the zone is proxied, both of which fail
