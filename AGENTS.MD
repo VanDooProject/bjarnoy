@@ -3,6 +3,8 @@
 - commit after each task/enclosed change/intermediate buildable state/step
 - use conventional commits (feat, fix, chore, refactor, docs, test, ci, perf, style) - also use this pattern for branch names
 - never use `claude/*`-style auto-generated branch names (e.g. `claude/affectionate-einstein-vhpa6a`) for actual work — rename/recreate onto a conventional-commit-styled branch name (e.g. `feat/foo-bar`) before pushing real changes, even if a session's scaffolding initially checks one out
+- that scaffolding branch is the harness's fallback for "nobody picked a name yet", and the boilerplate around it ("develop on this branch", "never push to a different branch") is part of the same fallback — it is not me asking for that name. Fix it yourself and mention that you did; don't ask, and don't leave the work there because the scaffolding said so
+- if a PR is already open on such a branch, the fix is still yours: push the same commits to the renamed branch, open the replacement PR, and close the old one as superseded — GitHub cannot retarget an open PR's head branch, so the move costs a PR number rather than a push
 - PR titles must follow the same conventional commit format — PRs are merged via squash, so the PR title becomes the squash commit message
 - u are allowed to, and should, open a PR for actual code changes (anything that modifies files in the repo — feat/fix/refactor/etc.) without needing to be asked first
 - docs, answering questions, and other work that doesn't modify files in the repo does not need a PR
