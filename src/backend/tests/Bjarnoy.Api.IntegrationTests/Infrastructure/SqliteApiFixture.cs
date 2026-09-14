@@ -78,6 +78,23 @@ public static class HttpResponseExtensions
             : null;
     }
 
+    /// <summary>
+    /// Reads the machine-readable `error` code off a ProblemDetails body —
+    /// e.g. `world_not_found`/`settlement_not_found` (see
+    /// WorldEndpoints.WorldNotFoundProblem, SettlementEndpoints.SettlementNotFoundProblem)
+    /// — the field a client checks before dropping a stale id, since a bare
+    /// 404 status alone doesn't say whether that's safe.
+    /// </summary>
+    public static async Task<string?> ErrorCodeAsync(
+        this HttpResponseMessage response,
+        CancellationToken cancellationToken = default)
+    {
+        var problem = await response.ReadStrictAsync<ProblemDetails>(cancellationToken);
+        return problem.Extensions.TryGetValue("error", out var value) && value is JsonElement element
+            ? element.GetString()
+            : null;
+    }
+
     public static Task<HttpResponseMessage> PostJsonAsync<T>(
         this HttpClient client,
         string url,

@@ -112,6 +112,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         var response = await client.GetAsync($"/api/v1/worlds/{Guid.CreateVersion7()}", Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("world_not_found", await response.ErrorCodeAsync(Ct));
     }
 
     [Fact]
@@ -165,6 +166,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         var response = await client.GetAsync($"/api/v1/worlds/{Guid.CreateVersion7()}/islands", Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("world_not_found", await response.ErrorCodeAsync(Ct));
     }
 
     [Fact]
@@ -239,6 +241,22 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
             $"/api/v1/worlds/{Guid.CreateVersion7()}/tiles?qMin=0&qMax=1&rMin=0&rMax=1", Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("world_not_found", await response.ErrorCodeAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Fog_mask_of_an_unknown_world_is_a_404_with_world_not_found()
+    {
+        using var client = _fixture.CreateClient();
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/v1/worlds/{Guid.CreateVersion7()}/fog-mask");
+        request.Headers.Add("X-Owner-Id", "test-owner");
+
+        var response = await client.SendAsync(request, Ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("world_not_found", await response.ErrorCodeAsync(Ct));
     }
 
     [Theory]
