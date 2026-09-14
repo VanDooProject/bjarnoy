@@ -74,12 +74,17 @@ jobs:
   # significantly (e.g. a new consistently-slow spec file).
   # TEMPORARY: all 4 shards routed to self-hosted to benchmark real 4-way
   # parallelism now that more runners have been registered — see PR #256.
-  # Still guarded against fork PRs (a `push` event has no `pull_request`
-  # context at all, so the head-repo check only matters for pull_request
-  # runs, and evaluates true here since this is a same-repo branch, not a
-  # fork) — a fork PR still falls back to ubuntu-latest for every shard.
+  # Restricted to this benchmark branch specifically (on top of the
+  # same-repo/non-fork check) so no other PR or push can pick up
+  # self-hosted just by existing while this is still on main's history.
+  #
+  # bjarnoy is public solely to get free GitHub-hosted CI minutes; that's
+  # also why self-hosted runners were push-only before this benchmark and
+  # need to go back to being restricted (or dropped) once it's done. Once
+  # self-hosted e2e performance is good enough to rely on, the repo moves
+  # to private and this fork/branch gating stops being necessary.
   e2e:
-    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && matrix.runner || 'ubuntu-latest' }}
+    runs-on: ${{ ((github.event_name == 'push' && github.ref_name == 'ci/benchmark-self-hosted-e2e-runner') || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ci/benchmark-self-hosted-e2e-runner')) && matrix.runner || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
