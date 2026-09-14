@@ -210,7 +210,19 @@ export class FogMaskLayer {
       uWind: { value: new Float32Array(WIND), type: 'vec2<f32>' },
       uMaskBlend: { value: 1, type: 'f32' },
       uShowRaw: { value: 0, type: 'f32' },
-      uArmyVisionSources: { value: new Float32Array(MAX_ARMY_VISION_SOURCES * 2), type: 'vec2<f32>' },
+      // `size` is what makes this an *array* uniform. Pixi defaults it to 1
+      // (UniformGroup), and a size-1 vec2 syncs through gl.uniform2f(v[0],
+      // v[1]) — only the first point ever reaches the GPU, leaving the
+      // shader's remaining `uArmyVisionSources` slots at their default (0,0).
+      // With one army in transit that is invisible; the second one reads slot
+      // 1 and punches a full-strength reveal disc at world origin, nowhere
+      // near any army. Declaring the size switches the sync to uniform2fv,
+      // which uploads the whole array.
+      uArmyVisionSources: {
+        value: new Float32Array(MAX_ARMY_VISION_SOURCES * 2),
+        type: 'vec2<f32>',
+        size: MAX_ARMY_VISION_SOURCES,
+      },
       uArmyVisionCount: { value: 0, type: 'f32' },
       uArmyVisionRadius: { value: 0, type: 'f32' },
     });
