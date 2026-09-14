@@ -414,6 +414,7 @@ export interface AdminWorldResponse {
   runState: string;
   runStateSince: string;
   createdAt: string;
+  seed: number;
   generation: WorldGenerationSettings;
 }
 

@@ -2,7 +2,6 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.Hosting;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.Extensions.Options;
 
 namespace Bjarnoy.Api.Endpoints;
 
@@ -26,9 +25,6 @@ namespace Bjarnoy.Api.Endpoints;
 /// </remarks>
 public static class InfoEndpoints
 {
-    /// <summary>How much of the commit SHA <c>ShortCommit</c> carries.</summary>
-    public const int ShortCommitLength = 7;
-
     /// <param name="publicAccess">
     /// Whether anyone may read it. False puts it behind the Admin policy, which
     /// is what a production build does — see <c>DiagnosticsOptions</c>.
@@ -54,27 +50,12 @@ public static class InfoEndpoints
         return app;
     }
 
-    private static Ok<BuildInfoResponse> GetBuildInfo(
-        IOptions<BuildInfoOptions> options,
-        IHostEnvironment environment)
-    {
-        var build = options.Value;
-        var commit = build.ResolvedCommit;
-
-        return TypedResults.Ok(new BuildInfoResponse(
+    private static Ok<BuildInfoResponse> GetBuildInfo(BuildInfo build, IHostEnvironment environment) =>
+        TypedResults.Ok(new BuildInfoResponse(
             Version: build.Version,
-            Commit: commit,
-            ShortCommit: Shorten(commit),
+            Commit: build.Commit,
+            ShortCommit: build.ShortCommit,
             Branch: build.Branch,
             BuiltAt: build.BuiltAt,
             Environment: environment.EnvironmentName));
-    }
-
-    /// <summary>
-    /// The first few characters of a real SHA. Anything shorter than that —
-    /// <c>"unknown"</c>, or an already-short SHA — is passed through whole
-    /// rather than sliced into something that looks like a different commit.
-    /// </summary>
-    private static string Shorten(string commit) =>
-        commit.Length > ShortCommitLength ? commit[..ShortCommitLength] : commit;
 }

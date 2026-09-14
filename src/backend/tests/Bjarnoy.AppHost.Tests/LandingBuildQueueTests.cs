@@ -130,7 +130,7 @@ public class LandingBuildQueueTests
 
         var speedUpResponse = await adminHttpClient.PatchAsJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 10.0),
+            new UpdateWorldSettingsRequest { SpeedFactor = 10.0 },
             cancellationToken);
         speedUpResponse.EnsureSuccessStatusCode();
 

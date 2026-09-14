@@ -31,7 +31,7 @@
 import { computed, ref, watchEffect } from 'vue';
 import type { AxialCoord } from '../../lib/hex/coords';
 import { useMapAnchor, type MapAnchorRenderer } from '../../composables/useMapAnchor';
-import { arrowTipOffset } from '../../lib/map/guidanceArrowGeometry';
+import { arrowTipOffset, HEX_TARGET_RADIUS_PX } from '../../lib/map/guidanceArrowGeometry';
 
 const props = withDefaults(
   defineProps<{
@@ -41,10 +41,19 @@ const props = withDefaults(
     label: string;
     /** Degrees; the mockup's arrow points down-and-toward the hex at roughly this range across its frames. */
     angle?: number;
+    /**
+     * Radius, in screen px, of the thing being pointed at, so the tip stops
+     * clear of its edge rather than inside it. Defaults to a point target,
+     * which is what the hex-anchored screens want (a hex has no fixed screen
+     * size — it changes with zoom). The ring-menu bubble mode passes its own
+     * real radius; see `guidanceArrowGeometry`'s `ARROW_TIP_GAP_PX` for why
+     * one flat value for both was wrong.
+     */
+    targetRadius?: number;
     /** Which side of the arrow the label chip sits on. */
     chipSide?: 'left' | 'right';
   }>(),
-  { angle: 38, chipSide: 'left' },
+  { angle: 38, targetRadius: HEX_TARGET_RADIUS_PX, chipSide: 'left' },
 );
 
 const anchorEl = ref<HTMLElement | null>(null);
@@ -65,7 +74,7 @@ watchEffect(() => {
 // guidance step changes, not every frame the way the anchor position does),
 // so a plain computed — recalculated on prop change, not per animation
 // frame — is the right cost here.
-const tipOffset = computed(() => arrowTipOffset(props.angle));
+const tipOffset = computed(() => arrowTipOffset(props.angle, props.targetRadius));
 </script>
 
 <template>
