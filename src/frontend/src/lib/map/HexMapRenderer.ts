@@ -247,6 +247,8 @@ export interface FogDebugFlags {
   terrainCull: boolean;
   /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
   waveCull: boolean;
+  /** §1c's live, client-computed army vision reveal (armyVisionPoints/setArmyVisionSources below) — off stops feeding any army position into the shader between mask fetches, so fog only ever reflects the last backend-authoritative mask. Useful for telling a client-side interpolation/reveal bug apart from a backend mask bug. */
+  armyVisionReveal: boolean;
 }
 /**
  * Fog knobs that are a *value* rather than an on/off — same debug-only
@@ -276,6 +278,7 @@ export const fogDebugFlags: FogDebugFlags = {
   realmBorders: true,
   terrainCull: true,
   waveCull: true,
+  armyVisionReveal: true,
 };
 
 // Per-rebuild/per-frame stats, read by FogPerfPanel — §2.8's "what's
@@ -3887,7 +3890,7 @@ export class HexMapRenderer {
       // home or as a guest garrison already sits inside its settlement's own
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
-      if (army.movement) armyVisionPoints.push({ x: point.x, y: point.y });
+      if (army.movement && fogDebugFlags.armyVisionReveal) armyVisionPoints.push({ x: point.x, y: point.y });
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;

@@ -39,6 +39,7 @@ const LABELS: Record<keyof FogDebugFlags, string> = {
   realmBorders: 'Realm borders enabled',
   terrainCull: 'Terrain: cull past fog cutoff',
   waveCull: 'Waves: cull past fog cutoff',
+  armyVisionReveal: 'Army vision reveal (client-side correction)',
 };
 
 watch(
