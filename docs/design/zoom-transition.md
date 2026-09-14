@@ -69,6 +69,8 @@ the source doc for the tracking issue.
    the extraction site. Worth flagging explicitly: until pinch lands,
    mobile has no way to zoom the map at all (see §1) — this is the
    motivating case for the follow-up, not just a nice-to-have.
+   **Shipped** — see §9.2: pinch drives the same `zoomBy()` seam as wheel,
+   `pointerId`-keyed tracking lives in `pinchGesture.ts`.
 
 ## 3. Key design decisions
 
@@ -312,3 +314,36 @@ Playtesting the shipped defaults surfaced three more fixes:
   `MapView.vue` passes `mode === 'settlement'` — the title stays visible in
   world mode (no in-scene badge there) and disappears once past the
   transition into settlement mode.
+
+### 9.2 Mobile pinch-to-zoom — shipped
+
+The §2 follow-up landed: two-finger pinch now zooms (and pans) the map on
+touch, through the same `zoomBy()` seam wheel zoom always used, so it also
+drives the world↔settlement transition above exactly like a wheel gesture
+does.
+
+- New `pinchGesture.ts` module — `pinchStep()` (pure factor/midpoint/pan
+  math off two touch positions) and `PinchTracker` (a `pointerId`-keyed
+  tracker: forms a pair from the first two fingers down, re-baselines
+  whenever that pair's composition changes so a stray third finger or a
+  finger handoff never produces a spurious jump). DOM-free, same reasoning
+  as this module: unit-testable under Vitest's Node environment.
+- `HexMapRenderer.ts`'s pointer handling became `pointerId`-aware as part of
+  this (it previously tracked a single `lastPointer` with no id at all — a
+  second finger's own `pointerup` could already end an unrelated drag).
+  `onPointerMove`'s new pinch branch pans by the pinch midpoint's movement,
+  then calls `zoomBy()` anchored on that same midpoint. A `pointercancel`
+  listener was added alongside `pointerup` so an orphaned touch pointer
+  (OS gesture steal, palm rejection) can't wedge future pinch geometry.
+- A second finger landing while a waypoint pin drag (Issue #93) is in
+  progress is ignored outright rather than promoted into a pinch — a pin
+  drag has already written intermediate positions to the store per hex
+  crossed, so there's no clean gesture to "hand off" to.
+- `touch-action: none` stays on both map canvases (it always suppressed the
+  browser's native pinch too; our own handler now fully replaces it rather
+  than leaving mobile with neither).
+- Tests: `pinchGesture.test.ts` (pure math + tracker state machine).
+  Pointer-routing at the `HexMapRenderer` class level isn't unit-testable in
+  this repo's Node-environment Vitest setup (no DOM/Pixi), so it's covered
+  by `e2e/pinch-zoom.spec.ts` instead, driving real two-finger touch via
+  CDP's `Input.dispatchTouchEvent`.
