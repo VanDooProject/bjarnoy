@@ -1,6 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
+import { loginTestUser } from './helpers';
 import { AdminTablePage, SettlementPage } from './pages';
 
 /**
@@ -101,11 +102,13 @@ async function gotoLeaderboards(page: Page) {
 test.describe('leaderboards', { tag: '@g2' }, () => {
   test('is reachable via the HUD nav link from the world map', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
-    // Leaderboards is rendered by HudNav regardless of a founded settlement
-    // (see HudNav.vue's `v-if` guarding only the Settlement/World map/Landing
-    // links, not this one) — but landing-page-defects.md L1 means HudNav
-    // itself is no longer mounted pre-founding at all, so founding first is
-    // the lightest way to reach any HudNav link now.
+    // landing-page-defects.md L1 means HudNav itself is no longer mounted
+    // pre-founding at all, so founding first is the lightest way to reach
+    // any HudNav link now. Returning-player nav work then layered an
+    // `auth.isAuthenticated` requirement on top of Leaderboards specifically
+    // (previously unconditioned — see HudNav.vue), so a real session is
+    // needed too.
+    await loginTestUser(page);
     await SettlementPage.found(page);
     await page.getByRole('button', { name: 'Leaderboards' }).click();
     await page.waitForURL('**/leaderboards');

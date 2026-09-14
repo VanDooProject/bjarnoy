@@ -1,0 +1,16 @@
+{
+  "title": "Wähle eine Welt",
+  "lede": "Tritt einer Welt bei, die noch neue Jarls aufnimmt, oder kehre zu einem Reich zurück, das du anderswo bereits gegründet hast.",
+  "loading": "Welten werden geladen…",
+  "error": "Die Liste der Welten konnte nicht geladen werden — versuche es gleich noch einmal.",
+  "empty": "Gerade ist keine Welt offen zum Beitreten.",
+  "players": "{count} / {max} Spieler",
+  "speed": "{factor}x Geschwindigkeit",
+  "youAreHere": "Du bist hier",
+  "yourRealm": "Dein Reich",
+  "join": "Beitreten",
+  "return": "Zurückkehren",
+  "joining": "Wird beigetreten…",
+  "joinError": "Der Welt konnte nicht beigetreten werden — versuche es gleich noch einmal.",
+  "loginNudge": "Melde dich an, um deine Reiche geräteübergreifend zu behalten."
+}
