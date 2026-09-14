@@ -16,11 +16,6 @@
     "reserved": "({n} reserved)",
     "rate": "+{n}/h"
   },
-  "realmPanel": {
-    "level": "Lv {level}",
-    "claims": "Realm claims {count} hexes",
-    "backToWorldMap": "← World map"
-  },
   "hoverTooltip": {
     "level": "LEVEL {level}",
     "clickToOpen": "CLICK TO OPEN",

@@ -80,11 +80,11 @@ const garrison = computed(() =>
 // Issue #40 phase 4: guest (Support) armies currently stationed at this
 // settlement — the host's read-only view (`GET /settlements/{id}/guests`,
 // fetched alongside `world.armies` — see world.ts's `refreshArmies`). Shown
-// as a small section under Garrison rather than a separate HUD panel: every
-// screen corner is already taken (BuildQueuePanel top-left, this panel
-// top-right, RealmPanel bottom-left, ArmyPanel bottom-right — see each
-// panel's own `position: absolute`), and a guest garrison is conceptually
-// close kin to "who's standing at home" already shown just above it. No
+// as a small section under Garrison rather than a separate HUD panel: most
+// screen corners are already taken (BuildQueuePanel top-left, this panel
+// top-right, ArmyPanel bottom-right — see each panel's own `position:
+// absolute`), and a guest garrison is conceptually close kin to "who's
+// standing at home" already shown just above it. No
 // recall/action buttons here — the host cannot command a guest army, only
 // its owner can (via their own settlement's ArmyPanel).
 const guests = computed(() =>

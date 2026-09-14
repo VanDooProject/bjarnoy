@@ -3,11 +3,13 @@
 // docs/design/zoom-transition.md §2. Mounted by MapView.vue (the shared
 // /world and /settlement host) under ?debug=1, same as the fog/water panels.
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import DebugPanel from './DebugPanel.vue';
 import { clampTuning, zoomTransitionTuning, type ZoomTransitionTuning } from '../../lib/map/zoomTransition';
 import type { HexMapRenderer } from '../../lib/map/HexMapRenderer';
 
 const props = defineProps<{ renderer?: HexMapRenderer | null }>();
+const router = useRouter();
 
 // zoomTransitionTuning itself stays a plain object — the renderer reads it
 // directly on the hot path (onWheel) and HexMapRenderer.ts is deliberately
@@ -84,6 +86,15 @@ const ZOOM_LABEL = 'Current zoom';
 const ENTER_LABEL = 'Zoom in → settlement at';
 const EXIT_LABEL = 'Zoom out → world at';
 const FADE_LABEL = 'Fade duration';
+// Zoom drives settlement<->world switching for real players (see this
+// component's own header comment) — RealmPanel's old manual "← World map"
+// button was the only other way to force a view, and it's gone now that the
+// zoom transition covers that. This is the one remaining override, kept
+// debug-only on purpose: forcing a view outside the zoom threshold is a
+// dev/testing shortcut, not something a real player should be able to do.
+const FORCE_VIEW_LABEL = 'Force view (bypasses zoom)';
+const FORCE_SETTLEMENT_LABEL = 'Settlement';
+const FORCE_WORLD_LABEL = 'World';
 </script>
 
 <template>
@@ -145,6 +156,14 @@ const FADE_LABEL = 'Fade duration';
         @input="onSliderChange"
       />
     </div>
+
+    <div class="row force-row">
+      <span>{{ FORCE_VIEW_LABEL }}</span>
+      <div class="force-buttons">
+        <button type="button" @click="router.push('/settlement')">{{ FORCE_SETTLEMENT_LABEL }}</button>
+        <button type="button" @click="router.push('/world')">{{ FORCE_WORLD_LABEL }}</button>
+      </div>
+    </div>
   </DebugPanel>
 </template>
 
@@ -192,5 +211,30 @@ const FADE_LABEL = 'Fade duration';
 }
 .slider-row input {
   width: 100%;
+}
+.force-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding-top: 8px;
+  cursor: default;
+}
+.force-buttons {
+  display: flex;
+  gap: 6px;
+}
+.force-buttons button {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+}
+.force-buttons button:hover {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 </style>

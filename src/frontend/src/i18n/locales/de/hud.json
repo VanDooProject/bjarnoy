@@ -16,11 +16,6 @@
     "reserved": "({n} reserviert)",
     "rate": "+{n}/h"
   },
-  "realmPanel": {
-    "level": "Lv {level}",
-    "claims": "Reich beansprucht {count} Hexfelder",
-    "backToWorldMap": "← Weltkarte"
-  },
   "hoverTooltip": {
     "level": "STUFE {level}",
     "clickToOpen": "KLICKEN ZUM ÖFFNEN",

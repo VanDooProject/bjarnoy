@@ -167,8 +167,8 @@ export const useWorldStore = defineStore('world', {
       // is populated in both demo and live mode, since onboarding runs in
       // both.
       placedBuildingTypes: [] as Tile['buildingType'][],
-      // RealmPanel's displayed territory size (WorldModel.claimedHexCount) —
-      // refreshed here alongside buildingsPlaced rather than read directly
+      // The selected settlement's territory size (WorldModel.claimedHexCount)
+      // — refreshed here alongside buildingsPlaced rather than read directly
       // off `model` in a computed, since `model` is `markRaw` and a Tower
       // levelling up (or a Longhouse levelling up) changes nothing Vue
       // tracks, so a direct read would freeze at its first-render value.
