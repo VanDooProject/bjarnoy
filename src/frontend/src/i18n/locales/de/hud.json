@@ -11,6 +11,11 @@
     "profileTitle": "Dein Profil",
     "createAccountTitle": "{nickname} — Konto erstellen"
   },
+  "returningPlayer": {
+    "trigger": "Ich habe schon ein Reich",
+    "triggerSub": "oder möchte einer anderen Welt beitreten",
+    "logIn": "Anmelden"
+  },
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserviert)",

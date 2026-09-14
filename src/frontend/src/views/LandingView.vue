@@ -12,6 +12,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
+import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
@@ -33,6 +34,10 @@ import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
 import { claimRadiusForLevel } from '../lib/map/shoreline';
+import {
+  HEX_TARGET_RADIUS_PX,
+  RING_BUBBLE_TARGET_RADIUS_PX,
+} from '../lib/map/guidanceArrowGeometry';
 import type { Terrain, Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
@@ -469,6 +474,11 @@ const pointerTarget = computed(() => {
       screen: spot,
       label: t('landing.pointer.thisOneFits', { terrain: terrainName(GUIDED_TERRAIN_FOR[reason.fit]) }),
       angle: 30,
+      // A ring bubble is a real, fixed-size target (BUB1, 52px across), not
+      // a point: without its radius the tip stops 9px from the bubble's
+      // *centre*, i.e. 17px inside it, and the shaft covers the bubble
+      // whose label it is supposed to be singling out.
+      targetRadius: RING_BUBBLE_TARGET_RADIUS_PX,
     };
   }
   if (!player.hasFoundedSettlement) {
@@ -478,6 +488,7 @@ const pointerTarget = computed(() => {
       coord: previewCoord.value,
       label: DEMO_MODE ? t('landing.pointer.clickThisPlot') : t('landing.pointer.anyGlowingPlot'),
       angle: 38,
+      targetRadius: HEX_TARGET_RADIUS_PX,
     };
   }
   if (!nextGuidedTargetCoord.value) return null;
@@ -493,6 +504,7 @@ const pointerTarget = computed(() => {
       ? t('landing.pointer.oneMore', { terrain: terrainName(GUIDED_TERRAIN_FOR[remainingType]) })
       : t('landing.pointer.nowBuildHere'),
     angle: oneDone ? 52 : 38,
+    targetRadius: HEX_TARGET_RADIUS_PX,
   };
 });
 
@@ -771,7 +783,7 @@ watch(
     </TopBar>
     <TopBar v-else title="Bjarnoy">
       <LocaleSwitcher />
-      <router-link class="have-realm-link" to="/login">{{ t('landing.header.haveRealm') }}</router-link>
+      <ReturningPlayerMenu />
     </TopBar>
 
     <!-- Once a settlement exists, fog is on screen and the camera is
@@ -824,6 +836,7 @@ watch(
       :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
       :label="pointerTarget.label"
       :angle="pointerTarget.angle"
+      :target-radius="pointerTarget.targetRadius"
     />
     <ResourceTicker :ticks="resourceTicks" @expire="onResourceTickExpire" />
 
@@ -947,22 +960,5 @@ h1 {
 }
 .footer-reservation {
   margin-left: auto;
-}
-/* TopBar's own root is `pointer-events: none` (the map behind it must stay
-   draggable everywhere the header itself has no content), and it only
-   re-enables clicks for `:deep(button)` in its right-hand slot —
-   LocaleSwitcher's toggle is already buttons, but this is a `router-link`
-   (an `<a>`), so it needs its own opt back in or the click falls through to
-   the map underneath it. */
-.have-realm-link {
-  pointer-events: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.have-realm-link:hover {
-  color: var(--text);
 }
 </style>

@@ -51,6 +51,11 @@ WORKDIR /src
 
 # Restore before copying sources, for the same layer-caching reason.
 COPY src/backend/global.json src/backend/Directory.Build.props src/backend/Directory.Packages.props ./
+# Directory.Build.props reads the version out of this, so the assembly — and so
+# GET /api/v1/info — reports the number release-please owns without a build arg.
+# It lands beside the props file here because this stage flattens the tree; see
+# the props file's own ReleaseManifestPath for the other candidate location.
+COPY .release-please-manifest.json ./
 COPY src/backend/src/Bjarnoy.Api/Bjarnoy.Api.csproj src/Bjarnoy.Api/
 COPY src/backend/src/Bjarnoy.Domain/Bjarnoy.Domain.csproj src/Bjarnoy.Domain/
 COPY src/backend/src/Bjarnoy.Infrastructure/Bjarnoy.Infrastructure.csproj src/Bjarnoy.Infrastructure/

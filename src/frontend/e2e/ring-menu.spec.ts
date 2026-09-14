@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { distanceFrom, rectsOf } from './helpers';
+import { distanceFrom, loginTestUser, rectsOf } from './helpers';
 import { MAP_SPEC_TIMEOUT_MS } from './budgets';
 import { SettlementPage, type ScreenPoint } from './pages';
 
@@ -278,6 +278,11 @@ test.describe('ring menu drill-down', () => {
 
   test('clicking "World map" in the header while a ring is open navigates instead of the ring intercepting it', { tag: '@g1' }, async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
+    // Returning-player nav work: "World map" now requires
+    // `auth.isAuthenticated` (see loginTestUser's own comment), so this
+    // regression guard needs a real session before it can even reach the
+    // button it's testing.
+    await loginTestUser(page);
     const settlement = await SettlementPage.found(page);
     const { x: cx, y: cy } = await settlement.canvasCentre();
 

@@ -45,22 +45,6 @@ public sealed partial class BuildInfoOptions
     /// </remarks>
     public string RuntimeCommit { get; set; } = Unknown;
 
-    /// <summary>
-    /// The commit to report. The baked one wins where it exists: it describes
-    /// the bits actually running, whereas the runtime value describes what the
-    /// platform believes it deployed — the same thing for an image the platform
-    /// just built, but not for a prebuilt one it merely started.
-    /// </summary>
-    public string ResolvedCommit =>
-        IsStamped(Commit) ? Commit
-        : IsStamped(RuntimeCommit) ? RuntimeCommit
-        : Unknown;
-
-    /// <summary>Whether a field carries a real value rather than a placeholder.</summary>
-    private static bool IsStamped(string? value) =>
-        !string.IsNullOrWhiteSpace(value)
-        && !string.Equals(value, Unknown, StringComparison.OrdinalIgnoreCase);
-
     /// <summary>The branch a production deployment is cut from.</summary>
     public const string ProductionBranch = "main";
 

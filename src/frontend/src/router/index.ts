@@ -17,6 +17,15 @@ export const router = createRouter({
       component: () => import('../views/LoginView.vue'),
     },
     {
+      // "Join another world" (ReturningPlayerMenu) — deliberately no
+      // `requiresAuth`: an anonymous player already has a local id
+      // (stores/player.ts) they can found a new realm under, or already
+      // hold a realm under, in any world, same as the landing page itself.
+      path: '/worlds',
+      name: 'worlds',
+      component: () => import('../views/WorldPickerView.vue'),
+    },
+    {
       // Issue #108: converts an anonymous player (local player.id, an
       // unclaimed settlement) into a permanent account — see
       // RegisterView.vue and AuthService.RegisterAsync's settlement-claim.

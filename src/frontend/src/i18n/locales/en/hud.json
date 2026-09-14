@@ -11,6 +11,11 @@
     "profileTitle": "Your profile",
     "createAccountTitle": "{nickname} — create an account"
   },
+  "returningPlayer": {
+    "trigger": "I already have a realm",
+    "triggerSub": "or want to join another world",
+    "logIn": "Log in"
+  },
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserved)",

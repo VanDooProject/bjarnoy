@@ -14,6 +14,7 @@ import { useReportsStore } from '../../stores/reports';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
+import ReturningPlayerMenu from './ReturningPlayerMenu.vue';
 import type { MessageSchema } from '../../i18n/schema';
 
 const route = useRoute();
@@ -80,9 +81,12 @@ const showProfileNudge = computed(
          false, so this link is a dead click on every pre-founding route this
          nav gets mounted on (the landing page's post-founding half included,
          for the brief window before founding flips it true) — hide it rather
-         than offer a click that silently does nothing. -->
+         than offer a click that silently does nothing. Layered onto that:
+         an anonymous visitor has no settlement of their own to view here
+         either (returning-player nav work), so the auth check on top of the
+         existing founded-settlement one keeps this hidden for them too. -->
     <button
-      v-if="player.hasFoundedSettlement"
+      v-if="auth.isAuthenticated && player.hasFoundedSettlement"
       class="link"
       :class="{ active: route.name === 'world' }"
       @click="router.push('/world')"
@@ -90,6 +94,7 @@ const showProfileNudge = computed(
       {{ t('hud.nav.worldMap') }}
     </button>
     <button
+      v-if="auth.isAuthenticated"
       class="link"
       :class="{ active: route.name === 'leaderboards' }"
       @click="router.push('/leaderboards')"
@@ -131,9 +136,10 @@ const showProfileNudge = computed(
     </button>
     <LocaleSwitcher />
     <!-- Logged in, the avatar opens the player's own profile (issue #42).
-         Anonymous, it opens registration (issue #108) — the only entry
-         point in the HUD for turning a local player id into a real
-         account. -->
+         Anonymous, ReturningPlayerMenu offers logging in or joining another
+         world instead — registration (issue #108) is still reachable from
+         there via the account-creation nudge (ProfileNudge, in its `nudge`
+         slot) once onboarding is done. -->
     <button
       v-if="auth.isAuthenticated"
       class="avatar avatar-button"
@@ -143,19 +149,11 @@ const showProfileNudge = computed(
     >
       {{ initials }}
     </button>
-    <span v-else class="avatar-wrap">
-      <button
-        class="avatar avatar-button"
-        type="button"
-        :class="{ 'is-nudging': showProfileNudge }"
-        :title="t('hud.nav.createAccountTitle', { nickname: player.nickname ?? 'Bjarnoy' })"
-        @click="router.push('/register')"
-      >
-        {{ initials }}
-        <span v-if="showProfileNudge" class="nudge-dot" aria-hidden="true" />
-      </button>
-      <ProfileNudge v-if="showProfileNudge" />
-    </span>
+    <ReturningPlayerMenu v-else :nudging="showProfileNudge">
+      <template #nudge>
+        <ProfileNudge v-if="showProfileNudge" />
+      </template>
+    </ReturningPlayerMenu>
   </nav>
 </template>
 
@@ -229,40 +227,5 @@ const showProfileNudge = computed(
   color: #20160a;
   font-size: 12px;
   font-weight: 700;
-}
-/* Design handoff "2a" frame 5: the profile-mark glow/badge pointing at the
-   nudge — same host BjarnoyTopBar.dc.html's own `glow`/`badge` states. */
-@keyframes avatar-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(255, 197, 92, 0.18), 0 0 30px 10px rgba(255, 197, 92, 0.6);
-  }
-}
-.avatar.is-nudging {
-  animation: avatar-glow 1.5s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .avatar.is-nudging {
-    animation: none;
-    box-shadow: 0 0 0 3px rgba(255, 197, 92, 0.3), 0 0 18px 4px rgba(255, 197, 92, 0.35);
-  }
-}
-.nudge-dot {
-  position: absolute;
-  right: -3px;
-  top: -3px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--rival);
-  border: 2px solid var(--shell);
-}
-.avatar-wrap {
-  position: relative;
-  display: flex;
-  flex: none;
 }
 </style>

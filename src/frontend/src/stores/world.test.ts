@@ -21,6 +21,10 @@ const getFogMask = vi.fn();
 const getPlotSuggestion = vi.fn();
 const releasePlotSuggestion = vi.fn();
 const buildDemoFogMask = vi.fn();
+const getWorld = vi.fn();
+const getIslands = vi.fn();
+const listWorlds = vi.fn();
+const getWorldMembership = vi.fn();
 
 // The test environment is `node` (see vitest.config.ts), not `jsdom` — world.ts
 // reads `localStorage.getItem('bjarnoy.worldId')` at module-level state-init
@@ -49,6 +53,10 @@ async function loadStoreModule(demoMode: boolean) {
       getFogMask: (...args: unknown[]) => getFogMask(...args),
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
+      getWorld: (...args: unknown[]) => getWorld(...args),
+      getIslands: (...args: unknown[]) => getIslands(...args),
+      listWorlds: (...args: unknown[]) => listWorlds(...args),
+      getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
     },
     // Mirrors the real `ApiError` shape (status + problem) — see
     // stores/leaderboard.test.ts's own copy of the same mock. Needed by the
@@ -828,6 +836,128 @@ describe('useWorldStore refreshDemoFogMask', () => {
 // safe (no reservation, no waiting queue) rather than erroring or leaving
 // stale/undefined state, and refreshLiveSettlement — the only place these
 // fields are ever refreshed from the backend — must stay a true no-op.
+// "Join another world" (store half — UI comes later): `joinWorld` must wipe
+// whatever per-world/per-settlement state the previously-joined world left
+// behind, point the store at the new world, and either restore an existing
+// realm there or leave the player free to found a fresh one.
+describe('useWorldStore joinWorld', () => {
+  function worldFixture(id: string) {
+    return {
+      id,
+      name: 'New World',
+      seed: 1,
+      radius: 50,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      speedFactor: 1,
+      generation: {},
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    };
+  }
+
+  it('switches to a world with an existing realm and restores it immediately', async () => {
+    getWorld.mockReset().mockResolvedValue(worldFixture('world-2'));
+    getIslands.mockReset().mockResolvedValue([]);
+    listSettlements.mockReset().mockResolvedValue([]);
+    getWorldMembership.mockReset().mockResolvedValue({
+      worldId: 'world-2',
+      settlementId: 'settlement-42',
+      settlementName: "Astrid's realm",
+    });
+    getSettlement.mockReset().mockResolvedValue({
+      id: 'settlement-42',
+      ownerName: 'Astrid',
+      name: "Astrid's realm",
+      q: 3,
+      r: 4,
+      longhouseLevel: 1,
+      resources: { stock: {}, ratePerHour: {} },
+      islandId: 'island-2',
+      buildings: [],
+      queue: [],
+      garrison: [],
+      trainingQueue: [],
+    });
+    getTradeBoard.mockReset().mockResolvedValue([]);
+    getMyTradeOffers.mockReset().mockResolvedValue([]);
+    getShipments.mockReset().mockResolvedValue([]);
+
+    const store = await loadStoreModule(false);
+
+    await store.joinWorld('world-2');
+
+    expect(getWorldMembership).toHaveBeenCalledWith('world-2', expect.any(String));
+    expect(store.worldId).toBe('world-2');
+    expect(store.liveReady).toBe(true);
+    expect(store.selectedSettlementId).toBe('settlement-42');
+
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+    expect(player.hasFoundedSettlement).toBe(true);
+    expect(player.settlementId).toBe('settlement-42');
+  });
+
+  it('switches to a brand-new world with no realm, leaving no stale state from the previous world behind', async () => {
+    getWorld.mockReset().mockResolvedValue(worldFixture('world-3'));
+    getIslands.mockReset().mockResolvedValue([]);
+    listSettlements.mockReset().mockResolvedValue([]);
+    getSettlement.mockReset();
+    getWorldMembership.mockReset().mockResolvedValue({
+      worldId: 'world-3',
+      settlementId: null,
+      settlementName: null,
+    });
+
+    const store = await loadStoreModule(false);
+    // Stale state left over from a previously-joined world/settlement.
+    store.worldId = 'world-1';
+    store.selectedSettlementId = 'old-settlement';
+    store.plotSuggestion = {
+      islandId: 'old-island',
+      plot: { q: 0, r: 0 },
+      alternatives: [],
+      reserved: true,
+      reservedUntil: null,
+    };
+    store.islands = [
+      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [] },
+    ];
+    store.armies = [{ id: 'old-army' } as never];
+    store.liveReady = true;
+
+    await store.joinWorld('world-3');
+
+    expect(store.worldId).toBe('world-3');
+    expect(store.liveReady).toBe(true);
+    expect(store.selectedSettlementId).toBeNull();
+    expect(store.plotSuggestion).toBeNull();
+    expect(store.armies).toEqual([]);
+    expect(getSettlement).not.toHaveBeenCalled();
+
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+    expect(player.hasFoundedSettlement).toBe(false);
+    expect(player.settlementId).toBeNull();
+  });
+
+  it('is a no-op in demo mode', async () => {
+    getWorldMembership.mockReset();
+    const store = await loadStoreModule(true);
+    const originalWorldId = store.worldId;
+
+    await store.joinWorld('world-9');
+
+    expect(getWorldMembership).not.toHaveBeenCalled();
+    expect(store.worldId).toBe(originalWorldId);
+  });
+});
+
 describe('construction slots/reservations degrade gracefully in demo mode', () => {
   it('reports a zero-reservation, non-premium construction summary with no backend call', async () => {
     getSettlement.mockReset();

@@ -122,6 +122,9 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(1.0, listed.SpeedFactor);
         Assert.False(listed.JoinsClosed);
         Assert.Equal("running", listed.RunState);
+
+        var stored = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(stored.Seed, listed.Seed);
     }
 
     [Fact]
@@ -136,11 +139,13 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(
-                SpeedFactor: 2.0,
-                StartsAt: Optional<DateTimeOffset?>.Of(startsAt),
-                JoinsClosed: true,
-                EndbossAt: Optional<DateTimeOffset?>.Of(endbossAt)),
+            new UpdateWorldSettingsRequest
+            {
+                SpeedFactor = 2.0,
+                StartsAt = Optional<DateTimeOffset?>.Of(startsAt),
+                JoinsClosed = true,
+                EndbossAt = Optional<DateTimeOffset?>.Of(endbossAt)
+            },
             Ct);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -154,7 +159,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         // A field omitted from the next PATCH must be left as-is.
         var second = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 3.0),
+            new UpdateWorldSettingsRequest { SpeedFactor = 3.0 },
             Ct);
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
         var afterSecond = await second.ReadStrictAsync<AdminWorldResponse>(Ct);
@@ -166,7 +171,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         // Explicit null clears a previously-set nullable field.
         var cleared = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: null, EndbossAt: Optional<DateTimeOffset?>.Of(null)),
+            new UpdateWorldSettingsRequest { SpeedFactor = null, EndbossAt = Optional<DateTimeOffset?>.Of(null) },
             Ct);
         Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
         var afterCleared = await cleared.ReadStrictAsync<AdminWorldResponse>(Ct);
@@ -183,7 +188,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 0),
+            new UpdateWorldSettingsRequest { SpeedFactor = 0 },
             Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -200,10 +205,12 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(
-                SpeedFactor: null,
-                StartsAt: Optional<DateTimeOffset?>.Of(startsAt),
-                EndbossAt: Optional<DateTimeOffset?>.Of(startsAt)),
+            new UpdateWorldSettingsRequest
+            {
+                SpeedFactor = null,
+                StartsAt = Optional<DateTimeOffset?>.Of(startsAt),
+                EndbossAt = Optional<DateTimeOffset?>.Of(startsAt)
+            },
             Ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -253,7 +260,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var missing = Guid.CreateVersion7();
 
         var settingsResponse = await client.PatchJsonAsync(
-            $"/api/v1/admin/worlds/{missing}/settings", new UpdateWorldSettingsRequest(SpeedFactor: 2.0), Ct);
+            $"/api/v1/admin/worlds/{missing}/settings", new UpdateWorldSettingsRequest { SpeedFactor = 2.0 }, Ct);
         Assert.Equal(HttpStatusCode.NotFound, settingsResponse.StatusCode);
 
         var runStateResponse = await client.PostJsonAsync(
@@ -273,7 +280,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: 2.0),
+            new UpdateWorldSettingsRequest { SpeedFactor = 2.0 },
             Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -293,7 +300,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Authorize(client, await CreateAdminTokenAsync(client));
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: null, JoinsClosed: true),
+            new UpdateWorldSettingsRequest { SpeedFactor = null, JoinsClosed = true },
             Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
@@ -325,7 +332,7 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Authorize(client, await CreateAdminTokenAsync(client));
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(SpeedFactor: null, StartsAt: Optional<DateTimeOffset?>.Of(DateTimeOffset.UtcNow.AddDays(1))),
+            new UpdateWorldSettingsRequest { SpeedFactor = null, StartsAt = Optional<DateTimeOffset?>.Of(DateTimeOffset.UtcNow.AddDays(1)) },
             Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
@@ -354,8 +361,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var endbossAt = _fixture.Factory.Time.GetUtcNow().AddHours(1);
         var response = await client.PatchJsonAsync(
             $"/api/v1/admin/worlds/{world.Id}/settings",
-            new UpdateWorldSettingsRequest(
-                SpeedFactor: null, EndbossAt: Optional<DateTimeOffset?>.Of(endbossAt)),
+            new UpdateWorldSettingsRequest
+            {
+                SpeedFactor = null, EndbossAt = Optional<DateTimeOffset?>.Of(endbossAt)
+            },
             Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
@@ -489,6 +498,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.True(reseeded.IslandCount > 0);
         Assert.Equal(0, reseeded.World.PlayerCount);
         Assert.Equal(world.Name, reseeded.World.Name);
+        // The embedded world is what the admin UI re-displays after a reseed
+        // completes, so it needs to already reflect the new seed itself, not
+        // just the top-level ReseedWorldResponse.Seed.
+        Assert.Equal(9001, reseeded.World.Seed);
 
         var after = await ReadWorldStateAsync(world.Id);
         Assert.Equal(9001, after.Seed);

@@ -253,6 +253,10 @@ function back() {
         <button class="secondary" @click="back">{{ $t('adminWorldReseed.backToWorlds') }}</button>
       </header>
 
+      <p class="current-seed" data-testid="current-seed">
+        {{ $t('adminWorldReseed.currentSeed', { seed: world.seed }) }}
+      </p>
+
       <p class="warning">
         {{ $t('adminWorldReseed.warning', { playerCount: world.playerCount }) }}
       </p>
@@ -338,6 +342,11 @@ function back() {
   color: var(--rival);
   font-size: 14px;
   max-width: 70ch;
+}
+.current-seed {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
 }
 .panel {
   background: var(--panel-bg);
