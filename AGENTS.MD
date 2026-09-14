@@ -23,6 +23,24 @@
 - run build and tests
 - evaluate if ci ran green
 
+## which model does what
+- Opus and Fable are for **planning, diagnosis and review** — working out
+  what's actually wrong, what to build, and whether a change is right
+- once the plan is settled, hand the **implementation** to Sonnet (a
+  subagent via the `Agent` tool, or by switching the session model) rather
+  than writing it out on Opus/Fable — same plan, cheaper execution
+- the planning model stays responsible for the result: brief the Sonnet
+  subagent with the concrete file paths, line numbers and the decision
+  already made (not "figure out how to fix X"), then review the diff it
+  produced before committing
+- don't delegate trivia — a one-line edit, a rename, or a quick test run
+  costs more to hand off than to just do
+- diagnosis is not implementation: while the root cause is still unknown,
+  keep it on the planning model until it's actually pinned down (and
+  prefer reading the code over stacking up subagent theories — an
+  unverified theory that sounds plausible is worse than no theory)
+- if running as sonnet and being stuck as a stronger model like opus on how to fix or debug
+
 # bugs
 - when fixing a bug add tests so we can make sure they don't come back; these tests can also be used to reproduce the bug first
 
