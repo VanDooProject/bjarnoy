@@ -815,11 +815,15 @@ async function onRingSelect(id: string) {
   const tile = selectedTile.value;
   if (tile && categoriesFor(tile).some((c) => c.buildings.some((b) => b.type === id))) {
     await buildType(id as BuildableType);
-    // A rejection (NoFreeSlot's premium hint included, issue #158) needs
-    // somewhere to show — fall back to BuildingModal (same tile, ring
-    // dismissed) instead of closing everything and losing it.
-    if (actionError.value) ringScreen.value = null;
-    else closeRing();
+    // Unlike 'upgrade' below, a rejection here must NOT fall through to
+    // BuildingModal: that modal's empty-tile view always defaults to a hut
+    // (see its own upgradeType computed) regardless of which building was
+    // actually attempted, so it used to show a mismatched cost/afford
+    // message for whatever the ring tried to build, with a "Build here"
+    // button that would then build a hut instead of retrying the real
+    // pick — confusing at best. A rejected ring build now just closes
+    // cleanly, same as clicking a locked bubble the ring already refuses.
+    closeRing();
     return;
   }
   switch (id) {
