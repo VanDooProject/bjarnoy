@@ -19,6 +19,7 @@ public sealed record AdminWorldResponse(
     string RunState,
     DateTimeOffset RunStateSince,
     DateTimeOffset CreatedAt,
+    int Seed,
     WorldGenerationSettingsResponse Generation)
 {
     public static AdminWorldResponse From(WorldEntity world, int playerCount)
@@ -39,6 +40,7 @@ public sealed record AdminWorldResponse(
             world.RunState.ToString().ToLowerInvariant(),
             world.RunStateSince,
             world.CreatedAt,
+            world.Seed,
             WorldGenerationSettingsResponse.From(world.ToGenerationOptions()));
     }
 }

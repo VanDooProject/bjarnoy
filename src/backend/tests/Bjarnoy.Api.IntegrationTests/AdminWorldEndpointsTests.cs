@@ -122,6 +122,9 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(1.0, listed.SpeedFactor);
         Assert.False(listed.JoinsClosed);
         Assert.Equal("running", listed.RunState);
+
+        var stored = await ReadWorldStateAsync(world.Id);
+        Assert.Equal(stored.Seed, listed.Seed);
     }
 
     [Fact]
@@ -495,6 +498,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.True(reseeded.IslandCount > 0);
         Assert.Equal(0, reseeded.World.PlayerCount);
         Assert.Equal(world.Name, reseeded.World.Name);
+        // The embedded world is what the admin UI re-displays after a reseed
+        // completes, so it needs to already reflect the new seed itself, not
+        // just the top-level ReseedWorldResponse.Seed.
+        Assert.Equal(9001, reseeded.World.Seed);
 
         var after = await ReadWorldStateAsync(world.Id);
         Assert.Equal(9001, after.Seed);

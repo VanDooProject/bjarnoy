@@ -47,6 +47,7 @@ function world(overrides: Partial<AdminWorldResponse> = {}): AdminWorldResponse 
     runState: 'running',
     runStateSince: '2026-01-01T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z',
+    seed: 1234,
     generation: {
       islandCellSize: 20,
       islandChance: 0.45,
