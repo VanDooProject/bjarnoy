@@ -113,6 +113,62 @@ editing it:
 Each deployment gets its own empty database, so a branch deployment starts from
 a fresh world and its own bootstrap Admin.
 
+### Preview deployments
+
+Coolify can deploy a PR as its own stack. Two things about that differ from a
+branch deployment, and both are invisible until something 404s:
+
+**Every service is renamed.** `postgres` becomes `postgres-pr-239`
+(`addPreviewDeploymentSuffix`), and a compose service's name is its DNS name —
+but nothing rewrites a hostname written inside an environment variable, so
+`Database__ConnectionString`'s `Host=postgres` would stop resolving. That is why
+the `postgres` service declares an alias on a shared `stack` network: keep both
+when editing, or the migrator exits 1, `app` never starts behind
+`service_completed_successfully`, and every path answers 404 while the dashboard
+happily reports postgres healthy.
+
+**`COOLIFY_BRANCH` is the application's branch, not the PR's** — it reads `main`
+on a preview of a PR into `main`. So `/api/v1/info` reports `branch: main`
+there, and, since the diagnostics gate treats `main` as production, a preview
+would hide the very API reference it exists to expose. Set these in the app's
+**Preview Deployments** environment variables, where they apply to previews
+only:
+
+```bash
+Diagnostics__ExposeApiReference=true
+Diagnostics__PublicBuildInfo=true
+```
+
+## Behind Cloudflare
+
+Two settings that are not optional once the zone is proxied, both of which fail
+in ways that look like the app is broken when it never sees the request at all.
+
+**SSL/TLS mode must be Full (strict)**, not Flexible. On Flexible, Cloudflare
+terminates TLS and talks to the origin over plain HTTP; Coolify's proxy answers
+"redirect to https", Cloudflare hands that back to the browser, and the browser
+asks again — `ERR_TOO_MANY_REDIRECTS`, with a `Location` byte-identical to the
+request URL. Nothing in this app issues a redirect (there is no
+`UseHttpsRedirection`), so a redirect loop is always the proxy pair.
+
+**Preview hostnames must stay one label** under the zone. Coolify's default
+preview URL template is `{{pr_id}}.{{domain}}`, which for a domain of
+`bjarnoy.example.com` produces `239.bjarnoy.example.com` — two labels below the
+apex. Cloudflare's free Universal SSL covers `example.com` and `*.example.com`
+and no deeper, and a wildcard never matches across a dot, so the edge has no
+certificate to present and the browser reports
+`ERR_SSL_VERSION_OR_CIPHER_MISMATCH` before any HTTP happens. Join with a dash
+instead:
+
+```
+pr{{pr_id}}-{{domain}}     →  pr239-bjarnoy.example.com
+```
+
+One label, covered by the existing wildcard, no new certificate. (The paid
+Advanced Certificate Manager issues multi-level wildcards if the dotted form is
+worth $10/month; so does taking previews off the proxy and letting Coolify's
+Let's Encrypt serve them directly.)
+
 ## Without Coolify
 
 From the repository root:

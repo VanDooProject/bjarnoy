@@ -76,6 +76,11 @@ builder.Services.AddOptions<BuildInfoOptions>()
 builder.Services.AddOptions<DiagnosticsOptions>()
     .Bind(builder.Configuration.GetSection(DiagnosticsOptions.SectionName));
 
+// Read once at startup: the attributes and the file timestamp cannot change
+// while the process runs.
+builder.Services.AddSingleton(AssemblyBuildStamp.FromAssembly(typeof(Program).Assembly));
+builder.Services.AddSingleton<BuildInfo>();
+
 // Which debugging surfaces this deployment opens. Read here rather than from
 // IOptions later because both decisions are made while routes are being
 // mapped, before there is a request to resolve anything against.
@@ -235,14 +240,30 @@ await using (var adminSeedScope = app.Services.CreateAsyncScope())
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-// Recovers the real visitor IP from X-Forwarded-For behind a reverse proxy —
+// Recovers what the proxy in front of us knows and Kestrel cannot see.
+//
+// X-Forwarded-For becomes Connection.RemoteIpAddress, which
 // PlotReservationService's per-IP abuse cap (a soft signal, not a security
-// boundary) would otherwise see only the proxy's own address for everyone.
+// boundary) reads — without it every visitor shares the proxy's own address
+// and the cap throttles the whole internet as one caller.
+//
+// X-Forwarded-Proto becomes Request.Scheme. The proxy terminates TLS and
+// speaks plain HTTP to the container, so without it the app believes every
+// request is http:// — and anything that builds an absolute URL from the
+// request builds a wrong one. The OpenAPI document does exactly that for its
+// `servers` entry, which is what Scalar then calls: an https:// page fetching
+// an http:// URL is blocked as mixed content, so the reference a branch
+// deployment serves would come up empty behind TLS.
+//
 // KnownNetworks/KnownProxies are cleared because this deployment's proxy
-// topology isn't fixed; that means the header is trusted from wherever it
-// arrives, which is fine for a generous, non-authoritative cap but would not
-// be for anything security-sensitive.
-var forwardedHeadersOptions = new ForwardedHeadersOptions { ForwardedHeaders = ForwardedHeaders.XForwardedFor };
+// topology isn't fixed; that means both headers are trusted from wherever they
+// arrive. Fine for a generous, non-authoritative cap and for link generation —
+// nothing here grants access, redirects, or sets a Secure-only cookie on the
+// strength of the scheme — but it would not be for anything security-sensitive.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+};
 forwardedHeadersOptions.KnownIPNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);

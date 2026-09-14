@@ -19,6 +19,7 @@ public sealed record AdminWorldResponse(
     string RunState,
     DateTimeOffset RunStateSince,
     DateTimeOffset CreatedAt,
+    int Seed,
     WorldGenerationSettingsResponse Generation)
 {
     public static AdminWorldResponse From(WorldEntity world, int playerCount)
@@ -39,6 +40,7 @@ public sealed record AdminWorldResponse(
             world.RunState.ToString().ToLowerInvariant(),
             world.RunStateSince,
             world.CreatedAt,
+            world.Seed,
             WorldGenerationSettingsResponse.From(world.ToGenerationOptions()));
     }
 }
@@ -117,23 +119,40 @@ public sealed record WorldGenerationSettingsOverrides(
     double? IslandCoastWarp = null,
     double? IslandCoastWarpScale = null);
 
-/// <param name="SpeedFactor">Omit to leave unchanged. Must be greater than 0 when sent.</param>
-/// <param name="StartsAt">
-/// Omit to leave unchanged; send explicit <c>null</c> to open the world immediately.
-/// </param>
-/// <param name="JoinsClosed">Omit to leave unchanged.</param>
-/// <param name="EndbossAt">
-/// Omit to leave unchanged; send explicit <c>null</c> to cancel a scheduled endboss.
-/// Must be after <see cref="StartsAt"/> (the world's current one if this request
-/// does not also change it) when sent as a value.
-/// </param>
-public sealed record UpdateWorldSettingsRequest(
-    double? SpeedFactor,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    Optional<DateTimeOffset?> StartsAt = default,
-    bool? JoinsClosed = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    Optional<DateTimeOffset?> EndbossAt = default);
+/// <remarks>
+/// Init-only properties rather than the positional parameters this used to
+/// have. A record parameter's default value is reported by reflection as
+/// <c>null</c> even when its type is a struct, and OpenAPI's schema exporter
+/// serialises every parameter default to emit a <c>default</c> keyword — so
+/// <c>Optional&lt;DateTimeOffset?&gt; StartsAt = default</c> made it try to
+/// write <c>null</c> as an <c>Optional&lt;T&gt;</c> and throw, taking the whole
+/// document with it ("The JSON value could not be converted to
+/// Optional`1[Nullable`1[DateTimeOffset]]"). Properties have no defaults to
+/// serialise, and an omitted one still lands as <c>default</c> — which is
+/// exactly "not sent". See <see cref="Optional{T}"/>.
+/// </remarks>
+public sealed record UpdateWorldSettingsRequest
+{
+    /// <summary>Omit to leave unchanged. Must be greater than 0 when sent.</summary>
+    public double? SpeedFactor { get; init; }
+
+    /// <summary>
+    /// Omit to leave unchanged; send explicit <c>null</c> to open the world immediately.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Optional<DateTimeOffset?> StartsAt { get; init; }
+
+    /// <summary>Omit to leave unchanged.</summary>
+    public bool? JoinsClosed { get; init; }
+
+    /// <summary>
+    /// Omit to leave unchanged; send explicit <c>null</c> to cancel a scheduled
+    /// endboss. Must be after <see cref="StartsAt"/> (the world's current one if
+    /// this request does not also change it) when sent as a value.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public Optional<DateTimeOffset?> EndbossAt { get; init; }
+}
 
 /// <param name="Action">One of <c>pause</c>, <c>maintenance</c>, <c>lock</c>, <c>resume</c>.</param>
 /// <param name="GraceMinutes">

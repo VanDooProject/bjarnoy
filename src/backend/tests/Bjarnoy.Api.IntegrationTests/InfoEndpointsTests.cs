@@ -57,27 +57,28 @@ public sealed class InfoEndpointsTests
 
         var info = await client.GetFromJsonAsync<BuildInfoResponse>("/api/v1/info", Ct);
 
-        Assert.Equal(Commit[..InfoEndpoints.ShortCommitLength], info!.ShortCommit);
+        Assert.Equal(Commit[..BuildInfo.ShortCommitLength], info!.ShortCommit);
         Assert.StartsWith(info.ShortCommit, info.Commit, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task An_unstamped_build_says_so_rather_than_inventing_a_version()
+    public async Task An_unstamped_build_still_answers_from_the_assembly()
     {
-        // `dotnet run`, or an image built without the build args. Reporting a
-        // wrong commit would be worse than admitting to none. Opened
-        // explicitly: an unstamped build is treated as production, and this
-        // test is about the payload rather than the gate.
+        // `dotnet run`, or an image built without the build args: the version
+        // comes from .release-please-manifest.json by way of the assembly, and
+        // the build time from the assembly file. Opened explicitly, since an
+        // unstamped build counts as production and this test is about the
+        // payload rather than the gate.
         await using var factory = BjarnoyApiFactory.Sqlite().WithDiagnostics(publicBuildInfo: true);
         using var client = factory.CreateClient();
 
         var info = await client.GetFromJsonAsync<BuildInfoResponse>("/api/v1/info", Ct);
 
-        Assert.Equal(BuildInfoOptions.Unknown, info!.Version);
-        Assert.Equal(BuildInfoOptions.Unknown, info.Commit);
+        Assert.NotEqual(BuildInfoOptions.Unknown, info!.Version);
+        Assert.NotEqual(BuildInfoOptions.Unknown, info.BuiltAt);
+        // Nothing knows the branch but the build that stamped it, so this one
+        // stays honest about not knowing.
         Assert.Equal(BuildInfoOptions.Unknown, info.Branch);
-        // Not sliced into a fake seven-character SHA.
-        Assert.Equal(BuildInfoOptions.Unknown, info.ShortCommit);
     }
 
     [Fact]
@@ -158,7 +159,7 @@ public sealed class InfoEndpointsTests
         var info = await client.GetFromJsonAsync<BuildInfoResponse>("/api/v1/info", Ct);
 
         Assert.Equal(Commit, info!.Commit);
-        Assert.Equal(Commit[..InfoEndpoints.ShortCommitLength], info.ShortCommit);
+        Assert.Equal(Commit[..BuildInfo.ShortCommitLength], info.ShortCommit);
     }
 
     [Fact]
