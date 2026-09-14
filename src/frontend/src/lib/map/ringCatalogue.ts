@@ -3,6 +3,10 @@
 // (`GET /api/v1/buildings`, or its bundled snapshot in demo mode via
 // stores/buildingCatalogue.ts) — nothing here re-derives a game rule, it only
 // renders one.
+import type { ResourceLine } from '../../api/types';
+import { resourceName } from '../../i18n/catalogueNames';
+
+const RESOURCE_KEYS: (keyof ResourceLine)[] = ['wood', 'stone', 'food', 'iron'];
 
 /**
  * `buildSeconds` as the card shows it: "4:00", "12:00", "1:30:00". Mirrors
@@ -30,19 +34,33 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
 }
 
 /**
- * The reason a Sawmill can't be placed on this specific Grass hex, or
- * undefined when it can — the same `lock` mechanism `longhouseLock` feeds, so
- * it shows as the same disabled-bubble/tooltip the ring already has. A
+ * Whether a Sawmill can be placed on this specific Grass hex at all — a
  * Sawmill is built directly on a river tile (`WorldModel.placeBuilding`
  * mirrors `BuildingDefinition.RequiresRiverShape`), and only a
  * `straight`/`bend` shaped one has matching art — `hasRiverShape` is whether
- * this hex's own river tile (if any) is one of those two shapes. Every other
- * buildable type has no such requirement, so this is a no-op for it (Fisher
- * Hut moved to the water category instead — see `RingMenu`'s `WATER_CATEGORY` —
- * since it's now built on coastal water itself, exactly like Fishing
- * Hut/Dockyard, with no separate lock needed).
+ * this hex's own river tile (if any) is one of those two shapes. Unlike
+ * `longhouseLock` (a progression gate the player can still work towards and
+ * so is shown as a disabled, explained bubble), this is a fixed property of
+ * the hex itself: a hex that will never grow a river should not offer a
+ * Sawmill bubble at all, so callers filter it out of the category rather
+ * than rendering it locked. Every other buildable type has no such
+ * requirement (Fisher Hut moved to the water category instead — see
+ * `RingMenu`'s `WATER_CATEGORY` — since it's now built on coastal water
+ * itself, exactly like Fishing Hut/Dockyard, with no separate check needed).
  */
-export function riverShapeLock(type: string, hasRiverShape: boolean): string | undefined {
-  if (type === 'sawmill' && !hasRiverShape) return 'Needs to stand on a river';
-  return undefined;
+export function sawmillAllowedHere(type: string, hasRiverShape: boolean): boolean {
+  return type !== 'sawmill' || hasRiverShape;
+}
+
+/**
+ * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
+ * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
+ * `formatCostLine` (which shows the whole price), but for what's still
+ * missing: a disabled Upgrade/Build bubble's hint needs to say precisely what
+ * to go get more of, not restate the full cost the player mostly already has.
+ */
+export function formatMissingResources(cost: ResourceLine, stock: ResourceLine): string {
+  return RESOURCE_KEYS.filter((key) => cost[key] > stock[key])
+    .map((key) => `${Math.ceil(cost[key] - stock[key])} ${resourceName(key)}`)
+    .join(', ');
 }

@@ -74,7 +74,7 @@
       "sendSettlers": "Siedler entsenden",
       "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
       "upgrade": "Ausbauen",
-      "notEnough": "Nicht genug {resources}",
+      "notEnough": "Benötigt {resources}",
       "details": "Details",
       "raze": "Abreißen",
       "cantRazeLonghouse": "Das Langhaus kann nicht abgerissen werden",

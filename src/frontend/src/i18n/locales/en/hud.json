@@ -74,7 +74,7 @@
       "sendSettlers": "Send settlers",
       "noSettlersYet": "You have no settlers available yet",
       "upgrade": "Upgrade",
-      "notEnough": "Not enough {resources}",
+      "notEnough": "Needs {resources}",
       "details": "Details",
       "raze": "Raze",
       "cantRazeLonghouse": "Can't raze the longhouse",

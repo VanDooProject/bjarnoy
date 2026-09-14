@@ -8,7 +8,6 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
-import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
@@ -41,7 +40,7 @@ import {
   type BuildingModifier,
   type BuildingOutput,
 } from '../lib/map/buildingEconomy';
-import { formatBuildTime, longhouseLock, riverShapeLock } from '../lib/map/ringCatalogue';
+import { formatBuildTime, formatMissingResources, longhouseLock, sawmillAllowedHere } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
@@ -392,7 +391,6 @@ onUnmounted(() => stageObserver?.disconnect());
 // treats a panel as an edge rather than opening underneath it:
 //   BuildQueuePanel .status-card  left:16  top:76    width:240  -> left 268
 //   ExpansionPanel  .status-card  left:16  top:340   width:240  (same column)
-//   RealmPanel      .realm-panel  left:16  bottom:16 min-w:220  (same column)
 //   TradePanel                    right:16 top:118   width:320  -> right -348
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
@@ -500,9 +498,9 @@ const BUILD_CATEGORIES: Record<'grass' | 'sand' | 'forest' | 'mountain', BuildCa
         { type: 'pumpkinfarm' },
         // Sawmill is only actually buildable on a Grass hex that is itself a
         // Straight/Bend river tile (BuildingDefinition.RequiresRiverShape) —
-        // still offered here (this bucket is terrain-keyed, not hex-specific)
-        // and locked per-hex instead, same as the longhouse-level gate below
-        // (see ringBuildingFor's riverShapeLock call).
+        // still listed here (this bucket is terrain-keyed, not hex-specific)
+        // but filtered back out per-hex when that isn't the case, rather than
+        // offered locked (see ringCategories' sawmillAllowedHere filter).
         { type: 'sawmill' },
       ],
     },
@@ -587,16 +585,14 @@ const rootActions = computed<RingAction[]>(() => {
     const upgradeDefinition = buildingCatalogue.byType[tile.buildingType]?.find((d) => d.level === nextLevel);
     const upgradeCost = upgradeDefinition?.cost ?? buildingUpgradeCost(tile.buildingType, nextLevel);
     const stock = world.hud.resources;
-    const shortOf = (['wood', 'stone', 'food', 'iron'] as const).filter((key) => upgradeCost[key] > stock[key]);
+    const missing = formatMissingResources(upgradeCost, stock);
     const actions: RingAction[] = [
       {
         id: 'upgrade',
         label: t('hud.ringMenu.actions.upgrade'),
         color: 'var(--gold)',
-        disabled: shortOf.length > 0,
-        hint: shortOf.length
-          ? t('hud.ringMenu.actions.notEnough', { resources: shortOf.map(resourceName).join(', ') })
-          : undefined,
+        disabled: missing.length > 0,
+        hint: missing.length ? t('hud.ringMenu.actions.notEnough', { resources: missing }) : undefined,
       },
       { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
@@ -698,28 +694,28 @@ function formatModifier(modifier: BuildingModifier): string {
   }
 }
 
+// Sawmill is built directly on a river tile, and only a Straight/Bend one has
+// matching art — mirrors WorldModel.placeBuilding's own check. This is a
+// fixed property of the hex (see sawmillAllowedHere), so ringCategories below
+// filters the bubble out entirely on a hex that will never qualify, rather
+// than rendering it locked.
+function hasMatchingRiverShape(coord: AxialCoord): boolean {
+  const shape = world.model.getRiverTile(coord.q, coord.r)?.shape;
+  return shape === 'straight' || shape === 'bend';
+}
+
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
   const matching = boostTerrain ? matchingNeighbourCount(coord, boostTerrain, tileAt) : 0;
   const stats = buildingStatsFor(type, 1, matching);
-  // Sawmill is built directly on a river tile, and only a Straight/Bend one
-  // has matching art — mirrors WorldModel.placeBuilding's own check, so the
-  // ring shows it locked rather than accepting a click the backend/demo
-  // model would then reject. Fisher Hut needs no such per-hex check: it
-  // lives in the water category (see WATER_CATEGORY), only ever offered on
-  // a coastal-water hex to begin with.
-  const riverShape = type === 'sawmill' ? world.model.getRiverTile(coord.q, coord.r)?.shape : undefined;
-  const hasRiverShape = riverShape === 'straight' || riverShape === 'bend';
   return {
     id: type,
     label: buildingName(type),
     cost: definition?.cost ?? buildingUpgradeCost(type, 1),
     time: definition ? formatBuildTime(definition.buildSeconds) : undefined,
     gives: stats.output ? formatOutput(stats.output) : stats.modifier ? formatModifier(stats.modifier) : undefined,
-    lock:
-      longhouseLock(definition?.requiredLonghouseLevel, world.hud.level)
-      ?? riverShapeLock(type, hasRiverShape),
+    lock: longhouseLock(definition?.requiredLonghouseLevel, world.hud.level),
     art: buildingArt(type, 1),
   };
 }
@@ -732,7 +728,9 @@ const ringCategories = computed<RingCategory[]>(() => {
     id: category.id,
     label: t(`hud.ringMenu.categories.${category.id}`),
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
-    buildings: category.buildings.map((b) => ringBuildingFor(b.type, coord)),
+    buildings: category.buildings
+      .filter((b) => sawmillAllowedHere(b.type, hasMatchingRiverShape(coord)))
+      .map((b) => ringBuildingFor(b.type, coord)),
   }));
 });
 
@@ -975,7 +973,6 @@ async function upgrade() {
       <HudNav />
     </TopBar>
     <template v-if="mode === 'settlement'">
-      <RealmPanel :ring-open="ringOpen" />
       <BuildQueuePanel @select="onQueueSelect" />
       <ExpansionPanel />
       <TradePanel />
