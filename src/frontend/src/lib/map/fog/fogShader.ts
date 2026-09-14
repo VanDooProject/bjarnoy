@@ -87,8 +87,7 @@ void main() {
  */
 export const MAX_ARMY_VISION_SOURCES = 8;
 
-export const FOG_FRAGMENT = `
-precision highp float;
+export const FOG_FRAGMENT = `precision highp float;
 
 in vec2 vUV;
 out vec4 finalColor;
@@ -148,10 +147,29 @@ uniform float uArmyVisionRadius;
 // Cheap 2D value noise (hash + smooth interpolation) — no external
 // dependency, good enough for a fog edge; not aiming for the visual quality
 // a real simplex/perlin implementation would give.
+//
+// \`p\` is wrapped to a bounded range before anything else touches it,
+// regardless of how far out in world space (or how far into a long-running
+// session's cloud drift) it came from. Skipping that wrap is what caused
+// mobile's blocky fog: the previous version multiplied unbounded \`p\` by
+// ~123/~456 and fed the result straight into fract()/dot(), and on a
+// mediump-precision fragment shader (common on mobile GPUs, and what
+// Pixi's own precision preprocessor falls back to on hardware that can't
+// honour \`highp\` — see this file's own precision line) fract() of a value
+// past a few thousand has no fractional bits left at all: every corner hash
+// in a noise cell collapses to the same handful of values, fbm() goes flat
+// within each cell, and the smoothstep at each cell's boundary reads as a
+// hard rectangular seam — exactly the "boxes" the noise exists to prevent
+// (see the file header on why displacing the ramp, not warping the UV, was
+// already chosen for the analogous hex-banding problem). 289 keeps every
+// intermediate value comfortably inside mediump's exact-integer range no
+// matter how large \`p\` gets, and is far larger in world units than any
+// world is wide, so it introduces no visible repeat.
 float hash(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
+  vec2 q = mod(p, 289.0);
+  vec3 p3 = fract(vec3(q.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
 float noise(vec2 p) {
