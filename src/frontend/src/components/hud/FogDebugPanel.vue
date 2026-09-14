@@ -36,6 +36,7 @@ const LABELS: Record<keyof FogDebugFlags, string> = {
   warp: 'Edge noise (organic mist edge)',
   drift: 'Wind drift (animates the edge)',
   showRawMask: 'Debug: bypass edge shaping, show raw mask',
+  showEffectiveMask: 'Debug: show effective mask (raw + army reveal)',
   realmBorders: 'Realm borders enabled',
   terrainCull: 'Terrain: cull past fog cutoff',
   waveCull: 'Waves: cull past fog cutoff',

@@ -210,6 +210,7 @@ export class FogMaskLayer {
       uWind: { value: new Float32Array(WIND), type: 'vec2<f32>' },
       uMaskBlend: { value: 1, type: 'f32' },
       uShowRaw: { value: 0, type: 'f32' },
+      uShowEffective: { value: 0, type: 'f32' },
       uArmyVisionSources: { value: new Float32Array(MAX_ARMY_VISION_SOURCES * 2), type: 'vec2<f32>' },
       uArmyVisionCount: { value: 0, type: 'f32' },
       uArmyVisionRadius: { value: 0, type: 'f32' },
@@ -295,9 +296,12 @@ export class FogMaskLayer {
    * concentric hexagons, which is the same diagnostic value v1's distJitter
    * toggle had and a direct read on how much work the noise is doing.
    * `showRawMask` bypasses the edge shaping and tier compositing entirely,
-   * rendering the fetched mask texture unmodified.
+   * rendering the fetched mask texture unmodified. `showEffectiveMask` is
+   * its complement: it dumps the mask channels after the §1c army-vision
+   * reveal has been multiplied in (still ahead of edge shaping/tier
+   * compositing), so troop-driven vision shows up where showRawMask can't.
    */
-  setDebug(opts: { warpEnabled: boolean; showRawMask: boolean }): void {
+  setDebug(opts: { warpEnabled: boolean; showRawMask: boolean; showEffectiveMask: boolean }): void {
     const edgeNoise = this.uniforms.uniforms.uEdgeNoise as Float32Array;
     edgeNoise[0] = opts.warpEnabled ? EDGE_NOISE[0] : 0;
     edgeNoise[1] = opts.warpEnabled ? EDGE_NOISE[1] : 0;
@@ -305,6 +309,7 @@ export class FogMaskLayer {
     seedJitter[0] = opts.warpEnabled ? SEED_JITTER[0] : 0;
     seedJitter[1] = opts.warpEnabled ? SEED_JITTER[1] : 0;
     this.uniforms.uniforms.uShowRaw = opts.showRawMask ? 1 : 0;
+    this.uniforms.uniforms.uShowEffective = opts.showEffectiveMask ? 1 : 0;
   }
 
   /**

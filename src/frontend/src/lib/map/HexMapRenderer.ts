@@ -241,6 +241,8 @@ export interface FogDebugFlags {
   drift: boolean;
   /** Bypasses the warp entirely and renders the mask texture unmodified — useful for inspecting the raw fetched mask (chunk seams, once §3's chunking lands) without the shader's own distortion on top. */
   showRawMask: boolean;
+  /** Dumps the mask channels right after §1c's army-vision reveal has been multiplied in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
+  showEffectiveMask: boolean;
   /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex — survives unchanged from v1 (§4 doesn't touch what it gates, only when it redraws). */
   realmBorders: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
@@ -275,6 +277,7 @@ export const fogDebugFlags: FogDebugFlags = {
   warp: true,
   drift: true,
   showRawMask: false,
+  showEffectiveMask: false,
   realmBorders: true,
   terrainCull: true,
   waveCull: true,
@@ -1753,7 +1756,11 @@ export class HexMapRenderer {
     const fogActive = this.isFogActive();
     this.blackFogLayer.mesh.visible = fogActive && fogDebugFlags.maskOutOfSight;
     this.whiteMistLayer.mesh.visible = fogActive && fogDebugFlags.maskUnknown;
-    const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
+    const debug = {
+      warpEnabled: fogDebugFlags.warp,
+      showRawMask: fogDebugFlags.showRawMask,
+      showEffectiveMask: fogDebugFlags.showEffectiveMask,
+    };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
     this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
