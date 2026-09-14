@@ -56,8 +56,7 @@ void main() {
 }
 `;
 
-export const WATER_FRAGMENT = `
-precision highp float;
+export const WATER_FRAGMENT = `precision highp float;
 
 in vec2 vUV;
 in vec2 vWorld;
@@ -121,11 +120,17 @@ uniform float uPropFoamScale;
 // Same cheap 2D value noise fogShader.ts uses — hash plus smooth
 // interpolation, no dependency, and deliberately the same function so the two
 // shaders' fields have the same character rather than two different kinds of
-// procedural grain on screen at once.
+// procedural grain on screen at once. See fogShader.ts's own hash() for why
+// \`p\` is wrapped before anything else touches it: on a mediump-precision
+// fragment shader (mobile GPUs, and Pixi's own fallback where \`highp\` isn't
+// actually supported), the previous version's large intermediate values lost
+// their fractional bits in fract(), which read on screen as flat, blocky
+// cells instead of smooth noise.
 float hash(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
+  vec2 q = mod(p, 289.0);
+  vec3 p3 = fract(vec3(q.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
 float noise(vec2 p) {
