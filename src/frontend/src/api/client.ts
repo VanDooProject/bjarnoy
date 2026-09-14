@@ -106,6 +106,24 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * True for a 404 whose body says the *world itself* doesn't exist — see
+ * `WorldEndpoints.WorldNotFoundProblem` — as opposed to a bare 404 for some
+ * other reason. A caller can safely drop a stored world id on this signal
+ * without risking dropping it over a transient failure.
+ */
+export function isWorldNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.problem?.error === 'world_not_found';
+}
+
+/**
+ * Settlement counterpart to {@link isWorldNotFound} — see
+ * `SettlementEndpoints.SettlementNotFoundProblem`.
+ */
+export function isSettlementNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.problem?.error === 'settlement_not_found';
+}
+
 // The auth store wires these three hooks up on import (see `stores/auth.ts`)
 // so this module can attach the access token and react to auth failures
 // without importing the store directly — a store importing `api` to make

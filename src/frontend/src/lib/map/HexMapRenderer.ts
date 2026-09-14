@@ -242,12 +242,16 @@ export interface FogDebugFlags {
   drift: boolean;
   /** Bypasses the warp entirely and renders the mask texture unmodified — useful for inspecting the raw fetched mask (chunk seams, once §3's chunking lands) without the shader's own distortion on top. */
   showRawMask: boolean;
+  /** Dumps the mask channels right after §1c's army-vision reveal has been multiplied in, still bypassing warp/edge-noise/tier compositing — the complement to showRawMask (which returns before that reveal is applied), for inspecting what's actually driving fog once troop vision is accounted for. */
+  showEffectiveMask: boolean;
   /** Turns off the realm-border wash + outer-edge glow/stroke drawn on every owned hex — survives unchanged from v1 (§4 doesn't touch what it gates, only when it redraws). */
   realmBorders: boolean;
   /** Terrain sprites stop being culled past FOG_TERRAIN_CULL_HEXES — always draw terrain art regardless of fog distance, to see what's under the mist. */
   terrainCull: boolean;
   /** Open-water wave squiggles stop being culled past FOG_TERRAIN_CULL_HEXES — off places and animates a wave on every open-water grid point in the viewport, including the ones under opaque mist. */
   waveCull: boolean;
+  /** §1c's live, client-computed army vision reveal (armyVisionPoints/setArmyVisionSources below) — off stops feeding any army position into the shader between mask fetches, so fog only ever reflects the last backend-authoritative mask. Useful for telling a client-side interpolation/reveal bug apart from a backend mask bug. */
+  armyVisionReveal: boolean;
 }
 /**
  * Fog knobs that are a *value* rather than an on/off — same debug-only
@@ -274,9 +278,11 @@ export const fogDebugFlags: FogDebugFlags = {
   warp: true,
   drift: true,
   showRawMask: false,
+  showEffectiveMask: false,
   realmBorders: true,
   terrainCull: true,
   waveCull: true,
+  armyVisionReveal: true,
 };
 
 // Per-rebuild/per-frame stats, read by FogPerfPanel — §2.8's "what's
@@ -1768,7 +1774,11 @@ export class HexMapRenderer {
     const fogActive = this.isFogActive();
     this.blackFogLayer.mesh.visible = fogActive && fogDebugFlags.maskOutOfSight;
     this.whiteMistLayer.mesh.visible = fogActive && fogDebugFlags.maskUnknown;
-    const debug = { warpEnabled: fogDebugFlags.warp, showRawMask: fogDebugFlags.showRawMask };
+    const debug = {
+      warpEnabled: fogDebugFlags.warp,
+      showRawMask: fogDebugFlags.showRawMask,
+      showEffectiveMask: fogDebugFlags.showEffectiveMask,
+    };
     this.blackFogLayer.setDebug(debug);
     this.whiteMistLayer.setDebug(debug);
     this.blackFogLayer.tick(now, fogDebugFlags.drift, fogDebugTuning.driftSpeed);
@@ -4028,7 +4038,7 @@ export class HexMapRenderer {
       // home or as a guest garrison already sits inside its settlement's own
       // explored/visible rings, same scope as the backend's own in-transit-
       // only condition (FogMaskService.GeneratePlayerMaskAsync).
-      if (army.movement) armyVisionPoints.push({ x: point.x, y: point.y });
+      if (army.movement && fogDebugFlags.armyVisionReveal) armyVisionPoints.push({ x: point.x, y: point.y });
       const p = this.toScreen(point);
       frame.armies.push({ id: army.id, x: p.x, y: p.y, interpolated: point.interpolated });
       const color = army.selected ? GOLD : army.returning ? RETURNING_COLOR : ROUTE_COLOR;

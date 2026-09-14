@@ -158,7 +158,7 @@ public static class WorldEndpoints
         }
     }
 
-    private static async Task<Results<Ok<WorldResponse>, NotFound>> GetWorld(
+    private static async Task<Results<Ok<WorldResponse>, NotFound<ProblemDetails>>> GetWorld(
         Guid worldId,
         WorldService worlds,
         TimeProvider timeProvider,
@@ -167,7 +167,7 @@ public static class WorldEndpoints
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
         if (world is null)
         {
-            return TypedResults.NotFound();
+            return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
         var islandCount = await worlds.GetIslandCountAsync(worldId, cancellationToken);
@@ -182,7 +182,7 @@ public static class WorldEndpoints
     /// <see cref="GetPlotSuggestion"/> does. Same anonymous-play ownership
     /// header as that endpoint.
     /// </summary>
-    private static async Task<Results<Ok<WorldMembershipResponse>, NotFound, BadRequest<ProblemDetails>>>
+    private static async Task<Results<Ok<WorldMembershipResponse>, NotFound<ProblemDetails>, BadRequest<ProblemDetails>>>
         GetMembership(
             Guid worldId,
             HttpContext httpContext,
@@ -198,7 +198,7 @@ public static class WorldEndpoints
 
         if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
         {
-            return TypedResults.NotFound();
+            return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
         var settlement = await settlements.FindByOwnerAsync(
@@ -208,14 +208,14 @@ public static class WorldEndpoints
             worldId, settlement?.Id.ToString(), settlement?.Name));
     }
 
-    private static async Task<Results<Ok<IReadOnlyList<IslandResponse>>, NotFound>> GetIslands(
+    private static async Task<Results<Ok<IReadOnlyList<IslandResponse>>, NotFound<ProblemDetails>>> GetIslands(
         Guid worldId,
         WorldService worlds,
         CancellationToken cancellationToken)
     {
         if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
         {
-            return TypedResults.NotFound();
+            return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
         var islands = await worlds.GetIslandsAsync(worldId, cancellationToken);
@@ -228,7 +228,7 @@ public static class WorldEndpoints
     /// Terrain for a window of the map. Derived from the world's seed on each
     /// call rather than read from a tile table — see <see cref="WorldService"/>.
     /// </summary>
-    private static async Task<Results<Ok<TileChunkResponse>, NotFound, ValidationProblem>> GetTiles(
+    private static async Task<Results<Ok<TileChunkResponse>, NotFound<ProblemDetails>, ValidationProblem>> GetTiles(
         Guid worldId,
         int qMin,
         int qMax,
@@ -270,7 +270,7 @@ public static class WorldEndpoints
         var world = await worlds.GetWorldAsync(worldId, cancellationToken);
         if (world is null)
         {
-            return TypedResults.NotFound();
+            return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
         IReadOnlyList<TileResponse> tiles =
@@ -292,7 +292,7 @@ public static class WorldEndpoints
     /// the header is what does that scoping today, at the same trust level
     /// every other anonymous-play endpoint already relies on.
     /// </summary>
-    private static async Task<Results<FileContentHttpResult, StatusCodeHttpResult, NotFound, BadRequest<ProblemDetails>>> GetFogMask(
+    private static async Task<Results<FileContentHttpResult, StatusCodeHttpResult, NotFound<ProblemDetails>, BadRequest<ProblemDetails>>> GetFogMask(
         Guid worldId,
         HttpContext httpContext,
         FogMaskService fogMask,
@@ -312,7 +312,10 @@ public static class WorldEndpoints
         var result = await fogMask.GeneratePlayerMaskAsync(worldId, ownerId, cancellationToken);
         if (!result.Accepted)
         {
-            return TypedResults.NotFound();
+            // FogMaskRejection's only value besides None: the world itself
+            // doesn't exist (map-fog-v2.md's slice never rejects for an
+            // owner having no settlements — that renders an all-fog mask).
+            return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
         var eTag = $"\"{result.ETag}\"";
@@ -426,5 +429,27 @@ public static class WorldEndpoints
         }
 
         return (ownerId, null);
+    }
+
+    /// <summary>
+    /// Every 404 in this file that means "no world with that id exists" —
+    /// as opposed to some other rejection that happens to share the status
+    /// code — carries this same machine-readable body. A world a client
+    /// once joined can stop existing (an admin reseed, or a database the
+    /// client's stored id no longer resolves against at all), and unlike a
+    /// bare 404 this lets it tell that apart from a transient failure and
+    /// drop the stale id instead of retrying it forever — see
+    /// `stores/world.ts`'s `recoverFromMissingWorld`.
+    /// </summary>
+    private static ProblemDetails WorldNotFoundProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Title = "No such world.",
+            Detail = "This world does not exist, or no longer does.",
+            Status = StatusCodes.Status404NotFound,
+        };
+        problem.Extensions["error"] = "world_not_found";
+        return problem;
     }
 }
