@@ -93,6 +93,118 @@ function close() {
   open.value = false;
 }
 
+// Drag-to-open/close (issue: mobile queue sidebar). Matches the CSS's own
+// dimensions — see the `.queue-drawer`/`.queue-drawer-rail` rules below —
+// so the drag transform lines up with the resting transform exactly.
+const RAIL_W = 96;
+const OPEN_W = computed(() => Math.min(window.innerWidth * 0.86, 340));
+const TRAVEL = computed(() => OPEN_W.value - RAIL_W);
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+// null when not dragging (the CSS class-driven transform + transition
+// takes over); a clamped in-progress offset while a pointer is down.
+const dragPx = ref<number | null>(null);
+
+interface DragState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startT: number;
+  openAtStart: boolean;
+  decided: 'horizontal' | 'vertical' | null;
+}
+
+let dragState: DragState | null = null;
+
+const rootStyle = computed(() => {
+  if (dragPx.value === null) return {};
+  const base = open.value ? 0 : -TRAVEL.value;
+  return { transform: `translateX(${base + dragPx.value}px)` };
+});
+
+function onRailPointerDown(event: PointerEvent) {
+  const rail = event.currentTarget as HTMLElement;
+  rail.setPointerCapture(event.pointerId);
+  dragState = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startT: performance.now(),
+    openAtStart: open.value,
+    decided: null,
+  };
+  dragPx.value = 0;
+}
+
+function onRailPointerMove(event: PointerEvent) {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+  const dx = event.clientX - dragState.startX;
+  const dy = event.clientY - dragState.startY;
+
+  if (dragState.decided === null) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    // A drag that starts more vertical than horizontal is a scroll, not a
+    // drawer drag — bail out entirely rather than fighting the gesture.
+    dragState.decided = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+    if (dragState.decided === 'vertical') {
+      dragPx.value = null;
+      return;
+    }
+  }
+  if (dragState.decided !== 'horizontal') return;
+
+  dragPx.value = dragState.openAtStart ? clamp(dx, -TRAVEL.value, 0) : clamp(dx, 0, TRAVEL.value);
+}
+
+function settleDrag(event: PointerEvent) {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+  const rail = event.currentTarget as HTMLElement;
+  if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
+
+  const dx = event.clientX - dragState.startX;
+  const dy = event.clientY - dragState.startY;
+  const dt = performance.now() - dragState.startT;
+  const { openAtStart, decided } = dragState;
+  dragState = null;
+  dragPx.value = null;
+
+  if (decided === 'vertical') return;
+
+  const isTap = Math.abs(dx) < 8 && Math.abs(dy) < 8 && dt < 500;
+  if (isTap) {
+    open.value = !open.value;
+    return;
+  }
+
+  const travel = TRAVEL.value;
+  const velocity = dt > 0 ? dx / dt : 0;
+  if (!openAtStart) {
+    const traveledFraction = clamp(dx, 0, travel) / travel;
+    open.value = traveledFraction > 0.4 || velocity > 0.5;
+  } else {
+    const traveledFraction = clamp(-dx, 0, travel) / travel;
+    open.value = !(traveledFraction > 0.4 || -velocity > 0.5);
+  }
+}
+
+function onRailPointerCancel(event: PointerEvent) {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+  dragState = null;
+  dragPx.value = null;
+}
+
+// The pointerup tap path above already toggles `open` — this only handles
+// the keyboard-activated click (Enter/Space on the focused rail button),
+// which fires with `detail === 0`. A touch/mouse-generated click always has
+// detail >= 1, so it's a no-op duplicate of the pointer path, not a second
+// toggle.
+function onRailClick(event: MouseEvent) {
+  if (event.detail === 0) toggle();
+}
+
 function selectBuildOrder(coord: { q: number; r: number }) {
   close();
   emit('select', coord);
@@ -111,7 +223,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 <template>
   <div v-if="hasAnything">
     <div v-if="open" class="queue-drawer-backdrop" @pointerdown.self="close" />
-    <div class="queue-drawer" :class="{ 'is-open': open }">
+    <div class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
       <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open">
         <div class="queue-drawer-header">
           <span class="status-card-title">{{ t('hud.queueDrawer.title') }}</span>
@@ -199,7 +311,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
         :aria-expanded="open"
         aria-controls="queue-drawer-body"
         :aria-label="t('hud.queueDrawer.openLabel')"
-        @click="toggle"
+        @pointerdown="onRailPointerDown"
+        @pointermove="onRailPointerMove"
+        @pointerup="settleDrag"
+        @pointercancel="onRailPointerCancel"
+        @click="onRailClick"
       >
         <div class="queue-drawer-rail-content">
           <div v-if="soonestBuild" class="rail-row">
@@ -406,6 +522,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 .queue-drawer.is-open {
   transform: translateX(0);
 }
+/* Mid-drag, the transform is driven imperatively by rootStyle every
+   pointermove — the transition would otherwise fight/lag each frame. */
+.queue-drawer.is-dragging {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .queue-drawer {
     transition: none;
@@ -461,7 +582,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
 }
 .queue-drawer-rail-content {
   width: 100%;

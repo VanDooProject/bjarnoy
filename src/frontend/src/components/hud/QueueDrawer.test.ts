@@ -122,6 +122,87 @@ describe('QueueDrawer', () => {
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false]);
   });
 
+  function stubPointerCapture(el: HTMLElement) {
+    (el as unknown as { setPointerCapture: () => void }).setPointerCapture = vi.fn();
+    (el as unknown as { hasPointerCapture: () => boolean }).hasPointerCapture = vi.fn(() => false);
+    (el as unknown as { releasePointerCapture: () => void }).releasePointerCapture = vi.fn();
+  }
+
+  it('dragging the rail past the open threshold opens the drawer', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer();
+    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
+    stubPointerCapture(rail);
+
+    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointermove', { clientX: 150, clientY: 0, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 150, clientY: 0, pointerId: 1 }));
+
+    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true]);
+  });
+
+  it('a short drag below the threshold snaps back without opening', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer();
+    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
+    stubPointerCapture(rail);
+
+    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointermove', { clientX: 30, clientY: 0, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 30, clientY: 0, pointerId: 1 }));
+
+    expect(wrapper.emitted('update:open')).toBeUndefined();
+  });
+
+  it('a small, quick pointer tap toggles the drawer, same as a click', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer();
+    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
+    stubPointerCapture(rail);
+
+    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 2, clientY: 1, pointerId: 1 }));
+
+    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([true]);
+  });
+
+  it('bails out of the drawer drag when the gesture is more vertical than horizontal', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer();
+    const rail = wrapper.get('.queue-drawer-rail').element as HTMLElement;
+    stubPointerCapture(rail);
+
+    rail.dispatchEvent(new PointerEvent('pointerdown', { clientX: 0, clientY: 0, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 60, pointerId: 1 }));
+    rail.dispatchEvent(new PointerEvent('pointerup', { clientX: 5, clientY: 60, pointerId: 1 }));
+
+    expect(wrapper.emitted('update:open')).toBeUndefined();
+  });
+
+  it('Escape closes an open drawer', async () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer({ open: true });
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted('update:open')).toEqual([[false]]);
+  });
+
   it('shows the garrison and guest sections', () => {
     const world = useWorldStore();
     world.hud.garrison = [{ unit: 'spearman', count: 12 }];
