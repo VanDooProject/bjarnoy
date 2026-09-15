@@ -687,6 +687,45 @@ describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
   });
 });
 
+describe('useWorldStore restoreLiveSettlement', () => {
+  // Regression: observed live on a preview deployment — a page reload with a
+  // stale persisted settlement id (stores/player.ts's bjarnoy.settlementId,
+  // for a world/settlement that no longer exists) crashed MapView/
+  // LandingView/ExpansionPanel's mount, because this call had no try/catch
+  // at all, unlike refreshLiveSettlement right above.
+  it('deselects the settlement and resets onboarding when the backend reports settlement_not_found', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+    store.liveReady = true;
+    getSettlement.mockReset().mockRejectedValue(
+      new MockedApiError(404, { error: 'settlement_not_found' }),
+    );
+    store.worldId = 'world-1';
+
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+    player.foundSettlement('dead-settlement', 'world-1');
+
+    await expect(
+      store.restoreLiveSettlement(player.id, 'dead-settlement'),
+    ).resolves.toBeUndefined();
+
+    expect(store.selectedSettlementId).toBeNull();
+    expect(player.settlementId).toBeNull();
+    expect(player.hasFoundedSettlement).toBe(false);
+  });
+
+  it('still throws on an ordinary (non-settlement_not_found) failure', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    getSettlement.mockReset().mockRejectedValue(new Error('network error'));
+
+    await expect(
+      store.restoreLiveSettlement('player-1', 'settlement-1'),
+    ).rejects.toThrow('network error');
+  });
+});
+
 describe('useWorldStore fetchFogMask', () => {
   it('is a no-op in demo mode', async () => {
     getFogMask.mockReset();
