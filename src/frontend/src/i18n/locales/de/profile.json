@@ -7,6 +7,13 @@
   "reportSent": "Meldung gesendet — vielen Dank.",
   "joined": "Beigetreten",
   "settlements": "Siedlungen",
+  "hudBar": {
+    "title": "HUD-Leiste",
+    "hint": "Gilt nur auf kleinen Bildschirmen. Du kannst die Leiste auf deinem Handy auch am Griff ziehen.",
+    "position": "Position der Leiste",
+    "top": "Oben",
+    "bottom": "Unten"
+  },
   "bio": {
     "title": "Bio",
     "edit": "Bio bearbeiten",
