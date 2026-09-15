@@ -43,7 +43,10 @@ const claimedHexes = computed(() => world.hud.claimedHexes);
 <style scoped>
 .realm-panel {
   position: absolute;
-  bottom: 16px;
+  /* --hud-inset-bottom (set on MapView's root) is 0px everywhere except a
+     mobile-docked-bottom HUD bar, where it's the bar's own height — keeps
+     this panel clear of it without touching desktop's plain 16px. */
+  bottom: calc(16px + var(--hud-inset-bottom, 0px));
   left: 16px;
   z-index: 10;
   padding: 14px 18px;
