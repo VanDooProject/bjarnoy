@@ -18,15 +18,10 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
-import { useTrainingOrders } from '../../composables/useQueueOrders';
+import { MAX_TRAINING_QUEUE_LENGTH, useTrainingOrders } from '../../composables/useQueueOrders';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
-
-// Mirrors Settlement.MaxTrainingQueueLength (backend) — no endpoint exposes
-// this as data, so it's kept in sync here the same way BuildQueuePanel pins
-// its own TOTAL_SLOTS.
-const MAX_TRAINING_QUEUE_LENGTH = 5;
 
 const orders = useTrainingOrders();
 

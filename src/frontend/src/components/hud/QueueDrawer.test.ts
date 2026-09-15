@@ -97,6 +97,18 @@ describe('QueueDrawer', () => {
     expect(rail.findAll('.rail-row')).toHaveLength(1);
   });
 
+  // Regression: the rail used to keep rendering its collapsed mini-summary
+  // even while open, so it sat right next to the full expanded list and
+  // visually read as the drawer being "open twice".
+  it('hides the rail mini-summary once the drawer is open', () => {
+    const world = useWorldStore();
+    world.hud.trainingQueueFetchedAt = Date.now();
+    world.hud.trainingQueue = [trainingOrder()];
+
+    const wrapper = mountDrawer({ open: true });
+    expect(wrapper.find('.queue-drawer-rail-content').exists()).toBe(false);
+  });
+
   it('clicking the rail opens the drawer', async () => {
     const world = useWorldStore();
     world.hud.trainingQueueFetchedAt = Date.now();

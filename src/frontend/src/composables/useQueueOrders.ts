@@ -9,6 +9,12 @@ import type { MessageSchema } from '../i18n/schema';
 import { buildingName, unitName } from '../i18n/catalogueNames';
 import { useWorldStore } from '../stores/world';
 
+// Mirrors Settlement.MaxTrainingQueueLength (backend) — no endpoint exposes
+// this as data, so it's kept in sync here manually. Shared by
+// TrainingQueuePanel.vue and QueueDrawer.vue rather than each keeping its
+// own copy.
+export const MAX_TRAINING_QUEUE_LENGTH = 5;
+
 export function formatCountdown(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
   const h = Math.floor(s / 3600);

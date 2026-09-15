@@ -9,22 +9,24 @@
 // glance. Instead it shows only the single soonest-to-finish item per
 // category, plus a "+N more" chip for the rest — see soonestBuild/
 // soonestTraining below.
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
-import { useBuildOrders, useTrainingOrders, type BuildOrderRow, type TrainingOrderRow } from '../../composables/useQueueOrders';
+import {
+  MAX_TRAINING_QUEUE_LENGTH,
+  useBuildOrders,
+  useTrainingOrders,
+  type BuildOrderRow,
+  type TrainingOrderRow,
+} from '../../composables/useQueueOrders';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const open = defineModel<boolean>('open', { default: false });
 const emit = defineEmits<{ select: [coord: { q: number; r: number }] }>();
-
-// Mirrors Settlement.MaxTrainingQueueLength (backend) — same reasoning as
-// TrainingQueuePanel.vue's own copy of this constant.
-const MAX_TRAINING_QUEUE_LENGTH = 5;
 
 const buildOrders = useBuildOrders();
 const trainingOrders = useTrainingOrders();
@@ -85,6 +87,17 @@ const hasAnything = computed(
   () => buildOrders.value.length > 0 || trainingOrders.value.length > 0 || garrison.value.length > 0 || guests.value.length > 0,
 );
 
+// The whole drawer (v-if="hasAnything" on the template root) unmounts the
+// instant the last queue/garrison/guest entry disappears — if that happens
+// while `open` is still true, the parent's v-model stays stuck at true with
+// no drawer left to close it, and MapView's canvasInteractionLocked watch
+// (keyed off this same `open`) never flips back, permanently locking map
+// interaction. Force-close before that can happen, and on unmount as a
+// backstop for any other path that drops the drawer while open.
+watch(hasAnything, (has) => {
+  if (!has) open.value = false;
+});
+
 function toggle() {
   open.value = !open.value;
 }
@@ -97,7 +110,15 @@ function close() {
 // dimensions — see the `.queue-drawer`/`.queue-drawer-rail` rules below —
 // so the drag transform lines up with the resting transform exactly.
 const RAIL_W = 96;
-const OPEN_W = computed(() => Math.min(window.innerWidth * 0.86, 340));
+// A plain computed() here would cache window.innerWidth from whenever it
+// was first read and never update — a rotation/resize would then desync
+// the drag clamp/threshold math from the CSS transform, which recomputes
+// `min(86vw, 340px)` live. Track the live width instead.
+const viewportWidth = ref(window.innerWidth);
+function onWindowResize() {
+  viewportWidth.value = window.innerWidth;
+}
+const OPEN_W = computed(() => Math.min(viewportWidth.value * 0.86, 340));
 const TRAVEL = computed(() => OPEN_W.value - RAIL_W);
 
 function clamp(value: number, min: number, max: number): number {
@@ -216,15 +237,26 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown));
-onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown);
+  window.addEventListener('resize', onWindowResize);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('resize', onWindowResize);
+  // Backstop for hasAnything's own watch above: whatever unmounts this
+  // drawer while open (e.g. useIsMobile crossing back over the breakpoint
+  // mid-gesture) must not leave the parent's v-model — and therefore the
+  // canvas interaction lock keyed off it — stuck at true.
+  open.value = false;
+});
 </script>
 
 <template>
   <div v-if="hasAnything">
     <div v-if="open" class="queue-drawer-backdrop" @pointerdown.self="close" />
     <div class="queue-drawer" :class="{ 'is-open': open, 'is-dragging': dragPx !== null }" :style="rootStyle">
-      <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open">
+      <div id="queue-drawer-body" class="queue-drawer-panel" :aria-hidden="!open" :inert="!open">
         <div class="queue-drawer-header">
           <span class="status-card-title">{{ t('hud.queueDrawer.title') }}</span>
           <button type="button" class="queue-drawer-close" @click="close">{{ t('hud.queueDrawer.close') }}</button>
@@ -259,8 +291,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
                 iron: Math.round(world.hud.reserved.iron),
               }) }}
             </div>
-            <div v-if="error" class="status-subtext error">{{ error }}</div>
           </template>
+          <div v-if="error" class="status-subtext error">{{ error }}</div>
 
           <template v-if="trainingOrders.length">
             <div class="status-card-header" :class="{ 'has-section-above': buildOrders.length }">
@@ -310,14 +342,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
         class="queue-drawer-rail"
         :aria-expanded="open"
         aria-controls="queue-drawer-body"
-        :aria-label="t('hud.queueDrawer.openLabel')"
+        :aria-label="open ? t('hud.queueDrawer.closeLabel') : t('hud.queueDrawer.openLabel')"
         @pointerdown="onRailPointerDown"
         @pointermove="onRailPointerMove"
         @pointerup="settleDrag"
         @pointercancel="onRailPointerCancel"
         @click="onRailClick"
       >
-        <div class="queue-drawer-rail-content">
+        <!-- The full list is already showing in .queue-drawer-panel right next
+             to this once open — rendering the rail's own mini summary too
+             would visually duplicate it (looked like the drawer was "open
+             twice"). Collapse to a bare drag/tap grip while open instead. -->
+        <div v-if="!open" class="queue-drawer-rail-content">
           <div v-if="soonestBuild" class="rail-row">
             <div class="rail-row-top">
               <span class="rail-row-label">{{ t('hud.queueDrawer.buildLabel') }}</span>
@@ -345,7 +381,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
             </div>
           </div>
         </div>
-        <span class="queue-drawer-chevron" aria-hidden="true">{{ t('hud.queueDrawer.chevron') }}</span>
+        <span class="queue-drawer-chevron" :class="{ 'is-open': open }" aria-hidden="true">{{ t('hud.queueDrawer.chevron') }}</span>
       </button>
     </div>
   </div>
@@ -578,12 +614,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   padding: 10px 8px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-left: 1px solid var(--panel-border);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: grab;
   touch-action: none;
+  /* Not while dragging (dragPx !== null skips the CSS transform entirely —
+     see rootStyle) or the width snap would fight the drag's own transform
+     each frame the same way the transition does (see .is-dragging above). */
+  transition: width 180ms ease;
+}
+.queue-drawer-rail:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+/* The full expanded list already shows everything the rail's own mini
+   summary would — see the template comment above .queue-drawer-rail-content
+   — so once open this is just a slim grip for dragging/tapping shut. */
+.queue-drawer.is-open .queue-drawer-rail {
+  width: 28px;
+  padding: 10px 2px;
+  justify-content: center;
+}
+.queue-drawer.is-dragging .queue-drawer-rail {
+  transition: none;
 }
 .queue-drawer-rail-content {
   width: 100%;
@@ -629,5 +683,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   flex: none;
   font-size: 18px;
   color: var(--muted);
+  transition: transform 180ms ease;
+}
+.queue-drawer-chevron.is-open {
+  transform: rotate(180deg);
 }
 </style>
