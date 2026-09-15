@@ -22,6 +22,9 @@
     "rate": "+{n}/h",
     "capMax": "max. {n}"
   },
+  "drawer": {
+    "toggle": "Mehr anzeigen"
+  },
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Reich beansprucht {count} Hexfelder",

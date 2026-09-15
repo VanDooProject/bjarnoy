@@ -22,6 +22,9 @@
     "rate": "+{n}/h",
     "capMax": "max {n}"
   },
+  "drawer": {
+    "toggle": "Show more"
+  },
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Realm claims {count} hexes",
