@@ -799,7 +799,20 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || this.selectedSettlementId === settlementId) return;
       this.ownerId = ownerId;
       await this.bootstrapLiveWorld();
-      const response = await api.getSettlement(settlementId);
+      let response;
+      try {
+        response = await api.getSettlement(settlementId);
+      } catch (err) {
+        if (isSettlementNotFound(err)) {
+          // Same TOCTOU as refreshLiveSettlement: the persisted settlement
+          // (stores/player.ts's bjarnoy.settlementId) is gone by the time
+          // this reload actually asks for it — recover instead of leaving
+          // the settlement route's mount throw uncaught.
+          this.recoverFromMissingSettlement();
+          return;
+        }
+        throw err;
+      }
       this.model.registerSettlement({
         id: response.id,
         ownerId,
