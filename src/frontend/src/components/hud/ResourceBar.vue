@@ -289,7 +289,15 @@ function stageText(key: string, value: number, rate: number, cap: number): strin
    rate / max capacity. Only active under HUD_COMPACT_QUERY (lib/breakpoints.ts);
    the desktop rules above are untouched. */
 .resource-bar.compact {
-  gap: 12px;
+  gap: 10px;
+}
+/* The desktop `.resource + .resource` separator (22px padding + a border)
+   would otherwise still apply here too — far too wide for 5 pills to fit a
+   phone screen. Compact pills space themselves with the flex gap above
+   instead. */
+.resource-bar.compact .resource--compact + .resource--compact {
+  padding-left: 0;
+  border-left: none;
 }
 .resource--compact {
   background: transparent;

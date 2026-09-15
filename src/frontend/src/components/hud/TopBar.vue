@@ -143,7 +143,16 @@ const backdropStyle = computed(() => {
       </div>
     </div>
     <div class="hud-bar-right">
-      <slot />
+      <!-- Compact mode has too little width to guarantee everything fits
+           (5 resource pills + the nav trigger + locale switcher) — scroll
+           this inner row horizontally rather than silently overflowing off
+           either edge. Unconditional (not just under dragEnabled) so it
+           costs nothing on desktop, where the content already fits and this
+           never engages. The grip stays outside it so it's always reachable
+           regardless of scroll position. -->
+      <div class="hud-bar-scroll">
+        <slot />
+      </div>
       <button
         v-if="dragEnabled"
         type="button"
@@ -254,10 +263,22 @@ const backdropStyle = computed(() => {
 .hud-bar-right {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 12px;
   flex: 1 1 auto;
   min-width: 0;
   justify-content: flex-end;
+}
+.hud-bar-scroll {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hud-bar-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* Mobile-only: the collapsed bar itself is the drag surface, so it needs to

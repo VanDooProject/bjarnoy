@@ -166,6 +166,17 @@ const showProfileNudge = computed(
   padding-left: 22px;
   border-left: 1px solid var(--panel-border);
 }
+/* Mobile HUD bar rework: these same destinations are duplicated into the
+   pull-down drawer (components/hud/MobileHudDrawer.vue), which is the only
+   thing that fits in the compact bar's own width — the inline links here
+   would otherwise push ResourceBar's pills off-screen. Keep this in sync
+   with lib/breakpoints.ts's HUD_COMPACT_MAX_WIDTH (plain CSS media queries
+   can't read a JS constant). */
+@media (max-width: 768px) {
+  .link {
+    display: none;
+  }
+}
 .link {
   background: transparent;
   border: none;
