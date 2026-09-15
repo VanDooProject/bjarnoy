@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileView from './ProfileView.vue';
 import type { ProfileResponse } from '../api/types';
 import { useAuthStore } from '../stores/auth';
+import { useHudPrefsStore } from '../stores/hudPrefs';
 import { createTestI18n } from '../test/i18n';
 import enProfile from '../i18n/locales/en/profile.json';
 
@@ -160,5 +161,78 @@ describe('ProfileView', () => {
     await flushPromises();
 
     expect(wrapper.findAll('button').some((b) => b.text() === 'Report')).toBe(false);
+  });
+
+  describe('HUD bar preferences', () => {
+    it('shows the HUD bar section on the player\'s own profile', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-1',
+        userName: 'ragnar',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('HUD bar');
+    });
+
+    it('hides the HUD bar section on someone else\'s profile', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-2',
+        userName: 'floki',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('HUD bar');
+    });
+
+    it('hides the HUD bar section from an anonymous visitor', async () => {
+      getProfileByName.mockResolvedValue(profile());
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('HUD bar');
+    });
+
+    it('choosing Bottom writes the hudPrefs store', async () => {
+      getProfileByName.mockResolvedValue(profile());
+      const auth = useAuthStore();
+      auth.user = {
+        id: 'user-1',
+        userName: 'ragnar',
+        role: 'player',
+        status: 'active',
+        displayName: null,
+        isPremium: false,
+        preferredLocale: null,
+      };
+
+      const wrapper = mountProfileView();
+      await flushPromises();
+
+      const bottomButton = wrapper.findAll('button').find((b) => b.text() === 'Bottom')!;
+      await bottomButton.trigger('click');
+
+      const hudPrefs = useHudPrefsStore();
+      expect(hudPrefs.barPosition).toBe('bottom');
+      expect(bottomButton.attributes('aria-pressed')).toBe('true');
+    });
   });
 });

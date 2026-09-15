@@ -19,7 +19,11 @@
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserved)",
-    "rate": "+{n}/h"
+    "rate": "+{n}/h",
+    "capMax": "max {n}"
+  },
+  "drawer": {
+    "toggle": "Show more"
   },
   "realmPanel": {
     "level": "Lv {level}",

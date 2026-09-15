@@ -6,6 +6,7 @@ import { api, ApiError } from '../api/client';
 import type { ProfileResponse } from '../api/types';
 import type { MessageSchema } from '../i18n/schema';
 import { useAuthStore } from '../stores/auth';
+import HudPreferences from '../components/settings/HudPreferences.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
@@ -159,6 +160,8 @@ function joinedDate(iso: string): string {
         </div>
       </dl>
 
+      <HudPreferences v-if="isOwnProfile" />
+
       <section class="bio-section">
         <div class="bio-head">
           <h2>{{ $t('profile.bio.title') }}</h2>
@@ -264,6 +267,9 @@ function joinedDate(iso: string): string {
   margin: 2px 0 0;
   font-size: 18px;
   font-weight: 600;
+}
+.hud-preferences {
+  margin: 0 0 24px;
 }
 .bio-head {
   display: flex;

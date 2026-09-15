@@ -8,6 +8,7 @@ import SettlementCanvas from '../components/map/SettlementCanvas.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import ResourceBar from '../components/hud/ResourceBar.vue';
+import MobileHudDrawer from '../components/hud/MobileHudDrawer.vue';
 import RealmPanel from '../components/hud/RealmPanel.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
@@ -31,6 +32,9 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useMediaQuery } from '../composables/useMediaQuery';
+import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
+import { useHudPrefsStore } from '../stores/hudPrefs';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
@@ -51,6 +55,17 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const hudPrefs = useHudPrefsStore();
+
+// Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
+// is actually docked at the bottom edge right now — desktop and the default
+// 'top' preference both keep the bar (and every offset below) exactly where
+// it's always been.
+const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
+const HUD_BAR_HEIGHT = 64;
+const hudBarAtBottom = computed(() => isCompactHud.value && hudPrefs.barPosition === 'bottom');
+const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : HUD_BAR_HEIGHT));
+const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? HUD_BAR_HEIGHT : 0));
 const unitCatalogue = useUnitCatalogueStore();
 const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();
@@ -397,12 +412,16 @@ onUnmounted(() => stageObserver?.disconnect());
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
-// These are worst-case constants: every panel is treated as present.
+// These are worst-case constants: every panel is treated as present. On
+// mobile, the bar (and these panels' own bottom offset — see RealmPanel.vue/
+// ArmyPanel.vue's `--hud-inset-bottom`) can be docked at the bottom instead;
+// `hudInsetTopPx`/`hudInsetBottomPx` above mirror that same 64px into
+// whichever edge box the bar actually occupies right now.
 const ringBounds = computed(() => ({
   left: 268,
-  top: 76,
+  top: hudInsetTopPx.value + 12,
   right: Math.max(420, stage.value.w - 348),
-  bottom: stage.value.h - 16,
+  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
 }));
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
@@ -411,9 +430,9 @@ const ringBounds = computed(() => ({
 // harmful than one covering the menu.
 const ringCardBounds = computed(() => ({
   left: 16,
-  top: 76,
+  top: hudInsetTopPx.value + 12,
   right: stage.value.w - 16,
-  bottom: stage.value.h - 16,
+  bottom: stage.value.h - (hudInsetBottomPx.value + 16),
 }));
 
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
@@ -938,7 +957,11 @@ async function upgrade() {
 </script>
 
 <template>
-  <div ref="stageRef" class="map-view">
+  <div
+    ref="stageRef"
+    class="map-view"
+    :style="{ '--hud-inset-top': hudInsetTopPx + 'px', '--hud-inset-bottom': hudInsetBottomPx + 'px' }"
+  >
     <SettlementCanvas
       v-if="world.selectedSettlementId"
       ref="canvasRef"
@@ -969,10 +992,13 @@ async function upgrade() {
          the camera starts — this scrim (matching Viking Realm.dc.html's own
          top-bar gradient) keeps the logo/resources/nav readable regardless
          of what's under them. -->
-    <div class="hud-scrim" />
+    <div class="hud-scrim" :class="{ 'hud-scrim--bottom': hudBarAtBottom }" />
     <TopBar :hide-title="mode === 'settlement'">
       <ResourceBar :ring-open="ringOpen" />
       <HudNav />
+      <template #drawer="{ close }">
+        <MobileHudDrawer @close="close" />
+      </template>
     </TopBar>
     <template v-if="mode === 'settlement'">
       <RealmPanel :ring-open="ringOpen" />
@@ -1041,6 +1067,13 @@ async function upgrade() {
   z-index: 5;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
+}
+/* Mobile only: the collapsed bar can dock to the bottom edge instead (see
+   hudBarAtBottom above) — the readability scrim follows it there. */
+.hud-scrim--bottom {
+  top: auto;
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(7, 15, 20, 0.7) 0%, rgba(7, 15, 20, 0.32) 70%, rgba(7, 15, 20, 0) 100%);
 }
 .fog-debug-stack {
   position: absolute;
