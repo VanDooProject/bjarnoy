@@ -124,6 +124,15 @@
     "guests": "Gäste",
     "unknownSettlement": "Unbekannte Siedlung"
   },
+  "queueDrawer": {
+    "title": "Warteschlangen",
+    "close": "✕",
+    "openLabel": "Bau- und Ausbildungswarteschlangen öffnen",
+    "buildLabel": "Bau",
+    "trainLabel": "Ausbildung",
+    "more": "+{count} weitere",
+    "chevron": "›"
+  },
   "buildingModal": {
     "close": "✕",
     "hexCoord": "Hex {q}, {r}",

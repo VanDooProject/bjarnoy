@@ -124,6 +124,15 @@
     "guests": "Guests",
     "unknownSettlement": "Unknown settlement"
   },
+  "queueDrawer": {
+    "title": "Queues",
+    "close": "✕",
+    "openLabel": "Open build & training queues",
+    "buildLabel": "Build",
+    "trainLabel": "Train",
+    "more": "+{count} more",
+    "chevron": "›"
+  },
   "buildingModal": {
     "close": "✕",
     "hexCoord": "Hex {q}, {r}",
