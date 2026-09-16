@@ -209,13 +209,16 @@ const backdropStyle = computed(() => {
     @pointerup="onBarPointerUp"
     @pointercancel="onBarPointerCancel"
   >
-    <div class="brand">
+    <!-- The logo lives in the mobile settlement-bubble instead (below) —
+         an empty .brand would still eat the bar's gap for nothing, so it's
+         skipped entirely rather than just hiding its contents. -->
+    <div v-if="!isCompact" class="brand">
       <span class="logo-hex" aria-hidden="true" title="Bjarnoy">
         <svg viewBox="0 0 100 100">
           <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
         </svg>
       </span>
-      <div class="titles" v-if="settlementName && !props.hideTitle && !isCompact">
+      <div class="titles" v-if="settlementName && !props.hideTitle">
         <span class="name">{{ settlementName }}</span>
         <span v-if="caption" class="caption">{{ caption }}</span>
       </div>

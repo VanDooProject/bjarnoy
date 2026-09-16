@@ -117,7 +117,7 @@ function stageText(value: number, rate: number, cap: number): string {
 </script>
 
 <template>
-  <div class="resource-bar" :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded }">
+  <div class="resource-bar" :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded, expanded: isExpanded }">
     <template v-if="!isCompact || isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource">
         <span class="hex-icon" :style="{ background: pill.color }" />
@@ -281,6 +281,14 @@ function stageText(value: number, rate: number, cap: number): string {
   font-weight: 400;
   font-size: 11px;
   color: var(--muted);
+}
+
+/* Mobile expanded pills only (drawer open) — reuses the desktop markup
+   above wholesale, but a mobile pill is much narrower than a desktop one,
+   so "400/3,000" on one line gets cramped fast. Break the cap onto its own
+   line there; desktop (no `.expanded` class) keeps the single-line look. */
+.resource-bar.expanded .value .cap {
+  display: block;
 }
 
 /* Mobile collapsed pills only (drawer closed) — single line per pill,

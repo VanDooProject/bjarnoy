@@ -7,9 +7,6 @@
 // docking preference so it always has clear space: tucked just under the
 // bar when it's docked at the top (the default), and left near the top
 // itself when the bar has moved to the bottom (nothing else is up there).
-// It also moves from centered to the right edge on mobile — TopBar.vue's
-// own settlement-name bubble now sits left-aligned on that exact same row,
-// and a centered badge collided with it.
 // While the pull-down drawer is open it would still land on top of the
 // drawer's own content in that same spot, so it hides for as long as that's
 // open (isHudDrawerOpen, kept in sync by TopBar.vue) rather than following
@@ -66,19 +63,14 @@ const showBadge = computed(() => DEMO_MODE && !(isCompact.value && isHudDrawerOp
 }
 /* Mobile-only bubble: small, fully rounded, and pushed clear of whichever
    edge the HUD bar is currently docked to (see `badgeStyle` above) instead
-   of spanning the top of the screen and covering it. Right-aligned instead
-   of centered, so it shares its row with TopBar.vue's left-aligned
-   settlement-name bubble without overlapping it — each capped to less than
-   half the screen width so the two can never collide even at their longest. */
+   of spanning the top of the screen and covering it. Stays centered like
+   the desktop rule above. */
 .demo-badge--compact {
-  left: auto;
-  right: 16px;
-  transform: none;
   padding: 3px 10px;
   font-size: 10px;
   border-radius: 999px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  max-width: calc(42vw - 16px);
+  max-width: calc(100vw - 32px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
