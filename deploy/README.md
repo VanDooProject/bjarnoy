@@ -150,6 +150,13 @@ help needed from this file:
 - **Nightly, as a backstop:** a scheduled run reaps any `bjarnoy-pr-<N>`
   Application whose PR is no longer open, in case a `closed` event was
   missed (a skipped, cancelled, or failed workflow run).
+- **Gated, so a docs-only PR doesn't spend a build for nothing:** by default
+  a PR whose changed files are all under `docs/`, end in `.md`, or are the
+  `LICENSE` file gets no environment at all. Two labels override that
+  either way — `preview` forces one on anyway (e.g. to look at a docs page
+  actually rendered), `no-preview` forces one off (and tears down an
+  already-provisioned environment if one exists, so labeling a PR
+  `no-preview` after the fact reclaims the build/disk it was using).
 
 The workflow needs a Coolify API token with `read`, `write`, and `deploy`
 abilities in the `COOLIFY_API_TOKEN` repository secret, plus repository

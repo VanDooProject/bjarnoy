@@ -19,7 +19,7 @@ name: PR preview environment
 # a string to the Coolify API.
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
   schedule:
     # Backstop for a workflow run that never reached the `closed` job at all
     # (skipped, cancelled, or failed outright) — reaps any bjarnoy-pr-<N>
@@ -45,11 +45,48 @@ jobs:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: scripts/coolify-preview.sh destroy "${{ github.event.pull_request.number }}"
 
-  ensure:
+  # Decides whether this PR change is worth a Coolify build at all, so a
+  # docs-only PR (or a small fix someone tags `no-preview`) doesn't spend
+  # build minutes/disk on an environment nobody is going to look at.
+  # Defaults: skip when every changed file is docs-shaped; the two labels
+  # override that in either direction, `preview` forcing one on (e.g. to
+  # actually look at a docs change rendered) and `no-preview` forcing one off.
+  gate:
     if: >
       github.event_name == 'pull_request_target' &&
       github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.decide.outputs.should_deploy }}
+    steps:
+      - id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const isDocsy = (path) =>
+              path.startsWith('docs/') || path.endsWith('.md') || path === 'LICENSE';
+            const docsOnly = files.length > 0 && files.every((f) => isDocsy(f.filename));
+
+            const labels = pr.labels.map((l) => l.name);
+            const forceOn = labels.includes('preview');
+            const forceOff = labels.includes('no-preview');
+
+            const shouldDeploy = forceOff ? false : forceOn ? true : !docsOnly;
+            core.info(
+              `${files.length} changed file(s), docsOnly=${docsOnly}, forceOn=${forceOn}, forceOff=${forceOff} -> should_deploy=${shouldDeploy}`,
+            );
+            core.setOutput('should_deploy', shouldDeploy);
+
+  ensure:
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     # Registers under repo Settings -> Environments (and the PR's own
     # "Environments" sidebar/deployment history) with a clickable URL —
@@ -88,6 +125,23 @@ jobs:
             } else {
               await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.pull_request.number, body });
             }
+
+  # The other half of the gate: reclaims an environment that was already
+  # provisioned (e.g. a `no-preview` label added after the fact, or a PR that
+  # picked up more commits and became docs-only again) rather than leaving it
+  # running for nothing. destroy is a no-op when nothing was ever created, so
+  # this is exactly as safe to run unconditionally as `teardown` above.
+  skip:
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reclaim this PR's Coolify environment, if one exists
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: scripts/coolify-preview.sh destroy "${{ github.event.pull_request.number }}"
 
   reap:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
