@@ -136,12 +136,19 @@ give **every open PR its own standalone Coolify Application** — its own
 compose project, hence its own network, volumes and containers, with no
 help needed from this file:
 
-- **On PR open/reopen/each push:** the workflow calls the Coolify API to
-  create (if missing) an Application named `bjarnoy-pr-<N>`, pointed at that
-  PR's own branch, with its own domain — the same one-label pattern the old
-  built-in previews used (`https://<N>-bjarnoy.velarix.space`, see "Behind
-  Cloudflare" below) — and triggers a deploy. The PR gets a GitHub
-  Environment (`pr-<N>`) and a sticky comment with the preview URL.
+- **Opt-in, not automatic:** a PR gets no environment at all unless it
+  carries the `preview` label — most PRs (docs, small fixes, anything
+  nobody needs to click through in a browser) don't need a full cold build
+  spent on them. Removing the label reclaims an already-provisioned
+  environment (destroy is a no-op when none exists, so this is exactly as
+  safe to run unconditionally as the close-triggered teardown below).
+- **Once labeled `preview` (and on every push after that):** the workflow
+  calls the Coolify API to create (if missing) an Application named
+  `bjarnoy-pr-<N>`, pointed at that PR's own branch, with its own domain —
+  the same one-label pattern the old built-in previews used
+  (`https://<N>-bjarnoy.velarix.space`, see "Behind Cloudflare" below) —
+  and triggers a deploy. The PR gets a GitHub Environment (`pr-<N>`) and a
+  sticky comment with the preview URL.
 - **On PR close (merged or not — squash included):** the workflow tears the
   Application down unconditionally, deleting its volumes and network too. A
   squash-merge is reported as the same `closed` + `merged: true` event as any
@@ -150,13 +157,6 @@ help needed from this file:
 - **Nightly, as a backstop:** a scheduled run reaps any `bjarnoy-pr-<N>`
   Application whose PR is no longer open, in case a `closed` event was
   missed (a skipped, cancelled, or failed workflow run).
-- **Gated, so a docs-only PR doesn't spend a build for nothing:** by default
-  a PR whose changed files are all under `docs/`, end in `.md`, or are the
-  `LICENSE` file gets no environment at all. Two labels override that
-  either way — `preview` forces one on anyway (e.g. to look at a docs page
-  actually rendered), `no-preview` forces one off (and tears down an
-  already-provisioned environment if one exists, so labeling a PR
-  `no-preview` after the fact reclaims the build/disk it was using).
 
 The workflow needs a Coolify API token with `read`, `write`, and `deploy`
 abilities in the `COOLIFY_API_TOKEN` repository secret, plus repository

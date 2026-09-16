@@ -45,12 +45,12 @@ jobs:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: scripts/coolify-preview.sh destroy "${{ github.event.pull_request.number }}"
 
-  # Decides whether this PR change is worth a Coolify build at all, so a
-  # docs-only PR (or a small fix someone tags `no-preview`) doesn't spend
-  # build minutes/disk on an environment nobody is going to look at.
-  # Defaults: skip when every changed file is docs-shaped; the two labels
-  # override that in either direction, `preview` forcing one on (e.g. to
-  # actually look at a docs change rendered) and `no-preview` forcing one off.
+  # Opt-in gate: a PR gets a Coolify environment only when someone actually
+  # wants one enough to say so, not by default — most PRs (docs, small
+  # fixes, anything you're not going to click through in a browser) don't
+  # need a full cold build spent on them. Apply the `preview` label to get
+  # one; removing it later reclaims an already-provisioned environment (see
+  # the `skip` job below).
   gate:
     if: >
       github.event_name == 'pull_request_target' &&
@@ -58,31 +58,9 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
-      should_deploy: ${{ steps.decide.outputs.should_deploy }}
+      should_deploy: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
     steps:
-      - id: decide
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.payload.pull_request;
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              ...context.repo,
-              pull_number: pr.number,
-              per_page: 100,
-            });
-            const isDocsy = (path) =>
-              path.startsWith('docs/') || path.endsWith('.md') || path === 'LICENSE';
-            const docsOnly = files.length > 0 && files.every((f) => isDocsy(f.filename));
-
-            const labels = pr.labels.map((l) => l.name);
-            const forceOn = labels.includes('preview');
-            const forceOff = labels.includes('no-preview');
-
-            const shouldDeploy = forceOff ? false : forceOn ? true : !docsOnly;
-            core.info(
-              `${files.length} changed file(s), docsOnly=${docsOnly}, forceOn=${forceOn}, forceOff=${forceOff} -> should_deploy=${shouldDeploy}`,
-            );
-            core.setOutput('should_deploy', shouldDeploy);
+      - run: echo "should_deploy=${{ contains(github.event.pull_request.labels.*.name, 'preview') }}"
 
   ensure:
     needs: gate
