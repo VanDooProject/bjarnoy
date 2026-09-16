@@ -54,11 +54,29 @@ test.describe('mobile HUD bar', () => {
     await page.mouse.move(x, y + 220, { steps: 10 });
     await page.mouse.up();
 
+    // Assert on the drawer's own actual height, not its content's mere
+    // presence in the DOM — a child inside `overflow: hidden` still reports
+    // a non-zero bounding box to Playwright's visibility check even while
+    // the parent has clipped it down to 0, which would make this pass
+    // whether or not the drag actually opened anything.
+    await expect(async () => {
+      const openBox = (await page.locator('.hud-drawer').boundingBox())!;
+      expect(openBox.height).toBeGreaterThan(100);
+    }).toPass();
     await expect(page.locator('.hud-drawer .drawer-links')).toBeVisible();
 
-    await page.mouse.move(x, y);
+    // Closing drags from within the now-open drawer itself, not from the
+    // collapsed bar's own position — the bar (and its grip) stays pinned to
+    // the screen's physical top edge even while open, so there is no room
+    // above it to keep dragging "up" from there (exactly like a real
+    // fingertip can't move past the top bezel). The open drawer has real
+    // travel space below the bar instead.
+    const openBox = (await page.locator('.hud-drawer').boundingBox())!;
+    const closeX = openBox.x + openBox.width / 2;
+    const closeStartY = openBox.y + openBox.height - 20;
+    await page.mouse.move(closeX, closeStartY);
     await page.mouse.down();
-    await page.mouse.move(x, y - 220, { steps: 10 });
+    await page.mouse.move(closeX, box.y + box.height + 4, { steps: 10 }); // up to just under the bar
     await page.mouse.up();
 
     // Closed height is a hairline border, not necessarily an exact "0px" —

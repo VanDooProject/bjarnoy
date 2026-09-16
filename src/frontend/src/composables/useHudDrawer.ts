@@ -24,6 +24,15 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
   let lastY = 0;
   let lastT = 0;
   let velocity = 0; // px/ms, positive = towards open
+  // A real mouse/touch drag that started on an interactive element (a nav
+  // link inside the open drawer, say) still gets a compatibility `click`
+  // dispatched on mouseup/touchend by the browser afterward, hit-tested at
+  // wherever the pointer ends up — which can land back on another
+  // clickable element and fire ITS handler (e.g. navigating away) even
+  // though the user's intent was clearly "drag to close", not "tap this".
+  // `consumeClickSuppression` lets the caller swallow exactly that one
+  // synthetic click, and only that one.
+  let suppressNextClick = false;
 
   function restingOffset(): number {
     return isOpen.value ? drawerHeight.value : 0;
@@ -81,6 +90,7 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
     const finalVelocity = velocity;
     teardown();
     if (!wasArmed) return; // a tap, not a drag — the chevron handles taps separately
+    suppressNextClick = true;
     isOpen.value = shouldOpenOnRelease(
       finalOffset,
       drawerHeight.value,
@@ -102,6 +112,13 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
     isOpen.value = false;
   }
 
+  /** Call from a capture-phase click handler; returns true if this click should be swallowed. */
+  function consumeClickSuppression(): boolean {
+    const should = suppressNextClick;
+    suppressNextClick = false;
+    return should;
+  }
+
   return {
     isOpen,
     dragging,
@@ -112,5 +129,6 @@ export function useHudDrawer(edge: Ref<HudBarPosition>, drawerHeight: Ref<number
     onPointerCancel,
     toggle,
     close,
+    consumeClickSuppression,
   };
 }

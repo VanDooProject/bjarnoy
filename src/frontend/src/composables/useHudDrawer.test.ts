@@ -94,4 +94,36 @@ describe('useHudDrawer', () => {
     drawer.onPointerMove(fakeEvent(150, 50, 2)); // different pointerId
     expect(drawer.dragging.value).toBe(false);
   });
+
+  describe('consumeClickSuppression', () => {
+    it('flags exactly one click to suppress after a real drag, e.g. one that started on a nav link', () => {
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+      drawer.onPointerDown(fakeEvent(500, 0));
+      drawer.onPointerMove(fakeEvent(150, 50)); // a real drag (past 8px)
+      drawer.onPointerUp(fakeEvent(50, 100));
+
+      expect(drawer.consumeClickSuppression()).toBe(true);
+      // Only the one synthetic click that follows this specific drag —
+      // a later, unrelated click must not still be swallowed.
+      expect(drawer.consumeClickSuppression()).toBe(false);
+    });
+
+    it('does not suppress a click after a plain tap (below the drag threshold)', () => {
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(3, 10)); // below the 8px intent threshold
+      drawer.onPointerUp(fakeEvent(3, 10));
+
+      expect(drawer.consumeClickSuppression()).toBe(false);
+    });
+
+    it('does not suppress a click after a cancelled drag', () => {
+      const drawer = useHudDrawer(ref<HudBarPosition>('top'), ref(300));
+      drawer.onPointerDown(fakeEvent(0, 0));
+      drawer.onPointerMove(fakeEvent(150, 50));
+      drawer.onPointerCancel(fakeEvent(150, 50));
+
+      expect(drawer.consumeClickSuppression()).toBe(false);
+    });
+  });
 });

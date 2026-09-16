@@ -16,12 +16,13 @@
 // per stores/hudPrefs.ts's `barPosition` (a user-set preference, not tied to
 // the drag gesture). Desktop and `docked` mode are completely untouched:
 // no grip, no drawer, no new CSS outside the compact media query.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -80,14 +81,29 @@ const drawerContentRef = ref<HTMLElement | null>(null);
 const drawerHeight = ref(0);
 let drawerObserver: ResizeObserver | null = null;
 
-onMounted(() => {
-  if (typeof ResizeObserver === 'undefined') return;
-  drawerObserver = new ResizeObserver((entries) => {
-    const rect = entries[0]?.contentRect;
-    if (rect) drawerHeight.value = rect.height;
-  });
-  if (drawerContentRef.value) drawerObserver.observe(drawerContentRef.value);
-});
+// `drawerContentRef` only becomes non-null once `dragEnabled` is true and
+// the `v-if="dragEnabled"` drawer actually mounts into the DOM — which does
+// NOT happen by the time this component's own onMounted runs, since
+// `isCompact` (from useMediaQuery) flips true in ITS onMounted (registered
+// earlier, so it runs first), but that reactive change only triggers a
+// re-render on the next tick, after this onMounted has already fired. A
+// one-shot `observe()` in onMounted therefore silently observes nothing —
+// watching the ref itself (immediate, so it also catches an
+// already-mounted case, e.g. HMR) is what actually attaches once the
+// element exists, whenever that ends up being.
+watch(
+  drawerContentRef,
+  (el) => {
+    drawerObserver?.disconnect();
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    drawerObserver = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) drawerHeight.value = rect.height;
+    });
+    drawerObserver.observe(el);
+  },
+  { immediate: true },
+);
 onBeforeUnmount(() => drawerObserver?.disconnect());
 
 const drawer = useHudDrawer(barPosition, drawerHeight);
@@ -107,8 +123,23 @@ function onBarPointerCancel(e: PointerEvent) {
 function onGripClick() {
   if (dragEnabled.value) drawer.toggle();
 }
+function onDrawerClickCapture(e: MouseEvent) {
+  // Swallow the one synthetic click a drag-to-close gesture leaves behind
+  // when it started on top of an interactive element (a nav link) — see
+  // useHudDrawer's own comment on `consumeClickSuppression`. Capture phase
+  // so this runs before the link's own bubble-phase click handler does.
+  if (drawer.consumeClickSuppression()) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}
 
 const drawerVisible = computed(() => dragEnabled.value && (drawer.isOpen.value || drawer.dragging.value));
+// DemoModeBadge.vue reads this shared singleton so it can get out of the
+// drawer's way while it's open — its own fixed top offset otherwise lands
+// right on top of the drawer's first content row.
+watch(drawerVisible, (visible) => { isHudDrawerOpen.value = visible; }, { immediate: true });
+onBeforeUnmount(() => { isHudDrawerOpen.value = false; });
 const drawerStyle = computed(() => ({
   height: `${drawer.currentOffset()}px`,
   transition: drawer.dragging.value ? 'none' : 'height 180ms ease',
@@ -178,7 +209,19 @@ const backdropStyle = computed(() => {
     class="hud-drawer"
     :class="{ 'hud-drawer--bottom': barPosition === 'bottom' }"
     :style="drawerStyle"
+    @pointerdown="onBarPointerDown"
+    @pointermove="onBarPointerMove"
+    @pointerup="onBarPointerUp"
+    @pointercancel="onBarPointerCancel"
+    @click.capture="onDrawerClickCapture"
   >
+    <!-- The collapsed bar (and its grip) stays pinned to the screen's own
+         edge even once open, so there is no room to keep dragging past it
+         in that direction — closing instead grabs the open drawer itself,
+         which has real space to travel. Same pointer handlers as the bar;
+         the 8px arm threshold keeps a plain tap on a nav link/resource row
+         inside from being mistaken for a drag, exactly as it does on the
+         collapsed bar's own resource pills. -->
     <div ref="drawerContentRef" class="hud-drawer-content">
       <slot name="drawer" :close="drawer.close" :is-open="drawer.isOpen.value" />
     </div>
@@ -345,6 +388,7 @@ const backdropStyle = computed(() => {
   background: linear-gradient(180deg, rgba(6, 12, 16, 0.97), rgba(6, 12, 16, 0.93));
   border-bottom: 1px solid var(--panel-border);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  touch-action: none;
 }
 .hud-drawer--bottom {
   top: auto;

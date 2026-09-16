@@ -16,6 +16,7 @@ import { mount } from '@vue/test-utils';
 import TopBar from './TopBar.vue';
 import { useWorldStore } from '../../stores/world';
 import { useHudPrefsStore } from '../../stores/hudPrefs';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 
@@ -160,6 +161,18 @@ describe('TopBar', () => {
       await grip.trigger('click');
       expect(grip.attributes('aria-expanded')).toBe('false');
       wrapper.unmount();
+    });
+
+    it('keeps the shared isHudDrawerOpen flag in sync, and clears it on unmount', async () => {
+      const wrapper = mountTopBar();
+      await wrapper.vm.$nextTick();
+
+      expect(isHudDrawerOpen.value).toBe(false);
+      await wrapper.get('.hud-grip').trigger('click');
+      expect(isHudDrawerOpen.value).toBe(true);
+
+      wrapper.unmount();
+      expect(isHudDrawerOpen.value).toBe(false);
     });
   });
 });
