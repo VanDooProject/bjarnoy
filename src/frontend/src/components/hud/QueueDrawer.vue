@@ -537,11 +537,26 @@ onUnmounted(() => {
   font-size: 11px;
 }
 
-/* Drawer chrome */
+/* Drawer chrome
+ *
+ * z-index 11/12 (same tier as the other HUD status cards, e.g.
+ * BuildQueuePanel.vue's own z-index: 10) was wrong for the *open* drawer:
+ * the onboarding overlays it can be opened alongside on the landing page —
+ * OnboardingBanner.vue/OnboardingChecklist.vue (15), ResourceTicker.vue
+ * (16), GuidancePointer.vue (36) — all sat above it and showed through,
+ * despite the drawer having its own full-screen backdrop meant to recede
+ * everything else. 37/38 puts the backdrop+drawer just above
+ * GuidancePointer (the highest of that group) while staying below the true
+ * modals/chrome that must never be obscured (RingMenu's own backdrop 30,
+ * BuildingModal/TrainingModal/TopBar 40, ReturningPlayerMenu/ProfileNudge
+ * 50) — those aren't expected to be reachable while this backdrop is up
+ * anyway (canvasInteractionLocked keeps a hex tap from opening the ring
+ * underneath it), but there's no reason to outrank them regardless.
+ */
 .queue-drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 11;
+  z-index: 37;
   background: rgba(0, 0, 0, 0.35);
 }
 .queue-drawer {
@@ -549,7 +564,7 @@ onUnmounted(() => {
   left: 0;
   top: 76px;
   bottom: 0;
-  z-index: 12;
+  z-index: 38;
   display: flex;
   width: min(86vw, 340px);
   transform: translateX(calc(-1 * (min(86vw, 340px) - 96px)));
