@@ -120,12 +120,24 @@ branch deployment, and both are invisible until something 404s:
 
 **Every service is renamed.** `postgres` becomes `postgres-pr-239`
 (`addPreviewDeploymentSuffix`), and a compose service's name is its DNS name —
-but nothing rewrites a hostname written inside an environment variable, so
-`Database__ConnectionString`'s `Host=postgres` would stop resolving. That is why
-the `postgres` service declares an alias on a shared `stack` network: keep both
-when editing, or the migrator exits 1, `app` never starts behind
-`service_completed_successfully`, and every path answers 404 while the dashboard
-happily reports postgres healthy.
+but nothing rewrites a hostname written inside an environment variable, so a
+literal `Host=postgres` stops resolving. Coolify does hand the renamed value
+back: `generateDockerComposeServiceName` injects `SERVICE_NAME_<SERVICE>` into
+every service, `postgres` on the production deployment and `postgres-pr-239` on
+a preview. `Database__ConnectionString` names the database through
+`${SERVICE_NAME_POSTGRES}` for that reason — write the literal instead and the
+migrator exits 1, `app` never starts behind `service_completed_successfully`,
+and every path answers 404 while the dashboard reports postgres healthy.
+
+A network alias on a shared network is *not* the way to solve this, though it
+looks like one. Coolify runs every deployment of an application under the same
+compose project (`--project-name {application uuid}`, prod and previews alike),
+so a network the file declares itself resolves to one `<uuid>_<name>` shared by
+production and every open PR. Three deployments then define the same alias on
+it, Docker DNS round-robins between them, and each stack intermittently reaches
+another's database. The per-deployment network Coolify attaches
+(`<uuid>` / `<uuid>-<pr>`) is the isolated one, and it needs no help from this
+file.
 
 **`COOLIFY_BRANCH` is the application's branch, not the PR's** — it reads `main`
 on a preview of a PR into `main`. So `/api/v1/info` reports `branch: main`
