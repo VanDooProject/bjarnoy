@@ -120,12 +120,24 @@ branch deployment, and both are invisible until something 404s:
 
 **Every service is renamed.** `postgres` becomes `postgres-pr-239`
 (`addPreviewDeploymentSuffix`), and a compose service's name is its DNS name —
-but nothing rewrites a hostname written inside an environment variable, so
-`Database__ConnectionString`'s `Host=postgres` would stop resolving. That is why
-the `postgres` service declares an alias on a shared `stack` network: keep both
-when editing, or the migrator exits 1, `app` never starts behind
-`service_completed_successfully`, and every path answers 404 while the dashboard
-happily reports postgres healthy.
+but nothing rewrites a hostname written inside an environment variable, so a
+literal `Host=postgres` stops resolving. Coolify does hand the renamed value
+back: `generateDockerComposeServiceName` injects `SERVICE_NAME_<SERVICE>` into
+every service, `postgres` on the production deployment and `postgres-pr-239` on
+a preview. `Database__ConnectionString` names the database through
+`${SERVICE_NAME_POSTGRES}` for that reason — write the literal instead and the
+migrator exits 1, `app` never starts behind `service_completed_successfully`,
+and every path answers 404 while the dashboard reports postgres healthy.
+
+A network alias on a shared network is *not* the way to solve this, though it
+looks like one. Coolify runs every deployment of an application under the same
+compose project (`--project-name {application uuid}`, prod and previews alike),
+so a network the file declares itself resolves to one `<uuid>_<name>` shared by
+production and every open PR. Three deployments then define the same alias on
+it, Docker DNS round-robins between them, and each stack intermittently reaches
+another's database. The per-deployment network Coolify attaches
+(`<uuid>` / `<uuid>-<pr>`) is the isolated one, and it needs no help from this
+file.
 
 **`COOLIFY_BRANCH` is the application's branch, not the PR's** — it reads `main`
 on a preview of a PR into `main`. So `/api/v1/info` reports `branch: main`
@@ -168,6 +180,80 @@ One label, covered by the existing wildcard, no new certificate. (The paid
 Advanced Certificate Manager issues multi-level wildcards if the dotted form is
 worth $10/month; so does taking previews off the proxy and letting Coolify's
 Let's Encrypt serve them directly.)
+
+### Through a tunnel
+
+A `cloudflared` tunnel removes the origin ports entirely: the connector dials
+out to Cloudflare, so 80, 443 and Coolify's own 8000 can all be closed at the
+firewall. Two things are easy to get wrong.
+
+**The wildcard DNS record is not created for you.** Cloudflare writes the CNAME
+to `<tunnel-id>.cfargotunnel.com` when you add a published application route,
+but it refuses to for a wildcard hostname — and an existing `*` A record would
+block it anyway, since a name cannot be both A and CNAME. Replace it by hand.
+
+**`No TLS Verify` is required on any route pointing at Coolify's proxy.**
+cloudflared sends SNI for the origin URL's hostname, which is `localhost`, and
+Traefik answers with its default self-signed certificate for
+`<hash>.traefik.default`. Verification fails and the edge returns 502 with
+`x509: certificate is valid for ... not localhost` in the connector log. The
+alternatives do not help: `Origin Server Name` pins one name and so cannot
+serve a wildcard, and `Match SNI to Host` asks for a certificate Traefik does
+not have either. Skipping verification is sound here only because the hop is
+loopback.
+
+Routes are matched top to bottom, so the specific hostname must sit above the
+wildcard:
+
+```
+1  coolify.example.com   HTTP    localhost:8000
+2  *.example.com         HTTPS   localhost:443   (No TLS Verify)
+```
+
+If Coolify still issues Let's Encrypt certificates, add a third route above the
+wildcard for `/.well-known/acme-challenge/*` to `HTTP localhost:80` — once the
+wildcard resolves to the tunnel, HTTP-01 challenges arrive over the tunnel and
+never reach Traefik's `:80` entrypoint, and renewals fail silently.
+
+Closing the ports afterwards needs conntrack, not a plain port match. Docker
+DNATs a published port before the `DOCKER-USER` chain runs, so by then the
+destination port is the container's, not the published one, and a
+`--dport 8000` rule matches nothing:
+
+```bash
+iptables  -I DOCKER-USER -i <nic> -p tcp -m conntrack --ctorigdstport 8000 -j DROP
+ip6tables -I INPUT       -i <nic> -p tcp --dport 8000 -j DROP
+```
+
+IPv6 usually has no Docker DNAT, so there `docker-proxy` accepts on the host
+and the rule belongs in `INPUT`. Scope both to the physical interface or you
+will cut container-to-container traffic and loopback with them.
+
+## Coolify's API from a Claude Code session
+
+`.mcp.json` in the repository root declares Coolify's MCP endpoint. It holds no
+values — the hostname and token are read from the environment:
+
+```json
+{
+  "mcpServers": {
+    "coolify": {
+      "type": "http",
+      "url": "${COOLIFY_URL}/mcp",
+      "headers": { "Authorization": "Bearer ${COOLIFY_API_TOKEN}" }
+    }
+  }
+}
+```
+
+Set `COOLIFY_URL` and `COOLIFY_API_TOKEN` in the cloud environment's
+environment variables. They are copied into a session once, at startup, so a
+change takes effect in the next session rather than the running one, and the
+host must also be on the environment's network allowlist or the connection is
+refused before it is attempted.
+
+Scope the token to `read`. `read:sensitive` returns environment variable
+*values* for every resource, which is every deployment secret on the instance.
 
 ## Without Coolify
 

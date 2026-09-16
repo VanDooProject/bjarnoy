@@ -141,7 +141,7 @@ public static class SettlementEndpoints
         };
     }
 
-    private static async Task<Results<Ok<SettlementResponse>, NotFound>> Get(
+    private static async Task<Results<Ok<SettlementResponse>, NotFound<ProblemDetails>>> Get(
         Guid settlementId,
         SettlementService settlements,
         TimeProvider time,
@@ -150,7 +150,7 @@ public static class SettlementEndpoints
         var found = await settlements.GetAsync(settlementId, cancellationToken);
         if (found is null)
         {
-            return TypedResults.NotFound();
+            return TypedResults.NotFound(SettlementNotFoundProblem());
         }
 
         var (entity, clock) = found.Value;
@@ -434,6 +434,26 @@ public static class SettlementEndpoints
 
         type = default;
         return false;
+    }
+
+    /// <summary>
+    /// <see cref="Get"/>'s 404 when no settlement exists by that id — unlike
+    /// a bare 404, this lets the client tell "your stored settlement is
+    /// gone for good" apart from a transient failure and drop the stale id
+    /// instead of retrying it forever (e.g. after its world got reseeded
+    /// out from under it) — see `stores/world.ts`'s
+    /// `recoverFromMissingSettlement`.
+    /// </summary>
+    private static ProblemDetails SettlementNotFoundProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Title = "No such settlement.",
+            Detail = "This settlement does not exist, or no longer does.",
+            Status = StatusCodes.Status404NotFound,
+        };
+        problem.Extensions["error"] = "settlement_not_found";
+        return problem;
     }
 
     private static ProblemDetails WorldPausedProblem()

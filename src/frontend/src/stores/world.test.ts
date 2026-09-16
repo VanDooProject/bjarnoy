@@ -38,6 +38,23 @@ vi.stubGlobal('localStorage', {
 async function loadStoreModule(demoMode: boolean) {
   vi.resetModules();
   vi.doMock('../config', () => ({ DEMO_MODE: demoMode }));
+  // Mirrors the real `ApiError` shape (status + problem) — see
+  // stores/leaderboard.test.ts's own copy of the same mock. Needed by the
+  // `refreshPlotSuggestion` tests below (409 + `problem.rejection`) and by
+  // `recoverFromMissingWorld`/`recoverFromMissingSettlement`'s own tests
+  // (404 + `problem.error`).
+  class MockApiError extends Error {
+    status: number;
+    problem: { rejection?: string; existingSettlementId?: string; error?: string } | undefined;
+    constructor(
+      status: number,
+      problem?: { rejection?: string; existingSettlementId?: string; error?: string },
+    ) {
+      super(`Request failed with status ${status}`);
+      this.status = status;
+      this.problem = problem;
+    }
+  }
   vi.doMock('../api/client', () => ({
     api: {
       getSettlementArmies: (...args: unknown[]) => getSettlementArmies(...args),
@@ -58,19 +75,15 @@ async function loadStoreModule(demoMode: boolean) {
       listWorlds: (...args: unknown[]) => listWorlds(...args),
       getWorldMembership: (...args: unknown[]) => getWorldMembership(...args),
     },
-    // Mirrors the real `ApiError` shape (status + problem) — see
-    // stores/leaderboard.test.ts's own copy of the same mock. Needed by the
-    // `refreshPlotSuggestion` tests below, which construct one with a 409
-    // status and an `AlreadyFounded`/`NoPlotAvailable` `problem.rejection`.
-    ApiError: class ApiError extends Error {
-      status: number;
-      problem: { rejection?: string; existingSettlementId?: string } | undefined;
-      constructor(status: number, problem?: { rejection?: string; existingSettlementId?: string }) {
-        super(`Request failed with status ${status}`);
-        this.status = status;
-        this.problem = problem;
-      }
-    },
+    ApiError: MockApiError,
+    // Real implementations check `err instanceof ApiError && err.problem?.error
+    // === '...'` — mirrored here against the same mocked class so
+    // `recoverFromMissingWorld`/`recoverFromMissingSettlement`'s tests can
+    // trigger them with a plain MockApiError.
+    isWorldNotFound: (err: unknown) =>
+      err instanceof MockApiError && err.problem?.error === 'world_not_found',
+    isSettlementNotFound: (err: unknown) =>
+      err instanceof MockApiError && err.problem?.error === 'settlement_not_found',
     // `stores/auth.ts` wires its refresh/lock hooks onto this at module load
     // (`authHooks.getAccessToken = ...`) — world.ts now imports that store
     // for the field-order premium check below, so the mock needs a plain
@@ -635,6 +648,150 @@ describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
     expect(store.hud.storageCap).toEqual({ wood: 750, stone: 750, food: 900, iron: 375 });
     expect(store.hud.resources.wood).toBe(750);
   });
+
+  // Regression: SettlementEndpoints.Get 404s exactly when no settlement
+  // exists by that id (see SettlementEndpoints.SettlementNotFoundProblem).
+  // refreshLiveSettlement had no try/catch at all, and startHudSync's poll
+  // loop calls it unawaited (`void this.refreshLiveSettlement()`), so this
+  // became an uncaught promise rejection every poll tick forever, once a
+  // settlement's world got reseeded out from under it. It must instead
+  // deselect the dead id and drop back to "not founded yet" rather than
+  // throwing.
+  it('deselects the settlement and resets onboarding when the backend reports settlement_not_found', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+    getSettlement.mockReset().mockRejectedValue(
+      new MockedApiError(404, { error: 'settlement_not_found' }),
+    );
+    store.worldId = 'world-1';
+    store.selectedSettlementId = 'dead-settlement';
+
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+    player.foundSettlement('dead-settlement', 'world-1');
+
+    await expect(store.refreshLiveSettlement()).resolves.toBeUndefined();
+
+    expect(store.selectedSettlementId).toBeNull();
+    expect(player.settlementId).toBeNull();
+    expect(player.hasFoundedSettlement).toBe(false);
+  });
+
+  it('still throws on an ordinary (non-settlement_not_found) failure, for the caller to handle', async () => {
+    getSettlement.mockReset().mockRejectedValue(new Error('network error'));
+
+    const store = await loadStoreModule(false);
+    store.selectedSettlementId = 'settlement-1';
+
+    await expect(store.refreshLiveSettlement()).rejects.toThrow('network error');
+  });
+});
+
+describe('useWorldStore bootstrapLiveWorld', () => {
+  // Regression: the world `getWorld`/`newestWorld` just resolved can still be
+  // gone by the time the very next call (`getIslands`) lands — observed live
+  // on a preview deployment whose world kept getting reseeded out from under
+  // it. That call had no try/catch at all, so it surfaced as an uncaught
+  // rejection straight out of bootstrapLiveWorld instead of the same
+  // world_not_found recovery fetchFogMask/refreshLiveSettlement already get.
+  it('falls back to NoWorldYet instead of throwing when the world disappears before its islands load', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        seed: 1,
+        radius: 30,
+        maxPlayers: 100,
+        status: 'Running',
+        islandCount: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        joinable: true,
+        joinableReason: 'None',
+        startsAt: null,
+        endbossTriggered: false,
+        speedFactor: 1,
+        generation: {},
+        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+      },
+    ]);
+    getIslands.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
+
+    await expect(store.bootstrapLiveWorld()).resolves.toBeUndefined();
+
+    expect(store.worldId).toBeNull();
+    expect(store.liveReady).toBe(false);
+    expect(store.worldJoinable).toBe(false);
+    expect(store.worldJoinableReason).toBe('NoWorldYet');
+  });
+
+  it('still throws on an ordinary (non-world_not_found) getIslands failure', async () => {
+    const store = await loadStoreModule(false);
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-1',
+        name: 'Kettil Sea',
+        seed: 1,
+        radius: 30,
+        maxPlayers: 100,
+        status: 'Running',
+        islandCount: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        joinable: true,
+        joinableReason: 'None',
+        startsAt: null,
+        endbossTriggered: false,
+        speedFactor: 1,
+        generation: {},
+        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+      },
+    ]);
+    getIslands.mockReset().mockRejectedValue(new Error('network error'));
+
+    await expect(store.bootstrapLiveWorld()).rejects.toThrow('network error');
+  });
+});
+
+describe('useWorldStore restoreLiveSettlement', () => {
+  // Regression: observed live on a preview deployment — a page reload with a
+  // stale persisted settlement id (stores/player.ts's bjarnoy.settlementId,
+  // for a world/settlement that no longer exists) crashed MapView/
+  // LandingView/ExpansionPanel's mount, because this call had no try/catch
+  // at all, unlike refreshLiveSettlement right above.
+  it('deselects the settlement and resets onboarding when the backend reports settlement_not_found', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+    store.liveReady = true;
+    getSettlement.mockReset().mockRejectedValue(
+      new MockedApiError(404, { error: 'settlement_not_found' }),
+    );
+    store.worldId = 'world-1';
+
+    const { usePlayerStore } = await import('./player');
+    const player = usePlayerStore();
+    player.foundSettlement('dead-settlement', 'world-1');
+
+    await expect(
+      store.restoreLiveSettlement(player.id, 'dead-settlement'),
+    ).resolves.toBeUndefined();
+
+    expect(store.selectedSettlementId).toBeNull();
+    expect(player.settlementId).toBeNull();
+    expect(player.hasFoundedSettlement).toBe(false);
+  });
+
+  it('still throws on an ordinary (non-settlement_not_found) failure', async () => {
+    const store = await loadStoreModule(false);
+    store.liveReady = true;
+    getSettlement.mockReset().mockRejectedValue(new Error('network error'));
+
+    await expect(
+      store.restoreLiveSettlement('player-1', 'settlement-1'),
+    ).rejects.toThrow('network error');
+  });
 });
 
 describe('useWorldStore fetchFogMask', () => {
@@ -736,6 +893,60 @@ describe('useWorldStore fetchFogMask', () => {
     getFogMask.mockResolvedValueOnce({ bitmap: { close: vi.fn() }, version: '"v2"' });
     await store.fetchFogMask();
     expect(getFogMask).toHaveBeenCalledTimes(2);
+  });
+
+  // Regression: WorldEndpoints.GetFogMask 404s exactly when the world itself
+  // is gone (see WorldEndpoints.WorldNotFoundProblem) — before this, that
+  // just fell into fetchFogMask's ordinary "leave the previous bitmap in
+  // place" catch, so a client whose world stopped existing kept asking after
+  // the same dead id forever (the reported "fog covers the whole map and
+  // never clears" symptom). It must instead drop the stale id and rejoin
+  // whatever world is actually running.
+  it('drops the world id and rejoins the newest world when the backend reports world_not_found', async () => {
+    const store = await loadStoreModule(false);
+    const { ApiError: MockedApiError } = await import('../api/client');
+    const staleBitmap = { close: vi.fn() };
+    getFogMask.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-2',
+        name: 'New Kettil Sea',
+        seed: 2,
+        radius: 30,
+        maxPlayers: 100,
+        status: 'Running',
+        islandCount: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        joinable: true,
+        joinableReason: 'None',
+        startsAt: null,
+        endbossTriggered: false,
+        speedFactor: 1,
+        generation: {},
+        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+      },
+    ]);
+    getIslands.mockReset().mockResolvedValue([]);
+    listSettlements.mockReset().mockResolvedValue([]);
+
+    store.worldId = 'world-1';
+    store.ownerId = 'player-1';
+    store.liveReady = true;
+    store.fogMaskBitmap = staleBitmap as unknown as ImageBitmap;
+
+    await store.fetchFogMask();
+
+    // Recovery runs fire-and-forget from fetchFogMask's own catch (see that
+    // code's comment on why), so `fetchFogMask()` resolving doesn't mean
+    // `recoverFromMissingWorld`'s chain of awaits (bootstrapLiveWorld ->
+    // listWorlds -> getIslands -> refreshWorldSettlements) has settled yet.
+    await vi.waitFor(() => expect(store.worldId).toBe('world-2'));
+
+    expect(store.liveReady).toBe(true);
+    // The dead world's mask is gone too, not just left stale — recovery
+    // starts this store back at "no mask fetched yet for the new world".
+    expect(staleBitmap.close).toHaveBeenCalledOnce();
+    expect(store.fogMaskBitmap).toBeNull();
   });
 });
 

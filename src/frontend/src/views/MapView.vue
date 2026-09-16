@@ -12,6 +12,7 @@ import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
 import ExpansionPanel from '../components/hud/ExpansionPanel.vue';
 import TradePanel from '../components/hud/TradePanel.vue';
 import TrainingQueuePanel from '../components/hud/TrainingQueuePanel.vue';
+import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import ArmyPanel from '../components/hud/ArmyPanel.vue';
 import HexTooltip from '../components/hud/HexTooltip.vue';
 import BuildingModal from '../components/hud/BuildingModal.vue';
@@ -30,6 +31,7 @@ import { useUnitCatalogueStore } from '../stores/unitCatalogue';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
+import { useIsMobile } from '../composables/useIsMobile';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
 import { buildingArt } from '../lib/map/buildingArt';
 import {
@@ -86,6 +88,8 @@ function onZoomModeChange(next: RenderMode) {
 // rendering toggles, nothing about game state. See useFogDebug for why this
 // is a shared composable rather than a local computed().
 const showFogDebug = useFogDebug();
+const isMobile = useIsMobile();
+const queueDrawerOpen = ref(false);
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 function onFogDebugChange() {
   canvasRef.value?.renderer?.forceRebuild();
@@ -395,13 +399,16 @@ onUnmounted(() => stageObserver?.disconnect());
 //   TrainingQueuePanel            right:16 top:76    width:240
 //   ArmyPanel       .status-card  right:16 bottom:16 width:260
 //   TopBar .hud-bar height 64, plus a 12px gap                  -> top 76
-// These are worst-case constants: every panel is treated as present.
-const ringBounds = computed(() => ({
-  left: 268,
-  top: 76,
-  right: Math.max(420, stage.value.w - 348),
-  bottom: stage.value.h - 16,
-}));
+// These are worst-case constants: every panel is treated as present. On
+// mobile, BuildQueuePanel/TrainingQueuePanel are replaced by QueueDrawer's
+// collapsed rail (.queue-drawer-rail, 96px wide) pinned to the left edge —
+// the other desktop panels still render at their fixed positions there too
+// (out of scope for this change), so only the left edge changes.
+const ringBounds = computed(() =>
+  isMobile.value
+    ? { left: 112, top: 76, right: stage.value.w - 16, bottom: stage.value.h - 16 }
+    : { left: 268, top: 76, right: Math.max(420, stage.value.w - 348), bottom: stage.value.h - 16 },
+);
 // The card gets its own, roomier area on purpose. What `ringBounds` leaves
 // over once every panel is reserved is about 308x404 at 1280x720 — too small
 // to hold the 200x222 card anywhere clear of the ring, so the card would end
@@ -417,9 +424,12 @@ const ringCardBounds = computed(() => ({
 // Issue #16 "ring menu": while any ring is open, its bubbles float on top
 // of the canvas, but the renderer's own pointer tracking is window-level
 // (see HexMapRenderer's onPointerMove) and doesn't know a menu is up —
-// lock out hover/wheel there for as long as a ring is showing.
-watch(ringScreen, (screen) => {
-  canvasRef.value?.renderer?.setInteractionLocked(!!screen);
+// lock out hover/wheel there for as long as a ring is showing. The mobile
+// queue drawer floats over the canvas the same way while open, so it shares
+// the same lock.
+const canvasInteractionLocked = computed(() => !!ringScreen.value || queueDrawerOpen.value);
+watch(canvasInteractionLocked, (locked) => {
+  canvasRef.value?.renderer?.setInteractionLocked(locked);
 });
 
 // A mousedown on the ring's own backdrop (not a bubble) closes the ring and
@@ -983,10 +993,15 @@ async function upgrade() {
       <HudNav />
     </TopBar>
     <template v-if="mode === 'settlement'">
-      <BuildQueuePanel @select="onQueueSelect" />
+      <template v-if="isMobile">
+        <QueueDrawer v-model:open="queueDrawerOpen" @select="onQueueSelect" />
+      </template>
+      <template v-else>
+        <BuildQueuePanel @select="onQueueSelect" />
+        <TrainingQueuePanel />
+      </template>
       <ExpansionPanel />
       <TradePanel />
-      <TrainingQueuePanel />
       <ArmyPanel />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
       <RingMenu

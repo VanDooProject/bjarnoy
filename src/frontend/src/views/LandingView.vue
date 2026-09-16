@@ -14,6 +14,7 @@ import HudNav from '../components/hud/HudNav.vue';
 import LocaleSwitcher from '../components/LocaleSwitcher.vue';
 import ReturningPlayerMenu from '../components/hud/ReturningPlayerMenu.vue';
 import BuildQueuePanel from '../components/hud/BuildQueuePanel.vue';
+import QueueDrawer from '../components/hud/QueueDrawer.vue';
 import RingMenu, { type RingAction } from '../components/hud/RingMenu.vue';
 import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vue';
 import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
@@ -41,6 +42,7 @@ import {
 import type { Terrain, Tile } from '../lib/map/types';
 import { buildingName, terrainName } from '../i18n/catalogueNames';
 import type { MessageSchema } from '../i18n/schema';
+import { useIsMobile } from '../composables/useIsMobile';
 
 const { t, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
@@ -333,10 +335,18 @@ const ringTerrain = ref<Terrain | null>(null);
 // exactly where the bubble is actually drawn.
 const ringLaneSpots = ref<Record<string, { x: number; y: number }>>({});
 
+const isMobile = useIsMobile();
+const queueDrawerOpen = ref(false);
+
 watch(ringScreen, (screen) => {
-  canvasRef.value?.renderer?.setInteractionLocked(!!screen);
   if (!screen) ringLaneSpots.value = {};
 });
+// Mirrors MapView.vue's own combined lock — the mobile queue drawer floats
+// over the canvas the same way the ring does while open.
+watch(
+  () => !!ringScreen.value || queueDrawerOpen.value,
+  (locked) => canvasRef.value?.renderer?.setInteractionLocked(locked),
+);
 
 const ringActions = computed<RingAction[]>(() =>
   ONBOARDING_BUILD_RING.map((type) => {
@@ -863,7 +873,10 @@ watch(
       </span>
     </div>
 
-    <BuildQueuePanel v-if="player.hasFoundedSettlement" @select="onQueueSelect" />
+    <template v-if="player.hasFoundedSettlement">
+      <QueueDrawer v-if="isMobile" v-model:open="queueDrawerOpen" @select="onQueueSelect" />
+      <BuildQueuePanel v-else @select="onQueueSelect" />
+    </template>
     <!-- Flat: no `categories`, so the ring stays one lane deep — onboarding
          offers a handful of types, not a hierarchy. -->
     <RingMenu
