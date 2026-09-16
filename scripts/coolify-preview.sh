@@ -41,7 +41,12 @@ api() {
 }
 
 app_name() { echo "bjarnoy-pr-$1"; }
-app_domain() { echo "https://pr$1-bjarnoy.velarix.space"; }
+# Same one-label-under-the-zone pattern the old built-in previews used
+# (<N>-bjarnoy.velarix.space, e.g. 255-bjarnoy.velarix.space) — see
+# deploy/README.md's "Behind Cloudflare" note on why it has to stay one
+# label. Kept identical on purpose so existing bookmarks/PR links keep
+# working the same way once a PR's own Application takes over that domain.
+app_domain() { echo "https://$1-bjarnoy.velarix.space"; }
 
 # Prints the UUID of the Coolify Application named bjarnoy-pr-<N>, or nothing
 # (not an error) if none exists yet — every caller below treats "not found" as

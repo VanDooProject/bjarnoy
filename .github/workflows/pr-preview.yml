@@ -56,7 +56,7 @@ jobs:
     # a plain curl call from a step does not do this on its own.
     environment:
       name: pr-${{ github.event.pull_request.number }}
-      url: https://pr${{ github.event.pull_request.number }}-bjarnoy.velarix.space
+      url: https://${{ github.event.pull_request.number }}-bjarnoy.velarix.space
     steps:
       - uses: actions/checkout@v4
       - name: Provision/redeploy this PR's Coolify environment
@@ -75,7 +75,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const url = `https://pr${context.payload.pull_request.number}-bjarnoy.velarix.space`;
+            const url = `https://${context.payload.pull_request.number}-bjarnoy.velarix.space`;
             const marker = '<!-- pr-preview-comment -->';
             const body = `${marker}\n🚀 Preview: ${url}\n\n(builds may take a few minutes after each push)`;
             const { data: comments } = await github.rest.issues.listComments({

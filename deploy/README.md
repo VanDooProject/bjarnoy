@@ -138,9 +138,10 @@ help needed from this file:
 
 - **On PR open/reopen/each push:** the workflow calls the Coolify API to
   create (if missing) an Application named `bjarnoy-pr-<N>`, pointed at that
-  PR's own branch, with its own domain
-  (`https://pr<N>-bjarnoy.velarix.space`), and triggers a deploy. The PR gets
-  a GitHub Environment (`pr-<N>`) and a sticky comment with the preview URL.
+  PR's own branch, with its own domain — the same one-label pattern the old
+  built-in previews used (`https://<N>-bjarnoy.velarix.space`, see "Behind
+  Cloudflare" below) — and triggers a deploy. The PR gets a GitHub
+  Environment (`pr-<N>`) and a sticky comment with the preview URL.
 - **On PR close (merged or not — squash included):** the workflow tears the
   Application down unconditionally, deleting its volumes and network too. A
   squash-merge is reported as the same `closed` + `merged: true` event as any
