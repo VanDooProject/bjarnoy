@@ -28,6 +28,7 @@
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Realm claims {count} hexes",
+    "levelHexesShort": "Lv {level} · {count} hexes",
     "backToWorldMap": "← World map"
   },
   "hoverTooltip": {

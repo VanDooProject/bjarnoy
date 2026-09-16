@@ -33,6 +33,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import { DEMO_MODE } from '../config';
 import { useFogDebug } from '../composables/useFogDebug';
 import { useMediaQuery } from '../composables/useMediaQuery';
+import { hudBarHeightPx } from '../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../lib/breakpoints';
 import { useHudPrefsStore } from '../stores/hudPrefs';
 import { parseKey, type AxialCoord } from '../lib/hex/coords';
@@ -60,12 +61,14 @@ const hudPrefs = useHudPrefsStore();
 // Mobile-only HUD bar: whether the collapsed bar (and its pull-down drawer)
 // is actually docked at the bottom edge right now — desktop and the default
 // 'top' preference both keep the bar (and every offset below) exactly where
-// it's always been.
+// it's always been. The bar's own height isn't always 64px on mobile
+// anymore (it grows once the drawer is open — see ResourceBar.vue's
+// isExpanded), so this reads the real, currently-measured height
+// (TopBar.vue's own ResizeObserver) rather than assuming a fixed number.
 const isCompactHud = useMediaQuery(HUD_COMPACT_QUERY);
-const HUD_BAR_HEIGHT = 64;
 const hudBarAtBottom = computed(() => isCompactHud.value && hudPrefs.barPosition === 'bottom');
-const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : HUD_BAR_HEIGHT));
-const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? HUD_BAR_HEIGHT : 0));
+const hudInsetTopPx = computed(() => (hudBarAtBottom.value ? 0 : hudBarHeightPx.value));
+const hudInsetBottomPx = computed(() => (hudBarAtBottom.value ? hudBarHeightPx.value : 0));
 const unitCatalogue = useUnitCatalogueStore();
 const buildingCatalogue = useBuildingCatalogueStore();
 const route = useRoute();

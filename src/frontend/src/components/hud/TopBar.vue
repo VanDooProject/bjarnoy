@@ -23,6 +23,7 @@ import { useHudPrefsStore } from '../../stores/hudPrefs';
 import { useMediaQuery } from '../../composables/useMediaQuery';
 import { useHudDrawer } from '../../composables/useHudDrawer';
 import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
+import { hudBarHeightPx, DEFAULT_HUD_BAR_HEIGHT } from '../../composables/hudBarHeight';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -77,6 +78,18 @@ const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
 const dragEnabled = computed(() => isCompact.value && !props.docked);
 const barPosition = computed(() => hudPrefs.barPosition);
 
+// Mobile-only settlement bubble: on a phone the bar has no room for the
+// name/caption inline (see `.titles`, hidden below under isCompact), so it
+// floats as its own bubble instead — same idea, and the same vertical slot,
+// as DemoModeBadge.vue's bubble (tucked below a top-docked bar, or near the
+// top itself when the bar has moved to the bottom), just left-aligned and
+// always shown regardless of `hideTitle` (that prop only exists to avoid
+// clutter next to the in-scene canvas label on a desktop-sized settlement
+// view — on mobile there's no such redundancy concern, and the bar's own
+// space is too tight to show it any other way).
+const claimedHexes = computed(() => world.hud.claimedHexes);
+const settlementBubbleTop = computed(() => (barPosition.value === 'top' ? `${hudBarHeightPx.value + 8}px` : '8px'));
+
 const drawerContentRef = ref<HTMLElement | null>(null);
 const drawerHeight = ref(0);
 let drawerObserver: ResizeObserver | null = null;
@@ -105,6 +118,33 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => drawerObserver?.disconnect());
+
+// The bar itself is no longer always exactly 64px tall on mobile — once the
+// drawer is open, ResourceBar's pills switch to their expanded (desktop-style
+// stacked) rendering, which is taller. Measure the real height so the drawer
+// can sit flush against it, and so other HUD chrome (MapView's insets,
+// RealmPanel/ArmyPanel's --hud-inset-bottom) can stay clear of it too,
+// rather than assuming a fixed 64px. Same "watch the ref" pattern as
+// drawerContentRef above, for the same reason.
+const barRef = ref<HTMLElement | null>(null);
+let barObserver: ResizeObserver | null = null;
+watch(
+  barRef,
+  (el) => {
+    barObserver?.disconnect();
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    barObserver = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) hudBarHeightPx.value = rect.height;
+    });
+    barObserver.observe(el);
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => {
+  barObserver?.disconnect();
+  hudBarHeightPx.value = DEFAULT_HUD_BAR_HEIGHT;
+});
 
 const drawer = useHudDrawer(barPosition, drawerHeight);
 
@@ -143,6 +183,7 @@ onBeforeUnmount(() => { isHudDrawerOpen.value = false; });
 const drawerStyle = computed(() => ({
   height: `${drawer.currentOffset()}px`,
   transition: drawer.dragging.value ? 'none' : 'height 180ms ease',
+  [barPosition.value === 'top' ? 'top' : 'bottom']: `${hudBarHeightPx.value}px`,
 }));
 const backdropStyle = computed(() => {
   const openFraction = drawerHeight.value > 0 ? Math.min(1, drawer.currentOffset() / drawerHeight.value) : 0;
@@ -155,8 +196,14 @@ const backdropStyle = computed(() => {
 
 <template>
   <header
+    ref="barRef"
     class="hud-bar"
-    :class="{ 'hud-bar--docked': docked, 'hud-bar--bottom': dragEnabled && barPosition === 'bottom', 'hud-bar--drag-enabled': dragEnabled }"
+    :class="{
+      'hud-bar--docked': docked,
+      'hud-bar--bottom': dragEnabled && barPosition === 'bottom',
+      'hud-bar--drag-enabled': dragEnabled,
+      'hud-bar--auto-height': isCompact,
+    }"
     @pointerdown="onBarPointerDown"
     @pointermove="onBarPointerMove"
     @pointerup="onBarPointerUp"
@@ -168,7 +215,7 @@ const backdropStyle = computed(() => {
           <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
         </svg>
       </span>
-      <div class="titles" v-if="settlementName && !props.hideTitle">
+      <div class="titles" v-if="settlementName && !props.hideTitle && !isCompact">
         <span class="name">{{ settlementName }}</span>
         <span v-if="caption" class="caption">{{ caption }}</span>
       </div>
@@ -196,6 +243,20 @@ const backdropStyle = computed(() => {
       </button>
     </div>
   </header>
+  <div
+    v-if="isCompact && settlementName"
+    class="settlement-bubble"
+    :style="{ top: settlementBubbleTop }"
+    v-show="!isHudDrawerOpen"
+  >
+    <span class="logo-hex" aria-hidden="true">
+      <svg viewBox="0 0 100 100">
+        <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" />
+      </svg>
+    </span>
+    <span class="bubble-name">{{ settlementName }}</span>
+    <span class="bubble-meta">{{ t('hud.realmPanel.levelHexesShort', { level: world.hud.level, count: claimedHexes }) }}</span>
+  </div>
   <div
     v-if="dragEnabled"
     class="hud-drawer-backdrop"
@@ -339,6 +400,14 @@ const backdropStyle = computed(() => {
   background: linear-gradient(0deg, rgba(6, 12, 16, 0.94), rgba(6, 12, 16, 0.82));
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+/* Mobile only: the bar grows to fit ResourceBar's expanded (drawer-open)
+   stacked pills instead of clipping them at a fixed 64px — desktop's plain
+   `.hud-bar` rule above (height: 64px) is untouched, since this class is
+   only ever applied under HUD_COMPACT_QUERY. */
+.hud-bar--auto-height {
+  height: auto;
+  min-height: 64px;
+}
 .hud-grip {
   flex: none;
   width: 28px;
@@ -370,6 +439,50 @@ const backdropStyle = computed(() => {
   transform: rotate(225deg);
 }
 
+/* Mobile-only settlement bubble — replaces the inline `.titles` name/caption
+   (hidden above under isCompact) since the bar itself has no room for it.
+   `top` is set inline (settlementBubbleTop) to land in the same slot
+   DemoModeBadge.vue's own bubble uses, just left-aligned instead of
+   centered — capped under half the screen width so it can never collide
+   with that badge's own (right-aligned, similarly capped) bubble sharing
+   the row. */
+.settlement-bubble {
+  position: fixed;
+  left: 16px;
+  z-index: 41;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(58vw - 16px);
+  padding: 6px 14px 6px 8px;
+  border-radius: 999px;
+  background: rgba(6, 12, 16, 0.94);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  overflow: hidden;
+}
+.settlement-bubble .logo-hex {
+  /* .logo-hex's own svg/polygon rules (shared with .brand's logo above)
+     already handle fill/stroke — only the size differs here. */
+  width: 20px;
+  height: 20px;
+}
+.bubble-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bubble-meta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex: none;
+}
+
 .hud-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -379,10 +492,11 @@ const backdropStyle = computed(() => {
 }
 
 .hud-drawer {
+  /* `top`/`bottom` come from the inline `drawerStyle` binding — the bar's
+     real, current (possibly expanded) height, not a fixed guess. */
   position: absolute;
   left: 0;
   right: 0;
-  top: 64px;
   z-index: 39;
   overflow: hidden;
   background: linear-gradient(180deg, rgba(6, 12, 16, 0.97), rgba(6, 12, 16, 0.93));
@@ -391,8 +505,6 @@ const backdropStyle = computed(() => {
   touch-action: none;
 }
 .hud-drawer--bottom {
-  top: auto;
-  bottom: 64px;
   border-bottom: none;
   border-top: 1px solid var(--panel-border);
   box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.35);

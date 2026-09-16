@@ -10,7 +10,7 @@ import { SettlementPage } from './pages';
 test.describe('mobile HUD bar', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('collapsed pills cycle stock -> rate -> max independently, fill bar always visible', async ({ page }) => {
+  test('tapping any collapsed pill cycles ALL pills together, fill bar always visible', async ({ page }) => {
     test.setTimeout(MAP_SPEC_TIMEOUT_MS);
     await loginTestUser(page);
     await SettlementPage.found(page);
@@ -26,12 +26,14 @@ test.describe('mobile HUD bar', () => {
 
     await wood.click();
     await expect(wood.locator('.value-compact')).toContainText('/h');
-    // The other pill is untouched by wood's own cycle.
-    await expect(stone.locator('.value-compact')).not.toContainText('/h');
+    // Tapping wood switched stone too — they move together, in sync.
+    await expect(stone.locator('.value-compact')).toContainText('/h');
     await expect(wood.locator('.fill-track')).toBeVisible();
 
-    await wood.click();
+    // A tap on a *different* pill still advances the one shared stage.
+    await stone.click();
     await expect(wood.locator('.value-compact')).toContainText('max');
+    await expect(stone.locator('.value-compact')).toContainText('max');
     await expect(wood.locator('.fill-track')).toBeVisible();
 
     await wood.click();
@@ -64,6 +66,16 @@ test.describe('mobile HUD bar', () => {
       expect(openBox.height).toBeGreaterThan(100);
     }).toPass();
     await expect(page.locator('.hud-drawer .drawer-links')).toBeVisible();
+    // ResourceBar's pills switch to their expanded (desktop-style stacked)
+    // rendering while the drawer is open, instead of the collapsed
+    // single-line cycle — that stacked content happens to still fit inside
+    // the same 64px bar with room to spare, so the bar's own height is not
+    // guaranteed to grow (TopBar.vue's dynamic height measurement is a
+    // safety net for if it ever doesn't, not something to assert on here).
+    const expandedBarBox = (await page.locator('.hud-bar').boundingBox())!;
+    expect(expandedBarBox.height).toBeGreaterThanOrEqual(box.height);
+    await expect(page.locator('.resource--compact')).toHaveCount(0); // expanded, not the single-line cycle
+    await expect(page.locator('.hud-bar .resource .rate').first()).toBeVisible();
 
     // Closing drags from within the now-open drawer itself, not from the
     // collapsed bar's own position — the bar (and its grip) stays pinned to
@@ -76,7 +88,7 @@ test.describe('mobile HUD bar', () => {
     const closeStartY = openBox.y + openBox.height - 20;
     await page.mouse.move(closeX, closeStartY);
     await page.mouse.down();
-    await page.mouse.move(closeX, box.y + box.height + 4, { steps: 10 }); // up to just under the bar
+    await page.mouse.move(closeX, expandedBarBox.y + expandedBarBox.height + 4, { steps: 10 }); // up to just under the (expanded) bar
     await page.mouse.up();
 
     // Closed height is a hairline border, not necessarily an exact "0px" —
@@ -86,6 +98,12 @@ test.describe('mobile HUD bar', () => {
       const closedBox = (await page.locator('.hud-drawer').boundingBox())!;
       expect(closedBox.height).toBeLessThanOrEqual(2);
     }).toPass();
+    // The bar itself shrinks back down and the single-line cycle returns.
+    await expect(async () => {
+      const collapsedBarBox = (await page.locator('.hud-bar').boundingBox())!;
+      expect(collapsedBarBox.height).toBeCloseTo(box.height, 0);
+    }).toPass();
+    await expect(page.locator('.resource-bar .resource--compact').first()).toBeVisible();
   });
 
   test('releasing short of the open threshold snaps the drawer back closed', async ({ page }) => {

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import ResourceBar from './ResourceBar.vue';
 import { useWorldStore } from '../../stores/world';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { createTestI18n } from '../../test/i18n';
 import enHud from '../../i18n/locales/en/hud.json';
 import enCatalogue from '../../i18n/locales/en/catalogue.json';
@@ -106,6 +107,7 @@ describe('ResourceBar (compact / mobile)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    isHudDrawerOpen.value = false;
   });
 
   function setup() {
@@ -129,22 +131,27 @@ describe('ResourceBar (compact / mobile)', () => {
     wrapper.unmount();
   });
 
-  it('cycles a single pill through stock -> rate -> max -> stock, independently of the others', async () => {
+  it('tapping any pill cycles ALL pills together through stock -> rate -> max -> stock', async () => {
     setup();
     const wrapper = mountResourceBar();
     await flushPromises();
     const [wood, stone] = wrapper.findAll('.resource--compact');
 
     expect(wood.get('.value-compact').text()).toContain('4,965');
+    expect(stone.get('.value-compact').text()).toContain('2,310');
+
     await wood.trigger('click');
     expect(wood.get('.value-compact').text()).toContain('+60/h');
-    expect(stone.get('.value-compact').text()).toContain('2,310'); // untouched
+    expect(stone.get('.value-compact').text()).toContain('+45/h'); // switched too, in sync
 
     await wood.trigger('click');
     expect(wood.get('.value-compact').text()).toContain('max 12,000');
+    expect(stone.get('.value-compact').text()).toContain('max 8,000');
 
-    await wood.trigger('click');
+    // Tapping a *different* pill still advances the one shared stage.
+    await stone.trigger('click');
     expect(wood.get('.value-compact').text()).toContain('4,965');
+    expect(stone.get('.value-compact').text()).toContain('2,310');
     wrapper.unmount();
   });
 
@@ -193,6 +200,22 @@ describe('ResourceBar (compact / mobile)', () => {
     vi.advanceTimersByTime(6000);
     await wrapper.vm.$nextTick();
     expect(wood.get('.value-compact').text()).toContain('4,965');
+    wrapper.unmount();
+  });
+
+  it('switches to the full desktop-style stacked layout while the drawer is open, instead of the single-line cycle', async () => {
+    setup();
+    isHudDrawerOpen.value = true;
+    const wrapper = mountResourceBar();
+    await flushPromises();
+
+    // The expanded branch reuses the desktop markup wholesale.
+    expect(wrapper.find('.resource--compact').exists()).toBe(false);
+    const wood = wrapper.findAll('.resource')[0];
+    expect(wood.get('.value').text()).toContain('4,965');
+    expect(wood.get('.value').text()).toContain('12,000'); // cap suffix
+    expect(wood.get('.rate').text()).toBe('+60/h');
+    expect(wood.find('.fill-track').exists()).toBe(true);
     wrapper.unmount();
   });
 });

@@ -8,16 +8,21 @@
 //
 // Mobile HUD bar rework: below HUD_COMPACT_QUERY there simply isn't room for
 // the stacked value/rate/fill layout, so each pill collapses to one line
-// that tap-cycles through stock -> rate -> max capacity (see `stageOf`/
-// `cycle` below), auto-reverting to stock after a few seconds of no further
-// tap so a player can't accidentally strand every pill on "max ...". The
-// fill bar itself is never part of the cycle — it renders identically in
-// every stage, at both viewport tiers. Desktop keeps today's markup and
-// styling completely untouched.
-import { computed, onBeforeUnmount, reactive } from 'vue';
+// that tap-cycles through stock -> rate -> max capacity (see `stage`/
+// `cycle` below) — a single shared stage, not one per pill, so tapping any
+// pill switches all of them together, auto-reverting to stock after a few
+// seconds of no further tap. While the pull-down drawer is open (isHudDrawerOpen)
+// there's real vertical room again, so pills switch to a third, "expanded"
+// rendering that shows all three facts at once — the exact same markup/CSS
+// as the desktop branch below, just still gated to mobile widths, so the
+// drawer doesn't need its own separate (and duplicate) resource list.
+// The fill bar itself is never part of the cycle — it renders identically in
+// every stage/branch. Desktop keeps today's markup and styling untouched.
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useMediaQuery } from '../../composables/useMediaQuery';
+import { isHudDrawerOpen } from '../../composables/hudDrawerOpenState';
 import { HUD_COMPACT_QUERY } from '../../lib/breakpoints';
 import type { MessageSchema } from '../../i18n/schema';
 
@@ -33,6 +38,7 @@ const world = useWorldStore();
 const { t, n } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 const isCompact = useMediaQuery(HUD_COMPACT_QUERY);
+const isExpanded = computed(() => isCompact.value && isHudDrawerOpen.value);
 
 // Issue #158: each pill's fill track gains a dim reserved segment — the
 // stock is not split into two bars, `reserved` is a *portion* of `value`
@@ -47,7 +53,6 @@ const pills = computed(() => [
 ]);
 
 const population = computed(() => world.hud.population);
-const POPULATION_KEY = 'population';
 
 function fmt(value: number): string {
   return n(Math.floor(value), 'integer');
@@ -72,55 +77,48 @@ function reservedSegment(value: number, reserved: number, cap: number): { left: 
   return { left, width };
 }
 
-// --- Mobile compact stage cycling (stock -> rate -> max -> stock) ---
+// --- Mobile collapsed stage cycling (stock -> rate -> max -> stock) ---
+// A single shared stage, not one per pill: tapping any pill switches all of
+// them together, so they always read as one consistent "mode" rather than a
+// mismatched mix of stock/rate/max across the row.
 
 type Stage = 0 | 1 | 2;
 const STAGE_COUNT = 3;
 const AUTO_REVERT_MS = 6000;
 
-// Per-pill, component-local, never persisted — a transient peek, not a
-// preference. Resets on remount (navigating away and back, or a reload).
-const stages = reactive<Record<string, Stage>>({});
-const revertTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const stage = ref<Stage>(0);
+let revertTimer: ReturnType<typeof setTimeout> | null = null;
 
-function stageOf(key: string): Stage {
-  return stages[key] ?? 0;
-}
-
-function clearRevertTimer(key: string) {
-  const existing = revertTimers[key];
-  if (existing) {
-    clearTimeout(existing);
-    delete revertTimers[key];
+function clearRevertTimer() {
+  if (revertTimer) {
+    clearTimeout(revertTimer);
+    revertTimer = null;
   }
 }
 
-function cycle(key: string) {
-  stages[key] = (((stageOf(key) + 1) % STAGE_COUNT) as Stage);
-  clearRevertTimer(key);
-  if (stages[key] !== 0) {
-    revertTimers[key] = setTimeout(() => {
-      stages[key] = 0;
-      delete revertTimers[key];
+function cycle() {
+  stage.value = ((stage.value + 1) % STAGE_COUNT) as Stage;
+  clearRevertTimer();
+  if (stage.value !== 0) {
+    revertTimer = setTimeout(() => {
+      stage.value = 0;
+      revertTimer = null;
     }, AUTO_REVERT_MS);
   }
 }
 
-onBeforeUnmount(() => {
-  Object.values(revertTimers).forEach(clearTimeout);
-});
+onBeforeUnmount(clearRevertTimer);
 
-function stageText(key: string, value: number, rate: number, cap: number): string {
-  const stage = stageOf(key);
-  if (stage === 1) return t('hud.resourceBar.rate', { n: Math.round(rate) });
-  if (stage === 2) return t('hud.resourceBar.capMax', { n: fmt(cap) });
+function stageText(value: number, rate: number, cap: number): string {
+  if (stage.value === 1) return t('hud.resourceBar.rate', { n: Math.round(rate) });
+  if (stage.value === 2) return t('hud.resourceBar.capMax', { n: fmt(cap) });
   return fmt(value);
 }
 </script>
 
 <template>
-  <div class="resource-bar" :class="{ disabled: props.ringOpen, compact: isCompact }">
-    <template v-if="!isCompact">
+  <div class="resource-bar" :class="{ disabled: props.ringOpen, compact: isCompact && !isExpanded }">
+    <template v-if="!isCompact || isExpanded">
       <div v-for="pill in pills" :key="pill.key" class="resource">
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers">
@@ -158,15 +156,15 @@ function stageText(key: string, value: number, rate: number, cap: number): strin
         :key="pill.key"
         type="button"
         class="resource resource--compact"
-        :data-stage="stageOf(pill.key)"
-        :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + stageText(pill.key, pill.value, pill.rate, pill.cap)"
-        @click="cycle(pill.key)"
+        :data-stage="stage"
+        :aria-label="t(`catalogue.resources.${pill.key}`) + ': ' + stageText(pill.value, pill.rate, pill.cap)"
+        @click="cycle"
       >
         <span class="hex-icon" :style="{ background: pill.color }" />
         <div class="numbers-compact">
-          <span class="value-compact" :class="`stage-${stageOf(pill.key)}`">
-            {{ stageText(pill.key, pill.value, pill.rate, pill.cap) }}
-            <span v-if="stageOf(pill.key) === 0 && pill.reserved > 0" class="reserved-hint">
+          <span class="value-compact" :class="`stage-${stage}`">
+            {{ stageText(pill.value, pill.rate, pill.cap) }}
+            <span v-if="stage === 0 && pill.reserved > 0" class="reserved-hint">
               {{ t('hud.resourceBar.reserved', { n: fmt(pill.reserved) }) }}
             </span>
           </span>
@@ -182,7 +180,7 @@ function stageText(key: string, value: number, rate: number, cap: number): strin
             />
           </span>
           <span class="stage-dots" aria-hidden="true">
-            <span v-for="i in STAGE_COUNT" :key="i" class="dot" :class="{ active: stageOf(pill.key) === i - 1 }" />
+            <span v-for="i in STAGE_COUNT" :key="i" class="dot" :class="{ active: stage === i - 1 }" />
           </span>
         </div>
       </button>
@@ -190,20 +188,20 @@ function stageText(key: string, value: number, rate: number, cap: number): strin
         v-if="population.max > 0"
         type="button"
         class="resource resource--compact population"
-        :data-stage="stageOf(POPULATION_KEY)"
-        :aria-label="t('hud.nav.settlement') + ': ' + stageText(POPULATION_KEY, population.current, population.rate, population.max)"
-        @click="cycle(POPULATION_KEY)"
+        :data-stage="stage"
+        :aria-label="t('hud.nav.settlement') + ': ' + stageText(population.current, population.rate, population.max)"
+        @click="cycle"
       >
         <span class="hex-icon" style="background: var(--pop, #7fb3d5)" />
         <div class="numbers-compact">
-          <span class="value-compact" :class="`stage-${stageOf(POPULATION_KEY)}`">
-            {{ stageText(POPULATION_KEY, population.current, population.rate, population.max) }}
+          <span class="value-compact" :class="`stage-${stage}`">
+            {{ stageText(population.current, population.rate, population.max) }}
           </span>
           <span class="fill-track">
             <span class="fill" :style="{ width: fillPct(population.current, population.max) + '%', background: 'var(--pop, #7fb3d5)' }" />
           </span>
           <span class="stage-dots" aria-hidden="true">
-            <span v-for="i in STAGE_COUNT" :key="i" class="dot" :class="{ active: stageOf(POPULATION_KEY) === i - 1 }" />
+            <span v-for="i in STAGE_COUNT" :key="i" class="dot" :class="{ active: stage === i - 1 }" />
           </span>
         </div>
       </button>
@@ -285,9 +283,11 @@ function stageText(key: string, value: number, rate: number, cap: number): strin
   color: var(--muted);
 }
 
-/* Mobile compact pills — single line per pill, tap-cycles through stock /
-   rate / max capacity. Only active under HUD_COMPACT_QUERY (lib/breakpoints.ts);
-   the desktop rules above are untouched. */
+/* Mobile collapsed pills only (drawer closed) — single line per pill,
+   tap-cycles through stock / rate / max capacity together. Only active
+   under HUD_COMPACT_QUERY (lib/breakpoints.ts) and while the drawer is
+   closed; the desktop rules above are untouched, and are reused as-is for
+   the mobile *expanded* state (drawer open — see ResourceBar.vue's isExpanded). */
 .resource-bar.compact {
   gap: 10px;
 }

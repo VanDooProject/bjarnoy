@@ -28,6 +28,7 @@
   "realmPanel": {
     "level": "Lv {level}",
     "claims": "Reich beansprucht {count} Hexfelder",
+    "levelHexesShort": "Lv {level} · {count} Hexfelder",
     "backToWorldMap": "← Weltkarte"
   },
   "hoverTooltip": {

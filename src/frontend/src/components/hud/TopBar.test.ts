@@ -174,5 +174,29 @@ describe('TopBar', () => {
       wrapper.unmount();
       expect(isHudDrawerOpen.value).toBe(false);
     });
+
+    it('shows a settlement bubble instead of the inline title, ignoring hideTitle', async () => {
+      const world = useWorldStore();
+      world.hud.settlementName = 'Bjørnstad';
+      world.hud.level = 4;
+      world.hud.claimedHexes = 19;
+
+      const wrapper = mountTopBar({ hideTitle: true });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('.titles').exists()).toBe(false); // inline title stays hidden on mobile
+      const bubble = wrapper.get('.settlement-bubble');
+      expect(bubble.get('.bubble-name').text()).toBe('Bjørnstad');
+      expect(bubble.get('.bubble-meta').text()).toBe('Lv 4 · 19 hexes');
+      wrapper.unmount();
+    });
+
+    it('renders no settlement bubble when there is no settlement', async () => {
+      const wrapper = mountTopBar();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('.settlement-bubble').exists()).toBe(false);
+      wrapper.unmount();
+    });
   });
 });
