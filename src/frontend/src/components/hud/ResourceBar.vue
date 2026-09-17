@@ -304,6 +304,19 @@ function stageText(value: number, rate: number, cap: number): string {
   padding-left: 0;
   border-left: none;
 }
+/* The shared `.fill-track` rule above carries a 64px min-width tuned for
+   roomy desktop pills — on a narrow expanded mobile pill (where the cap now
+   wraps onto its own line, see the `.value .cap` rule above), that floor is
+   almost always wider than the "400"/"/3,000" text sitting above it, since
+   `.numbers`'s default `align-items: stretch` then stretches those shorter
+   text lines out to match the (wider) fill-track instead of the other way
+   around. Drop the floor here so the fill-track's width is driven purely by
+   `width: 100%` of its stretched `.numbers` parent, which sizes itself to
+   the widest of value/cap/rate — the bar then tracks the text instead of
+   overshooting it. */
+.resource-bar.expanded .fill-track {
+  min-width: 0;
+}
 
 /* Mobile collapsed pills only (drawer closed) — single line per pill,
    tap-cycles through stock / rate / max capacity together. Only active
