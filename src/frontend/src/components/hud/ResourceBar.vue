@@ -290,6 +290,20 @@ function stageText(value: number, rate: number, cap: number): string {
 .resource-bar.expanded .value .cap {
   display: block;
 }
+/* The desktop `gap: 22px` + `.resource + .resource` separator (22px padding
+   + a border) below assume roomy side-by-side desktop pills; once a narrow
+   mobile pill's own value/cap/rate stack is only ~70px wide, that same 22px
+   gap plus 22px padding reads as a huge blank strip ("spacing after
+   numbers") between one pill's numbers and the next pill's icon. Match the
+   already-established compact-mode numbers (10px gap, no border/padding
+   separator) here too, for visual consistency across the two mobile states. */
+.resource-bar.expanded {
+  gap: 10px;
+}
+.resource-bar.expanded .resource + .resource {
+  padding-left: 0;
+  border-left: none;
+}
 
 /* Mobile collapsed pills only (drawer closed) — single line per pill,
    tap-cycles through stock / rate / max capacity together. Only active
