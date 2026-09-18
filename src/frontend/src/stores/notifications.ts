@@ -43,7 +43,16 @@ export const useNotificationsStore = defineStore('notifications', {
     },
   },
   actions: {
-    /** Loads /config and, if enabled, checks whether this browser already has a subscription the server also knows about. */
+    /**
+     * Loads /config and, if enabled, checks whether this browser already has
+     * a subscription the server also knows about. The two are deliberately
+     * not gated behind the same loading flag: `syncThisDevice()` waits on
+     * `navigator.serviceWorker.ready`, which can take an unpredictable
+     * moment on a first-ever page load (the worker still installing) — the
+     * "This device" card (enable/disable button) must render as soon as
+     * /config resolves, not sit behind that, defaulting to "off" until the
+     * sync upgrades it.
+     */
     async load() {
       this.support = pushSupport();
       this.permission = currentPermission(this.support);
@@ -51,12 +60,13 @@ export const useNotificationsStore = defineStore('notifications', {
       this.configError = null;
       try {
         this.config = await api.getNotificationConfig();
-        await this.syncThisDevice();
       } catch (err) {
         this.configError = err instanceof ApiError ? err.message : 'Could not load notification settings.';
+        return;
       } finally {
         this.configLoading = false;
       }
+      await this.syncThisDevice();
     },
     /** Reconciles this browser's own PushSubscription (if any) against the server's list — sets thisDeviceSubscriptionId. */
     async syncThisDevice() {
