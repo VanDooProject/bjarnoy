@@ -9,11 +9,13 @@
 // Bottom-right HUD corner: BuildQueuePanel is top-left, TrainingQueuePanel
 // top-right, RealmPanel bottom-left (see each panel's own `position:
 // absolute` in their <style>) — this is the one open corner.
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';
 import { useAuthStore } from '../../stores/auth';
+import { usePlayerStore } from '../../stores/player';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
+import { api } from '../../api/client';
 import { DEMO_MODE } from '../../config';
 import type { MessageSchema } from '../../i18n/schema';
 import { missionName, unitName } from '../../i18n/catalogueNames';
@@ -31,12 +33,39 @@ import { buildingLabel } from '../../lib/units/battleReports';
 
 const world = useWorldStore();
 const auth = useAuthStore();
+const player = usePlayerStore();
 const catalogue = useUnitCatalogueStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 onMounted(() => {
   void catalogue.load();
 });
+
+// Which of the player's own settlements a dispatch is sent *from* — the
+// world map's "Send troops here" ring action (an unclaimed tile) always
+// defaults this to the currently selected settlement, but with more than
+// one realm a player needs to see/change that before confirming. Mirrors
+// ExpansionPanel.vue's own settlement switcher (issue #55) rather than
+// sharing state with it — this list only needs to exist while ArmyPanel is
+// mounted, and ArmyPanel is visible in both settlement and world zoom.
+const mySettlements = ref<{ id: string; name: string; q: number; r: number }[]>([]);
+async function loadMySettlements() {
+  if (DEMO_MODE || !auth.isAuthenticated || !world.worldId) return;
+  try {
+    mySettlements.value = await api.listMySettlements(world.worldId);
+  } catch {
+    // Best-effort — the switcher just shows only the current settlement then.
+  }
+}
+onMounted(loadMySettlements);
+watch(() => auth.isAuthenticated, (isAuthenticated) => {
+  if (isAuthenticated) loadMySettlements();
+});
+async function switchSourceSettlement(settlementId: string) {
+  if (settlementId === world.selectedSettlementId) return;
+  player.switchSettlement(settlementId);
+  await world.restoreLiveSettlement(player.id, settlementId);
+}
 
 const draft = computed(() => world.dispatchDraft);
 
@@ -283,6 +312,17 @@ async function confirmFieldOrderClick() {
     <p v-if="DEMO_MODE" class="status-subtext demo-note">
       {{ t('hud.armyPanel.demoNote') }}
     </p>
+
+    <div v-if="mySettlements.length > 1" class="source-switcher">
+      <label for="army-panel-source">{{ t('hud.armyPanel.from') }}</label>
+      <select
+        id="army-panel-source"
+        :value="world.selectedSettlementId"
+        @change="switchSourceSettlement(($event.target as HTMLSelectElement).value)"
+      >
+        <option v-for="s in mySettlements" :key="s.id" :value="s.id">{{ s.name }}</option>
+      </select>
+    </div>
 
     <template v-if="!draft && !fieldDraft">
       <div v-if="armyRows.length" class="army-list">
@@ -633,6 +673,20 @@ async function confirmFieldOrderClick() {
 }
 .demo-note {
   margin-top: 0;
+}
+.source-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.source-switcher select {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  padding: 4px 6px;
 }
 .error-note {
   color: #e08a8a;

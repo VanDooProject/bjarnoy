@@ -274,6 +274,13 @@ export const useWorldStore = defineStore('world', {
       submitting: boolean;
       error: string | null;
     } | null,
+    // Set by the world map's "Found settlement here"/"Land here" ring action
+    // (an unclaimed tile) so ExpansionPanel.vue can prefill its target-hex
+    // form with the clicked coordinate instead of the player typing q/r by
+    // hand. Not a draft of its own — founding still goes through
+    // ExpansionPanel's existing `dispatchFounding` flow and preconditions
+    // (settler crews trained, renown, spacing); this is just a handoff value.
+    foundDraftTarget: null as AxialCoord | null,
     // The target settlement's own placed buildings, fetched on demand once an
     // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
     // the "preferred target building" picker in ArmyPanel.vue lists from.
@@ -1180,6 +1187,13 @@ export const useWorldStore = defineStore('world', {
     },
     cancelDispatch() {
       this.dispatchDraft = null;
+    },
+    /** World map ring action on an unclaimed tile: hands the clicked hex to ExpansionPanel's target-hex form. */
+    setFoundTarget(coord: AxialCoord) {
+      this.foundDraftTarget = coord;
+    },
+    clearFoundTarget() {
+      this.foundDraftTarget = null;
     },
     /** Switching mission clears the plotted route/target — a move destination and an attack's/support's waypoint-only route aren't interchangeable, and a stale target settlement from a previous draft shouldn't silently carry over. */
     setDispatchMission(mission: 'move' | 'attack' | 'support') {

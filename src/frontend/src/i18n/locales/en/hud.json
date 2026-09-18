@@ -75,6 +75,7 @@
       "info": "Info",
       "attackRaid": "Attack / Raid",
       "combatNotImplemented": "Combat is not implemented yet",
+      "sendTroopsHere": "Send troops here",
       "landHere": "Land here",
       "sendSettlers": "Send settlers",
       "noSettlersYet": "You have no settlers available yet",
@@ -292,6 +293,7 @@
   },
   "armyPanel": {
     "title": "Armies",
+    "from": "From",
     "demoNote": "Dispatching armies requires the live backend and isn't wired up in demo mode yet.",
     "noArmies": "No armies on the road.",
     "dispatchArmy": "Dispatch army",
