@@ -8,9 +8,12 @@ import { RingMenuComponent, WorldMapPage } from './pages';
  * (MapView.onHexClick's world-mode branch navigated to /settlement no matter
  * which hex was clicked). It now opens the same ring menu settlement zoom
  * already uses, offering "Send troops here" (starts a move dispatch draft
- * pre-plotted with that hex) and "Land here"/"Send settlers" (hands the
- * coordinate to ExpansionPanel's founding form) — see the world map's own
- * onHexClick/rootActions comments.
+ * pre-plotted with that hex) and "Found settlement here"/"Send settlers"
+ * (hands the coordinate to ExpansionPanel's founding form) — see the world
+ * map's own onHexClick/rootActions comments. The founding action reads
+ * "Found settlement here" rather than "Land here" specifically so it can't
+ * be misread as a troop-landing order sitting right next to "Send troops
+ * here" in the same ring.
  */
 
 type EmptyTileWindow = Window & {
@@ -71,7 +74,7 @@ test.describe('empty-field context menu on the world map', { tag: '@g3' }, () =>
     expect(draft?.route).toEqual([hex]);
   });
 
-  test('clicking an unclaimed tile\'s "Land here"/"Send settlers" action hands the coordinate to the founding form', async ({ page }) => {
+  test('clicking an unclaimed tile\'s "Found settlement here"/"Send settlers" action hands the coordinate to the founding form', async ({ page }) => {
     test.setTimeout(HEAVY_MAP_SPEC_TIMEOUT_MS);
     const world = await WorldMapPage.open(page);
     const box = await world.box();
@@ -85,7 +88,7 @@ test.describe('empty-field context menu on the world map', { tag: '@g3' }, () =>
     await page.mouse.click(box.x + screen.x, box.y + screen.y);
     await ring.waitForOpen();
 
-    const foundAction = ring.bubbles.filter({ hasText: /Land here|Send settlers/ });
+    const foundAction = ring.bubbles.filter({ hasText: /Found settlement here|Send settlers/ });
     await expect(foundAction).toBeVisible();
     await foundAction.click();
 

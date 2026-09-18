@@ -49,7 +49,7 @@ const destR = ref(0);
 const provisions = ref(200);
 const retargetFor = ref<string | null>(null);
 
-// A "Found settlement here"/"Land here" ring action on the world map (an
+// A "Found settlement here"/"Send settlers" ring action on the world map (an
 // unclaimed tile) hands its coordinate over via `world.foundDraftTarget`
 // rather than the player typing q/r by hand — see that state's own comment.
 watch(

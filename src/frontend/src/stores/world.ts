@@ -274,8 +274,8 @@ export const useWorldStore = defineStore('world', {
       submitting: boolean;
       error: string | null;
     } | null,
-    // Set by the world map's "Found settlement here"/"Land here" ring action
-    // (an unclaimed tile) so ExpansionPanel.vue can prefill its target-hex
+    // Set by the world map's "Found settlement here"/"Send settlers" ring
+    // action (an unclaimed tile) so ExpansionPanel.vue can prefill its target-hex
     // form with the clicked coordinate instead of the player typing q/r by
     // hand. Not a draft of its own — founding still goes through
     // ExpansionPanel's existing `dispatchFounding` flow and preconditions
