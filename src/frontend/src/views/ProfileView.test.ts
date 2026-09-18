@@ -7,10 +7,11 @@ import type { ProfileResponse } from '../api/types';
 import { useAuthStore } from '../stores/auth';
 import { createTestI18n } from '../test/i18n';
 import enProfile from '../i18n/locales/en/profile.json';
+import enNotifications from '../i18n/locales/en/notifications.json';
 
 function mountProfileView() {
   return mount(ProfileView, {
-    global: { plugins: [createTestI18n({ profile: enProfile })] },
+    global: { plugins: [createTestI18n({ profile: enProfile, notifications: enNotifications })] },
   });
 }
 

@@ -65,6 +65,16 @@ export const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
     },
     {
+      // Push notification settings (docs/plans/push-notifications.md) — a
+      // dedicated route rather than a /settings parent, since this is the
+      // only settings concern so far; nest under /settings if a second one
+      // appears. No requiresAuth: an anonymous visitor should see the
+      // page's own "create an account" notice, not a hard /login redirect.
+      path: '/settings/notifications',
+      name: 'notification-settings',
+      component: () => import('../views/NotificationSettingsView.vue'),
+    },
+    {
       path: '/leaderboards',
       name: 'leaderboards',
       component: () => import('../views/LeaderboardView.vue'),

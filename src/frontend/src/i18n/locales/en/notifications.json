@@ -1,0 +1,19 @@
+{
+  "title": "Notifications",
+  "anonymous": "Create an account to receive notifications.",
+  "createAccount": "Create an account",
+  "unavailable": "Push notifications are not available on this server.",
+  "loadError": "Could not load notification settings.",
+  "thisDevice": {
+    "title": "This device",
+    "unsupported": "Push notifications are not supported in this browser.",
+    "needsInstall": "Add Fjørdhold to your Home Screen to enable notifications on this device.",
+    "denied": "Notifications are blocked for this site in your browser settings.",
+    "off": "Notifications are off on this device.",
+    "on": "Notifications are on for this device.",
+    "enable": "Enable notifications on this device",
+    "disable": "Turn off on this device",
+    "sendTest": "Send test notification",
+    "testSent": "Test notification sent — it should arrive shortly."
+  }
+}

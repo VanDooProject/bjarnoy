@@ -45,6 +45,7 @@ import type {
   WeeklyStatsPageResponse,
   MarkReadResponse,
   MessageResponse,
+  NotificationConfigResponse,
   PagedAdminSettlementsResponse,
   PagedAdminUsersResponse,
   PreviewWorldSeedRequest,
@@ -59,6 +60,7 @@ import type {
   PostTradeOfferRequest,
   ProblemDetails,
   ProfileResponse,
+  PushSubscriptionResponse,
   ProposeTreatyRequest,
   QueueBuildRequest,
   RenownResponse,
@@ -90,6 +92,7 @@ import type {
   UpdateBioRequest,
   UpdateLocaleRequest,
   UpdateWorldSettingsRequest,
+  UpsertPushSubscriptionRequest,
   UserResponse,
   WorldMembershipResponse,
   WorldResponse,
@@ -168,7 +171,9 @@ async function request<T>(path: string, init?: RequestInit, allowRefresh = true)
     }
     throw new ApiError(res.status, problem);
   }
-  if (res.status === 204) return undefined as T;
+  // 204 never has a body; 202 (sendTestPushNotification) is body-less here
+  // too — TypedResults.Accepted() with no value.
+  if (res.status === 204 || res.status === 202) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -628,4 +633,18 @@ export const api = {
       method: 'DELETE',
       headers: ownerHeader(ownerId),
     }),
+  // Push notifications (Web Push/VAPID) — see docs/plans/push-notifications.md.
+  // Anonymous, unlike the rest of this group: the service worker's subscribe
+  // call needs the public VAPID key before a user is necessarily logged in.
+  getNotificationConfig: () => request<NotificationConfigResponse>('/notifications/config'),
+  listPushSubscriptions: () => request<PushSubscriptionResponse[]>('/notifications/subscriptions'),
+  upsertPushSubscription: (body: UpsertPushSubscriptionRequest) =>
+    request<PushSubscriptionResponse>('/notifications/subscriptions', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deletePushSubscription: (subscriptionId: string) =>
+    request<unknown>(`/notifications/subscriptions/${subscriptionId}`, { method: 'DELETE' }),
+  sendTestPushNotification: (subscriptionId: string) =>
+    request<unknown>(`/notifications/subscriptions/${subscriptionId}/test`, { method: 'POST' }),
 };

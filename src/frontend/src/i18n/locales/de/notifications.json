@@ -1,0 +1,19 @@
+{
+  "title": "Benachrichtigungen",
+  "anonymous": "Erstelle ein Konto, um Benachrichtigungen zu erhalten.",
+  "createAccount": "Konto erstellen",
+  "unavailable": "Push-Benachrichtigungen sind auf diesem Server nicht verfügbar.",
+  "loadError": "Benachrichtigungseinstellungen konnten nicht geladen werden.",
+  "thisDevice": {
+    "title": "Dieses Gerät",
+    "unsupported": "Push-Benachrichtigungen werden in diesem Browser nicht unterstützt.",
+    "needsInstall": "Füge Fjørdhold zu deinem Startbildschirm hinzu, um Benachrichtigungen auf diesem Gerät zu aktivieren.",
+    "denied": "Benachrichtigungen sind für diese Seite in deinen Browsereinstellungen blockiert.",
+    "off": "Benachrichtigungen sind auf diesem Gerät ausgeschaltet.",
+    "on": "Benachrichtigungen sind für dieses Gerät aktiviert.",
+    "enable": "Benachrichtigungen auf diesem Gerät aktivieren",
+    "disable": "Auf diesem Gerät ausschalten",
+    "sendTest": "Testbenachrichtigung senden",
+    "testSent": "Testbenachrichtigung gesendet — sie sollte in Kürze eintreffen."
+  }
+}
