@@ -3,6 +3,7 @@ using Bjarnoy.Api.Hosting;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.Services.Notifications;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,6 +81,13 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// </summary>
     public TestTimeProvider Time { get; } =
         new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+
+    /// <summary>
+    /// The fake push sender <see cref="WithPush"/> swaps in for the real
+    /// <c>WebPushSender</c> — records every send instead of calling a real
+    /// push service.
+    /// </summary>
+    public RecordingPushSender PushSender { get; } = new();
 
     /// <summary>Directory used as the application's web root during tests.</summary>
     public static string TestWebRootPath { get; } =
@@ -165,6 +173,19 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
             .GetWorldsAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Drains <c>notification_outbox</c> once, exactly as
+    /// <c>PushDeliveryHostedService</c>'s timer would — tests call this
+    /// directly instead of waiting on that timer, the same way they advance
+    /// <see cref="Time"/> instead of waiting on a real clock.
+    /// </summary>
+    public async Task DeliverDueNotificationsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<PushDeliveryService>()
+            .DeliverDueAsync(cancellationToken);
+    }
+
     public async Task<MigrationStatus> GetMigrationStatusAsync(CancellationToken cancellationToken = default)
     {
         await using var scope = Services.CreateAsyncScope();
@@ -244,6 +265,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
+
+            if (_push is not null)
+            {
+                services.RemoveAll<IPushSender>();
+                services.AddSingleton<IPushSender>(PushSender);
+            }
         });
     }
 

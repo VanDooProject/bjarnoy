@@ -52,6 +52,20 @@ builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<RenownService>();
 builder.Services.AddScoped<NotificationSubscriptionService>();
+builder.Services.AddScoped<NotificationEnqueuer>();
+
+// Registered unconditionally (unlike PushOptions itself, only bound below
+// when migrationCommand == None) so NotificationEnqueuer can be resolved
+// even in migrator mode and simply short-circuits when push is off.
+builder.Services.AddSingleton(new PushFeatureState
+{
+    Enabled = new PushOptions
+    {
+        VapidPublicKey = builder.Configuration[$"{PushOptions.SectionName}:VapidPublicKey"],
+        VapidPrivateKey = builder.Configuration[$"{PushOptions.SectionName}:VapidPrivateKey"],
+        Subject = builder.Configuration[$"{PushOptions.SectionName}:Subject"],
+    }.IsConfigured,
+});
 
 builder.Services.AddSingleton<IPlotReservationStore, InMemoryPlotReservationStore>();
 builder.Services.AddScoped<PlotReservationService>();
@@ -215,6 +229,8 @@ if (migrationCommand == MigrationCommandKind.None)
             });
         builder.Services.AddHttpClient<PushServiceClient>();
         builder.Services.AddScoped<IPushSender, WebPushSender>();
+        builder.Services.AddScoped<PushDeliveryService>();
+        builder.Services.AddHostedService<PushDeliveryHostedService>();
     }
 }
 

@@ -4,8 +4,11 @@ using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.Hosting;
+using Bjarnoy.Domain.Notifications;
+using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services.Notifications;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace Bjarnoy.Api.Endpoints;
@@ -53,6 +56,13 @@ public static class NotificationEndpoints
         notifications.MapDelete("/subscriptions/{subscriptionId:guid}", DeleteSubscription)
             .WithName("DeletePushSubscription")
             .WithSummary("Unsubscribes one of the caller's own devices.")
+            .RequireAuthorization()
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            .AddEndpointFilter<UserActivityEndpointFilter>();
+
+        notifications.MapPost("/subscriptions/{subscriptionId:guid}/test", SendTestNotification)
+            .WithName("SendTestPushNotification")
+            .WithSummary("Queues a test push notification to one of the caller's own devices.")
             .RequireAuthorization()
             .AddEndpointFilter<ActiveUserEndpointFilter>()
             .AddEndpointFilter<UserActivityEndpointFilter>();
@@ -121,5 +131,45 @@ public static class NotificationEndpoints
         return outcome == SubscriptionDeleteOutcome.Deleted
             ? TypedResults.NoContent()
             : TypedResults.NotFound();
+    }
+
+    private static async Task<Results<Accepted, NotFound>> SendTestNotification(
+        Guid subscriptionId,
+        GameDbContext dbContext,
+        NotificationEnqueuer notificationEnqueuer,
+        IOptions<PushOptions> pushOptions,
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken)
+    {
+        if (!pushOptions.Value.IsConfigured)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var ownsSubscription = await dbContext.PushSubscriptions
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == subscriptionId && s.UserId == userId, cancellationToken);
+        if (!ownsSubscription)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var preferredLocale = await dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.PreferredLocale)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        await notificationEnqueuer.EnqueueAsync(
+            userId,
+            NotificationType.DirectMessage,
+            NotificationTextRenderer.RenderTest(preferredLocale),
+            dedupeKey: $"test:{subscriptionId}:{DateTimeOffset.UtcNow.Ticks}",
+            timeToLive: TimeSpan.FromMinutes(5),
+            cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TypedResults.Accepted((string?)null);
     }
 }
