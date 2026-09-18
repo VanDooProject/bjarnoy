@@ -88,6 +88,12 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<PlayerExploredEntity> PlayerExplored => Set<PlayerExploredEntity>();
 
+    public DbSet<PushSubscriptionEntity> PushSubscriptions => Set<PushSubscriptionEntity>();
+
+    public DbSet<NotificationOptOutEntity> NotificationOptOuts => Set<NotificationOptOutEntity>();
+
+    public DbSet<NotificationOutboxEntity> NotificationOutbox => Set<NotificationOutboxEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -439,6 +445,11 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .HasForeignKey(t => t.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            user.HasMany(u => u.PushSubscriptions)
+                .WithOne(s => s.User!)
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Reserved system accounts, seeded here (rather than at app
             // startup) so they exist deterministically as soon as the
             // AddUsers migration applies — the same migration's backfill of
@@ -497,6 +508,60 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
             // Looked up by hash on every refresh/logout call.
             token.HasIndex(t => t.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<PushSubscriptionEntity>(subscription =>
+        {
+            subscription.ToTable("push_subscriptions");
+            subscription.HasKey(s => s.Id);
+            subscription.Property(s => s.Id).ValueGeneratedNever();
+            subscription.Property(s => s.Endpoint).HasMaxLength(2048).IsRequired();
+            subscription.Property(s => s.P256dh).HasMaxLength(256).IsRequired();
+            subscription.Property(s => s.Auth).HasMaxLength(64).IsRequired();
+            subscription.Property(s => s.DeviceLabel).HasMaxLength(60).IsRequired();
+            subscription.Property(s => s.UserAgent).HasMaxLength(512);
+
+            // A browser install has exactly one subscription per origin —
+            // a PUT for an endpoint that already exists updates that row
+            // (and re-parents it to the caller on an account switch) rather
+            // than creating a second one.
+            subscription.HasIndex(s => s.Endpoint).IsUnique();
+            subscription.HasIndex(s => s.UserId);
+        });
+
+        modelBuilder.Entity<NotificationOptOutEntity>(optOut =>
+        {
+            optOut.ToTable("notification_opt_outs");
+            optOut.HasKey(o => new { o.UserId, o.Type });
+            optOut.Property(o => o.Type).HasConversion<int>();
+
+            optOut.HasOne(o => o.User)
+                .WithMany()
+                .HasForeignKey(o => o.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NotificationOutboxEntity>(outbox =>
+        {
+            outbox.ToTable("notification_outbox");
+            outbox.HasKey(o => o.Id);
+            outbox.Property(o => o.Id).ValueGeneratedNever();
+            outbox.Property(o => o.Type).HasConversion<int>();
+            outbox.Property(o => o.DedupeKey).HasMaxLength(200).IsRequired();
+            outbox.Property(o => o.PayloadJson).HasMaxLength(2000).IsRequired();
+            outbox.Property(o => o.LastError).HasMaxLength(500);
+
+            outbox.HasOne(o => o.User)
+                .WithMany()
+                .HasForeignKey(o => o.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Inserting the same event twice (a read racing the
+            // due-completion scanner) is a no-op.
+            outbox.HasIndex(o => o.DedupeKey).IsUnique();
+
+            // The delivery worker's "due & unsent" scan.
+            outbox.HasIndex(o => new { o.SentAt, o.ScheduledFor });
         });
 
         modelBuilder.Entity<GuildEntity>(guild =>
