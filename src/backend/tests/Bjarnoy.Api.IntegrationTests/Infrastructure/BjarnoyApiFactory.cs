@@ -40,6 +40,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// <summary>Set by <see cref="WithDiagnostics"/>; null leaves it to the build.</summary>
     private DiagnosticsOptions? _diagnostics;
 
+    /// <summary>Set by <see cref="WithPush"/>; null leaves push unconfigured (the default, unstamped-build-style state).</summary>
+    private PushOptions? _push;
+
     private BjarnoyApiFactory(DatabaseProvider provider, string connectionString, string? databaseFile)
     {
         _provider = provider;
@@ -133,6 +136,26 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         return this;
     }
 
+    /// <summary>
+    /// Push (Web Push/VAPID) is unconfigured by default in tests, same as an
+    /// unstamped build — call this for the tests that need
+    /// <c>NotificationEndpoints</c>'s subscribe/deliver paths enabled.
+    /// </summary>
+    public BjarnoyApiFactory WithPush(
+        string vapidPublicKey = "test-vapid-public-key",
+        string vapidPrivateKey = "test-vapid-private-key",
+        string subject = "mailto:test@bjarnoy.local")
+    {
+        _push = new PushOptions
+        {
+            VapidPublicKey = vapidPublicKey,
+            VapidPrivateKey = vapidPrivateKey,
+            Subject = subject,
+        };
+
+        return this;
+    }
+
     /// <summary>The worlds the database holds, in creation order.</summary>
     public async Task<IReadOnlyList<WorldEntity>> GetWorldsAsync(
         CancellationToken cancellationToken = default)
@@ -167,6 +190,15 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
         // Health endpoints are opt-in outside development; the tests assert on them.
         builder.UseSetting("ExposeHealthChecks", "true");
+
+        // Unset unless a test asked for it, via WithPush — same "unconfigured
+        // means the feature is off" default Program.cs itself uses.
+        if (_push is not null)
+        {
+            builder.UseSetting($"{PushOptions.SectionName}:VapidPublicKey", _push.VapidPublicKey);
+            builder.UseSetting($"{PushOptions.SectionName}:VapidPrivateKey", _push.VapidPrivateKey);
+            builder.UseSetting($"{PushOptions.SectionName}:Subject", _push.Subject);
+        }
 
         // Unset unless a test asked for it, so /api/v1/info's "unstamped build"
         // case is the default here exactly as it is for a plain `dotnet run`.

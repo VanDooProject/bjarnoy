@@ -113,7 +113,7 @@ public static class AuthEndpoints
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        await authService.LogoutAsync(request.RefreshToken, cancellationToken);
+        await authService.LogoutAsync(request.RefreshToken, request.PushEndpoint, cancellationToken);
         return Results.NoContent();
     }
 

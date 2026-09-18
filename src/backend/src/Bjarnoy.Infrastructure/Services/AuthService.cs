@@ -223,8 +223,14 @@ public sealed class AuthService(
         return new RefreshResult(RefreshOutcome.Success, stored.User, raw);
     }
 
-    /// <summary>Revokes a refresh token. A no-op (not an error) if it is unknown or already revoked.</summary>
-    public async Task LogoutAsync(string refreshToken, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Revokes a refresh token. A no-op (not an error) if it is unknown or
+    /// already revoked. If <paramref name="pushEndpoint"/> is given, this
+    /// device's push subscription is deleted in the same call — see
+    /// <see cref="Bjarnoy.Infrastructure.Entities.PushSubscriptionEntity"/>.
+    /// </summary>
+    public async Task LogoutAsync(
+        string refreshToken, string? pushEndpoint = null, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
@@ -232,12 +238,18 @@ public sealed class AuthService(
         var stored = await _dbContext.RefreshTokens.FirstOrDefaultAsync(
             t => t.TokenHash == hash, cancellationToken);
 
-        if (stored is null || stored.RevokedAt is not null)
+        if (stored is not null && stored.RevokedAt is null)
         {
-            return;
+            stored.RevokedAt = _timeProvider.GetUtcNow();
         }
 
-        stored.RevokedAt = _timeProvider.GetUtcNow();
+        if (!string.IsNullOrWhiteSpace(pushEndpoint))
+        {
+            await _dbContext.PushSubscriptions
+                .Where(s => s.Endpoint == pushEndpoint)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

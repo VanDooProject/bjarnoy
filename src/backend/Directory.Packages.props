@@ -1,5 +1,4 @@
 <Project>
-
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- Keep in sync with the Aspire.AppHost.Sdk version pinned in
@@ -10,15 +9,14 @@
     <ExtensionsVersion>10.9.0</ExtensionsVersion>
     <OpenTelemetryVersion>1.18.0</OpenTelemetryVersion>
   </PropertyGroup>
-
   <ItemGroup Label="Aspire">
     <PackageVersion Include="Aspire.Hosting.AppHost" Version="$(AspireVersion)" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="$(AspireVersion)" />
     <PackageVersion Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="$(AspireVersion)" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="$(AspireVersion)" />
+    <PackageVersion Include="Lib.Net.Http.WebPush" Version="3.3.1" />
   </ItemGroup>
-
   <ItemGroup Label="Hosting and telemetry">
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="$(ExtensionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="$(ExtensionsVersion)" />
@@ -28,7 +26,6 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="$(OpenTelemetryVersion)" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="$(OpenTelemetryVersion)" />
   </ItemGroup>
-
   <ItemGroup Label="Data">
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(DotNetVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(DotNetVersion)" />
@@ -38,7 +35,6 @@
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="$(DotNetVersion)" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
-
   <ItemGroup Label="Auth">
     <!-- PasswordHasher<T> (PBKDF2) for account passwords. -->
     <PackageVersion Include="Microsoft.Extensions.Identity.Core" Version="$(DotNetVersion)" />
@@ -46,12 +42,10 @@
          transitively, which AuthEndpoints uses to mint them. -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="$(DotNetVersion)" />
   </ItemGroup>
-
   <ItemGroup Label="Caching">
     <!-- UserActivityService's per-user write-throttle (IMemoryCache). -->
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="$(DotNetVersion)" />
   </ItemGroup>
-
   <ItemGroup Label="Imaging">
     <!--
       FogMaskPngEncoder's RGBA8 -> PNG encode (map-fog-v2.md §2.2/§3).
@@ -64,13 +58,11 @@
          native asset package (matches our Aspire/Docker deployment and CI). -->
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux" Version="3.119.0" />
   </ItemGroup>
-
   <ItemGroup Label="Api">
     <PackageVersion Include="Asp.Versioning.Http" Version="10.2.3" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="$(DotNetVersion)" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.17.1" />
   </ItemGroup>
-
   <ItemGroup Label="Testing">
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="$(DotNetVersion)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
@@ -79,5 +71,4 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.0" />
   </ItemGroup>
-
 </Project>

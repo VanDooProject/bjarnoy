@@ -7,9 +7,11 @@ using Bjarnoy.Api.Json;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.Services.Notifications;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
 using Bjarnoy.Infrastructure.World;
 using Bjarnoy.ServiceDefaults;
+using Lib.Net.Http.WebPush;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
@@ -49,6 +51,7 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<RenownService>();
+builder.Services.AddScoped<NotificationSubscriptionService>();
 
 builder.Services.AddSingleton<IPlotReservationStore, InMemoryPlotReservationStore>();
 builder.Services.AddScoped<PlotReservationService>();
@@ -175,6 +178,44 @@ if (migrationCommand == MigrationCommandKind.None)
     // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
     builder.Services.AddHostedService<UserActivityRetentionHostedService>();
+
+    // Push (Web Push/VAPID) is optional, unlike Jwt: an environment that
+    // configures none of Push:VapidPublicKey/VapidPrivateKey/Subject simply
+    // runs without it (NotificationEndpoints.GetConfig reports
+    // enabled: false; the subscription endpoints 404). Configuring only some
+    // of the three is a misconfiguration and fails startup, same as a
+    // missing Jwt:SigningKey. See docs/plans/push-notifications.md.
+    builder.Services.AddOptions<PushOptions>()
+        .Bind(builder.Configuration.GetSection(PushOptions.SectionName))
+        .ValidateOnStart();
+
+    var pushSection = builder.Configuration.GetSection(PushOptions.SectionName);
+    var pushOptions = new PushOptions
+    {
+        VapidPublicKey = pushSection["VapidPublicKey"],
+        VapidPrivateKey = pushSection["VapidPrivateKey"],
+        Subject = pushSection["Subject"],
+    };
+
+    if (pushOptions.IsPartiallyConfigured)
+    {
+        throw new InvalidOperationException(
+            $"{PushOptions.SectionName}:VapidPublicKey, {PushOptions.SectionName}:VapidPrivateKey and " +
+            $"{PushOptions.SectionName}:Subject must all be set, or none of them.");
+    }
+
+    if (pushOptions.IsConfigured)
+    {
+        builder.Services.AddOptions<PushSenderSettings>()
+            .Configure(settings =>
+            {
+                settings.VapidPublicKey = pushOptions.VapidPublicKey!;
+                settings.VapidPrivateKey = pushOptions.VapidPrivateKey!;
+                settings.Subject = pushOptions.Subject!;
+            });
+        builder.Services.AddHttpClient<PushServiceClient>();
+        builder.Services.AddScoped<IPushSender, WebPushSender>();
+    }
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
@@ -305,6 +346,7 @@ app.MapAdminArmyEndpoints(versionSet);
 app.MapChatEndpoints(versionSet);
 app.MapAdminReportEndpoints(versionSet);
 app.MapAdminActivityEndpoints(versionSet);
+app.MapNotificationEndpoints(versionSet);
 
 // The built Vue frontend is copied into wwwroot by the Docker build, so one
 // container serves both the API and the app it talks to. In a local run wwwroot
