@@ -11,21 +11,31 @@ import { loginTestUser } from './helpers';
  *
  * Chromium has no reachable push service in CI, and none is needed to test
  * this UI flow: `PushManager.prototype.subscribe`/`getSubscription` are
- * stubbed to return a fixed fake `PushSubscription`, and
- * `context.grantPermissions(['notifications'])` makes
- * `Notification.requestPermission()` resolve to `granted` without a real
- * permission prompt. The real, project-served `/sw.js` still registers
- * (verified separately in landing.spec.ts) — only the Push API surface is
- * faked here.
+ * stubbed to return a fixed fake `PushSubscription`. `Notification.permission`/
+ * `requestPermission` are stubbed too, rather than relying on
+ * `context.grantPermissions(['notifications'])` — that CDP-level grant does
+ * not reliably show up on `Notification.permission` in this CI's headless
+ * Chromium build (confirmed: it read back as `denied` there even after the
+ * grant, while a locally available but differently-versioned Chromium build
+ * showed `granted` — see the CI run this fixed:
+ * https://github.com/VanDooProject/bjarnoy/actions/runs/35364964364).
+ * The real, project-served `/sw.js` still registers (verified separately in
+ * landing.spec.ts) — only the Push/Notification permission surface is faked
+ * here.
  */
 
 const VAPID_PUBLIC_KEY = 'BLVLvVQOdXPmaq0OBrafyLwaroPwrrnCJwZPNYk9K872OaZH3cHl1ETnpKlBwsczy_gCrrdxBI_clksPtCGn-1g';
 const FAKE_ENDPOINT = 'https://push.example/fake-endpoint';
 const FAKE_SUBSCRIPTION_ID = 'sub-1';
 
-async function stubPushManager(page: Page) {
+async function stubPushApi(page: Page) {
   await page.addInitScript(
     ({ endpoint }) => {
+      // Stubbed directly rather than via context.grantPermissions — see this
+      // file's header comment for why.
+      Object.defineProperty(Notification, 'permission', { get: () => 'granted', configurable: true });
+      Notification.requestPermission = () => Promise.resolve('granted');
+
       class FakePushSubscription {
         endpoint = endpoint;
         toJSON() {
@@ -50,15 +60,11 @@ async function stubPushManager(page: Page) {
   );
 }
 
-test.beforeEach(async ({ context }) => {
-  await context.grantPermissions(['notifications']);
-});
-
 test('a logged-in player can enable push, sees the "on" state, and can send a test notification', async ({
   page,
 }) => {
   await loginTestUser(page);
-  await stubPushManager(page);
+  await stubPushApi(page);
 
   await page.route('**/api/v1/notifications/config', (route: Route) =>
     route.fulfill({ json: { enabled: true, vapidPublicKey: VAPID_PUBLIC_KEY } }),
@@ -92,18 +98,6 @@ test('a logged-in player can enable push, sees the "on" state, and can send a te
   await page.goto('/settings/notifications');
 
   await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
-  // Temporary CI diagnostic (issue: PR #265's e2e run) — remove once the
-  // root cause of the missing Enable button in CI (but not locally) is
-  // confirmed.
-  await page.waitForTimeout(2000);
-  const diag = await page.evaluate(() => ({
-    hasPushManager: 'PushManager' in window,
-    hasNotification: 'Notification' in window,
-    hasServiceWorker: 'serviceWorker' in navigator,
-    notificationPermission: typeof Notification !== 'undefined' ? Notification.permission : 'n/a',
-    bodyText: document.body.innerText,
-  }));
-  console.log('DIAG', JSON.stringify(diag));
   const enableButton = page.getByRole('button', { name: 'Enable notifications on this device' });
   await expect(enableButton).toBeVisible();
   await enableButton.click();
