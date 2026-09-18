@@ -92,6 +92,18 @@ test('a logged-in player can enable push, sees the "on" state, and can send a te
   await page.goto('/settings/notifications');
 
   await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+  // Temporary CI diagnostic (issue: PR #265's e2e run) — remove once the
+  // root cause of the missing Enable button in CI (but not locally) is
+  // confirmed.
+  await page.waitForTimeout(2000);
+  const diag = await page.evaluate(() => ({
+    hasPushManager: 'PushManager' in window,
+    hasNotification: 'Notification' in window,
+    hasServiceWorker: 'serviceWorker' in navigator,
+    notificationPermission: typeof Notification !== 'undefined' ? Notification.permission : 'n/a',
+    bodyText: document.body.innerText,
+  }));
+  console.log('DIAG', JSON.stringify(diag));
   const enableButton = page.getByRole('button', { name: 'Enable notifications on this device' });
   await expect(enableButton).toBeVisible();
   await enableButton.click();
