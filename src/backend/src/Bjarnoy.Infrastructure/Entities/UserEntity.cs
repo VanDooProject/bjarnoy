@@ -130,6 +130,8 @@ public class UserEntity
 
     public List<RefreshTokenEntity> RefreshTokens { get; set; } = [];
 
+    public List<PushSubscriptionEntity> PushSubscriptions { get; set; } = [];
+
     /// <summary>
     /// Settlements this user owns via <see cref="SettlementEntity.UserId"/> —
     /// one user, many settlements. Populated by claiming (at registration) or,

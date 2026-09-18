@@ -145,6 +145,9 @@ function joinedDate(iso: string): string {
             {{ $t('profile.report') }}
           </button>
           <span v-if="reportDone" class="muted">{{ $t('profile.reportSent') }}</span>
+          <router-link v-if="isOwnProfile" class="secondary" to="/settings/notifications">
+            {{ $t('notifications.title') }}
+          </router-link>
         </div>
       </header>
 

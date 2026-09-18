@@ -48,6 +48,8 @@ import enArmyEditor from './locales/en/armyEditor.json';
 import enGarrisonForm from './locales/en/garrisonForm.json';
 import enGrantResourcesForm from './locales/en/grantResourcesForm.json';
 import enSettlementLayoutEditor from './locales/en/settlementLayoutEditor.json';
+import enNotifications from './locales/en/notifications.json';
+import deNotifications from './locales/de/notifications.json';
 import { datetimeFormats, numberFormats } from './formats';
 import {
   DEFAULT_LOCALE,
@@ -121,6 +123,7 @@ export const i18n = createI18n({
       garrisonForm: enGarrisonForm,
       grantResourcesForm: enGrantResourcesForm,
       settlementLayoutEditor: enSettlementLayoutEditor,
+      notifications: enNotifications,
     },
     de: {
       common: deCommon,
@@ -141,6 +144,7 @@ export const i18n = createI18n({
       reports: deReports,
       simulator: deSimulator,
       docs: deDocs,
+      notifications: deNotifications,
     },
   },
   datetimeFormats,

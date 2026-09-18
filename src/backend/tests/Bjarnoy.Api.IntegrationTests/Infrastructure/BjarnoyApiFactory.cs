@@ -3,6 +3,7 @@ using Bjarnoy.Api.Hosting;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
+using Bjarnoy.Infrastructure.Services.Notifications;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +40,9 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
     /// <summary>Set by <see cref="WithDiagnostics"/>; null leaves it to the build.</summary>
     private DiagnosticsOptions? _diagnostics;
+
+    /// <summary>Set by <see cref="WithPush"/>; null leaves push unconfigured (the default, unstamped-build-style state).</summary>
+    private PushOptions? _push;
 
     private BjarnoyApiFactory(DatabaseProvider provider, string connectionString, string? databaseFile)
     {
@@ -77,6 +81,13 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
     /// </summary>
     public TestTimeProvider Time { get; } =
         new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+
+    /// <summary>
+    /// The fake push sender <see cref="WithPush"/> swaps in for the real
+    /// <c>WebPushSender</c> — records every send instead of calling a real
+    /// push service.
+    /// </summary>
+    public RecordingPushSender PushSender { get; } = new();
 
     /// <summary>Directory used as the application's web root during tests.</summary>
     public static string TestWebRootPath { get; } =
@@ -133,6 +144,26 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         return this;
     }
 
+    /// <summary>
+    /// Push (Web Push/VAPID) is unconfigured by default in tests, same as an
+    /// unstamped build — call this for the tests that need
+    /// <c>NotificationEndpoints</c>'s subscribe/deliver paths enabled.
+    /// </summary>
+    public BjarnoyApiFactory WithPush(
+        string vapidPublicKey = "test-vapid-public-key",
+        string vapidPrivateKey = "test-vapid-private-key",
+        string subject = "mailto:test@bjarnoy.local")
+    {
+        _push = new PushOptions
+        {
+            VapidPublicKey = vapidPublicKey,
+            VapidPrivateKey = vapidPrivateKey,
+            Subject = subject,
+        };
+
+        return this;
+    }
+
     /// <summary>The worlds the database holds, in creation order.</summary>
     public async Task<IReadOnlyList<WorldEntity>> GetWorldsAsync(
         CancellationToken cancellationToken = default)
@@ -140,6 +171,19 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         await using var scope = Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<WorldService>()
             .GetWorldsAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Drains <c>notification_outbox</c> once, exactly as
+    /// <c>PushDeliveryHostedService</c>'s timer would — tests call this
+    /// directly instead of waiting on that timer, the same way they advance
+    /// <see cref="Time"/> instead of waiting on a real clock.
+    /// </summary>
+    public async Task DeliverDueNotificationsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<PushDeliveryService>()
+            .DeliverDueAsync(cancellationToken);
     }
 
     public async Task<MigrationStatus> GetMigrationStatusAsync(CancellationToken cancellationToken = default)
@@ -167,6 +211,15 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
 
         // Health endpoints are opt-in outside development; the tests assert on them.
         builder.UseSetting("ExposeHealthChecks", "true");
+
+        // Unset unless a test asked for it, via WithPush — same "unconfigured
+        // means the feature is off" default Program.cs itself uses.
+        if (_push is not null)
+        {
+            builder.UseSetting($"{PushOptions.SectionName}:VapidPublicKey", _push.VapidPublicKey);
+            builder.UseSetting($"{PushOptions.SectionName}:VapidPrivateKey", _push.VapidPrivateKey);
+            builder.UseSetting($"{PushOptions.SectionName}:Subject", _push.Subject);
+        }
 
         // Unset unless a test asked for it, so /api/v1/info's "unstamped build"
         // case is the default here exactly as it is for a plain `dotnet run`.
@@ -212,6 +265,12 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
+
+            if (_push is not null)
+            {
+                services.RemoveAll<IPushSender>();
+                services.AddSingleton<IPushSender>(PushSender);
+            }
         });
     }
 

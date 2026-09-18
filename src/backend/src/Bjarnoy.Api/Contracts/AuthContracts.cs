@@ -21,7 +21,15 @@ public sealed record LoginRequest(
 
 public sealed record RefreshRequest([property: Required] string RefreshToken);
 
-public sealed record LogoutRequest([property: Required] string RefreshToken);
+/// <param name="PushEndpoint">
+/// This device's current Web Push subscription endpoint, if it has one — a
+/// logged-out device must stop receiving another account's notifications,
+/// so the matching <c>PushSubscriptionEntity</c> row is deleted in the same
+/// call rather than left for the delivery worker to discover is gone.
+/// </param>
+public sealed record LogoutRequest(
+    [property: Required] string RefreshToken,
+    [property: MaxLength(2048)] string? PushEndpoint = null);
 
 /// <param name="IsPremium">
 /// Lets the frontend gate premium-only actions (the fight simulator, extra

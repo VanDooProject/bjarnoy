@@ -1,0 +1,118 @@
+import type { Page, Route } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { loginTestUser } from './helpers';
+
+/**
+ * Demo mode has no backend behind it (see playwright.config.ts's webServer),
+ * so `/api/v1/notifications/*` is mocked with `page.route` — the endpoints
+ * themselves are covered end to end by
+ * `Bjarnoy.Api.IntegrationTests/NotificationEndpointsTests`. This spec is
+ * the settings page's own click -> subscribe -> PUT -> "on" state wiring.
+ *
+ * Chromium has no reachable push service in CI, and none is needed to test
+ * this UI flow: `PushManager.prototype.subscribe`/`getSubscription` are
+ * stubbed to return a fixed fake `PushSubscription`. `Notification.permission`/
+ * `requestPermission` are stubbed too, rather than relying on
+ * `context.grantPermissions(['notifications'])` — that CDP-level grant does
+ * not reliably show up on `Notification.permission` in this CI's headless
+ * Chromium build (confirmed: it read back as `denied` there even after the
+ * grant, while a locally available but differently-versioned Chromium build
+ * showed `granted` — see the CI run this fixed:
+ * https://github.com/VanDooProject/bjarnoy/actions/runs/35364964364).
+ * The real, project-served `/sw.js` still registers (verified separately in
+ * landing.spec.ts) — only the Push/Notification permission surface is faked
+ * here.
+ */
+
+const VAPID_PUBLIC_KEY = 'BLVLvVQOdXPmaq0OBrafyLwaroPwrrnCJwZPNYk9K872OaZH3cHl1ETnpKlBwsczy_gCrrdxBI_clksPtCGn-1g';
+const FAKE_ENDPOINT = 'https://push.example/fake-endpoint';
+const FAKE_SUBSCRIPTION_ID = 'sub-1';
+
+async function stubPushApi(page: Page) {
+  await page.addInitScript(
+    ({ endpoint }) => {
+      // Stubbed directly rather than via context.grantPermissions — see this
+      // file's header comment for why.
+      Object.defineProperty(Notification, 'permission', { get: () => 'granted', configurable: true });
+      Notification.requestPermission = () => Promise.resolve('granted');
+
+      class FakePushSubscription {
+        endpoint = endpoint;
+        toJSON() {
+          return { endpoint, keys: { p256dh: 'fake-p256dh', auth: 'fake-auth' } };
+        }
+        unsubscribe() {
+          return Promise.resolve(true);
+        }
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const proto = (window as any).PushManager?.prototype;
+      if (!proto) return;
+      let subscribed: FakePushSubscription | null = null;
+      proto.subscribe = () => {
+        subscribed = new FakePushSubscription();
+        return Promise.resolve(subscribed);
+      };
+      proto.getSubscription = () => Promise.resolve(subscribed);
+    },
+    { endpoint: FAKE_ENDPOINT },
+  );
+}
+
+test('a logged-in player can enable push, sees the "on" state, and can send a test notification', async ({
+  page,
+}) => {
+  await loginTestUser(page);
+  await stubPushApi(page);
+
+  await page.route('**/api/v1/notifications/config', (route: Route) =>
+    route.fulfill({ json: { enabled: true, vapidPublicKey: VAPID_PUBLIC_KEY } }),
+  );
+  await page.route('**/api/v1/notifications/subscriptions', (route: Route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ json: [] });
+    }
+    if (route.request().method() === 'PUT') {
+      return route.fulfill({
+        status: 201,
+        json: {
+          id: FAKE_SUBSCRIPTION_ID,
+          deviceLabel: 'Chrome on Linux',
+          userAgent: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          lastSeenAt: '2026-01-01T00:00:00Z',
+          lastDeliveredAt: null,
+        },
+      });
+    }
+    return route.fallback();
+  });
+
+  let testNotificationRequested = false;
+  await page.route(`**/api/v1/notifications/subscriptions/${FAKE_SUBSCRIPTION_ID}/test`, (route: Route) => {
+    testNotificationRequested = true;
+    return route.fulfill({ status: 202 });
+  });
+
+  await page.goto('/settings/notifications');
+
+  await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+  const enableButton = page.getByRole('button', { name: 'Enable notifications on this device' });
+  await expect(enableButton).toBeVisible();
+  await enableButton.click();
+
+  await expect(page.getByText('Notifications are on for this device.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Turn off on this device' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Send test notification' }).click();
+  await expect(page.getByText('Test notification sent')).toBeVisible();
+  expect(testNotificationRequested).toBe(true);
+});
+
+test('an anonymous visitor sees a create-account notice instead of the enable flow', async ({ page }) => {
+  await page.goto('/settings/notifications');
+
+  await expect(page.getByText('Create an account to receive notifications.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable notifications on this device' })).toHaveCount(0);
+});

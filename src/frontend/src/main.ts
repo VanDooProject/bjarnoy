@@ -19,6 +19,16 @@ app.use(i18n);
 
 app.mount('#app');
 
+// Registration alone shows no browser prompt and enables no behaviour by
+// itself — it only makes the worker available for the notification-settings
+// flow (src/push/) to later subscribe through. See
+// docs/plans/push-notifications.md.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch((error) => {
+    console.error('Service worker registration failed', error);
+  });
+}
+
 // Demo-mode-only debug hooks: let test/screenshot scripts (e.g.
 // scripts/screenshot-helpers) drive the app past what the real UI exposes
 // yet. Never present in a live (VITE_DEMO_MODE=false) build.

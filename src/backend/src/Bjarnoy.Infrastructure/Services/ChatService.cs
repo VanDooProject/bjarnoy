@@ -1,5 +1,7 @@
+using Bjarnoy.Domain.Notifications;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
+using Bjarnoy.Infrastructure.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bjarnoy.Infrastructure.Services;
@@ -36,11 +38,16 @@ public sealed record MessagesPage(IReadOnlyList<MessageEntity> Messages, int Tot
 /// Reporting a message records it on the shared <see cref="ReportService"/>
 /// queue rather than a chat-only one — see that type.
 /// </summary>
-public sealed class ChatService(GameDbContext dbContext, TimeProvider timeProvider, ReportService reportService)
+public sealed class ChatService(
+    GameDbContext dbContext, TimeProvider timeProvider, ReportService reportService, NotificationEnqueuer notificationEnqueuer)
 {
+    /// <summary>A message notification is stale well before a day passes.</summary>
+    private static readonly TimeSpan MessageNotificationTimeToLive = TimeSpan.FromHours(24);
+
     private readonly GameDbContext _dbContext = dbContext;
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ReportService _reportService = reportService;
+    private readonly NotificationEnqueuer _notificationEnqueuer = notificationEnqueuer;
 
     /// <summary>
     /// Whether <paramref name="senderId"/> is allowed to see when
@@ -72,24 +79,48 @@ public sealed class ChatService(GameDbContext dbContext, TimeProvider timeProvid
             return (SendMessageOutcome.MessageToSelf, null);
         }
 
-        var recipientExists = await _dbContext.Users
+        var recipient = await _dbContext.Users
             .AsNoTracking()
-            .AnyAsync(u => u.Id == recipientId, cancellationToken)
+            .Where(u => u.Id == recipientId)
+            .Select(u => new { u.PreferredLocale })
+            .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (!recipientExists)
+        if (recipient is null)
         {
             return (SendMessageOutcome.RecipientNotFound, null);
         }
 
+        var sender = await _dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id == senderId)
+            .Select(u => new { u.UserName, u.DisplayName })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var recipientRow = new MessageRecipientEntity { RecipientUserId = recipientId };
         var message = new MessageEntity
         {
             SenderUserId = senderId,
             Body = body,
             SentAt = _timeProvider.GetUtcNow(),
-            Recipients = [new MessageRecipientEntity { RecipientUserId = recipientId }],
+            Recipients = [recipientRow],
         };
 
         _dbContext.Messages.Add(message);
+
+        if (sender is not null)
+        {
+            var payload = NotificationTextRenderer.RenderDirectMessage(
+                recipient.PreferredLocale, sender.DisplayName ?? sender.UserName, body);
+            await _notificationEnqueuer.EnqueueAsync(
+                recipientId,
+                NotificationType.DirectMessage,
+                payload,
+                dedupeKey: $"message:{recipientRow.Id}",
+                MessageNotificationTimeToLive,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return (SendMessageOutcome.Success, message);

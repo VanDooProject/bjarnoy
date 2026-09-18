@@ -1374,3 +1374,29 @@ export interface UnitDefinitionResponse {
   /** Another unit type that must itself be available (a prerequisite chain), or null. */
   requiredUnitType: string | null;
 }
+
+// Mirrors src/backend/src/Bjarnoy.Api/Contracts/NotificationContracts.cs —
+// push notification subscriptions (Web Push/VAPID). See
+// docs/plans/push-notifications.md.
+
+export interface NotificationConfigResponse {
+  enabled: boolean;
+  vapidPublicKey: string | null;
+}
+
+export interface PushSubscriptionResponse {
+  id: string;
+  deviceLabel: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  lastDeliveredAt: string | null;
+}
+
+export interface UpsertPushSubscriptionRequest {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  deviceLabel: string;
+  userAgent: string | null;
+}
