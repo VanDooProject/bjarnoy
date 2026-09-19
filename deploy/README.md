@@ -296,3 +296,5 @@ passes too.
 
 For the single-container SQLite deployment — no compose, no PostgreSQL — see
 `docs/tech/backend.md`, "The image".
+
+<!-- throwaway change to exercise .github/workflows/pr-preview.yml end-to-end; this PR will be closed once verified -->
