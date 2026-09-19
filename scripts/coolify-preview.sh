@@ -34,10 +34,23 @@ set -euo pipefail
 api() {
   local method=$1 path=$2
   shift 2
-  curl -sS --fail-with-body \
+  local response status body
+  # Not --fail-with-body: piped straight into `jq` at every call site, and
+  # combined with `set -o pipefail` that discards curl's response body
+  # before it can be logged - a failure then said only "exit code 22" with
+  # no indication of *why* (bad token, bad uuid, wrong scope...). Split
+  # status from body instead so a failure can say what Coolify actually said.
+  response=$(curl -sS -w '\n%{http_code}' \
     -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
     -H 'Content-Type: application/json' \
-    -X "$method" "${COOLIFY_URL%/}/api/v1${path}" "$@"
+    -X "$method" "${COOLIFY_URL%/}/api/v1${path}" "$@")
+  status=${response##*$'\n'}
+  body=${response%$'\n'*}
+  if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+    echo "Coolify API ${method} ${path} -> HTTP ${status}: ${body}" >&2
+    return 1
+  fi
+  echo "$body"
 }
 
 app_name() { echo "bjarnoy-pr-$1"; }
