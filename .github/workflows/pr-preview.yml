@@ -1,0 +1,68 @@
+name: PR preview deployment
+
+# Coolify can deploy every open PR as its own stack, but that means every
+# fork/branch PR spins up a database and a container the moment it's opened.
+# Gate that behind a label instead: adding "preview" to a PR deploys it on
+# Coolify, removing the label (or closing the PR) tears the preview down.
+#
+# Coolify's own "Preview Deployments" auto-deploy toggle on the application
+# must stay OFF, or it will deploy every PR itself regardless of this label.
+#
+# Requires two repository secrets:
+#   COOLIFY_URL          e.g. https://coolify.velarix.space (no trailing slash)
+#   COOLIFY_API_TOKEN     a token with the "deploy" ability
+#
+# Secrets are not available to workflows triggered by pull_request from a
+# fork, so previews can only be triggered for PRs from branches of this repo.
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  COOLIFY_APP_UUID: qo8shdo3jhhlfh6iisirsayn
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+
+jobs:
+  deploy:
+    if: >-
+      github.event.action != 'closed' &&
+      contains(github.event.pull_request.labels.*.name, 'preview')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy PR preview on Coolify
+        run: |
+          curl -fsS --request GET \
+            "${COOLIFY_URL}/api/v1/deploy?uuid=${COOLIFY_APP_UUID}&pr=${PR_NUMBER}" \
+            --header "Authorization: Bearer ${COOLIFY_API_TOKEN}"
+        env:
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+
+  remove:
+    if: >-
+      github.event.action == 'closed' ||
+      !contains(github.event.pull_request.labels.*.name, 'preview')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove PR preview on Coolify
+        run: |
+          # 404 just means there was never a preview for this PR (e.g. the
+          # label was removed before one was ever deployed) - not a failure.
+          status=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+            --request DELETE \
+            "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}?pr=${PR_NUMBER}" \
+            --header "Authorization: Bearer ${COOLIFY_API_TOKEN}")
+          cat /tmp/response.json
+          echo
+          if [ "$status" != "200" ] && [ "$status" != "404" ]; then
+            echo "Unexpected status $status removing PR preview" >&2
+            exit 1
+          fi
+        env:
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
