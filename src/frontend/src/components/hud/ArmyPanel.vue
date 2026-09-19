@@ -7,8 +7,9 @@
 // (in transit / returning / supporting) plus the flow for creating a new one.
 //
 // Bottom-right HUD corner: BuildQueuePanel is top-left, TrainingQueuePanel
-// top-right, RealmPanel bottom-left (see each panel's own `position:
-// absolute` in their <style>) — this is the one open corner.
+// top-right (see each panel's own `position: absolute` in their <style>) —
+// bottom-left is open since RealmPanel's removal (zoom now drives
+// settlement<->world switching, so its manual override button is gone).
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorldStore } from '../../stores/world';

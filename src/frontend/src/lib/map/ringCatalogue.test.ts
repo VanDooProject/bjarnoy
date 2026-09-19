@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBuildTime, longhouseLock } from './ringCatalogue';
+import { formatBuildTime, formatMissingResources, longhouseLock, sawmillAllowedHere } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -39,5 +39,40 @@ describe('longhouseLock', () => {
     // "hut" is demo-only and has no backend definition, so there is no gate to
     // report — it must not read as locked.
     expect(longhouseLock(undefined, 1)).toBeUndefined();
+  });
+});
+
+describe('sawmillAllowedHere', () => {
+  it('excludes a sawmill from a hex with no matching river shape', () => {
+    expect(sawmillAllowedHere('sawmill', false)).toBe(false);
+  });
+
+  it('allows a sawmill on a straight/bend river hex', () => {
+    expect(sawmillAllowedHere('sawmill', true)).toBe(true);
+  });
+
+  it('is a no-op for every other buildable type', () => {
+    expect(sawmillAllowedHere('farm', false)).toBe(true);
+    expect(sawmillAllowedHere('quarry', false)).toBe(true);
+  });
+});
+
+describe('formatMissingResources', () => {
+  it('lists only the shortfall, not the full cost', () => {
+    const cost = { wood: 100, stone: 50, food: 0, iron: 0 };
+    const stock = { wood: 60, stone: 50, food: 200, iron: 10 };
+    expect(formatMissingResources(cost, stock)).toBe('40 Wood');
+  });
+
+  it('lists every short resource, in wood/stone/food/iron order', () => {
+    const cost = { wood: 100, stone: 50, food: 30, iron: 10 };
+    const stock = { wood: 0, stone: 0, food: 0, iron: 0 };
+    expect(formatMissingResources(cost, stock)).toBe('100 Wood, 50 Stone, 30 Food, 10 Iron');
+  });
+
+  it('is empty when the stock already covers the cost', () => {
+    const cost = { wood: 10, stone: 10, food: 10, iron: 10 };
+    const stock = { wood: 10, stone: 10, food: 10, iron: 10 };
+    expect(formatMissingResources(cost, stock)).toBe('');
   });
 });
