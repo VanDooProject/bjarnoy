@@ -151,6 +151,26 @@ Diagnostics__ExposeApiReference=true
 Diagnostics__PublicBuildInfo=true
 ```
 
+### Gating previews behind a label
+
+`.github/workflows/pr-preview.yml` deploys a PR's preview only once a
+`preview` label is on it, instead of Coolify spinning one up (its own
+database, its own container) for every PR the moment it's opened. Adding the
+label calls Coolify's deploy API for that PR; removing it, or closing the PR,
+calls the delete API to tear the preview back down.
+
+For that gate to mean anything, the application's own **Preview
+Deployments** auto-deploy toggle has to stay off — otherwise Coolify deploys
+every PR on its own regardless of the label, and the workflow is only ever
+adding a redundant deploy on top of one that already happened.
+
+The workflow needs two repository secrets, `COOLIFY_URL` and
+`COOLIFY_API_TOKEN` (a token with the `deploy` ability — see "Coolify's API
+from a Claude Code session" below for the read-only token used for MCP; this
+one needs more than that). Secrets aren't available to `pull_request`
+workflows triggered from a fork, so this only gates previews for PRs opened
+from branches of this repository.
+
 ## Behind Cloudflare
 
 Two settings that are not optional once the zone is proxied, both of which fail
