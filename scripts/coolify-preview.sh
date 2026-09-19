@@ -108,7 +108,7 @@ cmd_ensure() {
   "build_pack": "dockercompose",
   "base_directory": "/",
   "docker_compose_location": "/deploy/docker-compose.yaml",
-  "docker_compose_domains": {"app": {"domain": "$(app_domain "$pr")"}},
+  "docker_compose_domains": {"app": {"name": "app", "domain": "$(app_domain "$pr")"}},
   "is_git_submodules_enabled": true,
   "is_preview_deployments_enabled": false,
   "is_auto_deploy_enabled": true,
