@@ -155,6 +155,14 @@ onUnmounted(() => {
 watch(mode, (m) => {
   world.setWorldMapActive(m === 'world');
   void world.refreshWorldSettlements();
+  // The ring menu is now mode-agnostic (it opens at world zoom too — see
+  // onHexClick's own comment), so switching modes no longer auto-closes it
+  // for free via a `v-if="mode === 'settlement'"` unmount the way it used
+  // to. A mode change from anywhere other than onHexClick's own tile-click
+  // flow (nav button, browser back/forward, a direct URL load) should still
+  // close whatever ring/modal was open on the view being left, exactly like
+  // that unmount used to.
+  closeRing();
   const renderer = canvasRef.value?.renderer;
   if (!renderer) return;
   // A no-op if the zoom-driven handler already flipped it (setMode is
