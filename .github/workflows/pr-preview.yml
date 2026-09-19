@@ -66,6 +66,12 @@ jobs:
     needs: gate
     if: needs.gate.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
+    # pull_request_target's default GITHUB_TOKEN is read-only (unlike plain
+    # pull_request from this same repo) - the sticky PR comment step below
+    # failed live with "Resource not accessible by integration" without this.
+    permissions:
+      contents: read
+      pull-requests: write
     # Registers under repo Settings -> Environments (and the PR's own
     # "Environments" sidebar/deployment history) with a clickable URL —
     # a plain curl call from a step does not do this on its own.
