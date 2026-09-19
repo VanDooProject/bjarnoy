@@ -70,12 +70,32 @@ find_app_uuid() {
   api GET '/applications' | jq -r --arg name "$name" '.[] | select(.name == $name) | .uuid' | head -n1
 }
 
+# Unlike the application, Coolify does NOT create an environment on the fly
+# from `environment_name` in the application-create payload below - that
+# call 404s with "Environment not found" against one that doesn't already
+# exist (the "bjarnoy" project only ships a `production` environment).
+# Idempotent the same way find_app_uuid is: look it up first, create only if
+# missing.
+ensure_environment() {
+  local name="pr-$1"
+  local uuid
+  uuid=$(api GET "/projects/${COOLIFY_PROJECT_UUID}" |
+    jq -r --arg name "$name" '.environments[] | select(.name == $name) | .uuid')
+  if [ -z "$uuid" ]; then
+    echo "Creating Coolify environment $name..." >&2
+    uuid=$(api POST "/projects/${COOLIFY_PROJECT_UUID}/environments" \
+      -d "{\"name\": \"${name}\"}" | jq -r '.uuid')
+  fi
+  echo "$uuid"
+}
+
 cmd_ensure() {
   local pr=$1 branch=$2
   local uuid
   uuid=$(find_app_uuid "$pr")
 
   if [ -z "$uuid" ]; then
+    ensure_environment "$pr" >/dev/null
     echo "Creating Coolify application for PR #$pr (branch $branch)..." >&2
     uuid=$(api POST '/applications/private-github-app' -d @- <<JSON | jq -r '.uuid'
 {
