@@ -155,6 +155,14 @@ onUnmounted(() => {
 watch(mode, (m) => {
   world.setWorldMapActive(m === 'world');
   void world.refreshWorldSettlements();
+  // The ring menu is now mode-agnostic (it opens at world zoom too — see
+  // onHexClick's own comment), so switching modes no longer auto-closes it
+  // for free via a `v-if="mode === 'settlement'"` unmount the way it used
+  // to. A mode change from anywhere other than onHexClick's own tile-click
+  // flow (nav button, browser back/forward, a direct URL load) should still
+  // close whatever ring/modal was open on the view being left, exactly like
+  // that unmount used to.
+  closeRing();
   const renderer = canvasRef.value?.renderer;
   if (!renderer) return;
   // A no-op if the zoom-driven handler already flipped it (setMode is
@@ -572,13 +580,20 @@ const rootActions = computed<RingAction[]>(() => {
   }
   if (isUnclaimedTile.value) {
     const onCoast = tile.terrain === 'sand';
+    // Issue: clicking an empty field previously did nothing useful at world
+    // zoom (see onHexClick's own comment) — these two actions are how an
+    // unclaimed tile becomes a valid dispatch/founding target. Both hand off
+    // to flows that already exist (ArmyPanel's move dispatch, ExpansionPanel's
+    // founding form) and already enforce their own preconditions
+    // (garrison/settler-crew counts, renown, spacing) server-side, so neither
+    // is pre-disabled here — a rejection surfaces in that flow's own error
+    // area instead of guessing client-side.
     return [
       { id: 'info', label: t('hud.ringMenu.actions.info') },
+      { id: 'send-troops', label: t('hud.ringMenu.actions.sendTroopsHere') },
       {
         id: onCoast ? 'land-here' : 'send-settlers',
         label: onCoast ? t('hud.ringMenu.actions.landHere') : t('hud.ringMenu.actions.sendSettlers'),
-        disabled: true,
-        hint: t('hud.ringMenu.actions.noSettlersYet'),
       },
     ];
   }
@@ -786,12 +801,15 @@ function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: numbe
     world.addFieldOrderWaypoint(coord);
     return;
   }
-  // World mode: same click-to-enter as the old WorldMapView.onHexClick
-  // (ignores which hex was clicked, always goes to the player's own
-  // settlement) — the zoom-driven transition is additional, not a
-  // replacement for it. None of the ring-menu logic below applies at world
-  // zoom; only a fleet's own draft (handled above) does.
-  if (mode.value === 'world') {
+  // World mode used to be click-to-enter for *any* hex (old
+  // WorldMapView.onHexClick, ignoring which hex was actually clicked) — that
+  // made an empty/enemy/other-player tile do nothing meaningful on click.
+  // Now only the player's own territory keeps that shortcut; every other
+  // tile falls through to the same ring menu settlement zoom already uses,
+  // so an unclaimed field gets its "send troops"/"found settlement" actions
+  // and a settlement tile gets its info/attack actions, at either zoom level.
+  const isOwnTile = !!tile.ownerId && tile.ownerId === world.selectedSettlementId;
+  if (mode.value === 'world' && isOwnTile) {
     router.push('/settlement');
     return;
   }
@@ -861,6 +879,31 @@ async function onRingSelect(id: string) {
       if (world.selectedSettlementId && selectedCoord.value) {
         world.model.razeBuilding(world.selectedSettlementId, selectedCoord.value);
         canvasRef.value?.renderer?.forceRebuild();
+      }
+      closeRing();
+      return;
+    case 'send-troops':
+      // Starts a fresh move dispatch from ArmyPanel's own flow (default
+      // source: world.selectedSettlementId) with this tile pre-plotted as
+      // the destination waypoint — same draft state ArmyPanel's "Dispatch
+      // army" button and further map clicks already read/write.
+      if (selectedCoord.value) {
+        world.startDispatch();
+        world.addWaypoint(selectedCoord.value);
+      }
+      closeRing();
+      return;
+    case 'land-here':
+    case 'send-settlers':
+      // Hands the coordinate to ExpansionPanel's founding form (issue #55) —
+      // that panel owns the actual dispatch call and its preconditions
+      // (settler crews trained, renown, spacing). ExpansionPanel only mounts
+      // in settlement-zoom mode (unlike the ring menu itself, which is now
+      // mode-agnostic), so a click at world zoom also switches views to it,
+      // the same way clicking your own settlement tile already does.
+      if (selectedCoord.value) {
+        world.setFoundTarget(selectedCoord.value);
+        if (mode.value === 'world') router.push('/settlement');
       }
       closeRing();
       return;
@@ -997,21 +1040,6 @@ async function upgrade() {
       <TradePanel />
       <ArmyPanel />
       <HexTooltip v-if="hoverInfo" :info="hoverInfo" />
-      <RingMenu
-        v-if="selectedTile && ringScreen"
-        :x="ringScreen.x"
-        :y="ringScreen.y"
-        :actions="rootActions"
-        :categories="ringCategories"
-        :terrain-label="ringTerrainLabel"
-        :coord-label="ringCoordLabel"
-        :bounds="ringBounds"
-        :card-bounds="ringCardBounds"
-        :stock="world.hud.resources"
-        @select="onRingSelect"
-        @close="closeRing"
-        @outside-pointer-down="onRingOutsidePointerDown"
-      />
       <BuildingModal
         v-if="selectedTile && !ringScreen && !trainModalOpen"
         :tile="selectedTile"
@@ -1034,10 +1062,32 @@ async function upgrade() {
            orders, recall) work at world zoom too, not just settlement zoom
            — a ship's whole journey happens on water the settlement view
            never shows. Everything else in the settlement-only template
-           above (building ring menu, construction/training panels) stays
-           settlement-only; only the army/fleet panel is mode-agnostic. -->
+           above (construction/training panels, building/training modals)
+           stays settlement-only; the army/fleet panel already was
+           mode-agnostic, and the ring menu now is too (empty/enemy/other
+           tiles get their own context actions at world zoom — see
+           onHexClick's own comment; the ring's build/upgrade/raze/train
+           actions still never appear here, since rootActions only offers
+           those for `isMineTile` tiles with a building, which world zoom's
+           own-tile click never reaches — that case short-circuits to
+           /settlement before a ring ever opens). -->
       <ArmyPanel />
     </template>
+    <RingMenu
+      v-if="selectedTile && ringScreen"
+      :x="ringScreen.x"
+      :y="ringScreen.y"
+      :actions="rootActions"
+      :categories="ringCategories"
+      :terrain-label="ringTerrainLabel"
+      :coord-label="ringCoordLabel"
+      :bounds="ringBounds"
+      :card-bounds="ringCardBounds"
+      :stock="world.hud.resources"
+      @select="onRingSelect"
+      @close="closeRing"
+      @outside-pointer-down="onRingOutsidePointerDown"
+    />
   </div>
 </template>
 

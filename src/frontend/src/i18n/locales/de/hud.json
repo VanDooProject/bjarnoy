@@ -75,7 +75,8 @@
       "info": "Info",
       "attackRaid": "Angriff / Überfall",
       "combatNotImplemented": "Kampf ist noch nicht implementiert",
-      "landHere": "Hier landen",
+      "sendTroopsHere": "Truppen hierher entsenden",
+      "landHere": "Hier Siedlung gründen",
       "sendSettlers": "Siedler entsenden",
       "noSettlersYet": "Du hast noch keine verfügbaren Siedler",
       "upgrade": "Ausbauen",
@@ -292,6 +293,7 @@
   },
   "armyPanel": {
     "title": "Armeen",
+    "from": "Von",
     "demoNote": "Die Entsendung von Armeen erfordert das echte Backend und ist im Demo-Modus noch nicht eingerichtet.",
     "noArmies": "Keine Armeen unterwegs.",
     "dispatchArmy": "Armee entsenden",
