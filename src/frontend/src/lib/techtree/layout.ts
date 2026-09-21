@@ -54,12 +54,15 @@ export type Slot = readonly [col: number, row: number];
  *
  * A column-3 cell is left empty on every row whose capstone's nearer parent
  * sits in column 2, so that parent's link can pass straight through to
- * column 4 instead of detouring: [3, 1] for Pumpkin Farm -> Shrine of
- * Freyja, and [3, 3] for Storage House -> Great Storehouse ([2, 3] is empty
- * too, since Great Storehouse has no column-2 parent at all), and [3, 4] for
- * Dockyard -> Shrine of Njörd. [2, 0] is likewise left empty for Lumberjack
- * -> Sawmill — Shrine of Ullr's own nearer parent (Sawmill) already sits in
- * column 3, right next to it, so its row needs no further empty cell.
+ * column 4 instead of detouring: [3, 3] for Storage House -> Great
+ * Storehouse ([2, 3] is empty too, since Great Storehouse has no column-2
+ * parent at all), and [3, 4] for Dockyard -> Shrine of Njörd. [2, 0] is
+ * likewise left empty for Lumberjack -> Sawmill — Shrine of Ullr's own
+ * nearer parent (Sawmill) already sits in column 3, right next to it, so
+ * its row needs no further empty cell. Row 1's own column-2 cell now holds
+ * Meadery rather than staying empty — Farm's link to Shrine of Freyja
+ * (row 1, column 4) routes around it rather than through it, since Meadery
+ * isn't a hop on that chain.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 2],
@@ -72,7 +75,13 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   tower: [1, 5],
 
   // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
-  pumpkinfarm: [2, 1],
+  // Meadery takes Pumpkin Farm's old row-1 slot (both are Farm-based, one
+  // rung of refining past it) — Pumpkin Farm itself moved down to Quarry's
+  // row so Crop Mill (also Farm-based, but a maxed-Farm capstone) has room
+  // for its own advanced-column slot right next to it.
+  meadery: [2, 1],
+  pumpkinfarm: [2, 2],
+  cropmill: [3, 2],
   dockyard: [2, 4],
   barracks: [2, 5],
 
@@ -88,21 +97,17 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   shrineofnjord: [4, 4],
   shrineofthor: [4, 5],
 
-  // Seven new buildings (art shipped, no catalogue prerequisite chain to
-  // slot them into the rows above without disturbing existing lanes), each
-  // given its own fresh row rather than reusing an occupied or
-  // pass-through-reserved cell in rows 0-5. Column still follows dependency
-  // depth: no cross-building prerequisite -> column 1 (a new root, same as
-  // Tower/StorageHouse/Quarry), one prerequisite -> column 2, a
-  // maxed-parent capstone -> column 3 (Crop Mill mirrors Sawmill's own
-  // Lumberjack-10 shape, just for Farm-10).
+  // Four more new roots (no cross-building prerequisite, same as
+  // Tower/StorageHouse/Quarry), each given its own fresh row rather than
+  // reusing an occupied or pass-through-reserved cell in rows 0-5. Meadery
+  // and Crop Mill (both Farm-based) sit up in Farm's/Quarry's own rows
+  // instead — see above.
   smithy: [1, 6],
   druidhut: [1, 7],
   claybrickworks: [1, 8],
   townsquare: [1, 9],
-  meadery: [2, 10],
+  // Behind both Storage House and Town Square, so column 2 either way.
   cartworkshop: [2, 11],
-  cropmill: [3, 12],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;
