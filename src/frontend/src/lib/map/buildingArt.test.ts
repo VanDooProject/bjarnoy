@@ -51,6 +51,19 @@ describe('buildingLayers', () => {
   it('returns nothing for a family with no buildings-static art', () => {
     expect(buildingLayers('not-a-real-family', 1)).toEqual({});
   });
+
+  it('walks down to the highest authored level for a family with a shared base, rather than stopping at the requested level with no top and no clip', () => {
+    // Regression coverage for a bug where a shared (`${family}_SE_base`)
+    // base — truthy at every level — made the walk-down break immediately
+    // at the requested level, even past the family's last authored `top`.
+    // Meadery's art tops out at level 4 but the docs page's default preview
+    // requests its catalogue max (10): before the fix this returned only
+    // the shared base, with no top layer and no `buildings-anim` clip.
+    const layers = buildingLayers('meadery', 10);
+    expect(layers.top).toBeDefined();
+    expect(layers.base).toBeDefined();
+    expect(layers.clip).toBeDefined();
+  });
 });
 
 describe('buildingLayersForType', () => {

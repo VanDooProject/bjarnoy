@@ -59,6 +59,10 @@
       "river": "Fluss",
       "bend": "Flussbiegung"
     },
+    "quarryVariants": {
+      "corrie": "Kar",
+      "saddleback": "Sattel"
+    },
     "categories": {
       "anchor": "Anker",
       "production": "Produktion",

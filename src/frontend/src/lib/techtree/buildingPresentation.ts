@@ -7,9 +7,7 @@ import { buildingArt, terrainArt, type ArtRef } from '../map/buildingArt';
 // here rather than duplicated, so a doc-page thumbnail is never out of sync
 // with what a building actually looks like in game. Each entry is the level
 // this preview shows (an upgraded building looks more built-up, so pick a
-// representative rung rather than always level 1); quarry has no building
-// sprite of its own (the map renders it as its terrain, mountain, with no
-// distinct prop), so it falls through to `terrainArt('mountain')` below.
+// representative rung rather than always level 1).
 const PREVIEW_LEVEL: Record<string, number> = {
   longhouse: 4,
   storagehouse: 4,
@@ -29,6 +27,10 @@ const PREVIEW_LEVEL: Record<string, number> = {
   // Flat/inland family only — same simplification buildingArt.ts's preview
   // card makes, regardless of where the actual tile sits next to a river.
   sawmill: 2,
+  // Corrie landform only — same simplification, regardless of which of the
+  // two the actual tile was carved into (see the docs page's own variant
+  // picker for the saddleback alternative).
+  quarry: 2,
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -79,7 +81,6 @@ export function shortLabel(type: string): string {
 }
 
 export function art(type: string): ArtRef {
-  if (type === 'quarry') return terrainArt('mountain');
   return buildingArt(type, PREVIEW_LEVEL[type] ?? 1) ?? terrainArt('grass');
 }
 

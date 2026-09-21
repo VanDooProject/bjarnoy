@@ -29,6 +29,11 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   shrineofnjord: 'freyjashrine',
   farm: 'farm_crop',
   tower: 'towerbuilding',
+  // The docs preview always shows the corrie landform, one of the two the
+  // pack carves a quarry into — see the docs page's own variant picker for
+  // the saddleback alternative (`quarry_saddleback`, resolved directly by
+  // family through buildingArtByFamily, same as the Sawmill's river looks).
+  quarry: 'quarry_corrie',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjackhut',
   storagehouse: 'storagebuilding',
@@ -194,16 +199,27 @@ export function buildingLayers(family: string, level: number): BuildingLayers {
   // (`${family}_SE_base`, no level suffix) — only the ones whose base
   // visibly changes as they build up (e.g. cropmill's second mill on the
   // far bank) carry a level-specific base (`${name}_base`) instead.
+  //
+  // The walk-down has to key off `top` alone: a shared base is truthy at
+  // every level, so gating the break on `top || base` (as this used to)
+  // stopped the walk at the very first level tried — the one requested —
+  // even when that level has no `top` frame of its own yet. That silently
+  // dropped both the top layer and its `buildings-anim` clip for any level
+  // past a family's authored rungs (e.g. Meadery's default, max-level
+  // preview: its art tops out at level 4, so level 10 requested no top and
+  // no clip, leaving only the shared base with nothing built on it and no
+  // animation — while hovering an authored level 1-4 worked, because the
+  // requested level matched one with a real `top` directly).
   const sharedBase = findAtlasFrame('buildings-static', `${family}_SE_base`);
   for (let l = clampLevel(level, 20); l >= 0; l--) {
     const name = `${family}_SE_level${String(l).padStart(3, '0')}`;
     const top = findAtlasFrame('buildings-static', name);
-    const base = findAtlasFrame('buildings-static', `${name}_base`) ?? sharedBase;
-    if (top || base) {
+    if (top) {
+      const base = findAtlasFrame('buildings-static', `${name}_base`) ?? sharedBase;
       return { base, top, clip: findAtlasClip('buildings-anim', name) };
     }
   }
-  return {};
+  return sharedBase ? { base: sharedBase } : {};
 }
 
 /**

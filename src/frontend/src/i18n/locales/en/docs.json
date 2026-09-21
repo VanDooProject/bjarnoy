@@ -59,6 +59,10 @@
       "river": "River",
       "bend": "River bend"
     },
+    "quarryVariants": {
+      "corrie": "Corrie",
+      "saddleback": "Saddleback"
+    },
     "categories": {
       "anchor": "Anchor",
       "production": "Production",

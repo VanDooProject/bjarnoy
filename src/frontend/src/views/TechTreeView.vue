@@ -137,6 +137,11 @@ const ART_VARIANTS: Partial<Record<string, { id: string; family: string; labelKe
     { id: 'river', family: 'sawmillriver', labelKey: 'docs.techTree.sawmillVariants.river' },
     { id: 'bend', family: 'sawmillbend', labelKey: 'docs.techTree.sawmillVariants.bend' },
   ],
+  // The two mountain landforms the pack carves a quarry into.
+  quarry: [
+    { id: 'corrie', family: 'quarry_corrie', labelKey: 'docs.techTree.quarryVariants.corrie' },
+    { id: 'saddleback', family: 'quarry_saddleback', labelKey: 'docs.techTree.quarryVariants.saddleback' },
+  ],
 };
 
 const selectedVariant = ref<Record<string, string>>({});
@@ -150,7 +155,6 @@ function selectedVariantId(type: string): string {
 }
 
 function thumbArt(type: string): ArtRef {
-  if (type === 'quarry') return terrainArt('mountain');
   const level = hoveredLevel.value[type] ?? maxLevelOf(type);
   const variants = variantsOf(type);
   if (variants.length > 0) {
@@ -180,7 +184,6 @@ function thumbUrl(type: string): string | null {
  * at all for those.
  */
 function thumbAnimatedLayers(type: string) {
-  if (type === 'quarry') return undefined;
   const level = hoveredLevel.value[type] ?? maxLevelOf(type);
   const variants = variantsOf(type);
   const layers =
