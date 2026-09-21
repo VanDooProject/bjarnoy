@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-21T16:39:08.796Z"
+    "generatedAt": "2026-09-21T16:52:43.443Z"
   },
   "data": [
     {
@@ -7819,6 +7819,10 @@
         {
           "type": "storagehouse",
           "level": 3
+        },
+        {
+          "type": "townsquare",
+          "level": 1
         }
       ]
     },

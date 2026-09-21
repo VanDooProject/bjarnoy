@@ -476,10 +476,17 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.StorageHouse, 3)]
+    [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 1)]
     public void A_new_building_carries_its_own_prerequisite(BuildingType type, BuildingType prerequisite, int level)
     {
         Assert.Contains(
             BuildingCatalogue.Get(type, 1).Prerequisites, p => p.Type == prerequisite && p.Level == level);
+    }
+
+    [Fact]
+    public void Cart_workshop_needs_both_its_prerequisites()
+    {
+        Assert.Equal(2, BuildingCatalogue.Get(BuildingType.CartWorkshop, 1).Prerequisites.Count);
     }
 
     [Theory]

@@ -161,8 +161,8 @@ public enum BuildingType
     /// Trains the civilian Provisioner/SettlerCrew half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>), plus a
-    /// modest storage bonus. Behind a level-3 <see cref="StorageHouse"/>.
-    /// Placed on grass.
+    /// modest storage bonus. Behind a level-3 <see cref="StorageHouse"/> and
+    /// a standing <see cref="TownSquare"/>. Placed on grass.
     /// </summary>
     CartWorkshop = 24,
 
