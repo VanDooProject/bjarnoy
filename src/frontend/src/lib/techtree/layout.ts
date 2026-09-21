@@ -54,15 +54,19 @@ export type Slot = readonly [col: number, row: number];
  *
  * A column-3 cell is left empty on every row whose capstone's nearer parent
  * sits in column 2, so that parent's link can pass straight through to
- * column 4 instead of detouring: [3, 3] for Storage House -> Great
- * Storehouse ([2, 3] is empty too, since Great Storehouse has no column-2
- * parent at all), and [3, 4] for Dockyard -> Shrine of Njörd. [2, 0] is
+ * column 4 instead of detouring: [3, 4] for Storage House -> Great
+ * Storehouse ([2, 4] is empty too, since Great Storehouse has no column-2
+ * parent at all), and [3, 5] for Dockyard -> Shrine of Njörd. [2, 0] is
  * likewise left empty for Lumberjack -> Sawmill — Shrine of Ullr's own
  * nearer parent (Sawmill) already sits in column 3, right next to it, so
- * its row needs no further empty cell. Row 1's own column-2 cell now holds
- * Meadery rather than staying empty — Farm's link to Shrine of Freyja
- * (row 1, column 4) routes around it rather than through it, since Meadery
- * isn't a hop on that chain.
+ * its row needs no further empty cell.
+ *
+ * Row 1's own column-2 cell is left empty on purpose: Crop Mill (column 3)
+ * now sits between Farm and Shrine of Freyja on Farm's own row, so
+ * `reuseSameRowChain` can trace Farm -> Crop Mill -> Shrine of Freyja as one
+ * continuous run instead of routing Farm's own link to the shrine around a
+ * card in the way. Meadery — also Farm-based, but not a hop on that chain —
+ * moved off this row entirely, beneath Quarry, to stay out of it.
  */
 export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   longhouse: [0, 2],
@@ -70,47 +74,44 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   lumberjack: [1, 0],
   farm: [1, 1],
   quarry: [1, 2],
-  storagehouse: [1, 3],
-  fishinghut: [1, 4],
-  tower: [1, 5],
+  // Clay Brickworks sits directly beneath Quarry — the last plain root (no
+  // cross-building prerequisite, same as Tower/StorageHouse/Quarry) — with
+  // Meadery alongside it in column 2, out of Farm's row (see above).
+  claybrickworks: [1, 3],
+  storagehouse: [1, 4],
+  fishinghut: [1, 5],
+  tower: [1, 6],
 
   // [2, 0] intentionally empty — the lane Lumberjack -> Sawmill runs through.
-  // Meadery takes Pumpkin Farm's old row-1 slot (both are Farm-based, one
-  // rung of refining past it) — Pumpkin Farm itself moved down to Quarry's
-  // row, since Crop Mill (also Farm-based) sits in the advanced column of
-  // Farm's own row instead — same row as its single Farm(10) prerequisite,
-  // the same shape Sawmill has with Lumberjack.
-  meadery: [2, 1],
+  meadery: [2, 3],
   pumpkinfarm: [2, 2],
-  dockyard: [2, 4],
-  barracks: [2, 5],
+  dockyard: [2, 5],
+  barracks: [2, 6],
 
   sawmill: [3, 0],
   cropmill: [3, 1],
-  // [3, 3] intentionally empty — the lane Storage House -> Great Storehouse runs through.
-  // [3, 4] intentionally empty — the lane Dockyard -> Shrine of Njörd runs through.
-  archeryrange: [3, 5],
+  // [3, 4] intentionally empty — the lane Storage House -> Great Storehouse runs through.
+  // [3, 5] intentionally empty — the lane Dockyard -> Shrine of Njörd runs through.
+  archeryrange: [3, 6],
 
-  greatstorehouse: [4, 3],
+  greatstorehouse: [4, 4],
   shrineoffreyja: [4, 1],
   shrineofullr: [4, 0],
-  shrineofnjord: [4, 4],
-  shrineofthor: [4, 5],
+  shrineofnjord: [4, 5],
+  shrineofthor: [4, 6],
 
-  // Clay Brickworks is the last plain root (no cross-building prerequisite,
-  // same as Tower/StorageHouse/Quarry). Smithy sits one row beneath Shrine
-  // of Thor, in the same capstone column — it shares that shrine's exact
-  // Barracks-10/ArcheryRange-10 prerequisite pair, so it reads as the
-  // military line's second capstone rather than a fresh root.
-  claybrickworks: [1, 6],
-  smithy: [4, 6],
+  // Smithy sits one row beneath Shrine of Thor, in the same capstone
+  // column — it shares that shrine's exact Barracks-10/ArcheryRange-10
+  // prerequisite pair, so it reads as the military line's second capstone
+  // rather than a fresh root.
+  smithy: [4, 7],
 
   // Town Square is a plain root too; Druid's Hut shares its row since it's
   // now gated on a standing Town Square (one prerequisite -> column 2).
   townsquare: [1, 7],
   druidhut: [2, 7],
 
-  // Behind both Storage House and Town Square, so column 2 either way.
+  // Behind a standing Town Square, so column 2.
   cartworkshop: [2, 8],
 };
 
