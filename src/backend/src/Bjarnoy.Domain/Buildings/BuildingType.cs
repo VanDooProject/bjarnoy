@@ -147,13 +147,16 @@ public enum BuildingType
 
     /// <summary>
     /// Iron, on grass or sand — takes over <see cref="MagicTower"/>'s
-    /// economic role as that building is retired from the game.
+    /// economic role as that building is retired from the game. A
+    /// military-line capstone behind the same maxed <see cref="Barracks"/>/
+    /// <see cref="ArcheryRange"/> pair as <see cref="ShrineOfThor"/>.
     /// </summary>
     Smithy = 22,
 
     /// <summary>
     /// No production or storage of its own yet — its ring of runestones is
-    /// meant for a future favour/rune mechanic. Placed on grass.
+    /// meant for a future favour/rune mechanic. Placed on grass, behind a
+    /// standing <see cref="TownSquare"/>.
     /// </summary>
     DruidHut = 23,
 

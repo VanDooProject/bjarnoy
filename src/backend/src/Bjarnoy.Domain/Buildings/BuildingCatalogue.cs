@@ -84,6 +84,9 @@ public static class BuildingCatalogue
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
             [BuildingType.CartWorkshop] = [new(BuildingType.StorageHouse, 3), new(BuildingType.TownSquare, 1)],
+            [BuildingType.Smithy] =
+                [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
+            [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 1)],
         };
 
     /// <summary>
@@ -147,7 +150,13 @@ public static class BuildingCatalogue
             BuildingType.CropMill =>
                 Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0))
                     with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
-            BuildingType.Smithy => Producer(type, level, SandOrGrass, new ResourceAmounts(0, 0, 0, Iron: 8)),
+            // A military-line capstone alongside Shrine of Thor, behind the
+            // same maxed Barracks/ArcheryRange pair (see PrerequisiteTable),
+            // so its longhouse gate overrides Producer's usual early-unlock
+            // curve the same way Sawmill's/Crop Mill's do.
+            BuildingType.Smithy =>
+                Producer(type, level, SandOrGrass, new ResourceAmounts(0, 0, 0, Iron: 8))
+                    with { RequiredLonghouseLevel = 10 },
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),
             BuildingType.ClayBrickworks => Producer(type, level, Grass, new ResourceAmounts(0, Stone: 20, 0, 0)),

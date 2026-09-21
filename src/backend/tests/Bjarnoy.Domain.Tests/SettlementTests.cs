@@ -477,22 +477,35 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.StorageHouse, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 1)]
+    [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
+    [InlineData(BuildingType.Smithy, BuildingType.ArcheryRange, 10)]
+    [InlineData(BuildingType.DruidHut, BuildingType.TownSquare, 1)]
     public void A_new_building_carries_its_own_prerequisite(BuildingType type, BuildingType prerequisite, int level)
     {
         Assert.Contains(
             BuildingCatalogue.Get(type, 1).Prerequisites, p => p.Type == prerequisite && p.Level == level);
     }
 
-    [Fact]
-    public void Cart_workshop_needs_both_its_prerequisites()
+    [Theory]
+    [InlineData(BuildingType.CartWorkshop, 2)]
+    [InlineData(BuildingType.Smithy, 2)]
+    [InlineData(BuildingType.DruidHut, 1)]
+    public void A_new_building_needs_exactly_its_own_prerequisites(BuildingType type, int expectedCount)
     {
-        Assert.Equal(2, BuildingCatalogue.Get(BuildingType.CartWorkshop, 1).Prerequisites.Count);
+        Assert.Equal(expectedCount, BuildingCatalogue.Get(type, 1).Prerequisites.Count);
+    }
+
+    [Fact]
+    public void Smithy_is_a_flat_level_10_capstone_like_the_shrines_and_sawmill()
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            Assert.Equal(10, BuildingCatalogue.Get(BuildingType.Smithy, level).RequiredLonghouseLevel);
+        }
     }
 
     [Theory]
     [InlineData(BuildingType.TownSquare)]
-    [InlineData(BuildingType.Smithy)]
-    [InlineData(BuildingType.DruidHut)]
     [InlineData(BuildingType.ClayBrickworks)]
     public void A_new_building_with_no_cross_building_prerequisite_has_none(BuildingType type)
     {
