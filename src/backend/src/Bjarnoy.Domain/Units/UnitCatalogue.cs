@@ -31,6 +31,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 60, Stone: 30, Food: 25, Iron: 15),
             TrainingDuration = TimeSpan.FromMinutes(10),
             RequiredLonghouseLevel = 1,
+            RequiredBuildingType = BuildingType.Barracks,
         },
         [UnitType.Spearman] = new UnitDefinition
         {
@@ -106,6 +107,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 90, Stone: 40, Food: 30, Iron: 20),
             TrainingDuration = TimeSpan.FromMinutes(20),
             RequiredLonghouseLevel = 4,
+            RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.SettlerCrew] = new UnitDefinition
         {
@@ -131,6 +133,7 @@ public static class UnitCatalogue
             TrainingCost = new ResourceAmounts(Wood: 200, Stone: 150, Food: 100, Iron: 100),
             TrainingDuration = TimeSpan.FromMinutes(40),
             RequiredLonghouseLevel = 5,
+            RequiredBuildingType = BuildingType.CartWorkshop,
         },
         [UnitType.Catapult] = new UnitDefinition
         {

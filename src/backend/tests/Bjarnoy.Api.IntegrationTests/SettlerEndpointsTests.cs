@@ -210,6 +210,20 @@ public sealed class SettlerEndpointsTests : IAsyncLifetime
             new GrantResourcesRequest(Wood: 1_000_000, Stone: 1_000_000, Food: 1_000_000, Iron: 1_000_000), Ct);
         Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
 
+        // SettlerCrew trains at a Cart Workshop, which itself needs a
+        // level-3 Storage House (see BuildingCatalogue/UnitCatalogue) — grant
+        // both before TrainThreeSettlerCrewsAsync below.
+        var layout = await client.GetFromJsonAsync<AdminSettlementLayoutResponse>(
+            $"/api/v1/admin/settlements/{settlement.Id}/layout", SqliteApiFixture.StrictJson, Ct);
+        var grassHexes = layout!.Hexes.Where(h => !h.IsCentre && h.Building is null && h.Terrain == "grass").Take(2).ToList();
+        Assert.True(grassHexes.Count >= 2, "settlement needs two empty grass hexes for Storage House + Cart Workshop");
+        await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/buildings/{grassHexes[0].Q}/{grassHexes[0].R}",
+            new PlaceBuildingRequest("storagehouse", 3), Ct);
+        await client.PutJsonAsync(
+            $"/api/v1/admin/settlements/{settlement.Id}/buildings/{grassHexes[1].Q}/{grassHexes[1].R}",
+            new PlaceBuildingRequest("cartworkshop", 1), Ct);
+
         Authorize(client, player.AccessToken);
 
         return (world.Id, settlement, player, island);
