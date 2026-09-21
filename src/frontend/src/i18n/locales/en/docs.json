@@ -67,7 +67,9 @@
       "anchor": "Anchor",
       "production": "Production",
       "military": "Military",
-      "logistics": "Logistics"
+      "logistics": "Logistics",
+      "religion": "Shrines",
+      "water": "Water"
     },
     "lore": {
       "longhouse": "The heart of the settlement. Its level sets claim radius, build slots and how many settlers call the village home — every settlement starts with one, standing on grass.",

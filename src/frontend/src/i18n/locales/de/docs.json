@@ -67,7 +67,9 @@
       "anchor": "Anker",
       "production": "Produktion",
       "military": "Militär",
-      "logistics": "Logistik"
+      "logistics": "Logistik",
+      "religion": "Schreine",
+      "water": "Wasser"
     },
     "lore": {
       "longhouse": "Das Herz der Siedlung. Seine Stufe bestimmt Claim-Radius, Bauplätze und wie viele Siedler im Dorf leben — jede Siedlung beginnt mit einem, stehend auf Gras.",

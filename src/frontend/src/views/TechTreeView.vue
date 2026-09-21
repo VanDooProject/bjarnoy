@@ -19,6 +19,7 @@ import {
 import type { MessageSchema } from '../i18n/schema';
 import { HIDDEN_FROM_DOCS } from '../lib/techtree/layout';
 import { prerequisitesOf } from '../lib/techtree/nodes';
+import { GRAPH_CATEGORY_ORDER, graphCategoryOf } from '../lib/techtree/buildingPresentation';
 
 const catalogue = useBuildingCatalogueStore();
 const { t, te, n, d } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -35,50 +36,20 @@ function typeLabel(type: string): string {
   return te(key) ? t(key) : type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-// Mirrors prototypes/MECHANICS.md's building categories (anchor / production
-// / military / logistics) — the closest thing this codebase has to a
-// canonical grouping — rather than inventing a new taxonomy for this page.
-// (The dependency graph above splits these a little finer — see
-// buildingPresentation.ts's GRAPH_CATEGORY_ORDER — but this page's section
-// headings keep the coarser four.)
-const CATEGORY_ORDER = ['anchor', 'production', 'military', 'logistics'] as const;
-type Category = (typeof CATEGORY_ORDER)[number];
-
-const CATEGORY_LABELS: Record<Category, string> = {
+// The same categorisation the dependency graph above draws its legend
+// from (buildingPresentation.ts's GRAPH_CATEGORY_ORDER/graphCategoryOf) —
+// this page used to keep its own separate, coarser copy that never
+// listed the shrine types at all, so they silently fell into the generic
+// "production" section here while the graph correctly grouped them under
+// "Shrines". One shared table now, so this page and the graph can't drift.
+const CATEGORY_LABELS: Record<(typeof GRAPH_CATEGORY_ORDER)[number], string> = {
   anchor: t('docs.techTree.categories.anchor'),
   production: t('docs.techTree.categories.production'),
   military: t('docs.techTree.categories.military'),
   logistics: t('docs.techTree.categories.logistics'),
+  religion: t('docs.techTree.categories.religion'),
+  water: t('docs.techTree.categories.water'),
 };
-
-const CATEGORY_OF: Record<string, Category> = {
-  longhouse: 'anchor',
-  farm: 'production',
-  pumpkinfarm: 'production',
-  lumberjack: 'production',
-  quarry: 'production',
-  fishinghut: 'production',
-  magictower: 'production',
-  fisherhut: 'production',
-  sawmill: 'production',
-  meadery: 'production',
-  cropmill: 'production',
-  claybrickworks: 'production',
-  tower: 'military',
-  archeryrange: 'military',
-  barracks: 'military',
-  smithy: 'military',
-  storagehouse: 'logistics',
-  greatstorehouse: 'logistics',
-  dockyard: 'logistics',
-  cartworkshop: 'logistics',
-  townsquare: 'logistics',
-  druidhut: 'logistics',
-};
-
-function categoryOf(type: string): Category {
-  return CATEGORY_OF[type] ?? 'production';
-}
 
 // Buildings on their way out of the game are left off the page entirely —
 // graph and tables both — so the docs stop advertising something a player
@@ -87,10 +58,10 @@ function categoryOf(type: string): Category {
 const documented = computed(() => catalogue.types.filter((t) => !HIDDEN_FROM_DOCS.includes(t)));
 
 const categories = computed(() =>
-  CATEGORY_ORDER.map((id) => ({
+  GRAPH_CATEGORY_ORDER.map((id) => ({
     id,
     label: CATEGORY_LABELS[id],
-    types: documented.value.filter((t) => categoryOf(t) === id),
+    types: documented.value.filter((t) => graphCategoryOf(t) === id),
   })).filter((c) => c.types.length > 0),
 );
 
