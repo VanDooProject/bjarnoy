@@ -20,6 +20,8 @@ import {
   CARD_W,
   LANE_OFFSET,
   LANE_STEP,
+  ROW_PITCH,
+  ROWS,
   columnX,
   rowMid,
   rowY,
@@ -87,9 +89,16 @@ function sourceOrder(layout: Layout, types: readonly string[]): string[] {
 export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
   const placed = (type: string) => layout[type] !== undefined;
   const colOf = (type: string) => layout[type]![0];
+  const rowOf = (type: string) => layout[type]![1];
   const midOf = (type: string) => rowMid(layout[type]![1]);
   const leftOf = (type: string) => columnX(colOf(type));
   const rightOf = (type: string) => columnX(colOf(type)) + CARD_W;
+  // The empty gap between two rows (ROW_PITCH - CARD_H tall) — a horizontal
+  // run at this height never crosses a card, in any column, by construction
+  // (see layout.ts's own row/card geometry). `nearRowGap` picks the gap right
+  // below `row`, or above it for the last row, which has none below.
+  const nearRowGap = (row: number): number =>
+    row < ROWS - 1 ? rowY(row) + CARD_H + (ROW_PITCH - CARD_H) / 2 : rowY(row) - (ROW_PITCH - CARD_H) / 2;
 
   const segments: RoutedSegment[] = [];
   const nextLane = laneAllocator();
@@ -239,6 +248,22 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
     const ownExitX = nextLane(colOf(from));
     if (!crossesCard(layout, ty, ownExitX, tx)) {
       segments.push({ points: [[sx, sy], [ownExitX, sy], [ownExitX, ty], [tx, ty]], keys: [key] });
+      continue;
+    }
+
+    // Same-row edge, blocked at its own row no matter which column it drops
+    // into (a card sits directly in the shared row between source and
+    // target — e.g. Meadery between Farm and Crop Mill/Shrine of Freyja):
+    // picking a different lane can't fix that, since the row itself is the
+    // obstacle. Dip into the narrow gap just past this row instead of the
+    // reserved lane far below the whole grid — a small kink hugging this
+    // one row, not a loop under every row beneath it.
+    if (sy === ty) {
+      const gapY = nearRowGap(rowOf(from));
+      segments.push({
+        points: [[sx, sy], [ownExitX, sy], [ownExitX, gapY], [ax, gapY], [ax, ty], [tx, ty]],
+        keys: [key],
+      });
       continue;
     }
 

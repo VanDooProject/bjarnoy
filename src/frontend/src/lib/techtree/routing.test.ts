@@ -14,8 +14,10 @@ import {
   COL_PITCH,
   LANE_OFFSET,
   LANE_STEP,
+  ROW_PITCH,
   TECH_TREE_LAYOUT,
   columnX,
+  rowMid,
   rowY,
 } from './layout';
 
@@ -178,6 +180,28 @@ describe('routeEdges', () => {
     expect(segment!.points).toHaveLength(4);
     for (const [, y] of segment!.points) {
       expect(y).not.toBe(BYPASS_Y);
+    }
+  });
+
+  it('routes a same-row edge blocked by a card in its own row as a small dip between rows, not a loop under everything', () => {
+    // Farm -> Crop Mill: both row 1, but Meadery sits directly between them
+    // in that same row, so no lane choice makes the direct same-row
+    // approach work — the row itself is the obstacle. Regression coverage
+    // for a routing bug where this (and Farm -> Shrine of Freyja, blocked
+    // the same way) fell through to the BYPASS_Y fallback: a loop from row
+    // 1 down past every row to the very bottom of the grid and back up,
+    // rather than a small kink confined to the gap just past row 1.
+    const segment = segments.find((s) => s.keys.includes(edgeKey('farm', 'cropmill')));
+    expect(segment).toBeDefined();
+    // Six points: stub right, down into the row gap, across, up into the
+    // target's approach lane, right into the target.
+    expect(segment!.points).toHaveLength(6);
+    const rowMidY = rowMid(TECH_TREE_LAYOUT['farm']![1]);
+    for (const [, y] of segment!.points) {
+      expect(y).not.toBe(BYPASS_Y);
+      // Never more than one row's pitch away from Farm's own row — a small
+      // local dip, not a detour spanning the rest of the grid.
+      expect(Math.abs(y - rowMidY)).toBeLessThan(ROW_PITCH);
     }
   });
 });
