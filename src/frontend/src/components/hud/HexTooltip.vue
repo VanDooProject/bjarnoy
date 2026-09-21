@@ -147,7 +147,7 @@ const workersText = computed(() =>
   pointer-events: none;
   /* Issue #16: square, not rounded — .panel's own border-radius is
      overridden here rather than there, since other .panel HUD chrome
-     (RealmPanel, BuildQueuePanel, etc.) is unaffected by this change. */
+     (BuildQueuePanel, etc.) is unaffected by this change. */
   border-radius: 0;
 }
 .title-row {

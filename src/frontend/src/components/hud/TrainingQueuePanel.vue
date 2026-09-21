@@ -18,58 +18,12 @@ import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
 import { unitName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
+import { MAX_TRAINING_QUEUE_LENGTH, useTrainingOrders } from '../../composables/useQueueOrders';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
-// Mirrors Settlement.MaxTrainingQueueLength (backend) — no endpoint exposes
-// this as data, so it's kept in sync here the same way BuildQueuePanel pins
-// its own TOTAL_SLOTS.
-const MAX_TRAINING_QUEUE_LENGTH = 5;
-
-function fmt(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
-}
-
-// Issue #99: same poll-invariant progress + monotonic-clamp fallback as
-// BuildQueuePanel.vue — see its own comment for the reasoning.
-const lastProgress = new Map<string, number>();
-
-const orders = computed(() => {
-  void world.hud.tick; // reactive dependency so the countdown ticks every second
-  const elapsed = (Date.now() - world.hud.trainingQueueFetchedAt) / 1000;
-  const liveIds = new Set(world.hud.trainingQueue.map((o) => o.id));
-  for (const id of lastProgress.keys()) {
-    if (!liveIds.has(id)) {
-      lastProgress.delete(id);
-    }
-  }
-  return world.hud.trainingQueue.map((o) => {
-    const remainingAtFetch = o.completesInSeconds;
-    const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
-    const totalSeconds = o.totalSeconds;
-    let progress =
-      remainingAtFetch === null || totalSeconds <= 0
-        ? 1
-        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
-    progress = Math.max(progress, lastProgress.get(o.id) ?? 0);
-    lastProgress.set(o.id, progress);
-    const done = remainingNow !== null && remainingNow <= 0.5;
-    return {
-      key: o.id,
-      name: t('hud.trainingQueue.orderName', { count: o.count, unit: unitName(o.unit) }),
-      remaining: remainingNow === null ? '—' : fmt(remainingNow),
-      progress,
-      done,
-      subtext: t('hud.trainingQueue.trainedCount', { completed: o.completedCount, total: o.count }),
-    };
-  });
-});
+const orders = useTrainingOrders();
 
 const garrison = computed(() =>
   world.hud.garrison
@@ -80,11 +34,11 @@ const garrison = computed(() =>
 // Issue #40 phase 4: guest (Support) armies currently stationed at this
 // settlement — the host's read-only view (`GET /settlements/{id}/guests`,
 // fetched alongside `world.armies` — see world.ts's `refreshArmies`). Shown
-// as a small section under Garrison rather than a separate HUD panel: every
-// screen corner is already taken (BuildQueuePanel top-left, this panel
-// top-right, RealmPanel bottom-left, ArmyPanel bottom-right — see each
-// panel's own `position: absolute`), and a guest garrison is conceptually
-// close kin to "who's standing at home" already shown just above it. No
+// as a small section under Garrison rather than a separate HUD panel: most
+// screen corners are already taken (BuildQueuePanel top-left, this panel
+// top-right, ArmyPanel bottom-right — see each panel's own `position:
+// absolute`), and a guest garrison is conceptually close kin to "who's
+// standing at home" already shown just above it. No
 // recall/action buttons here — the host cannot command a guest army, only
 // its owner can (via their own settlement's ArmyPanel).
 const guests = computed(() =>

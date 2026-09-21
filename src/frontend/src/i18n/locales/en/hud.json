@@ -21,11 +21,6 @@
     "reserved": "({n} reserved)",
     "rate": "+{n}/h"
   },
-  "realmPanel": {
-    "level": "Lv {level}",
-    "claims": "Realm claims {count} hexes",
-    "backToWorldMap": "← World map"
-  },
   "hoverTooltip": {
     "level": "LEVEL {level}",
     "clickToOpen": "CLICK TO OPEN",
@@ -79,7 +74,7 @@
       "sendSettlers": "Send settlers",
       "noSettlersYet": "You have no settlers available yet",
       "upgrade": "Upgrade",
-      "notEnough": "Not enough {resources}",
+      "notEnough": "Needs {resources}",
       "details": "Details",
       "raze": "Raze",
       "cantRazeLonghouse": "Can't raze the longhouse",
@@ -123,6 +118,16 @@
     "garrisonEmpty": "No units standing here yet.",
     "guests": "Guests",
     "unknownSettlement": "Unknown settlement"
+  },
+  "queueDrawer": {
+    "title": "Queues",
+    "close": "✕",
+    "openLabel": "Open build & training queues",
+    "closeLabel": "Close build & training queues",
+    "buildLabel": "Build",
+    "trainLabel": "Train",
+    "more": "+{count} more",
+    "chevron": "›"
   },
   "buildingModal": {
     "close": "✕",

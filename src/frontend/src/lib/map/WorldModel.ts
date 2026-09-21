@@ -753,7 +753,7 @@ export class WorldModel {
    * centre disc — hex-offset math (`demoFogMask.ts`'s own centre-radius use,
    * `HexMapRenderer.rebuildSettlementLabels`). Fog radius
    * (`visibleHexes`/`exploredRadius`) is tower-aware via `visionDiscsFor`
-   * instead. `RealmPanel`'s displayed count instead uses `claimedHexCount`,
+   * instead. HUD territory-size readouts use `claimedHexCount` instead,
    * which also accounts for towers.
    */
   borderRadius(settlement: Settlement): number {

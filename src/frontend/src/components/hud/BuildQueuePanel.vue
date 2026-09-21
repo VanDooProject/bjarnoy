@@ -17,8 +17,8 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { buildingName } from '../../i18n/catalogueNames';
 import { useWorldStore } from '../../stores/world';
+import { useBuildOrders } from '../../composables/useQueueOrders';
 
 const world = useWorldStore();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
@@ -39,61 +39,7 @@ async function cancel(orderId: string) {
   }
 }
 
-function fmt(seconds: number): string {
-  const s = Math.max(0, Math.round(seconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
-}
-
-// Issue #99: progress must be poll-invariant. The backend now sends the
-// order's true total duration (`totalSeconds`), so progress is `1 -
-// remainingNow / totalSeconds` rather than relative to whenever the HUD
-// last polled. `lastProgress` is a defensive fallback for a missing/stale
-// `totalSeconds` (or any other surprise): it clamps each order's displayed
-// progress to never go backward, keyed by order id so a genuinely new order
-// starts fresh.
-const lastProgress = new Map<string, number>();
-
-const orders = computed(() => {
-  void world.hud.tick; // reactive dependency so the countdown ticks every second
-  const elapsed = (Date.now() - world.hud.queueFetchedAt) / 1000;
-  const liveIds = new Set(world.hud.queue.map((q) => q.id));
-  for (const id of lastProgress.keys()) {
-    if (!liveIds.has(id)) {
-      lastProgress.delete(id);
-    }
-  }
-  return world.hud.queue.map((q) => {
-    const label = buildingName(q.building);
-    const waiting = q.state === 'waiting';
-    // A waiting order has no real completion instant yet (see
-    // BuildOrderResponse.completesAtGameTime's own remarks) — no countdown,
-    // no progress bar, just "waiting for a slot".
-    const remainingAtFetch = waiting ? null : q.completesInSeconds;
-    const remainingNow = remainingAtFetch === null ? null : Math.max(0, remainingAtFetch - elapsed);
-    const totalSeconds = q.totalSeconds;
-    let progress =
-      waiting || remainingAtFetch === null || totalSeconds <= 0
-        ? 1
-        : 1 - Math.max(0, Math.min(1, (remainingNow ?? 0) / totalSeconds));
-    progress = Math.max(progress, lastProgress.get(q.id) ?? 0);
-    lastProgress.set(q.id, progress);
-    const done = remainingNow !== null && remainingNow <= 0.5;
-    return {
-      key: q.id,
-      name: t('hud.buildQueue.orderName', { name: label, level: q.targetLevel }),
-      remaining: waiting ? t('hud.buildQueue.waitingForSlot') : remainingNow === null ? '—' : fmt(remainingNow),
-      progress,
-      done,
-      waiting,
-      subtext: t('hud.buildQueue.hexSubtext', { q: q.q, r: q.r }),
-      coord: { q: q.q, r: q.r },
-    };
-  });
-});
+const orders = useBuildOrders();
 
 // Issue #158: a footer note when any queued order is a waiting one — its
 // cost sits reserved (still in `hud.resources`, still counted against the
