@@ -43,6 +43,17 @@
     "terrainAny": "Jedes bebaubare Land",
     "needsFirst": "Benötigt zuerst: {prerequisites}",
     "graphEyebrow": "Docs · Techbaum",
+    "imageSize": {
+      "label": "Bildgröße:",
+      "normal": "Normal",
+      "large": "Groß"
+    },
+    "artVariant": "Aussehen:",
+    "sawmillVariants": {
+      "inland": "Landeinwärts",
+      "river": "Fluss",
+      "bend": "Flussbiegung"
+    },
     "categories": {
       "anchor": "Anker",
       "production": "Produktion",
