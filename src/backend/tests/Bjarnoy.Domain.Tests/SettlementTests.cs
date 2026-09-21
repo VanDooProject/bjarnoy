@@ -475,7 +475,6 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
     [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
-    [InlineData(BuildingType.CartWorkshop, BuildingType.StorageHouse, 3)]
     [InlineData(BuildingType.CartWorkshop, BuildingType.TownSquare, 1)]
     [InlineData(BuildingType.Smithy, BuildingType.Barracks, 10)]
     [InlineData(BuildingType.Smithy, BuildingType.ArcheryRange, 10)]
@@ -487,7 +486,7 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.CartWorkshop, 2)]
+    [InlineData(BuildingType.CartWorkshop, 1)]
     [InlineData(BuildingType.Smithy, 2)]
     [InlineData(BuildingType.DruidHut, 1)]
     public void A_new_building_needs_exactly_its_own_prerequisites(BuildingType type, int expectedCount)

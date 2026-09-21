@@ -83,7 +83,7 @@ public static class BuildingCatalogue
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
             [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
             [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
-            [BuildingType.CartWorkshop] = [new(BuildingType.StorageHouse, 3), new(BuildingType.TownSquare, 1)],
+            [BuildingType.CartWorkshop] = [new(BuildingType.TownSquare, 1)],
             [BuildingType.Smithy] =
                 [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
             [BuildingType.DruidHut] = [new(BuildingType.TownSquare, 1)],
@@ -582,8 +582,7 @@ public static class BuildingCatalogue
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
     /// melee/archer/ship split's shape, applied to the civilian line — plus
     /// a modest storage bonus (the yard's own carts and barrels), so it is
-    /// not purely a training gate. Behind both a level-3
-    /// <see cref="BuildingType.StorageHouse"/> and a standing
+    /// not purely a training gate. Behind a standing
     /// <see cref="BuildingType.TownSquare"/> (see <see cref="PrerequisiteTable"/>).
     /// </summary>
     private static BuildingDefinition CartWorkshop(int level) => new()

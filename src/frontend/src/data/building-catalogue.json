@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-21T17:06:48.520Z"
+    "generatedAt": "2026-09-21T21:51:54.141Z"
   },
   "data": [
     {
@@ -7830,10 +7830,6 @@
       "occupiesAllSlots": false,
       "claimRadius": 0,
       "prerequisites": [
-        {
-          "type": "storagehouse",
-          "level": 3
-        },
         {
           "type": "townsquare",
           "level": 1
