@@ -142,13 +142,19 @@ describe('routeEdges', () => {
     // adjacent on Shrine of Thor's own row (Barracks -> Archery Range is its
     // own real edge) — the Barracks -> Shrine of Thor link should reuse that
     // exact run and the Archery Range -> Shrine of Thor leaf, rather than
-    // drawing a third line of its own.
+    // drawing a third line of its own. Archery Range also feeds Smithy one
+    // row down, so its own row-5 run splits into a shared stub (both
+    // targets) and a Shrine-of-Thor-only tail — the tail, not the stub, is
+    // the leg Barracks -> Shrine of Thor reuses.
     const barracksToShrine = edgeKey('barracks', 'shrineofthor');
+    const archeryToShrineKey = edgeKey('archeryrange', 'shrineofthor');
     const barracksToArchery = segments.find((s) => s.keys.includes(edgeKey('barracks', 'archeryrange')));
-    const archeryToShrine = segments.find((s) => s.keys.includes(edgeKey('archeryrange', 'shrineofthor')));
+    const archeryToShrineTail = segments.find(
+      (s) => s.keys.includes(archeryToShrineKey) && s.keys.includes(barracksToShrine),
+    );
 
     expect(barracksToArchery!.keys).toContain(barracksToShrine);
-    expect(archeryToShrine!.keys).toContain(barracksToShrine);
+    expect(archeryToShrineTail).toBeDefined();
     // No separate line was drawn just for it.
     expect(segments.filter((s) => s.keys.includes(barracksToShrine))).toHaveLength(2);
   });

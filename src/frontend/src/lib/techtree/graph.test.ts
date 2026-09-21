@@ -64,7 +64,7 @@ describe('ancestry', () => {
       new Set(['pumpkinfarm', 'shrineoffreyja', 'meadery', 'cropmill']),
     );
     expect(descendantsOf(graph, 'tower')).toEqual(
-      new Set(['barracks', 'archeryrange', 'shrineofthor']),
+      new Set(['barracks', 'archeryrange', 'shrineofthor', 'smithy']),
     );
     expect(descendantsOf(graph, 'quarry')).toEqual(new Set());
   });
@@ -94,12 +94,14 @@ describe('hoverSets', () => {
     const sets = hoverSets(graph, 'barracks');
 
     expect(sets.up).toEqual(new Set(['barracks', 'tower', 'longhouse']));
-    expect(sets.down).toEqual(new Set(['archeryrange', 'shrineofthor']));
+    expect(sets.down).toEqual(new Set(['archeryrange', 'shrineofthor', 'smithy']));
     expect(sets.downKeys).toEqual(
       new Set([
         edgeKey('barracks', 'archeryrange'),
         edgeKey('archeryrange', 'shrineofthor'),
         edgeKey('barracks', 'shrineofthor'),
+        edgeKey('archeryrange', 'smithy'),
+        edgeKey('barracks', 'smithy'),
       ]),
     );
     // The edge into the hovered card belongs to the prerequisite side.

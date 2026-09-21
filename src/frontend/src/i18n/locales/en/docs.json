@@ -77,8 +77,8 @@
       "meadery": "Keeps bees on grass behind a level-5 Farm — skeps, a honey press and a mead cellar turning blossom into the settlement's richest table.",
       "townsquare": "The village's own market square on grass — no effect of its own yet, but a future prerequisite or boost.",
       "cropmill": "Grinds a maxed Farm's grain on a straight river tile — a millstone under the open sky, its waterwheel turning with the current.",
-      "smithy": "Works iron at a hearth on grass or sand — the settlement's forge, replacing the retired Magic Tower.",
-      "druidhut": "A turf-roofed roundhouse on grass with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
+      "smithy": "Works iron at a hearth on grass or sand behind a maxed Barracks and Archery Range — the settlement's forge, replacing the retired Magic Tower as the military line's second capstone.",
+      "druidhut": "A turf-roofed roundhouse on grass behind a Town Square, with a ring of runestones — no effect of its own yet, but meant for a future favour or rune mechanic.",
       "cartworkshop": "Builds the settlement's carts on grass behind a Storage House and a Town Square — trains provisioners and settler crews in place of the longhouse, and keeps a little more in its yard.",
       "claybrickworks": "Digs and fires clay on grass — a pit, a drying rack and a kiln turning red earth into stone where no mountain stands."
     },
