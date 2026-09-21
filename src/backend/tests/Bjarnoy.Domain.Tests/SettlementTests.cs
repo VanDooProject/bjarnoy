@@ -239,6 +239,8 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.ShrineOfThor, BuildingType.ArcheryRange, 10)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Farm, 10)]
     [InlineData(BuildingType.ShrineOfFreyja, BuildingType.PumpkinFarm, 10)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.CropMill, 10)]
+    [InlineData(BuildingType.ShrineOfFreyja, BuildingType.Meadery, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Lumberjack, 10)]
     [InlineData(BuildingType.ShrineOfUllr, BuildingType.Sawmill, 10)]
     [InlineData(BuildingType.ShrineOfNjord, BuildingType.FishingHut, 10)]
@@ -1210,31 +1212,64 @@ public class SettlementTests
     [Fact]
     public void A_building_with_two_prerequisites_is_refused_while_either_is_missing()
     {
-        // Shrine of Freyja wants a maxed Farm and Pumpkin Farm.
-        var withoutPumpkin = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10));
-        var withoutFarm = FoundAtLonghouseLevel(10, (BuildingType.PumpkinFarm, 10));
+        // Shrine of Thor wants a maxed Barracks and Archery Range.
+        var withoutArchery = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10));
+        var withoutBarracks = FoundAtLonghouseLevel(10, (BuildingType.ArcheryRange, 10));
 
-        var missingPumpkin = withoutPumpkin.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
-        var missingFarm = withoutFarm.PlanBuild(
-            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingArchery = withoutArchery.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingBarracks = withoutBarracks.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingPumpkin.Rejection);
-        Assert.Equal(BuildingType.PumpkinFarm, missingPumpkin.MissingPrerequisite?.Type);
-        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingFarm.Rejection);
-        Assert.Equal(BuildingType.Farm, missingFarm.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingArchery.Rejection);
+        Assert.Equal(BuildingType.ArcheryRange, missingArchery.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingBarracks.Rejection);
+        Assert.Equal(BuildingType.Barracks, missingBarracks.MissingPrerequisite?.Type);
     }
 
     [Fact]
     public void A_building_with_two_prerequisites_is_accepted_once_both_stand()
     {
         var settlement = FoundAtLonghouseLevel(
-            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10));
+            10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Shrine_of_freyja_is_accepted_once_all_four_food_line_prerequisites_stand()
+    {
+        var settlement = FoundAtLonghouseLevel(
+            10,
+            (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10),
+            (BuildingType.CropMill, 10), (BuildingType.Meadery, 10));
 
         var decision = settlement.PlanBuild(
             BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
 
         Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Shrine_of_freyja_is_refused_while_crop_mill_or_meadery_is_missing()
+    {
+        var withoutCropMill = FoundAtLonghouseLevel(
+            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10), (BuildingType.Meadery, 10));
+        var withoutMeadery = FoundAtLonghouseLevel(
+            10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10), (BuildingType.CropMill, 10));
+
+        var missingCropMill = withoutCropMill.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+        var missingMeadery = withoutMeadery.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingCropMill.Rejection);
+        Assert.Equal(BuildingType.CropMill, missingCropMill.MissingPrerequisite?.Type);
+        Assert.Equal(BuildRejection.RequiredBuildingTooLow, missingMeadery.Rejection);
+        Assert.Equal(BuildingType.Meadery, missingMeadery.MissingPrerequisite?.Type);
     }
 
     [Fact]

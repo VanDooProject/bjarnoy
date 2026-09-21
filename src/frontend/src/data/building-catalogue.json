@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-21T21:51:54.141Z"
+    "generatedAt": "2026-09-21T22:49:17Z",
+    "source": "BuildingCatalogue (regenerated)"
   },
   "data": [
     {
@@ -3245,6 +3245,14 @@
         },
         {
           "type": "pumpkinfarm",
+          "level": 10
+        },
+        {
+          "type": "cropmill",
+          "level": 10
+        },
+        {
+          "type": "meadery",
           "level": 10
         }
       ]

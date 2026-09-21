@@ -75,7 +75,10 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfThor] =
                 [new(BuildingType.Barracks, 10), new(BuildingType.ArcheryRange, 10)],
             [BuildingType.ShrineOfFreyja] =
-                [new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10)],
+                [
+                    new(BuildingType.Farm, 10), new(BuildingType.PumpkinFarm, 10),
+                    new(BuildingType.CropMill, 10), new(BuildingType.Meadery, 10),
+                ],
             [BuildingType.ShrineOfUllr] =
                 [new(BuildingType.Lumberjack, 10), new(BuildingType.Sawmill, 10)],
             [BuildingType.ShrineOfNjord] =
