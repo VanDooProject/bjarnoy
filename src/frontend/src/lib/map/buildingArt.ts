@@ -9,7 +9,7 @@
 // angle these surfaces render at. Families showcase doesn't have a given
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
-import { findAtlasFrame, type AtlasFrameRect } from './atlas';
+import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
 import fishinghutUrl from '../../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
 import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 
@@ -143,6 +143,48 @@ export function buildingArt(type: string, level = 1): ArtRef | undefined {
   if (frame) return { kind: 'atlas', frame };
   const pngUrl = pngBuildingArt(family, level);
   return pngUrl ? { kind: 'png', url: pngUrl } : undefined;
+}
+
+/**
+ * The `buildings-static` base+top layer pair a building's picture is
+ * composited from at runtime, plus its animated top-layer clip if
+ * `buildings-anim` has one for this exact family/level (a moving part —
+ * sawmill's/cropmill's waterwheel, meadery's beekeeper — see that repo's
+ * README "Animated parts"). Unlike `buildingArt`'s single flattened
+ * `showcase` picture, the two layers stay separate here so a caller (see
+ * `AnimatedBuildingSprite.vue`) can position them into a shared canvas and
+ * swap only the top layer's frame to animate, rather than needing showcase
+ * to have baked in every possible animation frame as its own picture (it
+ * doesn't — showcase is one static composite per level).
+ */
+export interface BuildingLayers {
+  base?: AtlasFrameRect;
+  top?: AtlasFrameRect;
+  clip?: AtlasClip & { frameRects: AtlasFrameRect[] };
+}
+
+/** Same wire-type-to-family resolution `buildingArt` does, for a caller that wants the layered form instead of a flattened picture. Undefined for a single-level-art or unmapped type — those have no `buildings-static` base/top split to animate. */
+export function buildingLayersForType(type: string, level: number): BuildingLayers | undefined {
+  if (SINGLE_LEVEL_ART[type]) return undefined;
+  const family = BUILDING_ART_FAMILIES[type];
+  return family ? buildingLayers(family, level) : undefined;
+}
+
+export function buildingLayers(family: string, level: number): BuildingLayers {
+  // Most families render one base picture shared across every level
+  // (`${family}_SE_base`, no level suffix) — only the ones whose base
+  // visibly changes as they build up (e.g. cropmill's second mill on the
+  // far bank) carry a level-specific base (`${name}_base`) instead.
+  const sharedBase = findAtlasFrame('buildings-static', `${family}_SE_base`);
+  for (let l = clampLevel(level, 20); l >= 0; l--) {
+    const name = `${family}_SE_level${String(l).padStart(3, '0')}`;
+    const top = findAtlasFrame('buildings-static', name);
+    const base = findAtlasFrame('buildings-static', `${name}_base`) ?? sharedBase;
+    if (top || base) {
+      return { base, top, clip: findAtlasClip('buildings-anim', name) };
+    }
+  }
+  return {};
 }
 
 /**

@@ -3,11 +3,12 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
+import AnimatedBuildingSprite from '../components/AnimatedBuildingSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
 import TechTreeGraph from '../components/docs/TechTreeGraph.vue';
 import type { AtlasFrameRect } from '../lib/map/atlas';
-import { buildingArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import { buildingArt, buildingLayersForType, terrainArt, type ArtRef } from '../lib/map/buildingArt';
 import type { MessageSchema } from '../i18n/schema';
 import { HIDDEN_FROM_DOCS } from '../lib/techtree/layout';
 import { prerequisitesOf } from '../lib/techtree/nodes';
@@ -122,6 +123,19 @@ function thumbUrl(type: string): string | null {
 }
 
 /**
+ * A moving part (waterwheel, walk cycle, smoke) beats the flattened
+ * `showcase` picture `thumbArt` otherwise shows — only set when this exact
+ * type/level has a `buildings-anim` clip; everything else keeps the static
+ * picture, `AnimatedBuildingSprite` isn't rendered at all for those.
+ */
+function thumbAnimatedLayers(type: string) {
+  if (type === 'quarry') return undefined;
+  const level = hoveredLevel.value[type] ?? maxLevelOf(type);
+  const layers = buildingLayersForType(type, level);
+  return layers?.clip ? layers : undefined;
+}
+
+/**
  * The buildings that must already stand before this one can go up — the same
  * rule the graph above draws, spelled out for the building's own section.
  */
@@ -189,7 +203,8 @@ function formatAmount(value: number): string {
         <section v-for="type in cat.types" :key="type" :id="type" class="building">
           <div class="building-header">
             <div class="thumb" @mouseenter="hoverThumb(type)" @mouseleave="resetThumb(type)">
-              <AtlasSprite v-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
+              <AnimatedBuildingSprite v-if="thumbAnimatedLayers(type)" :layers="thumbAnimatedLayers(type)!" />
+              <AtlasSprite v-else-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
               <img v-else-if="thumbUrl(type)" class="thumb-img" :src="thumbUrl(type)!" alt="" />
             </div>
             <div class="building-intro">
