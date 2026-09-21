@@ -122,6 +122,13 @@
     "none": "keine",
     "riverVariants": "Form:",
     "riverSawmillNote": "Die Sägemühle ist das einzige Gebäude, das direkt auf einer Flusskachel steht — nur auf einer geraden oder gebogenen.",
+    "mountainVariants": "Landform:",
+    "mountainLandforms": {
+      "plain": "Schlicht",
+      "corrie": "Kar",
+      "saddleback": "Sattel",
+      "table": "Tafelberg"
+    },
     "riverShapes": {
       "spring": "Quelle",
       "straight": "Gerade",

@@ -6,7 +6,7 @@ import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
 import TopBar from '../components/hud/TopBar.vue';
 import HudNav from '../components/hud/HudNav.vue';
-import { coastalWaterArt, riverArt, terrainArt, type ArtRef } from '../lib/map/buildingArt';
+import { coastalWaterArt, riverArt, terrainArt, terrainArtByFamily, type ArtRef } from '../lib/map/buildingArt';
 import type { AtlasFrameRect } from '../lib/map/atlas';
 
 const catalogue = useBuildingCatalogueStore();
@@ -23,6 +23,22 @@ type RiverShape = (typeof RIVER_SHAPES)[number];
 const riverShape = ref<RiverShape>('straight');
 const riverShapeArt = computed<ArtRef>(() => riverArt(riverShape.value));
 
+// The pack carves a mountain hex into one of three landforms (plus the
+// plain, undecorated look `terrainArt('mountain')` otherwise shows) — same
+// idea as the river shape picker above, and the same landform names the
+// Quarry building's own variant picker offers (TechTreeView.vue), since a
+// Quarry's art sits on top of one of these.
+const MOUNTAIN_VARIANTS = ['plain', 'corrie', 'saddleback', 'table'] as const;
+type MountainVariant = (typeof MOUNTAIN_VARIANTS)[number];
+const MOUNTAIN_FAMILY: Record<MountainVariant, string> = {
+  plain: 'mountaintile',
+  corrie: 'mountaintile_corrie',
+  saddleback: 'mountaintile_saddleback',
+  table: 'mountaintile_table',
+};
+const mountainVariant = ref<MountainVariant>('plain');
+const mountainVariantArt = computed<ArtRef>(() => terrainArtByFamily(MOUNTAIN_FAMILY[mountainVariant.value]));
+
 // id doubles as the anchor/ToC key; terrain is the wire name a building's
 // AllowedTerrain lists (see BuildingCatalogue.cs) — null for the rows that
 // aren't a BuildingType terrain value on their own (sea never holds a
@@ -34,6 +50,7 @@ interface TileEntry {
   terrain: string | null;
   coastal?: boolean;
   river?: boolean;
+  mountain?: boolean;
 }
 
 // Generation rules mirror WorldGenerationOptions' documented defaults
@@ -45,13 +62,15 @@ const TILES: TileEntry[] = [
   { id: 'sand', art: terrainArt('sand'), terrain: 'sand' },
   { id: 'grass', art: terrainArt('grass'), terrain: 'grass' },
   { id: 'forest', art: terrainArt('forest'), terrain: 'forest' },
-  { id: 'mountain', art: terrainArt('mountain'), terrain: 'mountain' },
+  { id: 'mountain', art: terrainArt('mountain'), terrain: 'mountain', mountain: true },
   { id: 'river', art: riverArt('straight'), terrain: null, river: true },
 ];
 
-/** The picture a tile's card shows — the river entry swaps in whichever shape is picked, everything else is static. */
+/** The picture a tile's card shows — the river/mountain entries swap in whichever shape/landform is picked, everything else is static. */
 function thumbArt(tile: TileEntry): ArtRef {
-  return tile.river ? riverShapeArt.value : tile.art;
+  if (tile.river) return riverShapeArt.value;
+  if (tile.mountain) return mountainVariantArt.value;
+  return tile.art;
 }
 function thumbFrame(tile: TileEntry): AtlasFrameRect | null {
   const art = thumbArt(tile);
@@ -153,6 +172,22 @@ const buildingsByTile = computed(() => {
             @click="riverShape = shape"
           >
             {{ t(`docs.tiles.riverShapes.${shape}`) }}
+          </button>
+        </div>
+
+        <!-- Same idea for Mountain's landform (Plain/Corrie/Saddleback/Table) —
+             the Quarry building's own variant picker sits on one of these. -->
+        <div v-if="tile.mountain" class="variants">
+          <span class="variants-label">{{ $t('docs.tiles.mountainVariants') }}</span>
+          <button
+            v-for="variant in MOUNTAIN_VARIANTS"
+            :key="variant"
+            type="button"
+            class="variant-button"
+            :class="{ active: mountainVariant === variant }"
+            @click="mountainVariant = variant"
+          >
+            {{ t(`docs.tiles.mountainLandforms.${variant}`) }}
           </button>
         </div>
       </section>

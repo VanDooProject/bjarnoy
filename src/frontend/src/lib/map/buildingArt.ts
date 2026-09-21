@@ -122,7 +122,13 @@ const RIVER_SHAPE_FAMILY: Record<string, string> = {
   straight: 'rivertile',
   bend: 'rivertile_bend',
   bend60: 'rivertile_bend60',
-  spring: 'rivertile_spring',
+  // A spring rises out of a mountain cluster (see WorldGenerator's own
+  // "traced downhill from a spring on a qualifying mountain cluster"), so
+  // its art is a spring bursting from a mountain landform — the plain,
+  // flat `rivertile_spring` this used to point at was a placeholder from
+  // before the pack had that art. Corrie is the same landform the docs
+  // page's own Mountain and Quarry variant pickers default to.
+  spring: 'mountaintile_corrie_spring',
   confluence: 'rivertile_y_narrow',
 };
 
@@ -246,6 +252,17 @@ function terrainFamilyArt(family: string, decorated: boolean): ArtRef {
 export function terrainArt(terrain: string): ArtRef {
   const family = TERRAIN_SHOWCASE_FAMILY[terrain] ?? TERRAIN_SHOWCASE_FAMILY.grass!;
   return terrainFamilyArt(family, terrain === 'grass' || terrain === 'forest');
+}
+
+/**
+ * Same lookup as `terrainArt`, but keyed directly by art-pack family rather
+ * than by `Terrain` — for a caller (like the docs tiles page's variant
+ * picker) that wants a specific one of a terrain's several landform
+ * families, e.g. Mountain's plain/corrie/saddleback/table looks, the same
+ * way `buildingArtByFamily` serves the Sawmill's river-look picker.
+ */
+export function terrainArtByFamily(family: string, decorated = false): ArtRef {
+  return terrainFamilyArt(family, decorated);
 }
 
 /** Art for coastal (shallow) water — a rendering variant of `sea`, not a `Terrain` of its own (see `Tile.isCoastalWater`), so it isn't reachable through `terrainArt`. */
