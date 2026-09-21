@@ -40,7 +40,14 @@ api() {
   # before it can be logged - a failure then said only "exit code 22" with
   # no indication of *why* (bad token, bad uuid, wrong scope...). Split
   # status from body instead so a failure can say what Coolify actually said.
+  # --retry-all-errors: observed live - a bare GET /applications 502'd once
+  # (Coolify's own gateway, momentarily unreachable), which failed `skip`'s
+  # reclaim-if-any-exists check on a totally unrelated PR that never touched
+  # this workflow. A transient 5xx blip shouldn't fail every open PR's
+  # checks; three quick retries ride it out, and a genuinely down Coolify
+  # still fails loudly after them.
   response=$(curl -sS -w '\n%{http_code}' \
+    --retry 3 --retry-delay 2 --retry-all-errors \
     -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
     -H 'Content-Type: application/json' \
     -X "$method" "${COOLIFY_URL%/}/api/v1${path}" "$@")
