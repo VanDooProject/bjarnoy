@@ -81,6 +81,9 @@ public static class BuildingCatalogue
             [BuildingType.ShrineOfNjord] =
                 [new(BuildingType.FishingHut, 10), new(BuildingType.Dockyard, 10)],
             [BuildingType.GreatStorehouse] = [new(BuildingType.StorageHouse, 10)],
+            [BuildingType.Meadery] = [new(BuildingType.Farm, 5)],
+            [BuildingType.CropMill] = [new(BuildingType.Farm, 10)],
+            [BuildingType.CartWorkshop] = [new(BuildingType.StorageHouse, 3)],
         };
 
     /// <summary>
@@ -137,6 +140,17 @@ public static class BuildingCatalogue
             BuildingType.Sawmill =>
                 Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
                     with { RequiresRiverShape = SawmillRiverShapes, RequiredLonghouseLevel = 10 },
+            BuildingType.Meadery => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 38, 0)),
+            BuildingType.TownSquare => TownSquare(level),
+            // Same capstone shape as Sawmill: behind a maxed Farm, so its
+            // longhouse gate overrides Producer's usual early-unlock curve.
+            BuildingType.CropMill =>
+                Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0))
+                    with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
+            BuildingType.Smithy => Producer(type, level, SandOrGrass, new ResourceAmounts(0, 0, 0, Iron: 8)),
+            BuildingType.DruidHut => DruidHut(level),
+            BuildingType.CartWorkshop => CartWorkshop(level),
+            BuildingType.ClayBrickworks => Producer(type, level, Grass, new ResourceAmounts(0, Stone: 20, 0, 0)),
             _ => null,
         };
 
@@ -416,6 +430,10 @@ public static class BuildingCatalogue
     private static readonly IReadOnlySet<RiverTileShape> SawmillRiverShapes =
         new HashSet<RiverTileShape> { RiverTileShape.Straight, RiverTileShape.Bend };
 
+    /// <summary>Unlike the Sawmill, the Crop Mill's vendor art only has a Straight-river composite — its waterwheel stands directly in the current.</summary>
+    private static readonly IReadOnlySet<RiverTileShape> CropMillRiverShapes =
+        new HashSet<RiverTileShape> { RiverTileShape.Straight };
+
     /// <summary>
     /// A shrine contributes no flat production or storage of its own — its
     /// favour (<see cref="ShrineCatalogue.Favour"/>) is a percentage bonus,
@@ -514,6 +532,57 @@ public static class BuildingCatalogue
         // standing first (see PrerequisiteTable) and gates Archery Range in
         // turn, so raising an army is a mid-game commitment rather than
         // something a settlement can start with.
+        RequiredLonghouseLevel = 3 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// No production or storage yet — a civic building that will later
+    /// become a prerequisite or grant a boost (a settler-cap increase is the
+    /// leading idea), buildable now so it has a place in the tech tree
+    /// ahead of that mechanic landing.
+    /// </summary>
+    private static BuildingDefinition TownSquare(int level) => new()
+    {
+        Type = BuildingType.TownSquare,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 160, Stone: 140, Food: 40, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(8, level),
+        AllowedTerrain = Grass,
+        RequiredLonghouseLevel = 5 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// No production or storage yet — its ring of runestones is meant for a
+    /// future favour/rune mechanic (see <see cref="BuildingType.ShrineOfThor"/>'s
+    /// "slotted runes" reference), buildable now so it has a place in the
+    /// tech tree ahead of that mechanic landing.
+    /// </summary>
+    private static BuildingDefinition DruidHut(int level) => new()
+    {
+        Type = BuildingType.DruidHut,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 160, Stone: 110, Food: 80, Iron: 0) * CostFactor(level),
+        BuildDuration = Duration(9, level),
+        AllowedTerrain = Grass,
+        RequiredLonghouseLevel = 6 + ((level - 1) / 2),
+    };
+
+    /// <summary>
+    /// Trains the civilian Provisioner/SettlerCrew half of the roster in
+    /// place of the Longhouse (see
+    /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
+    /// melee/archer/ship split's shape, applied to the civilian line — plus
+    /// a modest storage bonus (the yard's own carts and barrels), so it is
+    /// not purely a training gate.
+    /// </summary>
+    private static BuildingDefinition CartWorkshop(int level) => new()
+    {
+        Type = BuildingType.CartWorkshop,
+        Level = level,
+        Cost = new ResourceAmounts(Wood: 150, Stone: 110, Food: 0, Iron: 10) * CostFactor(level),
+        BuildDuration = Duration(7, level),
+        StorageCapacity = ResourceAmounts.Uniform(250) * level,
+        AllowedTerrain = Grass,
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };
 }

@@ -471,6 +471,102 @@ public class BuildingCatalogueTests
         Assert.Equal(expectedWood, production.Wood, 6);
         Assert.Equal(expectedFood, production.Food, 6);
     }
+
+    [Theory]
+    [InlineData(BuildingType.Meadery, BuildingType.Farm, 5)]
+    [InlineData(BuildingType.CropMill, BuildingType.Farm, 10)]
+    [InlineData(BuildingType.CartWorkshop, BuildingType.StorageHouse, 3)]
+    public void A_new_building_carries_its_own_prerequisite(BuildingType type, BuildingType prerequisite, int level)
+    {
+        Assert.Contains(
+            BuildingCatalogue.Get(type, 1).Prerequisites, p => p.Type == prerequisite && p.Level == level);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.TownSquare)]
+    [InlineData(BuildingType.Smithy)]
+    [InlineData(BuildingType.DruidHut)]
+    [InlineData(BuildingType.ClayBrickworks)]
+    public void A_new_building_with_no_cross_building_prerequisite_has_none(BuildingType type)
+    {
+        Assert.Empty(BuildingCatalogue.Get(type, 1).Prerequisites);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Meadery, Terrain.Grass)]
+    [InlineData(BuildingType.TownSquare, Terrain.Grass)]
+    [InlineData(BuildingType.CropMill, Terrain.Grass)]
+    [InlineData(BuildingType.DruidHut, Terrain.Grass)]
+    [InlineData(BuildingType.CartWorkshop, Terrain.Grass)]
+    [InlineData(BuildingType.ClayBrickworks, Terrain.Grass)]
+    public void A_new_land_building_only_allows_its_own_terrain(BuildingType type, Terrain allowed)
+    {
+        Assert.True(BuildingCatalogue.Get(type, 1).AllowsTerrain(allowed));
+        foreach (var other in Enum.GetValues<Terrain>().Where(t => t != allowed && t.IsLand()))
+        {
+            Assert.False(BuildingCatalogue.Get(type, 1).AllowsTerrain(other));
+        }
+    }
+
+    [Fact]
+    public void Smithy_allows_sand_or_grass_like_the_other_border_buildings()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.Smithy, 1);
+        Assert.True(definition.AllowsTerrain(Terrain.Grass));
+        Assert.True(definition.AllowsTerrain(Terrain.Sand));
+        Assert.False(definition.AllowsTerrain(Terrain.Forest));
+        Assert.False(definition.AllowsTerrain(Terrain.Mountain));
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Meadery)]
+    [InlineData(BuildingType.CropMill)]
+    [InlineData(BuildingType.Smithy)]
+    [InlineData(BuildingType.ClayBrickworks)]
+    public void A_new_producer_scales_linearly_with_level(BuildingType type)
+    {
+        var one = BuildingCatalogue.Get(type, 1).ProductionPerHour;
+        var three = BuildingCatalogue.Get(type, 3).ProductionPerHour;
+
+        Assert.True(one.Wood + one.Stone + one.Food + one.Iron > 0);
+        Assert.Equal(one.Wood * 3, three.Wood, 6);
+        Assert.Equal(one.Stone * 3, three.Stone, 6);
+        Assert.Equal(one.Food * 3, three.Food, 6);
+        Assert.Equal(one.Iron * 3, three.Iron, 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.TownSquare)]
+    [InlineData(BuildingType.DruidHut)]
+    public void TownSquare_and_DruidHut_produce_and_store_nothing_yet(BuildingType type)
+    {
+        // Both are civic/favour buildings whose real mechanic (a settler-cap
+        // boost, a rune/favour slot) doesn't exist yet — they're buildable
+        // now purely as a placeholder ahead of that mechanic landing.
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            var definition = BuildingCatalogue.Get(type, level);
+            Assert.Equal(ResourceAmounts.Zero, definition.ProductionPerHour);
+            Assert.Equal(ResourceAmounts.Zero, definition.StorageCapacity);
+        }
+    }
+
+    [Fact]
+    public void CropMill_only_stands_on_a_straight_river_tile()
+    {
+        var definition = BuildingCatalogue.Get(BuildingType.CropMill, 1);
+        Assert.Equal(new HashSet<RiverTileShape> { RiverTileShape.Straight }, definition.RequiresRiverShape);
+    }
+
+    [Fact]
+    public void CartWorkshop_grants_a_uniform_storage_bonus()
+    {
+        var one = BuildingCatalogue.Get(BuildingType.CartWorkshop, 1).StorageCapacity;
+        var two = BuildingCatalogue.Get(BuildingType.CartWorkshop, 2).StorageCapacity;
+
+        Assert.True(one.Wood > 0 && one.Wood == one.Stone && one.Wood == one.Food && one.Wood == one.Iron);
+        Assert.Equal(one.Wood * 2, two.Wood, 6);
+    }
 }
 
 public class SettlementTests
