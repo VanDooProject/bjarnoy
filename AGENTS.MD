@@ -82,6 +82,31 @@
   ask-first + dedupe-check + own-PR flow above), it does not stand down
   just because a rerun happened to pass
 
+# scheduled check-ins / send_later
+- don't poll on a fixed timer for something only I can unblock. A recurring
+  `send_later`/check-in that re-reads a PR every hour is expensive: each
+  firing pays the full fixed cost of the session (system prompt, skill
+  listing, tool definitions) plus every read call it makes, even when the
+  answer is "nothing changed" every single time
+- if a PR is blocked on a decision only I can make (which of two options to
+  take, whether to run a destructive/administrative action), a scheduled
+  check-in adds nothing — my reply already resumes the session the moment I
+  send it, no timer required. Say what you're waiting on and stop; don't
+  arm a check-in at all
+- only schedule a recurring check-in for state that can change on its own,
+  without my input (an external CI run finishing, a rerun you were told to
+  watch, a rate limit or quota clearing on a known schedule), and match the
+  interval to how fast that state actually changes — not a blanket hourly
+  default
+- prefer an event-driven subscription (e.g. `subscribe_pr_activity` for
+  CI/review activity) over polling wherever the thing you're watching can
+  push a real event instead of being polled
+- if 3 consecutive check-ins land with nothing changed, stop silently
+  re-arming — surface it instead: use the `AskUserQuestion` tool to ask me
+  directly whether to keep waiting, change the interval, or drop it, rather
+  than looping quietly forever on a blocker that clearly isn't resolving
+  itself
+
 # tests
 - tests need to be meaningful and not test third party stuff
 - for e2e tests increasing timeouts is usually not the fix for an issue, most of the time its wrong/broken selectors
