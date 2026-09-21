@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useBuildingCatalogueStore } from '../stores/buildingCatalogue';
 import AtlasSprite from '../components/AtlasSprite.vue';
@@ -75,17 +75,28 @@ const categories = computed(() =>
 const hoveredLevel = ref<Record<string, number>>({});
 
 /**
- * Which buildings' thumbnails are shown large (roughly double the
- * long-standing 96x144 size, for a closer look at the art) — clicking a
- * thumbnail toggles it, independently of every other building's.
+ * Whether every building's thumbnail is shown large (roughly double the
+ * long-standing 96x144 size, for a closer look at the art) — one shared
+ * setting for the whole page, same as the old Normal/Large buttons, just
+ * toggled by clicking any thumbnail instead of a separate control.
  */
-const largeThumbs = ref<Set<string>>(new Set());
+const thumbsLarge = ref(false);
 
-function toggleThumbSize(type: string) {
-  const next = new Set(largeThumbs.value);
-  if (next.has(type)) next.delete(type);
-  else next.add(type);
-  largeThumbs.value = next;
+/**
+ * Toggling resizes every thumbnail on the page at once, which reflows
+ * everything below (and, for a thumbnail partway down the page, above) the
+ * one that was clicked — left alone, the browser keeps the scroll position
+ * in pixels, so the clicked thumbnail visibly jumps out from under the
+ * pointer. Recording its viewport position before the resize and scrolling
+ * by exactly how far it moved after Vue re-renders keeps it (and whatever
+ * the reader was looking at) exactly where it was.
+ */
+async function toggleThumbSize(event: MouseEvent | KeyboardEvent) {
+  const el = event.currentTarget as HTMLElement;
+  const before = el.getBoundingClientRect().top;
+  thumbsLarge.value = !thumbsLarge.value;
+  await nextTick();
+  window.scrollBy(0, el.getBoundingClientRect().top - before);
 }
 
 function maxLevelOf(type: string): number {
@@ -242,15 +253,15 @@ function formatAmount(value: number): string {
           <div class="building-header">
             <div
               class="thumb"
-              :class="{ large: largeThumbs.has(type) }"
+              :class="{ large: thumbsLarge }"
               role="button"
               tabindex="0"
               :aria-label="$t('docs.techTree.imageSize.toggle')"
               @mouseenter="hoverThumb(type)"
               @mouseleave="resetThumb(type)"
-              @click="toggleThumbSize(type)"
-              @keydown.enter="toggleThumbSize(type)"
-              @keydown.space.prevent="toggleThumbSize(type)"
+              @click="toggleThumbSize($event)"
+              @keydown.enter="toggleThumbSize($event)"
+              @keydown.space.prevent="toggleThumbSize($event)"
             >
               <AnimatedBuildingSprite v-if="thumbAnimatedLayers(type)" :layers="thumbAnimatedLayers(type)!" />
               <AtlasSprite v-else-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
