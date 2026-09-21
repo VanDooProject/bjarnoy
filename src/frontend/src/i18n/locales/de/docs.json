@@ -49,9 +49,7 @@
     "needsFirst": "Benötigt zuerst: {prerequisites}",
     "graphEyebrow": "Docs · Techbaum",
     "imageSize": {
-      "label": "Bildgröße:",
-      "normal": "Normal",
-      "large": "Groß"
+      "toggle": "Klicken, um dieses Bild zu vergrößern"
     },
     "artVariant": "Aussehen:",
     "sawmillVariants": {

@@ -74,10 +74,19 @@ const categories = computed(() =>
  */
 const hoveredLevel = ref<Record<string, number>>({});
 
-/** Normal matches the long-standing 96x144 thumb; large roughly doubles it for a closer look at the art. */
-const THUMB_SIZES = ['normal', 'large'] as const;
-type ThumbSize = (typeof THUMB_SIZES)[number];
-const thumbSize = ref<ThumbSize>('normal');
+/**
+ * Which buildings' thumbnails are shown large (roughly double the
+ * long-standing 96x144 size, for a closer look at the art) — clicking a
+ * thumbnail toggles it, independently of every other building's.
+ */
+const largeThumbs = ref<Set<string>>(new Set());
+
+function toggleThumbSize(type: string) {
+  const next = new Set(largeThumbs.value);
+  if (next.has(type)) next.delete(type);
+  else next.add(type);
+  largeThumbs.value = next;
+}
 
 function maxLevelOf(type: string): number {
   const levels = catalogue.byType[type];
@@ -219,20 +228,6 @@ function formatAmount(value: number): string {
         }}
       </p>
 
-      <div class="size-toggle" role="group" :aria-label="$t('docs.techTree.imageSize.label')">
-        <span class="size-toggle-label">{{ $t('docs.techTree.imageSize.label') }}</span>
-        <button
-          v-for="size in THUMB_SIZES"
-          :key="size"
-          type="button"
-          class="variant-button"
-          :class="{ active: thumbSize === size }"
-          @click="thumbSize = size"
-        >
-          {{ $t(`docs.techTree.imageSize.${size}`) }}
-        </button>
-      </div>
-
       <nav v-if="categories.length > 0" class="toc" :aria-label="$t('docs.status.toc')">
         <div v-for="cat in categories" :key="cat.id" class="toc-group">
           <span class="toc-category">{{ cat.label }}</span>
@@ -247,9 +242,15 @@ function formatAmount(value: number): string {
           <div class="building-header">
             <div
               class="thumb"
-              :class="{ large: thumbSize === 'large' }"
+              :class="{ large: largeThumbs.has(type) }"
+              role="button"
+              tabindex="0"
+              :aria-label="$t('docs.techTree.imageSize.toggle')"
               @mouseenter="hoverThumb(type)"
               @mouseleave="resetThumb(type)"
+              @click="toggleThumbSize(type)"
+              @keydown.enter="toggleThumbSize(type)"
+              @keydown.space.prevent="toggleThumbSize(type)"
             >
               <AnimatedBuildingSprite v-if="thumbAnimatedLayers(type)" :layers="thumbAnimatedLayers(type)!" />
               <AtlasSprite v-else-if="thumbFrame(type)" :frame="thumbFrame(type)!" />
@@ -452,21 +453,6 @@ function formatAmount(value: number): string {
   align-items: center;
   gap: 16px;
 }
-.size-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin-top: 16px;
-}
-.size-toggle-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-right: 4px;
-}
 .thumb {
   display: flex;
   align-items: flex-end;
@@ -478,6 +464,12 @@ function formatAmount(value: number): string {
   border-radius: 8px;
   background: var(--panel, #1c1710);
   border: 1px solid var(--panel-border);
+  cursor: pointer;
+}
+.thumb:hover,
+.thumb:focus-visible {
+  border-color: var(--gold);
+  outline: none;
 }
 .thumb.large {
   width: 176px;

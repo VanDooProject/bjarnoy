@@ -49,9 +49,7 @@
     "needsFirst": "Needs first: {prerequisites}",
     "graphEyebrow": "Docs · Tech tree",
     "imageSize": {
-      "label": "Image size:",
-      "normal": "Normal",
-      "large": "Large"
+      "toggle": "Click to enlarge this picture"
     },
     "artVariant": "Look:",
     "sawmillVariants": {
