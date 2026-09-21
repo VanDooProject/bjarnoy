@@ -18,6 +18,7 @@ export type BuildingModifier =
   | { kind: 'trainsLandTroops' }
   | { kind: 'trainsShips' }
   | { kind: 'garrison' }
+  | { kind: 'trainsCivilianCrews' }
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'arcane' }
@@ -202,6 +203,30 @@ export function buildingStatsFor(
               : 'shipAttack';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
+    // Plain Producer() buildings (BuildingCatalogue.cs) — same "no boost
+    // terrain" shape as Farm/PumpkinFarm above, just a different resource.
+    case 'meadery':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: level * 38 } };
+    case 'cropmill':
+      return { output: { kind: 'resourceRate', resource: 'food', amount: level * 32 } };
+    case 'claybrickworks':
+      return { output: { kind: 'resourceRate', resource: 'stone', amount: level * 20 } };
+    case 'smithy':
+      return { output: { kind: 'resourceRate', resource: 'iron', amount: level * 8 } };
+    // Mirrors BuildingCatalogue.cs's CartWorkshop(level): a storage bonus
+    // (ResourceAmounts.Uniform(250) * level) plus the civilian training
+    // roster it took over from the longhouse (Provisioner/SettlerCrew).
+    case 'cartworkshop':
+      return {
+        output: { kind: 'storageCapacity', amount: level * 250 },
+        modifier: { kind: 'trainsCivilianCrews' },
+      };
+    // No production or storage of its own yet — see BuildingType.TownSquare/
+    // DruidHut's own doc comments on the backend (a future civic/rune
+    // mechanic), same "no output" shape as the default case below.
+    case 'townsquare':
+    case 'druidhut':
+      return {};
     default:
       return {};
   }
@@ -238,6 +263,17 @@ const BASE_COST: Record<BuildingKind, ResourceLine> = {
   barracks: { wood: 130, stone: 110, food: 0, iron: 15 },
   fisherhut: { wood: 100, stone: 80, food: 0, iron: 0 },
   sawmill: { wood: 100, stone: 80, food: 0, iron: 0 },
+  // Meadery/CropMill/Smithy/ClayBrickworks are all plain Producer()
+  // buildings (BuildingCatalogue.cs), so they share the same base cost as
+  // farm/lumberjack/quarry/etc above. TownSquare/DruidHut/CartWorkshop are
+  // bespoke definitions with their own Cost.
+  meadery: { wood: 100, stone: 80, food: 0, iron: 0 },
+  cropmill: { wood: 100, stone: 80, food: 0, iron: 0 },
+  smithy: { wood: 100, stone: 80, food: 0, iron: 0 },
+  claybrickworks: { wood: 100, stone: 80, food: 0, iron: 0 },
+  townsquare: { wood: 160, stone: 140, food: 40, iron: 0 },
+  druidhut: { wood: 160, stone: 110, food: 80, iron: 0 },
+  cartworkshop: { wood: 150, stone: 110, food: 0, iron: 10 },
 };
 
 /** Resource cost to build `type` at `targetLevel` (1 for a fresh build, current level + 1 for an upgrade). */

@@ -7,7 +7,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { MessageSchema } from '../../i18n/schema';
-import { unitName } from '../../i18n/catalogueNames';
+import { buildingName, unitName } from '../../i18n/catalogueNames';
 import { apiErrorMessage } from '../../i18n/apiErrors';
 import { useWorldStore } from '../../stores/world';
 import { useUnitCatalogueStore } from '../../stores/unitCatalogue';
@@ -70,14 +70,25 @@ const isCoastal = computed<boolean | null>(() => {
   return hasShorelineInTerritory(discs, world.model);
 });
 
+// Mirrors `Settlement.PlanTrain`'s own `buildingLevelOf` lookup — a
+// settlement's level of a given building type, 0 if it has none — so
+// `isUnitAvailable` can gate a row on its training building the same way
+// the backend gates the actual order (e.g. Thrall needs a standing
+// Barracks now, not the longhouse alone).
+function buildingLevelOf(buildingType: string): number {
+  return world.hud.buildings.find((b) => b.type === buildingType)?.level ?? 0;
+}
+
 const rows = computed(() =>
   catalogue.definitions.map((definition) => {
     const count = quantityFor(definition.type);
     const cost = totalTrainingCost(definition, count);
-    const meetsLevel = isUnitAvailable(definition.type, longhouseLevel.value, catalogue.byType);
+    const meetsLevel = longhouseLevel.value >= definition.requiredLonghouseLevel;
+    const hasBuilding = buildingLevelOf(definition.requiredBuildingType) >= 1;
+    const meetsPrerequisites = isUnitAvailable(definition.type, longhouseLevel.value, catalogue.byType, buildingLevelOf);
     const needsCoast = definition.class === 'ship';
     const coastal = isCoastal.value !== false; // unknown (null) treated as coastal, see isCoastal's comment
-    const available = meetsLevel && (!needsCoast || coastal);
+    const available = meetsPrerequisites && (!needsCoast || coastal);
     // Issue #158: available (stock minus what the waiting build queue has
     // reserved), not raw stock — a reservation the player could still train
     // troops with would not be a reservation. `hud.available` mirrors
@@ -91,10 +102,15 @@ const rows = computed(() =>
       costText: formatCostLine(cost),
       durationText: formatTrainingDuration(definition.trainingSeconds, count),
       available,
+      meetsLevel,
+      // Only true once the longhouse level itself is already met — a
+      // missing training building is a more specific, more actionable hint
+      // than "and requires X level" when both happen to be true at once.
+      needsBuildingReason: meetsLevel && !hasBuilding,
       // Only true once the *other* requirements are already met — no point
       // telling the player "also, no shoreline" on a unit whose longhouse
-      // level they haven't reached yet either.
-      needsCoastReason: meetsLevel && needsCoast && !coastal,
+      // level or training building they haven't reached yet either.
+      needsCoastReason: meetsLevel && hasBuilding && needsCoast && !coastal,
       affordable,
       // Training only works against the live backend; demo mode has no
       // TrainingOrder/garrison concept in the local WorldModel yet.
@@ -159,7 +175,8 @@ async function train(type: string, count: number) {
             <div class="unit-stats">
               {{ t('hud.trainingModal.attackDefense', { attack: row.definition.attack, defense: row.definition.defense }) }}
               <span v-if="row.needsCoastReason"> · {{ t('hud.trainingModal.requiresCoastal') }}</span>
-              <span v-else-if="!row.available"> · {{ t('hud.trainingModal.requiresLonghouse', { level: row.definition.requiredLonghouseLevel }) }}<template v-if="row.definition.requiredUnitType"> {{ t('hud.trainingModal.requiresUnit', { unit: unitName(row.definition.requiredUnitType) }) }}</template></span>
+              <span v-else-if="row.needsBuildingReason"> · {{ t('hud.trainingModal.requiresBuilding', { building: buildingName(row.definition.requiredBuildingType) }) }}</span>
+              <span v-else-if="!row.meetsLevel"> · {{ t('hud.trainingModal.requiresLonghouse', { level: row.definition.requiredLonghouseLevel }) }}<template v-if="row.definition.requiredUnitType"> {{ t('hud.trainingModal.requiresUnit', { unit: unitName(row.definition.requiredUnitType) }) }}</template></span>
             </div>
             <div class="unit-cost" :class="{ unaffordable: row.available && !row.affordable }">
               {{ row.costText }} · {{ row.durationText }}

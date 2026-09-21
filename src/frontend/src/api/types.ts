@@ -1373,4 +1373,6 @@ export interface UnitDefinitionResponse {
   requiredLonghouseLevel: number;
   /** Another unit type that must itself be available (a prerequisite chain), or null. */
   requiredUnitType: string | null;
+  /** The building type whose ring trains this unit (`UnitDefinition.RequiredBuildingType`, e.g. `"longhouse"`, `"barracks"`, `"cartworkshop"`) — at least one must stand for the unit to be trainable. */
+  requiredBuildingType: string;
 }

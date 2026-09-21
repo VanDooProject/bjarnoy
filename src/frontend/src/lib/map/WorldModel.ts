@@ -5,6 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { riverBuildingAllowedHere } from './ringCatalogue';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import { DEFAULT_GENERATION, generateTile, terrainAt, type WorldGenerationConstants } from './worldGenerator';
@@ -986,6 +987,13 @@ export class WorldModel {
       'barracks',
       'fisherhut',
       'sawmill',
+      'meadery',
+      'townsquare',
+      'cropmill',
+      'smithy',
+      'druidhut',
+      'cartworkshop',
+      'claybrickworks',
     ]);
 
     const previouslyRendered = this.renderedBuildingCoords.get(settlementId);
@@ -1041,13 +1049,13 @@ export class WorldModel {
     const isWaterOnlyBuilding = type === 'fishinghut' || type === 'dockyard' || type === 'fisherhut';
     if (isWaterOnlyBuilding ? !tile.isCoastalWater : tile.terrain === 'sea') return false;
     if (tile.buildingType) return false;
-    // The Sawmill is built directly on a river tile — only Straight/Bend
-    // shapes have a matching sawmill+river art composite (matches
-    // BuildingDefinition.RequiresRiverShape). sawmillArtVariantOf reads this
-    // same own-hex river tile to pick which composite to render.
-    if (type === 'sawmill') {
-      const river = this.getRiverTile(at.q, at.r);
-      if (!river || (river.shape !== 'straight' && river.shape !== 'bend')) return false;
+    // The Sawmill and Crop Mill are built directly on a river tile — only
+    // certain shapes have a matching river-composite art (matches
+    // BuildingDefinition.RequiresRiverShape, see riverBuildingAllowedHere).
+    // sawmillArtVariantOf reads this same own-hex river tile to pick which
+    // Sawmill composite to render; Crop Mill has only one (straight-only).
+    if (type && !riverBuildingAllowedHere(type, this.getRiverTile(at.q, at.r)?.shape)) {
+      return false;
     }
     tile.ownerId = settlementId;
     tile.buildingType = type;

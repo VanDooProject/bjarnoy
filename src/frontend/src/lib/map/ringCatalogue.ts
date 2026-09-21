@@ -34,22 +34,35 @@ export function longhouseLock(requiredLevel: number | undefined, currentLevel: n
 }
 
 /**
- * Whether a Sawmill can be placed on this specific Grass hex at all — a
- * Sawmill is built directly on a river tile (`WorldModel.placeBuilding`
- * mirrors `BuildingDefinition.RequiresRiverShape`), and only a
- * `straight`/`bend` shaped one has matching art — `hasRiverShape` is whether
- * this hex's own river tile (if any) is one of those two shapes. Unlike
+ * The river shapes each river-gated building's vendor art has a matching
+ * composite for (`BuildingDefinition.RequiresRiverShape`) — Sawmill's
+ * waterwheel reads from the bank on a Straight or Bend tile, Crop Mill's
+ * stands directly in the current so only a Straight tile has its composite.
+ * A type with no entry here has no river requirement at all.
+ */
+const RIVER_SHAPES_BY_TYPE: Partial<Record<string, ReadonlySet<string>>> = {
+  sawmill: new Set(['straight', 'bend']),
+  cropmill: new Set(['straight']),
+};
+
+/**
+ * Whether `type` can be placed on this specific Grass hex at all — Sawmill
+ * and Crop Mill are built directly on a river tile
+ * (`WorldModel.placeBuilding` mirrors `BuildingDefinition.RequiresRiverShape`),
+ * and only some shapes have matching art (see `RIVER_SHAPES_BY_TYPE`) —
+ * `riverShape` is this hex's own river tile's shape, if it has one. Unlike
  * `longhouseLock` (a progression gate the player can still work towards and
  * so is shown as a disabled, explained bubble), this is a fixed property of
- * the hex itself: a hex that will never grow a river should not offer a
- * Sawmill bubble at all, so callers filter it out of the category rather
+ * the hex itself: a hex that will never grow a matching river should not
+ * offer the bubble at all, so callers filter it out of the category rather
  * than rendering it locked. Every other buildable type has no such
  * requirement (Fisher Hut moved to the water category instead — see
  * `RingMenu`'s `WATER_CATEGORY` — since it's now built on coastal water
  * itself, exactly like Fishing Hut/Dockyard, with no separate check needed).
  */
-export function sawmillAllowedHere(type: string, hasRiverShape: boolean): boolean {
-  return type !== 'sawmill' || hasRiverShape;
+export function riverBuildingAllowedHere(type: string, riverShape: string | undefined): boolean {
+  const allowedShapes = RIVER_SHAPES_BY_TYPE[type];
+  return !allowedShapes || (riverShape !== undefined && allowedShapes.has(riverShape));
 }
 
 /**

@@ -141,7 +141,14 @@ export interface Tile {
     | 'fisherhut'
     | 'sawmill'
     | 'shrineofullr'
-    | 'shrineofnjord';
+    | 'shrineofnjord'
+    | 'meadery'
+    | 'townsquare'
+    | 'cropmill'
+    | 'smithy'
+    | 'druidhut'
+    | 'cartworkshop'
+    | 'claybrickworks';
   buildingLevel?: number;
 }
 
