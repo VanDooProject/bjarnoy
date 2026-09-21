@@ -24,6 +24,9 @@ const PREVIEW_LEVEL: Record<string, number> = {
   greatstorehouse: 4,
   barracks: 2,
   fisherhut: 2,
+  // Shares FisherHut's art family now — see buildingArt.ts's
+  // BUILDING_ART_FAMILIES.
+  fishinghut: 2,
   // Flat/inland family only — same simplification buildingArt.ts's preview
   // card makes, regardless of where the actual tile sits next to a river.
   sawmill: 2,

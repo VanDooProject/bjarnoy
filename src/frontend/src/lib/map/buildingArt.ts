@@ -10,7 +10,6 @@
 // level for yet (e.g. `hut`/vikinghut isn't in showcase at all) fall back
 // to the older, lower-res per-level hextiles/ PNG.
 import { findAtlasFrame, findAtlasClip, type AtlasClip, type AtlasFrameRect } from './atlas';
-import fishinghutUrl from '../../../vendor/bg_assets_hextile/hextiles/fishinghutbuilding_SE.png';
 import magictowerUrl from '../../../vendor/bg_assets_hextile/hextiles/magictower_SE.png';
 
 /** Either a showcase atlas frame (preferred) or a plain PNG URL fallback — <AtlasSprite>/<img> render either uniformly. */
@@ -42,6 +41,11 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   greatstorehouse: 'bigstoragehouse',
   barracks: 'barracks',
   fisherhut: 'fisherhut',
+  // Fishing Hut used to fall back to a legacy single-level composite
+  // (`fishinghutbuilding`, no per-level art) — the pack's real, leveled
+  // fisherman's-hut art (already used for the separate FisherHut building)
+  // is the newer, better look, so both share the same family now.
+  fishinghut: 'fisherhut',
   // The preview card always shows the flat/inland family, regardless of
   // where (or whether) the actual tile sits next to a river — see
   // textures.ts's textureKeyFor/WorldModel.sawmillArtVariantOf for the
@@ -56,11 +60,10 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   claybrickworks: 'claybrickworks',
 };
 
-// fishinghut/magictower have no level suffix at all — a single composited
-// image per building, unlike the families above — and showcase doesn't
-// carry them yet, so these stay PNG-only.
+// magictower has no level suffix at all — a single composited image,
+// unlike the families above — and showcase doesn't carry it yet, so it
+// stays PNG-only.
 const SINGLE_LEVEL_ART: Record<string, string> = {
-  fishinghut: fishinghutUrl,
   magictower: magictowerUrl,
 };
 

@@ -72,7 +72,11 @@ describe('buildingLayersForType', () => {
   });
 
   it('is undefined for a single-level-art type (no buildings-static split)', () => {
-    expect(buildingLayersForType('fishinghut', 1)).toBeUndefined();
+    expect(buildingLayersForType('magictower', 1)).toBeUndefined();
+  });
+
+  it('resolves FishingHut through the shared fisherhut family, not the old single-level art', () => {
+    expect(buildingLayersForType('fishinghut', 1)?.top).toBeDefined();
   });
 
   it('is undefined for an unmapped type', () => {
