@@ -8,6 +8,7 @@ import { buildGraph, edgeKey } from './graph';
 import { prerequisitesOf } from './nodes';
 import { routeEdges, crossesCard, pathD, type RoutedSegment } from './routing';
 import {
+  BYPASS_Y,
   CARD_H,
   CARD_W,
   COL_PITCH,
@@ -161,6 +162,23 @@ describe('routeEdges', () => {
 
   it('is stable across calls, so the picture never reshuffles', () => {
     expect(routeEdges(TECH_TREE_LAYOUT, graph)).toEqual(segments);
+  });
+
+  it("routes a same-row-blocked distant edge as a short dogleg, not a detour under the whole grid", () => {
+    // Barracks -> Smithy: same source row as Archery Range -> Shrine of
+    // Thor, but Smithy sits one row down, so the direct same-row approach
+    // lane would cross Archery Range's own card. Regression coverage for a
+    // routing bug where this fell all the way through to the BYPASS_Y
+    // fallback (down below every row, across, and back up) instead of the
+    // much shorter "drop into Barracks' own gutter immediately" path.
+    const segment = segments.find((s) => s.keys.includes(edgeKey('barracks', 'smithy')));
+    expect(segment).toBeDefined();
+    // Four points: stub right, straight down, straight right into the
+    // target — never touching BYPASS_Y.
+    expect(segment!.points).toHaveLength(4);
+    for (const [, y] of segment!.points) {
+      expect(y).not.toBe(BYPASS_Y);
+    }
   });
 });
 

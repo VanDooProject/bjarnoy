@@ -229,11 +229,23 @@ export function routeEdges(layout: Layout, graph: TechGraph): RoutedSegment[] {
       continue;
     }
 
-    // Blocked at one end or the other: go down under every card, across, and
-    // back up into the target's approach lane.
-    const exitX = nextLane(colOf(from));
+    // The same-row approach lane is blocked (a card sits in the way at one
+    // end), but there's often a simpler way round than detouring under the
+    // whole grid: drop into the source's own gutter right away — a short
+    // stub, then straight down, then one long run into the target — an "F"
+    // on its side rather than a dip below every row. Only the horizontal
+    // needs checking; a gutter is never a card's own column, so the vertical
+    // leg can never cross one.
+    const ownExitX = nextLane(colOf(from));
+    if (!crossesCard(layout, ty, ownExitX, tx)) {
+      segments.push({ points: [[sx, sy], [ownExitX, sy], [ownExitX, ty], [tx, ty]], keys: [key] });
+      continue;
+    }
+
+    // Still blocked: go down under every card, across, and back up into the
+    // target's approach lane.
     segments.push({
-      points: [[sx, sy], [exitX, sy], [exitX, BYPASS_Y], [ax, BYPASS_Y], [ax, ty], [tx, ty]],
+      points: [[sx, sy], [ownExitX, sy], [ownExitX, BYPASS_Y], [ax, BYPASS_Y], [ax, ty], [tx, ty]],
       keys: [key],
     });
   }
