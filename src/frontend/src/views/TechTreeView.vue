@@ -378,7 +378,7 @@ function formatAmount(value: number): string {
 }
 .thumb {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   flex: none;
   width: 96px;
