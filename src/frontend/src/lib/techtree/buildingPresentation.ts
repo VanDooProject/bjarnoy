@@ -96,6 +96,11 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   logistics: 'Logistics',
 };
 
+// Mirrors MapView.vue's BUILD_CATEGORIES — the ring menu's own grouping — so
+// Town Square, Druid's Hut, and Smithy land in the same family here as they
+// do in the game, rather than falling into a generic "production" bucket
+// that ignores what they actually are (a civic root and its own follow-on,
+// and a military-line capstone that just happens to produce iron).
 const CATEGORY_OF: Record<string, Category> = {
   longhouse: 'anchor',
   farm: 'production',
@@ -107,18 +112,18 @@ const CATEGORY_OF: Record<string, Category> = {
   fisherhut: 'production',
   sawmill: 'production',
   meadery: 'production',
-  townsquare: 'production',
   cropmill: 'production',
-  smithy: 'production',
-  druidhut: 'production',
   claybrickworks: 'production',
   tower: 'military',
   archeryrange: 'military',
   barracks: 'military',
+  smithy: 'military',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   dockyard: 'logistics',
   cartworkshop: 'logistics',
+  townsquare: 'logistics',
+  druidhut: 'logistics',
 };
 
 export function categoryOf(type: string): Category {
@@ -150,17 +155,17 @@ const GRAPH_CATEGORY_OF: Record<string, GraphCategory> = {
   sawmill: 'production',
   magictower: 'production',
   meadery: 'production',
-  townsquare: 'production',
   cropmill: 'production',
-  smithy: 'production',
-  druidhut: 'production',
   claybrickworks: 'production',
   tower: 'military',
   archeryrange: 'military',
   barracks: 'military',
+  smithy: 'military',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   cartworkshop: 'logistics',
+  townsquare: 'logistics',
+  druidhut: 'logistics',
   shrineofthor: 'religion',
   shrineoffreyja: 'religion',
   shrineofullr: 'religion',

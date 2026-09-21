@@ -10,10 +10,10 @@ import { categoryOf, graphCategoryOf, typeLabel } from './buildingPresentation';
 
 const NEW_TYPES = [
   { type: 'meadery', label: 'Meadery', category: 'production', graphCategory: 'production' },
-  { type: 'townsquare', label: 'Town square', category: 'production', graphCategory: 'production' },
+  { type: 'townsquare', label: 'Town square', category: 'logistics', graphCategory: 'logistics' },
   { type: 'cropmill', label: 'Crop mill', category: 'production', graphCategory: 'production' },
-  { type: 'smithy', label: 'Smithy', category: 'production', graphCategory: 'production' },
-  { type: 'druidhut', label: "Druid's hut", category: 'production', graphCategory: 'production' },
+  { type: 'smithy', label: 'Smithy', category: 'military', graphCategory: 'military' },
+  { type: 'druidhut', label: "Druid's hut", category: 'logistics', graphCategory: 'logistics' },
   { type: 'cartworkshop', label: 'Cart workshop', category: 'logistics', graphCategory: 'logistics' },
   { type: 'claybrickworks', label: 'Clay brickworks', category: 'production', graphCategory: 'production' },
 ] as const;
