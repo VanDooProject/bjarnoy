@@ -101,6 +101,11 @@
 - prefer an event-driven subscription (e.g. `subscribe_pr_activity` for
   CI/review activity) over polling wherever the thing you're watching can
   push a real event instead of being polled
+- if 3 consecutive check-ins land with nothing changed, stop silently
+  re-arming — surface it instead: use the `AskUserQuestion` tool to ask me
+  directly whether to keep waiting, change the interval, or drop it, rather
+  than looping quietly forever on a blocker that clearly isn't resolving
+  itself
 
 # tests
 - tests need to be meaningful and not test third party stuff
