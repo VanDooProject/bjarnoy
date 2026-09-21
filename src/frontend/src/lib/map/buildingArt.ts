@@ -42,6 +42,13 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // textures.ts's textureKeyFor/WorldModel.sawmillArtVariantOf for the
   // adjacency-aware picker the world-map renderer uses instead.
   sawmill: 'sawmill',
+  meadery: 'meadery',
+  townsquare: 'townsquare',
+  cropmill: 'cropmill',
+  smithy: 'smithy',
+  druidhut: 'druidhut',
+  cartworkshop: 'cartworkshop',
+  claybrickworks: 'claybrickworks',
 };
 
 // fishinghut/magictower have no level suffix at all — a single composited

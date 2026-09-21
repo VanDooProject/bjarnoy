@@ -19,7 +19,14 @@
     "archeryrange": "Schießplatz",
     "dockyard": "Werft",
     "barracks": "Kaserne",
-    "sawmill": "Sägewerk"
+    "sawmill": "Sägewerk",
+    "meadery": "Met-Brennerei",
+    "townsquare": "Dorfplatz",
+    "cropmill": "Getreidemühle",
+    "smithy": "Schmiede",
+    "druidhut": "Druidenhütte",
+    "cartworkshop": "Wagnerei",
+    "claybrickworks": "Ziegelei"
   },
   "units": {
     "thrall": "Knecht",

@@ -19,7 +19,14 @@
     "archeryrange": "Archery Range",
     "dockyard": "Dockyard",
     "barracks": "Barracks",
-    "sawmill": "Sawmill"
+    "sawmill": "Sawmill",
+    "meadery": "Meadery",
+    "townsquare": "Town Square",
+    "cropmill": "Crop Mill",
+    "smithy": "Smithy",
+    "druidhut": "Druid's Hut",
+    "cartworkshop": "Cart Workshop",
+    "claybrickworks": "Clay Brickworks"
   },
   "units": {
     "thrall": "Thrall",

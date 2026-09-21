@@ -33,7 +33,12 @@
     "archeryrange": "Schießplatz",
     "dockyard": "Werft",
     "greatstorehouse": "Großes Lagerhaus",
-    "fisherhut": "Fischerhütte"
+    "fisherhut": "Fischerhütte",
+    "townsquare": "Dorfplatz",
+    "cropmill": "Getreidemühle",
+    "druidhut": "Druidenhütte",
+    "cartworkshop": "Wagnerei",
+    "claybrickworks": "Ziegelei"
   },
   "techTree": {
     "title": "Techbaum",
@@ -68,7 +73,14 @@
       "greatstorehouse": "Eine Lagerstufe für das Endspiel auf Gras, die sowohl das Langhaus als auch das eigene Lagerhaus dieser Siedlung auf Stufe 10 benötigt.",
       "barracks": "Eine Garnison, errichtet auf Gras oder Sand an der Grenze.",
       "fisherhut": "Ein zweiter Steg für den Tisch, der Grasland wie ein Bauernhof bewirtschaftet statt der Untiefen.",
-      "sawmill": "Verarbeitet Holz auf Gras, neben einem benachbarten Holzfäller — sein Aussehen ändert sich, wenn es neben einem Fluss oder einer Flussbiegung gebaut wird."
+      "sawmill": "Verarbeitet Holz auf Gras, neben einem benachbarten Holzfäller — sein Aussehen ändert sich, wenn es neben einem Fluss oder einer Flussbiegung gebaut wird.",
+      "meadery": "Hält Bienen auf Gras hinter einem Bauernhof der Stufe 5 — Bienenkörbe, eine Honigpresse und ein Metkeller verwandeln Blüten in den reichsten Tisch der Siedlung.",
+      "townsquare": "Der eigene Marktplatz des Dorfes auf Gras — noch ohne eigene Wirkung, aber eine künftige Voraussetzung oder ein künftiger Bonus.",
+      "cropmill": "Mahlt das Getreide eines ausgebauten Bauernhofs auf einer geraden Flusskachel — ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht.",
+      "smithy": "Verarbeitet Eisen an einer Esse auf Gras oder Sand — die Schmiede der Siedlung, die den ausrangierten Magischen Turm ersetzt.",
+      "druidhut": "Ein Rundhaus mit Grasdach auf Gras, umgeben von einem Ring aus Runensteinen — noch ohne eigene Wirkung, aber für eine künftige Gunst- oder Runenmechanik gedacht.",
+      "cartworkshop": "Baut die Karren der Siedlung auf Gras hinter einem Lagerhaus — bildet Furiere und Siedlertrupps anstelle des Langhauses aus und bietet etwas mehr Platz im eigenen Hof.",
+      "claybrickworks": "Gräbt und brennt Ton auf Gras — eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht."
     },
     "table": {
       "level": "Stufe",

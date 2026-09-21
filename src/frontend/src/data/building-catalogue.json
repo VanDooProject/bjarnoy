@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-09T17:14:30.143Z"
+    "generatedAt": "2026-09-21T16:39:08.796Z"
   },
   "data": [
     {
@@ -6160,6 +6160,2271 @@
       ],
       "requiresCoastalWater": false,
       "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 1,
+      "cost": {
+        "wood": 100,
+        "stone": 80,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 240,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 38,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "farm",
+          "level": 5
+        }
+      ]
+    },
+    {
+      "type": "meadery",
+      "level": 2,
+      "cost": {
+        "wood": 160,
+        "stone": 128,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 360,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 76,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 3,
+      "cost": {
+        "wood": 256.00000000000006,
+        "stone": 204.80000000000004,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 540,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 114,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 2,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 4,
+      "cost": {
+        "wood": 409.6000000000001,
+        "stone": 327.68000000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 810,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 152,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 2,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 5,
+      "cost": {
+        "wood": 655.3600000000001,
+        "stone": 524.2880000000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1215,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 190,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 6,
+      "cost": {
+        "wood": 1048.5760000000002,
+        "stone": 838.8608000000002,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1822.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 228,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 7,
+      "cost": {
+        "wood": 1677.7216000000005,
+        "stone": 1342.1772800000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 2733.75,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 266,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 8,
+      "cost": {
+        "wood": 2684.354560000001,
+        "stone": 2147.483648000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 4100.625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 304,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 9,
+      "cost": {
+        "wood": 4294.9672960000025,
+        "stone": 3435.9738368000017,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 6150.9375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 342,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "meadery",
+      "level": 10,
+      "cost": {
+        "wood": 6871.947673600003,
+        "stone": 5497.558138880003,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 9226.40625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 380,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 1,
+      "cost": {
+        "wood": 160,
+        "stone": 140,
+        "food": 40,
+        "iron": 0
+      },
+      "buildSeconds": 480,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 2,
+      "cost": {
+        "wood": 256,
+        "stone": 224,
+        "food": 64,
+        "iron": 0
+      },
+      "buildSeconds": 720,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 3,
+      "cost": {
+        "wood": 409.6000000000001,
+        "stone": 358.4000000000001,
+        "food": 102.40000000000002,
+        "iron": 0
+      },
+      "buildSeconds": 1080,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 4,
+      "cost": {
+        "wood": 655.3600000000001,
+        "stone": 573.4400000000002,
+        "food": 163.84000000000003,
+        "iron": 0
+      },
+      "buildSeconds": 1620,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 5,
+      "cost": {
+        "wood": 1048.5760000000002,
+        "stone": 917.5040000000001,
+        "food": 262.14400000000006,
+        "iron": 0
+      },
+      "buildSeconds": 2430,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 7,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 6,
+      "cost": {
+        "wood": 1677.7216000000003,
+        "stone": 1468.0064000000004,
+        "food": 419.4304000000001,
+        "iron": 0
+      },
+      "buildSeconds": 3645,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 7,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 7,
+      "cost": {
+        "wood": 2684.354560000001,
+        "stone": 2348.8102400000007,
+        "food": 671.0886400000003,
+        "iron": 0
+      },
+      "buildSeconds": 5467.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 8,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 8,
+      "cost": {
+        "wood": 4294.967296000002,
+        "stone": 3758.0963840000013,
+        "food": 1073.7418240000004,
+        "iron": 0
+      },
+      "buildSeconds": 8201.25,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 8,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 9,
+      "cost": {
+        "wood": 6871.947673600003,
+        "stone": 6012.954214400003,
+        "food": 1717.9869184000008,
+        "iron": 0
+      },
+      "buildSeconds": 12301.875,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 9,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "townsquare",
+      "level": 10,
+      "cost": {
+        "wood": 10995.116277760006,
+        "stone": 9620.726743040004,
+        "food": 2748.7790694400014,
+        "iron": 0
+      },
+      "buildSeconds": 18452.8125,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 9,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 1,
+      "cost": {
+        "wood": 100,
+        "stone": 80,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 240,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 32,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "farm",
+          "level": 10
+        }
+      ]
+    },
+    {
+      "type": "cropmill",
+      "level": 2,
+      "cost": {
+        "wood": 160,
+        "stone": 128,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 360,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 64,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 3,
+      "cost": {
+        "wood": 256.00000000000006,
+        "stone": 204.80000000000004,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 540,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 96,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 4,
+      "cost": {
+        "wood": 409.6000000000001,
+        "stone": 327.68000000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 810,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 128,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 5,
+      "cost": {
+        "wood": 655.3600000000001,
+        "stone": 524.2880000000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1215,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 160,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 6,
+      "cost": {
+        "wood": 1048.5760000000002,
+        "stone": 838.8608000000002,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1822.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 192,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 7,
+      "cost": {
+        "wood": 1677.7216000000005,
+        "stone": 1342.1772800000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 2733.75,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 224,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 8,
+      "cost": {
+        "wood": 2684.354560000001,
+        "stone": 2147.483648000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 4100.625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 256,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 9,
+      "cost": {
+        "wood": 4294.9672960000025,
+        "stone": 3435.9738368000017,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 6150.9375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 288,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cropmill",
+      "level": 10,
+      "cost": {
+        "wood": 6871.947673600003,
+        "stone": 5497.558138880003,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 9226.40625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 320,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 1,
+      "cost": {
+        "wood": 100,
+        "stone": 80,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 240,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 8
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 2,
+      "cost": {
+        "wood": 160,
+        "stone": 128,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 360,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 16
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 3,
+      "cost": {
+        "wood": 256.00000000000006,
+        "stone": 204.80000000000004,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 540,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 24
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 2,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 4,
+      "cost": {
+        "wood": 409.6000000000001,
+        "stone": 327.68000000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 810,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 32
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 2,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 5,
+      "cost": {
+        "wood": 655.3600000000001,
+        "stone": 524.2880000000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1215,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 40
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 6,
+      "cost": {
+        "wood": 1048.5760000000002,
+        "stone": 838.8608000000002,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1822.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 48
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 7,
+      "cost": {
+        "wood": 1677.7216000000005,
+        "stone": 1342.1772800000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 2733.75,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 56
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 8,
+      "cost": {
+        "wood": 2684.354560000001,
+        "stone": 2147.483648000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 4100.625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 64
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 9,
+      "cost": {
+        "wood": 4294.9672960000025,
+        "stone": 3435.9738368000017,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 6150.9375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 72
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "smithy",
+      "level": 10,
+      "cost": {
+        "wood": 6871.947673600003,
+        "stone": 5497.558138880003,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 9226.40625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 80
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass",
+        "sand"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 1,
+      "cost": {
+        "wood": 160,
+        "stone": 110,
+        "food": 80,
+        "iron": 0
+      },
+      "buildSeconds": 540,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 2,
+      "cost": {
+        "wood": 256,
+        "stone": 176,
+        "food": 128,
+        "iron": 0
+      },
+      "buildSeconds": 810,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 3,
+      "cost": {
+        "wood": 409.6000000000001,
+        "stone": 281.6000000000001,
+        "food": 204.80000000000004,
+        "iron": 0
+      },
+      "buildSeconds": 1215,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 7,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 4,
+      "cost": {
+        "wood": 655.3600000000001,
+        "stone": 450.5600000000001,
+        "food": 327.68000000000006,
+        "iron": 0
+      },
+      "buildSeconds": 1822.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 7,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 5,
+      "cost": {
+        "wood": 1048.5760000000002,
+        "stone": 720.8960000000002,
+        "food": 524.2880000000001,
+        "iron": 0
+      },
+      "buildSeconds": 2733.75,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 8,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 6,
+      "cost": {
+        "wood": 1677.7216000000003,
+        "stone": 1153.4336000000003,
+        "food": 838.8608000000002,
+        "iron": 0
+      },
+      "buildSeconds": 4100.625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 8,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 7,
+      "cost": {
+        "wood": 2684.354560000001,
+        "stone": 1845.4937600000007,
+        "food": 1342.1772800000006,
+        "iron": 0
+      },
+      "buildSeconds": 6150.9375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 9,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 8,
+      "cost": {
+        "wood": 4294.967296000002,
+        "stone": 2952.790016000001,
+        "food": 2147.483648000001,
+        "iron": 0
+      },
+      "buildSeconds": 9226.40625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 9,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 9,
+      "cost": {
+        "wood": 6871.947673600003,
+        "stone": 4724.464025600002,
+        "food": 3435.9738368000017,
+        "iron": 0
+      },
+      "buildSeconds": 13839.609375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "druidhut",
+      "level": 10,
+      "cost": {
+        "wood": 10995.116277760006,
+        "stone": 7559.142440960004,
+        "food": 5497.558138880003,
+        "iron": 0
+      },
+      "buildSeconds": 20759.4140625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 10,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 1,
+      "cost": {
+        "wood": 150,
+        "stone": 110,
+        "food": 0,
+        "iron": 10
+      },
+      "buildSeconds": 420,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 250,
+        "stone": 250,
+        "food": 250,
+        "iron": 250
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": [
+        {
+          "type": "storagehouse",
+          "level": 3
+        }
+      ]
+    },
+    {
+      "type": "cartworkshop",
+      "level": 2,
+      "cost": {
+        "wood": 240,
+        "stone": 176,
+        "food": 0,
+        "iron": 16
+      },
+      "buildSeconds": 630,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 500,
+        "stone": 500,
+        "food": 500,
+        "iron": 500
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 3,
+      "cost": {
+        "wood": 384.00000000000006,
+        "stone": 281.6000000000001,
+        "food": 0,
+        "iron": 25.600000000000005
+      },
+      "buildSeconds": 945,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 750,
+        "stone": 750,
+        "food": 750,
+        "iron": 750
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 4,
+      "cost": {
+        "wood": 614.4000000000001,
+        "stone": 450.5600000000001,
+        "food": 0,
+        "iron": 40.96000000000001
+      },
+      "buildSeconds": 1417.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 1000,
+        "stone": 1000,
+        "food": 1000,
+        "iron": 1000
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 5,
+      "cost": {
+        "wood": 983.0400000000002,
+        "stone": 720.8960000000002,
+        "food": 0,
+        "iron": 65.53600000000002
+      },
+      "buildSeconds": 2126.25,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 1250,
+        "stone": 1250,
+        "food": 1250,
+        "iron": 1250
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 6,
+      "cost": {
+        "wood": 1572.8640000000005,
+        "stone": 1153.4336000000003,
+        "food": 0,
+        "iron": 104.85760000000002
+      },
+      "buildSeconds": 3189.375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 1500,
+        "stone": 1500,
+        "food": 1500,
+        "iron": 1500
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 7,
+      "cost": {
+        "wood": 2516.582400000001,
+        "stone": 1845.4937600000007,
+        "food": 0,
+        "iron": 167.77216000000007
+      },
+      "buildSeconds": 4784.0625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 1750,
+        "stone": 1750,
+        "food": 1750,
+        "iron": 1750
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 8,
+      "cost": {
+        "wood": 4026.5318400000015,
+        "stone": 2952.790016000001,
+        "food": 0,
+        "iron": 268.4354560000001
+      },
+      "buildSeconds": 7176.09375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 2000,
+        "stone": 2000,
+        "food": 2000,
+        "iron": 2000
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 6,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 9,
+      "cost": {
+        "wood": 6442.450944000003,
+        "stone": 4724.464025600002,
+        "food": 0,
+        "iron": 429.4967296000002
+      },
+      "buildSeconds": 10764.140625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 2250,
+        "stone": 2250,
+        "food": 2250,
+        "iron": 2250
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 7,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "cartworkshop",
+      "level": 10,
+      "cost": {
+        "wood": 10307.921510400005,
+        "stone": 7559.142440960004,
+        "food": 0,
+        "iron": 687.1947673600004
+      },
+      "buildSeconds": 16146.2109375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 2500,
+        "stone": 2500,
+        "food": 2500,
+        "iron": 2500
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 7,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 1,
+      "cost": {
+        "wood": 100,
+        "stone": 80,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 240,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 20,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 2,
+      "cost": {
+        "wood": 160,
+        "stone": 128,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 360,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 40,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 1,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 3,
+      "cost": {
+        "wood": 256.00000000000006,
+        "stone": 204.80000000000004,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 540,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 60,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 2,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 4,
+      "cost": {
+        "wood": 409.6000000000001,
+        "stone": 327.68000000000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 810,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 80,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 2,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 5,
+      "cost": {
+        "wood": 655.3600000000001,
+        "stone": 524.2880000000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1215,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 100,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 6,
+      "cost": {
+        "wood": 1048.5760000000002,
+        "stone": 838.8608000000002,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 1822.5,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 120,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 3,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 7,
+      "cost": {
+        "wood": 1677.7216000000005,
+        "stone": 1342.1772800000006,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 2733.75,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 140,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 8,
+      "cost": {
+        "wood": 2684.354560000001,
+        "stone": 2147.483648000001,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 4100.625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 160,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 4,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 9,
+      "cost": {
+        "wood": 4294.9672960000025,
+        "stone": 3435.9738368000017,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 6150.9375,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 180,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
+      "slotCost": 1,
+      "occupiesAllSlots": false,
+      "claimRadius": 0,
+      "prerequisites": []
+    },
+    {
+      "type": "claybrickworks",
+      "level": 10,
+      "cost": {
+        "wood": 6871.947673600003,
+        "stone": 5497.558138880003,
+        "food": 0,
+        "iron": 0
+      },
+      "buildSeconds": 9226.40625,
+      "productionPerHour": {
+        "wood": 0,
+        "stone": 200,
+        "food": 0,
+        "iron": 0
+      },
+      "storageCapacity": {
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
+      },
+      "allowedTerrain": [
+        "grass"
+      ],
+      "requiresCoastalWater": false,
+      "requiredLonghouseLevel": 5,
       "slotCost": 1,
       "occupiesAllSlots": false,
       "claimRadius": 0,

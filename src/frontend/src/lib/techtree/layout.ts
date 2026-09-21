@@ -87,6 +87,22 @@ export const TECH_TREE_LAYOUT: Readonly<Record<string, Slot>> = {
   shrineofullr: [4, 0],
   shrineofnjord: [4, 4],
   shrineofthor: [4, 5],
+
+  // Seven new buildings (art shipped, no catalogue prerequisite chain to
+  // slot them into the rows above without disturbing existing lanes), each
+  // given its own fresh row rather than reusing an occupied or
+  // pass-through-reserved cell in rows 0-5. Column still follows dependency
+  // depth: no cross-building prerequisite -> column 1 (a new root, same as
+  // Tower/StorageHouse/Quarry), one prerequisite -> column 2, a
+  // maxed-parent capstone -> column 3 (Crop Mill mirrors Sawmill's own
+  // Lumberjack-10 shape, just for Farm-10).
+  smithy: [1, 6],
+  druidhut: [1, 7],
+  claybrickworks: [1, 8],
+  townsquare: [1, 9],
+  meadery: [2, 10],
+  cartworkshop: [2, 11],
+  cropmill: [3, 12],
 };
 
 export const COLUMNS = COLUMN_TITLES.length;

@@ -60,7 +60,9 @@ describe('ancestry', () => {
   });
 
   it('reports what a building leads to', () => {
-    expect(descendantsOf(graph, 'farm')).toEqual(new Set(['pumpkinfarm', 'shrineoffreyja']));
+    expect(descendantsOf(graph, 'farm')).toEqual(
+      new Set(['pumpkinfarm', 'shrineoffreyja', 'meadery', 'cropmill']),
+    );
     expect(descendantsOf(graph, 'tower')).toEqual(
       new Set(['barracks', 'archeryrange', 'shrineofthor']),
     );

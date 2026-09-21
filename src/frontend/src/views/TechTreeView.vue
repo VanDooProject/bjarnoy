@@ -54,12 +54,19 @@ const CATEGORY_OF: Record<string, Category> = {
   magictower: 'production',
   fisherhut: 'production',
   sawmill: 'production',
+  meadery: 'production',
+  townsquare: 'production',
+  cropmill: 'production',
+  smithy: 'production',
+  druidhut: 'production',
+  claybrickworks: 'production',
   tower: 'military',
   archeryrange: 'military',
   barracks: 'military',
   storagehouse: 'logistics',
   greatstorehouse: 'logistics',
   dockyard: 'logistics',
+  cartworkshop: 'logistics',
 };
 
 function categoryOf(type: string): Category {
