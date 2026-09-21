@@ -43,6 +43,17 @@
     "terrainAny": "Any buildable land",
     "needsFirst": "Needs first: {prerequisites}",
     "graphEyebrow": "Docs · Tech tree",
+    "imageSize": {
+      "label": "Image size:",
+      "normal": "Normal",
+      "large": "Large"
+    },
+    "artVariant": "Look:",
+    "sawmillVariants": {
+      "inland": "Inland",
+      "river": "River",
+      "bend": "River bend"
+    },
     "categories": {
       "anchor": "Anchor",
       "production": "Production",
