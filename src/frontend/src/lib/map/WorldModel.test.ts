@@ -395,6 +395,28 @@ describe('WorldModel.placeBuilding — fisher hut and sawmill', () => {
   );
 });
 
+describe('WorldModel.tick', () => {
+  // Regression: tick() used to add rate*dtHours to each resource with no
+  // upper bound, so a long-idle tab (or a big elapsed-time jump) could push
+  // the HUD's displayed stock above the settlement's storage cap — visible
+  // as a number like "3,760/3,750" that then snapped back down to the cap
+  // on the next server sync. tick() must clamp to storageCapForDisplay, the
+  // same cap the backend's ResourcePool.Adjust enforces.
+  it('never lets a resource exceed the settlement storage cap, even after a large elapsed time', () => {
+    const model = new WorldModel(20260825);
+    const { settlement } = foundLandedSettlement(model);
+    const cap = model.storageCapForDisplay(settlement.id);
+    settlement.resources.wood = cap.wood - 1;
+
+    model.tick(performance.now() + 1000 * 60 * 60 * 24); // simulate a day of elapsed time
+
+    expect(settlement.resources.wood).toBe(cap.wood);
+    expect(settlement.resources.stone).toBeLessThanOrEqual(cap.stone);
+    expect(settlement.resources.food).toBeLessThanOrEqual(cap.food);
+    expect(settlement.resources.iron).toBeLessThanOrEqual(cap.iron);
+  });
+});
+
 describe('WorldModel longhouse placement', () => {
   it('refuses to place a longhouse on an otherwise-buildable owned hex — founding is the only source of one', () => {
     const model = new WorldModel(20260825);

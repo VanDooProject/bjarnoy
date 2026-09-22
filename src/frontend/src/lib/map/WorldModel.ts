@@ -1295,10 +1295,11 @@ export class WorldModel {
     for (const settlement of this.settlements.values()) {
       const res = settlement.resources;
       const rate = settlement.rates;
-      res.wood += rate.wood * dtHours;
-      res.stone += rate.stone * dtHours;
-      res.food += rate.food * dtHours;
-      res.iron += rate.iron * dtHours;
+      const cap = this.storageCapForDisplay(settlement.id);
+      res.wood = Math.min(cap.wood, res.wood + rate.wood * dtHours);
+      res.stone = Math.min(cap.stone, res.stone + rate.stone * dtHours);
+      res.food = Math.min(cap.food, res.food + rate.food * dtHours);
+      res.iron = Math.min(cap.iron, res.iron + rate.iron * dtHours);
     }
   }
 }
