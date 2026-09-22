@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-22T10:05:25.293Z"
+    "generatedAt": "2026-09-22T10:23:06.107Z"
   },
   "data": [
     {
@@ -5201,7 +5201,7 @@
       },
       "buildSeconds": 240,
       "productionPerHour": {
-        "wood": 26,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5238,7 +5238,7 @@
       },
       "buildSeconds": 360,
       "productionPerHour": {
-        "wood": 52,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5270,7 +5270,7 @@
       },
       "buildSeconds": 540,
       "productionPerHour": {
-        "wood": 78,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5302,7 +5302,7 @@
       },
       "buildSeconds": 810,
       "productionPerHour": {
-        "wood": 104,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5334,7 +5334,7 @@
       },
       "buildSeconds": 1215,
       "productionPerHour": {
-        "wood": 130,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5366,7 +5366,7 @@
       },
       "buildSeconds": 1822.5,
       "productionPerHour": {
-        "wood": 156,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5398,7 +5398,7 @@
       },
       "buildSeconds": 2733.75,
       "productionPerHour": {
-        "wood": 182,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5430,7 +5430,7 @@
       },
       "buildSeconds": 4100.625,
       "productionPerHour": {
-        "wood": 208,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5462,7 +5462,7 @@
       },
       "buildSeconds": 6150.9375,
       "productionPerHour": {
-        "wood": 234,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -5494,7 +5494,7 @@
       },
       "buildSeconds": 9226.40625,
       "productionPerHour": {
-        "wood": 260,
+        "wood": 0,
         "stone": 0,
         "food": 0,
         "iron": 0
@@ -6831,7 +6831,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 32,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -6868,7 +6868,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 64,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -6900,7 +6900,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 96,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -6932,7 +6932,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 128,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -6964,7 +6964,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 160,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -6996,7 +6996,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 192,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -7028,7 +7028,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 224,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -7060,7 +7060,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 256,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -7092,7 +7092,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 288,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {
@@ -7124,7 +7124,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 320,
+        "food": 0,
         "iron": 0
       },
       "storageCapacity": {

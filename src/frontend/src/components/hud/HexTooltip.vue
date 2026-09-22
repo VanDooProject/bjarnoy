@@ -73,8 +73,6 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierTrainsLandTroops');
     case 'trainsShips':
       return t('hud.hoverTooltip.modifierTrainsShips');
-    case 'garrison':
-      return t('hud.hoverTooltip.modifierGarrison');
     case 'trainsCivilianCrews':
       return t('hud.hoverTooltip.modifierTrainsCivilianCrews');
     case 'terrainBoost':
@@ -95,6 +93,12 @@ function formatModifier(modifier: BuildingModifier): string {
       return t('hud.hoverTooltip.modifierShrineFavour', {
         percent: modifier.percent,
         domain: t(modifier.domain === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
+      });
+    case 'radiusBoost':
+      return t('hud.hoverTooltip.modifierRadiusBoost', {
+        percent: modifier.percent,
+        range: modifier.range,
+        resource: t(modifier.resource === 'wood' ? 'hud.hoverTooltip.domainWood' : 'hud.hoverTooltip.domainFood'),
       });
   }
 }

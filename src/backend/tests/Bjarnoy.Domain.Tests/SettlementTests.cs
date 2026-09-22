@@ -446,7 +446,6 @@ public class BuildingCatalogueTests
     [InlineData(BuildingType.Lumberjack, Terrain.Forest)]
     [InlineData(BuildingType.Quarry, Terrain.Mountain)]
     [InlineData(BuildingType.FishingHut, Terrain.Sea)]
-    [InlineData(BuildingType.Sawmill, Terrain.Forest)]
     public void BoostMultiplier_only_counts_each_buildings_own_matching_terrain(BuildingType type, Terrain matching)
     {
         var terrainAt = TerrainWithMatchingNeighbours(matching, 6);
@@ -473,6 +472,83 @@ public class BuildingCatalogueTests
 
         Assert.Equal(expectedWood, production.Wood, 6);
         Assert.Equal(expectedFood, production.Food, 6);
+    }
+
+    [Theory]
+    [InlineData(BuildingType.Sawmill)]
+    [InlineData(BuildingType.CropMill)]
+    public void A_radius_boost_producer_has_no_production_of_its_own(BuildingType type)
+    {
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            Assert.Equal(ResourceAmounts.Zero, BuildingCatalogue.Get(type, level).ProductionPerHour);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, 5.0)]
+    [InlineData(10, 100.0)]
+    public void RadiusBoostPercent_is_linear_from_5_percent_at_level_1_to_100_percent_at_level_10(int level, double expected)
+    {
+        Assert.Equal(expected, BuildingCatalogue.RadiusBoostPercent(level), 6);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 2)]
+    [InlineData(9, 5)]
+    [InlineData(10, 5)]
+    public void RadiusBoostRange_grows_by_one_ring_every_two_levels(int level, int expectedRange)
+    {
+        Assert.Equal(expectedRange, BuildingCatalogue.RadiusBoostRange(level));
+    }
+
+    [Fact]
+    public void A_sawmill_boosts_a_lumberjack_within_range_but_not_beyond_it()
+    {
+        // Level 1 Sawmill: range 1 (RadiusBoostRange), +5% (RadiusBoostPercent).
+        var sawmill = new PlacedBuilding(Origin, BuildingType.Sawmill, 1);
+        var inRange = new PlacedBuilding(Origin.Neighbours()[0], BuildingType.Lumberjack, 2);
+        var beyondRange = new PlacedBuilding(new HexCoord(10, 10), BuildingType.Lumberjack, 2);
+
+        var (production, _) = BuildingCatalogue.Totals([sawmill, inRange, beyondRange], terrainAt: null);
+
+        var baseWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 2).ProductionPerHour.Wood;
+        var expectedWood = baseWood * 1.05 + baseWood; // boosted + unboosted
+        Assert.Equal(expectedWood, production.Wood, 6);
+    }
+
+    [Fact]
+    public void A_cropmill_boosts_both_farm_and_pumpkinfarm_within_range()
+    {
+        var cropMill = new PlacedBuilding(Origin, BuildingType.CropMill, 1);
+        var farm = new PlacedBuilding(Origin.Neighbours()[0], BuildingType.Farm, 2);
+        var pumpkinFarm = new PlacedBuilding(Origin.Neighbours()[1], BuildingType.PumpkinFarm, 2);
+
+        var (production, _) = BuildingCatalogue.Totals([cropMill, farm, pumpkinFarm], terrainAt: null);
+
+        var expectedFood =
+            BuildingCatalogue.Get(BuildingType.Farm, 2).ProductionPerHour.Food * 1.05
+            + BuildingCatalogue.Get(BuildingType.PumpkinFarm, 2).ProductionPerHour.Food * 1.05;
+        Assert.Equal(expectedFood, production.Food, 6);
+    }
+
+    [Fact]
+    public void Multiple_radius_boosters_in_range_of_the_same_building_stack_additively()
+    {
+        // Both sawmills stand within one ring of the same lumberjack (though
+        // not necessarily of each other) — their level-1 5% boosts stack.
+        var lumberjackCoord = Origin.Neighbours()[0];
+        var sawmillA = new PlacedBuilding(Origin, BuildingType.Sawmill, 1);
+        var sawmillB = new PlacedBuilding(lumberjackCoord.Neighbours()[1], BuildingType.Sawmill, 1);
+        var lumberjack = new PlacedBuilding(lumberjackCoord, BuildingType.Lumberjack, 1);
+
+        var (production, _) = BuildingCatalogue.Totals([sawmillA, sawmillB, lumberjack], terrainAt: null);
+
+        var baseWood = BuildingCatalogue.Get(BuildingType.Lumberjack, 1).ProductionPerHour.Wood;
+        Assert.Equal(baseWood * 1.10, production.Wood, 6); // 5% + 5%, both sawmills in range
     }
 
     [Theory]
@@ -541,7 +617,6 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.CropMill)]
     [InlineData(BuildingType.ClayBrickworks)]
     public void A_new_producer_scales_linearly_with_level(BuildingType type)
     {

@@ -17,12 +17,12 @@ export type BuildingModifier =
   | { kind: 'borderAnchor' }
   | { kind: 'trainsLandTroops' }
   | { kind: 'trainsShips' }
-  | { kind: 'garrison' }
   | { kind: 'trainsCivilianCrews' }
   | { kind: 'terrainBoost'; terrain: 'forest' | 'mountain'; percent: number }
   | { kind: 'coastal'; percent?: number }
   | { kind: 'arcane' }
-  | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' };
+  | { kind: 'shrineFavour'; percent: number; domain: 'landAttack' | 'food' | 'wood' | 'shipAttack' }
+  | { kind: 'radiusBoost'; percent: number; range: number; resource: 'wood' | 'food' };
 
 /**
  * Structured (not pre-formatted) so callers in different render contexts —
@@ -41,7 +41,9 @@ export interface BuildingLevelStats {
  * the server-authoritative table in `BuildingCatalogue.cs`'s `Boosts`
  * dictionary (10% per matching direct neighbour, capped at 50% — see
  * `boostMultiplier` below). A building with no entry here (Farm/PumpkinFarm
- * included) gets no such bonus.
+ * included) gets no such bonus. Sawmill has no entry either — it has no
+ * production of its own to be terrain-boosted any more, see
+ * `RADIUS_BOOST_TARGET`/`radiusBoostPercent`/`radiusBoostRange` below.
  */
 export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain>> = {
   lumberjack: 'forest',
@@ -49,13 +51,37 @@ export const BOOST_TERRAIN: Partial<Record<BuildingKind, Terrain>> = {
   // The hut itself already stands on coastal water; more open sea around it
   // is what the backend rewards, not the land it backs onto.
   fishinghut: 'sea',
-  // Refines what a neighbouring Lumberjack cuts — see BuildingCatalogue.cs's Boosts table.
-  sawmill: 'forest',
 };
 
 /** Mirrors `BuildingCatalogue.BoostMultiplier`'s 10%-per-neighbour curve, capped at 50% (5 of 6 neighbours). */
 function boostMultiplier(matchingNeighbours: number): number {
   return 1 + Math.min(matchingNeighbours * 0.1, 0.5);
+}
+
+/**
+ * Which resource (and, implicitly, which building type — Lumberjack for
+ * Sawmill, Farm/PumpkinFarm for CropMill) a radius-boost producer raises the
+ * output of within its range, mirroring `BuildingCatalogue.cs`'s
+ * `RadiusBoostTargets`. Sawmill/CropMill have no production of their own any
+ * more — this replaces it.
+ */
+export const RADIUS_BOOST_RESOURCE: Partial<Record<BuildingKind, 'wood' | 'food'>> = {
+  sawmill: 'wood',
+  cropmill: 'food',
+};
+
+const MAX_LEVEL = 10;
+
+/** Mirrors `BuildingCatalogue.RadiusBoostPercent`: linear from 5% at level 1 to 100% at level 10. */
+export function radiusBoostPercent(level: number): number {
+  const clamped = Math.min(Math.max(level, 1), MAX_LEVEL);
+  return 5 + (clamped - 1) * (95 / (MAX_LEVEL - 1));
+}
+
+/** Mirrors `BuildingCatalogue.RadiusBoostRange`: 1 ring at levels 1-2, +1 ring every 2 levels after. */
+export function radiusBoostRange(level: number): number {
+  const clamped = Math.min(Math.max(level, 1), MAX_LEVEL);
+  return 1 + Math.floor((clamped - 1) / 2);
 }
 
 /** How many of `tile`'s six direct neighbours (never `tile` itself) are `terrain`. */
@@ -107,10 +133,12 @@ export function buildingStatsFor(
       return { modifier: { kind: 'trainsLandTroops' } };
     case 'dockyard':
       return { modifier: { kind: 'trainsShips' } };
-    // No production/storage of its own and no unit-training hook yet — see
-    // BuildingType.Barracks's doc comment on the backend.
+    // Trains the land army's core line (Thrall/Spearman/Axeman/Berserker) in
+    // place of the Longhouse — the same "trainsLandTroops" shape as Archery
+    // Range above, which trains the rest of the roster (see
+    // UnitCatalogue's doc comment on the backend for the exact split).
     case 'barracks':
-      return { modifier: { kind: 'garrison' } };
+      return { modifier: { kind: 'trainsLandTroops' } };
     // A third food-producer variant alongside Farm/PumpkinFarm — same
     // fixed-field shape, no terrain/adjacency boost (mirrors those two's
     // exclusion from BuildingCatalogue.cs's Boosts table).
@@ -121,17 +149,17 @@ export function buildingStatsFor(
         workers: { cap: workersCap },
       };
     }
-    case 'sawmill': {
-      const multiplier = boostMultiplier(matchingNeighbours);
-      const output = Math.round(level * 26 * multiplier);
+    // No production of its own — boosts every Lumberjack within its level's
+    // range instead (see radiusBoostPercent/radiusBoostRange above).
+    case 'sawmill':
       return {
-        output: { kind: 'resourceRate', resource: 'wood', amount: output },
-        modifier:
-          multiplier > 1
-            ? { kind: 'terrainBoost', terrain: 'forest', percent: Math.round((multiplier - 1) * 100) }
-            : undefined,
+        modifier: {
+          kind: 'radiusBoost',
+          percent: Math.round(radiusBoostPercent(level)),
+          range: radiusBoostRange(level),
+          resource: 'wood',
+        },
       };
-    }
     case 'longhouse':
       return { output: { kind: 'storageCapacity', amount: level * 100 } };
     // Mirrors BuildingCatalogue.cs's StorageHouse(level): ResourceAmounts.Uniform(1000) * level.
@@ -203,16 +231,29 @@ export function buildingStatsFor(
               : 'shipAttack';
       return { modifier: { kind: 'shrineFavour', percent: favour, domain } };
     }
-    // Plain Producer() buildings (BuildingCatalogue.cs) — same "no boost
-    // terrain" shape as Farm/PumpkinFarm above, just a different resource.
+    // No production or storage of its own yet — its mead is meant for a
+    // future morale-boost mechanic, same "no output" shape as townsquare/
+    // druidhut below (see BuildingCatalogue.cs's Meadery doc comment).
     case 'meadery':
-      return { output: { kind: 'resourceRate', resource: 'food', amount: level * 38 } };
+      return {};
+    // No production of its own — boosts every Farm/PumpkinFarm within range
+    // instead, same shape as Sawmill above.
     case 'cropmill':
-      return { output: { kind: 'resourceRate', resource: 'food', amount: level * 32 } };
+      return {
+        modifier: {
+          kind: 'radiusBoost',
+          percent: Math.round(radiusBoostPercent(level)),
+          range: radiusBoostRange(level),
+          resource: 'food',
+        },
+      };
     case 'claybrickworks':
       return { output: { kind: 'resourceRate', resource: 'stone', amount: level * 20 } };
+    // No production or storage of its own yet — retired Iron production for
+    // a future troop-upgrade mechanic, same "no output" shape as meadery
+    // above (see BuildingCatalogue.cs's Smithy doc comment).
     case 'smithy':
-      return { output: { kind: 'resourceRate', resource: 'iron', amount: level * 8 } };
+      return {};
     // Mirrors BuildingCatalogue.cs's CartWorkshop(level): a storage bonus
     // (ResourceAmounts.Uniform(250) * level) plus the civilian training
     // roster it took over from the longhouse (Provisioner/SettlerCrew).

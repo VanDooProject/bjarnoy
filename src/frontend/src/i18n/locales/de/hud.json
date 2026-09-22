@@ -43,7 +43,6 @@
     "modifierBorderAnchor": "Grenzanker",
     "modifierTrainsLandTroops": "Bildet Landtruppen aus",
     "modifierTrainsShips": "Baut Schiffe",
-    "modifierGarrison": "Garnison",
     "modifierTrainsCivilianCrews": "Bildet Furiere/Siedlertrupps aus",
     "modifierTerrainBoost": "{terrain} (+{percent}%)",
     "modifierCoastal": "Küste",
@@ -52,6 +51,7 @@
     "modifierShrineFavour": "+{percent}% {domain}-Produktion",
     "modifierShrineFavourLandAttack": "+{percent}% Angriff für Landeinheiten",
     "modifierShrineFavourShipAttack": "+{percent}% Schiffsangriff",
+    "modifierRadiusBoost": "+{percent}% {resource} für Gebäude im Umkreis von {range} Ringen",
     "domainFood": "Nahrung",
     "domainWood": "Holz"
   },

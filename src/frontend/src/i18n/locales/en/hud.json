@@ -43,7 +43,6 @@
     "modifierBorderAnchor": "Border anchor",
     "modifierTrainsLandTroops": "Trains land troops",
     "modifierTrainsShips": "Trains ships",
-    "modifierGarrison": "Garrison",
     "modifierTrainsCivilianCrews": "Trains provisioners/settler crews",
     "modifierTerrainBoost": "{terrain} (+{percent}%)",
     "modifierCoastal": "Coastal",
@@ -52,6 +51,7 @@
     "modifierShrineFavour": "+{percent}% {domain} production",
     "modifierShrineFavourLandAttack": "+{percent}% land unit attack",
     "modifierShrineFavourShipAttack": "+{percent}% ship attack",
+    "modifierRadiusBoost": "+{percent}% {resource} to buildings within {range} rings",
     "domainFood": "Food",
     "domainWood": "Wood"
   },

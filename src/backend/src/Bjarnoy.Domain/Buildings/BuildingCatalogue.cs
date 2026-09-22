@@ -150,8 +150,14 @@ public static class BuildingCatalogue
             // BuildingDefinition.RequiresRiverShape. A late-game capstone on
             // a maxed Lumberjack (see PrerequisiteTable), so its longhouse
             // gate overrides Producer's usual early-unlock curve.
+            //
+            // No Wood of its own — a radius-boost producer instead (see
+            // RadiusBoostTargets/RadiusBoostPercent/RadiusBoostRange): it
+            // raises every Lumberjack within its level's range by a
+            // percentage of that Lumberjack's own production, applied in
+            // Totals(IEnumerable{PlacedBuilding}, Func{HexCoord,Terrain}?).
             BuildingType.Sawmill =>
-                Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
+                Producer(type, level, Grass, ResourceAmounts.Zero)
                     with { RequiresRiverShape = SawmillRiverShapes, RequiredLonghouseLevel = 10 },
             // No production of its own yet — its mead is meant for a future
             // morale-boost mechanic (see BuildingType.Smithy's own note on
@@ -161,8 +167,13 @@ public static class BuildingCatalogue
             BuildingType.TownSquare => TownSquare(level),
             // Same capstone shape as Sawmill: behind a maxed Farm, so its
             // longhouse gate overrides Producer's usual early-unlock curve.
+            //
+            // No Food of its own, same reasoning as Sawmill above — boosts
+            // every Farm/PumpkinFarm within range instead (kept together as
+            // one boost target until they unify into one soil-selected
+            // building — see BuildingType.Farm's own roadmap note).
             BuildingType.CropMill =>
-                Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0))
+                Producer(type, level, Grass, ResourceAmounts.Zero)
                     with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
             // No production of its own yet — retired Iron production in
             // favour of a future troop-upgrade mechanic (costs/effects not
@@ -235,7 +246,9 @@ public static class BuildingCatalogue
     /// <summary>
     /// Total production and storage a completed set of placed buildings
     /// contributes, applying each terrain-bound producer's adjacency boost
-    /// (see <see cref="Boosts"/>) from <paramref name="terrainAt"/>.
+    /// (see <see cref="Boosts"/>) from <paramref name="terrainAt"/> and each
+    /// radius-boost producer's (Sawmill, Crop Mill — see
+    /// <see cref="RadiusBoostTargets"/>) reach over its own neighbourhood.
     /// </summary>
     /// <param name="terrainAt">
     /// Terrain of any hex on the map, land or sea, in or out of the
@@ -248,23 +261,34 @@ public static class BuildingCatalogue
     {
         ArgumentNullException.ThrowIfNull(buildings);
 
+        var placed = buildings.Where(b => b.Level >= 1).ToList();
+
+        // Radius-boost sources standing among these buildings, with their
+        // level's percent/range already resolved once rather than per
+        // boosted building below.
+        var radiusBoosters = placed
+            .Where(b => RadiusBoostTargets.ContainsKey(b.Type))
+            .Select(b => (b.Coord, b.Type, Percent: RadiusBoostPercent(b.Level), Range: RadiusBoostRange(b.Level)))
+            .ToList();
+
         var production = ResourceAmounts.Zero;
         var capacity = BaseStorageCapacity;
 
-        foreach (var building in buildings)
+        foreach (var building in placed)
         {
-            if (building.Level < 1)
-            {
-                continue;
-            }
-
             var definition = TryGet(building.Type, Math.Min(building.Level, MaxLevel));
             if (definition is null)
             {
                 continue;
             }
 
-            production += definition.ProductionPerHour * BoostMultiplier(building.Type, building.Coord, terrainAt);
+            var radiusBoostPercent = radiusBoosters
+                .Where(b => RadiusBoostTargets[b.Type].Contains(building.Type)
+                    && b.Coord.DistanceTo(building.Coord) <= b.Range)
+                .Sum(b => b.Percent);
+
+            var multiplier = BoostMultiplier(building.Type, building.Coord, terrainAt) * (1.0 + radiusBoostPercent / 100.0);
+            production += definition.ProductionPerHour * multiplier;
             capacity += definition.StorageCapacity;
         }
 
@@ -321,11 +345,47 @@ public static class BuildingCatalogue
             // around it (rather than the land it backs onto) is what makes a
             // fishing spot better.
             [BuildingType.FishingHut] = new(Sea, PerTilePercent: 0.10, CapPercent: 0.50),
-            // Refines what a neighbouring Lumberjack cuts — same boost shape,
-            // same terrain, as a second demand on the forest ring rather than
-            // a resource of its own.
-            [BuildingType.Sawmill] = new(Forest, PerTilePercent: 0.10, CapPercent: 0.50),
+            // Sawmill no longer has an entry here — it produces nothing of
+            // its own to boost with terrain any more, see RadiusBoostTargets
+            // below for its replacement mechanic (boosting Lumberjack
+            // instead of being boosted by Forest).
         };
+
+    /// <summary>
+    /// Which building type a radius-boost producer (Sawmill, Crop Mill)
+    /// raises the production of, within <see cref="RadiusBoostRange"/> rings
+    /// of itself — applied in
+    /// <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>.
+    /// Crop Mill boosts both Farm and PumpkinFarm together: they are the
+    /// same crop mechanically today (see <see cref="BuildingType.Farm"/>'s
+    /// own roadmap note on unifying them), so splitting the boost between
+    /// them would just be an arbitrary rule with no design behind it yet.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<BuildingType, IReadOnlySet<BuildingType>> RadiusBoostTargets =
+        new Dictionary<BuildingType, IReadOnlySet<BuildingType>>
+        {
+            [BuildingType.Sawmill] = new HashSet<BuildingType> { BuildingType.Lumberjack },
+            [BuildingType.CropMill] = new HashSet<BuildingType> { BuildingType.Farm, BuildingType.PumpkinFarm },
+        };
+
+    /// <summary>
+    /// Percent a radius-boost building (Sawmill, Crop Mill) at
+    /// <paramref name="level"/> adds to each boosted building's own
+    /// production within its range — linear from 5% at level 1 to 100% at
+    /// level 10 (a rough design figure from the original discussion, not
+    /// tuned balance).
+    /// </summary>
+    public static double RadiusBoostPercent(int level) =>
+        5.0 + (Math.Clamp(level, 1, MaxLevel) - 1) * (95.0 / (MaxLevel - 1));
+
+    /// <summary>
+    /// How many rings out a radius-boost building's boost reaches at
+    /// <paramref name="level"/>: 1 ring at levels 1-2, growing by one ring
+    /// every 2 levels after — a flat step per design ("no curve over
+    /// range"), not a smoothly growing radius.
+    /// </summary>
+    public static int RadiusBoostRange(int level) =>
+        1 + (Math.Clamp(level, 1, MaxLevel) - 1) / 2;
 
     /// <summary>
     /// The production multiplier <paramref name="type"/> earns at
