@@ -115,6 +115,7 @@ const buildingsByTile = computed(() => {
       <HudNav />
     </TopBar>
     <main class="body">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.tiles.title') }}</h1>
       <p class="intro">{{ $t('docs.tiles.intro') }}</p>
 
@@ -207,6 +208,17 @@ const buildingsByTile = computed(() => {
   margin: 0 auto;
   padding: 24px 28px 60px;
   color: var(--text);
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 .intro {
   color: var(--muted);

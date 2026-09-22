@@ -222,6 +222,7 @@ function formatAmount(value: number): string {
       <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
     </div>
     <main class="body">
+      <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.techTree.title') }}</h1>
       <p class="intro">
         {{ $t('docs.techTree.intro') }}
@@ -399,6 +400,17 @@ function formatAmount(value: number): string {
   max-width: 90ch;
   padding: 24px 0 60px;
   color: var(--text);
+}
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumb:hover {
+  color: var(--gold);
+  text-decoration: underline;
 }
 .intro {
   color: var(--muted);
