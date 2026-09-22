@@ -8,7 +8,13 @@ import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCo
 import { riverBuildingAllowedHere } from './ringCatalogue';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
-import { DEFAULT_GENERATION, generateTile, terrainAt, type WorldGenerationConstants } from './worldGenerator';
+import {
+  DEFAULT_GENERATION,
+  generateTile,
+  springMountainShapeAt,
+  terrainAt,
+  type WorldGenerationConstants,
+} from './worldGenerator';
 import {
   emptyResources,
   TILE_ORIENTATIONS,
@@ -452,6 +458,21 @@ export class WorldModel {
       if (this.getTile(dirs[i].q, dirs[i].r).terrain === 'sea') return TILE_ORIENTATIONS[i];
     }
     return null;
+  }
+
+  /**
+   * Which of the two spring-capable mountain shapes a river `Spring` tile at
+   * `coord` should render as — mirrors the backend's
+   * `TerrainSampler.SpringMountainShapeAt` exactly (same seed offset, same
+   * threshold; see `worldGenerator.ts`'s own `springMountainShapeAt`), so a
+   * live-mode spring and the demo world's own client-side generation pick
+   * the same shape for the same coordinate/seed. Pure and independent of
+   * whether `coord` actually is a spring — the caller (river rendering)
+   * already knows that from its own `RiverTile` lookup.
+   */
+  springShapeAt(coord: AxialCoord): 'corrie' | 'saddleback' {
+    const shape = springMountainShapeAt(coord.q, coord.r, { seed: this.seed, generation: this.generation });
+    return shape === 2 ? 'saddleback' : 'corrie';
   }
 
   /**

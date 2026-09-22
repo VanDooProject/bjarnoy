@@ -108,8 +108,8 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
 const COASTAL_FAMILY = 'coastalwatertile';
 
-/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
-type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
+/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. Spring is split into its two spring-capable mountain landforms (`springcorrie`/`springsaddleback`) rather than one fixed shape — see `riverArtFor`'s own comment. */
+type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'springcorrie' | 'springsaddleback' | 'confluence';
 
 // Exported (only) so textures.test.ts can guard the family name a shape
 // resolves to, the same reason riverArtFor below is exported.
@@ -121,10 +121,12 @@ export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   // placement), so its art is a spring bursting from a mountain landform —
   // the flat, undecorated `rivertile_spring` this used to point at was a
   // placeholder from before the pack had that art (see buildingArt.ts's
-  // matching docs-page fix). `mountaintile_corrie_spring` has its own
-  // base/top split (a rock prop standing above the plate), unlike the old
-  // family's base-only composite.
-  spring: 'mountaintile_corrie_spring',
+  // matching docs-page fix). Only two of the pack's four mountain shapes
+  // shipped a `_spring` cut (`MountainShape.IsSpringCapable`) — both have
+  // their own base/top split (a rock prop standing above the plate),
+  // unlike the old family's base-only composite.
+  springcorrie: 'mountaintile_corrie_spring',
+  springsaddleback: 'mountaintile_saddleback_spring',
   confluence: 'rivertile_y_narrow',
 };
 
@@ -546,7 +548,12 @@ export function topAnimFor(
  * 120°-off-straight turn, a separate art family from `bend` — is directional
  * the same way, reusing `bendOrientationOf` (it takes an in/out direction
  * pair, not an angle, so the same anchor logic applies); `spring` has only
- * an outflow (`springOrientationOf`); `straight` orients by whichever of
+ * an outflow (`springOrientationOf`) — which of its two art families
+ * (`springcorrie`/`springsaddleback`) to use is the caller's own per-tile
+ * lookup (`springShape`, mirroring the backend's
+ * `TerrainSampler.SpringMountainShapeAt` — see `WorldModel.springShapeAt`),
+ * since which mountain shape a spring's coordinate hashes to has nothing to
+ * do with the river tile itself; `straight` orients by whichever of
  * `inDirections[0]`/`outDirection` is available, since `straightOrientationOf`
  * gives the same file either way (`docs/design/river-generation.md` again).
  *
@@ -577,7 +584,8 @@ export function topAnimFor(
 export function riverArtFor(
   river: RiverTile,
   seaDirection: TileOrientation | null,
-): { shape: 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence'; orientation: TileOrientation } {
+  springShape: 'corrie' | 'saddleback' = 'corrie',
+): { shape: RiverArtShape; orientation: TileOrientation } {
   if (river.shape === 'bend' && river.outDirection && river.inDirections[0]) {
     return { shape: 'bend', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
@@ -585,7 +593,8 @@ export function riverArtFor(
     return { shape: 'bend60', orientation: bendOrientationOf(river.inDirections[0], river.outDirection) };
   }
   if (river.shape === 'spring' && river.outDirection) {
-    return { shape: 'spring', orientation: springOrientationOf(river.outDirection) };
+    const shape = springShape === 'saddleback' ? 'springsaddleback' : 'springcorrie';
+    return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
     const orientation =
@@ -608,12 +617,15 @@ export function riverArtFor(
  * terrain would have drawn. `seaDirection` (only meaningful for a `Mouth`
  * tile — see `riverArtFor`) is the caller's own terrain lookup
  * (`WorldModel.seaFacingDirectionOf`), since a `RiverTile` carries none.
+ * `springShape` (only meaningful for a `Spring` tile) is likewise the
+ * caller's own lookup (`WorldModel.springShapeAt`) — see `riverArtFor`.
  */
 export function riverTexturesFor(
   textures: TileTextures,
   river: RiverTile,
   seaDirection: TileOrientation | null = null,
+  springShape: 'corrie' | 'saddleback' = 'corrie',
 ): { base: Texture; top: Texture } {
-  const { shape, orientation } = riverArtFor(river, seaDirection);
+  const { shape, orientation } = riverArtFor(river, seaDirection, springShape);
   return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
 }

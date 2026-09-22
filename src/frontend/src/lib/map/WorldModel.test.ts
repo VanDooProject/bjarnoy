@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { hexDistance, hexesInRadius, neighbors, type AxialCoord } from '../hex/coords';
 import { floodFillLandmass, PREVIEW_ISLAND_FLOOD_MAX_RADIUS, PREVIEW_ISLAND_RADIUS, WorldModel } from './WorldModel';
+import { springMountainShapeAt } from './worldGenerator';
 import type { RiverTile } from './types';
 
 function foundLandedSettlement(model: WorldModel) {
@@ -473,6 +474,35 @@ describe('WorldModel.seaFacingDirectionOf', () => {
     // land.
     const model = new WorldModel(783131215);
     expect(model.seaFacingDirectionOf({ q: -70, r: -36 })).toBeNull();
+  });
+});
+
+describe('WorldModel.springShapeAt', () => {
+  it('matches the standalone springMountainShapeAt for the same coordinate/seed', () => {
+    // Regression coverage for a bug where the live map hardcoded every
+    // Spring river tile to the 'corrie' shape — WorldModel now delegates to
+    // the exact same seed-hash mirror of the backend's
+    // TerrainSampler.SpringMountainShapeAt that generateTile/variantAt
+    // already use elsewhere, rather than picking one shape for everything.
+    const model = new WorldModel(783131215);
+    for (const at of [
+      { q: 0, r: 0 },
+      { q: -70, r: -31 },
+      { q: 12, r: -5 },
+      { q: -3, r: 8 },
+    ]) {
+      const expected = springMountainShapeAt(at.q, at.r, { seed: model.seed, generation: model.generation });
+      expect(model.springShapeAt(at)).toBe(expected === 2 ? 'saddleback' : 'corrie');
+    }
+  });
+
+  it('actually uses both spring-capable shapes across coordinates, not just one', () => {
+    const model = new WorldModel(783131215);
+    const shapes = new Set<string>();
+    for (let q = 0; q < 40; q++) {
+      shapes.add(model.springShapeAt({ q, r: 0 }));
+    }
+    expect(shapes).toEqual(new Set(['corrie', 'saddleback']));
   });
 });
 

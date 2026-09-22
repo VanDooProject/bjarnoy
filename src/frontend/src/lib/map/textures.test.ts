@@ -92,15 +92,28 @@ describe('riverArtFor', () => {
     expect(result.orientation).toBe('SW');
   });
 
-  it("points Spring at a mountain-spring family, not the old flat rivertile_spring placeholder", () => {
+  it('points Spring at a mountain-spring family, not the old flat rivertile_spring placeholder', () => {
     // Regression coverage for a bug where the live map rendered every
     // Spring river tile with a flat, undecorated pond-on-grass composite —
     // a placeholder from before the pack had proper mountain-spring art
     // (a spring bursting from a corrie/saddleback rock formation, matching
     // the lore: a spring rises on a mountain cluster). See buildingArt.ts's
     // matching docs-page fix for the same family swap.
-    expect(RIVER_FAMILY.spring).toBe('mountaintile_corrie_spring');
-    expect(RIVER_FAMILY.spring).not.toBe('rivertile_spring');
+    expect(RIVER_FAMILY.springcorrie).toBe('mountaintile_corrie_spring');
+    expect(RIVER_FAMILY.springsaddleback).toBe('mountaintile_saddleback_spring');
+    expect(Object.values(RIVER_FAMILY)).not.toContain('rivertile_spring');
+  });
+
+  it('resolves a Spring tile to whichever of the two spring-capable mountain shapes the caller asks for', () => {
+    // Both art families actually get used, keyed on the caller's own
+    // per-coordinate lookup (WorldModel.springShapeAt) — not one hardcoded
+    // shape for every spring on the map.
+    const tile = riverTile('spring', null, 'SW');
+
+    expect(riverArtFor(tile, null, 'corrie').shape).toBe('springcorrie');
+    expect(riverArtFor(tile, null, 'saddleback').shape).toBe('springsaddleback');
+    // Defaults to corrie when the caller doesn't pass one.
+    expect(riverArtFor(tile, null).shape).toBe('springcorrie');
   });
 });
 
