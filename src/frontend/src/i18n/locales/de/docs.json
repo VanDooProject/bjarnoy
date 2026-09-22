@@ -94,7 +94,7 @@
       "cropmill": "Mahlt das Getreide eines ausgebauten Bauernhofs auf einer geraden Flusskachel — ein Mühlstein unter freiem Himmel, dessen Wasserrad sich mit der Strömung dreht. Keine eigene Nahrung: stattdessen steigert sie jeden Bauernhof und jede Kürbisfarm im Umkreis ihrer Stufe (mit steigender Stufe wachsen Reichweite und Bonus).",
       "smithy": "Eine Esse auf Gras oder Sand hinter einer ausgebauten Kaserne und einem Schießplatz — die Schmiede der Siedlung, die den ausrangierten Magischen Turm als zweiten Gipfelpunkt der Militärlinie ersetzt. Noch ohne eigene Wirkung: für eine künftige Truppen-Aufwertungsmechanik gedacht.",
       "druidhut": "Ein Rundhaus mit Grasdach auf Gras hinter einem Dorfplatz, umgeben von einem Ring aus Runensteinen — noch ohne eigene Wirkung, aber für eine künftige Gunst- oder Runenmechanik gedacht.",
-      "cartworkshop": "Baut die Karren der Siedlung auf Gras hinter einem Dorfplatz — bildet Furiere und Siedlertrupps anstelle des Langhauses aus und bietet etwas mehr Platz im eigenen Hof.",
+      "cartworkshop": "Baut die Karren der Siedlung auf Gras hinter einem Dorfplatz — bildet Furiere und Siedlertrupps anstelle des Langhauses aus. Keine eigene Lagerkapazität.",
       "claybrickworks": "Gräbt und brennt Ton auf Gras — eine Grube, ein Trockengestell und ein Brennofen verwandeln rote Erde in Stein, wo kein Berg steht."
     },
     "table": {

@@ -657,13 +657,14 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void CartWorkshop_grants_a_uniform_storage_bonus()
+    public void CartWorkshop_is_purely_a_training_gate_with_no_storage_of_its_own()
     {
-        var one = BuildingCatalogue.Get(BuildingType.CartWorkshop, 1).StorageCapacity;
-        var two = BuildingCatalogue.Get(BuildingType.CartWorkshop, 2).StorageCapacity;
-
-        Assert.True(one.Wood > 0 && one.Wood == one.Stone && one.Wood == one.Food && one.Wood == one.Iron);
-        Assert.Equal(one.Wood * 2, two.Wood, 6);
+        for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
+        {
+            var definition = BuildingCatalogue.Get(BuildingType.CartWorkshop, level);
+            Assert.Equal(ResourceAmounts.Zero, definition.StorageCapacity);
+            Assert.Equal(ResourceAmounts.Zero, definition.ProductionPerHour);
+        }
     }
 }
 

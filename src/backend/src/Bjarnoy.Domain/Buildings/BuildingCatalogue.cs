@@ -657,9 +657,9 @@ public static class BuildingCatalogue
     /// Trains the civilian Provisioner/SettlerCrew half of the roster in
     /// place of the Longhouse (see
     /// <see cref="Units.UnitDefinition.RequiredBuildingType"/>) — the basic
-    /// melee/archer/ship split's shape, applied to the civilian line — plus
-    /// a modest storage bonus (the yard's own carts and barrels), so it is
-    /// not purely a training gate. Behind a standing
+    /// melee/archer/ship split's shape, applied to the civilian line.
+    /// Purely a training gate, no storage of its own — a settlement's yard
+    /// isn't where resources are kept. Behind a standing
     /// <see cref="BuildingType.TownSquare"/> (see <see cref="PrerequisiteTable"/>).
     /// </summary>
     private static BuildingDefinition CartWorkshop(int level) => new()
@@ -668,7 +668,6 @@ public static class BuildingCatalogue
         Level = level,
         Cost = new ResourceAmounts(Wood: 150, Stone: 110, Food: 0, Iron: 10) * CostFactor(level),
         BuildDuration = Duration(7, level),
-        StorageCapacity = ResourceAmounts.Uniform(250) * level,
         AllowedTerrain = Grass,
         RequiredLonghouseLevel = 3 + ((level - 1) / 2),
     };

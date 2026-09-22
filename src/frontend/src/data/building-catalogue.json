@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-22T10:23:06.107Z"
+    "generatedAt": "2026-09-22T11:30:02.567Z"
   },
   "data": [
     {
@@ -7824,10 +7824,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 250,
-        "stone": 250,
-        "food": 250,
-        "iron": 250
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -7861,10 +7861,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 500,
-        "stone": 500,
-        "food": 500,
-        "iron": 500
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -7893,10 +7893,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 750,
-        "stone": 750,
-        "food": 750,
-        "iron": 750
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -7925,10 +7925,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 1000,
-        "stone": 1000,
-        "food": 1000,
-        "iron": 1000
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -7957,10 +7957,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 1250,
-        "stone": 1250,
-        "food": 1250,
-        "iron": 1250
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -7989,10 +7989,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 1500,
-        "stone": 1500,
-        "food": 1500,
-        "iron": 1500
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -8021,10 +8021,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 1750,
-        "stone": 1750,
-        "food": 1750,
-        "iron": 1750
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -8053,10 +8053,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 2000,
-        "stone": 2000,
-        "food": 2000,
-        "iron": 2000
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -8085,10 +8085,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 2250,
-        "stone": 2250,
-        "food": 2250,
-        "iron": 2250
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"
@@ -8117,10 +8117,10 @@
         "iron": 0
       },
       "storageCapacity": {
-        "wood": 2500,
-        "stone": 2500,
-        "food": 2500,
-        "iron": 2500
+        "wood": 0,
+        "stone": 0,
+        "food": 0,
+        "iron": 0
       },
       "allowedTerrain": [
         "grass"

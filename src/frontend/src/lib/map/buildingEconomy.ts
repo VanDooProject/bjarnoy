@@ -254,14 +254,11 @@ export function buildingStatsFor(
     // above (see BuildingCatalogue.cs's Smithy doc comment).
     case 'smithy':
       return {};
-    // Mirrors BuildingCatalogue.cs's CartWorkshop(level): a storage bonus
-    // (ResourceAmounts.Uniform(250) * level) plus the civilian training
-    // roster it took over from the longhouse (Provisioner/SettlerCrew).
+    // Mirrors BuildingCatalogue.cs's CartWorkshop(level): purely a training
+    // gate for the civilian roster it took over from the longhouse
+    // (Provisioner/SettlerCrew) — no storage or production of its own.
     case 'cartworkshop':
-      return {
-        output: { kind: 'storageCapacity', amount: level * 250 },
-        modifier: { kind: 'trainsCivilianCrews' },
-      };
+      return { modifier: { kind: 'trainsCivilianCrews' } };
     // No production or storage of its own yet — see BuildingType.TownSquare/
     // DruidHut's own doc comments on the backend (a future civic/rune
     // mechanic), same "no output" shape as the default case below.
