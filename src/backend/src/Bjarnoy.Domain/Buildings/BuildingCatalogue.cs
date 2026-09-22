@@ -146,19 +146,26 @@ public static class BuildingCatalogue
             BuildingType.Sawmill =>
                 Producer(type, level, Grass, new ResourceAmounts(Wood: 26, 0, 0, 0))
                     with { RequiresRiverShape = SawmillRiverShapes, RequiredLonghouseLevel = 10 },
-            BuildingType.Meadery => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 38, 0)),
+            // No production of its own yet — its mead is meant for a future
+            // morale-boost mechanic (see BuildingType.Smithy's own note on
+            // its retired Iron production), buildable now so it has a place
+            // in the tech tree ahead of that mechanic landing.
+            BuildingType.Meadery => Producer(type, level, Grass, ResourceAmounts.Zero),
             BuildingType.TownSquare => TownSquare(level),
             // Same capstone shape as Sawmill: behind a maxed Farm, so its
             // longhouse gate overrides Producer's usual early-unlock curve.
             BuildingType.CropMill =>
                 Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 32, 0))
                     with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
-            // A military-line capstone alongside Shrine of Thor, behind the
-            // same maxed Barracks/ArcheryRange pair (see PrerequisiteTable),
-            // so its longhouse gate overrides Producer's usual early-unlock
-            // curve the same way Sawmill's/Crop Mill's do.
+            // No production of its own yet — retired Iron production in
+            // favour of a future troop-upgrade mechanic (costs/effects not
+            // yet designed); still a military-line capstone alongside
+            // Shrine of Thor, behind the same maxed Barracks/ArcheryRange
+            // pair (see PrerequisiteTable), so its longhouse gate overrides
+            // Producer's usual early-unlock curve the same way
+            // Sawmill's/Crop Mill's do.
             BuildingType.Smithy =>
-                Producer(type, level, SandOrGrass, new ResourceAmounts(0, 0, 0, Iron: 8))
+                Producer(type, level, SandOrGrass, ResourceAmounts.Zero)
                     with { RequiredLonghouseLevel = 10 },
             BuildingType.DruidHut => DruidHut(level),
             BuildingType.CartWorkshop => CartWorkshop(level),

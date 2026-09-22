@@ -540,9 +540,7 @@ public class BuildingCatalogueTests
     }
 
     [Theory]
-    [InlineData(BuildingType.Meadery)]
     [InlineData(BuildingType.CropMill)]
-    [InlineData(BuildingType.Smithy)]
     [InlineData(BuildingType.ClayBrickworks)]
     public void A_new_producer_scales_linearly_with_level(BuildingType type)
     {
@@ -559,11 +557,14 @@ public class BuildingCatalogueTests
     [Theory]
     [InlineData(BuildingType.TownSquare)]
     [InlineData(BuildingType.DruidHut)]
+    [InlineData(BuildingType.Meadery)]
+    [InlineData(BuildingType.Smithy)]
     public void TownSquare_and_DruidHut_produce_and_store_nothing_yet(BuildingType type)
     {
-        // Both are civic/favour buildings whose real mechanic (a settler-cap
-        // boost, a rune/favour slot) doesn't exist yet — they're buildable
-        // now purely as a placeholder ahead of that mechanic landing.
+        // All four are placeholder buildings whose real mechanic (a
+        // settler-cap boost, a rune/favour slot, a future morale boost, a
+        // future troop-upgrade mechanic) doesn't exist yet — they're
+        // buildable now purely ahead of that mechanic landing.
         for (var level = 1; level <= BuildingCatalogue.MaxLevel; level++)
         {
             var definition = BuildingCatalogue.Get(type, level);
