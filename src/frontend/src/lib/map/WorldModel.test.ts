@@ -546,6 +546,7 @@ describe('WorldModel.soilForSettlement / soilAtIslandCentre', () => {
       level: 1,
       resources: { wood: 0, stone: 0, food: 0, iron: 0 },
       rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
       islandId: 'isl-1',
     });
 
@@ -570,6 +571,7 @@ describe('WorldModel.soilForSettlement / soilAtIslandCentre', () => {
       level: 1,
       resources: { wood: 0, stone: 0, food: 0, iron: 0 },
       rates: { wood: 0, stone: 0, food: 0, iron: 0 },
+      foundedAt: 0,
       islandId: 'does-not-exist',
     });
 
