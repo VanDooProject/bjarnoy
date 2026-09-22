@@ -34,6 +34,7 @@ import { loadAtlasCategory, type AtlasClip, type LoadedAtlas } from './atlas';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
+  confluenceOrientationOf,
   mouthOrientationOf,
   springOrientationOf,
   straightOrientationOf,
@@ -555,12 +556,19 @@ export function topAnimFor(
  * carries none), not the inflow's geometric opposite `straight` alone
  * would assume.
  *
- * `confluence` (`y_narrow`) is asymmetric — two fixed arms plus a third at
- * a fixed offset, not a simple rotated pair — and hasn't been pixel-verified
- * the way the other three families have, so it keeps the untransformed
- * `outDirection ?? inDirections[0]` this whole function used before this
- * fix, rather than risk applying a derived formula that wasn't measured
- * against it. Known-unfixed; see "Art pack orientation convention".
+ * `confluence` (`y_narrow`) is asymmetric — a fixed opposite pair (the
+ * trunk) plus a third edge adjacent to one end (the branch), not a simple
+ * rotated pair — pixel-verified the same way the other three families were
+ * (see `confluenceOrientationOf`'s own doc comment and
+ * `docs/design/river-generation.md`'s "Art pack orientation convention").
+ * Unlike an ordinary bend, nothing on the generation side constrains a
+ * confluence's (in1, in2, out) angles to one fixed relative arrangement —
+ * two independently traced paths collide wherever they happen to — so most
+ * real confluences don't match this asset's one representable rotation
+ * class; `confluenceOrientationOf` returns `null` for those; and this falls
+ * back to the untransformed `outDirection ?? inDirections[0]` this whole
+ * function used before the fix, same as before for the genuinely
+ * unrepresentable case.
  */
 // Exported (only) so textures.test.ts can check the shape/orientation this
 // picks without going through loadTileTextures' real asset pipeline
@@ -580,7 +588,12 @@ export function riverArtFor(
     return { shape: 'spring', orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
-    return { shape: 'confluence', orientation: river.outDirection ?? river.inDirections[0] ?? 'SE' };
+    const orientation =
+      confluenceOrientationOf(river.inDirections, river.outDirection) ??
+      river.outDirection ??
+      river.inDirections[0] ??
+      'SE';
+    return { shape: 'confluence', orientation };
   }
   if (river.shape === 'mouth' && river.inDirections[0]) {
     return mouthOrientationOf(river.inDirections[0], seaDirection);

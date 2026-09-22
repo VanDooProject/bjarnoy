@@ -105,6 +105,72 @@ export function mouthOrientationOf(
   return { shape: 'straight', orientation: straightOrientationOf(inDirection) };
 }
 
+/**
+ * The `y_narrow` confluence asset's rotation convention, pixel-sampled the
+ * same way `docs/design/river-generation.md`'s "Art pack orientation
+ * convention" derived Bend/Spring/Straight — `is_blue` sampling along each
+ * of a rendered file's six polygon edges (inset toward centre) against
+ * every orientation, not eyeballed. File `D` touches edges `1+D`, `4+D`,
+ * `5+D` (mod 6) — a fixed *opposite* pair (`1+D`/`4+D`, the trunk: a
+ * straight line clear across the hex) plus a third edge (`5+D`) adjacent to
+ * the second of that pair, where the art shows a branch joining the trunk
+ * right before it exits. Converting through `edge(d) = (3-d) mod 6` (see
+ * that doc section) gives the three directions file `D` actually renders:
+ * `out = (5-D) mod 6` (the far end of the trunk, where the merged flow
+ * exits), `trunkIn = (2-D) mod 6` (the trunk's near end — one tributary,
+ * unbranched all the way across), `branchIn = (4-D) mod 6` (the branch —
+ * the other tributary, joining in right at the exit).
+ *
+ * Unlike Bend/Spring, this pattern only covers *one* fixed relative
+ * arrangement of (in1, in2, out) — confluences come from two independently
+ * traced paths colliding (`RiverGenerator.ResolveCollisions`), so nothing
+ * on the generation side constrains their angles the way an ordinary bend's
+ * fixed 2-apart turn does. Most real confluences won't match this asset's
+ * one rotation-class at all; this returns `null` for those (a real,
+ * currently-unrepresentable case — fixing it for every possible triple
+ * would mean the collision resolution itself choosing tiles that fit a
+ * representable angle, not just picking a rotation after the fact), and
+ * the caller falls back to its own best-effort the way `mouthOrientationOf`
+ * does for its one unrepresentable angle.
+ *
+ * A confluence always has exactly two inflows (`RiverGenerator`'s own
+ * `ins.Count >= 2` classification), but `outDirection` can be absent — a
+ * confluence that also sits at the coast, with nothing downstream to point
+ * at. Without a real `out` to anchor the trunk's far end, this instead
+ * looks for any rotation whose three touched directions cover both real
+ * inflows (in either trunk/branch role), so the picture is at least
+ * hydrologically coherent even though which slot is nominally "out" is
+ * arbitrary in that case.
+ */
+export function confluenceOrientationOf(
+  inDirections: readonly TileOrientation[],
+  outDirection: TileOrientation | null,
+): TileOrientation | null {
+  const ins = inDirections.map((d) => TILE_ORIENTATIONS.indexOf(d));
+
+  if (outDirection) {
+    const outIndex = TILE_ORIENTATIONS.indexOf(outDirection);
+    const d = (5 - outIndex + 6) % 6;
+    const trunkIn = (2 - d + 6) % 6;
+    const branchIn = (4 - d + 6) % 6;
+    if (ins.length === 2 && ins.includes(trunkIn) && ins.includes(branchIn)) {
+      return TILE_ORIENTATIONS[d]!;
+    }
+    return null;
+  }
+
+  for (let d = 0; d < 6; d++) {
+    const out = (5 - d + 6) % 6;
+    const trunkIn = (2 - d + 6) % 6;
+    const branchIn = (4 - d + 6) % 6;
+    const touched = new Set([out, trunkIn, branchIn]);
+    if (ins.every((i) => touched.has(i))) {
+      return TILE_ORIENTATIONS[d]!;
+    }
+  }
+  return null;
+}
+
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;

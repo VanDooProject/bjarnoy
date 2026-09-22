@@ -74,6 +74,24 @@ describe('riverArtFor', () => {
     expect(result.orientation).toBe(bendOrientationOf('NW', 'SW'));
   });
 
+  it('resolves a representable Confluence tile through confluenceOrientationOf, not the untransformed fallback', () => {
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluence');
+    expect(result.orientation).toBe('E');
+    // The untransformed fallback this used to always return.
+    expect(result.orientation).not.toBe('SE');
+  });
+
+  it('falls back to the untransformed outDirection for a Confluence angle the asset cannot represent', () => {
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['E', 'NE'], outDirection: 'SW' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluence');
+    expect(result.orientation).toBe('SW');
+  });
+
   it("points Spring at a mountain-spring family, not the old flat rivertile_spring placeholder", () => {
     // Regression coverage for a bug where the live map rendered every
     // Spring river tile with a flat, undecorated pond-on-grass composite —
