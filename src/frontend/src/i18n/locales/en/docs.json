@@ -122,6 +122,15 @@
     "none": "none",
     "riverVariants": "Shape:",
     "riverSawmillNote": "The Sawmill is the one building that goes directly on a river tile — only a Straight or Bend one.",
+    "riverLookLabel": "Look:",
+    "riverLooks": {
+      "plain": "Plain",
+      "island": "Island",
+      "meander": "Meander",
+      "loop": "Loop",
+      "narrow": "Narrow",
+      "wide": "Wide"
+    },
     "mountainVariants": "Landform:",
     "mountainLandforms": {
       "plain": "Plain",
