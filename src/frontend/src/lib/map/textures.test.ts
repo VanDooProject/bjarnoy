@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFamilyClips, classifyFamilyFrames, riverArtFor, type FamilyFrame } from './textures';
+import { classifyFamilyClips, classifyFamilyFrames, riverArtFor, RIVER_FAMILY, type FamilyFrame } from './textures';
 import { bendOrientationOf } from './types';
 import type { RiverTile } from './types';
 import type { AtlasClip } from './atlas';
@@ -72,6 +72,17 @@ describe('riverArtFor', () => {
 
     expect(result.shape).toBe('bend');
     expect(result.orientation).toBe(bendOrientationOf('NW', 'SW'));
+  });
+
+  it("points Spring at a mountain-spring family, not the old flat rivertile_spring placeholder", () => {
+    // Regression coverage for a bug where the live map rendered every
+    // Spring river tile with a flat, undecorated pond-on-grass composite —
+    // a placeholder from before the pack had proper mountain-spring art
+    // (a spring bursting from a corrie/saddleback rock formation, matching
+    // the lore: a spring rises on a mountain cluster). See buildingArt.ts's
+    // matching docs-page fix for the same family swap.
+    expect(RIVER_FAMILY.spring).toBe('mountaintile_corrie_spring');
+    expect(RIVER_FAMILY.spring).not.toBe('rivertile_spring');
   });
 });
 

@@ -110,11 +110,20 @@ const COASTAL_FAMILY = 'coastalwatertile';
 /** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
 type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
 
-const RIVER_FAMILY: Record<RiverArtShape, string> = {
+// Exported (only) so textures.test.ts can guard the family name a shape
+// resolves to, the same reason riverArtFor below is exported.
+export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   straight: 'rivertile',
   bend: 'rivertile_bend',
   bend60: 'rivertile_bend60',
-  spring: 'rivertile_spring',
+  // A spring rises out of a mountain cluster (see RiverGenerator's spring
+  // placement), so its art is a spring bursting from a mountain landform —
+  // the flat, undecorated `rivertile_spring` this used to point at was a
+  // placeholder from before the pack had that art (see buildingArt.ts's
+  // matching docs-page fix). `mountaintile_corrie_spring` has its own
+  // base/top split (a rock prop standing above the plate), unlike the old
+  // family's base-only composite.
+  spring: 'mountaintile_corrie_spring',
   confluence: 'rivertile_y_narrow',
 };
 

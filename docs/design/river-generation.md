@@ -190,10 +190,14 @@ This intentionally does **not** restrict which mountain a river's spring lands o
 is unchanged): a spring always renders with a spring-capable shape, even where `MountainShapeAt` would have
 picked Cone or Table for that coordinate.
 
-As of this note, only the generation-side hooks above exist; the atlas doesn't yet vendor the new
-`mountaintile_saddleback`/`_corrie`(`_spring`)/`_table` families, and `textures.ts`'s `KEY_FAMILY`/river
-rendering hasn't been wired to consume `MountainShapeAt`/`SpringMountainShapeAt` yet. That's the remaining
-follow-up once the atlas is repacked with the new shapes.
+Update: the atlas now vendors all four `mountaintile_{cone,table,saddleback,corrie}` families (cone is just the
+plain, unqualified `mountaintile` family) plus the two spring cuts, and `textures.ts`'s river rendering points
+`RiverArtShape.spring` at `mountaintile_corrie_spring` (fixing the flat placeholder it used to render with) —
+but that's a fixed choice, not `SpringMountainShapeAt`-driven variety between Corrie and Saddleback, and
+ordinary (non-spring) mountain tiles still all render the single generic `mountaintile` family regardless of
+`MountainShapeAt`. Wiring `KEY_FAMILY`/river rendering to actually consume `MountainShapeAt`/
+`SpringMountainShapeAt` per-coordinate, so mountains read as a mix of all four shapes the way the generation
+side already supports, remains the follow-up.
 
 ## Bigger islands, more rivers
 
