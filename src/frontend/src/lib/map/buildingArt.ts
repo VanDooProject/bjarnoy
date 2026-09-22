@@ -26,7 +26,13 @@ const BUILDING_ART_FAMILIES: Record<string, string> = {
   // Swap these for dedicated families once the art exists.
   shrineofullr: 'thorshrine',
   shrineofnjord: 'freyjashrine',
-  farm: 'farm_crop',
+  // `farm_crop` is the legacy, non-scripted family (VanDooProject/3d_assets'
+  // asset-inventory.md: "Legacy, non-scripted... its lowest level used to be
+  // the finished farmhouse"). `farm` is the newer, on-palette, scripted
+  // counterpart (a gable longhouse over a wheat yard that grows as the tile
+  // levels up) — doesn't replace Pumpkin Farm's own `farm_pumpkin` family,
+  // which stays legacy for now.
+  farm: 'farm',
   tower: 'towerbuilding',
   // The docs preview always shows the corrie landform, one of the two the
   // pack carves a quarry into — see the docs page's own variant picker for

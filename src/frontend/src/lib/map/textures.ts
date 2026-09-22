@@ -83,7 +83,9 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
   // the matching docs-page choice.
   shrineofullr: 'thorshrine',
   shrineofnjord: 'freyjashrine',
-  farm: 'farm_crop',
+  // Newer, on-palette scripted art — see buildingArt.ts's matching docs-page
+  // choice. Pumpkin Farm stays on the legacy `farm_pumpkin` family for now.
+  farm: 'farm',
   pumpkinfarm: 'farm_pumpkin',
   lumberjack: 'lumberjackhut',
   storagehouse: 'storagebuilding',
