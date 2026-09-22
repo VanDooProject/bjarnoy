@@ -1049,11 +1049,21 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+
+        // Only worth a query for an actual shrine — every other building
+        // type has no god, so PlanBuild's check is a no-op for it regardless
+        // of what set we hand it.
+        var shrineGodsElsewhereOnIsland = BuildingCatalogue.GodOf(type) is not null
+            ? await ShrineGodsElsewhereOnIslandAsync(settlement.IslandId, settlement.Id, coord, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
-            riverShapeAt: riverShapeAt);
+            riverShapeAt: riverShapeAt,
+            shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland);
 
         if (!decision.Accepted)
         {
@@ -1326,6 +1336,32 @@ public sealed class SettlementService(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Which gods already have a standing shrine somewhere on
+    /// <paramref name="islandId"/>, at a hex other than
+    /// (<paramref name="settlementId"/>, <paramref name="coord"/>) — spanning
+    /// every settlement on the island, so a second settlement can't raise the
+    /// same god's shrine just because it isn't the one that already has it
+    /// (see <see cref="Settlement.PlanBuild"/>'s
+    /// shrineGodsElsewhereOnIsland parameter).
+    /// </summary>
+    private async Task<IReadOnlySet<GodType>> ShrineGodsElsewhereOnIslandAsync(
+        Guid islandId, Guid settlementId, HexCoord coord, CancellationToken cancellationToken)
+    {
+        var shrineTypesOnIsland = await _dbContext.PlacedBuildings
+            .Where(b => b.Settlement!.IslandId == islandId
+                && (b.SettlementId != settlementId || b.Q != coord.Q || b.R != coord.R))
+            .Select(b => b.Type)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return shrineTypesOnIsland
+            .Select(BuildingCatalogue.GodOf)
+            .Where(god => god is not null)
+            .Select(god => god!.Value)
+            .ToHashSet();
     }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>

@@ -1,5 +1,6 @@
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
+using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.World;
 
 namespace Bjarnoy.Domain.Tests;
@@ -1343,6 +1344,53 @@ public class SettlementTests
         var decision = settlement.PlanBuild(BuildingType.ShrineOfThor, new HexCoord(1, 0), terrain, T0, Guid.CreateVersion7());
 
         Assert.Equal(BuildRejection.TerrainNotAllowed, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_shrine_is_refused_when_its_god_already_has_a_shrine_elsewhere_on_the_island()
+    {
+        // The caller (SettlementService.QueueBuildAsync) computes this set
+        // from every settlement on the island, not just this one — see
+        // Settlement.PlanBuild's shrineGodsElsewhereOnIsland doc comment.
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            shrineGodsElsewhereOnIsland: new HashSet<GodType> { GodType.Thor });
+
+        Assert.Equal(BuildRejection.ShrineGodAlreadyOnIsland, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_shrine_to_a_different_god_is_still_buildable_while_another_gods_shrine_stands_on_the_island()
+    {
+        // A settlement (or island) can still raise all four gods' shrines —
+        // it's the same god twice that's refused, not shrines in general.
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Farm, 10), (BuildingType.PumpkinFarm, 10),
+            (BuildingType.CropMill, 10), (BuildingType.Meadery, 10));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfFreyja, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            shrineGodsElsewhereOnIsland: new HashSet<GodType> { GodType.Thor });
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void Leveling_up_this_settlements_own_shrine_is_not_refused_by_the_island_limit()
+    {
+        // The caller excludes the target coord from the set it builds, so a
+        // settlement can always level up the shrine already standing there —
+        // the island limit only ever blocks a *new* shrine to a claimed god.
+        var settlement = FoundAtLonghouseLevel(10, (BuildingType.Barracks, 10), (BuildingType.ArcheryRange, 10),
+            (BuildingType.ShrineOfThor, 1));
+        var shrineCoord = new HexCoord(-4, 0); // FoundAtLonghouseLevel's third `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.ShrineOfThor, shrineCoord, Terrain.Grass, T0, Guid.CreateVersion7(),
+            shrineGodsElsewhereOnIsland: new HashSet<GodType>());
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
     }
 
     [Fact]

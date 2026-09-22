@@ -927,6 +927,15 @@ public sealed record Settlement
     /// <see cref="BuildingDefinition.RequiresRiverShape"/> building (the
     /// Sawmill, built directly on a river tile) cares.
     /// </param>
+    /// <param name="shrineGodsElsewhereOnIsland">
+    /// Which gods already have a standing shrine somewhere on this
+    /// settlement's island, at a hex other than <paramref name="coord"/> —
+    /// spanning every settlement on the island, not just this one. Only a
+    /// Shrine <paramref name="type"/> (<see cref="BuildingCatalogue.GodOf"/>)
+    /// cares; the caller computes this from the island's other settlements
+    /// (<c>SettlementService.QueueBuildAsync</c>), since a lone
+    /// <see cref="Settlement"/> has no notion of its siblings.
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -937,7 +946,8 @@ public sealed record Settlement
         bool isCoastalWater = false,
         int maxWaitingOrders = 0,
         int maxOrdersPerHex = DefaultMaxOrdersPerHex,
-        RiverTileShape? riverShapeAt = null)
+        RiverTileShape? riverShapeAt = null,
+        IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null)
     {
         if (!Claims(coord))
         {
@@ -991,6 +1001,18 @@ public sealed record Settlement
             && (riverShapeAt is not { } actualShape || !requiredShapes.Contains(actualShape)))
         {
             return BuildDecision.Rejected(BuildRejection.TerrainNotAllowed);
+        }
+
+        // Each of the four gods gets at most one shrine per island — raised
+        // by whichever settlement gets there first, anywhere on it, not just
+        // this one (see shrineGodsElsewhereOnIsland's own doc comment). A
+        // level-up of this settlement's own shrine at this same coord isn't
+        // "elsewhere", so the caller excludes coord from the set it builds.
+        if (BuildingCatalogue.GodOf(type) is { } god
+            && shrineGodsElsewhereOnIsland is not null
+            && shrineGodsElsewhereOnIsland.Contains(god))
+        {
+            return BuildDecision.Rejected(BuildRejection.ShrineGodAlreadyOnIsland);
         }
 
         // A settlement gets its one longhouse from founding (SettlementService.FoundAsync
