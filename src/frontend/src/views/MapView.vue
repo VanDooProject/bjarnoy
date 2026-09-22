@@ -42,7 +42,7 @@ import {
   type BuildingModifier,
   type BuildingOutput,
 } from '../lib/map/buildingEconomy';
-import { formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from '../lib/map/ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from '../lib/map/ringCatalogue';
 import type { Tile } from '../lib/map/types';
 import type { ArmyOverlayData, ArmyOverlayMarker, HoverInfo, RenderMode } from '../lib/map/HexMapRenderer';
 import { classifyUnitSelection, totalSpeed, totalUpkeepPerHour } from '../lib/units/armyDispatch';
@@ -745,6 +745,14 @@ function riverShapeAt(coord: AxialCoord): string | undefined {
   return world.model.getRiverTile(coord.q, coord.r)?.shape;
 }
 
+// PumpkinFarm is only offered on a Pumpkin-soil island — mirrors
+// WorldModel.placeBuilding's own check, same "filter out of the category
+// rather than render locked" reasoning riverShapeAt above uses, since this
+// too is a fixed property of the settlement rather than a progression gate.
+function currentIslandSoil(): 'wheat' | 'pumpkin' | undefined {
+  return world.selectedSettlementId ? world.model.soilForSettlement(world.selectedSettlementId) : undefined;
+}
+
 function ringBuildingFor(type: BuildableType, coord: AxialCoord): RingBuilding {
   const definition = buildingCatalogue.byType[type]?.find((d) => d.level === 1);
   const boostTerrain = BOOST_TERRAIN[type];
@@ -771,6 +779,7 @@ const ringCategories = computed<RingCategory[]>(() => {
     color: CATEGORY_COLORS[category.id] ?? 'var(--gold)',
     buildings: category.buildings
       .filter((b) => riverBuildingAllowedHere(b.type, riverShapeAt(coord)))
+      .filter((b) => cropAllowedHere(b.type, currentIslandSoil()))
       .map((b) => ringBuildingFor(b.type, coord)),
   }));
 });

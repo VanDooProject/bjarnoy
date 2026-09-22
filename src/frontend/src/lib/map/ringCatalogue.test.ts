@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from './ringCatalogue';
+import { cropAllowedHere, formatBuildTime, formatMissingResources, longhouseLock, riverBuildingAllowedHere } from './ringCatalogue';
 
 describe('formatBuildTime', () => {
   it('renders the level-1 catalogue durations the way the design card shows them', () => {
@@ -65,6 +65,28 @@ describe('riverBuildingAllowedHere', () => {
   it('is a no-op for every other buildable type', () => {
     expect(riverBuildingAllowedHere('farm', undefined)).toBe(true);
     expect(riverBuildingAllowedHere('quarry', undefined)).toBe(true);
+  });
+});
+
+describe('cropAllowedHere', () => {
+  it('only allows pumpkinfarm on pumpkin soil', () => {
+    expect(cropAllowedHere('pumpkinfarm', 'pumpkin')).toBe(true);
+    expect(cropAllowedHere('pumpkinfarm', 'wheat')).toBe(false);
+  });
+
+  it('is permissive when the soil is unresolvable (undefined)', () => {
+    expect(cropAllowedHere('pumpkinfarm', undefined)).toBe(true);
+  });
+
+  it('never refuses farm, on either soil or unresolvable soil', () => {
+    expect(cropAllowedHere('farm', 'wheat')).toBe(true);
+    expect(cropAllowedHere('farm', 'pumpkin')).toBe(true);
+    expect(cropAllowedHere('farm', undefined)).toBe(true);
+  });
+
+  it('is a no-op for every other buildable type', () => {
+    expect(cropAllowedHere('quarry', 'wheat')).toBe(true);
+    expect(cropAllowedHere('sawmill', 'wheat')).toBe(true);
   });
 });
 

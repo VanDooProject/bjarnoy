@@ -123,19 +123,21 @@ public static class BuildingCatalogue
             BuildingType.Longhouse => Longhouse(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 30, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 24, 0, 0)),
-            // Farm and PumpkinFarm are identical today (same terrain, same
-            // Food/hour curve) — a deliberate roadmap seam, not an
-            // oversight. The plan is to unify them into one building whose
-            // art/output the world picks per island from its soil (some
-            // islands fertile for wheat, others for pumpkin), rather than
-            // leaving the choice to the player. Not implemented yet: no
-            // soil concept exists in World/TerrainSampler today.
+            // Farm is the settlement's always-available staple, buildable on
+            // any island regardless of soil.
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
             BuildingType.FishingHut => FishingHut(level),
             BuildingType.MagicTower => Producer(type, level, Grass, new ResourceAmounts(0, 0, 0, Iron: 6)),
-            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
+            // The bonus crop: only buildable on a Pumpkin-soil island
+            // (Settlement.PlanBuild's islandSoil parameter, from
+            // World.TerrainSampler.SoilAt) — not a free player choice, and
+            // not gated the other way (Farm stays buildable everywhere).
+            // Yields more than Farm: an indirect fertility signal via the
+            // production curve rather than a separate bonus multiplier —
+            // that's what makes a Pumpkin-soil island "more fertile".
+            BuildingType.PumpkinFarm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 44, 0)),
             BuildingType.ShrineOfThor => Shrine(type, level),
             BuildingType.ShrineOfFreyja => Shrine(type, level),
             BuildingType.ShrineOfUllr => Shrine(type, level),

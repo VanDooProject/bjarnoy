@@ -936,6 +936,14 @@ public sealed record Settlement
     /// (<c>SettlementService.QueueBuildAsync</c>), since a lone
     /// <see cref="Settlement"/> has no notion of its siblings.
     /// </param>
+    /// <param name="islandSoil">
+    /// Which crop this settlement's island grows (<see cref="SoilType"/>) —
+    /// only <see cref="BuildingType.PumpkinFarm"/> cares: it's only buildable
+    /// on a Pumpkin-soil island, the bonus a "more fertile" island unlocks.
+    /// <see cref="BuildingType.Farm"/> stays buildable everywhere regardless
+    /// of soil. The caller resolves this once from the island's centre
+    /// (<c>SettlementService.QueueBuildAsync</c>, <see cref="TerrainSampler.SoilAt"/>).
+    /// </param>
     public BuildDecision PlanBuild(
         BuildingType type,
         HexCoord coord,
@@ -947,7 +955,8 @@ public sealed record Settlement
         int maxWaitingOrders = 0,
         int maxOrdersPerHex = DefaultMaxOrdersPerHex,
         RiverTileShape? riverShapeAt = null,
-        IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null)
+        IReadOnlySet<GodType>? shrineGodsElsewhereOnIsland = null,
+        SoilType? islandSoil = null)
     {
         if (!Claims(coord))
         {
@@ -1013,6 +1022,19 @@ public sealed record Settlement
             && shrineGodsElsewhereOnIsland.Contains(god))
         {
             return BuildDecision.Rejected(BuildRejection.ShrineGodAlreadyOnIsland);
+        }
+
+        // Farm is the settlement's always-available staple — never gated.
+        // PumpkinFarm is the bonus crop a Pumpkin-soil island additionally
+        // unlocks (see SoilType), which is what makes such an island "more
+        // fertile" rather than just different. Only gates a *new*
+        // PumpkinFarm (!occupied); leveling up one already standing here is
+        // always allowed, so a settlement from before this rule existed
+        // never gets bricked by its own earlier build.
+        if (!occupied && type == BuildingType.PumpkinFarm
+            && islandSoil is { } soil && soil == SoilType.Wheat)
+        {
+            return BuildDecision.Rejected(BuildRejection.WrongCropForIslandSoil);
         }
 
         // A settlement gets its one longhouse from founding (SettlementService.FoundAsync

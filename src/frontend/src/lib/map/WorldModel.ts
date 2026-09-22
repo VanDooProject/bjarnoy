@@ -5,12 +5,13 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
-import { riverBuildingAllowedHere } from './ringCatalogue';
+import { cropAllowedHere, riverBuildingAllowedHere } from './ringCatalogue';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import {
   DEFAULT_GENERATION,
   generateTile,
+  soilAt,
   springMountainShapeAt,
   terrainAt,
   type WorldGenerationConstants,
@@ -473,6 +474,28 @@ export class WorldModel {
   springShapeAt(coord: AxialCoord): 'corrie' | 'saddleback' {
     const shape = springMountainShapeAt(coord.q, coord.r, { seed: this.seed, generation: this.generation });
     return shape === 2 ? 'saddleback' : 'corrie';
+  }
+
+  /**
+   * Which crop the island centred on `centre` grows — mirrors the backend's
+   * `TerrainSampler.SoilAt` (via `soilAt`'s own doc comment). Only
+   * PumpkinFarm cares (see `Settlement.PlanBuild`'s islandSoil parameter on
+   * the backend): Farm stays buildable everywhere regardless of soil.
+   */
+  soilAtIslandCentre(centre: AxialCoord): 'wheat' | 'pumpkin' {
+    return soilAt(centre.q, centre.r, { seed: this.seed, generation: this.generation });
+  }
+
+  /**
+   * Which crop `settlementId`'s own island grows, resolved from its stored
+   * `islandId` against `listIslands()` — or `undefined` if either is
+   * unknown (a demo settlement founded with no island id; see
+   * `cropAllowedHere`'s own doc comment for how callers treat that).
+   */
+  soilForSettlement(settlementId: string): 'wheat' | 'pumpkin' | undefined {
+    const islandId = this.settlements.get(settlementId)?.islandId;
+    const island = islandId ? this.islands.find((i) => i.id === islandId) : undefined;
+    return island ? this.soilAtIslandCentre({ q: island.q, r: island.r }) : undefined;
   }
 
   /**
@@ -1076,6 +1099,11 @@ export class WorldModel {
     // sawmillArtVariantOf reads this same own-hex river tile to pick which
     // Sawmill composite to render; Crop Mill has only one (straight-only).
     if (type && !riverBuildingAllowedHere(type, this.getRiverTile(at.q, at.r)?.shape)) {
+      return false;
+    }
+    // PumpkinFarm is only buildable on a Pumpkin-soil island (matches
+    // BuildRejection.WrongCropForIslandSoil) — Farm has no such gate.
+    if (type && !cropAllowedHere(type, this.soilForSettlement(settlementId))) {
       return false;
     }
     tile.ownerId = settlementId;

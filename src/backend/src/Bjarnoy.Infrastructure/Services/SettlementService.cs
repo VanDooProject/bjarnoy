@@ -1058,12 +1058,19 @@ public sealed class SettlementService(
                 .ConfigureAwait(false)
             : null;
 
+        // Likewise, only PumpkinFarm cares which crop this island grows —
+        // Farm stays buildable everywhere.
+        var islandSoil = type == BuildingType.PumpkinFarm
+            ? await IslandSoilAsync(settlement.IslandId, sampler, cancellationToken).ConfigureAwait(false)
+            : null;
+
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
             riverShapeAt: riverShapeAt,
-            shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland);
+            shrineGodsElsewhereOnIsland: shrineGodsElsewhereOnIsland,
+            islandSoil: islandSoil);
 
         if (!decision.Accepted)
         {
@@ -1362,6 +1369,24 @@ public sealed class SettlementService(
             .Where(god => god is not null)
             .Select(god => god!.Value)
             .ToHashSet();
+    }
+
+    /// <summary>
+    /// Which crop <paramref name="islandId"/>'s island grows
+    /// (<see cref="TerrainSampler.SoilAt"/>, from its stored centre) — or
+    /// <see langword="null"/> if the island row is somehow missing, in which
+    /// case <see cref="Settlement.PlanBuild"/> just skips the soil check
+    /// rather than refusing every Farm/PumpkinFarm build outright.
+    /// </summary>
+    private async Task<SoilType?> IslandSoilAsync(Guid islandId, TerrainSampler sampler, CancellationToken cancellationToken)
+    {
+        var centre = await _dbContext.Islands
+            .Where(i => i.Id == islandId)
+            .Select(i => new { i.CentreQ, i.CentreR })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return centre is null ? null : sampler.SoilAt(new HexCoord(centre.CentreQ, centre.CentreR));
     }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>

@@ -81,13 +81,14 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
   });
 
   it('farm and pumpkinfarm ignore terrain adjacency entirely, matching Boosts excluding them', () => {
-    // BuildingCatalogue.cs: Farm 36/level, PumpkinFarm 36/level, neither in Boosts.
+    // BuildingCatalogue.cs: Farm 36/level, PumpkinFarm 44/level (the bonus,
+    // Pumpkin-soil-only crop yields more), neither in Boosts.
     expect(buildingStatsFor('farm', 1, 6)).toEqual({
       output: { kind: 'resourceRate', resource: 'food', amount: 36 },
       workers: { cap: 4 },
     });
     expect(buildingStatsFor('pumpkinfarm', 2, 6)).toEqual({
-      output: { kind: 'resourceRate', resource: 'food', amount: 72 },
+      output: { kind: 'resourceRate', resource: 'food', amount: 88 },
       workers: { cap: 8 },
     });
   });

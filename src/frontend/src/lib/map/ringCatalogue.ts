@@ -66,6 +66,19 @@ export function riverBuildingAllowedHere(type: string, riverShape: string | unde
 }
 
 /**
+ * Whether `type` can be placed given this settlement's island soil — only
+ * PumpkinFarm cares (`WorldModel.placeBuilding`/the backend's
+ * `Settlement.PlanBuild` mirror this): it's the bonus crop a Pumpkin-soil
+ * island unlocks, a "more fertile" island over a Wheat-soil one. Farm stays
+ * offered everywhere. `soil` is `undefined` when the caller couldn't resolve
+ * an island (e.g. a demo settlement founded with no island id) — permissive
+ * by default, same as the backend's null islandSoil.
+ */
+export function cropAllowedHere(type: string, soil: 'wheat' | 'pumpkin' | undefined): boolean {
+  return type !== 'pumpkinfarm' || soil === undefined || soil === 'pumpkin';
+}
+
+/**
  * The exact shortfall against `cost`, e.g. "40 Wood, 15 Stone" — omits any
  * resource `stock` already covers. Mirrors `trainingEconomy.ts`'s
  * `formatCostLine` (which shows the whole price), but for what's still

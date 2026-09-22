@@ -436,6 +436,18 @@ public sealed class TerrainSampler
     }
 
     /// <summary>
+    /// Which crop <paramref name="islandCentre"/>'s island grows — every Grass
+    /// hex on that island shares this one answer (see <see cref="SoilType"/>),
+    /// so the caller hashes by the island's centre once rather than per hex.
+    /// Same pattern as <see cref="SpringMountainShapeAt"/>, a different salt.
+    /// </summary>
+    public SoilType SoilAt(HexCoord islandCentre)
+    {
+        var hash = ValueNoise.Hash2(islandCentre.Q, islandCentre.R, _options.Seed + 41);
+        return hash < 0.5 ? SoilType.Wheat : SoilType.Pumpkin;
+    }
+
+    /// <summary>
     /// Seed-stable variant index for a hex, in <c>[0, N)</c> where <c>N</c> is
     /// however many variants <see cref="VariantCounts"/> knows the art pack has
     /// for that terrain (1 — i.e. always variant 0 — for anything not listed).

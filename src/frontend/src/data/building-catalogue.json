@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "http://localhost:5180/api/v1/buildings",
-    "generatedAt": "2026-09-22T11:30:02.567Z"
+    "generatedAt": "2026-09-22T11:48:09.738Z"
   },
   "data": [
     {
@@ -2567,7 +2567,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 36,
+        "food": 44,
         "iron": 0
       },
       "storageCapacity": {
@@ -2604,7 +2604,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 72,
+        "food": 88,
         "iron": 0
       },
       "storageCapacity": {
@@ -2636,7 +2636,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 108,
+        "food": 132,
         "iron": 0
       },
       "storageCapacity": {
@@ -2668,7 +2668,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 144,
+        "food": 176,
         "iron": 0
       },
       "storageCapacity": {
@@ -2700,7 +2700,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 180,
+        "food": 220,
         "iron": 0
       },
       "storageCapacity": {
@@ -2732,7 +2732,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 216,
+        "food": 264,
         "iron": 0
       },
       "storageCapacity": {
@@ -2764,7 +2764,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 252,
+        "food": 308,
         "iron": 0
       },
       "storageCapacity": {
@@ -2796,7 +2796,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 288,
+        "food": 352,
         "iron": 0
       },
       "storageCapacity": {
@@ -2828,7 +2828,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 324,
+        "food": 396,
         "iron": 0
       },
       "storageCapacity": {
@@ -2860,7 +2860,7 @@
       "productionPerHour": {
         "wood": 0,
         "stone": 0,
-        "food": 360,
+        "food": 440,
         "iron": 0
       },
       "storageCapacity": {

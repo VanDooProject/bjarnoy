@@ -440,6 +440,18 @@ export function springMountainShapeAt(q: number, r: number, world: WorldSeed): n
 }
 
 /**
+ * Which crop the island whose centre is (q, r) grows — `'wheat'` or
+ * `'pumpkin'` — mirrors the backend's `TerrainSampler.SoilAt` exactly (same
+ * seed offset, same threshold). Every Grass hex on that island shares this
+ * one answer, so the caller hashes by the island's centre once rather than
+ * per hex (see `WorldModel.soilAtIslandCentre`).
+ */
+export function soilAt(q: number, r: number, world: WorldSeed): 'wheat' | 'pumpkin' {
+  const h = hash2(q, r, world.seed + 41);
+  return h < 0.5 ? 'wheat' : 'pumpkin';
+}
+
+/**
  * A terrain sampler `generateTile` may reuse — `WorldModel.terrainOf` in
  * practice, which caches. Defaults to calling `terrainAt` directly, so a
  * caller that has no cache (a test, `enumerateIslands`' neighbours) still gets

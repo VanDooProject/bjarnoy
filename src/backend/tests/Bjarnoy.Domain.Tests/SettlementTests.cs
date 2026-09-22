@@ -1470,6 +1470,74 @@ public class SettlementTests
     }
 
     [Fact]
+    public void A_new_pumpkinfarm_is_refused_on_a_wheat_soil_island()
+    {
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.PumpkinFarm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Wheat);
+
+        Assert.Equal(BuildRejection.WrongCropForIslandSoil, decision.Rejection);
+    }
+
+    [Fact]
+    public void A_new_pumpkinfarm_is_accepted_on_a_pumpkin_soil_island()
+    {
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+
+        var decision = settlement.PlanBuild(
+            BuildingType.PumpkinFarm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Pumpkin);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_new_farm_is_never_refused_by_island_soil_either_way()
+    {
+        // Farm is the always-available staple crop — soil only ever gates
+        // PumpkinFarm, the bonus a "more fertile" island unlocks.
+        var settlement = FoundAtLonghouseLevel(1);
+
+        var onWheat = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(1, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Wheat);
+        var onPumpkin = settlement.PlanBuild(
+            BuildingType.Farm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7(), islandSoil: SoilType.Pumpkin);
+
+        Assert.True(onWheat.Accepted, $"expected accept, got {onWheat.Rejection}");
+        Assert.True(onPumpkin.Accepted, $"expected accept, got {onPumpkin.Rejection}");
+    }
+
+    [Fact]
+    public void Leveling_up_an_existing_pumpkinfarm_is_not_refused_even_on_wheat_soil()
+    {
+        // A settlement from before this rule existed may already have a
+        // PumpkinFarm standing on what is now Wheat soil — leveling it up
+        // must still work; the soil gate only ever blocks placing a *new* one.
+        var settlement = FoundAtLonghouseLevel(1, (BuildingType.PumpkinFarm, 1));
+        var farmCoord = new HexCoord(-2, 0); // FoundAtLonghouseLevel's first `standing` entry
+
+        var decision = settlement.PlanBuild(
+            BuildingType.PumpkinFarm, farmCoord, Terrain.Grass, T0, Guid.CreateVersion7(),
+            islandSoil: SoilType.Wheat);
+
+        Assert.True(decision.Accepted, $"expected accept, got {decision.Rejection}");
+    }
+
+    [Fact]
+    public void A_null_islandSoil_skips_the_pumpkinfarm_soil_check()
+    {
+        // A caller with no island to resolve (islandSoil: null, the
+        // default) never refuses PumpkinFarm over soil.
+        var settlement = FoundAtLonghouseLevel(5, (BuildingType.Farm, 5));
+
+        var pumpkin = settlement.PlanBuild(BuildingType.PumpkinFarm, new HexCoord(2, 0), Terrain.Grass, T0, Guid.CreateVersion7());
+
+        Assert.True(pumpkin.Accepted, $"expected accept, got {pumpkin.Rejection}");
+    }
+
+    [Fact]
     public void A_fisher_hut_is_refused_on_land_even_when_affordable()
     {
         // Same rule as FishingHut/Dockyard — a Fisher Hut is built directly

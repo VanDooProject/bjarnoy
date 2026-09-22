@@ -113,7 +113,10 @@ export function buildingStatsFor(
   switch (type) {
     // Farm and PumpkinFarm are deliberately excluded from BuildingCatalogue.cs's
     // Boosts table (they work a fixed field, not a resource that concentrates
-    // nearby) — no terrain or water adjacency changes their output.
+    // nearby) — no terrain or water adjacency changes their output. Farm is
+    // always buildable; PumpkinFarm is gated to Pumpkin-soil islands (see
+    // ringCatalogue.ts's cropAllowedHere) and yields more, the "more fertile"
+    // island's bonus crop.
     case 'farm': {
       const workersCap = level * 4;
       return {
@@ -171,7 +174,7 @@ export function buildingStatsFor(
     case 'pumpkinfarm': {
       const workersCap = level * 4;
       return {
-        output: { kind: 'resourceRate', resource: 'food', amount: level * 36 },
+        output: { kind: 'resourceRate', resource: 'food', amount: level * 44 },
         workers: { cap: workersCap },
       };
     }

@@ -98,6 +98,14 @@ public enum BuildRejection
     /// </summary>
     ShrineGodAlreadyOnIsland,
 
+    /// <summary>
+    /// PumpkinFarm was ordered on a Wheat-soil island — it's the bonus crop
+    /// only a Pumpkin-soil island (<see cref="World.SoilType"/>) unlocks;
+    /// Farm stays buildable everywhere regardless of soil. See
+    /// <see cref="Settlement.PlanBuild"/>'s islandSoil parameter.
+    /// </summary>
+    WrongCropForIslandSoil,
+
     /// <summary>No construction slot is free, and there is no waiting-queue room either (the non-premium wall).</summary>
     NoFreeSlot,
 }
