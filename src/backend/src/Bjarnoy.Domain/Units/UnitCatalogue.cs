@@ -12,6 +12,13 @@ namespace Bjarnoy.Domain.Units;
 /// Numbers are a placeholder roster from the design doc, not a finished
 /// economy — see the issue #40 table this was seeded from.
 /// </remarks>
+/// <remarks>
+/// <see cref="BuildingType.Barracks"/> and <see cref="BuildingType.ArcheryRange"/>
+/// split the land-army roster with no overlap by <see cref="UnitDefinition.RequiredBuildingType"/>:
+/// Barracks trains the core line (Thrall, Spearman, Axeman, Berserker),
+/// ArcheryRange trains the ranged/siege specialists (Bowman, Catapult) — no
+/// unit is ever trainable from both.
+/// </remarks>
 public static class UnitCatalogue
 {
     public static IReadOnlyList<UnitType> AllTypes { get; } = Enum.GetValues<UnitType>();
