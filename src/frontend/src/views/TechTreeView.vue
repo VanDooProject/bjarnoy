@@ -218,16 +218,17 @@ function formatAmount(value: number): string {
       <HudNav />
     </TopBar>
     <div class="page">
-    <div class="graph-wrap">
-      <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
-    </div>
-    <main class="body">
+    <div class="head">
       <RouterLink to="/docs" class="breadcrumb">{{ $t('docs.backToDocs') }}</RouterLink>
       <h1>{{ $t('docs.techTree.title') }}</h1>
       <p class="intro">
         {{ $t('docs.techTree.intro') }}
       </p>
-
+    </div>
+    <div class="graph-wrap">
+      <TechTreeGraph v-if="catalogue.types.length > 0" :by-type="catalogue.byType" />
+    </div>
+    <main class="body">
       <p v-if="catalogue.loading" class="status">{{ $t('docs.status.loading') }}</p>
       <p v-else-if="catalogue.error" class="status error">{{ catalogue.error }}</p>
       <p v-else-if="catalogue.source === 'fallback'" class="status">
@@ -393,6 +394,11 @@ function formatAmount(value: number): string {
 }
 /* The graph is wider than the prose column, and wider than most windows —
    it gets the full page width and scrolls sideways inside itself. */
+.head {
+  max-width: 90ch;
+  padding-top: 24px;
+  color: var(--text);
+}
 .graph-wrap {
   padding-top: 24px;
 }
