@@ -521,8 +521,10 @@ public class BuildingCatalogueTests
     }
 
     [Fact]
-    public void A_cropmill_boosts_both_farm_and_pumpkinfarm_within_range()
+    public void A_cropmill_boosts_farm_but_not_pumpkinfarm_within_range()
     {
+        // A mill grinds grain — Farm's crop, not PumpkinFarm's (see
+        // RadiusBoostTargets' own doc comment).
         var cropMill = new PlacedBuilding(Origin, BuildingType.CropMill, 1);
         var farm = new PlacedBuilding(Origin.Neighbours()[0], BuildingType.Farm, 2);
         var pumpkinFarm = new PlacedBuilding(Origin.Neighbours()[1], BuildingType.PumpkinFarm, 2);
@@ -531,7 +533,7 @@ public class BuildingCatalogueTests
 
         var expectedFood =
             BuildingCatalogue.Get(BuildingType.Farm, 2).ProductionPerHour.Food * 1.05
-            + BuildingCatalogue.Get(BuildingType.PumpkinFarm, 2).ProductionPerHour.Food * 1.05;
+            + BuildingCatalogue.Get(BuildingType.PumpkinFarm, 2).ProductionPerHour.Food; // unboosted
         Assert.Equal(expectedFood, production.Food, 6);
     }
 

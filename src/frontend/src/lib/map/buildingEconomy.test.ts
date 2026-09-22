@@ -121,7 +121,7 @@ describe('buildingStatsFor terrain-adjacency boost (mirrors BuildingCatalogue.cs
     });
   });
 
-  it('cropmill has no production of its own — it boosts Farm/PumpkinFarm within range instead', () => {
+  it('cropmill has no production of its own — it boosts Farm (not PumpkinFarm) within range instead', () => {
     expect(buildingStatsFor('cropmill', 1, 0)).toEqual({
       modifier: { kind: 'radiusBoost', percent: 5, range: 1, resource: 'food' },
     });

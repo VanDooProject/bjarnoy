@@ -171,9 +171,9 @@ public static class BuildingCatalogue
             // longhouse gate overrides Producer's usual early-unlock curve.
             //
             // No Food of its own, same reasoning as Sawmill above — boosts
-            // every Farm/PumpkinFarm within range instead (kept together as
-            // one boost target until they unify into one soil-selected
-            // building — see BuildingType.Farm's own roadmap note).
+            // every Farm within range instead. Not PumpkinFarm: a mill
+            // grinds grain, and PumpkinFarm is a different crop (see
+            // RadiusBoostTargets).
             BuildingType.CropMill =>
                 Producer(type, level, Grass, ResourceAmounts.Zero)
                     with { RequiresRiverShape = CropMillRiverShapes, RequiredLonghouseLevel = 10 },
@@ -358,16 +358,15 @@ public static class BuildingCatalogue
     /// raises the production of, within <see cref="RadiusBoostRange"/> rings
     /// of itself — applied in
     /// <see cref="Totals(IEnumerable{PlacedBuilding}, Func{HexCoord, Terrain}?)"/>.
-    /// Crop Mill boosts both Farm and PumpkinFarm together: they are the
-    /// same crop mechanically today (see <see cref="BuildingType.Farm"/>'s
-    /// own roadmap note on unifying them), so splitting the boost between
-    /// them would just be an arbitrary rule with no design behind it yet.
+    /// Crop Mill grinds grain, so it only boosts Farm — PumpkinFarm is a
+    /// different crop (see <see cref="BuildingType.PumpkinFarm"/>'s own doc
+    /// comment: the Pumpkin-soil-only bonus, not the staple a mill grinds).
     /// </summary>
     private static readonly IReadOnlyDictionary<BuildingType, IReadOnlySet<BuildingType>> RadiusBoostTargets =
         new Dictionary<BuildingType, IReadOnlySet<BuildingType>>
         {
             [BuildingType.Sawmill] = new HashSet<BuildingType> { BuildingType.Lumberjack },
-            [BuildingType.CropMill] = new HashSet<BuildingType> { BuildingType.Farm, BuildingType.PumpkinFarm },
+            [BuildingType.CropMill] = new HashSet<BuildingType> { BuildingType.Farm },
         };
 
     /// <summary>
