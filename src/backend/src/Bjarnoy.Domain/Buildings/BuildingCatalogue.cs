@@ -123,6 +123,13 @@ public static class BuildingCatalogue
             BuildingType.Longhouse => Longhouse(level),
             BuildingType.Lumberjack => Producer(type, level, Forest, new ResourceAmounts(Wood: 30, 0, 0, 0)),
             BuildingType.Quarry => Producer(type, level, Ridge, new ResourceAmounts(0, Stone: 24, 0, 0)),
+            // Farm and PumpkinFarm are identical today (same terrain, same
+            // Food/hour curve) — a deliberate roadmap seam, not an
+            // oversight. The plan is to unify them into one building whose
+            // art/output the world picks per island from its soil (some
+            // islands fertile for wheat, others for pumpkin), rather than
+            // leaving the choice to the player. Not implemented yet: no
+            // soil concept exists in World/TerrainSampler today.
             BuildingType.Farm => Producer(type, level, Grass, new ResourceAmounts(0, 0, Food: 36, 0)),
             BuildingType.StorageHouse => StorageHouse(level),
             BuildingType.Tower => Tower(level),
