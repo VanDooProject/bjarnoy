@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bendOrientationOf,
   confluenceOrientationOf,
+  confluenceWideOrientationOf,
   mouthOrientationOf,
   springOrientationOf,
   straightOrientationOf,
@@ -186,5 +187,38 @@ describe('confluenceOrientationOf', () => {
         expect(confluenceOrientationOf([TILE_ORIENTATIONS[i]!, TILE_ORIENTATIONS[j]!], null)).not.toBeNull();
       }
     }
+  });
+});
+
+describe('confluenceWideOrientationOf', () => {
+  // Pixel-sampled the same way, against every rendered `rivertile_ywide_*`
+  // file: file D touches edges 1+D, 3+D, 5+D (mod 6) — every other edge,
+  // evenly spaced, unlike y_narrow's opposite-pair-plus-branch. Converting
+  // through edge(d) = (3-d) mod 6 gives three directions each exactly 2
+  // apart (120°) from both others, with no distinguished role — any of the
+  // three real directions can fill any of the three touched slots.
+  it('picks the file whose three touched directions match a real triple, in any role', () => {
+    expect(confluenceWideOrientationOf(['NW', 'SW'], 'E')).toBe('E');
+    // Order of the two inflows shouldn't matter.
+    expect(confluenceWideOrientationOf(['SW', 'NW'], 'E')).toBe('E');
+  });
+
+  it('only matches the two mutually-120°-apart triples on the wheel, not the y_narrow trunk/branch pattern', () => {
+    // NW/SE is an opposite pair (confluenceOrientationOf's own trunk shape),
+    // never 120° apart from anything — so this never matches it either.
+    expect(confluenceWideOrientationOf(['NW', 'SE'], 'SW')).toBeNull();
+  });
+
+  it('returns null for a triple neither confluence asset can represent', () => {
+    expect(confluenceWideOrientationOf(['E', 'NE'], 'SW')).toBeNull();
+  });
+
+  it('falls back to any rotation covering both inflows when there is no outDirection', () => {
+    expect(confluenceWideOrientationOf(['NW', 'SW'], null)).toBe('E');
+  });
+
+  it('needs at least two known directions to ever match', () => {
+    expect(confluenceWideOrientationOf(['NW'], null)).toBeNull();
+    expect(confluenceWideOrientationOf([], null)).toBeNull();
   });
 });

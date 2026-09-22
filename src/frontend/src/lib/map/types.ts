@@ -171,6 +171,48 @@ export function confluenceOrientationOf(
   return null;
 }
 
+/**
+ * The `y_wide` confluence asset's rotation convention — a second, later-
+ * added junction (`VanDooProject/3d_assets`' asset-inventory.md: "the
+ * **second** junction and the other way to pick three edges... every pair
+ * 120 degrees apart... three arms radiating rather than two turned toward
+ * each other"), pixel-sampled the same way as `confluenceOrientationOf`
+ * above. File `D` touches edges `1+D`, `3+D`, `5+D` (mod 6) — every other
+ * edge, evenly spaced, unlike `y_narrow`'s opposite-pair-plus-branch.
+ * Converting through `edge(d) = (3-d) mod 6` gives directions `{(2-D),
+ * (0-D), (4-D)} mod 6` — three directions each exactly 2 apart (120°) from
+ * both others, with no distinguished "trunk" or "branch": since the three
+ * arms are geometrically identical and evenly spaced, the whole pattern
+ * repeats every 2 steps of `D` (only two distinct pictures exist, at even
+ * and odd `D`) and any of the three real directions can fill any of the
+ * three touched slots.
+ *
+ * A real (in1, in2, out) triple matches only when all three directions are
+ * mutually 120° apart — the two possible sets on a six-direction wheel are
+ * `{E, NW, SW}` and `{NE, W, SE}` — which `confluenceOrientationOf`'s
+ * opposite-pair-anchored `y_narrow` pattern can never itself satisfy (a
+ * 120°-only spacing never contains an opposite, 180°-apart pair), so the two
+ * functions' representable triples never overlap: a caller can safely try
+ * this one as a second, independent chance after `y_narrow`'s fails.
+ */
+export function confluenceWideOrientationOf(
+  inDirections: readonly TileOrientation[],
+  outDirection: TileOrientation | null,
+): TileOrientation | null {
+  const known = [...inDirections, ...(outDirection ? [outDirection] : [])].map((d) =>
+    TILE_ORIENTATIONS.indexOf(d),
+  );
+  if (known.length < 2) return null;
+
+  for (let d = 0; d < 6; d++) {
+    const touched = new Set([(2 - d + 6) % 6, (0 - d + 6) % 6, (4 - d + 6) % 6]);
+    if (known.every((i) => touched.has(i))) {
+      return TILE_ORIENTATIONS[d]!;
+    }
+  }
+  return null;
+}
+
 export type ResourceKind = 'wood' | 'stone' | 'food' | 'iron';
 
 export type Resources = Record<ResourceKind, number>;

@@ -74,21 +74,30 @@ describe('riverArtFor', () => {
     expect(result.orientation).toBe(bendOrientationOf('NW', 'SW'));
   });
 
-  it('resolves a representable Confluence tile through confluenceOrientationOf, not the untransformed fallback', () => {
+  it('resolves a representable Confluence tile through confluenceOrientationOf (y_narrow), not the untransformed fallback', () => {
     const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'SE' };
     const result = riverArtFor(tile, null);
 
-    expect(result.shape).toBe('confluence');
+    expect(result.shape).toBe('confluencenarrow');
     expect(result.orientation).toBe('E');
     // The untransformed fallback this used to always return.
     expect(result.orientation).not.toBe('SE');
   });
 
-  it('falls back to the untransformed outDirection for a Confluence angle the asset cannot represent', () => {
+  it('resolves a Confluence tile matching the wide junction (ywide), not the narrow one', () => {
+    // E, NW, SW are mutually 120° apart — unrepresentable by y_narrow's
+    // opposite-pair-plus-branch shape, but exactly ywide's own pattern.
+    const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['NW', 'SW'], outDirection: 'E' };
+    const result = riverArtFor(tile, null);
+
+    expect(result.shape).toBe('confluencewide');
+  });
+
+  it('falls back to the untransformed outDirection for a Confluence angle neither asset can represent', () => {
     const tile: RiverTile = { q: 0, r: 0, shape: 'confluence', inDirections: ['E', 'NE'], outDirection: 'SW' };
     const result = riverArtFor(tile, null);
 
-    expect(result.shape).toBe('confluence');
+    expect(result.shape).toBe('confluencenarrow');
     expect(result.orientation).toBe('SW');
   });
 

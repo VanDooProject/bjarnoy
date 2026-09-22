@@ -35,6 +35,7 @@ import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
   confluenceOrientationOf,
+  confluenceWideOrientationOf,
   mouthOrientationOf,
   springOrientationOf,
   straightOrientationOf,
@@ -108,8 +109,15 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
 const COASTAL_FAMILY = 'coastalwatertile';
 
-/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. Spring is split into its two spring-capable mountain landforms (`springcorrie`/`springsaddleback`) rather than one fixed shape — see `riverArtFor`'s own comment. */
-type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'springcorrie' | 'springsaddleback' | 'confluence';
+/** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. Spring is split into its two spring-capable mountain landforms (`springcorrie`/`springsaddleback`), and Confluence into its two junctions (`confluencenarrow`/`confluencewide`) rather than one fixed family each — see `riverArtFor`'s own comment. */
+type RiverArtShape =
+  | 'straight'
+  | 'bend'
+  | 'bend60'
+  | 'springcorrie'
+  | 'springsaddleback'
+  | 'confluencenarrow'
+  | 'confluencewide';
 
 // Exported (only) so textures.test.ts can guard the family name a shape
 // resolves to, the same reason riverArtFor below is exported.
@@ -127,7 +135,14 @@ export const RIVER_FAMILY: Record<RiverArtShape, string> = {
   // unlike the old family's base-only composite.
   springcorrie: 'mountaintile_corrie_spring',
   springsaddleback: 'mountaintile_saddleback_spring',
-  confluence: 'rivertile_y_narrow',
+  // The pack's two confluence junctions — y_narrow's asymmetric opposite-
+  // pair-plus-branch (see `confluenceOrientationOf`) and ywide's later,
+  // fully symmetric three-arms-120°-apart alternative (see
+  // `confluenceWideOrientationOf`) — cover two disjoint sets of real (in1,
+  // in2, out) triples between them, so both get used rather than only ever
+  // reaching for one.
+  confluencenarrow: 'rivertile_y_narrow',
+  confluencewide: 'rivertile_ywide',
 };
 
 /** The orientation token embedded in every frame name, e.g. `..._NE_...` or `..._NE`. */
@@ -563,19 +578,20 @@ export function topAnimFor(
  * carries none), not the inflow's geometric opposite `straight` alone
  * would assume.
  *
- * `confluence` (`y_narrow`) is asymmetric — a fixed opposite pair (the
- * trunk) plus a third edge adjacent to one end (the branch), not a simple
- * rotated pair — pixel-verified the same way the other three families were
- * (see `confluenceOrientationOf`'s own doc comment and
- * `docs/design/river-generation.md`'s "Art pack orientation convention").
- * Unlike an ordinary bend, nothing on the generation side constrains a
- * confluence's (in1, in2, out) angles to one fixed relative arrangement —
- * two independently traced paths collide wherever they happen to — so most
- * real confluences don't match this asset's one representable rotation
- * class; `confluenceOrientationOf` returns `null` for those; and this falls
- * back to the untransformed `outDirection ?? inDirections[0]` this whole
- * function used before the fix, same as before for the genuinely
- * unrepresentable case.
+ * `confluence` has two junction assets, each pixel-verified the same way
+ * the other families were (`docs/design/river-generation.md`'s "Art pack
+ * orientation convention"): `y_narrow` (`confluenceOrientationOf`) is
+ * asymmetric — a fixed opposite pair (the trunk) plus a third edge adjacent
+ * to one end (the branch); `ywide` (`confluenceWideOrientationOf`) is fully
+ * symmetric — three arms exactly 120° apart, no distinguished trunk or
+ * branch. Unlike an ordinary bend, nothing on the generation side
+ * constrains a confluence's (in1, in2, out) angles to one fixed relative
+ * arrangement — two independently traced paths collide wherever they
+ * happen to — so this tries `y_narrow` first, then `ywide` (the two never
+ * both match the same triple — an opposite pair and an evenly-120°-spaced
+ * triple are mutually exclusive), and only falls back to the untransformed
+ * `outDirection ?? inDirections[0]` this whole function used before either
+ * fix, for a triple neither asset can represent.
  */
 // Exported (only) so textures.test.ts can check the shape/orientation this
 // picks without going through loadTileTextures' real asset pipeline
@@ -597,12 +613,12 @@ export function riverArtFor(
     return { shape, orientation: springOrientationOf(river.outDirection) };
   }
   if (river.shape === 'confluence') {
-    const orientation =
-      confluenceOrientationOf(river.inDirections, river.outDirection) ??
-      river.outDirection ??
-      river.inDirections[0] ??
-      'SE';
-    return { shape: 'confluence', orientation };
+    const narrow = confluenceOrientationOf(river.inDirections, river.outDirection);
+    if (narrow) return { shape: 'confluencenarrow', orientation: narrow };
+    const wide = confluenceWideOrientationOf(river.inDirections, river.outDirection);
+    if (wide) return { shape: 'confluencewide', orientation: wide };
+    const orientation = river.outDirection ?? river.inDirections[0] ?? 'SE';
+    return { shape: 'confluencenarrow', orientation };
   }
   if (river.shape === 'mouth' && river.inDirections[0]) {
     return mouthOrientationOf(river.inDirections[0], seaDirection);
