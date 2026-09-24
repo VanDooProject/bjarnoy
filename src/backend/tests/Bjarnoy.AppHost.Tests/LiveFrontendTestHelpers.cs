@@ -199,4 +199,31 @@ public static class LiveFrontendTestHelpers
                 + $"Recent console messages: [{string.Join(" | ", recentConsole)}]");
         }
     }
+
+    /// <summary>
+    /// Clicks the hex at axial <paramref name="q"/>/<paramref name="r"/> —
+    /// same technique <see cref="ClickPointScript"/> uses for the founding
+    /// click, and the same one <c>e2e/pages/SettlementPage.ts</c>'s
+    /// <c>clickHex</c>/<c>findHex</c> use in the demo Playwright suite:
+    /// <c>window.__settlementRenderer().hexCenterScreen({q, r})</c> converts
+    /// the hex to a screen point via the renderer's own camera math, added to
+    /// the canvas's own bounding box. Opens whatever ring menu that hex
+    /// offers (LandingView's onboarding ring, or SettlementView's full one) —
+    /// the caller clicks the ring bubble it wants next.
+    /// </summary>
+    public static async Task ClickHexAsync(IPage page, int q, int r)
+    {
+        var canvas = page.Locator("canvas");
+        var box = await canvas.BoundingBoxAsync()
+            ?? throw new InvalidOperationException("Map canvas never rendered a bounding box.");
+        var point = await page.EvaluateAsync<double[]>(
+            """
+            (coord) => {
+              const p = window.__settlementRenderer().hexCenterScreen(coord);
+              return [p.x, p.y];
+            }
+            """,
+            new { q, r });
+        await page.Mouse.ClickAsync(box.X + (float)point[0], box.Y + (float)point[1]);
+    }
 }
