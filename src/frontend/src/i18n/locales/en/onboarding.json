@@ -7,7 +7,7 @@
     "later": "Later"
   },
   "returningLogin": {
-    "eyebrow": "Welcome back",
+    "eyebrow": "Your realm is waiting",
     "title": "Welcome back, {name}",
     "body": "Log back in to pick up your realm where you left off.",
     "newRealm": "Start a new realm instead"
