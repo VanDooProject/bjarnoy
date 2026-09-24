@@ -143,6 +143,25 @@ export interface Tile {
     | 'shrineofullr'
     | 'shrineofnjord';
   buildingLevel?: number;
+  /**
+   * This hex's place in a "giant tile" — one art object spanning a centre
+   * hex plus its six neighbours (see `giantTiles.ts`'s module doc comment
+   * for the full frame-name/rendering contract). Set on all 7 covered hexes,
+   * `part: 'C'` on the anchor itself. `orientation` is carried here (rather
+   * than re-derived from the anchor tile's own `orientation` at render time)
+   * so a covered tile's render doesn't depend on the anchor tile having been
+   * materialised yet — all 7 parts of one giant always share it.
+   *
+   * A spike: no backend/API notion of this exists yet (`WorldModel.placeGiant`
+   * is demo-mode/client-only), and a giant tile carries no building economy
+   * of its own (it isn't a `buildingType`).
+   */
+  giant?: {
+    family: 'giantmountain';
+    anchor: { q: number; r: number };
+    part: import('./giantTiles').GiantPart;
+    orientation: TileOrientation;
+  };
 }
 
 export interface Settlement {

@@ -58,6 +58,7 @@ import {
   TILE_ART_TOPFACE_H_FRAC,
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
+  giantTopTextureFor,
   loadBuildingAtlases,
   loadTerrainAtlas,
   mergeTileTextures,
@@ -68,6 +69,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
+import { giantCrop } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 
@@ -721,10 +723,27 @@ const TILE_W = 168;
 const TILE_H = TILE_W * TILE_ART_TOPFACE_H_FRAC;
 const TILE_CANVAS_H = TILE_W * (TILE_ART_NATIVE_H / TILE_ART_NATIVE_W);
 const TILE_TOPFACE_Y_OFFSET = TILE_W * TILE_ART_TOPFACE_Y_FRAC;
+// A giant tile's top sprite (see giantTiles.ts) can rise well above its own
+// hex's normal 300px-tall canvas — its crop's nativeH is native-pixel height
+// H, so it rises (H - TILE_ART_NATIVE_H) native px, i.e.
+// TILE_W * (H - TILE_ART_NATIVE_H) / TILE_ART_NATIVE_W world units, above the
+// hex it's drawn at (see syncSpriteLayer's cropOffsetY). A hex whose *anchor*
+// sits just outside the viewport can still have a covered part sprite
+// visible on screen this way, so the margin below has to clear that, not
+// just an ordinary tile's own footprint. GIANT_MAX_ASSUMED_NATIVE_H is a
+// generous assumption (3x a normal tile's height) rather than a real
+// measurement — there is no vendored giant art to measure yet (see
+// giantTiles.ts's module comment) — deliberately wide enough that a real
+// giant coming in taller than expected is still a "widen this constant"
+// fix, not tiles vanishing at the edge of the screen.
+const GIANT_MAX_ASSUMED_NATIVE_H = TILE_ART_NATIVE_H * 3;
 // How far past the viewport edge (world-space) coordsInRect/isEntirelyDeepFog
 // consider a hex "visible" — shared so the two agree on exactly the same
 // rect every rebuild.
-const VISIBLE_RECT_MARGIN = TILE_W * 2;
+const VISIBLE_RECT_MARGIN = Math.max(
+  TILE_W * 2,
+  (TILE_W * (GIANT_MAX_ASSUMED_NATIVE_H - TILE_ART_NATIVE_H)) / TILE_ART_NATIVE_W,
+);
 
 // The flat top-face diamond (isoTopPoints) spans world-y 0..TILE_H from the
 // tile's grid origin, so its own vertical centre is TILE_H/2 — NOT
@@ -2908,6 +2927,25 @@ export class HexMapRenderer {
       const river = worldModel.getRiverTile(c.q, c.r);
 
       const key = coordKey(c);
+      // A giant tile (see giantTiles.ts) replaces only this hex's *top*
+      // sprite — its base stays whatever grass/forest-turned-grass art
+      // baseTextureFor would already draw. No real backend/live-mode
+      // interaction to worry about here (giants are demo-only, never
+      // rivers/buildings — WorldModel.canPlaceGiant already refuses those),
+      // so this is checked ahead of the river/sawmill branches below.
+      if (tile.giant) {
+        baseEntries.set(key, { texture: baseTextureFor(textures, tile), coord: c });
+        const giantTexture = giantTopTextureFor(textures, tile.giant.family, tile.giant.orientation, tile.giant.part);
+        if (giantTexture) {
+          // Degrades gracefully when the real art hasn't landed in the
+          // vendored atlas yet (giantTopTextureFor returns undefined) — the
+          // tile just draws with its plain base, no top sprite at all,
+          // rather than throwing or showing a placeholder.
+          topEntries.set(key, { texture: giantTexture, coord: c, crop: giantCrop(giantTexture.height) });
+        }
+        fogPerfStats.terrainDrawnCount++;
+        continue;
+      }
       // A Sawmill is built directly on a river tile (WorldModel.placeBuilding
       // only accepts a straight/bend one) — its sawmill+river composite art
       // replaces the plain river art the `river` branch below would
