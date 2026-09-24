@@ -164,6 +164,50 @@ public class WorldGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Giant placement v2: giants are generated before start positions, and a
+    /// start position too close to one is dropped — this locks down the
+    /// exclusion actually taking effect (never within
+    /// <see cref="GiantGenerator.StartPositionExclusionRadius"/> + 1 of any
+    /// giant anchor, i.e. never within 4 of any footprint hex — a footprint
+    /// hex reaches at most 1 step from the anchor).
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(55)] // Known (GiantGenerationTests.TwoGiantSeed) to place two giants on one island.
+    public void Start_positions_never_sit_within_the_giant_exclusion_radius(int seed)
+    {
+        var world = Generate(seed, radius: 90);
+        var checkedAny = false;
+
+        foreach (var island in world.Islands)
+        {
+            if (island.Giants.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var start in island.StartPositions)
+            {
+                foreach (var giant in island.Giants)
+                {
+                    checkedAny = true;
+                    Assert.True(
+                        start.DistanceTo(giant.Anchor) >= GiantGenerator.StartPositionExclusionRadius + 1,
+                        $"island {island.Index}: start position {start} sits within " +
+                        $"{GiantGenerator.StartPositionExclusionRadius + 1} hexes of giant anchor {giant.Anchor}");
+
+                    foreach (var footprintHex in Giant.Footprint(giant.Anchor))
+                    {
+                        Assert.NotEqual(start, footprintHex);
+                    }
+                }
+            }
+        }
+
+        Assert.True(checkedAny, "no island in this world had both a giant and a start position to check");
+    }
+
     [Fact]
     public void A_radius_one_world_generates_without_error()
     {
