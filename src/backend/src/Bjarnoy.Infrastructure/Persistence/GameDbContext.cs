@@ -88,6 +88,8 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
 
     public DbSet<PlayerExploredEntity> PlayerExplored => Set<PlayerExploredEntity>();
 
+    public DbSet<AiPlayerEntity> AiPlayers => Set<AiPlayerEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -893,6 +895,45 @@ public class GameDbContext(DbContextOptions<GameDbContext> options) : DbContext(
                 .WithMany()
                 .HasForeignKey(e => e.WorldId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiPlayerEntity>(ai =>
+        {
+            ai.ToTable("ai_players");
+
+            // UserId is the primary key, not a separately-generated one — one
+            // AI player per account. Same ValueGeneratedNever/1:1 shape as
+            // UserActivityEntity.
+            ai.HasKey(a => a.UserId);
+            ai.Property(a => a.UserId).ValueGeneratedNever();
+            ai.Property(a => a.Personality).HasConversion<int>();
+
+            ai.Property(a => a.Objectives)
+                .HasConversion(new AiObjectiveListConverter())
+                .Metadata.SetValueComparer(AiObjectiveListConverter.Comparer);
+
+            // Cascade: an AI player row has no meaning once its (system)
+            // account is gone — same reasoning as UserActivityEntity, unlike
+            // SettlementEntity.Owner/WeeklyStatEntity.User, which deliberately
+            // outlive the account.
+            ai.HasOne(a => a.User)
+                .WithOne()
+                .HasForeignKey<AiPlayerEntity>(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Restrict, not cascade: a world going away should not silently
+            // orphan-delete its AI accounts' rows out from under any other
+            // reasoning about them — same posture as SettlementEntity.Owner.
+            ai.HasOne(a => a.World)
+                .WithMany()
+                .HasForeignKey(a => a.WorldId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // AiPlayerService.RunDueAsync's hot lookup: "every AI whose
+            // NextActAt has passed" — see its own remarks on why the
+            // comparison is done in memory on SQLite; the index still speeds
+            // up the PostgreSQL path's equivalent query.
+            ai.HasIndex(a => a.NextActAt);
         });
     }
 }

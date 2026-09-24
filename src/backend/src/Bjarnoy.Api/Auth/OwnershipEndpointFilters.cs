@@ -3,6 +3,8 @@ using Bjarnoy.Api.Contracts;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Bjarnoy.Api.Auth;
 
@@ -144,9 +146,31 @@ internal static class OwnershipGate
         }
 
         var headerOwnerId = httpContext.Request.Headers[OwnerIdHeaderName].ToString();
-        return !string.IsNullOrEmpty(headerOwnerId) && headerOwnerId == ownerId
-            ? null
-            : Refuse();
+        if (string.IsNullOrEmpty(headerOwnerId) || headerOwnerId != ownerId)
+        {
+            return Refuse();
+        }
+
+        // The owner proved themselves with a valid, matching X-Owner-Id — this
+        // is "the anonymous owner did something", the signal AiTakeoverService
+        // reads to decide a settlement is still played. See
+        // docs/design/ai-players.md's "Takeover rule". Failure here must never
+        // fail the request it's riding along on — same posture as
+        // UserActivityEndpointFilter — so any exception is caught and logged,
+        // not rethrown.
+        try
+        {
+            var options = httpContext.RequestServices.GetRequiredService<IOptions<AiPlayersOptions>>().Value;
+            await settlements.TouchOwnerActivityAsync(settlementId, options.ActivityWriteThrottle, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(OwnershipGate).FullName!)
+                .LogWarning(ex, "Failed to record owner activity for settlement {SettlementId}.", settlementId);
+        }
+
+        return null;
     }
 
     private static IResult Refuse() =>
