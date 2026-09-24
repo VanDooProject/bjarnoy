@@ -27,7 +27,7 @@ public static class WorldEndpoints
 
         worlds.MapGet("/", ListWorlds)
             .WithName("ListWorlds")
-            .WithSummary("Lists every world on this server.");
+            .WithSummary("Lists every world on this server with the minimal public fields (WorldSummaryResponse).");
 
         // Registered ahead of "/{worldId:guid}" for readability, though the
         // ":guid" constraint on that route already keeps "joinable" from
@@ -35,10 +35,6 @@ public static class WorldEndpoints
         worlds.MapGet("/joinable", ListJoinableWorlds)
             .WithName("ListJoinableWorlds")
             .WithSummary("Lists every world with the player-facing fields needed to pick one to join.");
-
-        worlds.MapPost("/", CreateWorld)
-            .WithName("CreateWorld")
-            .WithSummary("Generates and stores a new world.");
 
         worlds.MapGet("/{worldId:guid}", GetWorld)
             .WithName("GetWorld")
@@ -75,20 +71,26 @@ public static class WorldEndpoints
         return app;
     }
 
-    private static async Task<Ok<IReadOnlyList<WorldResponse>>> ListWorlds(
+    /// <summary>
+    /// The minimal public listing (<see cref="WorldSummaryResponse"/>) — world
+    /// creation is admin-only now (<c>POST /api/v1/admin/worlds</c>), so this
+    /// no longer needs to hand back <see cref="WorldResponse"/>'s full,
+    /// map-reproducing shape (seed/radius/generation) to any anonymous
+    /// caller. <see cref="GetWorld"/> below is still where a client fetches
+    /// the full config for a world it has actually picked.
+    /// </summary>
+    private static async Task<Ok<IReadOnlyList<WorldSummaryResponse>>> ListWorlds(
         WorldService worlds,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var entities = await worlds.GetWorldsAsync(cancellationToken);
-        var islandCounts = await worlds.GetIslandCountsAsync(cancellationToken);
         var playerCounts = await worlds.GetPlayerCountsAsync(cancellationToken);
         var now = timeProvider.GetUtcNow();
 
-        IReadOnlyList<WorldResponse> response =
+        IReadOnlyList<WorldSummaryResponse> response =
         [
-            .. entities.Select(w => WorldResponse.From(
-                w, islandCounts.GetValueOrDefault(w.Id), playerCounts.GetValueOrDefault(w.Id), now)),
+            .. entities.Select(w => WorldSummaryResponse.From(w, playerCounts.GetValueOrDefault(w.Id), now)),
         ];
 
         return TypedResults.Ok(response);
@@ -117,52 +119,17 @@ public static class WorldEndpoints
         return TypedResults.Ok(response);
     }
 
-    private static async Task<Results<Created<WorldResponse>, ValidationProblem, Conflict<ProblemDetails>>>
-        CreateWorld(
-            CreateWorldRequest request,
-            WorldService worlds,
-            TimeProvider timeProvider,
-            CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var options = WorldGenerationOptions.ForSeed(request.Seed ?? Random.Shared.Next()) with
-        {
-            Radius = request.Radius,
-        };
-
-        try
-        {
-            options.Validate();
-        }
-        catch (ArgumentException ex)
-        {
-            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
-            {
-                [ex.ParamName ?? nameof(request)] = [ex.Message],
-            });
-        }
-
-        try
-        {
-            var world = await worlds.CreateWorldAsync(
-                request.Name, options, request.MaxPlayers, autoSeed: request.Seed is null, cancellationToken);
-
-            return TypedResults.Created(
-                $"/api/v1/worlds/{world.Id}",
-                WorldResponse.From(world, world.Islands.Count, playerCount: 0, timeProvider.GetUtcNow()));
-        }
-        catch (WorldCreationException ex)
-        {
-            return TypedResults.Conflict(new ProblemDetails
-            {
-                Title = "The world could not be created.",
-                Detail = ex.Message,
-                Status = StatusCodes.Status409Conflict,
-            });
-        }
-    }
-
+    /// <summary>
+    /// The full, map-reproducing world config (seed, radius, generation,
+    /// movement) — deliberately still public, unlike <see cref="ListWorlds"/>'s
+    /// minimal summary above. The game client builds its map entirely
+    /// client-side from this seed/generation pair (see
+    /// <c>stores/world.ts</c>'s <c>bootstrapLiveWorld</c>), including
+    /// anonymously: the landing page previews terrain before a visitor has
+    /// founded anything, so there is no owner to gate this behind. And it
+    /// would gate nothing anyway — <c>GET /worlds/{worldId}/tiles</c> already
+    /// serves the exact same terrain to any caller on demand.
+    /// </summary>
     private static async Task<Results<Ok<WorldResponse>, NotFound<ProblemDetails>>> GetWorld(
         Guid worldId,
         WorldService worlds,
