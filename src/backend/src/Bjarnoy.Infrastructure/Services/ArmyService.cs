@@ -234,6 +234,7 @@ public sealed class ArmyService(
 
         var sampler = new TerrainSampler(settlement.World.ToGenerationOptions());
         var riverTiles = await LoadRiverTilesAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var dispatchGiantIndex = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var armyId = Guid.CreateVersion7();
 
         // Founding-specific, dispatch-time-only checks (issue #55 §6): renown/
@@ -269,16 +270,16 @@ public sealed class ArmyService(
             var claimedSettlements = await _settlementService
                 .GetClaimedSettlementsAsync(settlement.WorldId, cancellationToken)
                 .ConfigureAwait(false);
-            var dispatchGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
             isHexFoundable = target =>
-                Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing, dispatchGiants);
+                Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing, dispatchGiantIndex);
         }
 
         var decision = Army.PlanDispatch(
             settled, unitCounts, provisions, waypoints, effectiveDestination, now, armyId, sampler.TerrainAt,
             mission, mission is ArmyMission.Attack or ArmyMission.Support or ArmyMission.Raid ? targetSettlementId : null,
             mission is ArmyMission.Attack or ArmyMission.Raid ? targetBuildingCoord : null, targetClaimDiscs,
-            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, riverTiles.Contains);
+            isHexFoundable, renownAndSlotAllowed, settlement.World.SpeedFactor, riverTiles.Contains,
+            dispatchGiantIndex);
 
         if (!decision.Accepted)
         {
