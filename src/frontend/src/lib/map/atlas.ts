@@ -41,6 +41,8 @@ export interface AtlasClip {
   frame_padding: number;
   frames: string[];
   parts: string[];
+  /** Which part of a "giant tile" (see `giantTiles.ts`) this clip animates — `C` for the anchor hex, or a `GiantPart` screen direction for a covered neighbour. Absent for every non-giant clip. */
+  giant_part?: string;
 }
 
 interface AtlasManifest {

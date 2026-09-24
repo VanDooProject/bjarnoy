@@ -33,7 +33,9 @@
     "longship": "Langschiff"
   },
   "giants": {
-    "giantmountain": "Riesenberg"
+    "giantmountain": "Riesenberg",
+    "giantshrine": "Runensteinheiligtum",
+    "giantvolcano": "Vulkan"
   },
   "terrain": {
     "sea": "Offenes Wasser",
