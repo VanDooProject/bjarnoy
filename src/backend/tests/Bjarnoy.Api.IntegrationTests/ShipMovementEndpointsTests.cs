@@ -167,10 +167,13 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
-            var userId = AddUser(db);
 
-            var origin = MakeSettlement(worldId, islandId, userId, ownerId, 0, 0);
-            var destination = MakeSettlement(worldId, islandId, userId, ownerId, 10, 0, withDockyard: true);
+            // Unclaimed (FoldIntoDock's own ownership check is OwnerId-based,
+            // not UserId-based — see ArmyService.SettleTo) — that's what lets
+            // this test prove ownership with the plain X-Owner-Id header
+            // below, same as the rest of anonymous play.
+            var origin = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, 0, 0);
+            var destination = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, ownerId, 10, 0, withDockyard: true);
             db.Settlements.AddRange(origin, destination);
             await db.SaveChangesAsync(Ct);
             originId = origin.Id;
@@ -183,6 +186,8 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
 
         var armyResponse = await client.GetAsync($"/api/v1/armies/{armyId}", Ct);
         Assert.Equal(HttpStatusCode.NotFound, armyResponse.StatusCode);
+
+        client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
 
         var destinationSettlement = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{destinationId}", SqliteApiFixture.StrictJson, Ct);
@@ -202,13 +207,15 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         using var client = Client();
         Guid armyId, rivalId;
 
+        var rivalOwnerId = $"rival-{Guid.CreateVersion7():N}";
+
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
             var (worldId, islandId) = await AddWorldAsync(db);
 
             var origin = MakeSettlement(worldId, islandId, AddUser(db), $"owner-{Guid.CreateVersion7():N}", 0, 0);
-            var rival = MakeSettlement(worldId, islandId, AddUser(db), $"rival-{Guid.CreateVersion7():N}", 10, 0, withDockyard: true);
+            var rival = MakeSettlement(worldId, islandId, SystemUserIds.Abandoned, rivalOwnerId, 10, 0, withDockyard: true);
             db.Settlements.AddRange(origin, rival);
             await db.SaveChangesAsync(Ct);
             rivalId = rival.Id;
@@ -219,7 +226,11 @@ public sealed class ShipMovementEndpointsTests : IAsyncLifetime
         _factory.Time.Advance(TimeSpan.FromHours(1.1));
 
         // Never silently absorbed into a rival's garrison — a foreign
-        // Dockyard doesn't fold arrivals no matter who reaches it.
+        // Dockyard doesn't fold arrivals no matter who reaches it. Reads as
+        // the rival itself (its own unclaimed owner id) purely to prove the
+        // garrison state; nothing about that ownership is what this test is
+        // actually about.
+        client.DefaultRequestHeaders.Add("X-Owner-Id", rivalOwnerId);
         var rivalSettlement = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{rivalId}", SqliteApiFixture.StrictJson, Ct);
         Assert.DoesNotContain(rivalSettlement!.Garrison, s => s.Unit == "karve");

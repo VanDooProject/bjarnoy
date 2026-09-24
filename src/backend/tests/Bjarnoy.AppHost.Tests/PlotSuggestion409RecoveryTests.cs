@@ -53,6 +53,16 @@ public class PlotSuggestion409RecoveryTests
 
         var world = Assert.Single(
             (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+
+        // GET .../settlements is fog-gated — the founding browser's own
+        // local id has to go on the header before it can read back even its
+        // own just-founded settlement. Read here (rather than only right
+        // before the reload below) so both this call and the post-reload one
+        // further down share it.
+        var playerIdBefore = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        Assert.False(string.IsNullOrEmpty(playerIdBefore));
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", playerIdBefore);
+
         var settlementBefore = Assert.Single(
             (await apiClient.GetFromJsonAsync<SettlementSummary[]>(
                 $"/api/v1/worlds/{world.Id}/settlements", cancellationToken))!);
@@ -66,8 +76,6 @@ public class PlotSuggestion409RecoveryTests
         // what turns the next plot-suggestion request into a 409
         // (`FoundingRejection`/`PlotSuggestionRejection.AlreadyFounded`)
         // rather than a fresh, successful founding attempt.
-        var playerIdBefore = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
-        Assert.False(string.IsNullOrEmpty(playerIdBefore));
         await page.EvaluateAsync("() => localStorage.removeItem('bjarnoy.settlementId')");
 
         // A hard reload — not client-side navigation — since

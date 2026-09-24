@@ -72,6 +72,14 @@ public class FoundingSettlementPersistenceTests
         var worlds = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
         var world = Assert.Single(worlds!);
 
+        // GET .../settlements is fog-gated: an anonymous caller with no
+        // realm sees nothing, and even a caller with a realm only sees their
+        // own settlements plus whatever they've explored — so every read
+        // below goes through the founding browser's own local id, the same
+        // X-Owner-Id proof a real client would send.
+        var firstOwnerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", firstOwnerId);
+
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         Assert.Single(settlements!);
@@ -93,9 +101,20 @@ public class FoundingSettlementPersistenceTests
         // racing to create another "Kettil Sea" and 409-ing.
         Assert.Single(worldsAfterSecondPlayer!);
 
-        var settlementsAfterSecondPlayer = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
+        // Neither player's own fog necessarily covers the other's plot, so
+        // the persisted total is read as the union of both realms' own
+        // views rather than a single, possibly fog-gated, listing.
+        var secondOwnerId = await secondPage.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        using var secondApiClient = app.CreateHttpClient("api");
+        secondApiClient.DefaultRequestHeaders.Add("X-Owner-Id", secondOwnerId);
+
+        var settlementsForFirstOwner = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
-        Assert.Equal(2, settlementsAfterSecondPlayer!.Length);
+        var settlementsForSecondOwner = await secondApiClient.GetFromJsonAsync<SettlementSummary[]>(
+            $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
+        var distinctSettlementIds = settlementsForFirstOwner!.Select(s => s.Id)
+            .Union(settlementsForSecondOwner!.Select(s => s.Id));
+        Assert.Equal(2, distinctSettlementIds.Count());
 
         // Same condition as a bare Assert.Empty, but it prints what actually
         // arrived. Assert.Empty truncates the collection in its message
