@@ -54,7 +54,7 @@ async function refresh() {
   try {
     const [r, s, a] = await Promise.all([
       api.getRenown(world.worldId),
-      api.getSettlement(world.selectedSettlementId),
+      api.getSettlement(world.selectedSettlementId, world.ownerId ?? undefined),
       api.getSettlementArmies(world.selectedSettlementId),
     ]);
     renown.value = r;

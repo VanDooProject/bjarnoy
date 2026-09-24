@@ -1006,6 +1006,22 @@ public sealed class SettlementService(
             .OrderBy(s => s.Id)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// The settlements standing on one island — backs
+    /// <c>GET .../plot-suggestion</c>'s <c>IslandSettlements</c>, so a
+    /// landing-page visitor previewing a plot sees who their would-be
+    /// neighbours are without the world-wide list <c>ListForWorld</c> used to
+    /// (and no longer does) hand every anonymous caller.
+    /// </summary>
+    public Task<List<SettlementEntity>> GetForIslandAsync(
+        Guid islandId, CancellationToken cancellationToken = default) =>
+        _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.Buildings)
+            .Where(s => s.IslandId == islandId)
+            .OrderBy(s => s.Id)
+            .ToListAsync(cancellationToken);
+
     /// <summary>Queues a build, charging for it up front.</summary>
     public async Task<BuildResult> QueueBuildAsync(
         Guid settlementId,

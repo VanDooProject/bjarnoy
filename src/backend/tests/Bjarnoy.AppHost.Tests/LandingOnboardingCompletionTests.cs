@@ -60,11 +60,17 @@ public class LandingOnboardingCompletionTests
 
         var world = Assert.Single(
             (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+
+        // GET .../settlements is fog-gated (a caller with no resolvable
+        // realm just sees an empty list) — the founding browser's own local
+        // id has to go on the header before asking for even its own
+        // just-founded settlement.
+        var ownerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlement = Assert.Single(settlements!);
-
-        var ownerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
 
         // The two guided buildings the tray tracks (farm, lumberjack — see
         // LandingView.vue's GUIDED_BUILD_TERRAIN) each need their own
