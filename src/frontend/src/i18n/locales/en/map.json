@@ -1,0 +1,7 @@
+{
+  "loading": {
+    "island": "Loading island…",
+    "failed": "Couldn't load the island art.",
+    "retry": "Retry"
+  }
+}

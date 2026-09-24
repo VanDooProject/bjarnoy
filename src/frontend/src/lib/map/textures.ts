@@ -402,6 +402,23 @@ export function loadTerrainAtlas(): Promise<TileTextures> {
   return terrainLoading;
 }
 
+let staticBuildingLoading: Promise<TileTextures> | null = null;
+/**
+ * The `buildings-static` atlas alone, with no `animTop` overlay yet — lets a
+ * caller (`HexMapRenderer.mount`) paint static building art as soon as it's
+ * ready instead of waiting on `buildings-anim` (~7 MB) too, which would
+ * otherwise compete for bandwidth against the atlas actually needed first.
+ * Its `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those
+ * only ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures`
+ * rather than using this result standalone.
+ */
+export function loadStaticBuildingAtlas(): Promise<TileTextures> {
+  if (!staticBuildingLoading) {
+    staticBuildingLoading = loadAtlasCategory('buildings-static').then((atlas) => buildTileTextures([atlas]));
+  }
+  return staticBuildingLoading;
+}
+
 let buildingLoading: Promise<TileTextures> | null = null;
 /**
  * The (much larger) `buildings-static` atlas, plus `buildings-anim`'s clips
@@ -410,13 +427,18 @@ let buildingLoading: Promise<TileTextures> | null = null;
  * `TileTextures` has empty `coastalBase`/`riverBase`/`riverTop` (those only
  * ever come from `loadTerrainAtlas`) — merge with `mergeTileTextures` rather
  * than using this result standalone.
+ *
+ * `buildings-anim` only starts loading once `buildings-static` has resolved
+ * (rather than both firing in parallel): on a slow connection the two
+ * ~13 MB-combined atlases competing for bandwidth at once delays the static
+ * art callers need first, for no benefit — nothing can render `animTop`
+ * before the static `top` frames it overlays exist anyway.
  */
 export function loadBuildingAtlases(): Promise<TileTextures> {
   if (!buildingLoading) {
-    buildingLoading = Promise.all([
-      loadAtlasCategory('buildings-static'),
-      loadAtlasCategory('buildings-anim'),
-    ]).then(([staticAtlas, animAtlas]) => buildTileTextures([staticAtlas], animAtlas));
+    buildingLoading = loadAtlasCategory('buildings-static').then((staticAtlas) =>
+      loadAtlasCategory('buildings-anim').then((animAtlas) => buildTileTextures([staticAtlas], animAtlas)),
+    );
   }
   return buildingLoading;
 }

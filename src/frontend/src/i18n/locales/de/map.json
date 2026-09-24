@@ -1,0 +1,7 @@
+{
+  "loading": {
+    "island": "Insel wird geladen…",
+    "failed": "Die Inselgrafik konnte nicht geladen werden.",
+    "retry": "Erneut versuchen"
+  }
+}
