@@ -140,6 +140,25 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task Giants_survive_the_round_trip_through_the_text_encoded_column()
+    {
+        using var client = _fixture.CreateClient();
+        // Seed/radius known (Bjarnoy.Domain.Tests.GiantGenerationTests) to
+        // place two giants on one island, so this doesn't depend on getting
+        // lucky with the default.
+        var world = await CreateWorldAsync(client, seed: 55, radius: 90);
+
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.NotNull(islands);
+        var giants = islands.SelectMany(i => i.Giants).ToList();
+        Assert.NotEmpty(giants);
+        Assert.All(giants, g => Assert.Equal("giantmountain", g.Family));
+        Assert.All(giants, g => Assert.Contains(g.Orientation, new[] { "E", "NE", "NW", "W", "SW", "SE" }));
+    }
+
+    [Fact]
     public async Task Islands_of_an_unknown_world_are_a_404()
     {
         using var client = _fixture.CreateClient();

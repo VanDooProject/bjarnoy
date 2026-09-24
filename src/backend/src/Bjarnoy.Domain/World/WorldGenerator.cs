@@ -61,14 +61,18 @@ public sealed class WorldGenerator
             }
 
             var index = islands.Count;
+            var startPositions = FindStartPositions(tiles, land);
+            var riverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index);
+            var riverTileSet = riverTiles.Select(t => t.Coord).ToHashSet();
             islands.Add(new GeneratedIsland
             {
                 Index = index,
                 Name = NextUniqueName(index, usedNames),
                 Tiles = tiles,
                 Centre = CentreOf(tiles),
-                StartPositions = FindStartPositions(tiles, land),
-                RiverTiles = RiverGenerator.Generate(tiles, land, _sampler, _options, index),
+                StartPositions = startPositions,
+                RiverTiles = riverTiles,
+                Giants = GiantGenerator.Generate(tiles, land, _sampler, _options, index, riverTileSet, startPositions),
             });
         }
 

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import type { AxialCoord } from '../hex/coords';
+import { giantCoverage } from './giantTiles';
 import {
   claimDiscs,
   claimRadiusForLevel,
   hasShoreline,
   hasShorelineInTerritory,
   towerClaimRadiusForLevel,
+  type ClaimDisc,
   type TerrainLookup,
 } from './shoreline';
 
@@ -125,6 +128,37 @@ describe('claimDiscs / hasShorelineInTerritory', () => {
     const discs = claimDiscs({ q: 0, r: 0 }, 1, [{ q: 5, r: 0, level: 4 }]);
 
     expect(hasShorelineInTerritory(discs, terrain)).toBe(false);
+  });
+
+  // Mirrors SettlementService.PlanTrainAsync's own giant-aware rewrite: a
+  // hex that only geometrically overlaps a disc but belongs to a giant
+  // whose 7-hex footprint isn't fully covered by the disc union must not
+  // count as a shoreline either, even when that one hex genuinely is land
+  // bordering sea.
+  it('excludes a giant hex from the shoreline check unless the giant is fully claimed', () => {
+    const anchor: AxialCoord = { q: 0, r: 0 };
+    // One of the anchor's 6 covered neighbours; the giant rule treats it
+    // exactly like every other footprint hex, including the anchor itself.
+    const shorelineFootprintHex = giantCoverage(anchor)[1].coord;
+    const seaHex: AxialCoord = { q: shorelineFootprintHex.q + 1, r: shorelineFootprintHex.r };
+    const terrain: TerrainLookup = { isLand: (q, r) => !(q === seaHex.q && r === seaHex.r) };
+    const footprint = new Set(giantCoverage(anchor).map((c) => `${c.coord.q},${c.coord.r}`));
+    const giantAt = (c: AxialCoord): AxialCoord | null => (footprint.has(`${c.q},${c.r}`) ? anchor : null);
+
+    // A disc covering only the shoreline hex itself, none of the giant's
+    // other 6 footprint hexes — geometrically it reaches a shoreline hex,
+    // but the territory rule says none of the 7 are claimed.
+    const partialDiscs: ClaimDisc[] = [{ q: shorelineFootprintHex.q, r: shorelineFootprintHex.r, radius: 0 }];
+    expect(hasShorelineInTerritory(partialDiscs, terrain, giantAt)).toBe(false);
+    // Sanity: with no giant-aware filter (the default `giantAt`), the same
+    // disc *does* read as a shoreline — proving the giant exclusion above,
+    // not some other mismatch, is what made it false.
+    expect(hasShorelineInTerritory(partialDiscs, terrain)).toBe(true);
+
+    // A disc large enough to cover the whole 7-hex footprint claims it, so
+    // the shoreline hex now counts.
+    const fullDiscs: ClaimDisc[] = [{ q: anchor.q, r: anchor.r, radius: 1 }];
+    expect(hasShorelineInTerritory(fullDiscs, terrain, giantAt)).toBe(true);
   });
 });
 

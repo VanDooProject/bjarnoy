@@ -32,6 +32,9 @@
     "karve": "Karve",
     "longship": "Langschiff"
   },
+  "giants": {
+    "giantmountain": "Riesenberg"
+  },
   "terrain": {
     "sea": "Offenes Wasser",
     "sand": "Ufer",

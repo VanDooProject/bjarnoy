@@ -31,6 +31,7 @@
 // so it's exercised directly rather than only through a loaded atlas).
 import { Texture } from 'pixi.js';
 import { loadAtlasCategory, type AtlasClip, type LoadedAtlas } from './atlas';
+import { classifyGiantFrames, giantTop as giantTopLookup, type GiantPart, type GiantTextureMap } from './giantTiles';
 import type { RiverTile, Terrain, Tile, TileOrientation } from './types';
 import {
   bendOrientationOf,
@@ -103,6 +104,19 @@ const KEY_FAMILY: Partial<Record<TextureKey, string>> = {
 
 /** Coastal water is a rendering variant of `sea`, not a `TextureKey` of its own — see `SOURCES.coastalBase` below. */
 const COASTAL_FAMILY = 'coastalwatertile';
+
+/**
+ * "Giant tile" families — one art object spanning a hex plus its six
+ * neighbours (see `giantTiles.ts`'s own module doc comment for the full
+ * contract). Kept as its own list, looked up by family name across whichever
+ * atlas categories are loaded (`terrain` today; `buildings-static` once a
+ * giant building exists), rather than folded into `KEY_FAMILY`: a giant's
+ * frames don't carry a `TextureKey`-shaped `variantNNN`/`levelNNN` suffix at
+ * the end of their name the way `classifyFamilyFrames` expects (see
+ * `classifyGiantFrames`'s own doc comment), so they need their own
+ * classification path entirely.
+ */
+const GIANT_FAMILIES: readonly string[] = ['giantmountain'];
 
 /** The source's river shapes — `RiverTileShape.Mouth` (see `types.ts`) has no art of its own and renders with `straight`/`bend`, same as before. */
 type RiverArtShape = 'straight' | 'bend' | 'bend60' | 'spring' | 'confluence';
@@ -299,6 +313,8 @@ export interface TileTextures {
   animTop: Partial<Record<TextureKey, OrientationMap<(TileAnimClip | undefined)[]>>>;
   riverBase: Record<RiverArtShape, OrientationMap<Texture>>;
   riverTop: Record<RiverArtShape, OrientationMap<Texture>>;
+  /** Giant-tile top textures, keyed by family (e.g. `giantmountain`) — see `giantTiles.ts`. */
+  giants: Partial<Record<string, GiantTextureMap<Texture>>>;
 }
 
 function framesOfFamily(atlas: LoadedAtlas, family: string): FamilyFrame<Texture>[] {
@@ -377,7 +393,14 @@ function buildTileTextures(atlases: LoadedAtlas[], animAtlas?: LoadedAtlas): Til
     riverTop[shape] = mapOrientations(topArr, (_o, arr) => arr[0] ?? Texture.EMPTY);
   }
 
-  return { base, coastalBase, baseIndexed, top, animTop, riverBase, riverTop };
+  const giants: TileTextures['giants'] = {};
+  for (const family of GIANT_FAMILIES) {
+    const frames = framesOfFamily(merged, family);
+    if (frames.length === 0) continue;
+    giants[family] = classifyGiantFrames(frames);
+  }
+
+  return { base, coastalBase, baseIndexed, top, animTop, riverBase, riverTop, giants };
 }
 
 /** Merges an already-resolved `TileTextures` with one loaded later (e.g. terrain, then buildings once they resolve) — used by `HexMapRenderer` to upgrade in place without a full reload. `coastalBase`/`riverBase`/`riverTop` only ever come from the terrain atlas, so `a`'s copies win unconditionally. */
@@ -390,6 +413,7 @@ export function mergeTileTextures(a: TileTextures, b: TileTextures): TileTexture
     coastalBase: a.coastalBase,
     riverBase: a.riverBase,
     riverTop: a.riverTop,
+    giants: { ...a.giants, ...b.giants },
   };
 }
 
@@ -591,4 +615,20 @@ export function riverTexturesFor(
 ): { base: Texture; top: Texture } {
   const { shape, orientation } = riverArtFor(river, seaDirection);
   return { base: textures.riverBase[shape][orientation], top: textures.riverTop[shape][orientation] };
+}
+
+/**
+ * A giant tile's part texture — `undefined` if this `TileTextures` has no
+ * frames for `family` yet (the real art hasn't landed in the vendored atlas —
+ * see `giantTiles.ts`'s module comment), or no frame for this exact
+ * orientation/part. Callers (`HexMapRenderer.rebuildTerrain`) must degrade
+ * gracefully to drawing the covered hexes normally when this is `undefined`.
+ */
+export function giantTopTextureFor(
+  textures: TileTextures,
+  family: string,
+  orientation: TileOrientation,
+  part: GiantPart,
+): Texture | undefined {
+  return giantTopLookup(textures.giants, family, orientation, part);
 }

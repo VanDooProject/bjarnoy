@@ -676,6 +676,7 @@ public static class SettlementEndpoints
             $"Needs a {missing.Type.ToWireName()} at level {missing.Level} first.",
         BuildRejection.TerrainNotAllowed => "That building cannot stand on that terrain.",
         BuildRejection.HexNotInSettlement => "That hex is outside the settlement's borders.",
+        BuildRejection.HexOccupiedByGiant => "That hex is part of a giant feature and can never be built on.",
         BuildRejection.HexOccupied => "Another building already stands there.",
         BuildRejection.NotEnoughResources =>
             "Not enough resources (some may be reserved for queued construction).",

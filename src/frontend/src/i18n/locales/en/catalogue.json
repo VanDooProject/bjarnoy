@@ -32,6 +32,9 @@
     "karve": "Karve",
     "longship": "Longship"
   },
+  "giants": {
+    "giantmountain": "Giant mountain"
+  },
   "terrain": {
     "sea": "Open water",
     "sand": "Shore",

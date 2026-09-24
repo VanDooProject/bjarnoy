@@ -85,7 +85,8 @@
       "notWiredYet": "Noch nicht mit dem Backend verbunden",
       "trainUnits": "Einheiten ausbilden",
       "build": "Bauen",
-      "openWater": "Offenes Wasser"
+      "openWater": "Offenes Wasser",
+      "giantOccupied": "Von einem Riesenwahrzeichen belegt"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "STF {level} · HEX {q}, {r}",

@@ -252,7 +252,8 @@ public sealed record Army
         Func<HexCoord, bool>? isHexFoundable = null,
         bool renownAndSlotAllowed = true,
         double speedFactor = 1.0,
-        Func<HexCoord, bool>? isRiver = null)
+        Func<HexCoord, bool>? isRiver = null,
+        IGiantIndex? giants = null)
     {
         ArgumentNullException.ThrowIfNull(settlement);
         ArgumentNullException.ThrowIfNull(requestedUnits);
@@ -369,8 +370,14 @@ public sealed record Army
         {
             IReadOnlyList<(HexCoord Centre, int Radius)> discs =
                 targetClaimDiscs is { Count: > 0 } ? targetClaimDiscs : [(destination, 0)];
+            // Filtered through the territory rule, not the raw disc union —
+            // a giant hex only geometrically inside a disc but not actually
+            // claimed (its footprint isn't fully covered) must not count as
+            // the defender's shoreline either.
+            var giantIndex = giants ?? GiantIndex.Empty;
             var targetHasShoreline = discs
                 .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
+                .Where(coord => Territory.Claims(discs, coord, giantIndex))
                 .Any(coord => Shoreline.IsShoreline(coord, terrainAt));
             if (!targetHasShoreline)
             {

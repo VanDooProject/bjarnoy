@@ -168,6 +168,7 @@ public static class AdminSettlementEndpoints
         var (entity, _) = found.Value;
         var domain = entity.ToDomain();
         var sampler = new TerrainSampler(entity.World!.ToGenerationOptions());
+        var giants = await settlements.LoadGiantIndexAsync(entity.WorldId, cancellationToken);
 
         // The editor paints the whole claimed territory, not just the
         // occupied hexes: an empty buildable hex is exactly what an admin
@@ -177,12 +178,17 @@ public static class AdminSettlementEndpoints
         // anywhere Settlement.Claims already reaches — including inside an
         // existing tower's own satellite disc, chaining allowed — so this
         // must paint the same shape or an admin would see buildable-looking
-        // hexes PlaceBuilding then refuses.
+        // hexes PlaceBuilding then refuses. Giant hexes are filtered out by
+        // the same territory rule PlaceBuilding enforces (Territory.Claims):
+        // a giant only paints as claimable once every one of its 7 footprint
+        // hexes is covered by this settlement's discs.
+        var discs = domain.ClaimDiscs.ToList();
         IReadOnlyList<AdminSettlementHexResponse> hexes =
         [
-            .. domain.ClaimDiscs
+            .. discs
                 .SelectMany(disc => disc.Centre.WithinRadius(disc.Radius))
                 .Distinct()
+                .Where(coord => !giants.TryGetGiant(coord, out var giant) || Territory.IsFullyCovered(discs, giant))
                 .OrderBy(c => c.R).ThenBy(c => c.Q)
                 .Select(coord =>
                 {
