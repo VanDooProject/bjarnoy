@@ -16,6 +16,10 @@
     "triggerSub": "oder möchte einer anderen Welt beitreten",
     "logIn": "Anmelden"
   },
+  "accountMenu": {
+    "profile": "Profil",
+    "logout": "Abmelden"
+  },
   "resourceBar": {
     "capSuffix": "/{n}",
     "reserved": "({n} reserviert)",

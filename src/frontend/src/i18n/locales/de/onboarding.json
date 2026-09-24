@@ -5,5 +5,11 @@
     "body": "Benenne deins über das Zeichen hier oben, und diese Insel folgt dir auf jedes Gerät. Dauert eine Minute — nur Benutzername und Passwort.",
     "cta": "Jarl benennen",
     "later": "Später"
+  },
+  "returningLogin": {
+    "eyebrow": "Willkommen zurück",
+    "title": "Willkommen zurück, {name}",
+    "body": "Melde dich wieder an, um dein Reich dort fortzusetzen, wo du aufgehört hast.",
+    "newRealm": "Stattdessen ein neues Reich beginnen"
   }
 }
