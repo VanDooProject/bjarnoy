@@ -324,6 +324,12 @@ public sealed class WorldService(
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+        // Every settlement this world had is now gone — RealmDirectory's
+        // cached realms for it (by settlement id, by user, by owner id) would
+        // otherwise keep answering with rows that no longer exist until they
+        // aged out on their own.
+        RealmDirectory.InvalidateWorld(worldId);
+
         _logger.LogWarning(
             "World {WorldId} ({Name}) reseeded to seed {Seed} by admin {AdminId}: " +
             "{Islands} islands, {Deleted} settlement(s) destroyed.",
