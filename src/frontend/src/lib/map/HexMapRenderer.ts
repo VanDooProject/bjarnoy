@@ -59,6 +59,7 @@ import {
   TILE_ART_TOPFACE_Y_FRAC,
   baseTextureFor,
   loadBuildingAtlases,
+  loadStaticBuildingAtlas,
   loadTerrainAtlas,
   mergeTileTextures,
   riverTexturesFor,
@@ -1649,6 +1650,22 @@ export class HexMapRenderer {
       if (this.destroyed) return;
       this.textures = textures;
       this.icons = icons;
+
+      // Staged in two steps rather than one `loadBuildingAtlases()` await:
+      // static building art (what settlement tiles actually need to stop
+      // looking terrain-only) paints as soon as it resolves, instead of
+      // waiting on `buildings-anim` too — that atlas only ever adds motion
+      // on top of art that's already on screen, so it's fine to arrive later
+      // and shouldn't hold up the first, more valuable paint.
+      loadStaticBuildingAtlas()
+        .then((staticBuildings) => {
+          if (this.destroyed || !this.textures) return;
+          this.textures = mergeTileTextures(this.textures, staticBuildings);
+          this.rebuildAll();
+        })
+        .catch((err) => {
+          console.warn('Static building atlas failed to load; settlement tiles stay terrain-only', err);
+        });
 
       loadBuildingAtlases()
         .then((buildings) => {

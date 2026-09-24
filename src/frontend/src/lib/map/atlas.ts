@@ -136,34 +136,100 @@ export function findAtlasFrame(category: string, name: string): AtlasFrameRect |
 
 const cache = new Map<string, Promise<LoadedAtlas>>();
 
-/** Loads and parses every page of one atlas category, merging them into a single frame/clip lookup. */
-export function loadAtlasCategory(category: string): Promise<LoadedAtlas> {
+/** One page's already-resolved data, ready to merge — same shape a manifest/webpUrl pair carries in `pagesFor`. */
+interface AtlasPage {
+  manifest: AtlasManifest;
+  webpUrl: string;
+}
+
+/**
+ * Loads one atlas page's WebP texture, retrying once on failure. A flaky/
+ * slow-connection load shouldn't fail the whole category just because one
+ * page's fetch glitched — but a `Spritesheet.parse()` failure on a corrupt
+ * page still propagates as-is, since retrying the same bytes wouldn't help.
+ * Pixi's `Assets` cache keeps rejected loads cached too (v8's loader map
+ * still has the in-flight/rejected promise keyed by url), so the retry has
+ * to `unload` first or it would just get handed the same rejection back —
+ * guarded in try/catch since unloading a url that never made it into the
+ * cache throws.
+ */
+async function loadPageTexture(webpUrl: string): Promise<Texture> {
+  try {
+    return await Assets.load<Texture>(webpUrl);
+  } catch (err) {
+    try {
+      await Assets.unload(webpUrl);
+    } catch {
+      // Nothing cached to unload — fine, just retry the load itself below.
+    }
+    return await Assets.load<Texture>(webpUrl);
+  }
+}
+
+/**
+ * Loads and parses every given page, merging them into a single frame/clip
+ * lookup. Pages are fetched in parallel (bandwidth spent on all of them at
+ * once beats a strictly one-after-another queue on a slow connection), then
+ * merged in the caller's page order so the result stays deterministic
+ * regardless of which page's network request happens to resolve first.
+ * Exported so it's unit-testable with injected pages, independent of the
+ * `import.meta.glob` vendor lookup `pagesFor`/`loadAtlasCategory` do (see
+ * atlas.test.ts).
+ */
+export async function loadPages(pages: AtlasPage[]): Promise<LoadedAtlas> {
+  const sheets = await Promise.all(
+    pages.map(async ({ manifest, webpUrl }) => {
+      const pageTexture = await loadPageTexture(webpUrl);
+      const sheet = new Spritesheet(pageTexture, manifest);
+      await sheet.parse();
+      return { manifest, sheet };
+    }),
+  );
+
+  const textures: Record<string, Texture> = {};
+  const frameMeta: Record<string, AtlasFrameMeta> = {};
+  const clips: Record<string, AtlasClip> = {};
+
+  for (const { manifest, sheet } of sheets) {
+    Object.assign(textures, sheet.textures);
+    for (const [name, frame] of Object.entries(manifest.frames)) {
+      if (frame.bjarnoy) frameMeta[name] = frame.bjarnoy;
+    }
+    Object.assign(clips, manifest.clips ?? {});
+  }
+
+  return { textures, frameMeta, clips };
+}
+
+/**
+ * Loads and parses every page of one atlas category, merging them into a
+ * single frame/clip lookup. `pages` defaults to the real vendored pages for
+ * `category` (via `pagesFor`) — atlas.test.ts overrides it with synthetic
+ * pages instead, since real vendor art needs a browser `document` this
+ * repo's node-environment vitest config doesn't provide (same reason
+ * `riverArtFor` is exported standalone in textures.ts).
+ */
+export function loadAtlasCategory(
+  category: string,
+  pages: AtlasPage[] = pagesFor(category),
+): Promise<LoadedAtlas> {
   const cached = cache.get(category);
   if (cached) return cached;
 
   const promise = (async () => {
-    const pages = pagesFor(category);
     if (pages.length === 0) {
       throw new Error(`atlas.ts: no vendored pages found for atlas category "${category}"`);
     }
-
-    const textures: Record<string, Texture> = {};
-    const frameMeta: Record<string, AtlasFrameMeta> = {};
-    const clips: Record<string, AtlasClip> = {};
-
-    for (const { manifest, webpUrl } of pages) {
-      const pageTexture = await Assets.load<Texture>(webpUrl);
-      const sheet = new Spritesheet(pageTexture, manifest);
-      await sheet.parse();
-      Object.assign(textures, sheet.textures);
-      for (const [name, frame] of Object.entries(manifest.frames)) {
-        if (frame.bjarnoy) frameMeta[name] = frame.bjarnoy;
-      }
-      Object.assign(clips, manifest.clips ?? {});
-    }
-
-    return { textures, frameMeta, clips };
+    return loadPages(pages);
   })();
+
+  // A rejected category promise stays cached forever otherwise — the next
+  // caller (e.g. a retry button, or setMode switching into settlement mode
+  // again) would just get handed the same dead rejection back rather than
+  // getting a fresh attempt.
+  promise.catch(() => {
+    if (cache.get(category) === promise) cache.delete(category);
+  });
 
   cache.set(category, promise);
   return promise;
