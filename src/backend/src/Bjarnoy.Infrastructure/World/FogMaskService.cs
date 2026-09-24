@@ -1,8 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
-using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -39,25 +36,27 @@ public sealed record FogMaskResult(FogMaskRejection Rejection, byte[]? Png = nul
 /// follow-up work, deliberately left out of this slice rather than
 /// half-implemented.
 ///
-/// What *is* implemented here is §3's "compute cache, not HTTP cache" —
-/// the expensive step (BFS distance transform + PNG encode) is cached
-/// server-side, keyed by the player's current settlement set plus their
-/// persisted explored history's own version, same shape as
+/// What *is* implemented here is §3's "compute cache, not HTTP cache" — the
+/// expensive step (BFS distance transform + PNG encode) is cached
+/// server-side, keyed by <see cref="ExploredAreaService"/>'s own
+/// <see cref="ExploredArea.Version"/> (the player's current settlement set
+/// plus their persisted explored history's own version, same shape as
 /// <see cref="Bjarnoy.Infrastructure.Services.UserActivityService"/>'s
-/// <see cref="IMemoryCache"/> use. A settlement founding, leveling, or
-/// losing — or newly-explored ground, see below — bumps the version key
-/// automatically, which naturally invalidates — no explicit eviction call
+/// <see cref="IMemoryCache"/> use). A settlement founding, leveling, or
+/// losing — or newly-explored ground — bumps that version automatically,
+/// which naturally invalidates this cache too, no explicit eviction call
 /// needed on write paths.
 ///
-/// Also implements §1e's persisted explored history: a player's own
-/// <see cref="Entities.PlayerExploredEntity"/> row is loaded, OR-ed with
-/// whatever their settlements' explored rings and any of their armies'
-/// current walked-over ground (<see cref="FogVisionRadii.ArmyVisionRadiusHexes"/>
-/// around each in-transit army's live position — <see cref="Domain.Armies.Army.PositionAt"/>,
-/// server-authoritative, no new plumbing needed) newly cover, and saved back
-/// if it grew. §1c's real-time army-vision *bonus* stays out of this
-/// entirely, by design — see <c>fogShader.ts</c>'s own remarks — only the
-/// ground an army has actually walked over becomes permanent memory here.
+/// §1e's persisted explored history itself — a player's own
+/// <see cref="Entities.PlayerExploredEntity"/> row loaded, OR-ed with
+/// whatever their settlements' explored rings, towers and armies newly
+/// cover, and saved back if it grew — now lives in
+/// <see cref="ExploredAreaService"/>, shared with every other fog-gated
+/// read (<c>GET /settlements/{id}/view</c>,
+/// <c>GET /worlds/{worldId}/settlements</c>) rather than duplicated here.
+/// §1c's real-time army-vision *bonus* stays out of this entirely, by
+/// design — see <c>fogShader.ts</c>'s own remarks — only the ground an army
+/// has actually walked over becomes permanent memory.
 /// </remarks>
 public sealed class FogMaskService(GameDbContext dbContext, IMemoryCache cache, TimeProvider timeProvider)
 {
@@ -69,143 +68,45 @@ public sealed class FogMaskService(GameDbContext dbContext, IMemoryCache cache, 
     /// </summary>
     private static readonly TimeSpan CacheSlidingExpiration = TimeSpan.FromMinutes(10);
 
-    private readonly GameDbContext _dbContext = dbContext;
     private readonly IMemoryCache _cache = cache;
-    private readonly TimeProvider _timeProvider = timeProvider;
+
+    // Not injected via DI: this service's own constructor signature is kept
+    // stable (dbContext/cache/timeProvider, exactly as before this class's
+    // shared explored-area computation moved out) so nothing registering or
+    // constructing a FogMaskService directly — including FogMaskServiceTests —
+    // needs to change. The two services share the same IMemoryCache
+    // deliberately, same reasoning as UserActivityService's remarks.
+    private readonly ExploredAreaService _exploredArea = new(dbContext, cache, timeProvider);
 
     public async Task<FogMaskResult> GeneratePlayerMaskAsync(
         Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
-
-        var radius = await _dbContext.Worlds
-            .Where(w => w.Id == worldId)
-            .Select(w => (int?)w.Radius)
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-
-        if (radius is null)
+        var area = await _exploredArea.GetAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false);
+        if (area is null)
         {
             return new FogMaskResult(FogMaskRejection.WorldNotFound);
         }
 
-        var bounds = FogMaskLayout.WorldBounds(radius.Value);
-
-        var settlements = await _dbContext.Settlements
-            .AsNoTracking()
-            .Include(s => s.Buildings)
-            .Where(s => s.WorldId == worldId && s.OwnerId == ownerId)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        // In-transit armies only — an AtHome army is standing in its own
-        // settlement's already-explored ring, and a Supporting one stands at
-        // whatever it's supporting, neither of which needs its own walked-
-        // ground contribution (see this class's own remarks). Settlement is
-        // included for PositionAt's `home` parameter.
-        var travellingArmies = await _dbContext.Armies
-            .AsNoTracking()
-            .Include(a => a.Settlement)
-            .Include(a => a.Stacks)
-            .Where(a => !a.AtHome && !a.IsSupporting && a.Settlement != null
-                && a.Settlement.WorldId == worldId && a.Settlement.OwnerId == ownerId)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        var now = _timeProvider.GetUtcNow();
-        var newlyWalked = new List<HexCoord>();
-        foreach (var settlement in settlements)
-        {
-            var level = settlement.ToDomain().LonghouseLevel;
-            newlyWalked.AddRange(new HexCoord(settlement.CentreQ, settlement.CentreR)
-                .WithinRadius(FogVisionRadii.ExploredRadius(level)));
-
-            foreach (var tower in settlement.Buildings.Where(b => b.Type == BuildingType.Tower))
-            {
-                newlyWalked.AddRange(new HexCoord(tower.Q, tower.R)
-                    .WithinRadius(FogVisionRadii.TowerExploredRadius(tower.Level)));
-            }
-        }
-
-        foreach (var armyEntity in travellingArmies)
-        {
-            var home = new HexCoord(armyEntity.Settlement!.CentreQ, armyEntity.Settlement.CentreR);
-            var position = armyEntity.ToDomain().PositionAt(home, now);
-            newlyWalked.AddRange(position.WithinRadius(FogVisionRadii.ArmyVisionRadiusHexes));
-        }
-
-        var explored = await _dbContext.PlayerExplored
-            .FirstOrDefaultAsync(e => e.WorldId == worldId && e.OwnerId == ownerId, cancellationToken)
-            .ConfigureAwait(false);
-
-        var mergedBits = PersistedExploredBitset.Merge(bounds, explored?.Bits, newlyWalked, out var grew);
-        if (grew)
-        {
-            if (explored is null)
-            {
-                explored = new PlayerExploredEntity { WorldId = worldId, OwnerId = ownerId };
-                _dbContext.PlayerExplored.Add(explored);
-            }
-
-            explored.Bits = mergedBits;
-            explored.UpdatedAt = now;
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        var eTag = ComputeETag(settlements, mergedBits);
-        var cacheKey = $"fog-mask:{worldId}:{ownerId}:{eTag}";
+        var cacheKey = $"fog-mask:{worldId}:{ownerId}:{area.Version}";
 
         if (_cache.TryGetValue<byte[]>(cacheKey, out var cachedPng))
         {
-            return new FogMaskResult(FogMaskRejection.None, cachedPng, eTag);
+            return new FogMaskResult(FogMaskRejection.None, cachedPng, area.Version);
         }
 
-        var sources = settlements
+        var sources = area.Settlements
             .Select(s => FogVisionRadii.ToVisionSource(
                 new HexCoord(s.CentreQ, s.CentreR), s.ToDomain().LonghouseLevel))
-            .Concat(settlements
+            .Concat(area.Settlements
                 .SelectMany(s => s.Buildings.Where(b => b.Type == BuildingType.Tower))
                 .Select(t => FogVisionRadii.ToTowerVisionSource(new HexCoord(t.Q, t.R), t.Level)))
             .ToList();
 
-        var persistedExplored = PersistedExploredBitset.Decode(bounds, mergedBits);
-        var mask = FogMaskGenerator.Generate(bounds, sources, persistedExplored);
+        var mask = FogMaskGenerator.Generate(area.Bounds, sources, area.Hexes);
         var png = FogMaskPngEncoder.Encode(mask);
 
         _cache.Set(cacheKey, png, new MemoryCacheEntryOptions { SlidingExpiration = CacheSlidingExpiration });
 
-        return new FogMaskResult(FogMaskRejection.None, png, eTag);
-    }
-
-    /// <summary>
-    /// A deterministic hash of the player's current settlement set — id,
-    /// position, longhouse level, and every standing Tower's own coord/level
-    /// (the inputs <see cref="FogVisionRadii.ToVisionSource"/> and
-    /// <see cref="FogVisionRadii.ToTowerVisionSource"/> read) — sorted first
-    /// so the same set always hashes the same way regardless of query order —
-    /// plus the persisted explored bitset actually baked into this mask.
-    /// Doubles as the cache key's version component and the HTTP `ETag`, per
-    /// §1a Option B's <c>(playerId, sorted [settlementId, q, r, level])</c>
-    /// cache key, extended for §1e's persisted layer and for Towers so a
-    /// tower built/levelled/razed actually busts the cached mask instead of
-    /// serving a stale one. The bitset only ever grows (see
-    /// <see cref="PersistedExploredBitset.Merge"/>), so this doesn't
-    /// reintroduce §1c's "busts the cache every movement tick" problem — an
-    /// army merely standing somewhere already-walked changes nothing here.
-    /// </summary>
-    private static string ComputeETag(IReadOnlyCollection<Entities.SettlementEntity> settlements, byte[] persistedBits)
-    {
-        var version = string.Join(
-            '|',
-            settlements
-                .Select(s => (s.Id, s.CentreQ, s.CentreR, Level: s.ToDomain().LonghouseLevel, Towers: s.Buildings
-                    .Where(b => b.Type == BuildingType.Tower)
-                    .OrderBy(b => b.Q).ThenBy(b => b.R)
-                    .Select(b => $"{b.Q}:{b.R}:{b.Level}")))
-                .OrderBy(s => s.Id)
-                .Select(s => $"{s.Id}:{s.CentreQ}:{s.CentreR}:{s.Level}:[{string.Join(',', s.Towers)}]"));
-
-        using var sha = SHA256.Create();
-        sha.TransformBlock(Encoding.UTF8.GetBytes(version), 0, Encoding.UTF8.GetByteCount(version), null, 0);
-        sha.TransformFinalBlock(persistedBits, 0, persistedBits.Length);
-
-        return Convert.ToHexString(sha.Hash!)[..16];
+        return new FogMaskResult(FogMaskRejection.None, png, area.Version);
     }
 }
