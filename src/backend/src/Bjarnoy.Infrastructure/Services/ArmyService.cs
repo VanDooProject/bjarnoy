@@ -269,7 +269,9 @@ public sealed class ArmyService(
             var claimedSettlements = await _settlementService
                 .GetClaimedSettlementsAsync(settlement.WorldId, cancellationToken)
                 .ConfigureAwait(false);
-            isHexFoundable = target => Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing);
+            var dispatchGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
+            isHexFoundable = target =>
+                Founding.IsHexFoundable(target, claimedSettlements, SettlementService.MinimumSpacing, dispatchGiants);
         }
 
         var decision = Army.PlanDispatch(
@@ -1016,7 +1018,9 @@ public sealed class ArmyService(
         var claimedSettlements = await _settlementService
             .GetClaimedSettlementsAsync(originSettlement.WorldId, cancellationToken)
             .ConfigureAwait(false);
-        var targetStillFoundable = Founding.IsHexFoundable(targetHex, claimedSettlements, SettlementService.MinimumSpacing);
+        var arrivalGiants = await LoadGiantIndexAsync(originSettlement.WorldId, cancellationToken).ConfigureAwait(false);
+        var targetStillFoundable =
+            Founding.IsHexFoundable(targetHex, claimedSettlements, SettlementService.MinimumSpacing, arrivalGiants);
 
         var arrival = Army.PlanFoundingArrival(domain, now, targetStillFoundable);
 
@@ -1214,6 +1218,27 @@ public sealed class ArmyService(
             .SelectMany(tiles => tiles)
             .Select(t => new HexCoord(t.Q, t.R))
             .ToHashSet();
+    }
+
+    /// <summary>
+    /// Every giant across every island of <paramref name="worldId"/>
+    /// (the territory rule), built into one lookup — mirrors
+    /// <see cref="LoadRiverTilesAsync"/> for the same reason.
+    /// </summary>
+    private async Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.Giants)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var giants = islands
+            .SelectMany(g => g)
+            .Select(g => new Giant(new HexCoord(g.Q, g.R), g.Family, (TileOrientation)g.Orientation))
+            .ToList();
+
+        return new GiantIndex(giants);
     }
 
     private Task<ArmyEntity?> LoadArmyAsync(Guid armyId, CancellationToken cancellationToken) =>

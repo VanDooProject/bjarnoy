@@ -67,12 +67,23 @@ public static class Founding
     /// its centre. Also false when <paramref name="target"/> falls inside any
     /// settlement's claim outright (spacing distance would be negative).
     /// </summary>
+    /// <param name="giants">
+    /// This world's giant index (the territory rule), or
+    /// <see langword="null"/> for none on hand. A giant hex is never
+    /// foundable, full stop — checked first, independently of spacing.
+    /// </param>
     public static bool IsHexFoundable(
         HexCoord target,
         IEnumerable<(HexCoord Centre, int ClaimRadius)> claimedSettlements,
-        int minimumSpacing)
+        int minimumSpacing,
+        IGiantIndex? giants = null)
     {
         ArgumentNullException.ThrowIfNull(claimedSettlements);
+
+        if ((giants ?? GiantIndex.Empty).TryGetGiant(target, out _))
+        {
+            return false;
+        }
 
         foreach (var (centre, claimRadius) in claimedSettlements)
         {

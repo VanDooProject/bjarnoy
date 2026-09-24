@@ -569,6 +569,10 @@ namespace Bjarnoy.Migrations.PostgreSql.Migrations
                     b.Property<int>("CentreR")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Giants")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("Index")
                         .HasColumnType("integer");
 

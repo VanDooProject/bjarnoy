@@ -185,7 +185,8 @@ public sealed record IslandResponse(
     int R,
     int TileCount,
     IReadOnlyList<TileCoordinate> StartPositions,
-    IReadOnlyList<RiverTileResponse> RiverTiles)
+    IReadOnlyList<RiverTileResponse> RiverTiles,
+    IReadOnlyList<GiantResponse> Giants)
 {
     public static IslandResponse From(IslandEntity island)
     {
@@ -199,8 +200,32 @@ public sealed record IslandResponse(
             island.CentreR,
             island.TileCount,
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
-            [.. island.RiverTiles.Select(RiverTileResponse.From)]);
+            [.. island.RiverTiles.Select(RiverTileResponse.From)],
+            [.. island.Giants.Select(GiantResponse.From)]);
     }
+}
+
+/// <summary>A 7-hex giant feature — see <see cref="Bjarnoy.Domain.World.Giant"/> and the territory rule.</summary>
+/// <param name="Family">The tile-art family it renders as, e.g. <c>"giantmountain"</c>.</param>
+/// <param name="Q">Anchor hex column.</param>
+/// <param name="R">Anchor hex row.</param>
+/// <param name="Orientation">
+/// The anchor tile's own orientation, as the wire name <see cref="TileOrientationExtensions.ToWireName"/>
+/// produces elsewhere (e.g. <c>"E"</c>, <c>"NE"</c>) — the footprint's other 6 hexes render as plain terrain.
+/// </param>
+public sealed record GiantResponse(string Family, int Q, int R, string Orientation)
+{
+    public static GiantResponse From(GiantRecord giant) => new(
+        giant.Family,
+        giant.Q,
+        giant.R,
+        ((TileOrientation)giant.Orientation).ToWireName());
+
+    public static GiantResponse FromDomain(Giant giant) => new(
+        giant.Family,
+        giant.Anchor.Q,
+        giant.Anchor.R,
+        giant.Orientation.ToWireName());
 }
 
 public sealed record TileCoordinate(int Q, int R);

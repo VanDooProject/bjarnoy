@@ -49,7 +49,31 @@ public class IslandEntity
     /// <see cref="Persistence.RiverTileListConverter"/> for the encoding.
     /// </remarks>
     public List<RiverTileRecord> RiverTiles { get; set; } = [];
+
+    /// <summary>
+    /// This island's 7-hex giant features — see
+    /// <c>Bjarnoy.Domain.World.GiantGenerator</c>.
+    /// </summary>
+    /// <remarks>
+    /// Persisted for the same reason <see cref="RiverTiles"/> is: generation
+    /// scores every candidate anchor against the whole island (mountains,
+    /// rivers, start positions, the other chosen giants), which a client — or
+    /// even the server on a later request — cannot re-derive hex by hex from
+    /// the seed alone. Stored as a single column, same reasoning as
+    /// <see cref="StartPositions"/>. See
+    /// <see cref="Persistence.GiantListConverter"/> for the encoding.
+    /// </remarks>
+    public List<GiantRecord> Giants { get; set; } = [];
 }
+
+/// <summary>
+/// A stored giant. Kept separate from the domain's <c>Giant</c> for the same
+/// reason <see cref="HexPoint"/> is kept separate from <c>HexCoord</c> —
+/// <c>Orientation</c> is the domain's <c>TileOrientation</c> by its plain
+/// numeric index, not the enum itself, so this type (and its converter)
+/// never has to change shape when the domain enum does.
+/// </summary>
+public readonly record struct GiantRecord(int Q, int R, string Family, int Orientation);
 
 /// <summary>A stored hex coordinate. Kept separate from the domain's
 /// <c>HexCoord</c> so persistence concerns never leak into the game rules.</summary>

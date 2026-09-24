@@ -198,7 +198,8 @@ public sealed record PreviewIslandResponse(
     int R,
     int TileCount,
     IReadOnlyList<TileCoordinate> StartPositions,
-    IReadOnlyList<RiverTileResponse> RiverTiles)
+    IReadOnlyList<RiverTileResponse> RiverTiles,
+    IReadOnlyList<GiantResponse> Giants)
 {
     public static PreviewIslandResponse From(GeneratedIsland island)
     {
@@ -211,7 +212,8 @@ public sealed record PreviewIslandResponse(
             island.Centre.R,
             island.TileCount,
             [.. island.StartPositions.Select(p => new TileCoordinate(p.Q, p.R))],
-            [.. island.RiverTiles.Select(RiverTileResponse.FromDomain)]);
+            [.. island.RiverTiles.Select(RiverTileResponse.FromDomain)],
+            [.. island.Giants.Select(GiantResponse.FromDomain)]);
     }
 }
 

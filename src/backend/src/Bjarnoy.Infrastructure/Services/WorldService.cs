@@ -399,6 +399,7 @@ public sealed class WorldService(
         TileCount = island.TileCount,
         StartPositions = [.. island.StartPositions.Select(p => new HexPoint(p.Q, p.R))],
         RiverTiles = [.. island.RiverTiles.Select(ToRiverTileRecord)],
+        Giants = [.. island.Giants.Select(ToGiantRecord)],
     };
 
     /// <summary>
@@ -701,4 +702,10 @@ public sealed class WorldService(
         (int)tile.Shape,
         [.. tile.InDirections.Select(d => (int)d)],
         tile.OutDirection is { } outDirection ? (int)outDirection : null);
+
+    private static GiantRecord ToGiantRecord(Giant giant) => new(
+        giant.Anchor.Q,
+        giant.Anchor.R,
+        giant.Family,
+        (int)giant.Orientation);
 }

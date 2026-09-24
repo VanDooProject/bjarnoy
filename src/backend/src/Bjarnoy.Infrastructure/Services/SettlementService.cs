@@ -874,10 +874,11 @@ public sealed class SettlementService(
 
         var (settlement, clock, now, settled, settleResult, guestArmies, guestStacks) = loaded.Value;
         var sampler = new TerrainSampler(settlement.World!.ToGenerationOptions());
+        var placeGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
 
         var result = settled.PlaceBuilding(
             coord, type, level, sampler.TerrainAt(coord), sampler.IsCoastalWater(coord),
-            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt);
+            now, settlement.World.SpeedFactor, guestStacks, sampler.TerrainAt, placeGiants);
 
         if (!result.Accepted)
         {
@@ -1049,11 +1050,12 @@ public sealed class SettlementService(
         var terrain = sampler.TerrainAt(coord);
         var riverShapeAt = await RiverShapeAtAsync(settlement.WorldId, coord, cancellationToken)
             .ConfigureAwait(false);
+        var buildGiants = await LoadGiantIndexAsync(settlement.WorldId, cancellationToken).ConfigureAwait(false);
         var decision = settled.PlanBuild(
             type, coord, terrain, now, Guid.CreateVersion7(),
             settlement.World.SpeedFactor, sampler.IsCoastalWater(coord),
             maxWaitingOrders, Settlement.DefaultMaxOrdersPerHex,
-            riverShapeAt: riverShapeAt);
+            riverShapeAt: riverShapeAt, giants: buildGiants);
 
         if (!decision.Accepted)
         {
@@ -1326,6 +1328,28 @@ public sealed class SettlementService(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Every giant across every island of <paramref name="worldId"/> (the
+    /// territory rule), built into one lookup — mirrors
+    /// <see cref="RiverShapeAtAsync"/>'s own whole-world scan, and
+    /// <c>ArmyService.LoadGiantIndexAsync</c> for the same reason.
+    /// </summary>
+    public async Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken = default)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.Giants)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var giants = islands
+            .SelectMany(g => g)
+            .Select(g => new Giant(new HexCoord(g.Q, g.R), g.Family, (TileOrientation)g.Orientation))
+            .ToList();
+
+        return new GiantIndex(giants);
     }
 
     private Task<SettlementEntity?> LoadAsync(Guid settlementId, CancellationToken cancellationToken) =>

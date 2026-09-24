@@ -133,8 +133,26 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
             return false;
         }
 
-        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At);
+        var giants = await LoadGiantIndexAsync(worldId, cancellationToken).ConfigureAwait(false);
+        Resolve(army, domain, movement, chosen.Other, chosen.OtherDomain, chosen.OtherMovement, chosen.Hex, chosen.At, giants);
         return true;
+    }
+
+    /// <summary>Every giant across every island of <paramref name="worldId"/> — see <c>ArmyService.LoadGiantIndexAsync</c>.</summary>
+    private async Task<IGiantIndex> LoadGiantIndexAsync(Guid worldId, CancellationToken cancellationToken)
+    {
+        var islands = await _dbContext.Islands
+            .AsNoTracking()
+            .Where(i => i.WorldId == worldId)
+            .Select(i => i.Giants)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var giants = islands
+            .SelectMany(g => g)
+            .Select(g => new Giant(new HexCoord(g.Q, g.R), g.Family, (TileOrientation)g.Orientation))
+            .ToList();
+
+        return new GiantIndex(giants);
     }
 
     /// <summary>
@@ -193,12 +211,12 @@ public sealed class FieldBattleService(GameDbContext dbContext, ILogger<FieldBat
     private void Resolve(
         ArmyEntity armyA, Army domainA, Movement movementA,
         ArmyEntity armyB, Army domainB, Movement movementB,
-        HexCoord hex, DateTimeOffset at)
+        HexCoord hex, DateTimeOffset at, IGiantIndex giants)
     {
         var claimA = FieldBattleResolver.ClaimAt(
-            hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), ToPlacedBuildings(armyA.Settlement.Buildings));
+            hex, new HexCoord(armyA.Settlement!.CentreQ, armyA.Settlement.CentreR), ToPlacedBuildings(armyA.Settlement.Buildings), giants);
         var claimB = FieldBattleResolver.ClaimAt(
-            hex, new HexCoord(armyB.Settlement!.CentreQ, armyB.Settlement.CentreR), ToPlacedBuildings(armyB.Settlement.Buildings));
+            hex, new HexCoord(armyB.Settlement!.CentreQ, armyB.Settlement.CentreR), ToPlacedBuildings(armyB.Settlement.Buildings), giants);
 
         var seed = BitConverter.ToInt32(ClaimId(armyA.Id, armyB.Id, at).ToByteArray(), 0);
 

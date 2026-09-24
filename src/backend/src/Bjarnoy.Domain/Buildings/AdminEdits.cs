@@ -8,6 +8,9 @@ public enum AdminBuildingEditRejection
     /// <summary>The hex lies outside the settlement's claimed radius.</summary>
     HexNotInSettlement,
 
+    /// <summary>The hex belongs to a giant's 7-hex footprint — never buildable, regardless of claim (the territory rule).</summary>
+    HexOccupiedByGiant,
+
     /// <summary>No such (type, level) pair in the catalogue.</summary>
     InvalidLevel,
 
