@@ -29,7 +29,16 @@ userName.value = player.lastAccount ?? '';
 async function onSubmit() {
   if (!(await login(userName.value, password.value))) return;
   await restoreRealmIfAny();
-  await router.push('/');
+  // Straight to the settlement, not `router.push('/')`: this panel already
+  // lives on '/', and vue-router treats a push to the current location as a
+  // duplicate navigation that never re-runs the guard (router/index.ts) that
+  // would otherwise forward a founded player to /settlement — so the player
+  // stayed on the landing page after a successful login. No realm restored
+  // (demo mode, or an account with no realm in this world) means there's
+  // nowhere else to go: the gate simply disappears and founding shows.
+  if (player.hasFoundedSettlement) {
+    await router.push({ name: 'settlement' });
+  }
 }
 
 // "Start a new realm instead": declines the gate — forgetting `lastAccount`

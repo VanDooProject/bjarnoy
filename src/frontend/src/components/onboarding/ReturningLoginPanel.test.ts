@@ -75,7 +75,11 @@ describe('ReturningLoginPanel', () => {
     expect(player.lastAccount).toBeNull();
   });
 
-  it('on successful submit, logs in, restores the realm, and navigates to /', async () => {
+  it('on successful submit, logs in, restores the realm, and navigates to /settlement', async () => {
+    // Regression: the panel used to `router.push('/')` from '/', a duplicate
+    // navigation vue-router skips — so the guard that forwards a founded
+    // player to /settlement never ran and the player stayed on the landing
+    // page after logging back in (caught by the AppHost happy-path test).
     const player = usePlayerStore();
     player.lastAccount = 'ragnar42';
     const { wrapper, router } = await mountPanel();
@@ -84,7 +88,9 @@ describe('ReturningLoginPanel', () => {
     auth.login = vi.fn().mockResolvedValue(undefined);
     const world = useWorldStore();
     world.worldId = 'world-9';
-    world.joinWorld = vi.fn().mockResolvedValue(undefined);
+    world.joinWorld = vi.fn().mockImplementation(async () => {
+      player.enterWorld('world-9', 'settlement-1');
+    });
 
     await wrapper.find('[data-testid="returning-login-password"]').setValue('hunter2');
     await wrapper.find('form').trigger('submit.prevent');
@@ -92,6 +98,26 @@ describe('ReturningLoginPanel', () => {
 
     expect(auth.login).toHaveBeenCalledWith('ragnar42', 'hunter2');
     expect(world.joinWorld).toHaveBeenCalledWith('world-9');
+    expect(router.currentRoute.value.path).toBe('/settlement');
+  });
+
+  it('stays on the landing page after login when the account has no realm in this world', async () => {
+    const player = usePlayerStore();
+    player.lastAccount = 'ragnar42';
+    const { wrapper, router } = await mountPanel();
+
+    const auth = useAuthStore();
+    auth.login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = 'world-9';
+    world.joinWorld = vi.fn().mockImplementation(async () => {
+      player.enterWorld('world-9', null);
+    });
+
+    await wrapper.find('[data-testid="returning-login-password"]').setValue('hunter2');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
     expect(router.currentRoute.value.path).toBe('/');
   });
 
