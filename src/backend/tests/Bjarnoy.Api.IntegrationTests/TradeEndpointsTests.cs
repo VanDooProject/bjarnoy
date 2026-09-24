@@ -54,9 +54,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     private async Task<(Guid WorldId, SettlementResponse Settlement, string OwnerId)> FoundAsync(
         HttpClient client, int seed = 21, int radius = 60)
     {
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), seed, radius), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -77,15 +75,23 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// <c>GET /settlements/{id}</c> is owner-only (SettlementOwnershipEndpointFilter)
-    /// — this suite reads two different settlements from the same client, so
-    /// each read swaps in the right settlement's own owner id rather than
-    /// relying on whatever header the client happens to carry.
+    /// <c>GET /settlements/{id}</c>, the trade board/mine/shipments/reports
+    /// reads below, and battle/field-report reads elsewhere in this suite
+    /// are all owner-gated (SettlementOwnershipEndpointFilter/
+    /// ReportOwnershipEndpointFilter) — this suite reads from two different
+    /// settlements on the same client, so every such read swaps in the
+    /// right settlement's own owner id first rather than relying on
+    /// whatever header the client happens to already carry.
     /// </summary>
-    private async Task<SettlementResponse?> GetSettlementAsync(HttpClient client, Guid settlementId, string ownerId)
+    private static void SetOwner(HttpClient client, string ownerId)
     {
         client.DefaultRequestHeaders.Remove("X-Owner-Id");
         client.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+    }
+
+    private async Task<SettlementResponse?> GetSettlementAsync(HttpClient client, Guid settlementId, string ownerId)
+    {
+        SetOwner(client, ownerId);
         return await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlementId}", SqliteApiFixture.StrictJson, Ct);
     }
@@ -214,8 +220,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task An_unknown_resource_name_is_a_bad_request()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         var response = await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/trade-offers",
             new PostTradeOfferRequest("gold", 100, "iron", 100, GuildOnly: false),
@@ -254,9 +261,10 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task Cancelling_someone_elses_offer_is_refused()
     {
         using var client = Client();
-        var (worldId, poster, _) = await FoundAsync(client);
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
         var (stranger, _) = await FoundAdjacentAsync(client, worldId, poster);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -267,15 +275,75 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
             new CancelTradeOfferRequest(stranger.Id),
             Ct);
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        // The caller holds the poster's id but names the stranger's
+        // settlement in the body — refused at the ownership gate now, before
+        // the service's own "must be the poster" check ever runs.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Cancelling_an_offer_while_posing_as_its_poster_is_forbidden()
+    {
+        // Regression: CancelTradeOfferRequest.SettlementId was trusted as-is,
+        // so anyone could withdraw anyone's offer by naming the poster.
+        using var client = Client();
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
+        var (_, strangerOwnerId) = await FoundAdjacentAsync(client, worldId, poster);
+
+        SetOwner(client, posterOwnerId);
+        var posted = await (await client.PostJsonAsync(
+            $"/api/v1/settlements/{poster.Id}/trade-offers",
+            new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
+            Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
+
+        SetOwner(client, strangerOwnerId);
+        var response = await client.PostJsonAsync(
+            $"/api/v1/trade-offers/{posted.Id}/cancel",
+            new CancelTradeOfferRequest(poster.Id),
+            Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        SetOwner(client, posterOwnerId);
+        var mine = await client.GetFromJsonAsync<List<TradeOfferResponse>>(
+            $"/api/v1/settlements/{poster.Id}/trade-offers/mine", SqliteApiFixture.StrictJson, Ct);
+        Assert.Equal("open", Assert.Single(mine!).State);
+    }
+
+    [Fact]
+    public async Task Accepting_an_offer_as_a_settlement_you_do_not_own_is_forbidden_and_escrows_nothing()
+    {
+        // Regression: AcceptTradeOfferRequest.AcceptorSettlementId was
+        // trusted as-is, so anyone could escrow another settlement's goods.
+        using var client = Client();
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
+        var (victim, victimOwnerId) = await FoundAdjacentAsync(client, worldId, poster);
+
+        var victimBefore = await GetSettlementAsync(client, victim.Id, victimOwnerId);
+
+        SetOwner(client, posterOwnerId);
+        var posted = await (await client.PostJsonAsync(
+            $"/api/v1/settlements/{poster.Id}/trade-offers",
+            new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
+            Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
+
+        // Still holding the poster's id, but naming the victim as acceptor.
+        var response = await client.PostJsonAsync(
+            $"/api/v1/trade-offers/{posted.Id}/accept",
+            new AcceptTradeOfferRequest(victim.Id),
+            Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
+        var victimAfter = await GetSettlementAsync(client, victim.Id, victimOwnerId);
+        Assert.Equal(victimBefore!.Resources.Stock.Iron, victimAfter!.Resources.Stock.Iron, 4);
     }
 
     [Fact]
     public async Task The_board_excludes_the_posters_own_offer()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -295,8 +363,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task Accepting_a_nonexistent_offer_is_not_found()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         var response = await client.PostJsonAsync(
             $"/api/v1/trade-offers/{Guid.CreateVersion7()}/accept",
             new AcceptTradeOfferRequest(settlement.Id),
@@ -309,8 +378,9 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task A_settlement_cannot_accept_its_own_offer()
     {
         using var client = Client();
-        var (_, settlement, _) = await FoundAsync(client);
+        var (_, settlement, ownerId) = await FoundAsync(client);
 
+        SetOwner(client, ownerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{settlement.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
@@ -332,14 +402,16 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         // remarks) — accepting a GuildOnly offer is always refused until
         // real membership resolution replaces the hardcoded false.
         using var client = Client();
-        var (worldId, poster, _) = await FoundAsync(client);
-        var (acceptor, _) = await FoundAdjacentAsync(client, worldId, poster);
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
+        var (acceptor, acceptorOwnerId) = await FoundAdjacentAsync(client, worldId, poster);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: true),
             Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
 
+        SetOwner(client, acceptorOwnerId);
         var response = await client.PostJsonAsync(
             $"/api/v1/trade-offers/{posted.Id}/accept",
             new AcceptTradeOfferRequest(acceptor.Id),
@@ -359,11 +431,13 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         var posterBefore = await GetSettlementAsync(client, poster.Id, posterOwnerId);
         var acceptorBefore = await GetSettlementAsync(client, acceptor.Id, acceptorOwnerId);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
             Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
 
+        SetOwner(client, acceptorOwnerId);
         var board = await client.GetFromJsonAsync<List<TradeOfferResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/trade-offers/board", SqliteApiFixture.StrictJson, Ct);
         Assert.Contains(board!, o => o.Id == posted.Id);
@@ -386,10 +460,12 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         // under a game-hour; two hours is a generous margin.
         _factory.Time.Advance(TimeSpan.FromHours(2));
 
+        SetOwner(client, acceptorOwnerId);
         var acceptorShipments = await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
         Assert.Contains(acceptorShipments!, s => s.Id == accepted.ToAcceptor.Id && s.Delivered);
 
+        SetOwner(client, posterOwnerId);
         var posterShipments = await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
         Assert.Contains(posterShipments!, s => s.Id == accepted.ToPoster.Id && s.Delivered);
@@ -411,14 +487,16 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     public async Task Completed_trade_report_is_visible_to_both_settlements()
     {
         using var client = Client();
-        var (worldId, poster, _) = await FoundAsync(client);
-        var (acceptor, _) = await FoundAdjacentAsync(client, worldId, poster);
+        var (worldId, poster, posterOwnerId) = await FoundAsync(client);
+        var (acceptor, acceptorOwnerId) = await FoundAdjacentAsync(client, worldId, poster);
 
+        SetOwner(client, posterOwnerId);
         var posted = await (await client.PostJsonAsync(
             $"/api/v1/settlements/{poster.Id}/trade-offers",
             new PostTradeOfferRequest("wood", 200, "iron", 100, GuildOnly: false),
             Ct)).ReadStrictAsync<TradeOfferResponse>(Ct);
 
+        SetOwner(client, acceptorOwnerId);
         var acceptResponse = await client.PostJsonAsync(
             $"/api/v1/trade-offers/{posted.Id}/accept",
             new AcceptTradeOfferRequest(acceptor.Id),
@@ -432,13 +510,16 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
         // Settling deliveries is lazy, keyed off a read against the
         // arriving settlement — touch both settlements' shipments first so
         // TryCompleteOfferAsync has written the report before we ask for it.
+        SetOwner(client, acceptorOwnerId);
         await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
+        SetOwner(client, posterOwnerId);
         await client.GetFromJsonAsync<List<ShipmentResponse>>(
             $"/api/v1/settlements/{poster.Id}/shipments", SqliteApiFixture.StrictJson, Ct);
 
         var posterReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
             $"/api/v1/settlements/{poster.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
+        SetOwner(client, acceptorOwnerId);
         var acceptorReports = await client.GetFromJsonAsync<List<TradeReportResponse>>(
             $"/api/v1/settlements/{acceptor.Id}/trade-reports", SqliteApiFixture.StrictJson, Ct);
 

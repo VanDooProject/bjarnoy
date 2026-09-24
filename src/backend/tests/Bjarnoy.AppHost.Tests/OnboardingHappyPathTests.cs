@@ -68,7 +68,7 @@ public class OnboardingHappyPathTests
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
         var world = Assert.Single(
-            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+            (await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken))!);
 
         var founderOwnerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
 

@@ -21,6 +21,25 @@ export interface WorldResponse {
   movement: WorldMovementResponse;
 }
 
+/**
+ * Mirrors `WorldSummaryResponse` — one row of `GET /worlds`, the minimal
+ * public listing (name, joinability, seat counts). Deliberately narrower
+ * than `WorldResponse`: no seed/radius/generation/movement, since a player
+ * choosing a world from a list needs none of that map-reproducing data —
+ * `getWorld` fetches the full config once a world is actually picked.
+ */
+export interface WorldSummaryResponse {
+  id: string;
+  name: string;
+  status: string;
+  joinable: boolean;
+  joinableReason: string;
+  playerCount: number;
+  maxPlayers: number;
+  freeSlots: number;
+  startsAt: string | null;
+}
+
 /** Mirrors `WorldGenerationResponse` — see that record's own doc comments for field semantics. */
 export interface WorldGenerationResponse {
   islandCellSize: number;
@@ -91,6 +110,7 @@ export interface JoinableWorldResponse {
   name: string;
   playerCount: number;
   maxPlayers: number;
+  freeSlots: number;
   joinable: boolean;
   joinableReason: string;
   startsAt: string | null;

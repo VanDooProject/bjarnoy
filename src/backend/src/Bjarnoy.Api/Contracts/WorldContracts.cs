@@ -64,11 +64,13 @@ public sealed record WorldResponse(
 /// data a player picking a world from a list needs, and handing it out would
 /// let a client precompute the whole map before ever landing on it.
 /// </summary>
+/// <param name="FreeSlots"><c>max(0, MaxPlayers - PlayerCount)</c> — what the picker actually needs to show, without making every caller re-derive it.</param>
 public sealed record JoinableWorldResponse(
     Guid Id,
     string Name,
     int PlayerCount,
     int MaxPlayers,
+    int FreeSlots,
     bool Joinable,
     string JoinableReason,
     DateTimeOffset? StartsAt,
@@ -87,12 +89,54 @@ public sealed record JoinableWorldResponse(
             world.Name,
             playerCount,
             world.MaxPlayers,
+            Math.Max(0, world.MaxPlayers - playerCount),
             joinability.Joinable,
             joinability.Reason.ToString().ToLowerInvariant(),
             world.StartsAt,
             world.SpeedFactor,
             world.CreatedAt,
             world.Status.ToString().ToLowerInvariant());
+    }
+}
+
+/// <summary>
+/// The minimal public listing for <c>GET /api/v1/worlds</c> — world creation
+/// moved to admin-only, so the old listing reusing <see cref="WorldResponse"/>
+/// (the very shape that carried seed/radius/generation to any anonymous
+/// caller) stopped making sense. Same idea as <see cref="JoinableWorldResponse"/>,
+/// one level up: a player choosing which world to look at needs its name,
+/// whether it's open, and how full it is — nothing that would let a client
+/// precompute its map. <c>GET /worlds/{worldId}</c> (<see cref="WorldResponse"/>)
+/// is still where the game client fetches the full config once a world is
+/// actually picked.
+/// </summary>
+public sealed record WorldSummaryResponse(
+    Guid Id,
+    string Name,
+    string Status,
+    bool Joinable,
+    string JoinableReason,
+    int PlayerCount,
+    int MaxPlayers,
+    int FreeSlots,
+    DateTimeOffset? StartsAt)
+{
+    public static WorldSummaryResponse From(WorldEntity world, int playerCount, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+
+        var joinability = world.DetermineJoinability(playerCount, now);
+
+        return new WorldSummaryResponse(
+            world.Id,
+            world.Name,
+            world.Status.ToString().ToLowerInvariant(),
+            joinability.Joinable,
+            joinability.Reason.ToString().ToLowerInvariant(),
+            playerCount,
+            world.MaxPlayers,
+            Math.Max(0, world.MaxPlayers - playerCount),
+            world.StartsAt);
     }
 }
 

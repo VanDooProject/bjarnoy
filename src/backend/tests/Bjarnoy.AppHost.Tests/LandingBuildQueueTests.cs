@@ -68,7 +68,7 @@ public class LandingBuildQueueTests
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
         var world = Assert.Single(
-            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+            (await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken))!);
 
         // The frontend generates and remembers its own anonymous player id
         // client-side (usePlayerStore, localStorage key "bjarnoy.playerId")

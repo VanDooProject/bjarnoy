@@ -1,5 +1,6 @@
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Hosting;
+using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Persistence;
 using Bjarnoy.Infrastructure.Services;
@@ -140,6 +141,35 @@ public sealed class BjarnoyApiFactory : WebApplicationFactory<Program>
         await using var scope = Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<WorldService>()
             .GetWorldsAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Creates a world directly through <see cref="WorldService"/> rather than
+    /// over HTTP. World creation now requires an admin session
+    /// (<c>POST /api/v1/admin/worlds</c> — <c>POST /api/v1/worlds</c> was
+    /// removed, see WorldEndpoints), and most tests only need <em>a</em> world
+    /// to exist as setup for whatever they actually mean to exercise; minting
+    /// and promoting an admin account in every one of them would be pure
+    /// boilerplate for no more coverage, since this calls the exact same
+    /// <see cref="WorldService.CreateWorldAsync"/> the admin endpoint itself
+    /// calls. Tests of the admin creation endpoint's own HTTP behaviour
+    /// (validation, the 409 on a duplicate name, the 401/403 matrix) still go
+    /// through <c>POST /api/v1/admin/worlds</c> directly — see
+    /// AdminGodModeEndpointsTests.
+    /// </summary>
+    public async Task<WorldEntity> CreateWorldAsync(
+        string name,
+        int? seed = null,
+        int radius = 60,
+        int maxPlayers = 500,
+        CancellationToken cancellationToken = default)
+    {
+        var options = WorldGenerationOptions.ForSeed(seed ?? Random.Shared.Next()) with { Radius = radius };
+        options.Validate();
+
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<WorldService>()
+            .CreateWorldAsync(name, options, maxPlayers, autoSeed: seed is null, cancellationToken);
     }
 
     public async Task<MigrationStatus> GetMigrationStatusAsync(CancellationToken cancellationToken = default)

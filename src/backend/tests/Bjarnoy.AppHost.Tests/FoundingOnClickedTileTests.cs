@@ -1,8 +1,10 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Bjarnoy.Api.Contracts;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 
@@ -45,8 +47,12 @@ namespace Bjarnoy.AppHost.Tests;
 /// The frontend joins the newest world (<c>bootstrapLiveWorld</c> →
 /// <c>newestWorld</c>, ordered by UUIDv7 id), so creating this one before the
 /// browser ever navigates is all it takes for the page under test to land in
-/// it. <c>POST /worlds</c> is unauthenticated today (see
-/// <c>WorldEndpoints</c>), so no admin login is needed for it.
+/// it. World creation is admin-only (<c>POST /api/v1/admin/worlds</c>), so
+/// this logs in as the same seeded admin account
+/// <see cref="AdminBootstrapLoginTests"/> drives through the UI — read off
+/// the "Log in as admin" dashboard link's own query string (the same place
+/// that test gets it) rather than duplicating AppHost.cs's password
+/// generation here.
 /// </para>
 /// </remarks>
 public class FoundingOnClickedTileTests
@@ -88,17 +94,46 @@ public class FoundingOnClickedTileTests
         var frontendUrl = app.GetEndpoint("frontend").ToString();
         using var apiClient = app.CreateHttpClient("api");
 
+        // Same seeded admin account AdminBootstrapLoginTests drives through
+        // the UI — its username/password ride along as query params on the
+        // dashboard's "Log in as admin" link (see AppHost.cs's
+        // frontend.WithUrls callback), which is the only place this test
+        // process can read them from without duplicating AppHost.cs's own
+        // password generation.
+        var frontendEvent = await resourceNotifications.WaitForResourceAsync(
+            "frontend",
+            evt => evt.Snapshot.Urls.Any(u => u.DisplayProperties?.DisplayName == "Log in as admin"),
+            cancellationToken);
+        var adminLoginUrl = new Uri(frontendEvent.Snapshot.Urls
+            .First(u => u.DisplayProperties?.DisplayName == "Log in as admin").Url);
+        var adminLoginQuery = QueryHelpers.ParseQuery(adminLoginUrl.Query);
+        var adminUserName = adminLoginQuery["username"].ToString();
+        var adminPassword = adminLoginQuery["password"].ToString();
+
+        var login = await apiClient.PostAsJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(adminUserName, adminPassword), cancellationToken);
+        login.EnsureSuccessStatusCode();
+        var adminAuth = (await login.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken))!;
+        apiClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminAuth.AccessToken);
+
         // Created before the browser navigates, so bootstrapLiveWorld()'s
         // newestWorld() picks this one rather than the API's own startup-seeded
         // (random-seed) world — see the class remarks for why this test needs a
         // known terrain when none of the others do.
         var createWorld = await apiClient.PostAsJsonAsync(
-            "/api/v1/worlds",
+            "/api/v1/admin/worlds",
             new CreateWorldRequest($"Founding click test {Guid.NewGuid():N}", Seed: PinnedWorldSeed),
             cancellationToken);
         createWorld.EnsureSuccessStatusCode();
-        var world = (await createWorld.Content.ReadFromJsonAsync<WorldResponse>(cancellationToken))!;
+        var world = (await createWorld.Content.ReadFromJsonAsync<AdminWorldResponse>(cancellationToken))!;
         Assert.Equal(PinnedWorldSeed, world.Seed);
+
+        // The rest of this test drives the anonymous player flow (the
+        // founding browser's own X-Owner-Id, not the admin's), so the admin
+        // token that just created the world must not ride along on the reads
+        // below.
+        apiClient.DefaultRequestHeaders.Authorization = null;
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();

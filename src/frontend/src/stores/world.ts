@@ -454,9 +454,14 @@ export const useWorldStore = defineStore('world', {
     },
     /** The most recently created world, or null if none exist yet. */
     async newestWorld() {
-      const worlds = await api.listWorlds();
+      // GET /worlds answers with WorldSummaryResponse — enough to pick a
+      // world, but not the seed/generation this store actually needs to
+      // build its local map, so the pick is followed by a real getWorld.
+      const summaries = await api.listWorlds();
+      if (summaries.length === 0) return null;
       // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
-      return worlds.length > 0 ? worlds[worlds.length - 1] : null;
+      const newest = summaries[summaries.length - 1];
+      return await api.getWorld(newest.id);
     },
     /**
      * The plot-suggestion's own pinned plot or one of its advisory
@@ -724,7 +729,7 @@ export const useWorldStore = defineStore('world', {
         requestedResource,
         requestedAmount,
         guildOnly,
-      });
+      }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
     },
     /**
@@ -734,7 +739,7 @@ export const useWorldStore = defineStore('world', {
      */
     async acceptTradeOfferLive(offerId: string) {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId });
+      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
       await this.refreshLiveSettlement();
     },
@@ -744,7 +749,7 @@ export const useWorldStore = defineStore('world', {
      */
     async cancelTradeOfferLive(offerId: string) {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId });
+      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
       await this.refreshLiveSettlement();
     },
@@ -757,9 +762,9 @@ export const useWorldStore = defineStore('world', {
     async refreshTradeAsync() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [board, mine, shipments] = await Promise.all([
-        api.getTradeBoard(this.selectedSettlementId),
-        api.getMyTradeOffers(this.selectedSettlementId),
-        api.getShipments(this.selectedSettlementId),
+        api.getTradeBoard(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getMyTradeOffers(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getShipments(this.selectedSettlementId, this.ownerId ?? undefined),
       ]);
       this.hud.tradeBoard = board;
       this.hud.myTradeOffers = mine;
@@ -1072,15 +1077,15 @@ export const useWorldStore = defineStore('world', {
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [summaries, guests] = await Promise.all([
-        api.getSettlementArmies(this.selectedSettlementId),
-        api.getSettlementGuests(this.selectedSettlementId),
+        api.getSettlementArmies(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getSettlementGuests(this.selectedSettlementId, this.ownerId ?? undefined),
       ]);
       // ArmySummary (the list endpoint) omits unit composition/movement/
       // provisions — ArmyPanel needs those, so fetch each army's full detail.
       // Settlements realistically hold a handful of dispatched armies at
       // once, so N+1 here is a non-issue compared to a purpose-built bulk
       // endpoint the backend doesn't expose.
-      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id)));
+      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, this.ownerId ?? undefined)));
       this.armiesFetchedAt = Date.now();
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();

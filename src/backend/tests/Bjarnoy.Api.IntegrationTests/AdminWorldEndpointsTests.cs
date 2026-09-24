@@ -27,19 +27,15 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
 
     private static string UniqueName(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..24];
 
-    private async Task<WorldResponse> CreateWorldAsync(HttpClient client, int maxPlayers = 100)
+    private async Task<WorldEntity> CreateWorldAsync(HttpClient client, int maxPlayers = 100)
     {
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds",
-            new CreateWorldRequest(UniqueName("world"), Seed: 4242, Radius: 30, MaxPlayers: maxPlayers),
-            Ct);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return await response.ReadStrictAsync<WorldResponse>(Ct);
+        _ = client;
+        return await _fixture.Factory.CreateWorldAsync(
+            UniqueName("world"), seed: 4242, radius: 30, maxPlayers: maxPlayers, cancellationToken: Ct);
     }
 
     /// <summary>Founds a settlement (one longhouse) on <paramref name="world"/>'s first usable plot.</summary>
-    private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldResponse world)
+    private async Task<SettlementResponse> FoundSettlementAsync(HttpClient client, WorldEntity world)
     {
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -389,9 +385,12 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         var again = await TriggerDueEndbossesAsync();
         Assert.DoesNotContain(world.Id, again);
 
-        var list = await client.GetFromJsonAsync<List<WorldResponse>>(
-            "/api/v1/worlds", SqliteApiFixture.StrictJson, Ct);
-        Assert.True(list!.Single(w => w.Id == world.Id).EndbossTriggered);
+        // GET /worlds returns the minimal WorldSummaryResponse now, which
+        // doesn't carry EndbossTriggered — read it off the single-world
+        // config endpoint instead, which still does.
+        var reread = await client.GetFromJsonAsync<WorldResponse>(
+            $"/api/v1/worlds/{world.Id}", SqliteApiFixture.StrictJson, Ct);
+        Assert.True(reread!.EndbossTriggered);
 
         // Out of scope for #27, but must not regress: joins stay open.
         await FoundSettlementAsync(client, world);

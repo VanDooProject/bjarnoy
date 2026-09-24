@@ -12,10 +12,16 @@ public sealed record PostTradeOfferRequest(
     bool GuildOnly = false);
 
 /// <param name="AcceptorSettlementId">The settlement accepting the offer — pays the requested side.</param>
-public sealed record AcceptTradeOfferRequest([property: Required] Guid AcceptorSettlementId);
+public sealed record AcceptTradeOfferRequest([property: Required] Guid AcceptorSettlementId) : ISettlementScopedRequest
+{
+    Guid ISettlementScopedRequest.ActingSettlementId => AcceptorSettlementId;
+}
 
 /// <param name="SettlementId">Must be the offer's poster, or the cancellation is refused.</param>
-public sealed record CancelTradeOfferRequest([property: Required] Guid SettlementId);
+public sealed record CancelTradeOfferRequest([property: Required] Guid SettlementId) : ISettlementScopedRequest
+{
+    Guid ISettlementScopedRequest.ActingSettlementId => SettlementId;
+}
 
 public sealed record TradeOfferResponse(
     Guid Id,

@@ -191,10 +191,8 @@ public sealed class AdminUserEndpointsTests(SqliteApiFixture fixture) : IClassFi
         Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
 
         Authorize(client, playerToken);
-        var world = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(UniqueName("world"), Seed: 4242, Radius: 30, MaxPlayers: 100), Ct);
-        Assert.Equal(HttpStatusCode.Created, world.StatusCode);
-        var worldResponse = await world.ReadStrictAsync<WorldResponse>(Ct);
+        var worldResponse = await _fixture.Factory.CreateWorldAsync(
+            UniqueName("world"), seed: 4242, radius: 30, maxPlayers: 100, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{worldResponse.Id}/islands", SqliteApiFixture.StrictJson, Ct);

@@ -59,7 +59,7 @@ public class LandingOnboardingCompletionTests
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
         var world = Assert.Single(
-            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+            (await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken))!);
 
         // GET .../settlements is fog-gated (a caller with no resolvable
         // realm just sees an empty list) — the founding browser's own local

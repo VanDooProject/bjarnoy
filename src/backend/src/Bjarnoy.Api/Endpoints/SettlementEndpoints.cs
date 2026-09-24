@@ -39,7 +39,8 @@ public static class SettlementEndpoints
 
         worlds.MapGet("/{worldId:guid}/settlements", ListForWorld)
             .WithName("ListWorldSettlements")
-            .WithSummary("Lists this caller's own settlements plus every rival settlement they have explored.");
+            .WithSummary("Lists this caller's own settlements plus every rival settlement they have explored.")
+            .RequireCallerRealm();
 
         var settlements = app.MapGroup("/api/v1/settlements")
             .WithApiVersionSet(versionSet)
@@ -51,45 +52,46 @@ public static class SettlementEndpoints
             // Full read (stock/rates/queues/garrison/runes) — owner only. A
             // rival is offered GetView below instead, fog-gated and without
             // any of that.
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>();
+            .RequireSettlementOwner();
 
         settlements.MapGet("/{settlementId:guid}/view", GetView)
             .WithName("GetSettlementView")
-            .WithSummary("A fog-gated read of any settlement whose ground the caller has explored.");
+            .WithSummary("A fog-gated read of any settlement whose ground the caller has explored.")
+            .RequireCallerRealm();
 
         settlements.MapPost("/{settlementId:guid}/builds", QueueBuild)
             .WithName("QueueBuild")
             .WithSummary("Queues a building, charging its cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/builds/{orderId:guid}/cancel", CancelBuild)
             .WithName("CancelBuild")
             .WithSummary("Cancels a still-queued build order, refunding its cost.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/units", TrainUnits)
             .WithName("TrainUnits")
             .WithSummary("Queues training a batch of units, charging their cost immediately.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/slot", SlotRune)
             .WithName("SlotRune")
             .WithSummary("Slots an unslotted rune into the shrine standing on a hex.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         settlements.MapPost("/{settlementId:guid}/runes/{runeId:guid}/unslot", UnslotRune)
             .WithName("UnslotRune")
             .WithSummary("Returns a slotted rune to storage.")
             .AddEndpointFilter<ActiveUserEndpointFilter>()
-            .AddEndpointFilter<SettlementOwnershipEndpointFilter>()
+            .RequireSettlementOwner()
             .AddEndpointFilter<UserActivityEndpointFilter>();
 
         app.MapGet("/api/v1/buildings", Catalogue)

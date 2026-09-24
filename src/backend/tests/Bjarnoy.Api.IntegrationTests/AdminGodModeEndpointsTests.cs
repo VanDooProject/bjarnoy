@@ -81,9 +81,7 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
     private async Task<(Guid WorldId, SettlementResponse Settlement)> FoundAsync(
         HttpClient client, string ownerName = "Ulf", int seed = 21, int radius = 60)
     {
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), seed, radius), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -417,6 +415,40 @@ public sealed class AdminGodModeEndpointsTests : IAsyncLifetime
         var duplicate = await client.PostJsonAsync(
             "/api/v1/admin/worlds", new CreateWorldRequest(name, Seed: 22, Radius: 40), Ct);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_world_created_without_a_seed_still_gets_one()
+    {
+        using var client = Client();
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            "/api/v1/admin/worlds", new CreateWorldRequest(Unique("seedless"), Seed: null, Radius: 30), Ct);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        // Whatever seed was drawn must be persisted, or the map is not reproducible.
+        var world = await response.ReadStrictAsync<AdminWorldResponse>(Ct);
+        var listed = await client.GetFromJsonAsync<List<AdminWorldResponse>>(
+            "/api/v1/admin/worlds", SqliteApiFixture.StrictJson, Ct);
+
+        Assert.Equal(world.Seed, listed!.Single(w => w.Id == world.Id).Seed);
+    }
+
+    [Theory]
+    [InlineData("", 4242, 30)]
+    [InlineData("ab", 4242, 30)]
+    [InlineData("valid-name", 4242, 0)]
+    [InlineData("valid-name", 4242, 5000)]
+    public async Task Invalid_admin_world_creation_requests_are_rejected(string name, int seed, int radius)
+    {
+        using var client = Client();
+        Authorize(client, await CreateAdminTokenAsync(client));
+
+        var response = await client.PostJsonAsync(
+            "/api/v1/admin/worlds", new CreateWorldRequest(name, seed, radius), Ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     /// <summary>

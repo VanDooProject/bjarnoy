@@ -69,7 +69,7 @@ public class FoundingSettlementPersistenceTests
         // freshly created world's WorldStatus is "active" (WorldEntity's
         // default), not "running" — that name belongs to the separate
         // WorldRunState field, which WorldResponse doesn't even expose.
-        var worlds = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
+        var worlds = await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken);
         var world = Assert.Single(worlds!);
 
         // GET .../settlements is fog-gated: an anonymous caller with no
@@ -96,7 +96,7 @@ public class FoundingSettlementPersistenceTests
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(secondPage, frontendUrl);
 
-        var worldsAfterSecondPlayer = await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken);
+        var worldsAfterSecondPlayer = await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken);
         // Still exactly one world: the second session joined it rather than
         // racing to create another "Kettil Sea" and 409-ing.
         Assert.Single(worldsAfterSecondPlayer!);

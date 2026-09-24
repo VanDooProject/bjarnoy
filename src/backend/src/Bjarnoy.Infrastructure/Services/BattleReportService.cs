@@ -30,13 +30,30 @@ public sealed class BattleReportService(GameDbContext dbContext)
             .FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
 
     /// <summary>Reports where <paramref name="settlementId"/> was either the attacker's or the defender's settlement, newest first.</summary>
-    public Task<List<BattleReportEntity>> GetForSettlementAsync(
-        Guid settlementId, CancellationToken cancellationToken = default) =>
-        _dbContext.BattleReports
+    public async Task<List<BattleReportEntity>> GetForSettlementAsync(
+        Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        // Ordered client-side rather than via OrderByDescending in the
+        // query — same reasoning (and same fix) as
+        // FieldBattleReportService.GetForSettlementAsync's own comment: the
+        // SQLite provider (a real, supported deployment target, not just
+        // test infra) refuses to translate ORDER BY over a DateTimeOffset
+        // column at all. A settlement's battle-report history is small, so
+        // sorting the already fully materialized (Include'd) list in memory
+        // is cheap and works identically on every provider. Found via
+        // EndpointAccessPolicyTests' new SQLite regression coverage for
+        // GET /settlements/{id}/reports (gate-remaining-read-endpoints) —
+        // this endpoint was reachable but had never actually been exercised
+        // against SQLite with any reports present before.
+        var reports = await _dbContext.BattleReports
             .AsNoTracking()
             .Include(r => r.AttackerLines)
             .Include(r => r.DefenderLines)
             .Where(r => r.AttackerSettlementId == settlementId || r.DefenderSettlementId == settlementId)
-            .OrderByDescending(r => r.OccurredAt)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        reports.Sort((a, b) => b.OccurredAt.CompareTo(a.OccurredAt));
+        return reports;
+    }
 }

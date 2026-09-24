@@ -1,6 +1,7 @@
 using System.Net;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Api.IntegrationTests.Infrastructure;
+using Bjarnoy.Infrastructure.Entities;
 
 namespace Bjarnoy.Api.IntegrationTests;
 
@@ -16,92 +17,72 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
 
     private static string UniqueName(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..24];
 
-    private async Task<WorldResponse> CreateWorldAsync(
-        HttpClient client,
+    private async Task<WorldEntity> CreateWorldAsync(
         int seed = 4242,
         int radius = 30,
-        int maxPlayers = 100)
-    {
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds",
-            new CreateWorldRequest(UniqueName("world"), seed, radius, maxPlayers),
-            Ct);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return await response.ReadStrictAsync<WorldResponse>(Ct);
-    }
+        int maxPlayers = 100) =>
+        await _fixture.Factory.CreateWorldAsync(UniqueName("world"), seed, radius, maxPlayers, cancellationToken: Ct);
 
     [Fact]
-    public async Task Creating_a_world_generates_islands_and_returns_its_location()
+    public async Task POST_to_the_removed_player_facing_create_route_no_longer_matches_anything()
     {
-        using var client = _fixture.CreateClient();
-        var name = UniqueName("kettil");
-
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(name, Seed: 7, Radius: 30), Ct);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
-        var world = await response.ReadStrictAsync<WorldResponse>(Ct);
-        Assert.Equal(name, world.Name);
-        Assert.Equal(7, world.Seed);
-        Assert.Equal(30, world.Radius);
-        Assert.Equal("active", world.Status);
-        Assert.True(world.IslandCount > 0);
-        Assert.Equal($"/api/v1/worlds/{world.Id}", response.Headers.Location?.ToString());
-    }
-
-    [Fact]
-    public async Task A_world_created_without_a_seed_still_gets_one()
-    {
+        // World creation moved to admin-only (POST /api/v1/admin/worlds) —
+        // this route must no longer exist at all, not just require auth.
         using var client = _fixture.CreateClient();
 
         var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(UniqueName("seedless"), Seed: null, Radius: 30), Ct);
+            "/api/v1/worlds", new CreateWorldRequest(UniqueName("kettil"), Seed: 7, Radius: 30), Ct);
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
-        // Whatever seed was drawn must be persisted, or the map is not reproducible.
-        var world = await response.ReadStrictAsync<WorldResponse>(Ct);
-        var reread = await client.GetFromJsonAsync<WorldResponse>(
-            $"/api/v1/worlds/{world.Id}", SqliteApiFixture.StrictJson, Ct);
-
-        Assert.Equal(world.Seed, reread!.Seed);
+        Assert.True(
+            response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed,
+            $"expected 404 or 405 for a route with no POST handler, got {(int)response.StatusCode}");
     }
 
     [Fact]
     public async Task A_created_world_is_readable_and_listed()
     {
         using var client = _fixture.CreateClient();
-        var created = await CreateWorldAsync(client);
+        var created = await CreateWorldAsync();
 
         var fetched = await client.GetFromJsonAsync<WorldResponse>(
             $"/api/v1/worlds/{created.Id}", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(fetched);
         Assert.Equal(created.Id, fetched.Id);
-        Assert.Equal(created.IslandCount, fetched.IslandCount);
+        Assert.Equal(created.Islands.Count, fetched.IslandCount);
 
-        var all = await client.GetFromJsonAsync<List<WorldResponse>>(
+        var all = await client.GetFromJsonAsync<List<WorldSummaryResponse>>(
             "/api/v1/worlds", SqliteApiFixture.StrictJson, Ct);
 
         Assert.Contains(all!, w => w.Id == created.Id);
     }
 
     [Fact]
-    public async Task Duplicate_world_names_are_rejected()
+    public async Task Listed_worlds_omit_seed_generation_radius_and_movement()
     {
         using var client = _fixture.CreateClient();
-        var name = UniqueName("twice");
+        var created = await CreateWorldAsync(maxPlayers: 5);
 
-        var first = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(name, Seed: 1, Radius: 30), Ct);
-        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var response = await client.GetAsync("/api/v1/worlds", Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var second = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(name, Seed: 2, Radius: 30), Ct);
+        // Strict deserialisation into WorldSummaryResponse: an extra property
+        // in the JSON fails the test, same guarantee WorldJoinEndpointsTests
+        // asserts for the /joinable picker.
+        var worlds = await response.ReadStrictAsync<IReadOnlyList<WorldSummaryResponse>>(Ct);
+        var listed = Assert.Single(worlds, w => w.Id == created.Id);
 
-        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal(created.Name, listed.Name);
+        Assert.Equal(5, listed.MaxPlayers);
+        Assert.Equal(0, listed.PlayerCount);
+        Assert.Equal(5, listed.FreeSlots);
+        Assert.True(listed.Joinable);
+
+        var body = await response.Content.ReadAsStringAsync(Ct);
+        Assert.DoesNotContain("\"seed\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"radius\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"generation\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"movement\"", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -119,13 +100,13 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task Islands_come_back_indexed_named_and_with_start_positions()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client, seed: 21, radius: 45);
+        var world = await CreateWorldAsync(seed: 21, radius: 45);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
 
         Assert.NotNull(islands);
-        Assert.Equal(world.IslandCount, islands.Count);
+        Assert.Equal(world.Islands.Count, islands.Count);
         Assert.Equal(Enumerable.Range(0, islands.Count), islands.Select(i => i.Index));
         Assert.All(islands, i => Assert.False(string.IsNullOrWhiteSpace(i.Name)));
         Assert.All(islands, i => Assert.True(i.TileCount > 0));
@@ -140,7 +121,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         using var client = _fixture.CreateClient();
         // Seed/radius known (Bjarnoy.Domain.Tests.RiverGenerationTests) to produce
         // several rivers, so this doesn't depend on getting lucky with the default.
-        var world = await CreateWorldAsync(client, seed: 2024, radius: 40);
+        var world = await CreateWorldAsync(seed: 2024, radius: 40);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -173,7 +154,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task Tiles_are_returned_for_the_requested_rectangle()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client, seed: 7, radius: 30);
+        var world = await CreateWorldAsync(seed: 7, radius: 30);
 
         var chunk = await client.GetFromJsonAsync<TileChunkResponse>(
             $"/api/v1/worlds/{world.Id}/tiles?qMin=-5&qMax=5&rMin=-5&rMax=5",
@@ -195,7 +176,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
         using var client = _fixture.CreateClient();
         // Radius bumped 30->32: after the island-shape retune, seed 99 at
         // radius 30 no longer places any island at all.
-        var world = await CreateWorldAsync(client, seed: 99, radius: 32);
+        var world = await CreateWorldAsync(seed: 99, radius: 32);
         const string url = "/api/v1/worlds/{0}/tiles?qMin=-8&qMax=8&rMin=-8&rMax=8";
 
         var first = await client.GetFromJsonAsync<TileChunkResponse>(
@@ -212,7 +193,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task An_oversized_tile_request_is_rejected_rather_than_served()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
 
         var response = await client.GetAsync(
             $"/api/v1/worlds/{world.Id}/tiles?qMin=-500&qMax=500&rMin=-500&rMax=500", Ct);
@@ -224,7 +205,7 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
     public async Task An_inverted_tile_range_is_rejected()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
 
         var response = await client.GetAsync(
             $"/api/v1/worlds/{world.Id}/tiles?qMin=5&qMax=-5&rMin=0&rMax=1", Ct);
@@ -257,21 +238,6 @@ public sealed class WorldEndpointsTests(SqliteApiFixture fixture) : IClassFixtur
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("world_not_found", await response.ErrorCodeAsync(Ct));
-    }
-
-    [Theory]
-    [InlineData("", 4242, 30)]
-    [InlineData("ab", 4242, 30)]
-    [InlineData("valid-name", 4242, 0)]
-    [InlineData("valid-name", 4242, 5000)]
-    public async Task Invalid_world_requests_are_rejected(string name, int seed, int radius)
-    {
-        using var client = _fixture.CreateClient();
-
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(name, seed, radius), Ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

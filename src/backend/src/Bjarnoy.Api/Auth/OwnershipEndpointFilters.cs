@@ -7,6 +7,83 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Bjarnoy.Api.Auth;
 
 /// <summary>
+/// Refuses a battle-report read with 403 unless the caller can prove they own
+/// either party's settlement — a battle report legitimately belongs to both
+/// the attacker's and the defender's owner, unlike the single-settlement
+/// rule <see cref="SettlementOwnershipEndpointFilter"/> enforces. See
+/// <see cref="OwnershipGate.EnforceAnyAsync"/> for the actual rule.
+/// </summary>
+/// <remarks>
+/// Fits <c>ArmyEndpoints.GetReport</c> only: reads the report id the same way
+/// the other filters here read their own first argument, then looks the
+/// report up itself (rather than trusting a route parameter) to get both
+/// settlement ids to check.
+/// </remarks>
+public sealed class ReportOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var reportId = context.GetArgument<Guid>(0);
+
+        var reports = context.HttpContext.RequestServices.GetRequiredService<BattleReportService>();
+        var report = await reports.GetAsync(reportId, context.HttpContext.RequestAborted);
+        if (report is null)
+        {
+            // No such report — let the endpoint's own NotFound handling
+            // answer, rather than this filter pre-empting it with a 403.
+            return await next(context);
+        }
+
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
+        var refusal = await OwnershipGate.EnforceAnyAsync(
+            context.HttpContext,
+            [report.AttackerSettlementId, report.DefenderSettlementId],
+            realms,
+            context.HttpContext.RequestAborted);
+
+        return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
+/// The field-battle-report sibling of <see cref="ReportOwnershipEndpointFilter"/> —
+/// same "either party's owner may read it" rule, applied to
+/// <c>ArmyEndpoints.GetFieldReport</c> and <c>FieldBattleReportEntity</c>'s
+/// <c>SideA</c>/<c>SideB</c> settlement ids instead of attacker/defender.
+/// </summary>
+public sealed class FieldReportOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var reportId = context.GetArgument<Guid>(0);
+
+        var reports = context.HttpContext.RequestServices.GetRequiredService<FieldBattleReportService>();
+        var report = await reports.GetAsync(reportId, context.HttpContext.RequestAborted);
+        if (report is null)
+        {
+            return await next(context);
+        }
+
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
+        var refusal = await OwnershipGate.EnforceAnyAsync(
+            context.HttpContext,
+            [report.SideASettlementId, report.SideBSettlementId],
+            realms,
+            context.HttpContext.RequestAborted);
+
+        return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
 /// Refuses a settlement-mutating request with 403 unless the caller can prove
 /// they own the target settlement. See <see cref="OwnershipGate"/> for the
 /// actual rule; this filter only resolves the settlement id.
@@ -37,6 +114,34 @@ public sealed class SettlementOwnershipEndpointFilter : IEndpointFilter
         var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
         var refusal = await OwnershipGate.EnforceAsync(
             context.HttpContext, settlementId, realms, context.HttpContext.RequestAborted);
+
+        return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
+/// Same rule as <see cref="SettlementOwnershipEndpointFilter"/>, for routes
+/// whose settlement comes from the request body (an
+/// <see cref="ISettlementScopedRequest"/> argument) rather than the route:
+/// trade accept/cancel took the acting settlement straight from the body with
+/// no check at all, so any caller could escrow another settlement's goods or
+/// withdraw its offers.
+/// </summary>
+public sealed class RequestSettlementOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var request = context.Arguments.OfType<ISettlementScopedRequest>().FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"{nameof(RequestSettlementOwnershipEndpointFilter)} is attached to an endpoint with no {nameof(ISettlementScopedRequest)} argument.");
+
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
+        var refusal = await OwnershipGate.EnforceAsync(
+            context.HttpContext, request.ActingSettlementId, realms, context.HttpContext.RequestAborted);
 
         return refusal ?? await next(context);
     }
@@ -135,23 +240,76 @@ internal static class OwnershipGate
         }
 
         var (userId, ownerId, _) = ownership.Value;
+        return Owns(httpContext, userId, ownerId) ? null : Refuse();
+    }
 
-        if (userId != SystemUserIds.Abandoned)
+    /// <summary>
+    /// The "owns any of these settlements" counterpart to <see cref="EnforceAsync"/> —
+    /// used where a resource (a battle report) legitimately belongs to more
+    /// than one settlement at once, see <see cref="ReportOwnershipEndpointFilter"/>/
+    /// <see cref="FieldReportOwnershipEndpointFilter"/>. Reuses the exact same
+    /// per-settlement JWT/header rule as <see cref="EnforceAsync"/> — a caller
+    /// passes as soon as one settlement id matches.
+    /// </summary>
+    /// <remarks>
+    /// A settlement id whose ownership lookup misses (deleted since, e.g. by a
+    /// world reseed) is skipped, not treated as a match nor as a pass-through:
+    /// unlike <see cref="EnforceAsync"/>'s single id, this filter's ids come
+    /// from a report that already recorded them at battle time, so a miss
+    /// here means "gone", not "never existed" — there is no NotFound for the
+    /// endpoint's own handler to answer with instead, so a caller who matches
+    /// nothing is refused rather than let through.
+    /// </remarks>
+    public static async Task<IResult?> EnforceAnyAsync(
+        HttpContext httpContext,
+        IReadOnlyList<Guid> settlementIds,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+        ArgumentNullException.ThrowIfNull(realms);
+
+        foreach (var settlementId in settlementIds)
+        {
+            var ownership = await realms.GetOwnershipAsync(settlementId, cancellationToken);
+            if (ownership is null)
+            {
+                continue;
+            }
+
+            var (userId, ownerId, _) = ownership.Value;
+            if (Owns(httpContext, userId, ownerId))
+            {
+                return null;
+            }
+        }
+
+        return Refuse();
+    }
+
+    /// <summary>
+    /// The single-settlement ownership test <see cref="EnforceAsync"/>/
+    /// <see cref="EnforceAnyAsync"/> both reduce to — <c>internal</c> (not
+    /// <c>private</c>) so a handler that must gate itself in-handler with a
+    /// more elaborate rule than either of those (e.g.
+    /// <c>ArmyEndpoints.ListGuestArmies</c>'s "host sees all, a guest's own
+    /// owner sees only their own") can still reuse this exact JWT/header
+    /// rule instead of re-deriving it.
+    /// </summary>
+    internal static bool Owns(HttpContext httpContext, Guid settlementUserId, string settlementOwnerId)
+    {
+        if (settlementUserId != SystemUserIds.Abandoned)
         {
             var user = httpContext.User;
             var idClaim = user.Identity?.IsAuthenticated == true
                 ? user.FindFirstValue(ClaimTypes.NameIdentifier)
                 : null;
 
-            return Guid.TryParse(idClaim, out var callerId) && callerId == userId
-                ? null
-                : Refuse();
+            return Guid.TryParse(idClaim, out var callerId) && callerId == settlementUserId;
         }
 
         var headerOwnerId = httpContext.Request.Headers[OwnerIdHeaderName].ToString();
-        return !string.IsNullOrEmpty(headerOwnerId) && headerOwnerId == ownerId
-            ? null
-            : Refuse();
+        return !string.IsNullOrEmpty(headerOwnerId) && headerOwnerId == settlementOwnerId;
     }
 
     private static IResult Refuse() =>
