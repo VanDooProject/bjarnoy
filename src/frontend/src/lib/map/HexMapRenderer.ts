@@ -69,7 +69,7 @@ import {
   type TileAnimClip,
   type TileTextures,
 } from './textures';
-import { giantCrop } from './giantTiles';
+import { giantCrop, giantFootprintOutline } from './giantTiles';
 import { transitionForZoom, zoomTransitionTuning } from './zoomTransition';
 import { PinchTracker } from './pinchGesture';
 
@@ -609,7 +609,13 @@ export interface ArmyOverlayFrame {
  */
 export type HoverSubject =
   | { kind: 'building'; buildingType: NonNullable<Tile['buildingType']>; level: number }
-  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean };
+  | { kind: 'terrain'; terrain: Terrain; isRiver: boolean }
+  // A hex covered by a giant tile (see giantTiles.ts) — named for the giant
+  // instead of the ground terrain it sits over, since the giant's opaque art
+  // fully covers that terrain. Generic over `family` (not a `'giantmountain'`
+  // literal) so a future giant building needs no change here; HexTooltip.vue
+  // falls back to the family id itself for one with no translated name yet.
+  | { kind: 'giant'; family: string };
 
 export interface HoverInfo {
   screenX: number;
@@ -640,6 +646,22 @@ export interface HoverInfo {
  */
 export function terrainTitleFor(tile: Tile, river: RiverTile | undefined): { terrain: Terrain; isRiver: boolean } {
   return { terrain: tile.terrain, isRiver: river !== undefined };
+}
+
+/**
+ * The `HoverSubject` a tile resolves to, from the tile's own fields alone —
+ * everything `hoverInfoFor` (the only real caller) adds on top (level,
+ * owner, stats) needs the live worldModel and isn't part of *which* subject
+ * kind gets shown. Pulled out purely so the precedence — a giant's opaque
+ * art fully covers the ground terrain, so `tile.giant` must win over both
+ * `buildingType` and `terrainTitleFor` — is unit-testable without a canvas/
+ * Pixi renderer, the same reason `terrainTitleFor` itself is extracted.
+ */
+export function hoverSubjectFor(tile: Tile, river: RiverTile | undefined): HoverSubject {
+  if (tile.giant) return { kind: 'giant', family: tile.giant.family };
+  if (tile.buildingType) return { kind: 'building', buildingType: tile.buildingType, level: tile.buildingLevel ?? 1 };
+  const { terrain, isRiver } = terrainTitleFor(tile, river);
+  return { kind: 'terrain', terrain, isRiver };
 }
 
 export interface RippleFrame {
@@ -1153,6 +1175,7 @@ export type WorldLayerName =
   | 'borders'
   | 'hover'
   | 'terrainTop'
+  | 'giantHover'
   | 'range'
   | 'highlight';
 
@@ -1189,7 +1212,13 @@ export type WorldLayerName =
  * where the foam is.
  */
 export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] {
-  const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'range', 'highlight'];
+  // giantHover sits directly above terrainTop: a giant's opaque top sprites
+  // (drawn as ordinary terrainTop entries, one per covered hex — see
+  // giantTiles.ts's module doc comment) would otherwise fully hide the
+  // normal `hover` layer's single-hex outline, which draws *under*
+  // terrainTop. The giant-footprint highlight needs its own layer above the
+  // art instead of trying to reuse `hover` (see setHoveredCoord).
+  const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'giantHover', 'range', 'highlight'];
   // Rivers only get their own vector-line layer in world mode — settlement
   // mode already draws them as sprite tile art baked into terrainBase/
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
@@ -1272,6 +1301,11 @@ export class HexMapRenderer {
   private borderLayer = new Graphics();
   private riverLayer = new Graphics();
   private hoverLayer = new Graphics();
+  // The whole-footprint highlight drawn instead of `hoverLayer` when the
+  // hovered hex belongs to a giant tile (see setHoveredCoord) — sits above
+  // `terrainTop` (worldLayerOrder) so it isn't hidden under the giant's own
+  // opaque art the way `hoverLayer` would be.
+  private giantHoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
   // on `options.highlightCoord`, redrawn every tick since the pulse itself
   // is time-based, unlike everything else here which only redraws on a
@@ -1566,6 +1600,7 @@ export class HexMapRenderer {
       borders: this.borderLayer,
       hover: this.hoverLayer,
       terrainTop: this.terrainTop.container,
+      giantHover: this.giantHoverLayer,
       range: this.rangeLayer,
       highlight: this.highlightLayer,
     };
@@ -2234,6 +2269,7 @@ export class HexMapRenderer {
     if (key === this.hoveredKey) return;
     this.hoveredKey = key;
     this.hoverLayer.clear();
+    this.giantHoverLayer.clear();
     if (!coord) {
       this.options.onHoverChange?.(null);
       return;
@@ -2257,11 +2293,25 @@ export class HexMapRenderer {
     }
 
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-    this.hoverLayer
-      .poly(flat)
-      .fill({ color: HOVER_FILL, alpha: 0.28 })
-      .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+    if (tile.giant) {
+      // Highlight the giant's whole 7-hex footprint instead of just this
+      // one hex — its opaque art (drawn one part per hex in terrainTop)
+      // would otherwise fully hide a normal single-hex outline drawn under
+      // it. `hoverLayer` stays empty for this hex (cleared above); the
+      // outline is drawn in `giantHoverLayer`, which sits above terrainTop
+      // (worldLayerOrder) instead.
+      const outline = giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]);
+      this.giantHoverLayer
+        .poly(outline)
+        .fill({ color: HOVER_FILL, alpha: 0.28 })
+        .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+    } else {
+      const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+      this.hoverLayer
+        .poly(flat)
+        .fill({ color: HOVER_FILL, alpha: 0.28 })
+        .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
+    }
 
     if (mode === 'settlement') {
       const river = worldModel.getRiverTile(coord.q, coord.r);
@@ -2296,27 +2346,29 @@ export class HexMapRenderer {
     const mine = owner?.ownerId === this.options.playerId;
     const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
 
-    if (tile.buildingType) {
-      const level = tile.buildingLevel ?? 1;
+    const subject = hoverSubjectFor(tile, river);
+    if (subject.kind === 'building') {
       // Stats are only for the viewer's own buildings — scouting a rival's
       // tile shows the building and its level, but the stats themselves are
       // gated behind Premium (see HoverInfo.premiumLocked).
-      const stats = mine ? this.buildingStats(tile, level) : undefined;
+      const stats = mine ? this.buildingStats(tile, subject.level) : undefined;
       return {
         screenX: screen.x,
         screenY: screen.y,
-        subject: { kind: 'building', buildingType: tile.buildingType, level },
+        subject,
         owner: ownerInfo,
         stats,
         premiumLocked: !mine,
         openable: mine,
       };
     }
-    const { terrain, isRiver } = terrainTitleFor(tile, river);
+    // Giant tiles carry no building economy of their own (types.ts), so
+    // 'giant' falls through here alongside plain 'terrain' — neither gets
+    // stats/openable.
     return {
       screenX: screen.x,
       screenY: screen.y,
-      subject: { kind: 'terrain', terrain, isRiver },
+      subject,
       owner: ownerInfo,
     };
   }

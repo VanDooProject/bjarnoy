@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { neighbors } from '../hex/coords';
-import { isoGridPosition } from '../hex/geometry';
+import { neighbors, type AxialCoord } from '../hex/coords';
+import { isoGridPosition, isoTopPoints, type Point } from '../hex/geometry';
 import {
   classifyGiantFrames,
   giantCoverage,
   giantCrop,
+  giantFootprintOutline,
   GIANT_NEIGHBOR_PARTS,
   giantTop,
   parseGiantFrameName,
@@ -121,6 +122,81 @@ describe('classifyGiantFrames / giantTop', () => {
     expect(giantTop(giants, 'giantmountain', 'SE', 'N')).toBeUndefined();
     expect(giantTop(giants, 'giantmountain', 'NE', 'C')).toBeUndefined();
     expect(giantTop(giants, 'unknownfamily', 'SE', 'C')).toBeUndefined();
+  });
+});
+
+describe('giantFootprintOutline', () => {
+  const w = 200;
+  const h = 92;
+
+  function key(p: Point): string {
+    return `${Math.round(p.x * 1000)}:${Math.round(p.y * 1000)}`;
+  }
+
+  /** All 7 covered hexes' own top-face polygons, in world coords — the same construction giantFootprintOutline itself uses, kept independent here as the ground truth the outline is checked against. */
+  function hexPolygons(anchor: AxialCoord): Point[][] {
+    return giantCoverage(anchor).map(({ coord }) => {
+      const grid = isoGridPosition(coord, w, h);
+      return isoTopPoints(w, h).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+    });
+  }
+
+  function directedEdges(polygons: Point[][]): Set<string> {
+    const edges = new Set<string>();
+    for (const poly of polygons) {
+      for (let i = 0; i < poly.length; i++) {
+        edges.add(`${key(poly[i])}->${key(poly[(i + 1) % poly.length])}`);
+      }
+    }
+    return edges;
+  }
+
+  // Run the whole suite for both an even- and an odd-column anchor —
+  // isoGridPosition treats the two parities differently (odd columns sit
+  // half a row lower), so the shared/interior edges a giant footprint has
+  // to drop are computed from different neighbour placements in each case.
+  it.each([
+    ['even-column anchor', { q: 4, r: -2 }],
+    ['odd-column anchor', { q: 3, r: -2 }],
+  ])('for %s, returns the 18-edge union outline with no interior edges and every vertex a real hex vertex', (_label, anchor) => {
+    const polygons = hexPolygons(anchor);
+    const allVertexKeys = new Set(polygons.flat().map(key));
+    const allDirected = directedEdges(polygons);
+
+    const outline = giantFootprintOutline(anchor, w, h);
+
+    // 18 edges (7 hexes * 6 edges = 42 half-edges; 12 shared edges each
+    // remove one from each of the two polygons sharing it, i.e. 24 of the
+    // 42 — see giantFootprintOutline's own doc comment).
+    expect(outline).toHaveLength(18);
+
+    // Every vertex really is a vertex of one of the 7 hex polygons — not
+    // some interpolated or mis-derived point.
+    for (const p of outline) {
+      expect(allVertexKeys.has(key(p))).toBe(true);
+    }
+
+    // A single closed loop: walking consecutive outline points traces a
+    // real directed edge of one of the 7 polygons each time, and it comes
+    // back to the start.
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i];
+      const b = outline[(i + 1) % outline.length];
+      expect(allDirected.has(`${key(a)}->${key(b)}`)).toBe(true);
+    }
+
+    // No interior (shared) edge survived: none of the outline's directed
+    // edges has its reverse also present among the 7 polygons' own edges
+    // (a shared edge is walked in both directions, once by each of the two
+    // hexes that share it).
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i];
+      const b = outline[(i + 1) % outline.length];
+      expect(allDirected.has(`${key(b)}->${key(a)}`)).toBe(false);
+    }
+
+    // No duplicate vertices — 18 distinct points, matching the 18 edges.
+    expect(new Set(outline.map(key)).size).toBe(18);
   });
 });
 

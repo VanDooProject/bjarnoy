@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   attentionPulseFrame,
+  hoverSubjectFor,
   landfallBurstFrames,
   plotRippleFrames,
   previewFitZoom,
@@ -96,7 +97,7 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 10, settlement: 9 } as const;
+    const expectedLength = { world: 11, settlement: 10 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
@@ -107,6 +108,43 @@ describe('worldLayerOrder', () => {
   it('draws rivers above the terrain fill and below realm borders in world mode', () => {
     expect(indexIn('world', 'terrainFlat')).toBeLessThan(indexIn('world', 'rivers'));
     expect(indexIn('world', 'rivers')).toBeLessThan(indexIn('world', 'borders'));
+  });
+
+  it('puts the giant-footprint hover layer directly above terrainTop in both modes', () => {
+    // A giant's opaque top sprites are ordinary terrainTop entries (see
+    // giantTiles.ts), so the whole-footprint hover highlight needs its own
+    // layer immediately above terrainTop to actually be visible over them —
+    // the normal `hover` layer draws *under* terrainTop and would be fully
+    // hidden.
+    for (const mode of ['world', 'settlement'] as const) {
+      expect(indexIn(mode, 'giantHover')).toBe(indexIn(mode, 'terrainTop') + 1);
+    }
+  });
+});
+
+// hoverSubjectFor resolves which HoverSubject a tile shows, from the tile's
+// own fields alone — the giant-tile precedence (its opaque art fully covers
+// the ground terrain, so `tile.giant` must win over both `buildingType` and
+// the plain terrain title) is the part worth locking down, since a giant
+// currently never carries a `buildingType` but nothing stops that changing.
+describe('hoverSubjectFor', () => {
+  const giant = { family: 'giantmountain' as const, anchor: { q: 0, r: 0 }, part: 'C' as const, orientation: 'SE' as const };
+
+  it('returns the giant subject, with its family, for a tile that belongs to a giant', () => {
+    const tile = { ...tileOf('grass'), giant };
+    expect(hoverSubjectFor(tile, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
+  it('names the giant even over a building type, since a giant tile fully covers whatever is under it', () => {
+    const tile = { ...tileOf('grass'), giant, buildingType: 'hut' as const, buildingLevel: 3 };
+    expect(hoverSubjectFor(tile, undefined)).toEqual({ kind: 'giant', family: 'giantmountain' });
+  });
+
+  it('falls back to building, then terrain, when there is no giant', () => {
+    const building = { ...tileOf('grass'), buildingType: 'hut' as const, buildingLevel: 2 };
+    expect(hoverSubjectFor(building, undefined)).toEqual({ kind: 'building', buildingType: 'hut', level: 2 });
+    expect(hoverSubjectFor(tileOf('sand'), undefined)).toEqual({ kind: 'terrain', terrain: 'sand', isRiver: false });
+    expect(hoverSubjectFor(tileOf('sand'), river)).toEqual({ kind: 'terrain', terrain: 'sand', isRiver: true });
   });
 });
 

@@ -24,6 +24,7 @@
 // that path would collide all 7 parts onto index 0. Giants get their own
 // lookup instead (`buildGiantTextures`/`giantTop`).
 import type { AxialCoord } from '../hex/coords';
+import { isoGridPosition, isoTopPoints, type Point } from '../hex/geometry';
 import { TILE_ORIENTATIONS, type TileOrientation } from './types';
 
 // Mirrors textures.ts's TILE_ART_NATIVE_H (300) — not imported from there to
@@ -166,4 +167,81 @@ export function giantCoverage(anchor: AxialCoord): GiantCoverage[] {
  */
 export function giantCrop(nativeH: number): { nativeY: number; nativeH: number } {
   return { nativeY: NATIVE_CANVAS_H - nativeH, nativeH };
+}
+
+/** A polygon edge (world coords), in the winding order it was drawn — see `giantFootprintOutline`. */
+interface Edge {
+  a: Point;
+  b: Point;
+}
+
+/**
+ * Rounds a world-space point to a stable string key so two hexes' shared
+ * edge (drawn independently, but landing on the same pixels by
+ * `isoTopPoints`'s construction — they abut with no gaps or overlaps)
+ * compares equal despite any floating-point noise from the two separate
+ * `isoGridPosition` calls that produced it.
+ */
+function pointKey(p: Point): string {
+  return `${Math.round(p.x * 1000)}:${Math.round(p.y * 1000)}`;
+}
+
+/**
+ * The union outline (in the renderer's world coords, same space the normal
+ * single-hex hover polygon is drawn in) of the 7 hexes a giant at `anchor`
+ * covers — for highlighting a whole giant's footprint on hover instead of
+ * just the one hex under the cursor (see HexMapRenderer's giant hover
+ * layer). Generic over the giant family: it only reads `anchor` and the
+ * tile geometry, never which family occupies it, so it works unchanged for
+ * any future giant building.
+ *
+ * Every one of the 7 hexes' 6 edges is collected (42 half-edges total); an
+ * edge shared by two of the hexes — walked in opposite directions by the
+ * two polygons that share it, since both are traced in the same rotational
+ * order — is dropped as interior. A hex-ring-of-6 around a centre hex isn't
+ * just 6 spokes: consecutive ring hexes are also neighbours of *each other*,
+ * so there are 12 shared edges (6 centre-to-neighbour, 6 neighbour-to-
+ * neighbour around the ring), each removing one edge from each of the two
+ * polygons that share it — 24 of the 42 half-edges, leaving the 18-edge
+ * outer boundary that's chained into one closed loop below.
+ */
+export function giantFootprintOutline(anchor: AxialCoord, w: number, h: number): Point[] {
+  const allEdges: Edge[] = [];
+  for (const { coord } of giantCoverage(anchor)) {
+    const grid = isoGridPosition(coord, w, h);
+    const points = isoTopPoints(w, h).map((p) => ({ x: grid.x + p.x, y: grid.y + p.y }));
+    for (let i = 0; i < points.length; i++) {
+      allEdges.push({ a: points[i], b: points[(i + 1) % points.length] });
+    }
+  }
+
+  const removed = new Set<number>();
+  for (let i = 0; i < allEdges.length; i++) {
+    if (removed.has(i)) continue;
+    for (let j = i + 1; j < allEdges.length; j++) {
+      if (removed.has(j)) continue;
+      const shared = pointKey(allEdges[i].a) === pointKey(allEdges[j].b) && pointKey(allEdges[i].b) === pointKey(allEdges[j].a);
+      if (shared) {
+        removed.add(i);
+        removed.add(j);
+        break;
+      }
+    }
+  }
+
+  const boundary = allEdges.filter((_, i) => !removed.has(i));
+  const byStartKey = new Map<string, Edge>();
+  for (const edge of boundary) byStartKey.set(pointKey(edge.a), edge);
+
+  const outline: Point[] = [];
+  if (boundary.length === 0) return outline;
+  const startKey = pointKey(boundary[0].a);
+  let current: Edge | undefined = boundary[0];
+  for (let guard = 0; current && guard <= boundary.length; guard++) {
+    outline.push(current.a);
+    const nextKey = pointKey(current.b);
+    if (nextKey === startKey) break;
+    current = byStartKey.get(nextKey);
+  }
+  return outline;
 }
