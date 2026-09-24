@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.World;
 using Bjarnoy.Infrastructure.Services;
 using Bjarnoy.Infrastructure.Services.PlotReservations;
@@ -355,6 +356,7 @@ public static class WorldEndpoints
         Guid worldId,
         HttpContext httpContext,
         PlotReservationService reservations,
+        SettlementService settlements,
         RealmDirectory realms,
         CancellationToken cancellationToken)
     {
@@ -414,12 +416,23 @@ public static class WorldEndpoints
         httpContext.Response.Headers.CacheControl = "no-store";
 
         var suggestion = result.Suggestion!;
+
+        var islandSettlementEntities = await settlements.GetForIslandAsync(suggestion.IslandId, cancellationToken);
+        IReadOnlyList<SettlementSummary> islandSettlements =
+        [
+            .. islandSettlementEntities.Select(s => new SettlementSummary(
+                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+                s.IslandId)),
+        ];
+
         return TypedResults.Ok(new PlotSuggestionResponse(
             suggestion.IslandId,
             new TileCoordinate(suggestion.Plot.Q, suggestion.Plot.R),
             [.. suggestion.Alternatives.Select(a => new TileCoordinate(a.Q, a.R))],
             suggestion.Reserved,
-            suggestion.ReservedUntil));
+            suggestion.ReservedUntil,
+            islandSettlements));
     }
 
     private static async Task<IResult> ReleasePlotSuggestion(

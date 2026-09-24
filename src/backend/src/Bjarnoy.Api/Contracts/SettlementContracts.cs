@@ -346,6 +346,26 @@ public sealed record SettlementSummary(
     Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
 
 /// <summary>
+/// <c>GET /settlements/{id}/view</c>'s fog-gated read: what a rival's
+/// explored ground on the world map earns them — identity, position and
+/// <paramref name="Buildings"/> only (and only the ones standing on a hex
+/// they've actually explored). Deliberately missing everything
+/// <see cref="SettlementResponse"/> carries beyond that: no stock, rates,
+/// construction queue, garrison, training queue or runes — none of that is
+/// something a rival's own map view could ever have told them, so none of it
+/// belongs in a read that answers for anyone but the owner.
+/// </summary>
+public sealed record SettlementViewResponse(
+    Guid Id,
+    string Name,
+    string OwnerName,
+    int Q,
+    int R,
+    int LonghouseLevel,
+    Guid IslandId,
+    IReadOnlyList<PlacedBuildingResponse> Buildings);
+
+/// <summary>
 /// The caller's own renown in one world (issue #55 §3), plus the settlement
 /// count it is measured against and the threshold for one more — everything
 /// a "found another settlement" UI needs in one call.

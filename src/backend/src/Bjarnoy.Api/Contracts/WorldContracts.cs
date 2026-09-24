@@ -217,12 +217,21 @@ public sealed record TileCoordinate(int Q, int R);
 /// visitor can always still attempt to found on <see cref="Plot"/> either
 /// way, and <c>FoundAsync</c>'s own checks are the real authority.
 /// </param>
+/// <param name="IslandSettlements">
+/// The settlements already standing on <see cref="IslandId"/> — who this
+/// visitor's would-be neighbours are. Replaces the pre-founding, world-wide
+/// settlement list <c>GET /worlds/{worldId}/settlements</c> used to hand
+/// every anonymous caller before that endpoint became fog-gated: a visitor
+/// choosing a plot still needs to see the island they're actually looking
+/// at, just not every settlement in the world.
+/// </param>
 public sealed record PlotSuggestionResponse(
     Guid IslandId,
     TileCoordinate Plot,
     IReadOnlyList<TileCoordinate> Alternatives,
     bool Reserved,
-    DateTimeOffset? ReservedUntil);
+    DateTimeOffset? ReservedUntil,
+    IReadOnlyList<SettlementSummary> IslandSettlements);
 
 /// <param name="Shape">One of <c>spring</c>, <c>straight</c>, <c>bend</c>, <c>confluence</c>, <c>mouth</c>, <c>bend60</c>.</param>
 /// <param name="InDirections">
