@@ -97,7 +97,7 @@ describe('worldLayerOrder', () => {
     // strokes) — settlement mode draws rivers as sprite tile art baked into
     // terrainBase/terrainTop instead (riverTexturesFor), so it never adds
     // 'rivers' to its own order.
-    const expectedLength = { world: 11, settlement: 10 } as const;
+    const expectedLength = { world: 10, settlement: 9 } as const;
     for (const mode of ['world', 'settlement'] as const) {
       const order = worldLayerOrder(mode);
       expect(new Set(order).size).toBe(order.length);
@@ -108,17 +108,6 @@ describe('worldLayerOrder', () => {
   it('draws rivers above the terrain fill and below realm borders in world mode', () => {
     expect(indexIn('world', 'terrainFlat')).toBeLessThan(indexIn('world', 'rivers'));
     expect(indexIn('world', 'rivers')).toBeLessThan(indexIn('world', 'borders'));
-  });
-
-  it('puts the giant-footprint hover layer directly above terrainTop in both modes', () => {
-    // A giant's opaque top sprites are ordinary terrainTop entries (see
-    // giantTiles.ts), so the whole-footprint hover highlight needs its own
-    // layer immediately above terrainTop to actually be visible over them —
-    // the normal `hover` layer draws *under* terrainTop and would be fully
-    // hidden.
-    for (const mode of ['world', 'settlement'] as const) {
-      expect(indexIn(mode, 'giantHover')).toBe(indexIn(mode, 'terrainTop') + 1);
-    }
   });
 });
 

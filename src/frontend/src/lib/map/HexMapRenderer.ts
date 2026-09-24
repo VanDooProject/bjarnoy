@@ -1175,7 +1175,6 @@ export type WorldLayerName =
   | 'borders'
   | 'hover'
   | 'terrainTop'
-  | 'giantHover'
   | 'range'
   | 'highlight';
 
@@ -1212,13 +1211,7 @@ export type WorldLayerName =
  * where the foam is.
  */
 export function worldLayerOrder(mode: 'world' | 'settlement'): WorldLayerName[] {
-  // giantHover sits directly above terrainTop: a giant's opaque top sprites
-  // (drawn as ordinary terrainTop entries, one per covered hex — see
-  // giantTiles.ts's module doc comment) would otherwise fully hide the
-  // normal `hover` layer's single-hex outline, which draws *under*
-  // terrainTop. The giant-footprint highlight needs its own layer above the
-  // art instead of trying to reuse `hover` (see setHoveredCoord).
-  const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'giantHover', 'range', 'highlight'];
+  const rest: WorldLayerName[] = ['borders', 'hover', 'terrainTop', 'range', 'highlight'];
   // Rivers only get their own vector-line layer in world mode — settlement
   // mode already draws them as sprite tile art baked into terrainBase/
   // terrainTop (see riverTexturesFor), so riverLayer is simply never added
@@ -1301,11 +1294,6 @@ export class HexMapRenderer {
   private borderLayer = new Graphics();
   private riverLayer = new Graphics();
   private hoverLayer = new Graphics();
-  // The whole-footprint highlight drawn instead of `hoverLayer` when the
-  // hovered hex belongs to a giant tile (see setHoveredCoord) — sits above
-  // `terrainTop` (worldLayerOrder) so it isn't hidden under the giant's own
-  // opaque art the way `hoverLayer` would be.
-  private giantHoverLayer = new Graphics();
   // zip 6a: "click to place" — a persistent (not hover-gated) pulsing glow
   // on `options.highlightCoord`, redrawn every tick since the pulse itself
   // is time-based, unlike everything else here which only redraws on a
@@ -1600,7 +1588,6 @@ export class HexMapRenderer {
       borders: this.borderLayer,
       hover: this.hoverLayer,
       terrainTop: this.terrainTop.container,
-      giantHover: this.giantHoverLayer,
       range: this.rangeLayer,
       highlight: this.highlightLayer,
     };
@@ -2269,7 +2256,6 @@ export class HexMapRenderer {
     if (key === this.hoveredKey) return;
     this.hoveredKey = key;
     this.hoverLayer.clear();
-    this.giantHoverLayer.clear();
     if (!coord) {
       this.options.onHoverChange?.(null);
       return;
@@ -2293,25 +2279,17 @@ export class HexMapRenderer {
     }
 
     const grid = isoGridPosition(coord, TILE_W, TILE_H);
-    if (tile.giant) {
-      // Highlight the giant's whole 7-hex footprint instead of just this
-      // one hex — its opaque art (drawn one part per hex in terrainTop)
-      // would otherwise fully hide a normal single-hex outline drawn under
-      // it. `hoverLayer` stays empty for this hex (cleared above); the
-      // outline is drawn in `giantHoverLayer`, which sits above terrainTop
-      // (worldLayerOrder) instead.
-      const outline = giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y]);
-      this.giantHoverLayer
-        .poly(outline)
-        .fill({ color: HOVER_FILL, alpha: 0.28 })
-        .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
-    } else {
-      const flat = isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
-      this.hoverLayer
-        .poly(flat)
-        .fill({ color: HOVER_FILL, alpha: 0.28 })
-        .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
-    }
+    // A hex covered by a giant highlights the giant's whole 7-hex footprint
+    // (the object, not the one hex under the cursor), in the same `hover`
+    // layer as any other tile - under terrainTop, so the art sits on top of
+    // the highlight exactly the way every other tile's topping does.
+    const outline = tile.giant
+      ? giantFootprintOutline(tile.giant.anchor, TILE_W, TILE_H).flatMap((p) => [p.x, p.y])
+      : isoTopPoints(TILE_W, TILE_H).flatMap((p) => [grid.x + p.x, grid.y + p.y]);
+    this.hoverLayer
+      .poly(outline)
+      .fill({ color: HOVER_FILL, alpha: 0.28 })
+      .stroke({ width: 4, color: HOVER_STROKE, alpha: 1 });
 
     if (mode === 'settlement') {
       const river = worldModel.getRiverTile(coord.q, coord.r);
