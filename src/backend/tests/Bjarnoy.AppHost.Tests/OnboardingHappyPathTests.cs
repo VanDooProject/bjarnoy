@@ -56,7 +56,13 @@ public class OnboardingHappyPathTests
 
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync();
+        // Reduced motion, same as the demo suite's playwright.config.ts: the
+        // profile nudge bobs on an infinite keyframe animation (paired with a
+        // prefers-reduced-motion override in ProfileNudge.vue), and a
+        // constantly moving element never passes Playwright's "stable" click
+        // check. Emulating the media feature stills it without touching app
+        // code or the DOM under test.
+        var page = await browser.NewPageAsync(new BrowserNewPageOptions { ReducedMotion = ReducedMotion.Reduce });
         var consoleErrors = page.CollectConsoleErrors();
 
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
