@@ -113,6 +113,8 @@ jobs:
           # and validates JWTs.
           docker run -d --name bjarnoy-smoke -p 8080:8080 -v "$data:/data" \
             -e Jwt__SigningKey="smoke-test-signing-key-not-for-production-use" \
+            -e ADMIN_BOOTSTRAP_USERNAME="smoke-admin" \
+            -e ADMIN_BOOTSTRAP_PASSWORD="smoke-admin-password-not-for-production" \
             "$image"
           trap 'docker logs bjarnoy-smoke; docker rm -f bjarnoy-smoke' EXIT
 
@@ -176,10 +178,22 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::the API works against the migrated database"
-          curl -fsS -X POST http://localhost:8080/api/v1/worlds \
+          # Creating a world is admin-only (POST /api/v1/admin/worlds), so the
+          # container seeds an admin from ADMIN_BOOTSTRAP_* above and the smoke
+          # test logs in as it first — which also proves admin bootstrap and
+          # JWT signing work in the image.
+          token=$(curl -fsS -X POST http://localhost:8080/api/v1/auth/login \
             -H 'content-type: application/json' \
+            -d '{"userName":"smoke-admin","password":"smoke-admin-password-not-for-production"}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+          curl -fsS -X POST http://localhost:8080/api/v1/admin/worlds \
+            -H 'content-type: application/json' \
+            -H "Authorization: Bearer $token" \
             -d '{"name":"smoke-test-world","seed":7,"radius":30,"maxPlayers":10}' \
-            -o /tmp/world.json
+            -o /tmp/created.json
+          world_id=$(python3 -c 'import json; print(json.load(open("/tmp/created.json"))["id"])')
+          # The public game-client config for that world carries islandCount.
+          curl -fsS "http://localhost:8080/api/v1/worlds/$world_id" -o /tmp/world.json
           cat /tmp/world.json
           echo
           # No islands would mean generation silently produced an empty sea.
@@ -193,7 +207,6 @@ jobs:
           # libfontconfig.so.1, which the aspnet base image does not carry, so
           # every request 500'd with "/app/liblibSkiaSharp: cannot open shared
           # object file" while every test on a normal machine passed.
-          world_id=$(python3 -c 'import json; print(json.load(open("/tmp/world.json"))["id"])')
           curl -fsS -o /tmp/fog.png \
             -H 'X-Owner-Id: player_smoke-test' \
             "http://localhost:8080/api/v1/worlds/$world_id/fog-mask"
