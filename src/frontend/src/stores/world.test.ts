@@ -17,6 +17,7 @@ const getTradeBoard = vi.fn();
 const getMyTradeOffers = vi.fn();
 const getShipments = vi.fn();
 const getSettlement = vi.fn();
+const getSettlementView = vi.fn();
 const getFogMask = vi.fn();
 const getPlotSuggestion = vi.fn();
 const releasePlotSuggestion = vi.fn();
@@ -67,6 +68,7 @@ async function loadStoreModule(demoMode: boolean) {
       getMyTradeOffers: (...args: unknown[]) => getMyTradeOffers(...args),
       getShipments: (...args: unknown[]) => getShipments(...args),
       getSettlement: (...args: unknown[]) => getSettlement(...args),
+      getSettlementView: (...args: unknown[]) => getSettlementView(...args),
       getFogMask: (...args: unknown[]) => getFogMask(...args),
       getPlotSuggestion: (...args: unknown[]) => getPlotSuggestion(...args),
       releasePlotSuggestion: (...args: unknown[]) => releasePlotSuggestion(...args),
@@ -319,6 +321,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
       alternatives: [FAR_ISLAND.at],
       reserved: true,
       reservedUntil: null,
+      islandSettlements: [],
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
@@ -353,6 +356,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
       alternatives: [],
       reserved: true,
       reservedUntil: null,
+      islandSettlements: [],
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
@@ -381,6 +385,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
       alternatives: [],
       reserved: true,
       reservedUntil: null,
+      islandSettlements: [],
     });
     foundSettlement.mockReset();
 
@@ -419,6 +424,7 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
       alternatives: [],
       reserved: true,
       reservedUntil: null,
+      islandSettlements: [],
     });
     foundSettlement.mockReset().mockResolvedValue({
       id: 'settlement-1',
@@ -609,6 +615,42 @@ describe('useWorldStore refreshWorldSettlements (island-scoped painting)', () =>
 
     expect(store.model.countBuildings('rival-near')).toBe(1);
     expect(store.model.countBuildings('rival-far')).toBe(1);
+  });
+});
+
+// Backend fix: GET .../settlements became fog-gated, so an anonymous
+// landing-page visitor (no realm of their own yet) legitimately gets nothing
+// back from it any more — `PlotSuggestionResponse.islandSettlements` is what
+// now carries their would-be neighbours instead, and `refreshPlotSuggestion`
+// must register those into the model the same way `refreshWorldSettlements`
+// registers its own summaries (shared `registerSettlementSummaries` helper).
+describe('useWorldStore refreshPlotSuggestion (islandSettlements)', () => {
+  it('registers and paints the suggested islands own settlements even with no world-wide list', async () => {
+    // The fog-gated world list: an anonymous visitor with no realm yet sees
+    // nothing from it at all.
+    listSettlements.mockReset().mockResolvedValue([]);
+    getPlotSuggestion.mockReset().mockResolvedValue({
+      islandId: 'island-near',
+      plot: { q: 0, r: 0 },
+      alternatives: [],
+      reserved: true,
+      reservedUntil: null,
+      islandSettlements: [
+        { id: 'resident-1', name: 'Resident', ownerName: 'Astrid', q: 2, r: 0, longhouseLevel: 1, islandId: 'island-near' },
+      ],
+    });
+
+    const store = await loadStoreModule(false);
+    store.worldId = 'world-1';
+
+    const outcome = await store.refreshPlotSuggestion('player-1');
+
+    expect(outcome).toEqual({ kind: 'ok', changed: true });
+    expect(store.model.getSettlement('resident-1')).toBeTruthy();
+    // Painted immediately (not just registered) — refreshWorldSettlements
+    // would otherwise have been the only thing painting this island, and it
+    // has nothing to paint from any more for an anonymous visitor.
+    expect(store.model.countBuildings('resident-1')).toBe(1);
   });
 });
 

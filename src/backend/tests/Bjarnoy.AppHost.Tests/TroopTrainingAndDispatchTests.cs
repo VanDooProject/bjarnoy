@@ -90,6 +90,14 @@ public class TroopTrainingAndDispatchTests
 
         var world = Assert.Single(
             (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+
+        // GET .../settlements and GET .../settlements/{id} are both
+        // fog-gated/owner-only — the founding browser's own local id has to
+        // go on the header before any of apiClient's settlement reads below
+        // (including its own just-founded settlement) will see anything.
+        var ownerId = await page.EvaluateAsync<string>("() => localStorage.getItem('bjarnoy.playerId')");
+        apiClient.DefaultRequestHeaders.Add("X-Owner-Id", ownerId);
+
         var settlements = await apiClient.GetFromJsonAsync<SettlementSummary[]>(
             $"/api/v1/worlds/{world.Id}/settlements", cancellationToken);
         var settlementId = Assert.Single(settlements!).Id;

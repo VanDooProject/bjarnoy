@@ -284,6 +284,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
             Ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
+        // The admin JWT just attached proves nothing about this (unclaimed)
+        // settlement's own ownership — present its founding browser's own
+        // local id, same as FoundSettlementAsync founded it under.
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "ulf-player");
         var afterRetune = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
 
@@ -318,6 +322,10 @@ public sealed class AdminWorldEndpointsTests(SqliteApiFixture fixture) : IClassF
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Equal("JoinsClosed", await refused.RejectionAsync(Ct));
 
+        // The client just went fully anonymous (auth cleared above) — same
+        // founding-browser local id as FoundSettlementAsync's own header-free
+        // founding call.
+        client.DefaultRequestHeaders.Add("X-Owner-Id", "ulf-player");
         var stillThere = await client.GetFromJsonAsync<SettlementResponse>(
             $"/api/v1/settlements/{settlement.Id}", SqliteApiFixture.StrictJson, Ct);
         Assert.NotNull(stillThere);

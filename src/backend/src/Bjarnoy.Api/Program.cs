@@ -61,6 +61,11 @@ builder.Services.AddOptions<PlotReservationOptions>()
 // FogMaskService's computed-mask cache (map-fog-v2.md §3) shares the same one.
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<FogMaskService>();
+// The fog-gated settlement/settlement-list reads (SettlementEndpoints.GetView/
+// ListForWorld) need the same explored-area computation FogMaskService bakes
+// its PNG from — see ExploredAreaService's own remarks for why it's a
+// separate, shared service rather than something only FogMaskService owns.
+builder.Services.AddScoped<ExploredAreaService>();
 builder.Services.AddOptions<UserActivityOptions>()
     .Bind(builder.Configuration.GetSection(UserActivityOptions.SectionName))
     .ValidateOnStart();

@@ -75,6 +75,7 @@ import type {
   SetUserStatusRequest,
   SetWorldRunStateRequest,
   SettlementResponse,
+  SettlementViewResponse,
   SlotRuneRequest,
   SettlementSummary,
   ShipmentResponse,
@@ -225,16 +226,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  listSettlements: (worldId: string) =>
-    request<SettlementSummary[]>(`/worlds/${worldId}/settlements`),
-  getSettlement: (settlementId: string) =>
-    request<SettlementResponse>(`/settlements/${settlementId}`),
+  // `ownerId` becomes the `X-Owner-Id` header the backend resolves the
+  // caller's realm from (fog-gated: own settlements plus every explored
+  // rival) — see CallerRealmResolver/ExploredAreaService. Omitting it (an
+  // anonymous caller with no realm at all) just gets an empty list back.
+  listSettlements: (worldId: string, ownerId?: string) =>
+    request<SettlementSummary[]>(`/worlds/${worldId}/settlements`, { headers: ownerHeader(ownerId) }),
   // `ownerId` becomes the `X-Owner-Id` header the backend's ownership
   // filter reads for an anonymous (unclaimed) settlement — see
   // SettlementOwnershipEndpointFilter. Harmless to omit or send stale for a
   // claimed settlement: the backend only consults it while the settlement
   // is still owned by the anonymous-play system account, and trusts the
-  // caller's JWT once it's claimed.
+  // caller's JWT once it's claimed. Owner-only (403 for anyone else) — use
+  // getSettlementView for a rival's settlement.
+  getSettlement: (settlementId: string, ownerId?: string) =>
+    request<SettlementResponse>(`/settlements/${settlementId}`, { headers: ownerHeader(ownerId) }),
+  // The fog-gated counterpart to getSettlement: works for any settlement
+  // whose ground `ownerId`'s realm has explored (their own included), but
+  // carries only identity/position/buildings — see SettlementViewResponse.
+  getSettlementView: (settlementId: string, ownerId?: string) =>
+    request<SettlementViewResponse>(`/settlements/${settlementId}/view`, { headers: ownerHeader(ownerId) }),
   queueBuild: (settlementId: string, body: QueueBuildRequest, ownerId?: string) =>
     request<unknown>(`/settlements/${settlementId}/builds`, {
       method: 'POST',

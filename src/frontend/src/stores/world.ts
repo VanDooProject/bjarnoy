@@ -10,6 +10,7 @@ import type {
   IslandResponse,
   PlacedBuildingResponse,
   RuneInstanceResponse,
+  SettlementSummary,
   ShipmentResponse,
   TradeOfferResponse,
   TrainingOrderResponse,
@@ -277,13 +278,13 @@ export const useWorldStore = defineStore('world', {
     // The target settlement's own placed buildings, fetched on demand once an
     // Attack dispatch's target is chosen (issue #40 phase 5) — this is what
     // the "preferred target building" picker in ArmyPanel.vue lists from.
-    // `GET /api/v1/settlements/{id}` (`api.getSettlement`) carries no
-    // ownership check, so it works for any settlement id, someone else's
-    // included — see the PR notes for why this phase reuses it rather than
-    // inventing a lighter endpoint. `dispatchTargetBuildingsFor` names which
-    // settlement `dispatchTargetBuildings` actually belongs to, so a stale
-    // fetch from a previously-picked target is never shown against a new one
-    // while the new fetch is still in flight.
+    // `GET /api/v1/settlements/{id}/view` (`api.getSettlementView`) is the
+    // fog-gated read that works for any explored settlement id, someone
+    // else's included, without handing back that rival's stock/rates/queue —
+    // see `loadDispatchTargetBuildings`'s own comment. `dispatchTargetBuildingsFor`
+    // names which settlement `dispatchTargetBuildings` actually belongs to,
+    // so a stale fetch from a previously-picked target is never shown against
+    // a new one while the new fetch is still in flight.
     dispatchTargetBuildings: null as PlacedBuildingResponse[] | null,
     dispatchTargetBuildingsFor: null as string | null,
     dispatchTargetBuildingsLoading: false,
@@ -442,10 +443,13 @@ export const useWorldStore = defineStore('world', {
         ),
       );
       this.liveReady = true;
-      // Every other player already in this shared world needs to be known
-      // before the landing page picks a starting plot (nearestStartPosition
-      // must avoid their homes) and drawn on screen (rival realms are part
-      // of the world too, not just something the world map reveals later).
+      // Fog-gated (ExploredAreaService): for a caller with an existing realm
+      // (a returning/claimed player), this pulls in their own settlements and
+      // whatever rivals they've already explored, so the world map has
+      // something to draw immediately. For a brand-new anonymous visitor with
+      // no realm yet, this legitimately comes back empty — their own would-be
+      // neighbours are what `refreshPlotSuggestion`'s `islandSettlements`
+      // provides instead, once a plot has been offered.
       await this.refreshWorldSettlements();
     },
     /** The most recently created world, or null if none exist yet. */
@@ -646,7 +650,7 @@ export const useWorldStore = defineStore('world', {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       let response;
       try {
-        response = await api.getSettlement(this.selectedSettlementId);
+        response = await api.getSettlement(this.selectedSettlementId, this.ownerId ?? undefined);
       } catch (err) {
         if (isSettlementNotFound(err)) {
           // Unlike a transient failure, this settlement is never going to
@@ -801,7 +805,7 @@ export const useWorldStore = defineStore('world', {
       await this.bootstrapLiveWorld();
       let response;
       try {
-        response = await api.getSettlement(settlementId);
+        response = await api.getSettlement(settlementId, ownerId);
       } catch (err) {
         if (isSettlementNotFound(err)) {
           // Same TOCTOU as refreshLiveSettlement: the persisted settlement
@@ -943,9 +947,13 @@ export const useWorldStore = defineStore('world', {
      * everyone (matching `prototypes/worldmap`'s `marks`), while the
      * landing/settlement preview only claims the island it's showing.
      */
-    async refreshWorldSettlements() {
-      if (DEMO_MODE || !this.worldId) return;
-      const summaries = await api.listSettlements(this.worldId);
+    /**
+     * Registers a batch of `SettlementSummary` rows into the local
+     * `WorldModel`, data-only — shared by `refreshWorldSettlements` (the
+     * fog-gated world list) and `refreshPlotSuggestion` (a suggestion's own
+     * `islandSettlements`), so the two don't duplicate this loop.
+     */
+    registerSettlementSummaries(summaries: SettlementSummary[]) {
       for (const summary of summaries) {
         if (summary.id === this.selectedSettlementId) continue;
         this.model.registerSettlement({
@@ -962,6 +970,11 @@ export const useWorldStore = defineStore('world', {
           islandId: summary.islandId,
         });
       }
+    },
+    async refreshWorldSettlements() {
+      if (DEMO_MODE || !this.worldId) return;
+      const summaries = await api.listSettlements(this.worldId, this.ownerId ?? undefined);
+      this.registerSettlementSummaries(summaries);
       if (this.worldMapActive) {
         this.model.claimAllTerritory();
       } else {
@@ -1025,6 +1038,12 @@ export const useWorldStore = defineStore('world', {
         reserved: response.reserved,
         reservedUntil: response.reservedUntil,
       };
+      // The suggested island's own settlements — replaces the pre-founding,
+      // world-wide list `refreshWorldSettlements` used to provide before
+      // `listSettlements` became fog-gated (an anonymous visitor has no
+      // explored ground of their own yet to fog-gate against).
+      this.registerSettlementSummaries(response.islandSettlements);
+      if (!this.worldMapActive) this.model.claimTerritoryOnIsland(response.islandId);
       return { kind: 'ok', changed: previous?.plot.q !== response.plot.q || previous?.plot.r !== response.plot.r };
     },
     /**
@@ -1211,20 +1230,24 @@ export const useWorldStore = defineStore('world', {
     },
     /**
      * Fetches the target settlement's placed buildings for the "preferred
-     * target building" picker (issue #40 phase 5) — see
-     * `dispatchTargetBuildings`'s own comment on why `api.getSettlement`
-     * works here even though `settlementId` is someone else's settlement.
-     * Swallows a failure into `dispatchTargetBuildingsError` rather than
-     * surfacing it as a dispatch-blocking error: the picker is a nice-to-have
-     * preference, not a requirement to dispatch (the backend's own fallback
-     * is a random pick), so ArmyPanel just falls back to "no preference"
-     * copy when this can't be loaded.
+     * target building" picker (issue #40 phase 5), via the fog-gated
+     * `getSettlementView` — `settlementId` is someone else's settlement, and
+     * the owner-only `getSettlement` now 403s for a non-owner (see
+     * SettlementOwnershipEndpointFilter). `getSettlementView` only succeeds
+     * (and only returns buildings) for ground this player has actually
+     * explored, which is a fine limit for a dispatch-target picker: an
+     * unexplored target can still be attacked, it just offers no per-building
+     * preference. Swallows a failure into `dispatchTargetBuildingsError`
+     * rather than surfacing it as a dispatch-blocking error: the picker is a
+     * nice-to-have preference, not a requirement to dispatch (the backend's
+     * own fallback is a random pick), so ArmyPanel just falls back to "no
+     * preference" copy when this can't be loaded.
      */
     async loadDispatchTargetBuildings(settlementId: string) {
       this.dispatchTargetBuildingsLoading = true;
       this.dispatchTargetBuildingsError = false;
       try {
-        const response = await api.getSettlement(settlementId);
+        const response = await api.getSettlementView(settlementId, this.ownerId ?? undefined);
         this.dispatchTargetBuildings = response.buildings;
         this.dispatchTargetBuildingsFor = settlementId;
       } catch {
