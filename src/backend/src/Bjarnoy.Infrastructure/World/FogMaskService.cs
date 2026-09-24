@@ -81,7 +81,7 @@ public sealed class FogMaskService(GameDbContext dbContext, IMemoryCache cache, 
     public async Task<FogMaskResult> GeneratePlayerMaskAsync(
         Guid worldId, string ownerId, CancellationToken cancellationToken = default)
     {
-        var area = await _exploredArea.GetAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false);
+        var area = await _exploredArea.GetAsync(worldId, ownerId, persist: true, cancellationToken).ConfigureAwait(false);
         if (area is null)
         {
             return new FogMaskResult(FogMaskRejection.WorldNotFound);

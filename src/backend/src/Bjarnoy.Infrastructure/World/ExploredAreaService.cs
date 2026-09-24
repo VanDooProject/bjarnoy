@@ -90,8 +90,17 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
     /// matching <see cref="FogMaskService"/>'s own "an all-fog mask is not a
     /// rejection" rule.
     /// </summary>
+    /// <param name="persist">
+    /// Whether newly explored ground is written back to
+    /// <see cref="PlayerExploredEntity"/>. Only the fog mask (the one read
+    /// that owns "exploring") passes <see langword="true"/>. The fog-gated
+    /// settlement reads compute the same merged area in memory without
+    /// saving: they are polled alongside the fog mask, and a second writer
+    /// racing it to insert a new player's first row hit the
+    /// <c>(WorldId, OwnerId)</c> unique index and 500'd the request.
+    /// </param>
     public async Task<ExploredArea?> GetAsync(
-        Guid worldId, string ownerId, CancellationToken cancellationToken = default)
+        Guid worldId, string ownerId, bool persist = false, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
 
@@ -152,8 +161,9 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
             .ConfigureAwait(false);
 
         var mergedBits = PersistedExploredBitset.Merge(bounds, explored?.Bits, newlyWalked, out var grew);
-        if (grew)
+        if (grew && persist)
         {
+            var inserting = explored is null;
             if (explored is null)
             {
                 explored = new PlayerExploredEntity { WorldId = worldId, OwnerId = ownerId };
@@ -162,7 +172,20 @@ public sealed class ExploredAreaService(GameDbContext dbContext, IMemoryCache ca
 
             explored.Bits = mergedBits;
             explored.UpdatedAt = now;
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateException) when (inserting)
+            {
+                // Two concurrent fog-mask requests for a brand-new player both
+                // saw no row and both inserted; the unique index let one win.
+                // The loser's bits are the same ground (the bitset only ever
+                // grows, and both were computed from the same inputs), so
+                // dropping this insert loses nothing — the next poll merges
+                // into the winner's row.
+                _dbContext.Entry(explored).State = EntityState.Detached;
+            }
         }
 
         var version = ComputeVersion(settlements, mergedBits);

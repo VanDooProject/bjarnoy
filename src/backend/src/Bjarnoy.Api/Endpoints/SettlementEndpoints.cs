@@ -216,7 +216,7 @@ public static class SettlementEndpoints
             return NotOwnerRefusal();
         }
 
-        var area = await exploredArea.GetAsync(entity.WorldId, realm.OwnerId!, cancellationToken);
+        var area = await exploredArea.GetAsync(entity.WorldId, realm.OwnerId!, persist: false, cancellationToken);
         if (area is null)
         {
             // The world resolved a moment ago but is gone by the time this
@@ -277,7 +277,7 @@ public static class SettlementEndpoints
             return TypedResults.Ok<IReadOnlyList<SettlementSummary>>([]);
         }
 
-        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, cancellationToken);
+        var area = await exploredArea.GetAsync(worldId, realm.OwnerId!, persist: false, cancellationToken);
         if (area is null)
         {
             return TypedResults.Ok<IReadOnlyList<SettlementSummary>>([]);

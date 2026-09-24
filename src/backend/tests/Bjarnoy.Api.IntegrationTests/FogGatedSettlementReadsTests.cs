@@ -287,6 +287,42 @@ public sealed class FogGatedSettlementReadsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Fog_gated_reads_never_write_explored_history()
+    {
+        // Regression: the world list and /view used to persist newly explored
+        // ground too. The frontend polls the world list in the same tick as
+        // the fog mask, so for a brand-new player both requests inserted the
+        // first player_explored row and the loser 500'd on the
+        // (WorldId, OwnerId) unique index (seen on Postgres in aspire-e2e).
+        // Only the fog mask may write it.
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+        var owner = Unique("owner");
+        client.DefaultRequestHeaders.Add("X-Owner-Id", owner);
+        var settlement = await FoundAsync(client, worldId, owner);
+
+        var list = await client.GetAsync($"/api/v1/worlds/{worldId}/settlements", Ct);
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        var view = await client.GetAsync($"/api/v1/settlements/{settlement.Id}/view", Ct);
+        Assert.Equal(HttpStatusCode.OK, view.StatusCode);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            Assert.False(await db.PlayerExplored.AnyAsync(e => e.WorldId == worldId && e.OwnerId == owner, Ct));
+        }
+
+        var fog = await client.GetAsync($"/api/v1/worlds/{worldId}/fog-mask", Ct);
+        Assert.Equal(HttpStatusCode.OK, fog.StatusCode);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GameDbContext>();
+            Assert.True(await db.PlayerExplored.AnyAsync(e => e.WorldId == worldId && e.OwnerId == owner, Ct));
+        }
+    }
+
+    [Fact]
     public async Task World_list_shows_own_and_explored_rivals_but_not_unexplored_ones()
     {
         using var client = Client();
