@@ -34,4 +34,21 @@ public static class AiPersonalityExtensions
         AiPersonality.Aggressive => "aggressive",
         _ => throw new ArgumentOutOfRangeException(nameof(personality), personality, "Unknown AI personality"),
     };
+
+    /// <summary>Parses a wire name (or enum name) back to an <see cref="AiPersonality"/>, case-insensitively.</summary>
+    public static bool TryParseWireName(string value, out AiPersonality personality)
+    {
+        foreach (var candidate in Enum.GetValues<AiPersonality>())
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                personality = candidate;
+                return true;
+            }
+        }
+
+        personality = default;
+        return false;
+    }
 }

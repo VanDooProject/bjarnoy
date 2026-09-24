@@ -336,4 +336,147 @@ public sealed class AiPlayerService(
 
         return byCoord;
     }
+
+    /// <summary>One AI player plus the settlements it currently holds — the admin listing's row shape.</summary>
+    public sealed record AiPlayerListItem(AiPlayerEntity AiPlayer, IReadOnlyList<SettlementEntity> Settlements);
+
+    /// <summary>
+    /// Every AI player in the database, with its user (for the display name)
+    /// and its settlements, for the admin listing endpoint. Two extra queries
+    /// total — one for the settlements, keyed by the AI user ids already
+    /// loaded — rather than one query per AI player.
+    /// </summary>
+    public async Task<IReadOnlyList<AiPlayerListItem>> ListAsync(CancellationToken cancellationToken = default)
+    {
+        // Ordered in memory, not via the query (OrderBy(CreatedAt)): EF Core's
+        // SQLite provider cannot translate an ORDER BY over a DateTimeOffset
+        // column — same restriction as the load-and-compare queries elsewhere
+        // in this file and in AiTakeoverService.
+        var aiPlayers = (await _dbContext.AiPlayers
+            .AsNoTracking()
+            .Include(a => a.User)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false))
+            .OrderBy(a => a.CreatedAt)
+            .ToList();
+
+        var userIds = aiPlayers.Select(a => a.UserId).ToList();
+        var settlements = await _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.Buildings)
+            .Include(s => s.Garrison)
+            .Include(s => s.Runes)
+            .Where(s => userIds.Contains(s.UserId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var settlementsByUser = settlements
+            .GroupBy(s => s.UserId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<SettlementEntity>)[.. g]);
+
+        return [.. aiPlayers.Select(a => new AiPlayerListItem(
+            a, settlementsByUser.GetValueOrDefault(a.UserId, [])))];
+    }
+
+    /// <summary>
+    /// One AI player, in the same shape <see cref="ListAsync"/> returns rows
+    /// in — used to build the admin response right after a takeover or an
+    /// update, rather than re-listing every AI player.
+    /// </summary>
+    public async Task<AiPlayerListItem?> GetAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var aiPlayer = await _dbContext.AiPlayers
+            .AsNoTracking()
+            .Include(a => a.User)
+            .FirstOrDefaultAsync(a => a.UserId == userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (aiPlayer is null)
+        {
+            return null;
+        }
+
+        var settlements = await _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.Buildings)
+            .Include(s => s.Garrison)
+            .Include(s => s.Runes)
+            .Where(s => s.UserId == userId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new AiPlayerListItem(aiPlayer, settlements);
+    }
+
+    /// <summary>Why <see cref="UpdateAsync"/> did not apply an update.</summary>
+    public enum AiPlayerUpdateOutcome
+    {
+        Applied,
+        NotFound,
+    }
+
+    /// <summary>
+    /// Replaces an AI player's personality and/or objective list — the admin
+    /// "edit AI" endpoint. Either argument left <see langword="null"/> leaves
+    /// that part unchanged; passing a personality does not reset the
+    /// objective list to that personality's defaults (an admin who wants that
+    /// sends both explicitly).
+    /// </summary>
+    public async Task<(AiPlayerUpdateOutcome Outcome, AiPlayerEntity? AiPlayer)> UpdateAsync(
+        Guid userId,
+        AiPersonality? personality,
+        IReadOnlyList<AiObjective>? objectives,
+        CancellationToken cancellationToken = default)
+    {
+        var aiPlayer = await _dbContext.AiPlayers
+            .FirstOrDefaultAsync(a => a.UserId == userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (aiPlayer is null)
+        {
+            return (AiPlayerUpdateOutcome.NotFound, null);
+        }
+
+        if (personality is { } newPersonality)
+        {
+            aiPlayer.Personality = newPersonality;
+        }
+
+        if (objectives is not null)
+        {
+            aiPlayer.Objectives = [.. objectives];
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return (AiPlayerUpdateOutcome.Applied, aiPlayer);
+    }
+
+    /// <summary>
+    /// The AI personality behind a user id, or <see langword="null"/> if that
+    /// user is not an AI player — used to shape <c>isAi</c>/<c>aiPersonality</c>
+    /// on a single settlement's response.
+    /// </summary>
+    public async Task<AiPersonality?> GetPersonalityForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var aiPlayer = await _dbContext.AiPlayers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.UserId == userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return aiPlayer?.Personality;
+    }
+
+    /// <summary>
+    /// Every AI player's personality in one world, keyed by user id — one
+    /// query for a whole world-map/settlement listing, rather than one lookup
+    /// per settlement.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, AiPersonality>> GetPersonalitiesForWorldAsync(
+        Guid worldId, CancellationToken cancellationToken = default) =>
+        await _dbContext.AiPlayers
+            .AsNoTracking()
+            .Where(a => a.WorldId == worldId)
+            .ToDictionaryAsync(a => a.UserId, a => a.Personality, cancellationToken)
+            .ConfigureAwait(false);
 }

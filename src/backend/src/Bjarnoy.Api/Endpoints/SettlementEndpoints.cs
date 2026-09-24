@@ -1,6 +1,7 @@
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.Ai;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Units;
@@ -102,6 +103,7 @@ public static class SettlementEndpoints
         Guid worldId,
         FoundSettlementRequest request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -120,10 +122,11 @@ public static class SettlementEndpoints
         {
             var found = await settlements.GetAsync(result.Settlement!.Id, cancellationToken);
             var (entity, clock) = found!.Value;
+            var aiPersonality = await aiPlayers.GetPersonalityForUserAsync(entity.UserId, cancellationToken);
 
             return TypedResults.Created(
                 $"/api/v1/settlements/{entity.Id}",
-                SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+                SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow()), aiPersonality));
         }
 
         var problem = Problem(result.Rejection);
@@ -144,6 +147,7 @@ public static class SettlementEndpoints
     private static async Task<Results<Ok<SettlementResponse>, NotFound<ProblemDetails>>> Get(
         Guid settlementId,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -154,23 +158,30 @@ public static class SettlementEndpoints
         }
 
         var (entity, clock) = found.Value;
+        var aiPersonality = await aiPlayers.GetPersonalityForUserAsync(entity.UserId, cancellationToken);
         return TypedResults.Ok(
-            SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+            SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow()), aiPersonality));
     }
 
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListForWorld(
         Guid worldId,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         CancellationToken cancellationToken)
     {
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
+        var aiPersonalities = await aiPlayers.GetPersonalitiesForWorldAsync(worldId, cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
-            .. entities.Select(s => new SettlementSummary(
-                s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
-                s.IslandId)),
+            .. entities.Select(s =>
+            {
+                var isAi = aiPersonalities.TryGetValue(s.UserId, out var personality);
+                return new SettlementSummary(
+                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0,
+                    s.IslandId, isAi, isAi ? personality.ToWireName() : null);
+            }),
         ];
 
         return TypedResults.Ok(response);

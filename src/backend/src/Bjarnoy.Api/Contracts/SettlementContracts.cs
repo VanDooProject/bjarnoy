@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Bjarnoy.Domain.Ai;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Settlers;
@@ -171,6 +172,11 @@ public sealed record TrainingOrderResponse(
 /// </param>
 public sealed record ConstructionResponse(int Slots, int SlotsUsed, int MaxWaitingOrders, int WaitingOrders, int MaxOrdersPerHex);
 
+/// <param name="IsAi">Whether this settlement's owner is an AI jarl rather than a real player.</param>
+/// <param name="AiPersonality">
+/// The AI owner's personality wire name (see <c>AiPersonalityExtensions.ToWireName</c>),
+/// or <see langword="null"/> for a human-owned settlement.
+/// </param>
 public sealed record SettlementResponse(
     Guid Id,
     Guid WorldId,
@@ -188,10 +194,19 @@ public sealed record SettlementResponse(
     IReadOnlyList<UnitStackResponse> Garrison,
     IReadOnlyList<TrainingOrderResponse> TrainingQueue,
     IReadOnlyList<RuneInstanceResponse> Runes,
-    WorldClockResponse World)
+    WorldClockResponse World,
+    bool IsAi = false,
+    string? AiPersonality = null)
 {
+    /// <param name="aiPersonality">
+    /// The owner's AI personality, or <see langword="null"/> for a human
+    /// owner — the caller looks this up (<c>AiPlayerService.GetPersonalityForUserAsync</c>
+    /// or <c>GetPersonalitiesForWorldAsync</c> for a bulk listing) since
+    /// <see cref="Bjarnoy.Infrastructure.Entities.AiPlayerEntity"/> lives
+    /// outside what a settlement's own entity graph loads.
+    /// </param>
     public static SettlementResponse From(
-        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow)
+        SettlementEntity entity, GameClock clock, DateTimeOffset gameNow, AiPersonality? aiPersonality = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
@@ -268,7 +283,9 @@ public sealed record SettlementResponse(
                 o.PerUnitDuration.TotalSeconds * o.Count))],
             [.. domain.Runes.Select(r => new RuneInstanceResponse(
                 r.Id, r.Type.ToWireName(), r.Rarity.ToWireName(), r.SlottedAt?.Q, r.SlottedAt?.R))],
-            WorldClockResponse.From(clock, gameNow));
+            WorldClockResponse.From(clock, gameNow),
+            aiPersonality is not null,
+            aiPersonality?.ToWireName());
     }
 }
 
@@ -342,8 +359,18 @@ public sealed record BuildingDefinitionResponse(
 }
 
 /// <summary>A settlement as it appears on the world map: enough to draw a marker.</summary>
+/// <param name="IsAi">Whether this settlement's owner is an AI jarl rather than a real player.</param>
+/// <param name="AiPersonality">The AI owner's personality wire name, or <see langword="null"/> for a human-owned settlement.</param>
 public sealed record SettlementSummary(
-    Guid Id, string Name, string OwnerName, int Q, int R, int LonghouseLevel, Guid IslandId);
+    Guid Id,
+    string Name,
+    string OwnerName,
+    int Q,
+    int R,
+    int LonghouseLevel,
+    Guid IslandId,
+    bool IsAi = false,
+    string? AiPersonality = null);
 
 /// <summary>
 /// The caller's own renown in one world (issue #55 §3), plus the settlement

@@ -314,6 +314,7 @@ app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
 app.MapAdminSettlementEndpoints(versionSet);
+app.MapAdminAiPlayersEndpoints(versionSet);
 app.MapAdminArmyEndpoints(versionSet);
 app.MapChatEndpoints(versionSet);
 app.MapAdminReportEndpoints(versionSet);

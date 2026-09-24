@@ -22,6 +22,36 @@ public enum AiObjectiveKind
     GarrisonStrength,
 }
 
+public static class AiObjectiveKindExtensions
+{
+    /// <summary>Lowercased wire name, matching the convention <c>BuildingTypeExtensions.ToWireName</c> sets.</summary>
+    public static string ToWireName(this AiObjectiveKind kind) => kind switch
+    {
+        AiObjectiveKind.ReachLonghouseLevel => "reachlonghouselevel",
+        AiObjectiveKind.ReachBuildingLevel => "reachbuildinglevel",
+        AiObjectiveKind.ProductionRate => "productionrate",
+        AiObjectiveKind.GarrisonStrength => "garrisonstrength",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown AI objective kind"),
+    };
+
+    /// <summary>Parses a wire name (or enum name) back to an <see cref="AiObjectiveKind"/>, case-insensitively.</summary>
+    public static bool TryParseWireName(string value, out AiObjectiveKind kind)
+    {
+        foreach (var candidate in Enum.GetValues<AiObjectiveKind>())
+        {
+            if (string.Equals(candidate.ToWireName(), value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            {
+                kind = candidate;
+                return true;
+            }
+        }
+
+        kind = default;
+        return false;
+    }
+}
+
 /// <summary>
 /// One entry in an AI player's ordered objective list. Every AI has a
 /// personality-default list (<see cref="AiProfile.DefaultObjectives"/>);
