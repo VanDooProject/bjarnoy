@@ -4,9 +4,9 @@
 // (showProfileNudge) — ProfileNudge.test.ts covers the nudge panel's own
 // content/actions.
 import { createPinia, setActivePinia } from 'pinia';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HudNav from './HudNav.vue';
 import { usePlayerStore } from '../../stores/player';
 import { useAuthStore } from '../../stores/auth';
@@ -41,6 +41,18 @@ async function mountHudNav(path = '/') {
   return mount(HudNav, {
     global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
   });
+}
+
+// Same as mountHudNav, but also hands back the router — the account-menu
+// tests below need it to assert on navigation.
+async function mountHudNavWithRouter(path = '/settlement') {
+  const router = testRouter();
+  await router.push(path);
+  await router.isReady();
+  const wrapper = mount(HudNav, {
+    global: { plugins: [router, createTestI18n({ hud: enHud, onboarding: enOnboarding })] },
+  });
+  return { wrapper, router };
 }
 
 function foundAndOnboarded(player: ReturnType<typeof usePlayerStore>) {
@@ -213,5 +225,79 @@ describe('HudNav link visibility', () => {
     player.hasFoundedSettlement = true;
     const wrapper = await mountHudNav('/settlement');
     expect(wrapper.text()).toContain('Landing');
+  });
+});
+
+// Player logout/login gate: the authenticated avatar is now a small account
+// dropdown (Profile / Log out) instead of a direct link to /profile.
+describe('HudNav account menu', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  it('opens on trigger click and Profile routes to /profile', async () => {
+    const auth = useAuthStore();
+    authenticate(auth);
+    const { wrapper, router } = await mountHudNavWithRouter();
+
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="account-menu-profile"]').trigger('click');
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe('/profile');
+    // Navigating away closes the menu, same as ReturningPlayerMenu's panel.
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+  });
+
+  it('Log out calls auth.logout, forgets the local identity, and ends with a full page load to /', async () => {
+    const auth = useAuthStore();
+    authenticate(auth);
+    localStorage.setItem('bjarnoy.playerId', 'player-1');
+    localStorage.setItem('bjarnoy.settlementId', 'settlement-1');
+    localStorage.setItem('bjarnoy.settlementsByWorld', '{"world-1":"settlement-1"}');
+    localStorage.setItem('bjarnoy.onboardingComplete', '1');
+    localStorage.setItem('bjarnoy.profileNudgeDismissed', '1');
+    localStorage.setItem('bjarnoy.nickname', 'Ragnar');
+    localStorage.setItem('bjarnoy.worldId', 'world-1');
+    localStorage.setItem('bjarnoy.locale', 'de');
+
+    // jsdom's window.location doesn't support vi.spyOn directly (its
+    // `assign` isn't a plain, reconfigurable own property) — swap the whole
+    // object out for the duration of this test instead.
+    const originalLocation = window.location;
+    const assignSpy = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, assign: assignSpy },
+    });
+
+    const { wrapper } = await mountHudNavWithRouter();
+
+    await wrapper.find('[data-testid="account-menu-trigger"]').trigger('click');
+    await wrapper.find('[data-testid="account-menu-logout"]').trigger('click');
+    await flushPromises();
+
+    expect(auth.isAuthenticated).toBe(false);
+    for (const key of [
+      'bjarnoy.playerId',
+      'bjarnoy.settlementId',
+      'bjarnoy.settlementsByWorld',
+      'bjarnoy.onboardingComplete',
+      'bjarnoy.profileNudgeDismissed',
+      'bjarnoy.nickname',
+    ]) {
+      expect(localStorage.getItem(key), key).toBeNull();
+    }
+    expect(localStorage.getItem('bjarnoy.worldId')).toBe('world-1');
+    expect(localStorage.getItem('bjarnoy.locale')).toBe('de');
+    expect(localStorage.getItem('bjarnoy.lastAccount')).toBe('ragnar');
+    expect(assignSpy).toHaveBeenCalledWith('/');
+
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
   });
 });

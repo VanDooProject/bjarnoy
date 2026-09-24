@@ -16,6 +16,18 @@ import { useWorldStore } from '../stores/world';
 import { createTestI18n } from '../test/i18n';
 import enLogin from '../i18n/locales/en/login.json';
 
+// Player logout/login gate: forced to live mode so the "restore realm after
+// login" assertion below (useLoginForm's `!DEMO_MODE && world.worldId`
+// guard) actually exercises the `world.joinWorld` call — the vitest config
+// otherwise defaults DEMO_MODE to true the same way a plain `npm run dev`
+// does. Doesn't affect this file's other tests: they either don't submit,
+// or go through LoginView's own linked-world branch, which calls
+// `world.joinWorld` unconditionally regardless of DEMO_MODE.
+vi.mock('../config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../config')>();
+  return { ...actual, DEMO_MODE: false };
+});
+
 function testRouter() {
   return createRouter({
     history: createMemoryHistory(),
@@ -98,5 +110,42 @@ describe('LoginView world linkage', () => {
 
     expect(world.joinWorld).not.toHaveBeenCalled();
     expect(wrapper.find('.error').exists()).toBe(true);
+  });
+
+  // Player logout/login gate: a plain login (no linked world) still needs
+  // this account's realm in whatever world is already loaded restored
+  // before the redirect fires — otherwise the router guard sees an
+  // unfounded player and strands them on the founding flow even though
+  // they already own a settlement there. `world.worldId` here stands in
+  // for "a world is already loaded" (set e.g. by a previous anonymous
+  // visit) — DEMO_MODE is left at its default (non-demo in the vitest
+  // config), so useLoginForm's own `!DEMO_MODE && world.worldId` guard
+  // takes the restore branch.
+  it('awaits world.joinWorld before the redirect when world.worldId is set and no world is linked', async () => {
+    const { wrapper, router } = await mountLoginView();
+
+    const auth = useAuthStore();
+    auth.login = vi.fn().mockResolvedValue(undefined);
+    const world = useWorldStore();
+    world.worldId = 'world-9';
+    let resolveJoin!: () => void;
+    world.joinWorld = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveJoin = resolve;
+        }),
+    );
+
+    const submitPromise = submit(wrapper);
+    await flushPromises();
+
+    // Still on /login: the redirect must wait for joinWorld to resolve.
+    expect(world.joinWorld).toHaveBeenCalledWith('world-9');
+    expect(router.currentRoute.value.path).toBe('/login');
+
+    resolveJoin();
+    await submitPromise;
+
+    expect(router.currentRoute.value.path).toBe('/');
   });
 });
