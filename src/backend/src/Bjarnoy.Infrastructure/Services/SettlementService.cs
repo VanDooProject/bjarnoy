@@ -276,7 +276,7 @@ public sealed class SettlementService(
         // One settlement per player per world — for now. Ships and carts will
         // one day let a player found a second one; until then this is a hard
         // rule, not just an unlikely-to-be-hit default.
-        if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+        if (await AlreadyFoundedAsync(worldId, ownerId, callerUserId, cancellationToken).ConfigureAwait(false))
         {
             return new FoundingResult(FoundingRejection.AlreadyFounded);
         }
@@ -404,7 +404,7 @@ public sealed class SettlementService(
                 return new FoundingResult(FoundingRejection.PlotTaken);
             }
 
-            if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+            if (await AlreadyFoundedAsync(worldId, ownerId, callerUserId, cancellationToken).ConfigureAwait(false))
             {
                 return new FoundingResult(FoundingRejection.AlreadyFounded);
             }
@@ -1412,9 +1412,15 @@ public sealed class SettlementService(
             s => s.WorldId == worldId && s.CentreQ == coord.Q && s.CentreR == coord.R,
             cancellationToken);
 
-    private Task<bool> AlreadyFoundedAsync(Guid worldId, string ownerId, CancellationToken cancellationToken) =>
+    // `callerUserId` closes the cross-browser gap: a logged-in player's realm
+    // keeps the OwnerId of the browser it was founded in, so an OwnerId-only
+    // check would let the same account found a second realm in this world
+    // from any other browser (a fresh local id) just by being logged in.
+    private Task<bool> AlreadyFoundedAsync(
+        Guid worldId, string ownerId, Guid? callerUserId, CancellationToken cancellationToken) =>
         _dbContext.Settlements.AnyAsync(
-            s => s.WorldId == worldId && s.OwnerId == ownerId,
+            s => s.WorldId == worldId
+                && (s.OwnerId == ownerId || (callerUserId != null && s.UserId == callerUserId)),
             cancellationToken);
 
     /// <summary>

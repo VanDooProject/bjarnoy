@@ -55,6 +55,19 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
     public static readonly TimeSpan SlidingExpiration = TimeSpan.FromMinutes(10);
 
     /// <summary>
+    /// Hard ceiling on any one entry's lifetime, however often it is read —
+    /// see <see cref="Cache{T}"/>.
+    /// </summary>
+    public static readonly TimeSpan AbsoluteExpiration = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// Bumped by every <see cref="InvalidateWorld"/>; a lookup only caches
+    /// what it read if this didn't move while it was reading. See
+    /// <see cref="InvalidateWorld"/> for the race this closes.
+    /// </summary>
+    private static long _generation;
+
+    /// <summary>
     /// One <see cref="CancellationTokenSource"/> per world that has ever had a
     /// cache entry, shared by every <see cref="RealmDirectory"/> instance
     /// (this service is request-scoped, but the cache and its invalidation
@@ -83,6 +96,7 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
             return cached;
         }
 
+        var generation = Volatile.Read(ref _generation);
         var ownership = await _dbContext.Settlements
             .Where(s => s.Id == settlementId)
             .Select(s => new { s.UserId, s.OwnerId, s.WorldId })
@@ -94,7 +108,7 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
         }
 
         var result = (ownership.UserId, ownership.OwnerId, ownership.WorldId);
-        Cache(cacheKey, result, ownership.WorldId);
+        Cache(cacheKey, result, ownership.WorldId, generation);
         return result;
     }
 
@@ -122,6 +136,7 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
         // since a user rarely holds more than a couple of settlements per
         // world (settler-convoy foundings), so this never pulls more than a
         // handful of rows.
+        var generation = Volatile.Read(ref _generation);
         var found = await _dbContext.Settlements
             .Where(s => s.WorldId == worldId && s.UserId == userId)
             .Select(s => new { s.Id, s.OwnerId, s.UserId, s.FoundedAt })
@@ -134,7 +149,7 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
         }
 
         var result = (primary.Id, primary.OwnerId, primary.UserId);
-        Cache(cacheKey, result, worldId);
+        Cache(cacheKey, result, worldId, generation);
         return result;
     }
 
@@ -158,6 +173,7 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
         }
 
         // Same client-side ordering as FindByUserAsync, and the same reason.
+        var generation = Volatile.Read(ref _generation);
         var found = await _dbContext.Settlements
             .Where(s => s.WorldId == worldId && s.OwnerId == ownerId)
             .Select(s => new { s.Id, s.OwnerId, s.UserId, s.FoundedAt })
@@ -170,7 +186,7 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
         }
 
         var result = (primary.Id, primary.OwnerId, primary.UserId);
-        Cache(cacheKey, result, worldId);
+        Cache(cacheKey, result, worldId, generation);
         return result;
     }
 
@@ -184,20 +200,41 @@ public sealed class RealmDirectory(GameDbContext dbContext, IMemoryCache cache)
     /// </summary>
     public static void InvalidateWorld(Guid worldId)
     {
+        // Bumped before the token is cancelled, so a lookup whose database
+        // read raced this invalidation (read the pre-write row, then reached
+        // Cache after the old token was already gone) sees a changed
+        // generation and skips caching — otherwise it would attach the stale
+        // value to the world's *fresh* token and outlive the invalidation
+        // meant to evict it. Invalidations are rare (a claiming register, a
+        // reseed), so the occasional skipped cache fill this costs unrelated
+        // worlds is negligible.
+        Interlocked.Increment(ref _generation);
         if (WorldTokens.TryRemove(worldId, out var oldCts))
         {
+            // Cancelled but deliberately not disposed: another request may be
+            // registering an entry against this token right now, and a
+            // disposed source would throw there. It holds no unmanaged
+            // resources worth the race, so the GC reclaims it.
             oldCts.Cancel();
-            oldCts.Dispose();
         }
     }
 
-    private void Cache<T>(string cacheKey, T value, Guid worldId)
+    private void Cache<T>(string cacheKey, T value, Guid worldId, long generation)
     {
+        if (Volatile.Read(ref _generation) != generation)
+        {
+            return;
+        }
+
         var cts = WorldTokens.GetOrAdd(worldId, static _ => new CancellationTokenSource());
 
         var entryOptions = new MemoryCacheEntryOptions
         {
             SlidingExpiration = SlidingExpiration,
+            // Sliding alone would let a key that is polled constantly (the
+            // fog mask, every few seconds) live forever; this caps it so a
+            // missed invalidation can never be stale for longer than this.
+            AbsoluteExpirationRelativeToNow = AbsoluteExpiration,
         };
         entryOptions.ExpirationTokens.Add(new CancellationChangeToken(cts.Token));
 

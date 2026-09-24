@@ -220,6 +220,36 @@ public sealed class RealmResolutionEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_logged_in_account_cannot_found_a_second_realm_in_the_same_world_from_another_browser()
+    {
+        using var client = Client();
+        var worldId = await CreateWorldAsync(client);
+
+        var firstBrowser = Unique("first");
+        await FoundAsync(client, worldId, firstBrowser);
+        var auth = await RegisterAsync(client, existingOwnerId: firstBrowser);
+        Authorize(client, auth.AccessToken);
+
+        // Same account, a brand-new local id (a second browser) and a
+        // different, free start position: the one-realm-per-world rule has to
+        // hold per account, not just per local id.
+        var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
+            $"/api/v1/worlds/{worldId}/islands", SqliteApiFixture.StrictJson, Ct);
+        var (island, plot) = islands!
+            .SelectMany(i => i.StartPositions.Select(p => (Island: i, Plot: p)))
+            .Skip(1)
+            .First();
+
+        var secondBrowser = Unique("second");
+        var response = await client.PostJsonAsync(
+            $"/api/v1/worlds/{worldId}/settlements",
+            new FoundSettlementRequest(island.Id, plot.Q, plot.R, "Twinstad", "Ulf", secondBrowser),
+            Ct);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Fog_mask_via_JWT_from_a_new_browser_resolves_to_the_original_owner()
     {
         using var client = Client();
