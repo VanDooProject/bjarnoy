@@ -1,0 +1,618 @@
+{
+  "_comment": "Cross-language parity fixture for the giants territory rule (Territory.Claims / Territory.IsFullyCovered): a claim disc union claims a plain hex normally, but a hex belonging to a giant is only claimed once EVERY one of that giant footprint's 7 hexes (anchor + 6 neighbours) is covered by the disc union \u2014 a claim that merely touches or partially covers a giant claims none of it. Each scenario lists the settlement claim discs (q, r, radius), the giant anchors present, the bounds hex-disc to enumerate candidate hexes over, and the sorted set of hexes within bounds that the rule claims. HexPathfinderGoldenTests.cs (backend) and a frontend test both compute against this fixture using each side's OWN production territory implementation, then assert the frozen claimed sets below.",
+  "scenarios": [
+    {
+      "name": "giant_fully_inside_single_disc",
+      "discs": [
+        {
+          "q": 0,
+          "r": 0,
+          "radius": 2
+        }
+      ],
+      "giants": [
+        {
+          "q": 0,
+          "r": 0
+        }
+      ],
+      "bounds": {
+        "q": 0,
+        "r": 0,
+        "radius": 2
+      },
+      "claimed": [
+        [
+          -2,
+          0
+        ],
+        [
+          -2,
+          1
+        ],
+        [
+          -2,
+          2
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          -1,
+          2
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          0,
+          -1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          1,
+          -1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          -2
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "comment": "A single r=2 disc fully encloses the giant's 7-hex footprint (max distance 1 from its own anchor) -- every hex within the disc, giant included, is claimed."
+    },
+    {
+      "name": "giant_touching_disc_edge_none_claimed",
+      "discs": [
+        {
+          "q": 11,
+          "r": 0,
+          "radius": 0
+        }
+      ],
+      "giants": [
+        {
+          "q": 10,
+          "r": 0
+        }
+      ],
+      "bounds": {
+        "q": 10,
+        "r": 0,
+        "radius": 2
+      },
+      "claimed": [],
+      "comment": "The disc is a single point sitting on exactly one of the giant's 7 footprint hexes (its edge) -- none of the other 6 are covered, so by the territory rule NONE of the 7 are claimed, not even the one the disc geometrically touches."
+    },
+    {
+      "name": "giant_half_covered_none_claimed",
+      "discs": [
+        {
+          "q": 0,
+          "r": -1,
+          "radius": 1
+        }
+      ],
+      "giants": [
+        {
+          "q": 0,
+          "r": 0
+        }
+      ],
+      "bounds": {
+        "q": 0,
+        "r": 0,
+        "radius": 2
+      },
+      "claimed": [
+        [
+          -1,
+          -1
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          1,
+          -2
+        ]
+      ],
+      "comment": "One disc covers 4 of the giant's 7 footprint hexes -- still not all 7, so the giant claims none; the disc's other 3 (non-giant) hexes are claimed normally."
+    },
+    {
+      "name": "giant_covered_only_by_union_of_two_discs",
+      "discs": [
+        {
+          "q": 0,
+          "r": -1,
+          "radius": 1
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "radius": 1
+        }
+      ],
+      "giants": [
+        {
+          "q": 0,
+          "r": 0
+        }
+      ],
+      "bounds": {
+        "q": 0,
+        "r": 0,
+        "radius": 2
+      },
+      "claimed": [
+        [
+          -1,
+          -1
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          -1,
+          2
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          0,
+          -1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          1,
+          -1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "comment": "Neither disc alone covers the giant's footprint, but their UNION covers all 7 -- the giant is claimed only because of the second disc (e.g. a Tower's satellite disc completing the enclosure)."
+    },
+    {
+      "name": "giant_union_missing_one_hex_still_none_claimed",
+      "discs": [
+        {
+          "q": 0,
+          "r": -1,
+          "radius": 1
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "radius": 0
+        }
+      ],
+      "giants": [
+        {
+          "q": 0,
+          "r": 0
+        }
+      ],
+      "bounds": {
+        "q": 0,
+        "r": 0,
+        "radius": 2
+      },
+      "claimed": [
+        [
+          -1,
+          -1
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          1,
+          -2
+        ]
+      ],
+      "comment": "A second, tiny disc is added but the union still misses 2 of the giant's 7 footprint hexes -- the giant still claims none, showing partial-union coverage is not enough."
+    },
+    {
+      "name": "two_giants_one_enclosed_one_not",
+      "discs": [
+        {
+          "q": 0,
+          "r": 0,
+          "radius": 2
+        }
+      ],
+      "giants": [
+        {
+          "q": 0,
+          "r": 0
+        },
+        {
+          "q": 20,
+          "r": 0
+        }
+      ],
+      "bounds": {
+        "q": 10,
+        "r": 0,
+        "radius": 12
+      },
+      "claimed": [
+        [
+          -2,
+          0
+        ],
+        [
+          -2,
+          1
+        ],
+        [
+          -2,
+          2
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          -1,
+          2
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          0,
+          -1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          1,
+          -1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          -2
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "comment": "Two giants far apart; only one sits inside the settlement's disc and is claimed whole, the other is untouched and claims nothing -- giants are judged independently."
+    },
+    {
+      "name": "no_giants_plain_discs",
+      "discs": [
+        {
+          "q": 0,
+          "r": 0,
+          "radius": 2
+        },
+        {
+          "q": 4,
+          "r": 0,
+          "radius": 1
+        }
+      ],
+      "giants": [],
+      "bounds": {
+        "q": 2,
+        "r": 0,
+        "radius": 4
+      },
+      "claimed": [
+        [
+          -2,
+          0
+        ],
+        [
+          -2,
+          1
+        ],
+        [
+          -2,
+          2
+        ],
+        [
+          -1,
+          -1
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          -1,
+          2
+        ],
+        [
+          0,
+          -2
+        ],
+        [
+          0,
+          -1
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          -2
+        ],
+        [
+          1,
+          -1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          -2
+        ],
+        [
+          2,
+          -1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          -1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          -1
+        ],
+        [
+          5,
+          0
+        ]
+      ],
+      "comment": "No giants at all -- a sanity check that the plain disc-union claim (two non-overlapping discs) is unaffected by the giant rule when there is nothing to special-case."
+    },
+    {
+      "name": "giant_at_negative_coords_fully_covered",
+      "discs": [
+        {
+          "q": -5,
+          "r": -5,
+          "radius": 2
+        }
+      ],
+      "giants": [
+        {
+          "q": -5,
+          "r": -5
+        }
+      ],
+      "bounds": {
+        "q": -5,
+        "r": -5,
+        "radius": 2
+      },
+      "claimed": [
+        [
+          -7,
+          -5
+        ],
+        [
+          -7,
+          -4
+        ],
+        [
+          -7,
+          -3
+        ],
+        [
+          -6,
+          -6
+        ],
+        [
+          -6,
+          -5
+        ],
+        [
+          -6,
+          -4
+        ],
+        [
+          -6,
+          -3
+        ],
+        [
+          -5,
+          -7
+        ],
+        [
+          -5,
+          -6
+        ],
+        [
+          -5,
+          -5
+        ],
+        [
+          -5,
+          -4
+        ],
+        [
+          -5,
+          -3
+        ],
+        [
+          -4,
+          -7
+        ],
+        [
+          -4,
+          -6
+        ],
+        [
+          -4,
+          -5
+        ],
+        [
+          -4,
+          -4
+        ],
+        [
+          -3,
+          -7
+        ],
+        [
+          -3,
+          -6
+        ],
+        [
+          -3,
+          -5
+        ]
+      ],
+      "comment": "Same as the first scenario but anchored at negative q/r, to guard against a sign-handling bug in the footprint/disc math."
+    }
+  ]
+}

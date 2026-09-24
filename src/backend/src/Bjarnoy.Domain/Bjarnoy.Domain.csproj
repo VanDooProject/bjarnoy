@@ -6,4 +6,11 @@
     clock. Anything ambient (time, randomness, configuration) is passed in.
   -->
 
+  <ItemGroup>
+    <!-- Lets Bjarnoy.Domain.Tests assert directly against internal generator
+         constants (e.g. GiantGenerator's placement thresholds) instead of
+         duplicating their values as magic numbers in the test suite. -->
+    <InternalsVisibleTo Include="Bjarnoy.Domain.Tests" />
+  </ItemGroup>
+
 </Project>
