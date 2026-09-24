@@ -106,9 +106,6 @@ public sealed class EndpointAccessPolicyTests
         // gate or leave open without a product decision — see this PR's own
         // report for what each one leaks/risks. ---
         ["POST /api/v1/worlds/"] = "TODO(review): anonymous player-facing world creation, with no auth at all — duplicates the admin-gated POST /admin/worlds, whose access model presumably ought to apply here too; left open because closing it would break the many tests that rely on it to set up a world anonymously, which needs a product decision, not a unilateral change.",
-        ["POST /api/v1/simulator"] = "TODO(review): gated by PremiumUserEndpointFilter (401 unauthenticated / 403 premium_required), a real access check but not an ownership one, so it fits none of the three EndpointAccessKind buckets as they stand today.",
-        ["POST /api/v1/trade-offers/{offerId:guid}/accept"] = "TODO(review): escrows the accepting settlement's goods with no ownership check at all — AcceptTradeOfferRequest.AcceptorSettlementId is caller-supplied and unverified. The route's own first argument is the offer id, not a settlement id, so this needs a bespoke filter (read the settlement id from the body), not a drop-in SettlementOwnershipEndpointFilter.",
-        ["POST /api/v1/trade-offers/{offerId:guid}/cancel"] = "TODO(review): same shape of gap as /accept above — CancelTradeOfferRequest.SettlementId is caller-supplied and unverified.",
     };
 
     [Fact]

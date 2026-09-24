@@ -120,6 +120,34 @@ public sealed class SettlementOwnershipEndpointFilter : IEndpointFilter
 }
 
 /// <summary>
+/// Same rule as <see cref="SettlementOwnershipEndpointFilter"/>, for routes
+/// whose settlement comes from the request body (an
+/// <see cref="ISettlementScopedRequest"/> argument) rather than the route:
+/// trade accept/cancel took the acting settlement straight from the body with
+/// no check at all, so any caller could escrow another settlement's goods or
+/// withdraw its offers.
+/// </summary>
+public sealed class RequestSettlementOwnershipEndpointFilter : IEndpointFilter
+{
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var request = context.Arguments.OfType<ISettlementScopedRequest>().FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                $"{nameof(RequestSettlementOwnershipEndpointFilter)} is attached to an endpoint with no {nameof(ISettlementScopedRequest)} argument.");
+
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
+        var refusal = await OwnershipGate.EnforceAsync(
+            context.HttpContext, request.ActingSettlementId, realms, context.HttpContext.RequestAborted);
+
+        return refusal ?? await next(context);
+    }
+}
+
+/// <summary>
 /// Refuses an army-mutating request with 403 unless the caller can prove they
 /// own the army's home settlement — an army has no owner of its own, only the
 /// settlement it was dispatched from (<see cref="ArmyEntity.SettlementId"/>),

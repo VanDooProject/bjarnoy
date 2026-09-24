@@ -724,7 +724,7 @@ export const useWorldStore = defineStore('world', {
         requestedResource,
         requestedAmount,
         guildOnly,
-      });
+      }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
     },
     /**
@@ -734,7 +734,7 @@ export const useWorldStore = defineStore('world', {
      */
     async acceptTradeOfferLive(offerId: string) {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId });
+      await api.acceptTradeOffer(offerId, { acceptorSettlementId: this.selectedSettlementId }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
       await this.refreshLiveSettlement();
     },
@@ -744,7 +744,7 @@ export const useWorldStore = defineStore('world', {
      */
     async cancelTradeOfferLive(offerId: string) {
       if (DEMO_MODE || !this.selectedSettlementId) return;
-      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId });
+      await api.cancelTradeOffer(offerId, { settlementId: this.selectedSettlementId }, this.ownerId ?? undefined);
       await this.refreshTradeAsync();
       await this.refreshLiveSettlement();
     },

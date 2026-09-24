@@ -64,12 +64,18 @@ public static class TradeEndpoints
         offers.MapPost("/{offerId:guid}/accept", Accept)
             .WithName("AcceptTradeOffer")
             .WithSummary("Accepts an open offer, escrowing the acceptor's goods and dispatching both shipments.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            // The acting settlement comes from the request body and used to be
+            // trusted as-is — anyone could act as any settlement here.
+            .RequireRequestSettlementOwner();
 
         offers.MapPost("/{offerId:guid}/cancel", Cancel)
             .WithName("CancelTradeOffer")
             .WithSummary("Withdraws an open offer and refunds its escrow.")
-            .AddEndpointFilter<ActiveUserEndpointFilter>();
+            .AddEndpointFilter<ActiveUserEndpointFilter>()
+            // The acting settlement comes from the request body and used to be
+            // trusted as-is — anyone could act as any settlement here.
+            .RequireRequestSettlementOwner();
 
         return app;
     }

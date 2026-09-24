@@ -272,10 +272,12 @@ export const api = {
       method: 'POST',
       headers: ownerHeader(ownerId),
     }),
-  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest) =>
+  // Owner-gated like queueBuild — same X-Owner-Id proof for an unclaimed realm.
+  postTradeOffer: (settlementId: string, body: PostTradeOfferRequest, ownerId?: string) =>
     request<TradeOfferResponse>(`/settlements/${settlementId}/trade-offers`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   // Owner-only (403 for anyone else) — see TradeEndpoints.Board's own
   // comment: `ownerId` proves the caller owns the *browsing* settlement,
@@ -297,15 +299,23 @@ export const api = {
     request<TradeReportResponse[]>(`/settlements/${settlementId}/trade-reports`, {
       headers: ownerHeader(ownerId),
     }),
-  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest) =>
+  // The acting settlement is in the body and is ownership-checked
+  // server-side (RequestSettlementOwnershipEndpointFilter) — an unclaimed
+  // realm proves it with X-Owner-Id, a claimed one with the JWT.
+  acceptTradeOffer: (offerId: string, body: AcceptTradeOfferRequest, ownerId?: string) =>
     request<TradeAcceptResponse>(`/trade-offers/${offerId}/accept`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
-  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest) =>
+  // The acting settlement is in the body and is ownership-checked
+  // server-side (RequestSettlementOwnershipEndpointFilter) — an unclaimed
+  // realm proves it with X-Owner-Id, a claimed one with the JWT.
+  cancelTradeOffer: (offerId: string, body: CancelTradeOfferRequest, ownerId?: string) =>
     request<TradeOfferResponse>(`/trade-offers/${offerId}/cancel`, {
       method: 'POST',
       body: JSON.stringify(body),
+      headers: ownerHeader(ownerId),
     }),
   trainUnits: (settlementId: string, body: TrainUnitsRequest, ownerId?: string) =>
     request<TrainingOrderResponse>(`/settlements/${settlementId}/units`, {

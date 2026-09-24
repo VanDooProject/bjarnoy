@@ -35,6 +35,14 @@ public enum EndpointAccessKind
     /// remarks for why these can't just reuse <see cref="SettlementOwnershipEndpointFilter"/>.
     /// </summary>
     CallerRealm,
+
+    /// <summary>
+    /// Requires an authenticated premium account
+    /// (<see cref="PremiumUserEndpointFilter"/>) — an entitlement check, not
+    /// an ownership one, but still a gate this endpoint can't be reached
+    /// without.
+    /// </summary>
+    PremiumUser,
 }
 
 /// <summary>
@@ -60,6 +68,8 @@ public sealed record EndpointAccess(EndpointAccessKind Kind)
     public static readonly EndpointAccess HostOrGuestOwner = new(EndpointAccessKind.HostOrGuestOwner);
 
     public static readonly EndpointAccess CallerRealm = new(EndpointAccessKind.CallerRealm);
+
+    public static readonly EndpointAccess PremiumUser = new(EndpointAccessKind.PremiumUser);
 }
 
 /// <summary>
@@ -102,4 +112,17 @@ public static class EndpointAccessBuilderExtensions
     /// </summary>
     public static RouteHandlerBuilder RequireHostOrGuestOwner(this RouteHandlerBuilder builder) =>
         builder.WithMetadata(EndpointAccess.HostOrGuestOwner);
+
+    /// <summary>
+    /// <see cref="RequestSettlementOwnershipEndpointFilter"/> + the
+    /// <see cref="EndpointAccess.SettlementOwner"/> marker: the settlement
+    /// being acted as comes from the request body
+    /// (<see cref="Contracts.ISettlementScopedRequest"/>), not the route.
+    /// </summary>
+    public static RouteHandlerBuilder RequireRequestSettlementOwner(this RouteHandlerBuilder builder) =>
+        builder.AddEndpointFilter<RequestSettlementOwnershipEndpointFilter>().WithMetadata(EndpointAccess.SettlementOwner);
+
+    /// <summary><see cref="PremiumUserEndpointFilter"/> + its marker.</summary>
+    public static RouteHandlerBuilder RequirePremiumUser(this RouteHandlerBuilder builder) =>
+        builder.AddEndpointFilter<PremiumUserEndpointFilter>().WithMetadata(EndpointAccess.PremiumUser);
 }
