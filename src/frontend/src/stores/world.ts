@@ -757,9 +757,9 @@ export const useWorldStore = defineStore('world', {
     async refreshTradeAsync() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [board, mine, shipments] = await Promise.all([
-        api.getTradeBoard(this.selectedSettlementId),
-        api.getMyTradeOffers(this.selectedSettlementId),
-        api.getShipments(this.selectedSettlementId),
+        api.getTradeBoard(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getMyTradeOffers(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getShipments(this.selectedSettlementId, this.ownerId ?? undefined),
       ]);
       this.hud.tradeBoard = board;
       this.hud.myTradeOffers = mine;
@@ -1072,15 +1072,15 @@ export const useWorldStore = defineStore('world', {
     async refreshArmies() {
       if (DEMO_MODE || !this.selectedSettlementId) return;
       const [summaries, guests] = await Promise.all([
-        api.getSettlementArmies(this.selectedSettlementId),
-        api.getSettlementGuests(this.selectedSettlementId),
+        api.getSettlementArmies(this.selectedSettlementId, this.ownerId ?? undefined),
+        api.getSettlementGuests(this.selectedSettlementId, this.ownerId ?? undefined),
       ]);
       // ArmySummary (the list endpoint) omits unit composition/movement/
       // provisions — ArmyPanel needs those, so fetch each army's full detail.
       // Settlements realistically hold a handful of dispatched armies at
       // once, so N+1 here is a non-issue compared to a purpose-built bulk
       // endpoint the backend doesn't expose.
-      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id)));
+      this.armies = await Promise.all(summaries.map((s) => api.getArmy(s.id, this.ownerId ?? undefined)));
       this.armiesFetchedAt = Date.now();
       this.guestArmies = guests;
       this.guestArmiesFetchedAt = Date.now();

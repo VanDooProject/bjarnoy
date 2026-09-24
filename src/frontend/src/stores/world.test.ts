@@ -125,7 +125,7 @@ describe('useWorldStore refreshArmies (guest armies)', () => {
 
     await store.refreshArmies();
 
-    expect(getSettlementGuests).toHaveBeenCalledWith('host-settlement-1');
+    expect(getSettlementGuests).toHaveBeenCalledWith('host-settlement-1', undefined);
     expect(store.guestArmies).toHaveLength(1);
     expect(store.guestArmies[0]).toEqual({
       armyId: 'guest-army-1',

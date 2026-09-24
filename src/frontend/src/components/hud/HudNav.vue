@@ -31,7 +31,7 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 // stores/world.ts's poll loop.
 function syncPolling() {
   if (!DEMO_MODE && player.settlementId) {
-    reports.startPolling(player.settlementId);
+    reports.startPolling(player.settlementId, player.id);
   } else {
     reports.stopPolling();
   }
