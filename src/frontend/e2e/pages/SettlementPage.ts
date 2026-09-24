@@ -1,5 +1,5 @@
 // See RingMenuComponent.ts for why `expect` comes from here, not `../fixtures`.
-import { type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { captureCanvas, claimLandfall, foundSettlement, waitForMapReady } from '../helpers';
 import { RingMenuComponent } from './RingMenuComponent';
 
@@ -76,6 +76,22 @@ export class SettlementPage {
   readonly ringNote: Locator;
   /** The profile-mark tooltip that replaces the old nickname modal (ProfileNudge.vue). */
   readonly profileNudge: Locator;
+  /** Player logout/login gate: HudNav's authenticated avatar dropdown trigger (only mounted once founded). */
+  readonly accountMenuTrigger: Locator;
+  /** The opened account dropdown panel (Profile / Log out). */
+  readonly accountMenu: Locator;
+  /** The account dropdown's "Log out" row — triggers useLogout's full page reload to '/'. */
+  readonly accountMenuLogoutButton: Locator;
+  /** Player logout/login gate: replaces the founding hero when this device remembers a logged-out account (ReturningLoginPanel.vue). */
+  readonly returningLoginPanel: Locator;
+  /** The panel's password field. */
+  readonly returningLoginPasswordInput: Locator;
+  /** The panel's submit button. */
+  readonly returningLoginSubmitButton: Locator;
+  /** The panel's login-error text, if any. */
+  readonly returningLoginErrorText: Locator;
+  /** The panel's "Start a new realm instead" decline button. */
+  readonly returningLoginNewRealmButton: Locator;
 
   private canvasBoxCache: { x: number; y: number; width: number; height: number } | null = null;
 
@@ -93,6 +109,14 @@ export class SettlementPage {
     this.continueButton = page.getByTestId('onboarding-continue');
     this.ringNote = page.getByTestId('ring-note');
     this.profileNudge = page.getByTestId('profile-nudge');
+    this.accountMenuTrigger = page.getByTestId('account-menu-trigger');
+    this.accountMenu = page.getByTestId('account-menu');
+    this.accountMenuLogoutButton = page.getByTestId('account-menu-logout');
+    this.returningLoginPanel = page.getByTestId('returning-login-panel');
+    this.returningLoginPasswordInput = page.getByTestId('returning-login-password');
+    this.returningLoginSubmitButton = page.getByTestId('returning-login-submit');
+    this.returningLoginErrorText = page.getByTestId('returning-login-error');
+    this.returningLoginNewRealmButton = page.getByTestId('returning-login-new-realm');
   }
 
   /** Founds a settlement via the shared helper and returns its view. */
@@ -274,5 +298,29 @@ export class SettlementPage {
       (window as unknown as { __demoWorld: () => { model: { listCartShipments: () => unknown[] } } })
         .__demoWorld().model.listCartShipments(),
     );
+  }
+
+  /** Player logout/login gate: opens HudNav's authenticated account dropdown. */
+  async openAccountMenu(): Promise<void> {
+    await this.accountMenuTrigger.click();
+    await expect(this.accountMenu).toBeVisible();
+  }
+
+  /**
+   * Logs out via the account dropdown. `useLogout` ends in a full page
+   * reload (`window.location.assign('/')`), not an in-app navigation — the
+   * caller awaits whatever the reloaded page shows next (e.g.
+   * `returningLoginPanel`) rather than a URL change, since the reload keeps
+   * the same '/' path.
+   */
+  async logout(): Promise<void> {
+    await this.openAccountMenu();
+    await this.accountMenuLogoutButton.click();
+  }
+
+  /** Fills and submits the returning-login gate's password field (username is pre-filled from `player.lastAccount`). */
+  async submitReturningLogin(password: string): Promise<void> {
+    await this.returningLoginPasswordInput.fill(password);
+    await this.returningLoginSubmitButton.click();
   }
 }
