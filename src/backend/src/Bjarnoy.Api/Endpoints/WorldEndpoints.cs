@@ -46,7 +46,8 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/membership", GetMembership)
             .WithName("GetWorldMembership")
-            .WithSummary("Whether the requesting owner already has a settlement in this world.");
+            .WithSummary("Whether the requesting owner already has a settlement in this world.")
+            .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/islands", GetIslands)
             .WithName("GetWorldIslands")
@@ -58,15 +59,18 @@ public static class WorldEndpoints
 
         worlds.MapGet("/{worldId:guid}/fog-mask", GetFogMask)
             .WithName("GetWorldFogMask")
-            .WithSummary("The requesting player's fog-of-war mask, as an RGBA8 PNG (map-fog-v2.md §2.2).");
+            .WithSummary("The requesting player's fog-of-war mask, as an RGBA8 PNG (map-fog-v2.md §2.2).")
+            .RequireCallerRealm();
 
         worlds.MapGet("/{worldId:guid}/plot-suggestion", GetPlotSuggestion)
             .WithName("GetPlotSuggestion")
-            .WithSummary("The plot this visitor is offered to found on, pinned across reloads.");
+            .WithSummary("The plot this visitor is offered to found on, pinned across reloads.")
+            .RequireCallerRealm();
 
         worlds.MapDelete("/{worldId:guid}/plot-suggestion", ReleasePlotSuggestion)
             .WithName("ReleasePlotSuggestion")
-            .WithSummary("Releases this visitor's held plot suggestion (e.g. \"pick a different island\").");
+            .WithSummary("Releases this visitor's held plot suggestion (e.g. \"pick a different island\").")
+            .RequireCallerRealm();
 
         return app;
     }
