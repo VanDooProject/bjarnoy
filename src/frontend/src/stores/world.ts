@@ -477,6 +477,17 @@ export const useWorldStore = defineStore('world', {
       const at = this.model.findLandfall(near) ?? near;
       const settlement = this.model.foundSettlement(ownerId, ownerName, name, at);
       this.selectedSettlementId = settlement.id;
+      // Giant tiles are a spike (see WorldModel.placeGiant's own doc
+      // comment) with no build UI of its own yet — demo mode seeds one
+      // giant mountain near every new settlement purely so it's visible on
+      // screen (and reachable for screenshots via
+      // window.__demoWorld().model.placeGiant) without needing a real
+      // placement flow. Deterministic for a given seed/landfall:
+      // findGiantAnchor's search order depends only on the settlement's own
+      // (q, r) and the world seed's terrain, never on wall-clock time or
+      // anything else non-reproducible.
+      const giantAnchor = this.model.findGiantAnchor(at);
+      if (giantAnchor) this.model.placeGiant(giantAnchor, 'giantmountain');
       this.syncHud();
       return settlement;
     },

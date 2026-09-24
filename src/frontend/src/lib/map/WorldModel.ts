@@ -5,6 +5,7 @@
 // renderer reads this directly every frame; Vue components only ever see
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
+import { giantCoverage } from './giantTiles';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { validateTradeRatio } from '../trade/tradeRatio';
 import { DEFAULT_GENERATION, generateTile, terrainAt, type WorldGenerationConstants } from './worldGenerator';
@@ -1085,6 +1086,82 @@ export class WorldModel {
     }
     tile.buildingType = undefined;
     tile.buildingLevel = undefined;
+    return true;
+  }
+
+  /**
+   * Whether a "giant tile" (see `giantTiles.ts`) could be placed with its
+   * anchor at `at`: all 7 covered hexes (the anchor + its six neighbours,
+   * `giantCoverage`) must be dry land the giant's footprint can actually
+   * replace — Grass or Forest, matching the demo's home-island terrain, not
+   * Sea/Sand/Mountain — and free of any building or existing giant. A spike
+   * rule, not the backend's: there is no server-side notion of a giant tile
+   * yet (see `Tile.giant`'s own doc comment).
+   */
+  canPlaceGiant(at: AxialCoord): boolean {
+    return giantCoverage(at).every(({ coord }) => {
+      const tile = this.getTile(coord.q, coord.r);
+      if (tile.terrain !== 'grass' && tile.terrain !== 'forest') return false;
+      if (tile.buildingType) return false;
+      if (tile.giant) return false;
+      return true;
+    });
+  }
+
+  /**
+   * The nearest hex to `home` (searched outward in `hexesInRadius`'s own
+   * closest-ring-first, deterministic order) that `canPlaceGiant` would
+   * accept, preferring `minRadius..maxRadius` hexes out — the demo's own
+   * "visible in the default settlement viewport, a few hexes from the home
+   * hex" framing — before falling back to a wider search so a smaller or
+   * rockier island still gets *a* valid spot rather than none. Returns
+   * `null` if nothing on the whole island qualifies within `fallbackMaxRadius`.
+   */
+  findGiantAnchor(home: AxialCoord, minRadius = 3, maxRadius = 4, fallbackMaxRadius = 12): AxialCoord | null {
+    for (let radius = minRadius; radius <= maxRadius; radius++) {
+      for (const c of hexesInRadius(home, radius)) {
+        if (hexDistance(home, c) !== radius) continue;
+        if (this.canPlaceGiant(c)) return c;
+      }
+    }
+    for (let radius = 0; radius <= fallbackMaxRadius; radius++) {
+      if (radius >= minRadius && radius <= maxRadius) continue;
+      for (const c of hexesInRadius(home, radius)) {
+        if (hexDistance(home, c) !== radius) continue;
+        if (this.canPlaceGiant(c)) return c;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Places a giant tile anchored at `at`, tagging all 7 covered hexes with
+   * `Tile.giant` (see that field's own doc comment) and — for a covered hex
+   * that was Forest — flattening it to Grass first, so the giant's own art
+   * is what actually reads on screen instead of a tree top poking through
+   * it. Returns `false` (no mutation) when `canPlaceGiant(at)` would.
+   *
+   * `orientation` defaults to the anchor tile's own generated orientation
+   * (`orientationAt`, same as every other tile) — a giant can be placed in
+   * any of the 6, but with no orientation given, "however this hex would
+   * already render" is the least surprising default.
+   */
+  placeGiant(at: AxialCoord, family: 'giantmountain' = 'giantmountain', orientation?: TileOrientation): boolean {
+    if (!this.canPlaceGiant(at)) return false;
+    const resolvedOrientation = orientation ?? this.getTile(at.q, at.r).orientation ?? 'SE';
+    for (const { coord, part } of giantCoverage(at)) {
+      const tile = this.getTile(coord.q, coord.r);
+      if (tile.terrain === 'forest') {
+        tile.terrain = 'grass';
+        // Keep the pure terrain cache (`terrainOf`/`isLand`, see its own doc
+        // comment) in step with the materialised `Tile` it was sampled from
+        // — both are land either way, but leaving it stale as `forest` would
+        // mislead anything that later asks `terrainOf` specifically (rather
+        // than reading the covered `Tile` this method already updated).
+        this.terrain.set(terrainKey(coord.q, coord.r), 'grass');
+      }
+      tile.giant = { family, anchor: { q: at.q, r: at.r }, part, orientation: resolvedOrientation };
+    }
     return true;
   }
 
