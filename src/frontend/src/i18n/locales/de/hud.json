@@ -28,6 +28,8 @@
     "claimedGround": "Beanspruchter Boden",
     "unclaimed": "Unbeansprucht",
     "ownedByOther": "{name} von {owner}",
+    "aiBadgeLabel": "KI",
+    "aiBadgeTitle": "KI-Spieler ({personality})",
     "river": "Fluss",
     "premiumGate": "Aufklärungsdetails sind eine {premium}-Funktion",
     "premium": "Premium",

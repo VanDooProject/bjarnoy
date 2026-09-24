@@ -102,6 +102,21 @@ public class SettlementEntity
 
     public DateTimeOffset FoundedAt { get; set; }
 
+    /// <summary>
+    /// Wall clock, unlike every other timestamp on this entity — see
+    /// <c>docs/design/ai-players.md</c>'s "Takeover rule". Set at founding
+    /// (<c>SettlementService.FoundAsync</c>/<c>FoundFromConvoyAsync</c>) and
+    /// bumped by the anonymous-owner branch of
+    /// <c>Bjarnoy.Api.Auth.OwnershipGate.EnforceAsync</c> on every accepted
+    /// mutating request, throttled to at most one write per
+    /// <c>AiPlayersOptions.ActivityWriteThrottle</c>
+    /// (<see cref="SettlementService.TouchOwnerActivityAsync"/>). Once this
+    /// falls more than <c>AiPlayersOptions.TakeoverAfter</c> behind wall-clock
+    /// now for a settlement still owned by <see cref="SystemUserIds.Abandoned"/>,
+    /// <c>AiTakeoverService</c> hands it to an AI jarl.
+    /// </summary>
+    public DateTimeOffset LastOwnerActivityAt { get; set; }
+
     public List<PlacedBuildingEntity> Buildings { get; set; } = [];
 
     public List<BuildOrderEntity> Queue { get; set; } = [];

@@ -67,6 +67,15 @@ builder.Services.AddScoped<IUserActivityTracker, UserActivityService>();
 builder.Services.AddScoped<UserActivityQueryService>();
 builder.Services.AddScoped<UserActivityRetentionService>();
 
+// AI players (docs/design/ai-players.md) — the takeover sweep and the turn
+// runner, wired up alongside the hosted service below.
+builder.Services.AddOptions<AiPlayersOptions>()
+    .Bind(builder.Configuration.GetSection(AiPlayersOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddScoped<AiTargetPolicy>();
+builder.Services.AddScoped<AiTakeoverService>();
+builder.Services.AddScoped<AiPlayerService>();
+
 // What this build is, for GET /api/v1/info. Bound unconditionally: the
 // migrator never serves the endpoint, but binding costs nothing and keeps the
 // two startup paths from diverging.
@@ -175,6 +184,10 @@ if (migrationCommand == MigrationCommandKind.None)
     // Prunes expired UserActivitySessionEntity rows on a schedule — same "the
     // migrator never serves requests" reasoning as the endboss trigger above.
     builder.Services.AddHostedService<UserActivityRetentionHostedService>();
+
+    // The AI takeover sweep and turn runner — same "the migrator never serves
+    // requests" reasoning as the endboss trigger above.
+    builder.Services.AddHostedService<AiPlayersHostedService>();
 }
 
 // Validates the DataAnnotations on request records before a handler runs, so a
@@ -301,6 +314,7 @@ app.MapSimulatorEndpoints(versionSet);
 app.MapAdminWorldEndpoints(versionSet);
 app.MapAdminUserEndpoints(versionSet);
 app.MapAdminSettlementEndpoints(versionSet);
+app.MapAdminAiPlayersEndpoints(versionSet);
 app.MapAdminArmyEndpoints(versionSet);
 app.MapChatEndpoints(versionSet);
 app.MapAdminReportEndpoints(versionSet);

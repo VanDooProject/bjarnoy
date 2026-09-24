@@ -28,6 +28,8 @@
     "claimedGround": "Claimed ground",
     "unclaimed": "Unclaimed",
     "ownedByOther": "{owner}'s {name}",
+    "aiBadgeLabel": "AI",
+    "aiBadgeTitle": "AI player ({personality})",
     "river": "River",
     "premiumGate": "Scouting details are a {premium} feature",
     "premium": "Premium",

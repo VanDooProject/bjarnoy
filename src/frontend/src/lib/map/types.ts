@@ -166,6 +166,10 @@ export interface Settlement {
   foundedAt: number;
   /** Which island (see `IslandLabel`) this settlement sits on, live mode only — used to gold-highlight the player's own island on the world map. */
   islandId?: string;
+  /** Whether this settlement's owner is an AI jarl rather than a real player (docs/design/ai-players.md), live mode only. */
+  isAi?: boolean;
+  /** The AI owner's personality wire name (e.g. `"aggressive"`), set only when `isAi` is true. */
+  aiPersonality?: string | null;
 }
 
 /**

@@ -615,7 +615,13 @@ export interface HoverInfo {
   subject: HoverSubject;
   // Present whenever the tile belongs to a settlement (building or claimed
   // terrain); absent for unclaimed ground.
-  owner?: { settlementName: string; ownerName: string; mine: boolean };
+  owner?: {
+    settlementName: string;
+    ownerName: string;
+    mine: boolean;
+    isAi: boolean;
+    aiPersonality: string | null;
+  };
   // Building stats are only ever populated for the viewer's own buildings —
   // see hoverInfoFor. `premiumLocked` tells HexTooltip.vue to render a gated
   // "Pro" upsell row in their place for a building tile that belongs to
@@ -2287,7 +2293,15 @@ export class HexMapRenderer {
     const screen = this.toScreen({ x: grid.x + TILE_W, y: grid.y + TILE_CENTER_Y_OFFSET });
     const owner = tile.ownerId ? this.options.worldModel.getSettlement(tile.ownerId) : undefined;
     const mine = owner?.ownerId === this.options.playerId;
-    const ownerInfo = owner ? { settlementName: owner.name, ownerName: owner.ownerName, mine } : undefined;
+    const ownerInfo = owner
+      ? {
+          settlementName: owner.name,
+          ownerName: owner.ownerName,
+          mine,
+          isAi: owner.isAi ?? false,
+          aiPersonality: owner.aiPersonality ?? null,
+        }
+      : undefined;
 
     if (tile.buildingType) {
       const level = tile.buildingLevel ?? 1;

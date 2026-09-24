@@ -565,6 +565,8 @@ export const useWorldStore = defineStore('world', {
           rates: { ...response.resources.ratePerHour },
           foundedAt: Date.now(),
           islandId: response.islandId,
+          isAi: response.isAi,
+          aiPersonality: response.aiPersonality,
         });
         this.model.claimTerritory(settlement.id);
         this.selectedSettlementId = settlement.id;
@@ -825,6 +827,8 @@ export const useWorldStore = defineStore('world', {
         rates: { ...response.resources.ratePerHour },
         foundedAt: Date.now(),
         islandId: response.islandId,
+        isAi: response.isAi,
+        aiPersonality: response.aiPersonality,
       });
       this.model.claimTerritory(response.id);
       this.selectedSettlementId = response.id;
@@ -960,6 +964,8 @@ export const useWorldStore = defineStore('world', {
           rates: emptyResources(),
           foundedAt: Date.now(),
           islandId: summary.islandId,
+          isAi: summary.isAi,
+          aiPersonality: summary.aiPersonality,
         });
       }
       if (this.worldMapActive) {

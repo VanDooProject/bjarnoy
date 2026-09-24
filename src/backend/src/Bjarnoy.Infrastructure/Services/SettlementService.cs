@@ -361,6 +361,10 @@ public sealed class SettlementService(
             // with this same OwnerId.
             UserId = SystemUserIds.Abandoned,
             FoundedAt = now,
+            // Wall clock, not game time — see the property's own remarks.
+            // Founding itself counts as the first "owner did something", so a
+            // brand-new anonymous settlement is never instantly takeover-eligible.
+            LastOwnerActivityAt = _timeProvider.GetUtcNow(),
         };
 
         settlement.ApplyDomain(new Settlement
@@ -460,6 +464,10 @@ public sealed class SettlementService(
             OwnerId = ownerId,
             UserId = userId,
             FoundedAt = now,
+            // Wall clock — a settler-crew founding is a real account acting,
+            // never anonymous, so this never feeds the takeover rule in
+            // practice, but every settlement carries a real value regardless.
+            LastOwnerActivityAt = _timeProvider.GetUtcNow(),
         };
 
         settlement.ApplyDomain(new Settlement
@@ -555,6 +563,45 @@ public sealed class SettlementService(
         }
 
         return (settlement, clock);
+    }
+
+    /// <summary>
+    /// Read-only settled snapshot for <c>AiPlayerService</c>'s turn planning:
+    /// the domain settlement settled to game-now, plus the pieces its
+    /// <c>AiSnapshot</c> needs, all from an <c>AsNoTracking</c> query. Unlike
+    /// <see cref="GetAsync"/>, this never writes anything back — the AI
+    /// runner never executes an intent directly against the settled result;
+    /// it always goes back through <see cref="QueueBuildAsync"/>,
+    /// <see cref="TrainUnitsAsync"/> or <c>ArmyService.DispatchAsync</c>,
+    /// which each settle (and persist) again on their own. Keeping this path
+    /// untracked avoids the tracked-entity conflicts that would come from
+    /// mixing a tracked read with those methods' own tracked writes on the
+    /// same scoped <see cref="GameDbContext"/>.
+    /// </summary>
+    public async Task<(Settlement Settled, WorldEntity World, GameClock Clock)?> GetSettledForPlanningAsync(
+        Guid settlementId, CancellationToken cancellationToken = default)
+    {
+        var settlement = await _dbContext.Settlements
+            .AsNoTracking()
+            .Include(s => s.World)
+            .Include(s => s.Buildings)
+            .Include(s => s.Queue)
+            .Include(s => s.Garrison)
+            .Include(s => s.TrainingQueue)
+            .Include(s => s.Runes)
+            .FirstOrDefaultAsync(s => s.Id == settlementId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (settlement?.World is null)
+        {
+            return null;
+        }
+
+        var clock = settlement.World.ToClock();
+        var now = clock.ToGameTime(_timeProvider.GetUtcNow());
+        var settled = settlement.ToDomain().SettleTo(now, settlement.World.SpeedFactor, [], TerrainAt(settlement.World)).Settlement;
+
+        return (settled, settlement.World, clock);
     }
 
     /// <summary>
@@ -1437,5 +1484,49 @@ public sealed class SettlementService(
 
         return _dbContext.Settlements
             .FirstOrDefaultAsync(s => s.WorldId == worldId && s.OwnerId == ownerId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Bumps <see cref="SettlementEntity.LastOwnerActivityAt"/> to now — the
+    /// anonymous-owner branch of <c>Bjarnoy.Api.Auth.OwnershipGate.EnforceAsync</c>
+    /// calls this on every accepted mutating request, which is what keeps a
+    /// still-played anonymous settlement out of <c>AiTakeoverService</c>'s
+    /// reach (see <c>docs/design/ai-players.md</c>'s "Takeover rule").
+    /// Throttled to at most one write per <paramref name="throttle"/>, mirroring
+    /// <see cref="UserActivityService"/>'s own write-throttle, so a chatty
+    /// client cannot turn "you did something" into "write to the database on
+    /// every request". Failure here must never fail the caller's request —
+    /// same posture as <c>UserActivityEndpointFilter</c> — so this never
+    /// throws for "no such settlement"; it is simply a no-op.
+    /// </summary>
+    public async Task TouchOwnerActivityAsync(
+        Guid settlementId, TimeSpan throttle, CancellationToken cancellationToken = default)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        // EF Core's SQLite provider cannot translate a relational (<, >)
+        // comparison on a DateTimeOffset column into SQL — see
+        // UserActivityRetentionService's own remarks for where this was
+        // verified — so the throttle check happens in memory over just the
+        // one column needed to decide it, and the actual write is a single
+        // ExecuteUpdateAsync keyed by id (an equality predicate, which does
+        // translate on both providers).
+        var current = await _dbContext.Settlements
+            .AsNoTracking()
+            .Where(s => s.Id == settlementId)
+            .Select(s => s.LastOwnerActivityAt)
+            .Cast<DateTimeOffset?>()
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (current is not { } lastActivity || now - lastActivity < throttle)
+        {
+            return;
+        }
+
+        await _dbContext.Settlements
+            .Where(s => s.Id == settlementId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.LastOwnerActivityAt, now), cancellationToken)
+            .ConfigureAwait(false);
     }
 }

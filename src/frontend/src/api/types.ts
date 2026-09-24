@@ -219,6 +219,10 @@ export interface SettlementResponse {
   trainingQueue: TrainingOrderResponse[];
   runes: RuneInstanceResponse[];
   world: WorldClockResponse;
+  /** Whether this settlement's owner is an AI jarl rather than a real player (docs/design/ai-players.md). */
+  isAi: boolean;
+  /** The AI owner's personality wire name (e.g. `"aggressive"`), or `null` for a human-owned settlement. */
+  aiPersonality: string | null;
 }
 
 export interface SettlementSummary {
@@ -229,6 +233,10 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+  /** Whether this settlement's owner is an AI jarl rather than a real player (docs/design/ai-players.md). */
+  isAi: boolean;
+  /** The AI owner's personality wire name (e.g. `"aggressive"`), or `null` for a human-owned settlement. */
+  aiPersonality: string | null;
 }
 
 // Settlement expansion (issue #55) — mirrors the settler-crew additions to

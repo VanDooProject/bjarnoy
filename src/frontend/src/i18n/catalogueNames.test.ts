@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import buildingCatalogue from '../data/building-catalogue.json';
 import unitCatalogue from '../data/unit-catalogue.json';
 import {
+  aiPersonalityName,
   buildingName,
   guildBoardTopicName,
   guildFeeTierName,
@@ -90,6 +91,12 @@ describe('catalogueNames', () => {
       'biggestArmy',
     ]) {
       expect(leaderboardCategoryName(category), category).not.toBe(category);
+    }
+  });
+
+  it('has a translated name for every AI personality', () => {
+    for (const personality of ['economic', 'balanced', 'defensive', 'aggressive']) {
+      expect(aiPersonalityName(personality), personality).not.toBe(personality);
     }
   });
 

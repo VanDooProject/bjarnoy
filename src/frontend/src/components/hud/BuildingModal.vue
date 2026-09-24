@@ -26,11 +26,14 @@ const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 import { buildingArt, terrainArt } from '../../lib/map/buildingArt';
 import AtlasSprite from '../AtlasSprite.vue';
+import AiBadge from '../AiBadge.vue';
 
 const props = defineProps<{
   tile: Tile;
   mine: boolean;
   ownerLabel: string | null;
+  /** The tile owner's AI personality wire name, or `null` for a human owner or the player's own tile. */
+  ownerAiPersonality?: string | null;
   busy: boolean;
   // Issue #158: the caller (SettlementView) surfaces a queue rejection's
   // detail text here (NoFreeSlot's premium hint included) rather than this
@@ -249,7 +252,10 @@ const actionLabel = computed(() => {
         <div class="head">
           <div>
             <div class="name">{{ name }}</div>
-            <div class="sub">{{ level > 0 ? t('hud.buildingModal.levelSub', { level, sub }) : sub }}</div>
+            <div class="sub">
+              {{ level > 0 ? t('hud.buildingModal.levelSub', { level, sub }) : sub }}
+              <AiBadge v-if="ownerAiPersonality" :personality="ownerAiPersonality" />
+            </div>
           </div>
           <button class="close" @click="emit('close')">{{ t('hud.buildingModal.close') }}</button>
         </div>

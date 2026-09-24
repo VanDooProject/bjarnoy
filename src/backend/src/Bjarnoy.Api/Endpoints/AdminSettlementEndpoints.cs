@@ -2,9 +2,11 @@ using Asp.Versioning;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Contracts;
 using Bjarnoy.Domain.Buildings;
+using Bjarnoy.Domain.Economy;
 using Bjarnoy.Domain.Shrines;
 using Bjarnoy.Domain.Units;
 using Bjarnoy.Domain.World;
+using Bjarnoy.Infrastructure.Entities;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -98,6 +100,7 @@ public static class AdminSettlementEndpoints
     private static async Task<Results<Ok<SettlementResponse>, NotFound>> Get(
         Guid settlementId,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -108,13 +111,14 @@ public static class AdminSettlementEndpoints
         }
 
         var (entity, clock) = found.Value;
-        return TypedResults.Ok(SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await ToResponseAsync(entity, clock, aiPlayers, time, cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound>> GrantResources(
         Guid settlementId,
         GrantResourcesRequest request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -128,13 +132,14 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await ToResponseAsync(result.Settlement!, clock, aiPlayers, time, cancellationToken));
     }
 
     private static async Task<Results<Ok<CompleteQueuesResponse>, NotFound>> CompleteQueues(
         Guid settlementId,
         CompleteQueuesRequest? request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -151,7 +156,7 @@ public static class AdminSettlementEndpoints
         return TypedResults.Ok(new CompleteQueuesResponse(
             result.CompletedBuilds,
             result.CompletedTraining,
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow()))));
+            await ToResponseAsync(result.Settlement!, clock, aiPlayers, time, cancellationToken)));
     }
 
     private static async Task<Results<Ok<AdminSettlementLayoutResponse>, NotFound>> GetLayout(
@@ -214,6 +219,7 @@ public static class AdminSettlementEndpoints
         int r,
         PlaceBuildingRequest request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -230,7 +236,7 @@ public static class AdminSettlementEndpoints
         var result = await settlements.PlaceBuildingAsync(
             settlementId, new HexCoord(q, r), type, request.Level, cancellationToken);
 
-        return BuildingEditResult(result, request.Level, time);
+        return await BuildingEditResultAsync(result, request.Level, aiPlayers, time, cancellationToken);
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> RazeBuilding(
@@ -238,18 +244,20 @@ public static class AdminSettlementEndpoints
         int q,
         int r,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         var result = await settlements.RazeBuildingAsync(settlementId, new HexCoord(q, r), cancellationToken);
 
-        return BuildingEditResult(result, level: null, time);
+        return await BuildingEditResultAsync(result, level: null, aiPlayers, time, cancellationToken);
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> AdjustGarrison(
         Guid settlementId,
         AdjustGarrisonRequest request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -283,13 +291,13 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await ToResponseAsync(result.Settlement!, clock, aiPlayers, time, cancellationToken));
     }
 
     /// <summary>Shared shaping of a <see cref="AdminBuildingEditServiceResult"/> into the two rejection HTTP shapes and the happy one.</summary>
-    private static Results<Ok<SettlementResponse>, NotFound, ValidationProblem> BuildingEditResult(
-        AdminBuildingEditServiceResult result, int? level, TimeProvider time)
+    private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> BuildingEditResultAsync(
+        AdminBuildingEditServiceResult result, int? level, AiPlayerService aiPlayers, TimeProvider time,
+        CancellationToken cancellationToken)
     {
         switch (result.Outcome)
         {
@@ -319,8 +327,22 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(
-            SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await ToResponseAsync(result.Settlement!, clock, aiPlayers, time, cancellationToken));
+    }
+
+    /// <summary>
+    /// Looks up the settlement owner's AI personality (<see langword="null"/>
+    /// for a human owner) and shapes the full <see cref="SettlementResponse"/>
+    /// — every admin endpoint that returns one goes through this so
+    /// <c>isAi</c>/<c>aiPersonality</c> stay accurate even for AI-owned
+    /// settlements god-mode edits act on.
+    /// </summary>
+    private static async Task<SettlementResponse> ToResponseAsync(
+        SettlementEntity entity, GameClock clock, AiPlayerService aiPlayers, TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var aiPersonality = await aiPlayers.GetPersonalityForUserAsync(entity.UserId, cancellationToken);
+        return SettlementResponse.From(entity, clock, clock.ToGameTime(time.GetUtcNow()), aiPersonality);
     }
 
     /// <summary>Wire name (or enum name) to <see cref="BuildingType"/> — same lookup <see cref="SettlementEndpoints"/> uses for a player's build.</summary>
@@ -362,6 +384,7 @@ public static class AdminSettlementEndpoints
         int r,
         SetBuildingLevelRequest request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -387,13 +410,14 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await ToResponseAsync(result.Settlement!, clock, aiPlayers, time, cancellationToken));
     }
 
     private static async Task<Results<Ok<SettlementResponse>, NotFound, ValidationProblem>> GrantRune(
         Guid settlementId,
         GrantRuneRequest request,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
@@ -428,7 +452,7 @@ public static class AdminSettlementEndpoints
         }
 
         var clock = result.Clock!.Value;
-        return TypedResults.Ok(SettlementResponse.From(result.Settlement!, clock, clock.ToGameTime(time.GetUtcNow())));
+        return TypedResults.Ok(await ToResponseAsync(result.Settlement!, clock, aiPlayers, time, cancellationToken));
     }
 
     private static bool TryParseRuneType(string value, out RuneType type)

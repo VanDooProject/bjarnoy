@@ -105,6 +105,8 @@ function detail(overrides: Partial<SettlementResponse> = {}): SettlementResponse
     trainingQueue: [],
     runes: [],
     world: { state: 'running', running: true, acceptsCommands: true, gameTime: '2026-01-01T00:00:00Z' },
+    isAi: false,
+    aiPersonality: null,
     ...overrides,
   };
 }

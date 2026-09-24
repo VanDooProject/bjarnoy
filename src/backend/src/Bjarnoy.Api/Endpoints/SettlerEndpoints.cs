@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
+using Bjarnoy.Domain.Ai;
 using Bjarnoy.Domain.Buildings;
 using Bjarnoy.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -60,20 +61,27 @@ public static class SettlerEndpoints
     private static async Task<Ok<IReadOnlyList<SettlementSummary>>> ListOwnSettlements(
         Guid worldId,
         SettlementService settlements,
+        AiPlayerService aiPlayers,
         ClaimsPrincipal principal,
         CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var entities = await settlements.GetForWorldAsync(worldId, cancellationToken);
+        var aiPersonalities = await aiPlayers.GetPersonalitiesForWorldAsync(worldId, cancellationToken);
 
         IReadOnlyList<SettlementSummary> response =
         [
             .. entities
                 .Where(s => s.UserId == userId)
-                .Select(s => new SettlementSummary(
-                    s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
-                    s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0, s.IslandId)),
+                .Select(s =>
+                {
+                    var isAi = aiPersonalities.TryGetValue(s.UserId, out var personality);
+                    return new SettlementSummary(
+                        s.Id, s.Name, s.OwnerName, s.CentreQ, s.CentreR,
+                        s.Buildings.FirstOrDefault(b => b.Type == BuildingType.Longhouse)?.Level ?? 0, s.IslandId,
+                        isAi, isAi ? personality.ToWireName() : null);
+                }),
         ];
 
         return TypedResults.Ok(response);
