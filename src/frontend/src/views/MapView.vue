@@ -634,13 +634,23 @@ const rootActions = computed<RingAction[]>(() => {
   }
   if (isMineTile.value) {
     const buildableSea = tile.terrain !== 'sea' || tile.isCoastalWater;
+    // A giant hex is never buildable, claimed or not — its own art fully
+    // occupies the ground there (mirrors WorldModel.placeBuilding's own
+    // `tile.giant` refusal). Checked ahead of the open-water hint since a
+    // giant is always land, so `buildableSea` alone would otherwise show
+    // "Build" as available on it.
+    const blockedByGiant = !!tile.giant;
     return [
       { id: 'details', label: t('hud.ringMenu.actions.details') },
       {
         id: 'build',
         label: t('hud.ringMenu.actions.build'),
-        disabled: !buildableSea,
-        hint: buildableSea ? undefined : t('hud.ringMenu.actions.openWater'),
+        disabled: !buildableSea || blockedByGiant,
+        hint: blockedByGiant
+          ? t('hud.ringMenu.actions.giantOccupied')
+          : buildableSea
+            ? undefined
+            : t('hud.ringMenu.actions.openWater'),
       },
     ];
   }

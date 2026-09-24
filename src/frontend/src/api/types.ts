@@ -63,6 +63,20 @@ export interface RiverTileResponse {
   outDirection: string | null;
 }
 
+/**
+ * Mirrors `GiantResponse` — a 7-hex giant feature (anchor + its six
+ * neighbours, see `lib/map/giantTiles.ts`'s `giantCoverage`) the server
+ * generated with the world. `orientation` is the wire name
+ * `TileOrientationExtensions.ToWireName` produces (e.g. `"E"`, `"NE"`), same
+ * as `RiverTileResponse`'s own direction fields.
+ */
+export interface GiantResponse {
+  family: string;
+  q: number;
+  r: number;
+  orientation: string;
+}
+
 export interface IslandResponse {
   id: string;
   index: number;
@@ -72,6 +86,7 @@ export interface IslandResponse {
   tileCount: number;
   startPositions: TileCoordinate[];
   riverTiles: RiverTileResponse[];
+  giants: GiantResponse[];
 }
 
 /** Mirrors `PlotSuggestionResponse` — the plot this visitor is offered right now, pinned across reloads. */

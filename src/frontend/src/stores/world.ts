@@ -441,6 +441,19 @@ export const useWorldStore = defineStore('world', {
           })),
         ),
       );
+      // Server-generated 7-hex giant features (see `IslandResponse.giants`)
+      // — the server is authoritative on where these sit, so this only
+      // tags the covered tiles for rendering (`WorldModel.setGiants`), no
+      // client-side placement validation.
+      this.model.setGiants(
+        this.islands.flatMap((island) =>
+          island.giants.map((giant) => ({
+            family: giant.family,
+            anchor: { q: giant.q, r: giant.r },
+            orientation: giant.orientation as TileOrientation,
+          })),
+        ),
+      );
       this.liveReady = true;
       // Every other player already in this shared world needs to be known
       // before the landing page picks a starting plot (nearestStartPosition
@@ -475,8 +488,6 @@ export const useWorldStore = defineStore('world', {
     /** Demo mode: found instantly in the local `WorldModel`, no server round trip. */
     foundStartingSettlement(ownerId: string, ownerName: string, name: string, near: AxialCoord) {
       const at = this.model.findLandfall(near) ?? near;
-      const settlement = this.model.foundSettlement(ownerId, ownerName, name, at);
-      this.selectedSettlementId = settlement.id;
       // Giant tiles are a spike (see WorldModel.placeGiant's own doc
       // comment) with no build UI of its own yet — demo mode seeds one
       // giant mountain near every new settlement purely so it's visible on
@@ -486,8 +497,20 @@ export const useWorldStore = defineStore('world', {
       // findGiantAnchor's search order depends only on the settlement's own
       // (q, r) and the world seed's terrain, never on wall-clock time or
       // anything else non-reproducible.
+      //
+      // Placed *before* `foundSettlement` below, not after: `foundSettlement`
+      // claims territory internally (`WorldModel.claimTerritory`), and
+      // claiming is one-way (it only ever adds `ownerId`, never removes it —
+      // see `claimedHexes`' own doc comment). If the giant didn't exist yet
+      // at that first claim, a footprint hex close enough to sit inside the
+      // centre disc would get wrongly claimed there (the territory rule has
+      // no giant to exclude), and no later call could ever undo it. Placing
+      // the giant first means the very first `claimTerritory` already sees
+      // it and applies the giant rule correctly from the start.
       const giantAnchor = this.model.findGiantAnchor(at);
       if (giantAnchor) this.model.placeGiant(giantAnchor, 'giantmountain');
+      const settlement = this.model.foundSettlement(ownerId, ownerName, name, at);
+      this.selectedSettlementId = settlement.id;
       this.syncHud();
       return settlement;
     },

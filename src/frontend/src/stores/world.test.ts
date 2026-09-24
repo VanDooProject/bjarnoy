@@ -294,6 +294,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         tileCount: 10,
         startPositions: [NEAR_ISLAND.at],
         riverTiles: [],
+        giants: [],
       },
       {
         id: FAR_ISLAND.islandId,
@@ -304,6 +305,7 @@ describe('useWorldStore founding a settlement (live mode)', () => {
         tileCount: 10,
         startPositions: [FAR_ISLAND.at],
         riverTiles: [],
+        giants: [],
       },
     ];
   }
@@ -443,6 +445,7 @@ describe('useWorldStore founding a settlement (L6b: persist before reconciling)'
         tileCount: 10,
         startPositions: [ISLAND.at],
         riverTiles: [],
+        giants: [],
       },
     ];
     // Simulates a failure in the local reconciliation that follows a
@@ -1137,7 +1140,7 @@ describe('useWorldStore joinWorld', () => {
       reservedUntil: null,
     };
     store.islands = [
-      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [] },
+      { id: 'old-island', index: 0, name: 'Old', q: 0, r: 0, tileCount: 1, startPositions: [], riverTiles: [], giants: [] },
     ];
     store.armies = [{ id: 'old-army' } as never];
     store.liveReady = true;

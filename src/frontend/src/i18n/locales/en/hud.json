@@ -81,7 +81,8 @@
       "notWiredYet": "Not wired to the backend yet",
       "trainUnits": "Train units",
       "build": "Build",
-      "openWater": "Open water"
+      "openWater": "Open water",
+      "giantOccupied": "Occupied by a giant landmark"
     },
     "hexCoord": "HEX {q}, {r}",
     "levelHexCoord": "LV {level} · HEX {q}, {r}",
