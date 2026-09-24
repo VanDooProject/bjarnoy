@@ -5,5 +5,11 @@
     "body": "Name yours from the mark up here and this island follows you to any device. Takes a minute — just a username and password.",
     "cta": "Name your jarl",
     "later": "Later"
+  },
+  "returningLogin": {
+    "eyebrow": "Your realm is waiting",
+    "title": "Welcome back, {name}",
+    "body": "Log back in to pick up your realm where you left off.",
+    "newRealm": "Start a new realm instead"
   }
 }
