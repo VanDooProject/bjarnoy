@@ -1,6 +1,7 @@
 // "Giant tiles": one art object spanning a centre hex plus its six
-// neighbours (a 7-hex plate — see `docs/design/giant-tiles.md`... this repo
-// has no such doc yet; the contract lives here and in WorldModel.placeGiant).
+// neighbours (a 7-hex plate — the render side is documented in
+// VanDooProject/3D_assets `docs/giant-tiles.md`; the game-side contract lives
+// here and in WorldModel.placeGiant).
 //
 // The art pipeline (VanDooProject/3D_assets) renders the whole giant once per
 // camera rotation and slices it into 7 per-hex TOP frames, one per covered
