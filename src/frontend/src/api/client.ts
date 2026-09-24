@@ -94,6 +94,7 @@ import type {
   UserResponse,
   WorldMembershipResponse,
   WorldResponse,
+  WorldSummaryResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -208,9 +209,10 @@ async function requestImageBitmap(path: string, ownerId?: string): Promise<Image
 }
 
 export const api = {
-  listWorlds: () => request<WorldResponse[]>('/worlds'),
-  createWorld: (body: CreateWorldRequest) =>
-    request<WorldResponse>('/worlds', { method: 'POST', body: JSON.stringify(body) }),
+  // World creation is admin-only (POST /api/v1/admin/worlds — see
+  // adminCreateWorld below); this listing is the minimal public info a
+  // player picks a world from, not the game-client config getWorld returns.
+  listWorlds: () => request<WorldSummaryResponse[]>('/worlds'),
   getWorld: (worldId: string) => request<WorldResponse>(`/worlds/${worldId}`),
   // "Join another world": the public world picker — no auth/owner header
   // required, unlike getWorldMembership just below.

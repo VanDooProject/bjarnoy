@@ -729,6 +729,74 @@ describe('useWorldStore refreshLiveSettlement (storage capacity)', () => {
   });
 });
 
+describe('useWorldStore newestWorld', () => {
+  // GET /worlds now answers with the minimal WorldSummaryResponse (no seed/
+  // generation), so newestWorld must pick a world from that list and then
+  // fetch its full config through getWorld before handing it back.
+  it('picks the last summary in the servers list order, then fetches its full config', async () => {
+    const store = await loadStoreModule(false);
+
+    listWorlds.mockReset().mockResolvedValue([
+      {
+        id: 'world-older',
+        name: 'Older Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
+        startsAt: null,
+      },
+      {
+        id: 'world-newest',
+        name: 'Newest Sea',
+        status: 'Running',
+        joinable: true,
+        joinableReason: 'None',
+        playerCount: 1,
+        maxPlayers: 100,
+        freeSlots: 99,
+        startsAt: null,
+      },
+    ]);
+    const fullWorld = {
+      id: 'world-newest',
+      name: 'Newest Sea',
+      seed: 7,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-02T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      speedFactor: 1,
+      generation: {},
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    };
+    getWorld.mockReset().mockResolvedValue(fullWorld);
+
+    const result = await store.newestWorld();
+
+    expect(getWorld).toHaveBeenCalledWith('world-newest');
+    expect(result).toEqual(fullWorld);
+  });
+
+  it('returns null without calling getWorld when no worlds exist yet', async () => {
+    const store = await loadStoreModule(false);
+    listWorlds.mockReset().mockResolvedValue([]);
+    getWorld.mockReset();
+
+    const result = await store.newestWorld();
+
+    expect(result).toBeNull();
+    expect(getWorld).not.toHaveBeenCalled();
+  });
+});
+
 describe('useWorldStore bootstrapLiveWorld', () => {
   // Regression: the world `getWorld`/`newestWorld` just resolved can still be
   // gone by the time the very next call (`getIslands`) lands — observed live
@@ -744,21 +812,32 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       {
         id: 'world-1',
         name: 'Kettil Sea',
-        seed: 1,
-        radius: 30,
-        maxPlayers: 100,
         status: 'Running',
-        islandCount: 1,
-        createdAt: '2026-01-01T00:00:00.000Z',
         joinable: true,
         joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
         startsAt: null,
-        endbossTriggered: false,
-        speedFactor: 1,
-        generation: {},
-        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
       },
     ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      speedFactor: 1,
+      generation: {},
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
     getIslands.mockReset().mockRejectedValue(new MockedApiError(404, { error: 'world_not_found' }));
 
     await expect(store.bootstrapLiveWorld()).resolves.toBeUndefined();
@@ -776,21 +855,32 @@ describe('useWorldStore bootstrapLiveWorld', () => {
       {
         id: 'world-1',
         name: 'Kettil Sea',
-        seed: 1,
-        radius: 30,
-        maxPlayers: 100,
         status: 'Running',
-        islandCount: 1,
-        createdAt: '2026-01-01T00:00:00.000Z',
         joinable: true,
         joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
         startsAt: null,
-        endbossTriggered: false,
-        speedFactor: 1,
-        generation: {},
-        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
       },
     ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-1',
+      name: 'Kettil Sea',
+      seed: 1,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      speedFactor: 1,
+      generation: {},
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
     getIslands.mockReset().mockRejectedValue(new Error('network error'));
 
     await expect(store.bootstrapLiveWorld()).rejects.toThrow('network error');
@@ -953,21 +1043,32 @@ describe('useWorldStore fetchFogMask', () => {
       {
         id: 'world-2',
         name: 'New Kettil Sea',
-        seed: 2,
-        radius: 30,
-        maxPlayers: 100,
         status: 'Running',
-        islandCount: 1,
-        createdAt: '2026-01-01T00:00:00.000Z',
         joinable: true,
         joinableReason: 'None',
+        playerCount: 0,
+        maxPlayers: 100,
+        freeSlots: 100,
         startsAt: null,
-        endbossTriggered: false,
-        speedFactor: 1,
-        generation: {},
-        movement: { land: {}, sea: {}, riverCrossingCost: 8 },
       },
     ]);
+    getWorld.mockReset().mockResolvedValue({
+      id: 'world-2',
+      name: 'New Kettil Sea',
+      seed: 2,
+      radius: 30,
+      maxPlayers: 100,
+      status: 'Running',
+      islandCount: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      joinable: true,
+      joinableReason: 'None',
+      startsAt: null,
+      endbossTriggered: false,
+      speedFactor: 1,
+      generation: {},
+      movement: { land: {}, sea: {}, riverCrossingCost: 8 },
+    });
     getIslands.mockReset().mockResolvedValue([]);
     listSettlements.mockReset().mockResolvedValue([]);
 

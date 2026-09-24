@@ -454,9 +454,14 @@ export const useWorldStore = defineStore('world', {
     },
     /** The most recently created world, or null if none exist yet. */
     async newestWorld() {
-      const worlds = await api.listWorlds();
+      // GET /worlds answers with WorldSummaryResponse — enough to pick a
+      // world, but not the seed/generation this store actually needs to
+      // build its local map, so the pick is followed by a real getWorld.
+      const summaries = await api.listWorlds();
+      if (summaries.length === 0) return null;
       // GetWorldsAsync orders by id (UUIDv7, so creation order) ascending.
-      return worlds.length > 0 ? worlds[worlds.length - 1] : null;
+      const newest = summaries[summaries.length - 1];
+      return await api.getWorld(newest.id);
     },
     /**
      * The plot-suggestion's own pinned plot or one of its advisory
