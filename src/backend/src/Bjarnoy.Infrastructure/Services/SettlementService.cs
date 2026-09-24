@@ -216,6 +216,17 @@ public sealed class SettlementService(
     /// <summary>
     /// Founds a settlement on one of an island's precomputed start positions.
     /// </summary>
+    /// <param name="callerUserId">
+    /// The founding request's authenticated caller, if any (its JWT's
+    /// <c>ClaimTypes.NameIdentifier</c>) — becomes the new settlement's real
+    /// <see cref="SettlementEntity.UserId"/> straight away, instead of the
+    /// anonymous-founding default (<see cref="SystemUserIds.Abandoned"/>,
+    /// used when this is <see langword="null"/>). Without this, a logged-in
+    /// player founding in a world they have never played would get an
+    /// unclaimed realm nobody's account owns until some later, separate claim
+    /// — there is no reason to make them do that when the account founding it
+    /// is already known right here.
+    /// </param>
     public async Task<FoundingResult> FoundAsync(
         Guid worldId,
         Guid islandId,
@@ -223,6 +234,7 @@ public sealed class SettlementService(
         string name,
         string ownerName,
         string ownerId,
+        Guid? callerUserId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -264,7 +276,7 @@ public sealed class SettlementService(
         // One settlement per player per world — for now. Ships and carts will
         // one day let a player found a second one; until then this is a hard
         // rule, not just an unlikely-to-be-hit default.
-        if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+        if (await AlreadyFoundedAsync(worldId, ownerId, callerUserId, cancellationToken).ConfigureAwait(false))
         {
             return new FoundingResult(FoundingRejection.AlreadyFounded);
         }
@@ -354,12 +366,13 @@ public sealed class SettlementService(
             Name = name,
             OwnerName = ownerName,
             OwnerId = ownerId,
-            // Anonymous founding — the only path today — has no real account
-            // yet, but UserId is required, so it starts out owned by the
-            // reserved "Abandoned" system user. AuthService.RegisterAsync
+            // A caller founding while already logged in owns it outright from
+            // the start (callerUserId). Anonymous founding has no real
+            // account yet, but UserId is required, so it starts out owned by
+            // the reserved "Abandoned" system user — AuthService.RegisterAsync
             // reassigns it to a real account when the client later registers
             // with this same OwnerId.
-            UserId = SystemUserIds.Abandoned,
+            UserId = callerUserId ?? SystemUserIds.Abandoned,
             FoundedAt = now,
         };
 
@@ -391,7 +404,7 @@ public sealed class SettlementService(
                 return new FoundingResult(FoundingRejection.PlotTaken);
             }
 
-            if (await AlreadyFoundedAsync(worldId, ownerId, cancellationToken).ConfigureAwait(false))
+            if (await AlreadyFoundedAsync(worldId, ownerId, callerUserId, cancellationToken).ConfigureAwait(false))
             {
                 return new FoundingResult(FoundingRejection.AlreadyFounded);
             }
@@ -555,24 +568,6 @@ public sealed class SettlementService(
         }
 
         return (settlement, clock);
-    }
-
-    /// <summary>
-    /// A settlement's real owner (<see cref="SettlementEntity.UserId"/>) and
-    /// client-local owner id (<see cref="SettlementEntity.OwnerId"/>) — a
-    /// lightweight projection for the ownership-authorization endpoint
-    /// filters (<c>Bjarnoy.Api.Auth.OwnershipGate</c>), not a full load. Null
-    /// if no such settlement exists.
-    /// </summary>
-    public async Task<(Guid UserId, string OwnerId)?> GetOwnershipAsync(
-        Guid settlementId, CancellationToken cancellationToken = default)
-    {
-        var ownership = await _dbContext.Settlements
-            .Where(s => s.Id == settlementId)
-            .Select(s => new { s.UserId, s.OwnerId })
-            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-
-        return ownership is null ? null : (ownership.UserId, ownership.OwnerId);
     }
 
     /// <summary>Admin search: settlements by world and/or owner name, paged.</summary>
@@ -1417,9 +1412,15 @@ public sealed class SettlementService(
             s => s.WorldId == worldId && s.CentreQ == coord.Q && s.CentreR == coord.R,
             cancellationToken);
 
-    private Task<bool> AlreadyFoundedAsync(Guid worldId, string ownerId, CancellationToken cancellationToken) =>
+    // `callerUserId` closes the cross-browser gap: a logged-in player's realm
+    // keeps the OwnerId of the browser it was founded in, so an OwnerId-only
+    // check would let the same account found a second realm in this world
+    // from any other browser (a fresh local id) just by being logged in.
+    private Task<bool> AlreadyFoundedAsync(
+        Guid worldId, string ownerId, Guid? callerUserId, CancellationToken cancellationToken) =>
         _dbContext.Settlements.AnyAsync(
-            s => s.WorldId == worldId && s.OwnerId == ownerId,
+            s => s.WorldId == worldId
+                && (s.OwnerId == ownerId || (callerUserId != null && s.UserId == callerUserId)),
             cancellationToken);
 
     /// <summary>

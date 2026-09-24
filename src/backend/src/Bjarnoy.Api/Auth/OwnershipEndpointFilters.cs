@@ -34,9 +34,9 @@ public sealed class SettlementOwnershipEndpointFilter : IEndpointFilter
 
         var settlementId = context.GetArgument<Guid>(0);
 
-        var settlements = context.HttpContext.RequestServices.GetRequiredService<SettlementService>();
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
         var refusal = await OwnershipGate.EnforceAsync(
-            context.HttpContext, settlementId, settlements, context.HttpContext.RequestAborted);
+            context.HttpContext, settlementId, realms, context.HttpContext.RequestAborted);
 
         return refusal ?? await next(context);
     }
@@ -76,9 +76,9 @@ public sealed class ArmyOwnershipEndpointFilter : IEndpointFilter
             return await next(context);
         }
 
-        var settlements = context.HttpContext.RequestServices.GetRequiredService<SettlementService>();
+        var realms = context.HttpContext.RequestServices.GetRequiredService<RealmDirectory>();
         var refusal = await OwnershipGate.EnforceAsync(
-            context.HttpContext, settlementId.Value, settlements, context.HttpContext.RequestAborted);
+            context.HttpContext, settlementId.Value, realms, context.HttpContext.RequestAborted);
 
         return refusal ?? await next(context);
     }
@@ -98,30 +98,35 @@ public sealed class ArmyOwnershipEndpointFilter : IEndpointFilter
 /// <see cref="SettlementEntity.OwnerId"/>/<see cref="SettlementEntity.UserId"/>
 /// already document: a settlement is either claimed (real <c>UserId</c>) or
 /// not (owned by the <c>Abandoned</c> system user, provable only by the
-/// founding browser's own local id). It does not, on its own, close the
-/// separate "any caller can read any settlement" gap — this only gates
-/// mutations, via the endpoint filters above.
+/// founding browser's own local id). This gates mutations, via the endpoint
+/// filters above; <see cref="Bjarnoy.Api.Endpoints.WorldEndpoints"/>'s
+/// per-world reads (membership/fog-mask/plot-suggestion) apply the same
+/// "claimed realm, header alone is no longer enough" rule to their own
+/// scoping via <see cref="CallerRealmResolver"/> instead, since none of them
+/// take a settlement id to run this gate against directly.
 /// </remarks>
 internal static class OwnershipGate
 {
     /// <summary>
     /// Carries the founding browser's client-local id (<c>player.id</c> on
-    /// the frontend) for an anonymous-owned settlement's mutating requests.
-    /// Meaningless — and ignored — once a settlement is claimed by a real
-    /// account, since the JWT itself proves ownership then.
+    /// the frontend) — for an anonymous-owned settlement's mutating requests
+    /// here, and as <see cref="CallerRealmResolver"/>'s fallback for the
+    /// per-world read endpoints. Meaningless — and ignored, in favour of the
+    /// caller's own realm — once a settlement is claimed by a real account,
+    /// since the JWT itself proves ownership then.
     /// </summary>
     public const string OwnerIdHeaderName = "X-Owner-Id";
 
     public static async Task<IResult?> EnforceAsync(
         HttpContext httpContext,
         Guid settlementId,
-        SettlementService settlements,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
-        ArgumentNullException.ThrowIfNull(settlements);
+        ArgumentNullException.ThrowIfNull(realms);
 
-        var ownership = await settlements.GetOwnershipAsync(settlementId, cancellationToken);
+        var ownership = await realms.GetOwnershipAsync(settlementId, cancellationToken);
         if (ownership is null)
         {
             // No such settlement — let the endpoint's own NotFound handling
@@ -129,7 +134,7 @@ internal static class OwnershipGate
             return null;
         }
 
-        var (userId, ownerId) = ownership.Value;
+        var (userId, ownerId, _) = ownership.Value;
 
         if (userId != SystemUserIds.Abandoned)
         {
