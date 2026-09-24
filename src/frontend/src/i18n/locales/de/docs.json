@@ -12,6 +12,10 @@
       "tiles": {
         "title": "Kacheln",
         "description": "Das Gelände, aus dem eine Welt besteht, wie es entsteht und was darauf gebaut werden kann."
+      },
+      "wastedLands": {
+        "title": "Ödlande",
+        "description": "Das Endspiel: Utgard, die Inseln, die sich die Riesen zurückholen, und was aus jedem Feld wird."
       }
     }
   },
@@ -154,5 +158,95 @@
   "impressum": {
     "title": "Impressum",
     "body": "Fjørdhold ist ein Hobbyprojekt für die VanDooProject-Community. Diese Platzhalterseite existiert, damit die echte Landingpage etwas hat, worauf sie verlinken kann — ersetze sie durch dein tatsächliches Impressum (Betreiber, Kontaktadresse und alle Angaben, die deine Rechtsordnung verlangt), bevor du live gehst."
+  },
+  "wastedLands": {
+    "title": "Die Ödlande",
+    "intro": "Wo die Welt endet. Die Ödlande sind das Endspiel einer Welt: die Inseln, die sich die Jötnar zurückholen, die Festung in ihrer Mitte und der letzte Krieg der Jarle von Bjarnøy.",
+    "lore": {
+      "heading": "Am Rand des langen Winters",
+      "p1": "Die Skalden sagen, das Meer um Bjarnøy war nie leer. Hinter den letzten Schären, wo die Seekarten enden, liegt Útgarðr, der Außenhof, die Heimat der Jötnar, der Riesen, die vor Göttern und Menschen hier waren. Solange die Inseln jung sind, schlafen die Riesen, und die Jarle kämpfen untereinander um Holz, Stein und Ruhm.",
+      "p2": "Doch jedes Zeitalter wird alt. Wenn die Hallen voll sind und auf jeder Insel Runensteine stehen, erwachen die Riesen. Zuerst holen sie sich die alten Orte: die Steinkreise, die die ersten Siedler errichtet und dann vergessen haben. Wo ein solcher Kreis unbewacht steht, wächst Utgard über Nacht aus dem Basalt, eine schwarze Zitadelle, deren Fenster in kaltem Runenfeuer brennen.",
+      "p3": "Das Land ringsum kippt, Ring um Ring. Gras wird zu Asche und Schlacke. Wälder sterben, wo sie stehen, zu gebleichten Stümpfen mit abgebrochenen Kronen. Die alten Berge brechen auf und erwachen als Feuerberge, und ihre Flüsse führen Feuer. Strände werden zu schwarzem Sand, und das Meer wird kränklich grünschwarz, voller Wracks der Langschiffe, die zu nah heransegelten.",
+      "p4": "Kein einzelner Jarl bricht Utgard. Seine Mauern sind für eine Belagerung gebaut, die eine Generation dauert, und die Fäule breitet sich weiter aus, während die Jarle streiten. Nur Gilden, die als ein Heer segeln, können den Außenhof stürmen. Wer sein Tor niederwirft, beendet das Zeitalter, und sein Name wird als letzter eingeritzt, bevor die Welt von vorn beginnt.",
+      "caption": "So soll sich das Endspiel anfühlen, ein Regelwerk ist das nicht. Die Mechanik wird noch entworfen und kann sich ändern."
+    },
+    "utgard": {
+      "heading": "Utgard, der Außenhof",
+      "body": "Ein Riesenfeld: eine Festung über sieben Hexfelder, ein Basaltfels mit Ringmauer, Rundtürmen und einem Bergfried in der Mitte, von innen in Runenfeuer getaucht und in Nebel gehüllt. Der Fels ist in sieben Stücke geschnitten, damit jedes Stück auf der Karte mit seinem Hexfeld sortiert wird wie jedes andere Feld.",
+      "camera": "Kamera"
+    },
+    "volcano": {
+      "heading": "Der Feuerberg",
+      "body": "Der zweite Riese der Ödlande. Erreicht die Fäule einen großen Berg, bricht er auf. Lava rinnt über seine Flanken, der Krater brodelt, und Rauch steigt ohne Ende auf. Wie Utgard bedeckt er sieben Hexfelder, und er ist animiert."
+    },
+    "island": {
+      "heading": "Eine Insel kippt",
+      "body": "Eine erfundene Insel für diese Seite, keine aus einer echten Welt. Zieh den Regler und sieh zu, wie sich die Fäule vom alten Steinkreis bis ins Meer ausbreitet. Jedes lebendige Feld wird durch sein ödes Gegenstück ersetzt: Aus dem Steinkreis wird Utgard, aus dem großen Berg ein Feuerberg.",
+      "blight": "Fäule",
+      "play": "Abspielen",
+      "rotateLeft": "Nach links drehen",
+      "rotateRight": "Nach rechts drehen",
+      "hoverHint": "Zeig auf ein Hexfeld, um zu sehen, was es ist.",
+      "stages": {
+        "s0": "Eine lebendige Insel",
+        "s1": "Utgard erhebt sich",
+        "s2": "Das Land verdorrt",
+        "s3": "Die Küste wird schwarz",
+        "s4": "Das Meer erkrankt"
+      },
+      "giantLiving": "Steinkreis (Riesenschrein)",
+      "giantWasted": "Utgard",
+      "giantMountainLiving": "Großer Berg (Riesenfeld)",
+      "giantVolcano": "Feuerberg"
+    },
+    "pairs": {
+      "heading": "Lebendig und öde",
+      "body": "Jedes öde Feld ersetzt genau ein lebendiges. Die Form des Bodens bleibt gleich, damit Flüsse, Küsten und Bergfüße weiter zusammenpassen, wenn eine Insel kippt.",
+      "living": "Lebendig",
+      "wasted": "Öde",
+      "looks": "Varianten"
+    },
+    "tiles": {
+      "grass": {
+        "living": "Grasland",
+        "wasted": "Ödland",
+        "lore": "Aschefleckiger Basalt. Darauf liegen Geröll, Obsidiansplitter, ein runenhell leuchtender Spalt, ein Netz aus Lavarissen oder ein rauchender Schlot."
+      },
+      "forest": {
+        "living": "Wald",
+        "wasted": "Toter Wald",
+        "lore": "Wo jeder Baum stand, steht jetzt ein Stumpf. Sie sind gebleicht, grau oder verkohlt, und ein Drittel ist abgebrochen."
+      },
+      "sand": {
+        "living": "Sand",
+        "wasted": "Schwarzer Sand",
+        "lore": "Vulkanischer Grus, übersät mit Kieseln aus demselben Gestein."
+      },
+      "mountain": {
+        "living": "Berg",
+        "wasted": "Zackengipfel",
+        "lore": "Schlanke Spitzen aus dunklem Fels mit Asche auf den Graten. Dort wächst nichts."
+      },
+      "river": {
+        "living": "Fluss",
+        "wasted": "Lavastrom",
+        "lore": "Dasselbe Bett wie ein Fluss, nur fließt darin Feuer statt Wasser."
+      },
+      "sea": {
+        "living": "Meer",
+        "wasted": "Verseuchtes Wasser",
+        "lore": "Grünschwarzes Wasser über dunklem Grund."
+      },
+      "coast": {
+        "living": "Küstenwasser",
+        "wasted": "Schwarzsandküste",
+        "lore": "Flaches Wasser über schwarzem Sand. Hier liegen das Wrack eines Langschiffs, ein Basaltfels und ein Riff aus Obsidianspitzen."
+      }
+    },
+    "lavaShapes": {
+      "straight": "Gerade",
+      "bend": "Biegung",
+      "bend60": "Enge Biegung"
+    }
   }
 }
