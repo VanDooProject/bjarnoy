@@ -100,11 +100,8 @@ public sealed class ProfileEndpointsTests(SqliteApiFixture fixture) : IClassFixt
         using var client = _fixture.CreateClient();
         var localOwnerId = $"local-{Guid.CreateVersion7():N}";
 
-        var world = await client.PostJsonAsync(
-            "/api/v1/worlds",
-            new CreateWorldRequest(UniqueName("world"), Seed: 777, Radius: 30, MaxPlayers: 100), Ct);
-        Assert.Equal(HttpStatusCode.Created, world.StatusCode);
-        var worldResponse = await world.ReadStrictAsync<WorldResponse>(Ct);
+        var worldResponse = await _fixture.Factory.CreateWorldAsync(
+            UniqueName("world"), seed: 777, radius: 30, maxPlayers: 100, cancellationToken: Ct);
 
         var islandsResponse = await client.GetAsync($"/api/v1/worlds/{worldResponse.Id}/islands", Ct);
         var islands = await islandsResponse.ReadStrictAsync<List<IslandResponse>>(Ct);

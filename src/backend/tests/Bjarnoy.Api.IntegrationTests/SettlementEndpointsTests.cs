@@ -51,9 +51,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     private async Task<(Guid WorldId, SettlementResponse Settlement)> FoundAsync(
         HttpClient client, int seed = 21, int radius = 60)
     {
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), seed, radius), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -97,9 +95,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task A_plot_that_is_not_a_start_position_is_refused()
     {
         using var client = Client();
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -205,9 +201,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // more-elongated islands) moved every seed's terrain — seed 5/60 no
         // longer places two islands close enough to exercise the
         // cross-island case below.
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 51, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 51, 60, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -301,9 +295,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task A_founding_attempt_beyond_the_cheap_spacing_filter_is_still_rejected_by_the_live_phase_two_check()
     {
         using var client = Client();
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -873,9 +865,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
         // reach the shore without an excessive number of upgrades here.
         // Everything past that is found dynamically through the same API a
         // player would use, not hard-coded.
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 1, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 1, 60, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
@@ -1298,9 +1288,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task Founding_on_another_visitors_live_reservation_is_refused()
     {
         using var client = Client();
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
         client.DefaultRequestHeaders.Add("X-Owner-Id", "holder");
         var suggestion = await (await client.GetAsync($"/api/v1/worlds/{world.Id}/plot-suggestion", Ct))
@@ -1321,9 +1309,7 @@ public sealed class SettlementEndpointsTests : IAsyncLifetime
     public async Task The_reservations_own_owner_can_still_found_on_it()
     {
         using var client = Client();
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
         client.DefaultRequestHeaders.Add("X-Owner-Id", "holder");
         var suggestion = await (await client.GetAsync($"/api/v1/worlds/{world.Id}/plot-suggestion", Ct))

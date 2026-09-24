@@ -52,7 +52,7 @@ public class PlotSuggestion409RecoveryTests
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
         var world = Assert.Single(
-            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+            (await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken))!);
 
         // GET .../settlements is fog-gated — the founding browser's own
         // local id has to go on the header before it can read back even its

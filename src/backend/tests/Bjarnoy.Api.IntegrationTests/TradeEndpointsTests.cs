@@ -54,9 +54,7 @@ public sealed class TradeEndpointsTests : IAsyncLifetime
     private async Task<(Guid WorldId, SettlementResponse Settlement, string OwnerId)> FoundAsync(
         HttpClient client, int seed = 21, int radius = 60)
     {
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), seed, radius), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
 
         var islands = await client.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);

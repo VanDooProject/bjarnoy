@@ -25,16 +25,9 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
 
     private static string UniqueName(string prefix) => $"{prefix}-{Guid.CreateVersion7():N}"[..24];
 
-    private async Task<WorldResponse> CreateWorldAsync(HttpClient client)
-    {
-        var response = await client.PostJsonAsync(
-            "/api/v1/worlds",
-            new CreateWorldRequest(UniqueName("world"), Seed: 4242, Radius: 40, MaxPlayers: 100),
-            Ct);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return await response.ReadStrictAsync<WorldResponse>(Ct);
-    }
+    private async Task<WorldEntity> CreateWorldAsync() =>
+        await _fixture.Factory.CreateWorldAsync(
+            UniqueName("world"), seed: 4242, radius: 40, maxPlayers: 100, cancellationToken: Ct);
 
     /// <summary>
     /// One founding plot per island — founding refuses two settlements too close
@@ -110,7 +103,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task Settlements_of_different_owners_are_ranked_by_score_and_system_owners_are_excluded()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
 
         var low = await FoundSettlementAsync(client, world.Id, plots);
@@ -170,7 +163,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task Equal_scores_are_ranked_by_ascending_subject_id()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
 
         var a = await FoundSettlementAsync(client, world.Id, plots);
@@ -209,7 +202,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task Rerunning_replaces_the_previous_snapshot_and_carries_previous_rank()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
 
         var first = await FoundSettlementAsync(client, world.Id, plots);
@@ -278,7 +271,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task A_refresh_within_the_staleness_window_is_skipped()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
         var settlement = await FoundSettlementAsync(client, world.Id, plots);
 
@@ -357,7 +350,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task Closing_the_first_window_computes_score_gained_from_a_zero_baseline()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
         var settlement = await FoundSettlementAsync(client, world.Id, plots);
 
@@ -399,7 +392,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task Multiple_missed_windows_close_oldest_first_and_only_the_last_carries_the_real_delta()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
         var settlement = await FoundSettlementAsync(client, world.Id, plots);
 
@@ -446,7 +439,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task Rerunning_close_due_windows_does_not_double_close()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
         var settlement = await FoundSettlementAsync(client, world.Id, plots);
 
@@ -480,7 +473,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task A_paused_worlds_windows_do_not_advance()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
         var settlement = await FoundSettlementAsync(client, world.Id, plots);
 
@@ -513,7 +506,7 @@ public sealed class LeaderboardServiceTests(SqliteApiFixture fixture) : IClassFi
     public async Task World_end_writes_final_all_time_snapshots_exactly_once()
     {
         using var client = _fixture.CreateClient();
-        var world = await CreateWorldAsync(client);
+        var world = await CreateWorldAsync();
         var plots = await GetPlotsAsync(client, world.Id);
         var settlement = await FoundSettlementAsync(client, world.Id, plots);
 

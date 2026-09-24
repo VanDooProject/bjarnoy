@@ -89,7 +89,7 @@ public class TroopTrainingAndDispatchTests
         await LiveFrontendTestHelpers.FoundStartingSettlementAsync(page, frontendUrl);
 
         var world = Assert.Single(
-            (await apiClient.GetFromJsonAsync<WorldResponse[]>("/api/v1/worlds", cancellationToken))!);
+            (await apiClient.GetFromJsonAsync<WorldSummaryResponse[]>("/api/v1/worlds", cancellationToken))!);
 
         // GET .../settlements and GET .../settlements/{id} are both
         // fog-gated/owner-only — the founding browser's own local id has to

@@ -472,9 +472,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
         var (_, rivalToken, _) = await RegisterAsync(rivalClient);
         rivalClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", rivalToken);
 
-        var world = await (await mineClient.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
         var islands = await mineClient.GetFromJsonAsync<List<IslandResponse>>(
             $"/api/v1/worlds/{world.Id}/islands", SqliteApiFixture.StrictJson, Ct);
         var island = islands!.First(i => i.StartPositions.Count > 1);
@@ -504,9 +502,7 @@ public sealed class GateRemainingReadEndpointsTests : IAsyncLifetime
     public async Task ListOwnSettlements_requires_authentication()
     {
         using var client = Client();
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), 21, 60), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), 21, 60, cancellationToken: Ct);
 
         var response = await client.GetAsync($"/api/v1/worlds/{world.Id}/settlements/mine", Ct);
 

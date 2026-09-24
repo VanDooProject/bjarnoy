@@ -24,9 +24,7 @@ public sealed class PlotSuggestionEndpointsTests : IAsyncLifetime
 
     private async Task<Guid> CreateWorldAsync(HttpClient client, int seed = 21, int radius = 60)
     {
-        var world = await (await client.PostJsonAsync(
-            "/api/v1/worlds", new CreateWorldRequest(Unique("w"), seed, radius), Ct))
-            .ReadStrictAsync<WorldResponse>(Ct);
+        var world = await _factory.CreateWorldAsync(Unique("w"), seed, radius, cancellationToken: Ct);
         return world.Id;
     }
 
