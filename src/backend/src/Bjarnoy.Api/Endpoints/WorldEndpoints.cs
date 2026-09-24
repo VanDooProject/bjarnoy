@@ -179,8 +179,13 @@ public static class WorldEndpoints
     /// Purely a read: the "join another world" flow's per-world check before
     /// offering a plot, so it must never take a plot reservation or otherwise
     /// touch <see cref="PlotReservationService"/> the way
-    /// <see cref="GetPlotSuggestion"/> does. Same anonymous-play ownership
-    /// header as that endpoint.
+    /// <see cref="GetPlotSuggestion"/> does. Resolves which realm to answer
+    /// for via <see cref="CallerRealmResolver"/> — a claimed player's JWT
+    /// finds their realm even from a browser that never founded anything, and
+    /// a <see cref="CallerRealmOutcome.Refused"/> header (someone else's
+    /// already-claimed realm) is reported the same as no membership at all:
+    /// this is a membership check, not an ownership proof, so it has nothing
+    /// to refuse with a 403 over.
     /// </summary>
     private static async Task<Results<Ok<WorldMembershipResponse>, NotFound<ProblemDetails>, BadRequest<ProblemDetails>>>
         GetMembership(
@@ -188,21 +193,26 @@ public static class WorldEndpoints
             HttpContext httpContext,
             WorldService worlds,
             SettlementService settlements,
+            RealmDirectory realms,
             CancellationToken cancellationToken)
     {
-        var ownerIdOrProblem = RequireOwnerId(httpContext);
-        if (ownerIdOrProblem.Problem is not null)
-        {
-            return TypedResults.BadRequest(ownerIdOrProblem.Problem);
-        }
-
         if (await worlds.GetWorldAsync(worldId, cancellationToken) is null)
         {
             return TypedResults.NotFound(WorldNotFoundProblem());
         }
 
-        var settlement = await settlements.FindByOwnerAsync(
-            worldId, ownerIdOrProblem.OwnerId!, cancellationToken);
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader)
+        {
+            return TypedResults.BadRequest(MissingOwnerIdProblem());
+        }
+
+        if (realm.Outcome == CallerRealmOutcome.Refused)
+        {
+            return TypedResults.Ok(new WorldMembershipResponse(worldId, null, null));
+        }
+
+        var settlement = await settlements.FindByOwnerAsync(worldId, realm.OwnerId!, cancellationToken);
 
         return TypedResults.Ok(new WorldMembershipResponse(
             worldId, settlement?.Id.ToString(), settlement?.Name));
@@ -282,34 +292,38 @@ public static class WorldEndpoints
     }
 
     /// <summary>
-    /// Reads <see cref="OwnershipGate.OwnerIdHeaderName"/> the same way the
-    /// settlement-mutating endpoints do (see
-    /// <see cref="Bjarnoy.Api.Auth.OwnershipEndpointFilters"/>) — anonymous
-    /// play has no JWT to prove identity with, so the caller's own
-    /// client-local id is what selects which settlements this mask is
-    /// built from. Per <c>map-fog-v2.md</c> §1f, this endpoint must stay
-    /// player-scoped even though <c>/tiles</c> above is deliberately open —
-    /// the header is what does that scoping today, at the same trust level
-    /// every other anonymous-play endpoint already relies on.
+    /// Scoped player-side via <see cref="CallerRealmResolver"/> — anonymous
+    /// play resolves purely off <see cref="OwnershipGate.OwnerIdHeaderName"/>
+    /// as before, but a claimed player's JWT now resolves to their realm's
+    /// own founding owner id even from a browser that never founded anything
+    /// (a new-browser login), and a header naming someone else's already-claimed
+    /// realm is refused with 403 rather than handed that realm's fog history.
+    /// Per <c>map-fog-v2.md</c> §1f, this endpoint must stay player-scoped
+    /// even though <c>/tiles</c> above is deliberately open. The resolved
+    /// owner id is passed straight through to <see cref="FogMaskService"/>
+    /// unchanged — its explored-tile history is keyed by <c>OwnerId</c>,
+    /// which is exactly why the resolver hands back the realm's original one
+    /// rather than anything from this request.
     /// </summary>
-    private static async Task<Results<FileContentHttpResult, StatusCodeHttpResult, NotFound<ProblemDetails>, BadRequest<ProblemDetails>>> GetFogMask(
+    private static async Task<IResult> GetFogMask(
         Guid worldId,
         HttpContext httpContext,
         FogMaskService fogMask,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
-        var ownerId = httpContext.Request.Headers[OwnershipGate.OwnerIdHeaderName].ToString();
-        if (string.IsNullOrEmpty(ownerId))
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader)
         {
-            return TypedResults.BadRequest(new ProblemDetails
-            {
-                Title = "Missing owner id.",
-                Detail = $"The '{OwnershipGate.OwnerIdHeaderName}' header is required.",
-                Status = StatusCodes.Status400BadRequest,
-            });
+            return TypedResults.BadRequest(MissingOwnerIdProblem());
         }
 
-        var result = await fogMask.GeneratePlayerMaskAsync(worldId, ownerId, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.Refused)
+        {
+            return NotOwnerRefusal();
+        }
+
+        var result = await fogMask.GeneratePlayerMaskAsync(worldId, realm.OwnerId!, cancellationToken);
         if (!result.Accepted)
         {
             // FogMaskRejection's only value besides None: the world itself
@@ -330,28 +344,36 @@ public static class WorldEndpoints
 
     /// <summary>
     /// Backend-owned counterpart to the landing page's old client-side plot
-    /// finder — see <see cref="PlotReservationService"/>. Same anonymous-play
-    /// ownership header as <see cref="GetFogMask"/>; never echoes any owner
-    /// id, IP, or another visitor's reservation back to the caller.
+    /// finder — see <see cref="PlotReservationService"/>. Same
+    /// <see cref="CallerRealmResolver"/>-based scoping as <see cref="GetFogMask"/>
+    /// (a claimed player's JWT resolves to their realm even from a fresh
+    /// browser, and someone else's already-claimed realm under the header is
+    /// refused with 403) — never echoes any owner id, IP, or another
+    /// visitor's reservation back to the caller.
     /// </summary>
-    private static async Task<Results<Ok<PlotSuggestionResponse>, NotFound<ProblemDetails>,
-        Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> GetPlotSuggestion(
+    private static async Task<IResult> GetPlotSuggestion(
         Guid worldId,
         HttpContext httpContext,
         PlotReservationService reservations,
+        RealmDirectory realms,
         CancellationToken cancellationToken)
     {
-        var ownerIdOrProblem = RequireOwnerId(httpContext);
-        if (ownerIdOrProblem.Problem is not null)
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader)
         {
-            return TypedResults.BadRequest(ownerIdOrProblem.Problem);
+            return TypedResults.BadRequest(MissingOwnerIdProblem());
+        }
+
+        if (realm.Outcome == CallerRealmOutcome.Refused)
+        {
+            return NotOwnerRefusal();
         }
 
         var ipKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var fingerprintKey = ClientFingerprint.Derive(httpContext.Request.Headers);
 
         var result = await reservations.GetOrRefreshAsync(
-            worldId, ownerIdOrProblem.OwnerId!, ipKey, fingerprintKey, cancellationToken);
+            worldId, realm.OwnerId!, ipKey, fingerprintKey, cancellationToken);
 
         switch (result.Rejection)
         {
@@ -400,36 +422,49 @@ public static class WorldEndpoints
             suggestion.ReservedUntil));
     }
 
-    private static Results<NoContent, BadRequest<ProblemDetails>> ReleasePlotSuggestion(
+    private static async Task<IResult> ReleasePlotSuggestion(
         Guid worldId,
         HttpContext httpContext,
-        PlotReservationService reservations)
+        PlotReservationService reservations,
+        RealmDirectory realms,
+        CancellationToken cancellationToken)
     {
-        var ownerIdOrProblem = RequireOwnerId(httpContext);
-        if (ownerIdOrProblem.Problem is not null)
+        var realm = await CallerRealmResolver.ResolveAsync(httpContext, worldId, realms, cancellationToken);
+        if (realm.Outcome == CallerRealmOutcome.MissingHeader)
         {
-            return TypedResults.BadRequest(ownerIdOrProblem.Problem);
+            return TypedResults.BadRequest(MissingOwnerIdProblem());
         }
 
-        reservations.Release(worldId, ownerIdOrProblem.OwnerId!);
+        if (realm.Outcome == CallerRealmOutcome.Refused)
+        {
+            return NotOwnerRefusal();
+        }
+
+        reservations.Release(worldId, realm.OwnerId!);
         return TypedResults.NoContent();
     }
 
-    private static (string? OwnerId, ProblemDetails? Problem) RequireOwnerId(HttpContext httpContext)
+    /// <summary>
+    /// The 400 every read endpoint above answers with when
+    /// <see cref="CallerRealmResolver.ResolveAsync"/> finds neither a JWT
+    /// realm nor a usable <see cref="OwnershipGate.OwnerIdHeaderName"/> header
+    /// to fall back to.
+    /// </summary>
+    private static ProblemDetails MissingOwnerIdProblem() => new()
     {
-        var ownerId = httpContext.Request.Headers[OwnershipGate.OwnerIdHeaderName].ToString();
-        if (string.IsNullOrEmpty(ownerId))
-        {
-            return (null, new ProblemDetails
-            {
-                Title = "Missing owner id.",
-                Detail = $"The '{OwnershipGate.OwnerIdHeaderName}' header is required.",
-                Status = StatusCodes.Status400BadRequest,
-            });
-        }
+        Title = "Missing owner id.",
+        Detail = $"The '{OwnershipGate.OwnerIdHeaderName}' header is required.",
+        Status = StatusCodes.Status400BadRequest,
+    };
 
-        return (ownerId, null);
-    }
+    /// <summary>
+    /// The 403 the fog-mask and plot-suggestion endpoints answer with on
+    /// <see cref="CallerRealmOutcome.Refused"/> — the same body
+    /// <see cref="OwnershipGate"/> uses for a mutation from the wrong caller,
+    /// since this is the same rule applied to a read.
+    /// </summary>
+    private static IResult NotOwnerRefusal() =>
+        Results.Json(new AuthErrorResponse("not_owner"), statusCode: StatusCodes.Status403Forbidden);
 
     /// <summary>
     /// Every 404 in this file that means "no world with that id exists" —

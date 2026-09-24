@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Asp.Versioning.Builder;
 using Bjarnoy.Api.Auth;
 using Bjarnoy.Api.Contracts;
@@ -101,11 +102,22 @@ public static class SettlementEndpoints
         Conflict<ProblemDetails>, BadRequest<ProblemDetails>>> Found(
         Guid worldId,
         FoundSettlementRequest request,
+        HttpContext httpContext,
         SettlementService settlements,
         TimeProvider time,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // A caller founding while already logged in should own the new
+        // settlement outright, not land it in the Abandoned/unclaimed limbo
+        // meant for players who have no account yet — see
+        // SettlementService.FoundAsync's callerUserId remarks.
+        var user = httpContext.User;
+        var idClaim = user.Identity?.IsAuthenticated == true
+            ? user.FindFirstValue(ClaimTypes.NameIdentifier)
+            : null;
+        Guid? callerUserId = Guid.TryParse(idClaim, out var parsedUserId) ? parsedUserId : null;
 
         var result = await settlements.FoundAsync(
             worldId,
@@ -114,6 +126,7 @@ public static class SettlementEndpoints
             request.Name,
             request.OwnerName,
             request.OwnerId,
+            callerUserId,
             cancellationToken);
 
         if (result.Accepted)
