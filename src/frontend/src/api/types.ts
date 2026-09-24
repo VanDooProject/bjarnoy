@@ -81,6 +81,8 @@ export interface PlotSuggestionResponse {
   alternatives: TileCoordinate[];
   reserved: boolean;
   reservedUntil: string | null;
+  /** Who's already standing on this island — replaces the pre-founding, world-wide settlement list now that `listSettlements` is fog-gated. */
+  islandSettlements: SettlementSummary[];
 }
 
 /** Mirrors `JoinableWorldResponse` — one row of `GET /worlds/joinable`, the "join another world" picker. Public: no `X-Owner-Id` needed. */
@@ -229,6 +231,24 @@ export interface SettlementSummary {
   r: number;
   longhouseLevel: number;
   islandId: string;
+}
+
+/**
+ * Mirrors `SettlementViewResponse` — the fog-gated read of any settlement
+ * whose ground the caller has explored (`GET /settlements/{id}/view`):
+ * identity, position and buildings only, no stock/rates/queue/garrison/runes.
+ * `buildings` is already filtered server-side to hexes the caller has
+ * actually explored.
+ */
+export interface SettlementViewResponse {
+  id: string;
+  name: string;
+  ownerName: string;
+  q: number;
+  r: number;
+  longhouseLevel: number;
+  islandId: string;
+  buildings: PlacedBuildingResponse[];
 }
 
 // Settlement expansion (issue #55) — mirrors the settler-crew additions to
