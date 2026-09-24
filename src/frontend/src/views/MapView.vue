@@ -365,6 +365,13 @@ const modalOwnerLabel = computed(() => {
     ? owner.name
     : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.name });
 });
+// Never set for the player's own settlement — see modalOwnerLabel above.
+const modalOwnerAiPersonality = computed(() => {
+  const tile = selectedTile.value;
+  if (!tile?.ownerId) return null;
+  const owner = world.model.getSettlement(tile.ownerId);
+  return owner && owner.ownerId !== player.id && owner.isAi ? (owner.aiPersonality ?? null) : null;
+});
 
 // Ring menu state. The 2a ring owns its own depth (root actions -> build
 // categories -> a category's buildings), so this only tracks *where* it is
@@ -1024,6 +1031,7 @@ async function upgrade() {
         :tile="selectedTile"
         :mine="modalMine"
         :owner-label="modalOwnerLabel"
+        :owner-ai-personality="modalOwnerAiPersonality"
         :busy="modalBusy"
         :error="actionError"
         @close="closeModal"

@@ -12,6 +12,7 @@ import type { HoverInfo } from '../../lib/map/HexMapRenderer';
 import type { BuildingOutput, BuildingModifier } from '../../lib/map/buildingEconomy';
 import type { MessageSchema } from '../../i18n/schema';
 import { buildingName, terrainName, resourceName } from '../../i18n/catalogueNames';
+import AiBadge from '../AiBadge.vue';
 
 const props = defineProps<{ info: HoverInfo }>();
 
@@ -41,6 +42,13 @@ const subtitle = computed(() => {
   const owner = props.info.owner;
   if (!owner) return undefined;
   return owner.mine ? owner.settlementName : t('hud.hoverTooltip.ownedByOther', { owner: owner.ownerName, name: owner.settlementName });
+});
+
+// Never shown for the viewer's own settlement — an AI never owns a
+// settlement the player is looking at as "theirs".
+const aiPersonality = computed(() => {
+  const owner = props.info.owner;
+  return owner && !owner.mine && owner.isAi ? owner.aiPersonality : null;
 });
 
 // Only shown for a non-building tile without a level badge — matches the
@@ -110,7 +118,10 @@ const workersText = computed(() =>
       <span class="title">{{ title }}</span>
       <span v-if="level" class="level">{{ t('hud.hoverTooltip.level', { level }) }}</span>
     </div>
-    <div v-if="subtitle" class="subtitle">{{ subtitle }}</div>
+    <div v-if="subtitle" class="subtitle">
+      {{ subtitle }}
+      <AiBadge v-if="aiPersonality" :personality="aiPersonality" />
+    </div>
     <div class="separator" />
     <div v-if="stat && !level" class="stat">{{ stat }}</div>
     <dl v-if="outputText || modifierText || workersText" class="stats">

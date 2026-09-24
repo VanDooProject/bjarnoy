@@ -96,5 +96,11 @@
       "weeklyResourcesLooted": "Weekly Resources Looted",
       "biggestArmy": "Biggest Army"
     }
+  },
+  "aiPersonalities": {
+    "economic": "Economic",
+    "balanced": "Balanced",
+    "defensive": "Defensive",
+    "aggressive": "Aggressive"
   }
 }

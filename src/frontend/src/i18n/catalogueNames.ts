@@ -17,3 +17,4 @@ export const guildFeeTierName = (tier: string) => lookup(`guild.feeTiers.${tier}
 export const guildBoardTopicName = (kind: string) => lookup(`guild.boardTopics.${kind}`, kind);
 export const leaderboardScopeName = (scope: string) => lookup(`leaderboard.scopes.${scope}`, scope);
 export const leaderboardCategoryName = (category: string) => lookup(`leaderboard.categories.${category}`, category);
+export const aiPersonalityName = (personality: string) => lookup(`aiPersonalities.${personality}`, personality);

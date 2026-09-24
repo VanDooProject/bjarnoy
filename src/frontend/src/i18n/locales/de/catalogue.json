@@ -96,5 +96,11 @@
       "weeklyResourcesLooted": "Geplünderte Rohstoffe diese Woche",
       "biggestArmy": "Größte Armee"
     }
+  },
+  "aiPersonalities": {
+    "economic": "Wirtschaftlich",
+    "balanced": "Ausgewogen",
+    "defensive": "Defensiv",
+    "aggressive": "Aggressiv"
   }
 }
