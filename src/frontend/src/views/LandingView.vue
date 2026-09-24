@@ -20,6 +20,7 @@ import OnboardingChecklist from '../components/onboarding/OnboardingChecklist.vu
 import GuidancePointer from '../components/onboarding/GuidancePointer.vue';
 import ResourceTicker, { type ResourceTick } from '../components/onboarding/ResourceTicker.vue';
 import OnboardingBanner from '../components/onboarding/OnboardingBanner.vue';
+import ReturningLoginPanel from '../components/onboarding/ReturningLoginPanel.vue';
 import { BOOST_TERRAIN, buildingStatsFor, matchingNeighbourCount } from '../lib/map/buildingEconomy';
 import {
   deriveOnboardingGuidance,
@@ -31,6 +32,7 @@ import {
 } from '../lib/map/onboardingGuidance';
 import { AlreadyFoundedError, useWorldStore } from '../stores/world';
 import { usePlayerStore } from '../stores/player';
+import { useAuthStore } from '../stores/auth';
 import { DEMO_MODE } from '../config';
 import { ApiError } from '../api/client';
 import { hexDistance, type AxialCoord } from '../lib/hex/coords';
@@ -67,7 +69,21 @@ const ONBOARDING_BUILD_RING: OnboardingBuildType[] = ['farm', 'lumberjack', 'qua
 
 const world = useWorldStore();
 const player = usePlayerStore();
+const auth = useAuthStore();
 const router = useRouter();
+
+// Player logout/login gate: this device remembers a real account
+// (`player.lastAccount`, set by logging out — see stores/player.ts's
+// `forgetLocalIdentity`) but the visitor is currently anonymous and hasn't
+// founded anything on it yet. Shows ReturningLoginPanel in place of the
+// founding hero/guidance instead of silently letting them start a brand new
+// throwaway realm on top of a real account they just logged out of.
+// `hasFoundedSettlement` still wins once true — an anonymous founding that
+// happened in the same tab (or session) before the visitor got around to
+// logging back in should keep going, not get interrupted by the gate.
+const showReturningLoginGate = computed(
+  () => !!player.lastAccount && !auth.isAuthenticated && !player.hasFoundedSettlement,
+);
 
 const canvasRef = ref<InstanceType<typeof SettlementCanvas> | null>(null);
 const previewCoord = ref<AxialCoord | null>(null);
@@ -469,6 +485,10 @@ const showLandfallBanner = computed(
 // opening the ring already locks camera drag.
 const pointerTarget = computed(() => {
   if (joinBlocked.value) return null;
+  // Player logout/login gate: ReturningLoginPanel replaces the founding
+  // hero, so "click this plot" guidance pointing at a plot the gate is
+  // covering would be actively misleading.
+  if (showReturningLoginGate.value) return null;
   if (ringScreen.value) {
     // Frame 3: "This one fits {terrain}" — aimed at whichever guided
     // building's bubble is actually enabled for this hex's terrain. No
@@ -520,6 +540,11 @@ const pointerTarget = computed(() => {
 
 function onHexClick(coord: AxialCoord, tile: Tile, screen: { x: number; y: number }) {
   if (!player.hasFoundedSettlement) {
+    // Player logout/login gate: a click on the preview must not found a
+    // throwaway settlement while ReturningLoginPanel is offering to log
+    // back into a real one — the panel's own "Start a new realm instead"
+    // button is the only way to fall through to founding here.
+    if (showReturningLoginGate.value) return;
     if (tile.terrain === 'sea' || founding.value || joinBlocked.value) return;
     // Live mode only founds on an exact, unclaimed start position (see
     // `startPositionAt`, issue #96) — a click elsewhere used to silently
@@ -801,7 +826,11 @@ watch(
          moving mist or (once centred, no more screenBiasX) right behind
          the village itself. The progress tray below already carries
          onboarding status, so it's the only thing left on screen. -->
-    <div v-if="!player.hasFoundedSettlement && joinBlocked" class="hero">
+    <!-- Player logout/login gate: replaces the founding hero entirely while
+         this device remembers a real account that's currently logged out —
+         see `showReturningLoginGate`'s own comment above. -->
+    <ReturningLoginPanel v-if="showReturningLoginGate" />
+    <div v-else-if="!player.hasFoundedSettlement && joinBlocked" class="hero">
       <div class="eyebrow">{{ t('landing.hero.eyebrow') }}</div>
       <h1>{{ t('landing.hero.notOpenTitle') }}</h1>
       <p class="lede">{{ joinBlockedMessage }}</p>
@@ -857,7 +886,7 @@ watch(
     <OnboardingBanner v-if="showLandfallBanner" variant="landfall" />
     <OnboardingBanner v-if="guidance.complete" variant="complete" @continue="onContinueToSettlement" />
     <OnboardingChecklist
-      v-if="!joinBlocked && !guidance.complete"
+      v-if="!joinBlocked && !guidance.complete && !showReturningLoginGate"
       :guidance="guidance"
       :has-founded="player.hasFoundedSettlement"
     />

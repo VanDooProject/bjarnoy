@@ -83,6 +83,12 @@ export const usePlayerStore = defineStore('player', {
     onboardingComplete: persistedOnboardingComplete,
     profileNudgeDismissed: persistedProfileNudgeDismissed,
     settlementsByWorld: persistedSettlementsByWorld,
+    // Player logout/login gate: which account (if any) last logged out on
+    // this device. Read straight from localStorage at store creation (same
+    // as the fields above) rather than only kept in Pinia state, so a fresh
+    // store instance — e.g. after the logout flow's own full page reload
+    // (composables/useLogout.ts) — sees it without anything re-hydrating it.
+    lastAccount: localStorage.getItem('bjarnoy.lastAccount') as string | null,
   }),
   getters: {
     // Live mode needs an owner name (2-100 chars) at the moment a settlement
@@ -166,6 +172,33 @@ export const usePlayerStore = defineStore('player', {
     dismissProfileNudge() {
       this.profileNudgeDismissed = true;
       if (!DEMO_MODE) localStorage.setItem('bjarnoy.profileNudgeDismissed', '1');
+    },
+    // Player logout/login gate: the local-identity half of logging out (see
+    // composables/useLogout.ts for the full flow, which also drops the
+    // in-memory auth session and reloads the page). Removes every key that
+    // ties this browser to the account that's logging out, so the founding
+    // gate, onboarding progress and nickname don't leak into whatever
+    // session comes next — but keeps `bjarnoy.worldId`/`bjarnoy.locale`,
+    // which describe this device's context rather than an identity, and
+    // records `lastAccount` so the landing page can offer a "log back in"
+    // gate (ReturningLoginPanel.vue) instead of silently starting a brand
+    // new anonymous founding flow for someone who still has a real account.
+    forgetLocalIdentity(lastAccountName: string) {
+      localStorage.removeItem('bjarnoy.playerId');
+      localStorage.removeItem('bjarnoy.settlementId');
+      localStorage.removeItem('bjarnoy.settlementsByWorld');
+      localStorage.removeItem('bjarnoy.onboardingComplete');
+      localStorage.removeItem('bjarnoy.profileNudgeDismissed');
+      localStorage.removeItem('bjarnoy.nickname');
+      localStorage.setItem('bjarnoy.lastAccount', lastAccountName);
+      this.lastAccount = lastAccountName;
+    },
+    // "Start a new realm instead" on ReturningLoginPanel.vue: the visitor
+    // declines to log back in, so the gate should stop showing and the
+    // normal founding hero should return.
+    forgetLastAccount() {
+      this.lastAccount = null;
+      localStorage.removeItem('bjarnoy.lastAccount');
     },
   },
 });

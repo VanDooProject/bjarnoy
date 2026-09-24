@@ -5,12 +5,13 @@
 // both real features now. The avatar carries the player's nickname initials
 // (or the game's own initials as a fallback), replacing the plain nickname
 // pill TopBar used to show.
-import { computed, onMounted, onUnmounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth';
 import { usePlayerStore } from '../../stores/player';
 import { useReportsStore } from '../../stores/reports';
+import { useLogout } from '../../composables/useLogout';
 import { DEMO_MODE } from '../../config';
 import LocaleSwitcher from '../LocaleSwitcher.vue';
 import ProfileNudge from '../onboarding/ProfileNudge.vue';
@@ -22,6 +23,7 @@ const router = useRouter();
 const auth = useAuthStore();
 const player = usePlayerStore();
 const reports = useReportsStore();
+const { logout } = useLogout();
 const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
 
 // Issue #40 phase 3: a lightweight "new reports" badge. HudNav is mounted
@@ -64,6 +66,48 @@ const showProfileNudge = computed(
     !player.nickname &&
     !player.profileNudgeDismissed,
 );
+
+// Player logout/login gate: the authenticated avatar is now a small account
+// dropdown (Profile / Log out) rather than a direct link to /profile,
+// mirroring ReturningPlayerMenu's own trigger/panel open-close pattern
+// (click to open, closes on outside click or Escape) since this is the same
+// kind of small anchored panel.
+const accountMenuOpen = ref(false);
+const accountMenuRoot = ref<HTMLDivElement | null>(null);
+
+function toggleAccountMenu() {
+  accountMenuOpen.value = !accountMenuOpen.value;
+}
+function closeAccountMenu() {
+  accountMenuOpen.value = false;
+}
+function goToProfile() {
+  closeAccountMenu();
+  router.push('/profile');
+}
+async function onLogoutClick() {
+  closeAccountMenu();
+  await logout();
+}
+function onAccountMenuPointerDown(event: PointerEvent) {
+  if (!accountMenuOpen.value) return;
+  const target = event.target as Node | null;
+  if (accountMenuRoot.value && target && !accountMenuRoot.value.contains(target)) closeAccountMenu();
+}
+function onAccountMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeAccountMenu();
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', onAccountMenuPointerDown, true);
+  document.addEventListener('keydown', onAccountMenuKeydown);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onAccountMenuPointerDown, true);
+  document.removeEventListener('keydown', onAccountMenuKeydown);
+});
+// A navigation while the menu is open should close it, same as
+// ReturningPlayerMenu does for its own panel.
+watch(() => route.fullPath, closeAccountMenu);
 </script>
 
 <template>
@@ -135,20 +179,35 @@ const showProfileNudge = computed(
       {{ t('hud.nav.landing') }}
     </button>
     <LocaleSwitcher />
-    <!-- Logged in, the avatar opens the player's own profile (issue #42).
+    <!-- Logged in, the avatar opens a small account dropdown — Profile
+         (issue #42) or Log out (player logout/login gate: `useLogout`
+         clears the local identity and drops back to a full page reload).
          Anonymous, ReturningPlayerMenu offers logging in or joining another
          world instead — registration (issue #108) is still reachable from
          there via the account-creation nudge (ProfileNudge, in its `nudge`
          slot) once onboarding is done. -->
-    <button
-      v-if="auth.isAuthenticated"
-      class="avatar avatar-button"
-      type="button"
-      :title="t('hud.nav.profileTitle')"
-      @click="router.push('/profile')"
-    >
-      {{ initials }}
-    </button>
+    <div v-if="auth.isAuthenticated" ref="accountMenuRoot" class="account-menu">
+      <button
+        type="button"
+        class="avatar avatar-button"
+        aria-haspopup="menu"
+        :aria-expanded="accountMenuOpen"
+        :title="t('hud.nav.profileTitle')"
+        data-testid="account-menu-trigger"
+        @click="toggleAccountMenu"
+      >
+        {{ initials }}
+      </button>
+      <div v-if="accountMenuOpen" class="panel menu account-panel" role="menu" data-testid="account-menu">
+        <div class="notch" />
+        <button type="button" role="menuitem" class="row" data-testid="account-menu-profile" @click="goToProfile">
+          {{ t('hud.accountMenu.profile') }}
+        </button>
+        <button type="button" role="menuitem" class="row" data-testid="account-menu-logout" @click="onLogoutClick">
+          {{ t('hud.accountMenu.logout') }}
+        </button>
+      </div>
+    </div>
     <ReturningPlayerMenu v-else :nudging="showProfileNudge">
       <template #nudge>
         <ProfileNudge v-if="showProfileNudge" />
@@ -227,5 +286,51 @@ const showProfileNudge = computed(
   color: #20160a;
   font-size: 12px;
   font-weight: 700;
+}
+/* Same anchored-panel shape as ReturningPlayerMenu.vue's `.menu`/`.notch` —
+   deliberately not shared as a component, just the same small pattern
+   applied to a second, unrelated trigger. */
+.account-menu {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+.account-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 50;
+  width: 160px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.notch {
+  position: absolute;
+  right: 7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--panel-border);
+  border-top: 1px solid var(--panel-border);
+  transform: rotate(45deg);
+}
+.row {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--gold);
 }
 </style>
