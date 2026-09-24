@@ -494,30 +494,35 @@ export const useWorldStore = defineStore('world', {
       const match = candidates.find((c) => c.q === at.q && c.r === at.r);
       return match ? { islandId: suggestion.islandId, at: match } : null;
     },
-    /** Demo mode: found instantly in the local `WorldModel`, no server round trip. */
+    /**
+     * Demo mode: found instantly in the local `WorldModel`, no server round
+     * trip.
+     *
+     * Giant placement v2: a provisional landfall identifies which island
+     * `near` is on (`findLandfall`, before any giant of this island's own
+     * exists to steer it away from — see that method's own doc comment on
+     * `isNearAnyGiantAnchor`), that island's giants are generated once
+     * (`WorldModel.placeGiantsForIsland`, a no-op on a repeat visit), and
+     * only then is `findLandfall` re-run so it can actually honour the
+     * exclusion around whatever giants just appeared. This mirrors the
+     * backend's own order (`WorldGenerator.Generate`: rivers, then giants,
+     * then start positions) as closely as a client with no backend to ask
+     * can.
+     *
+     * Placed *before* `foundSettlement` below, not after: `foundSettlement`
+     * claims territory internally (`WorldModel.claimTerritory`), and
+     * claiming is one-way (it only ever adds `ownerId`, never removes it —
+     * see `claimedHexes`' own doc comment). If a giant didn't exist yet at
+     * that first claim, a footprint hex close enough to sit inside the
+     * centre disc would get wrongly claimed there (the territory rule has no
+     * giant to exclude), and no later call could ever undo it. Placing
+     * giants first means the very first `claimTerritory` already sees them
+     * and applies the giant rule correctly from the start.
+     */
     foundStartingSettlement(ownerId: string, ownerName: string, name: string, near: AxialCoord) {
+      const provisionalLandfall = this.model.findLandfall(near) ?? near;
+      this.model.placeGiantsForIsland(provisionalLandfall, this.model.seed);
       const at = this.model.findLandfall(near) ?? near;
-      // Giant tiles are a spike (see WorldModel.placeGiant's own doc
-      // comment) with no build UI of its own yet — demo mode seeds one
-      // giant mountain near every new settlement purely so it's visible on
-      // screen (and reachable for screenshots via
-      // window.__demoWorld().model.placeGiant) without needing a real
-      // placement flow. Deterministic for a given seed/landfall:
-      // findGiantAnchor's search order depends only on the settlement's own
-      // (q, r) and the world seed's terrain, never on wall-clock time or
-      // anything else non-reproducible.
-      //
-      // Placed *before* `foundSettlement` below, not after: `foundSettlement`
-      // claims territory internally (`WorldModel.claimTerritory`), and
-      // claiming is one-way (it only ever adds `ownerId`, never removes it —
-      // see `claimedHexes`' own doc comment). If the giant didn't exist yet
-      // at that first claim, a footprint hex close enough to sit inside the
-      // centre disc would get wrongly claimed there (the territory rule has
-      // no giant to exclude), and no later call could ever undo it. Placing
-      // the giant first means the very first `claimTerritory` already sees
-      // it and applies the giant rule correctly from the start.
-      const giantAnchor = this.model.findGiantAnchor(at);
-      if (giantAnchor) this.model.placeGiant(giantAnchor, 'giantmountain');
       const settlement = this.model.foundSettlement(ownerId, ownerName, name, at);
       this.selectedSettlementId = settlement.id;
       this.syncHud();

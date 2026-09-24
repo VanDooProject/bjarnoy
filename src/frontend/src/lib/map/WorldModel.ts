@@ -6,10 +6,11 @@
 // small, explicitly-copied summaries (see stores/world.ts).
 import { coordKey, hexDistance, hexesInRadius, neighbors, parseKey, type AxialCoord } from '../hex/coords';
 import { giantCoverage, type GiantPart } from './giantTiles';
+import { placeGiants, StartPositionExclusionRadius, type GiantFamily } from './giantPlacement';
 import { claimDiscs, claimRadiusForLevel, type ClaimDisc } from './shoreline';
 import { claimsWithGiants } from './territory';
 import { validateTradeRatio } from '../trade/tradeRatio';
-import { DEFAULT_GENERATION, generateTile, terrainAt, type WorldGenerationConstants } from './worldGenerator';
+import { DEFAULT_GENERATION, generateTile, hash2, terrainAt, type WorldGenerationConstants } from './worldGenerator';
 import {
   emptyResources,
   TILE_ORIENTATIONS,
@@ -137,6 +138,17 @@ export const PREVIEW_ISLAND_RADIUS = 7;
 // (still `PREVIEW_ISLAND_RADIUS`) instead of drawing a silently-truncated
 // island.
 export const PREVIEW_ISLAND_FLOOD_MAX_RADIUS = 24;
+
+// Demo mode's `placeGiantsForIsland` needs the landfall's *whole* island
+// (giant placement rules — size thresholds, spacing — care about the real
+// island, not a viewport crop), so this deliberately doesn't reuse
+// `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` (tuned tight around the render crop's own
+// `PREVIEW_ISLAND_RADIUS`): a larger island than that bound would silently
+// come back truncated (a `null` from `floodFillLandmass`, treated as "no
+// island" below) rather than getting its due giants. Generous rather than
+// unbounded for the same "must not hang on a pathological seed" reason
+// `PREVIEW_ISLAND_FLOOD_MAX_RADIUS` itself gives.
+const GIANT_ISLAND_FLOOD_MAX_RADIUS = 60;
 
 /**
  * Iterative flood fill (an explicit queue, not recursion — the same "one
@@ -270,6 +282,15 @@ export class WorldModel {
    * has touched yet.
    */
   private giantAnchorByHex = new Map<string, AxialCoord>();
+  /**
+   * Demo mode: which islands `placeGiantsForIsland` has already run giant
+   * placement for, keyed by the island's own lowest-(q, r) tile (`coordKey`)
+   * — placement should happen at most once per island per model, the same
+   * way a real world's giants are generated once at world creation rather
+   * than re-rolled. Live mode never touches this: `setGiants` tags the
+   * server's authoritative giants directly.
+   */
+  private giantPlacedIslands = new Set<string>();
 
   constructor(seed = 1, generation: WorldGenerationConstants = DEFAULT_GENERATION) {
     this.seed = seed;
@@ -325,6 +346,27 @@ export class WorldModel {
    */
   giantAnchorAt(coord: AxialCoord): AxialCoord | null {
     return this.giantAnchorByHex.get(coordKey(coord)) ?? null;
+  }
+
+  /**
+   * Whether `coord` sits within `StartPositionExclusionRadius + 1` hexes of
+   * any placed giant's anchor — the same exclusion
+   * `WorldGenerator.FindStartPositions` (backend) enforces, mirrored here so
+   * `findLandfall` can steer a demo-mode landfall clear of a giant's
+   * footprint the same way a real world's start positions already are. Scans
+   * the *distinct* anchors in `giantAnchorByHex` (deduping its 7-hex-per-
+   * giant fan-out) rather than every covered hex, since the exclusion is
+   * always measured from the anchor.
+   */
+  private isNearAnyGiantAnchor(coord: AxialCoord): boolean {
+    const seen = new Set<string>();
+    for (const anchor of this.giantAnchorByHex.values()) {
+      const key = coordKey(anchor);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (hexDistance(coord, anchor) < StartPositionExclusionRadius + 1) return true;
+    }
+    return false;
   }
 
   /**
@@ -590,6 +632,13 @@ export class WorldModel {
     for (let radius = 0; radius <= maxRadius; radius++) {
       for (const c of hexesInRadius(near, radius)) {
         if (!this.isLand(c.q, c.r)) continue;
+        // Giant placement v2: never land within a giant's own start-position
+        // exclusion — mirrors `WorldGenerator.FindStartPositions` (backend)
+        // dropping the same candidates. Placement always runs before this is
+        // called (see `stores/world.ts`'s `foundStartingSettlement`), so
+        // `giantAnchorByHex` already reflects the island's giants by the
+        // time this scan happens.
+        if (this.isNearAnyGiantAnchor(c)) continue;
         firstLand ??= c;
         if (this.isGoodStartCandidate(c)) return c;
       }
@@ -1155,32 +1204,6 @@ export class WorldModel {
   }
 
   /**
-   * The nearest hex to `home` (searched outward in `hexesInRadius`'s own
-   * closest-ring-first, deterministic order) that `canPlaceGiant` would
-   * accept, preferring `minRadius..maxRadius` hexes out — the demo's own
-   * "visible in the default settlement viewport, a few hexes from the home
-   * hex" framing — before falling back to a wider search so a smaller or
-   * rockier island still gets *a* valid spot rather than none. Returns
-   * `null` if nothing on the whole island qualifies within `fallbackMaxRadius`.
-   */
-  findGiantAnchor(home: AxialCoord, minRadius = 3, maxRadius = 4, fallbackMaxRadius = 12): AxialCoord | null {
-    for (let radius = minRadius; radius <= maxRadius; radius++) {
-      for (const c of hexesInRadius(home, radius)) {
-        if (hexDistance(home, c) !== radius) continue;
-        if (this.canPlaceGiant(c)) return c;
-      }
-    }
-    for (let radius = 0; radius <= fallbackMaxRadius; radius++) {
-      if (radius >= minRadius && radius <= maxRadius) continue;
-      for (const c of hexesInRadius(home, radius)) {
-        if (hexDistance(home, c) !== radius) continue;
-        if (this.canPlaceGiant(c)) return c;
-      }
-    }
-    return null;
-  }
-
-  /**
    * Places a giant tile anchored at `at`, tagging all 7 covered hexes with
    * `Tile.giant` (see that field's own doc comment) and — for a covered hex
    * that was Forest — flattening it to Grass first, so the giant's own art
@@ -1192,13 +1215,62 @@ export class WorldModel {
    * any of the 6, but with no orientation given, "however this hex would
    * already render" is the least surprising default.
    */
-  placeGiant(at: AxialCoord, family: 'giantmountain' = 'giantmountain', orientation?: TileOrientation): boolean {
+  placeGiant(at: AxialCoord, family: GiantFamily = 'giantmountain', orientation?: TileOrientation): boolean {
     if (!this.canPlaceGiant(at)) return false;
     const resolvedOrientation = orientation ?? this.getTile(at.q, at.r).orientation ?? 'SE';
     for (const { coord, part } of giantCoverage(at)) {
       this.tagGiantHex(coord, at, family, resolvedOrientation, part);
     }
     return true;
+  }
+
+  /**
+   * Demo mode's own giant generation — the local counterpart to the
+   * backend's `WorldGenerator` running `GiantGenerator` once per island at
+   * world creation. Flood-fills `near`'s whole island
+   * (`GIANT_ISLAND_FLOOD_MAX_RADIUS` — see that constant's own doc comment
+   * for why this can't reuse `previewIslandTiles`'s tighter crop bound), and
+   * if this model hasn't already placed giants for that island
+   * (`giantPlacedIslands`, keyed by the island's own lowest-(q, r) tile —
+   * the demo has no backend island id to key by instead), runs the shared
+   * `placeGiants` core (mirrors `GiantGenerator.PlaceCore`) against it and
+   * places each result with `placeGiant`.
+   *
+   * `islandIndex` has no backend equivalent to borrow in demo mode (there is
+   * no island list to index into) — it is derived instead from a hash of the
+   * island's own lowest-(q, r) tile, scaled into a large integer range the
+   * same way a real per-island index would vary the shrine/tie-break rolls
+   * from one island to the next. This is a demo-only stand-in, not a port of
+   * anything the backend does with island indices.
+   *
+   * A no-op if `near` isn't land, if its island has already had giants
+   * placed, or if `placeGiants` offers nothing (most demo islands are far
+   * smaller than `SmallIslandGiantThreshold`, so this often places nothing
+   * at all — see `stores/world.ts`'s `foundStartingSettlement` for where
+   * this is called and why it must run before `foundSettlement`).
+   */
+  placeGiantsForIsland(near: AxialCoord, worldSeed: number): void {
+    if (!this.isLand(near.q, near.r)) return;
+
+    const islandTiles = floodFillLandmass(near, (c) => this.isLand(c.q, c.r), GIANT_ISLAND_FLOOD_MAX_RADIUS);
+    if (!islandTiles || islandTiles.length === 0) return;
+
+    let lowest = islandTiles[0];
+    for (const tile of islandTiles) {
+      if (tile.q < lowest.q || (tile.q === lowest.q && tile.r < lowest.r)) {
+        lowest = tile;
+      }
+    }
+
+    const islandKey = coordKey(lowest);
+    if (this.giantPlacedIslands.has(islandKey)) return;
+    this.giantPlacedIslands.add(islandKey);
+
+    const islandIndex = Math.floor(hash2(lowest.q, lowest.r, worldSeed) * 1_000_000);
+    const placements = placeGiants(islandTiles, (c) => this.terrainOf(c.q, c.r), worldSeed, islandIndex);
+    for (const placement of placements) {
+      this.placeGiant(placement.anchor, placement.family);
+    }
   }
 
   /**
@@ -1212,7 +1284,7 @@ export class WorldModel {
   private tagGiantHex(
     coord: AxialCoord,
     anchor: AxialCoord,
-    family: 'giantmountain',
+    family: GiantFamily,
     orientation: TileOrientation,
     part: GiantPart,
   ) {
@@ -1254,7 +1326,7 @@ export class WorldModel {
       if (anchorTile.giant && (anchorTile.giant.anchor.q !== giant.anchor.q || anchorTile.giant.anchor.r !== giant.anchor.r)) {
         continue;
       }
-      const family = giant.family as 'giantmountain';
+      const family = giant.family as GiantFamily;
       for (const { coord, part } of giantCoverage(giant.anchor)) {
         if (this.getTile(coord.q, coord.r).giant) continue;
         this.tagGiantHex(coord, giant.anchor, family, giant.orientation, part);
