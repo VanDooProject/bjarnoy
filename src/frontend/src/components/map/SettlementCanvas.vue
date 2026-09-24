@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useHexMapRenderer } from '../../composables/useHexMapRenderer';
 import type { WorldModel } from '../../lib/map/WorldModel';
 import type { AxialCoord } from '../../lib/hex/coords';
 import type { Tile } from '../../lib/map/types';
 import type { HoverInfo, RenderMode } from '../../lib/map/HexMapRenderer';
+import type { MessageSchema } from '../../i18n/schema';
 
 const props = defineProps<{
   // Defaults to 'settlement' — every existing caller (SettlementView's ring-
@@ -56,10 +58,19 @@ const emit = defineEmits<{
   'zoom-mode-change': [mode: RenderMode];
 }>();
 
+const { t } = useI18n<{ message: MessageSchema }>({ useScope: 'global' });
+
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 
-const { renderer } = useHexMapRenderer(canvas, container, {
+// Named so the template calls a script-scoped function instead of the bare
+// global `window` — vue-tsc's template type-checking doesn't resolve global
+// identifiers referenced directly in an expression.
+function reloadPage(): void {
+  window.location.reload();
+}
+
+const { renderer, ready, loadError } = useHexMapRenderer(canvas, container, {
   mode: props.mode ?? 'settlement',
   worldModel: props.worldModel,
   playerId: props.playerId,
@@ -85,6 +96,32 @@ defineExpose({ renderer });
 <template>
   <div ref="container" class="map-container" :style="background ? { background } : undefined">
     <canvas ref="canvas" />
+    <!-- Shown until mount() resolves (or fails) — `mount` awaits the terrain
+         atlas, which on a slow connection can take a while with an empty
+         canvas underneath and nothing else in the DOM to say why. Overlay
+         only, not blocking: `pointer-events: none` (bar the retry button)
+         so it never eats clicks meant for the canvas underneath, and it
+         works equally on the landing page's dark background and in-game's
+         lighter fog backdrop (a semi-transparent dark pill + white text
+         reads on both, rather than tuning contrast per host). -->
+    <div
+      v-if="!ready"
+      class="map-loading-overlay"
+      data-testid="map-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <template v-if="loadError">
+        <p class="map-loading-text">{{ t('map.loading.failed') }}</p>
+        <button type="button" class="map-loading-retry" @click="reloadPage">
+          {{ t('map.loading.retry') }}
+        </button>
+      </template>
+      <template v-else>
+        <span class="map-loading-spinner" aria-hidden="true" />
+        <p class="map-loading-text">{{ t('map.loading.island') }}</p>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -106,5 +143,64 @@ canvas {
   height: 100%;
   touch-action: none;
   cursor: grab;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  pointer-events: none;
+  text-align: center;
+  padding: 1rem;
+}
+
+.map-loading-text {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  background: rgba(10, 20, 30, 0.6);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.map-loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #f5b83d;
+  animation: map-loading-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-loading-spinner {
+    animation: none;
+    /* Reduced-motion still needs some visible "this is active" cue — a
+       steady off-color ring rather than a spin. */
+    border-top-color: rgba(255, 255, 255, 0.3);
+    background: rgba(245, 184, 61, 0.3);
+  }
+}
+
+@keyframes map-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.map-loading-retry {
+  pointer-events: auto;
+  border: none;
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  background: #f5b83d;
+  color: #1a1206;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>

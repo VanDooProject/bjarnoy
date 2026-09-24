@@ -29,6 +29,7 @@ import armyEditor from './locales/en/armyEditor.json';
 import garrisonForm from './locales/en/garrisonForm.json';
 import grantResourcesForm from './locales/en/grantResourcesForm.json';
 import settlementLayoutEditor from './locales/en/settlementLayoutEditor.json';
+import map from './locales/en/map.json';
 
 // English is the source of truth for keys: every other locale is typed
 // against its shape, so a missing/misspelled key is a `vue-tsc -b` error.
@@ -67,4 +68,5 @@ export interface MessageSchema {
   garrisonForm: typeof garrisonForm;
   grantResourcesForm: typeof grantResourcesForm;
   settlementLayoutEditor: typeof settlementLayoutEditor;
+  map: typeof map;
 }

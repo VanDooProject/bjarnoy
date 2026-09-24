@@ -1,4 +1,4 @@
-import { onBeforeUnmount, onMounted, shallowRef, type Ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, shallowRef, type Ref } from 'vue';
 import { HexMapRenderer, type HexMapRendererOptions } from '../lib/map/HexMapRenderer';
 
 /**
@@ -35,6 +35,13 @@ export function useHexMapRenderer(
   options: HexMapRendererOptions,
 ) {
   const renderer = shallowRef<HexMapRenderer | null>(null);
+  // `mount()` awaits the terrain atlas (see HexMapRenderer.mount's own
+  // remarks), which on a slow connection can take a while with nothing on
+  // screen to show for it — `ready` lets a consumer (SettlementCanvas) show
+  // a loading overlay until the canvas actually has something drawn on it,
+  // instead of leaving a blank island with no feedback.
+  const ready = ref(false);
+  const loadError = ref<unknown>(null);
   let resizeObserver: ResizeObserver | null = null;
 
   onMounted(async () => {
@@ -43,8 +50,19 @@ export function useHexMapRenderer(
     if (!canvas || !container) return;
     const r = new HexMapRenderer(options);
     const { width, height } = await waitForRealSize(container);
-    await r.mount(canvas, Math.max(1, width), Math.max(1, height));
+    try {
+      await r.mount(canvas, Math.max(1, width), Math.max(1, height));
+    } catch (err) {
+      console.error('HexMapRenderer failed to mount', err);
+      loadError.value = err;
+      // Half-built (e.g. Pixi's own init resolved but the terrain atlas
+      // threw) — destroy rather than leave a renderer nobody will ever call
+      // destroy() on, since it never made it into `renderer.value`.
+      r.destroy();
+      return;
+    }
     renderer.value = r;
+    ready.value = true;
     // Real lifecycle signal for "the renderer is mounted and has drawn its
     // first frame" — e.g. e2e tests wait on this instead of a guessed
     // timeout, since there's otherwise nothing in the DOM to observe. Not a
@@ -68,5 +86,5 @@ export function useHexMapRenderer(
     delete containerRef.value?.dataset.mapReady;
   });
 
-  return { renderer };
+  return { renderer, ready, loadError };
 }

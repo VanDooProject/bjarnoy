@@ -839,8 +839,11 @@ watch(
       <p v-else-if="invalidClickMessage" class="status">{{ invalidClickMessage }}</p>
     </div>
 
+    <!-- Held back until the map has mounted (its terrain atlas loaded):
+         before that the pointer would aim at an empty backdrop, on top of
+         SettlementCanvas's own loading overlay. -->
     <GuidancePointer
-      v-if="pointerTarget"
+      v-if="pointerTarget && canvasRef?.renderer"
       :coord="pointerTarget.mode === 'hex' ? pointerTarget.coord : undefined"
       :renderer="pointerTarget.mode === 'hex' ? canvasRef?.renderer : undefined"
       :screen="pointerTarget.mode === 'screen' ? pointerTarget.screen : undefined"
