@@ -1,11 +1,13 @@
 using DotNet.Testcontainers.Builders;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace Bjarnoy.Api.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// A throwaway PostgreSQL container for the tests that must run against the
-/// production provider.
+/// A throwaway PostgreSQL database for the tests that must run against the
+/// production provider — a container by default, or a scratch database on an
+/// already-running server when <see cref="ExternalServerVariable"/> is set.
 /// </summary>
 /// <remarks>
 /// SQLite covers the endpoints; this covers the things only PostgreSQL can
@@ -14,10 +16,24 @@ namespace Bjarnoy.Api.IntegrationTests.Infrastructure;
 /// </remarks>
 public sealed class PostgreSqlFixture : IAsyncLifetime
 {
+    /// <summary>
+    /// Connection string of an existing PostgreSQL server to use instead of a
+    /// container, for machines that have PostgreSQL but no usable Docker (e.g.
+    /// a sandbox whose egress blocks image pulls). The login needs
+    /// <c>CREATEDB</c>: each run creates its own uniquely named database there
+    /// and drops it afterwards, so the server's other databases — and the
+    /// database named in the connection string — are never touched.
+    /// </summary>
+    public const string ExternalServerVariable = "BJARNOY_TEST_POSTGRES";
+
     private PostgreSqlContainer? _container;
 
+    private string? _externalServer;
+
+    private string? _externalDatabase;
+
     /// <summary>
-    /// Why the container is unavailable, or <see langword="null"/> if it started.
+    /// Why PostgreSQL is unavailable, or <see langword="null"/> if it started.
     /// </summary>
     /// <remarks>
     /// Docker is not available everywhere these tests run, and a developer
@@ -27,11 +43,20 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
     public string? SkipReason { get; private set; }
 
     public string ConnectionString =>
-        _container?.GetConnectionString()
+        (_externalDatabase is not null
+            ? new NpgsqlConnectionStringBuilder(_externalServer) { Database = _externalDatabase }.ConnectionString
+            : _container?.GetConnectionString())
         ?? throw new InvalidOperationException($"PostgreSQL is unavailable: {SkipReason}");
 
     public async ValueTask InitializeAsync()
     {
+        var external = Environment.GetEnvironmentVariable(ExternalServerVariable);
+        if (!string.IsNullOrWhiteSpace(external))
+        {
+            await CreateExternalDatabaseAsync(external);
+            return;
+        }
+
         try
         {
             _container = new PostgreSqlBuilder("postgres:18-alpine")
@@ -54,6 +79,33 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
             await _container.DisposeAsync();
         }
 
+        if (_externalDatabase is not null)
+        {
+            // Pooled connections into the scratch database would block the
+            // DROP; FORCE (PostgreSQL 13+) terminates any that remain.
+            NpgsqlConnection.ClearAllPools();
+            await ExecuteOnServerAsync($"DROP DATABASE IF EXISTS \"{_externalDatabase}\" WITH (FORCE)");
+        }
+
         GC.SuppressFinalize(this);
+    }
+
+    private async Task CreateExternalDatabaseAsync(string server)
+    {
+        _externalServer = server;
+        var database = $"bjarnoy_test_{Guid.NewGuid():N}";
+
+        // Unlike a container, a misconfigured server the developer asked for
+        // explicitly is a real failure, not a reason to skip silently.
+        await ExecuteOnServerAsync($"CREATE DATABASE \"{database}\"");
+        _externalDatabase = database;
+    }
+
+    private async Task ExecuteOnServerAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(_externalServer);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 }

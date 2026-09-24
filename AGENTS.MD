@@ -182,9 +182,24 @@
   Forbidden` from Docker Hub's CDN — the sandbox's egress proxy doesn't
   allow that host for this session. Per the proxy's own guidance
   (`/root/.ccr/README.md`), a 403 is an org policy denial, not a bug — don't
-  retry or try to route around it. So those Docker-dependent test suites
-  still can't be run/reproduced locally in this sandbox; say so rather than
-  claiming to have verified them, and rely on CI for that coverage.
+  retry or try to route around it. So `Bjarnoy.AppHost.Tests` still can't
+  be run/reproduced locally in this sandbox; say so rather than claiming to
+  have verified it, and rely on CI for that coverage.
+- The PostgreSQL half of `Bjarnoy.Api.IntegrationTests` **can** run here
+  without Docker, against a local PostgreSQL from Ubuntu's apt archive —
+  `PostgreSqlFixture` uses the server named by `BJARNOY_TEST_POSTGRES`
+  instead of a container when that variable is set (it creates and drops
+  its own scratch database there):
+  ```bash
+  sudo apt-get install -y postgresql
+  sudo service postgresql start
+  sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+  BJARNOY_TEST_POSTGRES="Host=localhost;Username=postgres;Password=postgres;Database=postgres" \
+    dotnet test --project src/backend/tests/Bjarnoy.Api.IntegrationTests
+  ```
+  apt ships an older major version (16) than CI's container (18), so this
+  is a real check of the migrations and dialect, but not a byte-for-byte
+  match of CI — mention the version when reporting it.
 - `npx playwright test` (the real `e2e/*.spec.ts` suite, not just a
   throwaway screenshot script) **does work in this sandbox**, including
   actually launching a browser — don't conclude otherwise just because
